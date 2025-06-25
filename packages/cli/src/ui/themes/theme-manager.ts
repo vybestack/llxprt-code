@@ -8,6 +8,7 @@ import { AyuDark } from './ayu.js';
 import { AyuLight } from './ayu-light.js';
 import { AtomOneDark } from './atom-one-dark.js';
 import { Dracula } from './dracula.js';
+import { GreenScreen } from './green-screen.js';
 import { GitHubDark } from './github-dark.js';
 import { GitHubLight } from './github-light.js';
 import { GoogleCode } from './googlecode.js';
@@ -37,6 +38,7 @@ class ThemeManager {
       AyuLight,
       AtomOneDark,
       Dracula,
+      GreenScreen,
       DefaultLight,
       DefaultDark,
       GitHubDark,

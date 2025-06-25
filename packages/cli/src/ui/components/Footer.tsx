@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { themeManager } from '../themes/theme-manager.js';
 import { shortenPath, tildeifyPath, tokenLimit } from '@google/gemini-cli-core';
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
@@ -39,18 +39,19 @@ export const Footer: React.FC<FooterProps> = ({
   showMemoryUsage,
   totalTokenCount,
 }) => {
+  const theme = themeManager.getActiveTheme();
   const limit = tokenLimit(model);
   const percentage = totalTokenCount / limit;
 
   return (
     <Box marginTop={1} justifyContent="space-between" width="100%">
       <Box>
-        <Text color={Colors.LightBlue}>
+        <Text color={theme.colors.LightBlue}>
           {shortenPath(tildeifyPath(targetDir), 70)}
-          {branchName && <Text color={Colors.Gray}> ({branchName}*)</Text>}
+          {branchName && <Text color={theme.colors.Gray}> ({branchName}*)</Text>}
         </Text>
         {debugMode && (
-          <Text color={Colors.AccentRed}>
+          <Text color={theme.colors.AccentRed}>
             {' ' + (debugMessage || '--debug')}
           </Text>
         )}
@@ -64,43 +65,43 @@ export const Footer: React.FC<FooterProps> = ({
         display="flex"
       >
         {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-          <Text color="green">
+          <Text color={theme.colors.AccentGreen}>
             {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
           </Text>
         ) : process.env.SANDBOX === 'sandbox-exec' ? (
-          <Text color={Colors.AccentYellow}>
+          <Text color={theme.colors.AccentYellow}>
             MacOS Seatbelt{' '}
-            <Text color={Colors.Gray}>({process.env.SEATBELT_PROFILE})</Text>
+            <Text color={theme.colors.Gray}>({process.env.SEATBELT_PROFILE})</Text>
           </Text>
         ) : (
-          <Text color={Colors.AccentRed}>
-            no sandbox <Text color={Colors.Gray}>(see /docs)</Text>
+          <Text color={theme.colors.AccentRed}>
+            no sandbox <Text color={theme.colors.Gray}>(see /docs)</Text>
           </Text>
         )}
       </Box>
 
       {/* Right Section: Gemini Label and Console Summary */}
       <Box alignItems="center">
-        <Text color={Colors.AccentBlue}>
+        <Text color={theme.colors.AccentBlue}>
           {' '}
           {model}{' '}
-          <Text color={Colors.Gray}>
+          <Text color={theme.colors.Gray}>
             ({((1 - percentage) * 100).toFixed(0)}% context left)
           </Text>
         </Text>
         {corgiMode && (
           <Text>
-            <Text color={Colors.Gray}>| </Text>
-            <Text color={Colors.AccentRed}>▼</Text>
-            <Text color={Colors.Foreground}>(´</Text>
-            <Text color={Colors.AccentRed}>ᴥ</Text>
-            <Text color={Colors.Foreground}>`)</Text>
-            <Text color={Colors.AccentRed}>▼ </Text>
+            <Text color={theme.colors.Gray}>| </Text>
+            <Text color={theme.colors.AccentRed}>▼</Text>
+            <Text color={theme.colors.Foreground}>(´</Text>
+            <Text color={theme.colors.AccentRed}>ᴥ</Text>
+            <Text color={theme.colors.Foreground}>`)</Text>
+            <Text color={theme.colors.AccentRed}>▼ </Text>
           </Text>
         )}
         {!showErrorDetails && errorCount > 0 && (
           <Box>
-            <Text color={Colors.Gray}>| </Text>
+            <Text color={theme.colors.Gray}>| </Text>
             <ConsoleSummaryDisplay errorCount={errorCount} />
           </Box>
         )}

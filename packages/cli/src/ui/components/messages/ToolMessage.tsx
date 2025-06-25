@@ -8,7 +8,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { DiffRenderer } from './DiffRenderer.js';
-import { Colors } from '../../colors.js';
+import { themeManager } from '../../themes/theme-manager.js';
 import { MarkdownDisplay } from '../../utils/MarkdownDisplay.js';
 import { GeminiRespondingSpinner } from '../GeminiRespondingSpinner.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
@@ -40,6 +40,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   emphasis = 'medium',
   renderOutputAsMarkdown = true,
 }) => {
+  const theme = themeManager.getActiveTheme();
   const availableHeight = availableTerminalHeight
     ? Math.max(
         availableTerminalHeight - STATIC_HEIGHT - RESERVED_LINE_COUNT,
@@ -90,7 +91,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
             {typeof resultDisplay === 'string' && !renderOutputAsMarkdown && (
               <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
                 <Box>
-                  <Text wrap="wrap">{resultDisplay}</Text>
+                  <Text color={theme.colors.Foreground} wrap="wrap">{resultDisplay}</Text>
                 </Box>
               </MaxSizedBox>
             )}
@@ -115,35 +116,38 @@ type ToolStatusIndicatorProps = {
 
 const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({
   status,
-}) => (
-  <Box minWidth={STATUS_INDICATOR_WIDTH}>
-    {status === ToolCallStatus.Pending && (
-      <Text color={Colors.AccentGreen}>o</Text>
-    )}
-    {status === ToolCallStatus.Executing && (
-      <GeminiRespondingSpinner
-        spinnerType="toggle"
-        nonRespondingDisplay={'⊷'}
-      />
-    )}
-    {status === ToolCallStatus.Success && (
-      <Text color={Colors.AccentGreen}>✔</Text>
-    )}
-    {status === ToolCallStatus.Confirming && (
-      <Text color={Colors.AccentYellow}>?</Text>
-    )}
-    {status === ToolCallStatus.Canceled && (
-      <Text color={Colors.AccentYellow} bold>
-        -
-      </Text>
-    )}
-    {status === ToolCallStatus.Error && (
-      <Text color={Colors.AccentRed} bold>
-        x
-      </Text>
-    )}
-  </Box>
-);
+}) => {
+  const theme = themeManager.getActiveTheme();
+  return (
+    <Box minWidth={STATUS_INDICATOR_WIDTH}>
+      {status === ToolCallStatus.Pending && (
+        <Text color={theme.colors.AccentGreen}>o</Text>
+      )}
+      {status === ToolCallStatus.Executing && (
+        <GeminiRespondingSpinner
+          spinnerType="toggle"
+          nonRespondingDisplay={'⊷'}
+        />
+      )}
+      {status === ToolCallStatus.Success && (
+        <Text color={theme.colors.AccentGreen}>✔</Text>
+      )}
+      {status === ToolCallStatus.Confirming && (
+        <Text color={theme.colors.AccentYellow}>?</Text>
+      )}
+      {status === ToolCallStatus.Canceled && (
+        <Text color={theme.colors.AccentYellow} bold>
+          -
+        </Text>
+      )}
+      {status === ToolCallStatus.Error && (
+        <Text color={theme.colors.AccentRed} bold>
+          x
+        </Text>
+      )}
+    </Box>
+  );
+};
 
 type ToolInfo = {
   name: string;
@@ -157,20 +161,21 @@ const ToolInfo: React.FC<ToolInfo> = ({
   status,
   emphasis,
 }) => {
+  const theme = themeManager.getActiveTheme();
   const nameColor = React.useMemo<string>(() => {
     switch (emphasis) {
       case 'high':
-        return Colors.Foreground;
+        return theme.colors.Foreground;
       case 'medium':
-        return Colors.Foreground;
+        return theme.colors.Foreground;
       case 'low':
-        return Colors.Gray;
+        return theme.colors.Gray;
       default: {
         const exhaustiveCheck: never = emphasis;
         return exhaustiveCheck;
       }
     }
-  }, [emphasis]);
+  }, [emphasis, theme.colors]);
   return (
     <Box>
       <Text
@@ -180,15 +185,18 @@ const ToolInfo: React.FC<ToolInfo> = ({
         <Text color={nameColor} bold>
           {name}
         </Text>{' '}
-        <Text color={Colors.Gray}>{description}</Text>
+        <Text color={theme.colors.Gray}>{description}</Text>
       </Text>
     </Box>
   );
 };
 
-const TrailingIndicator: React.FC = () => (
-  <Text color={Colors.Foreground} wrap="truncate">
-    {' '}
-    ←
-  </Text>
-);
+const TrailingIndicator: React.FC = () => {
+  const theme = themeManager.getActiveTheme();
+  return (
+    <Text color={theme.colors.Foreground} wrap="truncate">
+      {' '}
+      ←
+    </Text>
+  );
+};

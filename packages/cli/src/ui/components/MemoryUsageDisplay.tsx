@@ -6,20 +6,21 @@
 
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { themeManager } from '../themes/theme-manager.js';
 import process from 'node:process';
 import { formatMemoryUsage } from '../utils/formatters.js';
 
 export const MemoryUsageDisplay: React.FC = () => {
+  const theme = themeManager.getActiveTheme();
   const [memoryUsage, setMemoryUsage] = useState<string>('');
-  const [memoryUsageColor, setMemoryUsageColor] = useState<string>(Colors.Gray);
+  const [memoryUsageColor, setMemoryUsageColor] = useState<string>(theme.colors.Gray);
 
   useEffect(() => {
     const updateMemory = () => {
       const usage = process.memoryUsage().rss;
       setMemoryUsage(formatMemoryUsage(usage));
       setMemoryUsageColor(
-        usage >= 2 * 1024 * 1024 * 1024 ? Colors.AccentRed : Colors.Gray,
+        usage >= 2 * 1024 * 1024 * 1024 ? theme.colors.AccentRed : theme.colors.Gray,
       );
     };
     const intervalId = setInterval(updateMemory, 2000);
@@ -29,7 +30,7 @@ export const MemoryUsageDisplay: React.FC = () => {
 
   return (
     <Box>
-      <Text color={Colors.Gray}>| </Text>
+      <Text color={theme.colors.Gray}>| </Text>
       <Text color={memoryUsageColor}>{memoryUsage}</Text>
     </Box>
   );

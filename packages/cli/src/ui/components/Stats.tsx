@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { themeManager } from '../themes/theme-manager.js';
 
 // --- Prop and Data Structures ---
 
@@ -28,12 +28,15 @@ export const StatRow: React.FC<{
   label: string;
   value: string | number;
   valueColor?: string;
-}> = ({ label, value, valueColor }) => (
+}> = ({ label, value, valueColor }) => {
+  const theme = themeManager.getActiveTheme();
+  return (
   <Box justifyContent="space-between" gap={2}>
-    <Text color={Colors.LightBlue}>{label}</Text>
-    <Text color={valueColor}>{value}</Text>
+    <Text color={theme.colors.LightBlue}>{label}</Text>
+    <Text color={valueColor || theme.colors.Foreground}>{value}</Text>
   </Box>
-);
+  );
+};
 
 /**
  * Renders a full column for either "Last Turn" or "Cumulative" stats.
@@ -45,17 +48,18 @@ export const StatsColumn: React.FC<{
   width?: string | number;
   children?: React.ReactNode;
 }> = ({ title, stats, isCumulative = false, width, children }) => {
+  const theme = themeManager.getActiveTheme();
   const cachedDisplay =
     isCumulative && stats.totalTokens > 0
       ? `${stats.cachedTokens.toLocaleString()} (${((stats.cachedTokens / stats.totalTokens) * 100).toFixed(1)}%)`
       : stats.cachedTokens.toLocaleString();
 
   const cachedColor =
-    isCumulative && stats.cachedTokens > 0 ? Colors.AccentGreen : undefined;
+    isCumulative && stats.cachedTokens > 0 ? theme.colors.AccentGreen : undefined;
 
   return (
     <Box flexDirection="column" width={width}>
-      <Text bold>{title}</Text>
+      <Text bold color={theme.colors.Foreground}>{title}</Text>
       <Box marginTop={1} flexDirection="column">
         {/* All StatRows below will now inherit the gap */}
         <StatRow
@@ -90,6 +94,7 @@ export const StatsColumn: React.FC<{
           borderRight={false}
           borderBottom={false}
           borderStyle="single"
+          borderColor={theme.colors.Gray}
         />
         <StatRow
           label="Total Tokens"
@@ -107,12 +112,15 @@ export const StatsColumn: React.FC<{
 export const DurationColumn: React.FC<{
   apiTime: string;
   wallTime: string;
-}> = ({ apiTime, wallTime }) => (
+}> = ({ apiTime, wallTime }) => {
+  const theme = themeManager.getActiveTheme();
+  return (
   <Box flexDirection="column" width={'48%'}>
-    <Text bold>Duration</Text>
+    <Text bold color={theme.colors.Foreground}>Duration</Text>
     <Box marginTop={1} flexDirection="column">
       <StatRow label="API Time" value={apiTime} />
       <StatRow label="Wall Time" value={wallTime} />
     </Box>
   </Box>
-);
+  );
+};

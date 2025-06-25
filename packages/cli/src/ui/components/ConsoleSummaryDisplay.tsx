@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { themeManager } from '../themes/theme-manager.js';
 
 interface ConsoleSummaryDisplayProps {
   errorCount: number;
@@ -16,6 +16,7 @@ interface ConsoleSummaryDisplayProps {
 export const ConsoleSummaryDisplay: React.FC<ConsoleSummaryDisplayProps> = ({
   errorCount,
 }) => {
+  const theme = themeManager.getActiveTheme();
   if (errorCount === 0) {
     return null;
   }
@@ -25,9 +26,9 @@ export const ConsoleSummaryDisplay: React.FC<ConsoleSummaryDisplayProps> = ({
   return (
     <Box>
       {errorCount > 0 && (
-        <Text color={Colors.AccentRed}>
+        <Text color={theme.colors.AccentRed}>
           {errorIcon} {errorCount} error{errorCount > 1 ? 's' : ''}{' '}
-          <Text color={Colors.Gray}>(ctrl+o for details)</Text>
+          <Text color={theme.colors.Gray}>(ctrl+o for details)</Text>
         </Text>
       )}
     </Box>

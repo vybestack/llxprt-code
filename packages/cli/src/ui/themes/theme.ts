@@ -43,7 +43,7 @@ export const lightTheme: ColorsTheme = {
 export const darkTheme: ColorsTheme = {
   type: 'dark',
   Background: '#1E1E2E',
-  Foreground: '#CDD6F4',
+  Foreground: '#6a9955',
   LightBlue: '#ADD8E6',
   AccentBlue: '#89B4FA',
   AccentPurple: '#CBA6F7',
