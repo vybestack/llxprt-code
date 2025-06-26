@@ -8,6 +8,7 @@ import { useCallback, useMemo } from 'react';
 import { type PartListUnion } from '@google/genai';
 import open from 'open';
 import process from 'node:process';
+import { ansi } from '../colors.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { useStateAndRef } from './useStateAndRef.js';
 import {
@@ -339,8 +340,8 @@ export const useSlashCommandProcessor = (
             discoveryState === MCPDiscoveryState.IN_PROGRESS ||
             connectingServers.length > 0
           ) {
-            message += `\u001b[33m⏳ MCP servers are starting up (${connectingServers.length} initializing)...\u001b[0m\n`;
-            message += `\u001b[90mNote: First startup may take longer. Tool availability will update automatically.\u001b[0m\n\n`;
+            message += ansi.accentYellow(`⏳ MCP servers are starting up (${connectingServers.length} initializing)...`) + '\n';
+            message += ansi.gray('Note: First startup may take longer. Tool availability will update automatically.') + '\n\n';
           }
 
           message += 'Configured MCP servers:\n\n';
@@ -372,7 +373,7 @@ export const useSlashCommandProcessor = (
             const server = mcpServers[serverName];
 
             // Format server header with bold formatting and status
-            message += `${statusIndicator} \u001b[1m${serverName}\u001b[0m - ${statusText}`;
+            message += `${statusIndicator} ${ansi.bold(serverName)} - ${statusText}`;
 
             // Add tool count with conditional messaging
             if (status === MCPServerStatus.CONNECTED) {
@@ -385,14 +386,11 @@ export const useSlashCommandProcessor = (
 
             // Add server description with proper handling of multi-line descriptions
             if ((useShowDescriptions || useShowSchema) && server?.description) {
-              const greenColor = '\u001b[32m';
-              const resetColor = '\u001b[0m';
-
               const descLines = server.description.trim().split('\n');
               if (descLines) {
                 message += ':\n';
                 for (let i = 0; i < descLines.length; i++) {
-                  message += `    ${greenColor}${descLines[i]}${resetColor}\n`;
+                  message += `    ${ansi.accentGreen(descLines[i])}\n`;
                 }
               } else {
                 message += '\n';
@@ -401,9 +399,6 @@ export const useSlashCommandProcessor = (
               message += '\n';
             }
 
-            // Reset formatting after server entry
-            message += '\u001b[0m';
-
             if (serverTools.length > 0) {
               serverTools.forEach((tool) => {
                 if (
@@ -411,34 +406,26 @@ export const useSlashCommandProcessor = (
                   tool.description
                 ) {
                   // Format tool name in cyan using simple ANSI cyan color
-                  message += `  - \u001b[36m${tool.name}\u001b[0m`;
-
-                  // Apply green color to the description text
-                  const greenColor = '\u001b[32m';
-                  const resetColor = '\u001b[0m';
+                  message += `  - ${ansi.accentCyan(tool.name)}`;
 
                   // Handle multi-line descriptions by properly indenting and preserving formatting
                   const descLines = tool.description.trim().split('\n');
                   if (descLines) {
                     message += ':\n';
                     for (let i = 0; i < descLines.length; i++) {
-                      message += `      ${greenColor}${descLines[i]}${resetColor}\n`;
+                      message += `      ${ansi.accentGreen(descLines[i])}\n`;
                     }
                   } else {
                     message += '\n';
                   }
-                  // Reset is handled inline with each line now
                 } else {
                   // Use cyan color for the tool name even when not showing descriptions
-                  message += `  - \u001b[36m${tool.name}\u001b[0m\n`;
+                  message += `  - ${ansi.accentCyan(tool.name)}\n`;
                 }
                 if (useShowSchema) {
                   // Prefix the parameters in cyan
-                  message += `    \u001b[36mParameters:\u001b[0m\n`;
-                  // Apply green color to the parameter text
-                  const greenColor = '\u001b[32m';
-                  const resetColor = '\u001b[0m';
-
+                  message += `    ${ansi.accentCyan('Parameters')}:\n`;
+                  
                   const paramsLines = JSON.stringify(
                     tool.schema.parameters,
                     null,
@@ -448,7 +435,7 @@ export const useSlashCommandProcessor = (
                     .split('\n');
                   if (paramsLines) {
                     for (let i = 0; i < paramsLines.length; i++) {
-                      message += `      ${greenColor}${paramsLines[i]}${resetColor}\n`;
+                      message += `      ${ansi.accentGreen(paramsLines[i])}\n`;
                     }
                   }
                 }
@@ -458,9 +445,6 @@ export const useSlashCommandProcessor = (
             }
             message += '\n';
           }
-
-          // Make sure to reset any ANSI formatting at the end to prevent it from affecting the terminal
-          message += '\u001b[0m';
 
           addMessage({
             type: MessageType.INFO,
@@ -532,11 +516,7 @@ export const useSlashCommandProcessor = (
             geminiTools.forEach((tool) => {
               if (useShowDescriptions && tool.description) {
                 // Format tool name in cyan using simple ANSI cyan color
-                message += `  - \u001b[36m${tool.displayName} (${tool.name})\u001b[0m:\n`;
-
-                // Apply green color to the description text
-                const greenColor = '\u001b[32m';
-                const resetColor = '\u001b[0m';
+                message += `  - ${ansi.accentCyan(`${tool.displayName} (${tool.name})`)}:\n`;
 
                 // Handle multi-line descriptions by properly indenting and preserving formatting
                 const descLines = tool.description.trim().split('\n');
@@ -544,21 +524,18 @@ export const useSlashCommandProcessor = (
                 // If there are multiple lines, add proper indentation for each line
                 if (descLines) {
                   for (let i = 0; i < descLines.length; i++) {
-                    message += `      ${greenColor}${descLines[i]}${resetColor}\n`;
+                    message += `      ${ansi.accentGreen(descLines[i])}\n`;
                   }
                 }
               } else {
                 // Use cyan color for the tool name even when not showing descriptions
-                message += `  - \u001b[36m${tool.displayName}\u001b[0m\n`;
+                message += `  - ${ansi.accentCyan(tool.displayName)}\n`;
               }
             });
           } else {
             message += '  No tools available\n';
           }
           message += '\n';
-
-          // Make sure to reset any ANSI formatting at the end to prevent it from affecting the terminal
-          message += '\u001b[0m';
 
           addMessage({
             type: MessageType.INFO,

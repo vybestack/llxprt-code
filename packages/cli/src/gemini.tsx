@@ -14,6 +14,7 @@ import v8 from 'node:v8';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { start_sandbox } from './utils/sandbox.js';
+import chalk from 'chalk';
 import {
   LoadedSettings,
   loadSettings,
@@ -88,11 +89,8 @@ export async function main() {
   await cleanupCheckpoints();
   if (settings.errors.length > 0) {
     for (const error of settings.errors) {
-      let errorMessage = `Error in ${error.path}: ${error.message}`;
-      if (!process.env.NO_COLOR) {
-        errorMessage = `\x1b[31m${errorMessage}\x1b[0m`;
-      }
-      console.error(errorMessage);
+      const errorMessage = `Error in ${error.path}: ${error.message}`;
+      console.error(chalk.red(errorMessage));
       console.error(`Please fix ${error.path} and try again.`);
     }
     process.exit(1);

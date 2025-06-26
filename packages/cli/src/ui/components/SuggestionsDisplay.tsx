@@ -33,7 +33,7 @@ export function SuggestionsDisplay({
   if (isLoading) {
     return (
       <Box paddingX={1} width={width}>
-        <Text color="gray">Loading suggestions...</Text>
+        <Text color={Colors.Gray}>Loading suggestions...</Text>
       </Box>
     );
   }
@@ -82,9 +82,9 @@ export function SuggestionsDisplay({
           </Box>
         );
       })}
-      {endIndex < suggestions.length && <Text color="gray">▼</Text>}
+      {endIndex < suggestions.length && <Text color={Colors.Gray}>▼</Text>}
       {suggestions.length > MAX_SUGGESTIONS_TO_SHOW && (
-        <Text color="gray">
+        <Text color={Colors.Gray}>
           ({activeIndex + 1}/{suggestions.length})
         </Text>
       )}

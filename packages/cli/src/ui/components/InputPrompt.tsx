@@ -9,7 +9,6 @@ import { Text, Box, useInput } from 'ink';
 import { Colors } from '../colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
-import { themeManager } from '../themes/theme-manager.js';
 import { TextBuffer } from './shared/text-buffer.js';
 import { cpSlice, cpLen } from '../utils/textUtils.js';
 import chalk from 'chalk';
@@ -50,7 +49,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   shellModeActive,
   setShellModeActive,
 }) => {
-  const theme = themeManager.getActiveTheme();
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
 
   const completion = useCompletion(
@@ -367,11 +365,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     <>
       <Box
         borderStyle="round"
-        borderColor={shellModeActive ? theme.colors.AccentYellow : theme.colors.AccentBlue}
+        borderColor={shellModeActive ? Colors.AccentYellow : Colors.AccentBlue}
         paddingX={1}
       >
         <Text
-          color={shellModeActive ? theme.colors.AccentYellow : theme.colors.AccentPurple}
+          color={shellModeActive ? Colors.AccentYellow : Colors.AccentPurple}
         >
           {shellModeActive ? '! ' : '> '}
         </Text>
@@ -380,10 +378,10 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             focus ? (
               <Text>
                 {chalk.inverse(placeholder.slice(0, 1))}
-                <Text color={theme.colors.Gray}>{placeholder.slice(1)}</Text>
+                <Text color={Colors.Gray}>{placeholder.slice(1)}</Text>
               </Text>
             ) : (
-              <Text color={theme.colors.Gray}>{placeholder}</Text>
+              <Text color={Colors.Gray}>{placeholder}</Text>
             )
           ) : (
             linesToRender.map((lineText, visualIdxInRenderedSet) => {
@@ -418,7 +416,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 }
               }
               return (
-                <Text color={theme.colors.Foreground} key={`line-${visualIdxInRenderedSet}`}>{display}</Text>
+                <Text color={Colors.Foreground} key={`line-${visualIdxInRenderedSet}`}>{display}</Text>
               );
             })
           )}
