@@ -42,7 +42,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
         </Text>
       </Box>
       <Box>
-        <Text>{cliVersion}</Text>
+        <Text color={Colors.Foreground}>{cliVersion}</Text>
       </Box>
     </Box>
     {GIT_COMMIT_INFO && !['N/A'].includes(GIT_COMMIT_INFO) && (
@@ -53,7 +53,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
           </Text>
         </Box>
         <Box>
-          <Text>{GIT_COMMIT_INFO}</Text>
+          <Text color={Colors.Foreground}>{GIT_COMMIT_INFO}</Text>
         </Box>
       </Box>
     )}
@@ -64,7 +64,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
         </Text>
       </Box>
       <Box>
-        <Text>{modelVersion}</Text>
+        <Text color={Colors.Foreground}>{modelVersion}</Text>
       </Box>
     </Box>
     <Box flexDirection="row">
@@ -74,7 +74,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
         </Text>
       </Box>
       <Box>
-        <Text>{sandboxEnv}</Text>
+        <Text color={Colors.Foreground}>{sandboxEnv}</Text>
       </Box>
     </Box>
     <Box flexDirection="row">
@@ -84,7 +84,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
         </Text>
       </Box>
       <Box>
-        <Text>{osVersion}</Text>
+        <Text color={Colors.Foreground}>{osVersion}</Text>
       </Box>
     </Box>
   </Box>

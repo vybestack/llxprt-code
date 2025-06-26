@@ -7,7 +7,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import Gradient from 'ink-gradient';
-import { themeManager } from '../themes/theme-manager.js';
+import { Colors } from '../colors.js';
 import { formatDuration } from '../utils/formatters.js';
 import { CumulativeStats } from '../contexts/SessionContext.js';
 import { FormattedStats, StatRow, StatsColumn } from './Stats.js';
@@ -25,7 +25,6 @@ export const SessionSummaryDisplay: React.FC<SessionSummaryDisplayProps> = ({
   stats,
   duration,
 }) => {
-  const theme = themeManager.getActiveTheme();
   const cumulativeFormatted: FormattedStats = {
     inputTokens: stats.promptTokenCount,
     outputTokens: stats.candidatesTokenCount,
@@ -40,19 +39,19 @@ export const SessionSummaryDisplay: React.FC<SessionSummaryDisplayProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={theme.colors.Gray}
+      borderColor={Colors.Gray}
       flexDirection="column"
       paddingY={1}
       paddingX={2}
       alignSelf="flex-start"
     >
       <Box marginBottom={1} flexDirection="column">
-        {theme.colors.GradientColors ? (
-          <Gradient colors={theme.colors.GradientColors}>
+        {Colors.GradientColors ? (
+          <Gradient colors={Colors.GradientColors}>
             <Text bold>{title}</Text>
           </Gradient>
         ) : (
-          <Text bold color={theme.colors.Foreground}>{title}</Text>
+          <Text bold color={Colors.Foreground}>{title}</Text>
         )}
       </Box>
 

@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { themeManager } from '../themes/theme-manager.js';
+import { Colors } from '../colors.js';
 import { formatDuration } from '../utils/formatters.js';
 import { CumulativeStats } from '../contexts/SessionContext.js';
 import { FormattedStats, StatRow, StatsColumn } from './Stats.js';
@@ -30,7 +30,6 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   lastTurnStats,
   duration,
 }) => {
-  const theme = themeManager.getActiveTheme();
   const lastTurnFormatted: FormattedStats = {
     inputTokens: lastTurnStats.promptTokenCount,
     outputTokens: lastTurnStats.candidatesTokenCount,
@@ -52,12 +51,12 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={theme.colors.Gray}
+      borderColor={Colors.Gray}
       flexDirection="column"
       paddingY={1}
       paddingX={2}
     >
-      <Text bold color={theme.colors.AccentPurple}>
+      <Text bold color={Colors.AccentPurple}>
         Stats
       </Text>
 

@@ -7,7 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
-import { themeManager } from '../themes/theme-manager.js';
+import { Colors } from '../colors.js';
 
 interface AuthInProgressProps {
   onTimeout: () => void;
@@ -16,7 +16,6 @@ interface AuthInProgressProps {
 export function AuthInProgress({
   onTimeout,
 }: AuthInProgressProps): React.JSX.Element {
-  const theme = themeManager.getActiveTheme();
   const [timedOut, setTimedOut] = useState(false);
 
   useInput((_, key) => {
@@ -37,18 +36,18 @@ export function AuthInProgress({
   return (
     <Box
       borderStyle="round"
-      borderColor={theme.colors.Gray}
+      borderColor={Colors.Gray}
       flexDirection="column"
       padding={1}
       width="100%"
     >
       {timedOut ? (
-        <Text color={theme.colors.AccentRed}>
+        <Text color={Colors.AccentRed}>
           Authentication timed out. Please try again.
         </Text>
       ) : (
         <Box>
-          <Text color={theme.colors.Foreground}>
+          <Text color={Colors.Foreground}>
             <Spinner type="dots" /> Waiting for auth... (Press ESC to cancel)
           </Text>
         </Box>
