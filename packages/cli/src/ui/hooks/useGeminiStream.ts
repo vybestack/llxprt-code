@@ -31,6 +31,8 @@ import {
   HistoryItem,
   HistoryItemWithoutId,
   HistoryItemToolGroup,
+  HistoryItemGemini,
+  HistoryItemGeminiContent,
   MessageType,
   ToolCallStatus,
 } from '../types.js';
@@ -44,6 +46,8 @@ import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { useLogger } from './useLogger.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { GeminiCompatibleWrapper } from '../../providers/adapters/GeminiCompatibleWrapper.js';
 import {
   useReactToolScheduler,
   mapToDisplay as mapTrackedToolCallsToDisplay,
@@ -69,6 +73,78 @@ enum StreamProcessingStatus {
   Completed,
   UserCancelled,
   Error,
+}
+
+/**
+ * Get the display model name, including provider prefix if using a provider
+ */
+function getDisplayModelName(config: Config): string {
+  const baseModel = config.getModel();
+  try {
+    const providerManager = getProviderManager();
+    if (providerManager.hasActiveProvider()) {
+      const provider = providerManager.getActiveProvider();
+      const providerModel = provider.getCurrentModel?.() || baseModel;
+      return `${provider.name}:${providerModel}`;
+    }
+  } catch {
+    // If there's any error accessing provider manager, fall back to base model
+  }
+  return baseModel;
+}
+
+/**
+ * Convert provider stream to Gemini event stream
+ */
+async function* convertProviderStreamToGeminiEvents(
+  providerStream: AsyncGenerator<any>,
+  providerName: string,
+  modelName: string,
+): AsyncGenerator<GeminiEvent> {
+  try {
+    for await (const chunk of providerStream) {
+      // The GeminiCompatibleWrapper converts provider messages to Gemini format
+      // Check for content in parts
+      if (chunk.candidates?.[0]?.content?.parts) {
+        const parts = chunk.candidates[0].content.parts;
+
+        for (const part of parts) {
+          // Handle text content
+          if (part.text) {
+            yield {
+              type: ServerGeminiEventType.Content,
+              value: part.text,
+            } as unknown as ContentEvent;
+          }
+
+          // Handle function calls (tool calls)
+          if (part.functionCall) {
+            yield {
+              type: ServerGeminiEventType.ToolCallRequest,
+              value: {
+                callId:
+                  (part.functionCall as any).id ||
+                  `${part.functionCall.name}-${Date.now()}`, // Use provided ID or generate one
+                name: part.functionCall.name,
+                args: part.functionCall.args || {},
+              },
+            } as unknown as GeminiEvent;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // ErrorEvent.value.error is a StructuredError
+    yield {
+      type: ServerGeminiEventType.Error,
+      value: {
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          type: 'provider_error',
+        },
+      },
+    } as unknown as ErrorEvent;
+  }
 }
 
 /**
@@ -315,7 +391,11 @@ export const useGeminiStream = (
         if (pendingHistoryItemRef.current) {
           addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         }
-        setPendingHistoryItem({ type: 'gemini', text: '' });
+        setPendingHistoryItem({
+          type: 'gemini',
+          text: '',
+          model: getDisplayModelName(config),
+        });
         newGeminiMessageBuffer = eventValue;
       }
       // Split large messages for better rendering performance. Ideally,
@@ -326,6 +406,7 @@ export const useGeminiStream = (
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
           text: newGeminiMessageBuffer,
+          model: (item as any)?.model || getDisplayModelName(config),
         }));
       } else {
         // This indicates that we need to split up this Gemini Message.
@@ -338,21 +419,27 @@ export const useGeminiStream = (
         // broken up so that there are more "statically" rendered.
         const beforeText = newGeminiMessageBuffer.substring(0, splitPoint);
         const afterText = newGeminiMessageBuffer.substring(splitPoint);
-        addItem(
-          {
-            type: pendingHistoryItemRef.current?.type as
-              | 'gemini'
-              | 'gemini_content',
-            text: beforeText,
-          },
-          userMessageTimestamp,
-        );
-        setPendingHistoryItem({ type: 'gemini_content', text: afterText });
+        const itemType = pendingHistoryItemRef.current?.type as
+          | 'gemini'
+          | 'gemini_content';
+        const historyItem: HistoryItemGemini | HistoryItemGeminiContent = {
+          type: itemType || 'gemini',
+          text: beforeText,
+          model:
+            (pendingHistoryItemRef.current as any)?.model ||
+            getDisplayModelName(config),
+        };
+        addItem(historyItem, userMessageTimestamp);
+        setPendingHistoryItem({
+          type: 'gemini_content',
+          text: afterText,
+          model: getDisplayModelName(config),
+        });
         newGeminiMessageBuffer = afterText;
       }
       return newGeminiMessageBuffer;
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config],
   );
 
   const handleUserCancelledEvent = useCallback(
@@ -520,7 +607,79 @@ export const useGeminiStream = (
       setInitError(null);
 
       try {
-        const stream = geminiClient.sendMessageStream(queryToSend, abortSignal);
+        // Check if we should use a provider instead of Gemini
+        let stream;
+        const providerManager = getProviderManager();
+
+        if (providerManager.hasActiveProvider()) {
+          console.debug('[useGeminiStream] Using provider for message');
+          const provider = providerManager.getActiveProvider();
+          const wrapper = new GeminiCompatibleWrapper(provider);
+
+          // Get the full conversation history
+          const chatHistory = await geminiClient.getHistory();
+          console.debug(
+            '[useGeminiStream] Chat history length:',
+            chatHistory.length,
+          );
+
+          // Convert current query to content format
+          const currentMessage =
+            typeof queryToSend === 'string'
+              ? { role: 'user' as const, parts: [{ text: queryToSend }] }
+              : Array.isArray(queryToSend)
+                ? {
+                    role: 'user' as const,
+                    parts: queryToSend.map((p) =>
+                      typeof p === 'string' ? { text: p } : p,
+                    ),
+                  }
+                : { role: 'user' as const, parts: [queryToSend] };
+
+          // Combine history with current message
+          const contents = [...chatHistory, currentMessage];
+
+          // Get tools from config to pass to provider
+          let tools: any;
+          try {
+            const toolRegistry = await config.getToolRegistry();
+            const availableTools = toolRegistry.getAllTools();
+            // Convert tools to provider format if needed
+            tools = availableTools.map((tool: any) => ({
+              type: 'function' as const,
+              function: {
+                name: tool.name,
+                description: tool.description || '',
+                parameters: tool.schema?.parameters || tool.parameterSchema || {},
+              },
+            }));
+            console.debug(
+              '[useGeminiStream] Passing',
+              tools.length,
+              'tools to provider',
+            );
+          } catch (error) {
+            console.debug('[useGeminiStream] Could not get tools:', error);
+          }
+
+          // Get the provider stream
+          const providerStream = await wrapper.generateContentStream({
+            model: provider.getCurrentModel?.() || config.getModel(),
+            contents,
+            config: { tools } as any,
+          });
+
+          // Convert provider stream to Gemini event stream
+          stream = convertProviderStreamToGeminiEvents(
+            providerStream,
+            provider.name,
+            provider.getCurrentModel?.() || 'unknown',
+          );
+        } else {
+          console.debug('[useGeminiStream] Using Gemini for message');
+          stream = geminiClient.sendMessageStream(queryToSend, abortSignal);
+        }
+
         const processingStatus = await processGeminiStreamEvents(
           stream,
           userMessageTimestamp,

@@ -425,18 +425,18 @@ describe('Gemini Client (client.ts)', () => {
         }),
       };
       client['config'] = mockConfig as any;
-      
+
       // Mock the content generator and chat
       const mockContentGenerator = {
         generateContent: vi.fn(),
       };
       client['contentGenerator'] = mockContentGenerator as any;
-      
+
       const initialChat = client['chat'];
-      
+
       // Act
       await client.updateModel('gemini-2.5-flash');
-      
+
       // Assert
       expect(mockSetModel).toHaveBeenCalledWith('gemini-2.5-flash');
       expect(client['model']).toBe('gemini-2.5-flash');
@@ -459,7 +459,7 @@ describe('Gemini Client (client.ts)', () => {
         { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
         { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
       ];
-      
+
       const mockConfig = {
         getContentGeneratorConfig: vi.fn().mockReturnValue({
           authType: AuthType.USE_GEMINI,
@@ -467,22 +467,22 @@ describe('Gemini Client (client.ts)', () => {
         }),
       };
       client['config'] = mockConfig as any;
-      
+
       (global.fetch as any).mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue({ models: mockModels }),
       });
-      
+
       // Act
       const models = await client.listAvailableModels();
-      
+
       // Assert
       expect(global.fetch).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/models?key=test-api-key',
         expect.objectContaining({
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
-        })
+        }),
       );
       expect(models).toEqual(mockModels);
     });
@@ -495,16 +495,19 @@ describe('Gemini Client (client.ts)', () => {
         }),
       };
       client['config'] = mockConfig as any;
-      
+
       // Act
       const models = await client.listAvailableModels();
-      
+
       // Assert
-      expect(models).toEqual([{
-        name: 'oauth-not-supported',
-        displayName: 'OAuth Authentication',
-        description: 'Model listing is not available with OAuth authentication',
-      }]);
+      expect(models).toEqual([
+        {
+          name: 'oauth-not-supported',
+          displayName: 'OAuth Authentication',
+          description:
+            'Model listing is not available with OAuth authentication',
+        },
+      ]);
     });
 
     it('should return empty array when API call fails', async () => {
@@ -516,12 +519,12 @@ describe('Gemini Client (client.ts)', () => {
         }),
       };
       client['config'] = mockConfig as any;
-      
+
       (global.fetch as any).mockRejectedValue(new Error('Network error'));
-      
+
       // Act
       const models = await client.listAvailableModels();
-      
+
       // Assert
       expect(models).toEqual([]);
     });
@@ -534,10 +537,10 @@ describe('Gemini Client (client.ts)', () => {
         }),
       };
       client['config'] = mockConfig as any;
-      
+
       // Act
       const models = await client.listAvailableModels();
-      
+
       // Assert
       expect(models).toEqual([]);
     });

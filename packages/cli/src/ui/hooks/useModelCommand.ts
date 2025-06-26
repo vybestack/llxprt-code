@@ -17,7 +17,10 @@ interface UseModelCommandProps {
   }) => void;
 }
 
-export const useModelCommand = ({ config, addMessage }: UseModelCommandProps) => {
+export const useModelCommand = ({
+  config,
+  addMessage,
+}: UseModelCommandProps) => {
   const [showModelDialog, setShowModelDialog] = useState(false);
 
   const openModelDialog = useCallback(() => {
@@ -28,47 +31,50 @@ export const useModelCommand = ({ config, addMessage }: UseModelCommandProps) =>
     setShowModelDialog(false);
   }, []);
 
-  const handleModelSelection = useCallback(async (modelName: string) => {
-    if (!config) {
-      addMessage({
-        type: MessageType.ERROR,
-        content: 'Configuration not available',
-        timestamp: new Date(),
-      });
-      return;
-    }
+  const handleModelSelection = useCallback(
+    async (modelName: string) => {
+      if (!config) {
+        addMessage({
+          type: MessageType.ERROR,
+          content: 'Configuration not available',
+          timestamp: new Date(),
+        });
+        return;
+      }
 
-    const currentModel = config.getModel();
-    
-    if (modelName === currentModel) {
-      addMessage({
-        type: MessageType.INFO,
-        content: `Already using model: ${currentModel}`,
-        timestamp: new Date(),
-      });
-      return;
-    }
+      const currentModel = config.getModel();
 
-    try {
-      // Update the model in config
-      config.setModel(modelName);
-      
-      // Update the model in the Gemini client
-      await config.getGeminiClient()?.updateModel(modelName);
-      
-      addMessage({
-        type: MessageType.INFO,
-        content: `Switched from ${currentModel} to ${modelName}`,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      addMessage({
-        type: MessageType.ERROR,
-        content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
-        timestamp: new Date(),
-      });
-    }
-  }, [config, addMessage]);
+      if (modelName === currentModel) {
+        addMessage({
+          type: MessageType.INFO,
+          content: `Already using model: ${currentModel}`,
+          timestamp: new Date(),
+        });
+        return;
+      }
+
+      try {
+        // Update the model in config
+        config.setModel(modelName);
+
+        // Update the model in the Gemini client
+        await config.getGeminiClient()?.updateModel(modelName);
+
+        addMessage({
+          type: MessageType.INFO,
+          content: `Switched from ${currentModel} to ${modelName}`,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        addMessage({
+          type: MessageType.ERROR,
+          content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+          timestamp: new Date(),
+        });
+      }
+    },
+    [config, addMessage],
+  );
 
   return {
     showModelDialog,

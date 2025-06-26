@@ -85,16 +85,18 @@ export class GeminiClient {
   async updateModel(newModel: string): Promise<void> {
     this.model = newModel;
     this.config.setModel(newModel);
-    
+
     // Re-initialize the chat with the new model
     this.chat = await this.startChat();
   }
 
-  async listAvailableModels(): Promise<Array<{name: string; displayName?: string; description?: string}>> {
+  async listAvailableModels(): Promise<
+    Array<{ name: string; displayName?: string; description?: string }>
+  > {
     // Try to list models using the REST API directly
     const authType = this.config.getContentGeneratorConfig()?.authType;
     const apiKey = this.config.getContentGeneratorConfig()?.apiKey;
-    
+
     if (authType === AuthType.USE_GEMINI && apiKey) {
       try {
         const response = await fetch(
@@ -104,9 +106,9 @@ export class GeminiClient {
             headers: {
               'Content-Type': 'application/json',
             },
-          }
+          },
         );
-        
+
         if (response.ok) {
           const data = await response.json();
           return data.models || [];
@@ -117,11 +119,14 @@ export class GeminiClient {
     } else if (authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
       // For OAuth, model listing is not supported by the Code Assist API
       // Return a special marker to indicate OAuth authentication
-      return [{
-        name: 'oauth-not-supported',
-        displayName: 'OAuth Authentication',
-        description: 'Model listing is not available with OAuth authentication'
-      }];
+      return [
+        {
+          name: 'oauth-not-supported',
+          displayName: 'OAuth Authentication',
+          description:
+            'Model listing is not available with OAuth authentication',
+        },
+      ];
     }
     // Return empty array if we can't fetch models
     return [];

@@ -28,6 +28,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { loadSandboxConfig } from './sandboxConfig.js';
+import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
 
 // Simple console logger for now - replace with actual logger if available
 const logger = {
@@ -197,7 +198,7 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(settings, argv);
 
-  return new Config({
+  const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
     sandbox: sandboxConfig,
@@ -246,6 +247,9 @@ export async function loadCliConfig(
     model: argv.model!,
     extensionContextFilePaths,
   });
+
+  // Enhance the config with provider support
+  return enhanceConfigWithProviders(config);
 }
 
 function mergeMcpServers(settings: Settings, extensions: Extension[]) {

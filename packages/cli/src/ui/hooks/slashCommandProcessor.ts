@@ -34,6 +34,7 @@ import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
 import { LoadedSettings } from '../../config/settings.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export interface SlashCommandActionReturn {
   shouldScheduleTool?: boolean;
@@ -341,8 +342,14 @@ export const useSlashCommandProcessor = (
             discoveryState === MCPDiscoveryState.IN_PROGRESS ||
             connectingServers.length > 0
           ) {
-            message += ansi.accentYellow(`⏳ MCP servers are starting up (${connectingServers.length} initializing)...`) + '\n';
-            message += ansi.gray('Note: First startup may take longer. Tool availability will update automatically.') + '\n\n';
+            message +=
+              ansi.accentYellow(
+                `⏳ MCP servers are starting up (${connectingServers.length} initializing)...`,
+              ) + '\n';
+            message +=
+              ansi.gray(
+                'Note: First startup may take longer. Tool availability will update automatically.',
+              ) + '\n\n';
           }
 
           message += 'Configured MCP servers:\n\n';
@@ -426,7 +433,7 @@ export const useSlashCommandProcessor = (
                 if (useShowSchema) {
                   // Prefix the parameters in cyan
                   message += `    ${ansi.accentCyan('Parameters')}:\n`;
-                  
+
                   const paramsLines = JSON.stringify(
                     tool.schema.parameters,
                     null,
@@ -547,10 +554,70 @@ export const useSlashCommandProcessor = (
       },
       {
         name: 'model',
-        description: 'select or switch Gemini model',
+        description: 'select or switch model (Gemini or provider model)',
         action: async (_mainCommand, _subCommand, _args) => {
           const modelName = _subCommand || _args;
-          
+
+          // Check if we're using a provider
+          const providerManager = getProviderManager();
+
+          if (providerManager.hasActiveProvider()) {
+            // Provider mode
+            if (!modelName) {
+              try {
+                const activeProvider = providerManager.getActiveProvider();
+                const models = await activeProvider.getModels();
+                const currentModel = activeProvider.getCurrentModel
+                  ? activeProvider.getCurrentModel()
+                  : 'unknown';
+
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Current model: ${currentModel}\n\nAvailable models for provider '${activeProvider.name}':\n${models.map((m) => `  - ${m.id}`).join('\n')}`,
+                  timestamp: new Date(),
+                });
+              } catch (error) {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Failed to list models: ${error instanceof Error ? error.message : String(error)}`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
+
+            // Switch model in provider
+            try {
+              const activeProvider = providerManager.getActiveProvider();
+              const currentModel = activeProvider.getCurrentModel
+                ? activeProvider.getCurrentModel()
+                : 'unknown';
+
+              if (activeProvider.setModel) {
+                activeProvider.setModel(modelName);
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${activeProvider.name}' does not support model switching`,
+                  timestamp: new Date(),
+                });
+              }
+            } catch (error) {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+                timestamp: new Date(),
+              });
+            }
+            return;
+          }
+
+          // Fallback to Gemini mode
           // If no model specified, open the interactive dialog
           if (!modelName) {
             openModelDialog();
@@ -569,7 +636,7 @@ export const useSlashCommandProcessor = (
             }
 
             const currentModel = config.getModel();
-            
+
             if (modelName === currentModel) {
               addMessage({
                 type: MessageType.INFO,
@@ -581,10 +648,10 @@ export const useSlashCommandProcessor = (
 
             // Update the model in config
             config.setModel(modelName);
-            
+
             // Update the model in the Gemini client
             await config.getGeminiClient()?.updateModel(modelName);
-            
+
             addMessage({
               type: MessageType.INFO,
               content: `Switched from ${currentModel} to ${modelName}`,
@@ -594,6 +661,88 @@ export const useSlashCommandProcessor = (
             addMessage({
               type: MessageType.ERROR,
               content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'provider',
+        description:
+          'switch between different AI providers (openai, anthropic, etc.)',
+        action: async (_mainCommand, providerName, _args) => {
+          const providerManager = getProviderManager();
+
+          if (!providerName) {
+            // List available providers
+            const providers = providerManager.listProviders();
+            const currentProvider = providerManager.getActiveProviderName();
+
+            // Build provider list including gemini as an option
+            const allProviders = ['gemini', ...providers];
+            const providerList = allProviders
+              .map((name) => {
+                if (name === 'gemini' && !currentProvider) {
+                  return 'gemini (active)';
+                } else if (name === currentProvider) {
+                  return `${name} (active)`;
+                }
+                return name;
+              })
+              .join(', ');
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Available providers: ${providerList}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          try {
+            const currentProvider = providerManager.getActiveProviderName();
+
+            // Handle switching to gemini (default)
+            if (providerName.toLowerCase() === 'gemini') {
+              if (!currentProvider) {
+                addMessage({
+                  type: MessageType.INFO,
+                  content: 'Already using Gemini (default provider)',
+                  timestamp: new Date(),
+                });
+                return;
+              }
+
+              providerManager.clearActiveProvider();
+              addMessage({
+                type: MessageType.INFO,
+                content: `Switched from ${currentProvider} to Gemini (default)`,
+                timestamp: new Date(),
+              });
+              return;
+            }
+
+            // Handle switching to other providers
+            if (providerName === currentProvider) {
+              addMessage({
+                type: MessageType.INFO,
+                content: `Already using provider: ${currentProvider}`,
+                timestamp: new Date(),
+              });
+              return;
+            }
+
+            providerManager.setActiveProvider(providerName);
+            const fromProvider = currentProvider || 'gemini';
+            addMessage({
+              type: MessageType.INFO,
+              content: `Switched from ${fromProvider} to ${providerName}`,
+              timestamp: new Date(),
+            });
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
               timestamp: new Date(),
             });
           }

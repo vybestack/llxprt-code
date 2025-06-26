@@ -1,6 +1,6 @@
 # 🗂️ multi-llm-ts Plan-Creation Guide
 
-This document explains **how to craft multi-phase implementation plans** ("P-plans") that can be executed by independent LLM workers while guaranteeing incremental quality gates.  Refer to this whenever you ask an LLM to generate a new plan.
+This document explains **how to craft multi-phase implementation plans** ("P-plans") that can be executed by independent LLM workers while guaranteeing incremental quality gates. Refer to this whenever you ask an LLM to generate a new plan.
 
 ---
 
@@ -15,9 +15,9 @@ plans/<feature-slug>/
   …
 ```
 
-* Use **two-digit numeric prefixes** for chronological ordering.
-* Every implementation phase *N* **must** be immediately followed by a verification phase *N*a.
-* The final plan should include as many phases as needed (stubs, TDD, impl, UI, integration, release).
+- Use **two-digit numeric prefixes** for chronological ordering.
+- Every implementation phase _N_ **must** be immediately followed by a verification phase *N*a.
+- The final plan should include as many phases as needed (stubs, TDD, impl, UI, integration, release).
 
 ---
 
@@ -29,15 +29,15 @@ plans/<feature-slug>/
 4. **Deliverables** – bullet list with explicit paths & API contracts.
 5. **Checklist (implementer)** – GitHub-style checkboxes `[ ]`; must be ticked (`[x]`) by the worker before finishing.
 6. **Self-verify** – terminal commands the worker must run locally to prove success (e.g., `npm run typecheck`).
-7. **End note** – *"STOP. Wait for Phase X verification."*
+7. **End note** – _"STOP. Wait for Phase X verification."_
 
 ### Mandatory Rules for Implementation Phases
 
-* **NO reverse tests**: workers cannot write tests that expect `NotYetImplemented` or any stub error.  Tests must assert real behaviour.
-* **Stub phases** must throw `NotYetImplemented` from all new methods.
-* Workers **must not** remove type checking or disable ESLint.
-* Each phase may only run the tests it expects to pass; earlier failing tests are acceptable until their scheduled phase.
-* The worker must check off every box in the checklist before stopping.
+- **NO reverse tests**: workers cannot write tests that expect `NotYetImplemented` or any stub error. Tests must assert real behaviour.
+- **Stub phases** must throw `NotYetImplemented` from all new methods.
+- Workers **must not** remove type checking or disable ESLint.
+- Each phase may only run the tests it expects to pass; earlier failing tests are acceptable until their scheduled phase.
+- The worker must check off every box in the checklist before stopping.
 
 ---
 
@@ -49,9 +49,9 @@ plans/<feature-slug>/
 
 ### Mandatory Rules for Verification Phases
 
-* Must aggressively look for *cheating* (e.g., hidden logic in stubs, unchecked boxes, tests that catch the stub error).
-* Should run linter, type-checker, and the relevant test scope.
-* Must fail if any checklist item remains unchecked.
+- Must aggressively look for _cheating_ (e.g., hidden logic in stubs, unchecked boxes, tests that catch the stub error).
+- Should run linter, type-checker, and the relevant test scope.
+- Must fail if any checklist item remains unchecked.
 
 ---
 
@@ -77,7 +77,6 @@ Each step is paired with its own `a` verification step.
 - [ ] Document rules: no reverse tests, throw `NotYetImplemented`, tick checkboxes.
 - [ ] Provide grep examples to detect cheating in verification files.
 
-
 ---
 
-Happy planning! 
+Happy planning!

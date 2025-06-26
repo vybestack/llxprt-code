@@ -416,7 +416,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 }
               }
               return (
-                <Text color={Colors.Foreground} key={`line-${visualIdxInRenderedSet}`}>{display}</Text>
+                <Text
+                  color={Colors.Foreground}
+                  key={`line-${visualIdxInRenderedSet}`}
+                >
+                  {display}
+                </Text>
               );
             })
           )}

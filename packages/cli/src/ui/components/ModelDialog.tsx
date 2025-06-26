@@ -22,7 +22,7 @@ export const ModelDialog: React.FC<ModelDialogProps> = ({
   onModelSelected,
 }) => {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [_error, _setError] = useState<string | null>(null);
 
   // Hardcoded models for OAuth users
   const models = [
@@ -31,7 +31,7 @@ export const ModelDialog: React.FC<ModelDialogProps> = ({
   ];
 
   const currentModel = config?.getModel() || 'gemini-2.5-pro';
-  const initialIndex = models.findIndex(m => m.value === currentModel);
+  const initialIndex = models.findIndex((m) => m.value === currentModel);
 
   useEffect(() => {
     // Simulate loading
@@ -71,7 +71,9 @@ export const ModelDialog: React.FC<ModelDialogProps> = ({
       padding={1}
       width="100%"
     >
-      <Text bold color={Colors.Foreground}>Select Model</Text>
+      <Text bold color={Colors.Foreground}>
+        Select Model
+      </Text>
       <RadioButtonSelect
         items={models}
         initialIndex={initialIndex >= 0 ? initialIndex : 0}

@@ -60,17 +60,27 @@ function applyColor(color: string, text: string): string {
   }
   // Handle named colors - map to specific chalk methods
   switch (color.toLowerCase()) {
-    case 'black': return chalk.black(text);
-    case 'red': return chalk.red(text);
-    case 'green': return chalk.green(text);
-    case 'yellow': return chalk.yellow(text);
-    case 'blue': return chalk.blue(text);
-    case 'magenta': return chalk.magenta(text);
-    case 'cyan': return chalk.cyan(text);
-    case 'white': return chalk.white(text);
+    case 'black':
+      return chalk.black(text);
+    case 'red':
+      return chalk.red(text);
+    case 'green':
+      return chalk.green(text);
+    case 'yellow':
+      return chalk.yellow(text);
+    case 'blue':
+      return chalk.blue(text);
+    case 'magenta':
+      return chalk.magenta(text);
+    case 'cyan':
+      return chalk.cyan(text);
+    case 'white':
+      return chalk.white(text);
     case 'gray':
-    case 'grey': return chalk.gray(text);
-    default: return text;
+    case 'grey':
+      return chalk.gray(text);
+    default:
+      return text;
   }
 }
 
@@ -87,15 +97,24 @@ export const ansi = {
     }
     // Handle named background colors
     switch (bg.toLowerCase()) {
-      case 'black': return chalk.bgBlack(text);
-      case 'red': return chalk.bgRed(text);
-      case 'green': return chalk.bgGreen(text);
-      case 'yellow': return chalk.bgYellow(text);
-      case 'blue': return chalk.bgBlue(text);
-      case 'magenta': return chalk.bgMagenta(text);
-      case 'cyan': return chalk.bgCyan(text);
-      case 'white': return chalk.bgWhite(text);
-      default: return text;
+      case 'black':
+        return chalk.bgBlack(text);
+      case 'red':
+        return chalk.bgRed(text);
+      case 'green':
+        return chalk.bgGreen(text);
+      case 'yellow':
+        return chalk.bgYellow(text);
+      case 'blue':
+        return chalk.bgBlue(text);
+      case 'magenta':
+        return chalk.bgMagenta(text);
+      case 'cyan':
+        return chalk.bgCyan(text);
+      case 'white':
+        return chalk.bgWhite(text);
+      default:
+        return text;
     }
   },
   lightBlue: (text: string) => applyColor(Colors.LightBlue, text),

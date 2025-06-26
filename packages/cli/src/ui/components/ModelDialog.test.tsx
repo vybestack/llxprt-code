@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import React from 'react';
 import { render } from 'ink-testing-library';
 import { ModelDialog } from './ModelDialog.js';
 import { Config } from '@google/gemini-cli-core';
@@ -28,7 +27,7 @@ describe('ModelDialog', () => {
         config={mockConfig as Config}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     expect(lastFrame()).toContain('Loading available models...');
@@ -40,11 +39,11 @@ describe('ModelDialog', () => {
         config={mockConfig as Config}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     // Wait for loading to complete
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const frame = lastFrame();
     expect(frame).toContain('Select Model');
@@ -59,11 +58,11 @@ describe('ModelDialog', () => {
         config={mockConfig as Config}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     // Wait for loading to complete
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     stdin.write('\x1B'); // Escape key
 
@@ -76,11 +75,11 @@ describe('ModelDialog', () => {
         config={mockConfig as Config}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     // Wait for loading to complete
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     // Select the current model (no navigation needed since it's already selected)
     stdin.write('\r'); // Enter
@@ -95,18 +94,18 @@ describe('ModelDialog', () => {
         config={mockConfig as Config}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     // Wait for loading to complete
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     // Navigate down to flash model
     stdin.write('\u001b[B'); // Arrow down (using full escape sequence)
-    
+
     // Small delay for navigation
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     stdin.write('\r'); // Enter
 
     expect(mockOnModelSelected).toHaveBeenCalledWith('gemini-2.5-flash');
@@ -115,17 +114,17 @@ describe('ModelDialog', () => {
 
   it('should highlight current model', async () => {
     mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-flash');
-    
+
     const { lastFrame } = render(
       <ModelDialog
         config={mockConfig as Config}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     // Wait for loading to complete
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const frame = lastFrame();
     expect(frame).toContain('● Gemini 2.5 Flash'); // Flash should be selected
@@ -137,11 +136,11 @@ describe('ModelDialog', () => {
         config={null}
         onClose={mockOnClose}
         onModelSelected={mockOnModelSelected}
-      />
+      />,
     );
 
     // Wait for loading to complete
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
 
     const frame = lastFrame();
     expect(frame).toContain('Select Model');

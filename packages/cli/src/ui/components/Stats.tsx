@@ -55,7 +55,9 @@ export const StatsColumn: React.FC<{
 
   return (
     <Box flexDirection="column" width={width}>
-      <Text bold color={Colors.Foreground}>{title}</Text>
+      <Text bold color={Colors.Foreground}>
+        {title}
+      </Text>
       <Box marginTop={1} flexDirection="column">
         {/* All StatRows below will now inherit the gap */}
         <StatRow
@@ -110,7 +112,9 @@ export const DurationColumn: React.FC<{
   wallTime: string;
 }> = ({ apiTime, wallTime }) => (
   <Box flexDirection="column" width={'48%'}>
-    <Text bold color={Colors.Foreground}>Duration</Text>
+    <Text bold color={Colors.Foreground}>
+      Duration
+    </Text>
     <Box marginTop={1} flexDirection="column">
       <StatRow label="API Time" value={apiTime} />
       <StatRow label="Wall Time" value={wallTime} />

@@ -90,7 +90,9 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
             {typeof resultDisplay === 'string' && !renderOutputAsMarkdown && (
               <MaxSizedBox maxHeight={availableHeight} maxWidth={childWidth}>
                 <Box>
-                  <Text color={Colors.Foreground} wrap="wrap">{resultDisplay}</Text>
+                  <Text color={Colors.Foreground} wrap="wrap">
+                    {resultDisplay}
+                  </Text>
                 </Box>
               </MaxSizedBox>
             )}

@@ -72,8 +72,27 @@ import { checkForUpdates } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
+
+/**
+ * Get the display model name, including provider prefix if using a provider
+ */
+function getDisplayModelName(config: Config): string {
+  const baseModel = config.getModel();
+  try {
+    const providerManager = getProviderManager();
+    if (providerManager.hasActiveProvider()) {
+      const provider = providerManager.getActiveProvider();
+      const providerModel = provider.getCurrentModel?.() || baseModel;
+      return `${provider.name}:${providerModel}`;
+    }
+  } catch {
+    // If there's any error accessing provider manager, fall back to base model
+  }
+  return baseModel;
+}
 
 interface AppProps {
   config: Config;
@@ -117,7 +136,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   const [editorError, setEditorError] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState<number>(0);
   const [corgiMode, setCorgiMode] = useState(false);
-  const [currentModel, setCurrentModel] = useState(config.getModel());
+  const [currentModel, setCurrentModel] = useState(getDisplayModelName(config));
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -174,12 +193,16 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     openModelDialog,
     closeModelDialog,
     handleModelSelection,
-  } = useModelCommand({ 
-    config, 
-    addMessage: (message) => addItem({
-      type: message.type,
-      text: message.content,
-    }, message.timestamp.getTime())
+  } = useModelCommand({
+    config,
+    addMessage: (message) =>
+      addItem(
+        {
+          type: message.type,
+          text: message.content,
+        },
+        message.timestamp.getTime(),
+      ),
   });
 
   const toggleCorgiMode = useCallback(() => {
@@ -233,9 +256,9 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   // Watch for model changes (e.g., from Flash fallback)
   useEffect(() => {
     const checkModelChange = () => {
-      const configModel = config.getModel();
-      if (configModel !== currentModel) {
-        setCurrentModel(configModel);
+      const displayModel = getDisplayModelName(config);
+      if (displayModel !== currentModel) {
+        setCurrentModel(displayModel);
       }
     };
 

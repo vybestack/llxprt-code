@@ -13,7 +13,7 @@ import { MessageType } from '../types.js';
 describe('useModelCommand', () => {
   let mockConfig: Partial<Config>;
   const mockAddMessage = vi.fn();
-  let mockGeminiClient: any;
+  let mockGeminiClient: { updateModel: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -29,7 +29,10 @@ describe('useModelCommand', () => {
 
   it('should initialize with dialog closed', () => {
     const { result } = renderHook(() =>
-      useModelCommand({ config: mockConfig as Config, addMessage: mockAddMessage })
+      useModelCommand({
+        config: mockConfig as Config,
+        addMessage: mockAddMessage,
+      }),
     );
 
     expect(result.current.showModelDialog).toBe(false);
@@ -37,7 +40,10 @@ describe('useModelCommand', () => {
 
   it('should open and close model dialog', () => {
     const { result } = renderHook(() =>
-      useModelCommand({ config: mockConfig as Config, addMessage: mockAddMessage })
+      useModelCommand({
+        config: mockConfig as Config,
+        addMessage: mockAddMessage,
+      }),
     );
 
     act(() => {
@@ -55,7 +61,10 @@ describe('useModelCommand', () => {
 
   it('should handle model selection successfully', async () => {
     const { result } = renderHook(() =>
-      useModelCommand({ config: mockConfig as Config, addMessage: mockAddMessage })
+      useModelCommand({
+        config: mockConfig as Config,
+        addMessage: mockAddMessage,
+      }),
     );
 
     await act(async () => {
@@ -63,7 +72,9 @@ describe('useModelCommand', () => {
     });
 
     expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
-    expect(mockGeminiClient.updateModel).toHaveBeenCalledWith('gemini-2.5-flash');
+    expect(mockGeminiClient.updateModel).toHaveBeenCalledWith(
+      'gemini-2.5-flash',
+    );
     expect(mockAddMessage).toHaveBeenCalledWith({
       type: MessageType.INFO,
       content: 'Switched from gemini-2.5-pro to gemini-2.5-flash',
@@ -73,7 +84,10 @@ describe('useModelCommand', () => {
 
   it('should handle selecting the same model', async () => {
     const { result } = renderHook(() =>
-      useModelCommand({ config: mockConfig as Config, addMessage: mockAddMessage })
+      useModelCommand({
+        config: mockConfig as Config,
+        addMessage: mockAddMessage,
+      }),
     );
 
     await act(async () => {
@@ -91,7 +105,7 @@ describe('useModelCommand', () => {
 
   it('should handle null config', async () => {
     const { result } = renderHook(() =>
-      useModelCommand({ config: null, addMessage: mockAddMessage })
+      useModelCommand({ config: null, addMessage: mockAddMessage }),
     );
 
     await act(async () => {
@@ -109,7 +123,10 @@ describe('useModelCommand', () => {
     mockGeminiClient.updateModel.mockRejectedValue(new Error('Update failed'));
 
     const { result } = renderHook(() =>
-      useModelCommand({ config: mockConfig as Config, addMessage: mockAddMessage })
+      useModelCommand({
+        config: mockConfig as Config,
+        addMessage: mockAddMessage,
+      }),
     );
 
     await act(async () => {

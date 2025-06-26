@@ -1,0 +1,5 @@
+/provider openai
+/model gpt-4o  
+what model are you?
+list the files in the current directory
+/exit

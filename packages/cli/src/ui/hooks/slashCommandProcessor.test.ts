@@ -451,7 +451,9 @@ describe('useSlashCommandProcessor', () => {
     });
 
     it('/model should handle error when switching models', async () => {
-      const mockUpdateModel = vi.fn().mockRejectedValue(new Error('Update failed'));
+      const mockUpdateModel = vi
+        .fn()
+        .mockRejectedValue(new Error('Update failed'));
       mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
       mockConfig.setModel = vi.fn();
       mockGeminiClient.updateModel = mockUpdateModel;
