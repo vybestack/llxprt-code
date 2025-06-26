@@ -114,7 +114,7 @@ export class GeminiClient {
       } catch (error) {
         // Silently fail and return empty array
       }
-    } else if (authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL || authType === AuthType.LOGIN_WITH_GOOGLE_ENTERPRISE) {
+    } else if (authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
       // For OAuth, model listing is not supported by the Code Assist API
       // Return a special marker to indicate OAuth authentication
       return [{
