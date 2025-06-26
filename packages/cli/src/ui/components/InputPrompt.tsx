@@ -6,7 +6,6 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, Box, useInput } from 'ink';
-import { Colors } from '../colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import { themeManager } from '../themes/theme-manager.js';

@@ -72,6 +72,7 @@ export const useSlashCommandProcessor = (
   openThemeDialog: () => void,
   openAuthDialog: () => void,
   openEditorDialog: () => void,
+  openModelDialog: () => void,
   performMemoryRefresh: () => Promise<void>,
   toggleCorgiMode: () => void,
   showToolDescriptions: boolean = false,
@@ -568,6 +569,60 @@ export const useSlashCommandProcessor = (
         },
       },
       {
+        name: 'model',
+        description: 'select or switch Gemini model',
+        action: async (_mainCommand, _subCommand, _args) => {
+          const modelName = _subCommand || _args;
+          
+          // If no model specified, open the interactive dialog
+          if (!modelName) {
+            openModelDialog();
+            return;
+          }
+
+          // Direct model switching for command with argument
+          try {
+            if (!config) {
+              addMessage({
+                type: MessageType.ERROR,
+                content: 'Configuration not available',
+                timestamp: new Date(),
+              });
+              return;
+            }
+
+            const currentModel = config.getModel();
+            
+            if (modelName === currentModel) {
+              addMessage({
+                type: MessageType.INFO,
+                content: `Already using model: ${currentModel}`,
+                timestamp: new Date(),
+              });
+              return;
+            }
+
+            // Update the model in config
+            config.setModel(modelName);
+            
+            // Update the model in the Gemini client
+            await config.getGeminiClient()?.updateModel(modelName);
+            
+            addMessage({
+              type: MessageType.INFO,
+              content: `Switched from ${currentModel} to ${modelName}`,
+              timestamp: new Date(),
+            });
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
         name: 'corgi',
         action: (_mainCommand, _subCommand, _args) => {
           toggleCorgiMode();
@@ -986,6 +1041,7 @@ Add any other context about the problem here.
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
+    openModelDialog,
     clearItems,
     performMemoryRefresh,
     showMemoryAction,

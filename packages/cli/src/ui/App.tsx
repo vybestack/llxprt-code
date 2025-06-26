@@ -23,6 +23,7 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
+import { useModelCommand } from './hooks/useModelCommand.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
@@ -36,6 +37,7 @@ import { ThemeDialog } from './components/ThemeDialog.js';
 import { AuthDialog } from './components/AuthDialog.js';
 import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
+import { ModelDialog } from './components/ModelDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
 import { loadHierarchicalGeminiMemory } from '../config/config.js';
@@ -167,6 +169,19 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, setEditorError, addItem);
 
+  const {
+    showModelDialog,
+    openModelDialog,
+    closeModelDialog,
+    handleModelSelection,
+  } = useModelCommand({ 
+    config, 
+    addMessage: (message) => addItem({
+      type: message.type,
+      text: message.content,
+    }, message.timestamp.getTime())
+  });
+
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
@@ -270,6 +285,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
+    openModelDialog,
     performMemoryRefresh,
     toggleCorgiMode,
     showToolDescriptions,
@@ -707,6 +723,14 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 onSelect={handleEditorSelect}
                 settings={settings}
                 onExit={exitEditorDialog}
+              />
+            </Box>
+          ) : showModelDialog ? (
+            <Box flexDirection="column">
+              <ModelDialog
+                config={config}
+                onClose={closeModelDialog}
+                onModelSelected={handleModelSelection}
               />
             </Box>
           ) : (

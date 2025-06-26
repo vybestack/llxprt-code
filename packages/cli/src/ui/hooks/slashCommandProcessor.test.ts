@@ -106,6 +106,7 @@ describe('useSlashCommandProcessor', () => {
   let mockOpenThemeDialog: ReturnType<typeof vi.fn>;
   let mockOpenAuthDialog: ReturnType<typeof vi.fn>;
   let mockOpenEditorDialog: ReturnType<typeof vi.fn>;
+  let mockOpenModelDialog: ReturnType<typeof vi.fn>;
   let mockPerformMemoryRefresh: ReturnType<typeof vi.fn>;
   let mockSetQuittingMessages: ReturnType<typeof vi.fn>;
   let mockTryCompressChat: ReturnType<typeof vi.fn>;
@@ -124,6 +125,7 @@ describe('useSlashCommandProcessor', () => {
     mockOpenThemeDialog = vi.fn();
     mockOpenAuthDialog = vi.fn();
     mockOpenEditorDialog = vi.fn();
+    mockOpenModelDialog = vi.fn();
     mockPerformMemoryRefresh = vi.fn().mockResolvedValue(undefined);
     mockSetQuittingMessages = vi.fn();
     mockTryCompressChat = vi.fn();
@@ -182,6 +184,7 @@ describe('useSlashCommandProcessor', () => {
         mockOpenThemeDialog,
         mockOpenAuthDialog,
         mockOpenEditorDialog,
+        mockOpenModelDialog,
         mockPerformMemoryRefresh,
         mockCorgiMode,
         showToolDescriptions,
@@ -384,6 +387,89 @@ describe('useSlashCommandProcessor', () => {
         commandResult = await handleSlashCommand('/editor');
       });
       expect(mockOpenEditorDialog).toHaveBeenCalled();
+      expect(commandResult).toBe(true);
+    });
+  });
+
+  describe('/model command', () => {
+    it('/model should open model dialog and return true', async () => {
+      const { handleSlashCommand } = getProcessor();
+      let commandResult: SlashCommandActionReturn | boolean = false;
+      await act(async () => {
+        commandResult = await handleSlashCommand('/model');
+      });
+      expect(mockOpenModelDialog).toHaveBeenCalled();
+      expect(commandResult).toBe(true);
+    });
+
+    it('/model with model name should switch models directly', async () => {
+      const mockUpdateModel = vi.fn().mockResolvedValue(undefined);
+      mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
+      mockConfig.setModel = vi.fn();
+      mockGeminiClient.updateModel = mockUpdateModel;
+      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockGeminiClient);
+
+      const { handleSlashCommand } = getProcessor();
+      let commandResult: SlashCommandActionReturn | boolean = false;
+      await act(async () => {
+        commandResult = await handleSlashCommand('/model gemini-2.5-flash');
+      });
+
+      expect(mockOpenModelDialog).not.toHaveBeenCalled();
+      expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(mockUpdateModel).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: 'Switched from gemini-2.5-pro to gemini-2.5-flash',
+        }),
+        expect.any(Number),
+      );
+      expect(commandResult).toBe(true);
+    });
+
+    it('/model with same model name should show already using message', async () => {
+      mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
+      mockConfig.setModel = vi.fn();
+      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockGeminiClient);
+
+      const { handleSlashCommand } = getProcessor();
+      let commandResult: SlashCommandActionReturn | boolean = false;
+      await act(async () => {
+        commandResult = await handleSlashCommand('/model gemini-2.5-pro');
+      });
+
+      expect(mockConfig.setModel).not.toHaveBeenCalled();
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.INFO,
+          text: 'Already using model: gemini-2.5-pro',
+        }),
+        expect.any(Number),
+      );
+      expect(commandResult).toBe(true);
+    });
+
+    it('/model should handle error when switching models', async () => {
+      const mockUpdateModel = vi.fn().mockRejectedValue(new Error('Update failed'));
+      mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
+      mockConfig.setModel = vi.fn();
+      mockGeminiClient.updateModel = mockUpdateModel;
+      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockGeminiClient);
+
+      const { handleSlashCommand } = getProcessor();
+      let commandResult: SlashCommandActionReturn | boolean = false;
+      await act(async () => {
+        commandResult = await handleSlashCommand('/model gemini-2.5-flash');
+      });
+
+      expect(mockAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MessageType.ERROR,
+          text: 'Failed to switch model: Update failed',
+        }),
+        expect.any(Number),
+      );
       expect(commandResult).toBe(true);
     });
   });

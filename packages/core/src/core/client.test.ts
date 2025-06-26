@@ -403,4 +403,143 @@ describe('Gemini Client (client.ts)', () => {
       expect(finalResult).toBeInstanceOf(Turn);
     });
   });
+
+  describe('updateModel', () => {
+    it('should update model in config and reinitialize chat', async () => {
+      // Arrange
+      const mockSetModel = vi.fn();
+      const mockConfig = {
+        getModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+        setModel: mockSetModel,
+        getProjectRoot: vi.fn().mockReturnValue('/test'),
+        getWorkingDir: vi.fn().mockReturnValue('/test'),
+        getFullContext: vi.fn().mockReturnValue(false),
+        getUserMemory: vi.fn().mockReturnValue(''),
+        getGeminiMdFileCount: vi.fn().mockReturnValue(0),
+        getFileService: vi.fn().mockReturnValue(null),
+        getCheckpointingEnabled: vi.fn().mockReturnValue(false),
+        getToolRegistry: vi.fn().mockResolvedValue({
+          generateSchema: vi.fn().mockReturnValue([]),
+          getToolTelemetry: vi.fn().mockReturnValue([]),
+          getFunctionDeclarations: vi.fn().mockReturnValue([]),
+        }),
+      };
+      client['config'] = mockConfig as any;
+      
+      // Mock the content generator and chat
+      const mockContentGenerator = {
+        generateContent: vi.fn(),
+      };
+      client['contentGenerator'] = mockContentGenerator as any;
+      
+      const initialChat = client['chat'];
+      
+      // Act
+      await client.updateModel('gemini-2.5-flash');
+      
+      // Assert
+      expect(mockSetModel).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(client['model']).toBe('gemini-2.5-flash');
+      expect(client['chat']).not.toBe(initialChat); // Chat should be reinitialized
+    });
+  });
+
+  describe('listAvailableModels', () => {
+    beforeEach(() => {
+      global.fetch = vi.fn();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should fetch models from API for GEMINI auth type', async () => {
+      // Arrange
+      const mockModels = [
+        { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+        { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
+      ];
+      
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.USE_GEMINI,
+          apiKey: 'test-api-key',
+        }),
+      };
+      client['config'] = mockConfig as any;
+      
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ models: mockModels }),
+      });
+      
+      // Act
+      const models = await client.listAvailableModels();
+      
+      // Assert
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=test-api-key',
+        expect.objectContaining({
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      expect(models).toEqual(mockModels);
+    });
+
+    it('should return OAuth marker for OAuth auth types', async () => {
+      // Arrange
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.LOGIN_WITH_GOOGLE_PERSONAL,
+        }),
+      };
+      client['config'] = mockConfig as any;
+      
+      // Act
+      const models = await client.listAvailableModels();
+      
+      // Assert
+      expect(models).toEqual([{
+        name: 'oauth-not-supported',
+        displayName: 'OAuth Authentication',
+        description: 'Model listing is not available with OAuth authentication',
+      }]);
+    });
+
+    it('should return empty array when API call fails', async () => {
+      // Arrange
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.USE_GEMINI,
+          apiKey: 'test-api-key',
+        }),
+      };
+      client['config'] = mockConfig as any;
+      
+      (global.fetch as any).mockRejectedValue(new Error('Network error'));
+      
+      // Act
+      const models = await client.listAvailableModels();
+      
+      // Assert
+      expect(models).toEqual([]);
+    });
+
+    it('should return empty array for unsupported auth type', async () => {
+      // Arrange
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: undefined,
+        }),
+      };
+      client['config'] = mockConfig as any;
+      
+      // Act
+      const models = await client.listAvailableModels();
+      
+      // Assert
+      expect(models).toEqual([]);
+    });
+  });
 });
