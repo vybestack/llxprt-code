@@ -19,4 +19,3 @@ export * from './providerManagerInstance.js';
 
 // Adapters
 export * from './adapters/IStreamAdapter.js';
-export * from './adapters/GeminiCompatibleWrapper.js';

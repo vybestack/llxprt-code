@@ -29,6 +29,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
+import { ProviderManagerAdapter } from '../providers/ProviderManagerAdapter.js';
 
 // Simple console logger for now - replace with actual logger if available
 const logger = {
@@ -198,6 +200,10 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(settings, argv);
 
+  // Create provider manager adapter
+  const cliProviderManager = getProviderManager();
+  const providerManagerAdapter = new ProviderManagerAdapter(cliProviderManager);
+
   const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -246,6 +252,7 @@ export async function loadCliConfig(
     bugCommand: settings.bugCommand,
     model: argv.model!,
     extensionContextFilePaths,
+    providerManager: providerManagerAdapter,
   });
 
   // Enhance the config with provider support

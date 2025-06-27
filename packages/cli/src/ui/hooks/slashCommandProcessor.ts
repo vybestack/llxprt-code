@@ -714,6 +714,16 @@ export const useSlashCommandProcessor = (
               }
 
               providerManager.clearActiveProvider();
+
+              // Refresh auth to go back to Gemini
+              if (config) {
+                const currentAuthType =
+                  config.getContentGeneratorConfig()?.authType;
+                if (currentAuthType) {
+                  await config.refreshAuth(currentAuthType);
+                }
+              }
+
               addMessage({
                 type: MessageType.INFO,
                 content: `Switched from ${currentProvider} to Gemini (default)`,
@@ -734,6 +744,16 @@ export const useSlashCommandProcessor = (
 
             providerManager.setActiveProvider(providerName);
             const fromProvider = currentProvider || 'gemini';
+
+            // Refresh auth to use the new provider
+            if (config) {
+              const currentAuthType =
+                config.getContentGeneratorConfig()?.authType;
+              if (currentAuthType) {
+                await config.refreshAuth(currentAuthType);
+              }
+            }
+
             addMessage({
               type: MessageType.INFO,
               content: `Switched from ${fromProvider} to ${providerName}`,

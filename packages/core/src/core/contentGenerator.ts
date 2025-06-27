@@ -16,6 +16,8 @@ import {
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { getEffectiveModel } from './modelCheck.js';
+import { ProviderManager } from '../providers/types.js';
+import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
 
 /**
  * Interface abstracting the core functionalities for generating content and counting tokens.
@@ -38,6 +40,7 @@ export enum AuthType {
   LOGIN_WITH_GOOGLE_PERSONAL = 'oauth-personal',
   USE_GEMINI = 'gemini-api-key',
   USE_VERTEX_AI = 'vertex-ai',
+  USE_PROVIDER = 'provider',
 }
 
 export type ContentGeneratorConfig = {
@@ -45,6 +48,7 @@ export type ContentGeneratorConfig = {
   apiKey?: string;
   vertexai?: boolean;
   authType?: AuthType | undefined;
+  providerManager?: ProviderManager;
 };
 
 export async function createContentGeneratorConfig(
@@ -109,6 +113,17 @@ export async function createContentGenerator(
       'User-Agent': `GeminiCLI/${version} (${process.platform}; ${process.arch})`,
     },
   };
+
+  // Check if we should use a provider
+  if (config.authType === AuthType.USE_PROVIDER) {
+    if (!config.providerManager) {
+      throw new Error(
+        'Provider manager is required for USE_PROVIDER auth type',
+      );
+    }
+    return new ProviderContentGenerator(config.providerManager, config);
+  }
+
   if (config.authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
     return createCodeAssistContentGenerator(httpOptions, config.authType);
   }

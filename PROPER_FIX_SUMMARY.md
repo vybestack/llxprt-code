@@ -15,17 +15,19 @@ When we initially tried to fix the "paths[0] argument must be of type string. Re
 ## The Proper Fix
 
 Changed this in `useGeminiStream.ts`:
+
 ```typescript
 // WRONG - inputSchema doesn't exist
-parameters: tool.inputSchema || {}
+parameters: tool.inputSchema || {};
 
 // CORRECT - use schema.parameters
-parameters: tool.schema?.parameters || tool.parameterSchema || {}
+parameters: tool.schema?.parameters || tool.parameterSchema || {};
 ```
 
 ## What We Reverted
 
 Removed all the defensive checks we added to the `getDescription` methods in:
+
 - ls.ts
 - edit.ts
 - glob.ts
@@ -50,6 +52,7 @@ These checks were unnecessary and were masking the real problem.
 ## Testing
 
 To test the fix:
+
 ```bash
 # Switch to Flash model to avoid rate limits
 /model gemini-2.5-flash

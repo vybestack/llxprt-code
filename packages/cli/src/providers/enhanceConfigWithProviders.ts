@@ -16,8 +16,8 @@ export function enhanceConfigWithProviders(config: Config): Config {
     '[enhanceConfigWithProviders] Enhancing config with provider support',
   );
 
-  // Provider integration is now handled directly in useGeminiStream hook
-  // This function is kept for compatibility but doesn't need to do anything
+  // Provider support is now built into the core Config class
+  // This function is kept for backward compatibility
 
   return config;
 }

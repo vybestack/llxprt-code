@@ -40,6 +40,7 @@ import {
   DEFAULT_GEMINI_FLASH_MODEL,
 } from './models.js';
 import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
+import { ProviderManager } from '../providers/types.js';
 
 export enum ApprovalMode {
   DEFAULT = 'default',
@@ -126,6 +127,7 @@ export interface ConfigParameters {
   bugCommand?: BugCommandSettings;
   model: string;
   extensionContextFilePaths?: string[];
+  providerManager?: ProviderManager;
 }
 
 export class Config {
@@ -166,6 +168,7 @@ export class Config {
   private readonly extensionContextFilePaths: string[];
   private modelSwitchedDuringSession: boolean = false;
   flashFallbackHandler?: FlashFallbackHandler;
+  private readonly providerManager: ProviderManager | undefined;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -207,6 +210,7 @@ export class Config {
     this.bugCommand = params.bugCommand;
     this.model = params.model;
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
+    this.providerManager = params.providerManager;
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
@@ -226,10 +230,16 @@ export class Config {
   }
 
   async refreshAuth(authMethod: AuthType) {
+    // Check if we should use a provider instead
+    let effectiveAuthMethod = authMethod;
+    if (this.providerManager && this.providerManager.hasActiveProvider()) {
+      effectiveAuthMethod = AuthType.USE_PROVIDER;
+    }
+
     // Check if this is actually a switch to a different auth method
     const previousAuthType = this.contentGeneratorConfig?.authType;
     const _isAuthMethodSwitch =
-      previousAuthType && previousAuthType !== authMethod;
+      previousAuthType && previousAuthType !== effectiveAuthMethod;
 
     // Always use the original default model when switching auth methods
     // This ensures users don't stay on Flash after switching between auth types
@@ -242,9 +252,14 @@ export class Config {
 
     const contentConfig = await createContentGeneratorConfig(
       modelToUse,
-      authMethod,
+      effectiveAuthMethod,
       this,
     );
+
+    // Add provider manager to config if using providers
+    if (effectiveAuthMethod === AuthType.USE_PROVIDER) {
+      contentConfig.providerManager = this.providerManager;
+    }
 
     const gc = new GeminiClient(this);
     this.geminiClient = gc;
@@ -267,6 +282,14 @@ export class Config {
   }
 
   getModel(): string {
+    // Check if we're using a provider
+    if (this.providerManager && this.providerManager.hasActiveProvider()) {
+      const provider = this.providerManager.getActiveProvider();
+      if (provider) {
+        const providerModel = provider.getCurrentModel?.() || this.model;
+        return `${provider.name}:${providerModel}`;
+      }
+    }
     return this.contentGeneratorConfig?.model || this.model;
   }
 
@@ -452,6 +475,10 @@ export class Config {
       await this.gitService.initialize();
     }
     return this.gitService;
+  }
+
+  getProviderManager(): ProviderManager | undefined {
+    return this.providerManager;
   }
 }
 

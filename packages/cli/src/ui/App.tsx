@@ -72,26 +72,15 @@ import { checkForUpdates } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
-import { getProviderManager } from '../providers/providerManagerInstance.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
 /**
- * Get the display model name, including provider prefix if using a provider
+ * Get the display model name
  */
 function getDisplayModelName(config: Config): string {
-  const baseModel = config.getModel();
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      const providerModel = provider.getCurrentModel?.() || baseModel;
-      return `${provider.name}:${providerModel}`;
-    }
-  } catch {
-    // If there's any error accessing provider manager, fall back to base model
-  }
-  return baseModel;
+  // The config.getModel() is now enhanced to include provider prefix
+  return config.getModel();
 }
 
 interface AppProps {

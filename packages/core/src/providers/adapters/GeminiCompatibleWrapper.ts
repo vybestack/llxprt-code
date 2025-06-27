@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider } from '../IProvider.js';
-import { IStreamAdapter } from './IStreamAdapter.js';
-import { IMessage } from '../IMessage.js';
+import { Provider, ProviderMessage, ProviderTool } from '../types.js';
 import {
   Content,
   GenerateContentResponse,
@@ -20,13 +18,13 @@ import {
   ServerGeminiStreamEvent,
   ServerGeminiContentEvent,
   ServerGeminiToolCallRequestEvent,
-} from '@google/gemini-cli-core';
+} from '../../core/turn.js';
 
 /**
  * Wrapper that makes any IProvider compatible with Gemini's ContentGenerator interface
  */
-export class GeminiCompatibleWrapper implements IStreamAdapter {
-  constructor(public readonly provider: IProvider) {}
+export class GeminiCompatibleWrapper {
+  constructor(private readonly provider: Provider) {}
 
   /**
    * Generate content using the wrapped provider (non-streaming)
@@ -42,11 +40,11 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
     const messages = this.convertContentsToMessages(params.contents);
 
     // Collect full response from provider stream
-    const responseMessages: IMessage[] = [];
+    const responseMessages: ProviderMessage[] = [];
     const stream = this.provider.generateChatCompletion(messages);
 
     for await (const chunk of stream) {
-      responseMessages.push(chunk as IMessage);
+      responseMessages.push(chunk as ProviderMessage);
     }
 
     // Convert provider response to Gemini format
@@ -80,7 +78,7 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
     );
 
     // Extract tools from config if available
-    const tools = (params.config as any)?.tools || undefined;
+    const tools = (params.config as { tools?: ProviderTool[] })?.tools || undefined;
     if (tools) {
       console.debug('[GeminiCompatibleWrapper] Tools provided:', tools.length);
     }
@@ -93,7 +91,7 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
         '[GeminiCompatibleWrapper] Received chunk from provider:',
         JSON.stringify(chunk, null, 2),
       );
-      yield this.convertMessageToStreamResponse(chunk as IMessage);
+      yield this.convertMessageToStreamResponse(chunk as ProviderMessage);
     }
   }
 
@@ -103,7 +101,7 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
    * @returns An async iterator of Gemini events
    */
   async *adaptStream(
-    providerStream: AsyncIterableIterator<IMessage>,
+    providerStream: AsyncIterableIterator<ProviderMessage>,
   ): AsyncIterableIterator<ServerGeminiStreamEvent> {
     yield* this.adaptProviderStream(providerStream);
   }
@@ -114,7 +112,7 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
    * @returns Async iterator of Gemini events
    */
   private async *adaptProviderStream(
-    providerStream: AsyncIterableIterator<IMessage>,
+    providerStream: AsyncIterableIterator<ProviderMessage>,
   ): AsyncIterableIterator<ServerGeminiStreamEvent> {
     for await (const message of providerStream) {
       // Emit content event if message has content
@@ -145,9 +143,9 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
   }
 
   /**
-   * Convert Gemini ContentListUnion to provider IMessage array
+   * Convert Gemini ContentListUnion to provider ProviderMessage array
    */
-  private convertContentsToMessages(contents: ContentListUnion): IMessage[] {
+  private convertContentsToMessages(contents: ContentListUnion): ProviderMessage[] {
     // Normalize ContentListUnion to Content[]
     let contentArray: Content[];
 
@@ -220,7 +218,7 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
    * Convert provider messages to a single Gemini response
    */
   private convertMessagesToResponse(
-    messages: IMessage[],
+    messages: ProviderMessage[],
   ): GenerateContentResponse {
     // Combine all messages into a single response
     const combinedContent = messages.map((m) => m.content || '').join('');
@@ -261,7 +259,7 @@ export class GeminiCompatibleWrapper implements IStreamAdapter {
    * Convert a single provider message to a streaming Gemini response
    */
   private convertMessageToStreamResponse(
-    message: IMessage,
+    message: ProviderMessage,
   ): GenerateContentResponse {
     const parts: Part[] = [];
 

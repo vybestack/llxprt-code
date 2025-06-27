@@ -270,6 +270,8 @@ describe('Gemini Client (client.ts)', () => {
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: mockGenerateContentFn,
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -298,6 +300,8 @@ describe('Gemini Client (client.ts)', () => {
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: mockGenerateContentFn,
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -380,6 +384,9 @@ describe('Gemini Client (client.ts)', () => {
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -427,8 +434,11 @@ describe('Gemini Client (client.ts)', () => {
       client['config'] = mockConfig as any;
 
       // Mock the content generator and chat
-      const mockContentGenerator = {
+      const mockContentGenerator: ContentGenerator = {
         generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
+        countTokens: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockContentGenerator as any;
 
