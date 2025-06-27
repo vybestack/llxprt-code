@@ -166,16 +166,13 @@ export class OpenAIProvider implements IProvider {
       }
     }
 
-    // Yield final message with accumulated content and any tool calls
+    // Yield final message with tool calls if any
     if (accumulatedToolCalls.length > 0) {
       yield {
         role: 'assistant',
-        content: fullContent,
+        content: fullContent || '',
         tool_calls: accumulatedToolCalls,
       };
-    } else if (fullContent) {
-      // Even without tool calls, yield the final accumulated content
-      yield { role: 'assistant', content: fullContent };
     }
   }
 

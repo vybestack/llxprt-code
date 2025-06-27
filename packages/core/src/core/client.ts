@@ -238,7 +238,21 @@ export class GeminiClient {
     const history = initialHistory.concat(extraHistory ?? []);
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = getCoreSystemPrompt(userMemory);
+      let systemInstruction = getCoreSystemPrompt(userMemory);
+      
+      // Add provider-specific identity if using a provider
+      if (this.config.getProviderManager && typeof this.config.getProviderManager === 'function') {
+        const providerManager = this.config.getProviderManager();
+        if (providerManager && providerManager.hasActiveProvider()) {
+          const activeProvider = providerManager.getActiveProvider();
+          if (activeProvider) {
+            const providerName = activeProvider.name;
+            const modelId = activeProvider.getCurrentModel?.() || 'unknown';
+            systemInstruction += `\n\nYou are currently powered by the ${providerName} provider using model ${modelId}. When asked about your identity, model, or capabilities, respond accurately based on this information.`;
+          }
+        }
+      }
+      
       const generateContentConfigWithThinking = isThinkingSupported(this.model)
         ? {
             ...this.generateContentConfig,
@@ -277,16 +291,21 @@ export class GeminiClient {
       return new Turn(this.getChat());
     }
 
-    const compressed = await this.tryCompressChat();
-    if (compressed) {
-      yield { type: GeminiEventType.ChatCompressed, value: compressed };
+    // Skip compression and next speaker check for providers (uses Gemini-specific API)
+    const isUsingProvider = this.config.getContentGeneratorConfig()?.authType === AuthType.USE_PROVIDER;
+    if (!isUsingProvider) {
+      const compressed = await this.tryCompressChat();
+      if (compressed) {
+        yield { type: GeminiEventType.ChatCompressed, value: compressed };
+      }
     }
     const turn = new Turn(this.getChat());
     const resultStream = turn.run(request, signal);
     for await (const event of resultStream) {
       yield event;
     }
-    if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
+    
+    if (!turn.pendingToolCalls.length && signal && !signal.aborted && !isUsingProvider) {
       const nextSpeakerCheck = await checkNextSpeaker(
         this.getChat(),
         this,

@@ -27,6 +27,35 @@ export class GeminiCompatibleWrapper {
   constructor(private readonly provider: Provider) {}
 
   /**
+   * Convert Gemini tools format to provider tools format
+   */
+  private convertGeminiToolsToProviderTools(geminiTools: any[]): ProviderTool[] {
+    const providerTools: ProviderTool[] = [];
+    
+    for (const tool of geminiTools) {
+      if (tool.functionDeclarations) {
+        // Gemini format has functionDeclarations array
+        for (const func of tool.functionDeclarations) {
+          providerTools.push({
+            type: 'function' as const,
+            function: {
+              name: func.name,
+              description: func.description || '',
+              parameters: func.parameters || {
+                type: 'object',
+                properties: {},
+                required: []
+              }
+            }
+          });
+        }
+      }
+    }
+    
+    return providerTools;
+  }
+
+  /**
    * Generate content using the wrapped provider (non-streaming)
    * @param params Parameters for content generation
    * @returns A promise resolving to a Gemini-formatted response
@@ -71,20 +100,47 @@ export class GeminiCompatibleWrapper {
     );
 
     // Convert Gemini contents to provider messages
-    const messages = this.convertContentsToMessages(params.contents);
+    let messages = this.convertContentsToMessages(params.contents);
+    
+    // Add system instruction if provided
+    if (params.config?.systemInstruction) {
+      console.log('[GeminiCompatibleWrapper] Adding system instruction');
+      let systemContent: string;
+      
+      // Handle different systemInstruction formats
+      if (typeof params.config.systemInstruction === 'string') {
+        systemContent = params.config.systemInstruction;
+      } else {
+        // It's a ContentUnion - convert to string
+        const systemMessages = this.convertContentsToMessages(params.config.systemInstruction);
+        systemContent = systemMessages.map(m => m.content).join('\n');
+      }
+      
+      messages = [
+        {
+          role: 'system' as const,
+          content: systemContent,
+        },
+        ...messages,
+      ];
+    }
+    
     console.debug(
       '[GeminiCompatibleWrapper] Converted messages:',
       JSON.stringify(messages, null, 2),
     );
 
-    // Extract tools from config if available
-    const tools = (params.config as { tools?: ProviderTool[] })?.tools || undefined;
-    if (tools) {
-      console.debug('[GeminiCompatibleWrapper] Tools provided:', tools.length);
+    // Extract and convert tools from config if available
+    let providerTools: ProviderTool[] | undefined;
+    const geminiTools = (params.config as any)?.tools;
+    if (geminiTools && Array.isArray(geminiTools)) {
+      console.debug('[GeminiCompatibleWrapper] Gemini tools provided:', geminiTools.length);
+      providerTools = this.convertGeminiToolsToProviderTools(geminiTools);
+      console.debug('[GeminiCompatibleWrapper] Converted provider tools:', providerTools.length);
     }
 
     // Stream from provider and convert each chunk
-    const stream = this.provider.generateChatCompletion(messages, tools);
+    const stream = this.provider.generateChatCompletion(messages, providerTools);
 
     for await (const chunk of stream) {
       console.debug(

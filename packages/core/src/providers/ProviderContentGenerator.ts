@@ -25,29 +25,29 @@ import { GeminiCompatibleWrapper } from './adapters/GeminiCompatibleWrapper.js';
  * ContentGenerator implementation that delegates to external providers
  */
 export class ProviderContentGenerator implements ContentGenerator {
-  private wrapper: GeminiCompatibleWrapper;
-
   constructor(
     private providerManager: ProviderManager,
     private config: ContentGeneratorConfig,
-  ) {
+  ) {}
+
+  private getWrapper(): GeminiCompatibleWrapper {
     const provider = this.providerManager.getActiveProvider();
     if (!provider) {
       throw new Error('No active provider');
     }
-    this.wrapper = new GeminiCompatibleWrapper(provider);
+    return new GeminiCompatibleWrapper(provider);
   }
 
   async generateContent(
     request: GenerateContentParameters,
   ): Promise<GenerateContentResponse> {
-    return this.wrapper.generateContent(request);
+    return this.getWrapper().generateContent(request);
   }
 
   async generateContentStream(
     request: GenerateContentParameters,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    return this.wrapper.generateContentStream(request);
+    return this.getWrapper().generateContentStream(request);
   }
 
   async countTokens(
