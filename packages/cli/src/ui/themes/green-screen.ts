@@ -14,12 +14,12 @@ const greenScreenColors: ColorsTheme = {
   AccentBlue: '#6a9955',
   AccentPurple: '#6a9955',
   AccentCyan: '#6a9955',
-  AccentGreen: '#6a9955',
+  AccentGreen: '#00ff00',
   AccentYellow: '#6a9955',
   AccentRed: '#6a9955',
   Comment: '#6a9955',
   Gray: '#6a9955',
-  GradientColors: ['#6a9955', '#6a9955'],
+  GradientColors: ['#00ff00', '#6a9955'],
 };
 
 export const GreenScreen: Theme = new Theme(

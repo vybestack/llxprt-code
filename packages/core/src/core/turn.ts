@@ -16,7 +16,10 @@ import {
   ToolResult,
   ToolResultDisplay,
 } from '../tools/tools.js';
-import { getResponseText } from '../utils/generateContentResponseUtilities.js';
+import {
+  getResponseText,
+  getFunctionCalls,
+} from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { GeminiChat } from './geminiChat.js';
@@ -203,7 +206,7 @@ export class Turn {
         }
 
         // Handle function calls (requesting tool execution)
-        const functionCalls = resp.functionCalls ?? [];
+        const functionCalls = getFunctionCalls(resp) ?? [];
         for (const fnCall of functionCalls) {
           const event = this.handlePendingFunctionCall(fnCall);
           if (event) {

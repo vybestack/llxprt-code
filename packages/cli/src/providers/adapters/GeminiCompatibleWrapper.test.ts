@@ -75,10 +75,9 @@ describe('GeminiCompatibleWrapper', () => {
     });
 
     it('should handle provider errors gracefully', async () => {
-      // eslint-disable-next-line require-yield
       mockProvider.generateChatCompletion = vi
         .fn()
-        .mockImplementation(async function* () {
+        .mockImplementation(async () => {
           throw new Error('Provider error');
         });
 

@@ -4,15 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Content, Part } from '@google/genai';
-
 /**
  * Represents a message in a provider's format
  */
 export interface ProviderMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
   tool_calls?: ProviderToolCall[];
+  // For tool messages (responses to tool calls)
+  tool_call_id?: string;
+  name?: string;
 }
 
 /**

@@ -20,6 +20,10 @@ export class ProviderManager {
   }
 
   setActiveProvider(name: string): void {
+    if (name === 'gemini') {
+      this.clearActiveProvider();
+      return;
+    }
     if (!this.providers.has(name)) {
       throw new Error('Provider not found');
     }

@@ -24,6 +24,8 @@ import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useModelCommand } from './hooks/useModelCommand.js';
+import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
+import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
@@ -194,6 +196,11 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
       ),
   });
 
+  const providerModelDialog = useProviderModelDialog({
+    addMessage: (m) =>
+      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+  });
+
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
@@ -298,6 +305,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     openAuthDialog,
     openEditorDialog,
     openModelDialog,
+    providerModelDialog.openDialog,
     performMemoryRefresh,
     toggleCorgiMode,
     showToolDescriptions,
@@ -735,6 +743,15 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 onSelect={handleEditorSelect}
                 settings={settings}
                 onExit={exitEditorDialog}
+              />
+            </Box>
+          ) : providerModelDialog.showDialog ? (
+            <Box flexDirection="column">
+              <ProviderModelDialog
+                models={providerModelDialog.models}
+                currentModel={providerModelDialog.currentModel}
+                onSelect={providerModelDialog.handleSelect}
+                onClose={providerModelDialog.closeDialog}
               />
             </Box>
           ) : showModelDialog ? (

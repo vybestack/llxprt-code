@@ -6,6 +6,7 @@
 
 import { ProviderManager } from './ProviderManager.js';
 import { OpenAIProvider } from './openai/OpenAIProvider.js';
+import { GeminiProvider } from './gemini/GeminiProvider.js';
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -18,6 +19,10 @@ export function getProviderManager(): ProviderManager {
 
     // Only auto-initialize providers when not in test environment
     if (process.env.NODE_ENV !== 'test') {
+      // Register GeminiProvider
+      const geminiProvider = new GeminiProvider();
+      providerManagerInstance.registerProvider(geminiProvider);
+
       // Initialize with OpenAI provider if API key is available
       try {
         const apiKeyPath = join(homedir(), '.openai_key');

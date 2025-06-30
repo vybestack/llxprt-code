@@ -707,7 +707,7 @@ export const useGeminiStream = (
 
       const responsesToSend: PartListUnion[] = geminiTools.map((toolCall) => {
         // Ensure the response is properly formatted with the callId
-        const response = toolCall.response.responseParts;
+        const response: PartListUnion = toolCall.response.responseParts;
 
         // Enhanced debug logging
         onDebugMessage(
@@ -758,7 +758,7 @@ export const useGeminiStream = (
                   ...part.functionResponse,
                   id: finalId,
                 },
-              };
+              } as Part;
             }
             return part;
           });
@@ -779,7 +779,7 @@ export const useGeminiStream = (
               ...responsePart.functionResponse,
               id: finalId,
             },
-          };
+          } as Part;
         } else if (typeof response === 'string') {
           // If it's a string, wrap it in a functionResponse
           onDebugMessage(
@@ -789,9 +789,9 @@ export const useGeminiStream = (
             functionResponse: {
               id: toolCall.request.callId,
               name: toolCall.request.name,
-              response: { output: response },
+              response: { output: response } as Record<string, unknown>,
             },
-          };
+          } as Part;
         }
 
         // Return as-is if it's not a functionResponse (shouldn't happen with proper tool execution)
@@ -806,12 +806,12 @@ export const useGeminiStream = (
           );
           // Check if it's a Part array that we missed
           if (Array.isArray(response)) {
-            return response.map((part: any) => {
+            return response.map((part) => {
               if (
                 part &&
                 typeof part === 'object' &&
                 'functionResponse' in part &&
-                !part.functionResponse.id
+                !part.functionResponse?.id
               ) {
                 onDebugMessage(
                   `[EMERGENCY] Found functionResponse without ID in array, adding: ${toolCall.request.callId}`,
@@ -822,7 +822,7 @@ export const useGeminiStream = (
                     id: toolCall.request.callId,
                     name: part.functionResponse.name || toolCall.request.name,
                   },
-                };
+                } as Part;
               }
               return part;
             });
@@ -836,9 +836,11 @@ export const useGeminiStream = (
               functionResponse: {
                 id: toolCall.request.callId,
                 name: toolCall.request.name,
-                response: (response as any).response || response,
+                response:
+                  (response as { response: Record<string, unknown> })
+                    .response || (response as Record<string, unknown>),
               },
-            };
+            } as Part;
           }
         }
 
@@ -859,8 +861,13 @@ export const useGeminiStream = (
       // Debug: Verify all function responses have IDs
       onDebugMessage(`[TOOL_ID_DEBUG] Final merged responses before submit:`);
       if (Array.isArray(mergedResponses)) {
-        mergedResponses.forEach((part: any, idx: number) => {
-          if (part && typeof part === 'object' && 'functionResponse' in part) {
+        (mergedResponses as Part[]).forEach((part: Part, idx: number) => {
+          if (
+            part &&
+            typeof part === 'object' &&
+            'functionResponse' in part &&
+            part.functionResponse
+          ) {
             onDebugMessage(
               `[TOOL_ID_DEBUG] Part ${idx}: ${part.functionResponse.name} has ID: ${part.functionResponse.id}`,
             );
@@ -872,7 +879,7 @@ export const useGeminiStream = (
               );
               // Try to find the corresponding tool call to get the ID
               const matchingTool = geminiTools.find(
-                (t) => t.request.name === part.functionResponse.name,
+                (t) => t.request.name === part.functionResponse?.name,
               );
               if (matchingTool) {
                 onDebugMessage(
@@ -902,6 +909,7 @@ export const useGeminiStream = (
     addItem,
     geminiClient,
     performMemoryRefresh,
+    onDebugMessage,
   ]);
 
   const pendingHistoryItems = [

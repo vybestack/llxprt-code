@@ -76,6 +76,7 @@ export const useSlashCommandProcessor = (
   openAuthDialog: () => void,
   openEditorDialog: () => void,
   openModelDialog: () => void,
+  openProviderModelDialog: () => void,
   performMemoryRefresh: () => Promise<void>,
   toggleCorgiMode: () => void,
   showToolDescriptions: boolean = false,
@@ -573,25 +574,7 @@ export const useSlashCommandProcessor = (
           if (providerManager.hasActiveProvider()) {
             // Provider mode
             if (!modelName) {
-              try {
-                const activeProvider = providerManager.getActiveProvider();
-                const models = await activeProvider.getModels();
-                const currentModel = activeProvider.getCurrentModel
-                  ? activeProvider.getCurrentModel()
-                  : 'unknown';
-
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `Current model: ${currentModel}\n\nAvailable models for provider '${activeProvider.name}':\n${models.map((m) => `  - ${m.id}`).join('\n')}`,
-                  timestamp: new Date(),
-                });
-              } catch (error) {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: `Failed to list models: ${error instanceof Error ? error.message : String(error)}`,
-                  timestamp: new Date(),
-                });
-              }
+              openProviderModelDialog();
               return;
             }
 
@@ -1202,6 +1185,7 @@ export const useSlashCommandProcessor = (
     openAuthDialog,
     openEditorDialog,
     openModelDialog,
+    openProviderModelDialog,
     clearItems,
     performMemoryRefresh,
     showMemoryAction,
@@ -1218,6 +1202,7 @@ export const useSlashCommandProcessor = (
     setQuittingMessages,
     pendingCompressionItemRef,
     setPendingCompressionItem,
+    settings.merged.selectedAuthType,
   ]);
 
   const handleSlashCommand = useCallback(

@@ -109,12 +109,16 @@ export class GeminiClient {
           },
         );
 
-        if (response.ok) {
-          const data = await response.json();
-          return data.models || [];
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(
+            `Failed to list models: ${response.status} ${response.statusText} - ${errorBody}`,
+          );
         }
+        const data = await response.json();
+        return data.models || [];
       } catch (error) {
-        // Silently fail and return empty array
+        throw new Error(`Failed to list models: ${error}`);
       }
     } else if (authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
       // For OAuth, model listing is not supported by the Code Assist API
@@ -225,6 +229,19 @@ export class GeminiClient {
     const toolRegistry = await this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
+    console.log(
+      '[GeminiClient] Tool registry loaded, tool count:',
+      toolDeclarations.length,
+    );
+    if (toolDeclarations.length > 0) {
+      console.log(
+        '[GeminiClient] Tool names:',
+        toolDeclarations
+          .map((t) => t.name)
+          .slice(0, 5)
+          .join(', ') + '...',
+      );
+    }
     const initialHistory: Content[] = [
       {
         role: 'user',
@@ -239,9 +256,12 @@ export class GeminiClient {
     try {
       const userMemory = this.config.getUserMemory();
       let systemInstruction = getCoreSystemPrompt(userMemory);
-      
+
       // Add provider-specific identity if using a provider
-      if (this.config.getProviderManager && typeof this.config.getProviderManager === 'function') {
+      if (
+        this.config.getProviderManager &&
+        typeof this.config.getProviderManager === 'function'
+      ) {
         const providerManager = this.config.getProviderManager();
         if (providerManager && providerManager.hasActiveProvider()) {
           const activeProvider = providerManager.getActiveProvider();
@@ -249,10 +269,20 @@ export class GeminiClient {
             const providerName = activeProvider.name;
             const modelId = activeProvider.getCurrentModel?.() || 'unknown';
             systemInstruction += `\n\nYou are currently powered by the ${providerName} provider using model ${modelId}. When asked about your identity, model, or capabilities, respond accurately based on this information.`;
+
+            // Add stronger tool usage directive for OpenAI
+            if (providerName === 'openai') {
+              systemInstruction += `\n\nIMPORTANT: You MUST use the provided tools/functions to complete tasks. Do NOT just describe what you would do - actually call the tools. For example:
+- To search code: USE the grep or glob tools
+- To read files: USE the read_file tool
+- To list directories: USE the ls tool
+- To edit files: USE the edit or write_file tools
+Never say "I would use X tool" - just use it directly.`;
+            }
           }
         }
       }
-      
+
       const generateContentConfigWithThinking = isThinkingSupported(this.model)
         ? {
             ...this.generateContentConfig,
@@ -292,7 +322,9 @@ export class GeminiClient {
     }
 
     // Skip compression and next speaker check for providers (uses Gemini-specific API)
-    const isUsingProvider = this.config.getContentGeneratorConfig()?.authType === AuthType.USE_PROVIDER;
+    const isUsingProvider =
+      this.config.getContentGeneratorConfig()?.authType ===
+      AuthType.USE_PROVIDER;
     if (!isUsingProvider) {
       const compressed = await this.tryCompressChat();
       if (compressed) {
@@ -304,8 +336,13 @@ export class GeminiClient {
     for await (const event of resultStream) {
       yield event;
     }
-    
-    if (!turn.pendingToolCalls.length && signal && !signal.aborted && !isUsingProvider) {
+
+    if (
+      !turn.pendingToolCalls.length &&
+      signal &&
+      !signal.aborted &&
+      !isUsingProvider
+    ) {
       const nextSpeakerCheck = await checkNextSpeaker(
         this.getChat(),
         this,

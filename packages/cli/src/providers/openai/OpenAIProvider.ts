@@ -45,8 +45,12 @@ export class OpenAIProvider implements IProvider {
       const models: IModel[] = [];
 
       for await (const model of response) {
-        // Only filter out models obviously unsuited for chat (like embeddings)
-        if (!/embedding|whisper|audio|tts|image|vision/i.test(model.id)) {
+        // Filter out non-chat models (embeddings, audio, image, moderation, DALL·E, etc.)
+        if (
+          !/embedding|whisper|audio|tts|image|vision|dall[- ]?e|moderation/i.test(
+            model.id,
+          )
+        ) {
           models.push({
             id: model.id,
             name: model.id,

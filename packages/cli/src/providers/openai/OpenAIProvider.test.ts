@@ -124,7 +124,7 @@ describe('OpenAIProvider', () => {
         supportedToolFormats: ['openai'],
       },
     ]);
-    // Note: text-embedding-ada-002 is filtered out because it doesn't contain 'gpt'
+    // Note: text-embedding-ada-002 is filtered out because it is an embedding model
   });
 
   it('should return fallback models when API call fails', async () => {

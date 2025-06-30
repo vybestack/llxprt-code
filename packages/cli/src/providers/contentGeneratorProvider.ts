@@ -8,7 +8,6 @@ import {
   ContentGenerator,
   ContentGeneratorConfig,
 } from '@google/gemini-cli-core';
-import { getProviderManager } from './providerManagerInstance.js';
 
 /**
  * Creates a ContentGenerator using the active provider if available

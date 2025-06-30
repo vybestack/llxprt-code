@@ -14,6 +14,8 @@ import {
 } from '@google/genai';
 import { GeminiClient } from './client.js';
 import { AuthType, ContentGenerator } from './contentGenerator.js';
+import type { Mock } from 'vitest';
+import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { Turn } from './turn.js';
@@ -74,16 +76,15 @@ describe('Gemini Client (client.ts)', () => {
 
     // Set up the mock for GoogleGenAI constructor and its methods
     const MockedGoogleGenAI = vi.mocked(GoogleGenAI);
-    MockedGoogleGenAI.mockImplementation(() => {
-      const mock = {
+    MockedGoogleGenAI.mockImplementation((..._args: unknown[]): GoogleGenAI => {
+      const mockInstance = {
         chats: { create: mockChatCreateFn },
         models: {
           generateContent: mockGenerateContentFn,
           embedContent: mockEmbedContentFn,
         },
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return mock as any;
+      return mockInstance as unknown as GoogleGenAI;
     });
 
     mockChatCreateFn.mockResolvedValue({} as Chat);
@@ -112,17 +113,15 @@ describe('Gemini Client (client.ts)', () => {
       vertexai: false,
       authType: AuthType.USE_GEMINI,
     };
-    MockedConfig.mockImplementation(() => {
-      const mock = {
+    MockedConfig.mockImplementation((): Config => {
+      const mock: Partial<Config> = {
         getContentGeneratorConfig: vi
           .fn()
           .mockReturnValue(contentGeneratorConfig),
         getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
         getModel: vi.fn().mockReturnValue('test-model'),
         getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
-        getApiKey: vi.fn().mockReturnValue('test-key'),
-        getVertexAI: vi.fn().mockReturnValue(false),
-        getUserAgent: vi.fn().mockReturnValue('test-agent'),
+
         getUserMemory: vi.fn().mockReturnValue(''),
         getFullContext: vi.fn().mockReturnValue(false),
         getSessionId: vi.fn().mockReturnValue('test-session-id'),
@@ -130,14 +129,14 @@ describe('Gemini Client (client.ts)', () => {
         getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
         getFileService: vi.fn().mockReturnValue(fileService),
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return mock as any;
+
+      return mock as Config;
     });
 
     // We can instantiate the client here since Config is mocked
     // and the constructor will use the mocked GoogleGenAI
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mockConfig = new Config({} as any);
+
+    const mockConfig = new Config({} as ConfigParameters);
     client = new GeminiClient(mockConfig);
     await client.initialize(contentGeneratorConfig);
   });
@@ -327,8 +326,8 @@ describe('Gemini Client (client.ts)', () => {
       const mockChat = {
         addHistory: vi.fn(),
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      client['chat'] = mockChat as any;
+
+      client['chat'] = mockChat as unknown as GeminiChat;
 
       const newContent = {
         role: 'user',
@@ -431,7 +430,7 @@ describe('Gemini Client (client.ts)', () => {
           getFunctionDeclarations: vi.fn().mockReturnValue([]),
         }),
       };
-      client['config'] = mockConfig as any;
+      client['config'] = mockConfig as unknown as Config;
 
       // Mock the content generator and chat
       const mockContentGenerator: ContentGenerator = {
@@ -440,7 +439,7 @@ describe('Gemini Client (client.ts)', () => {
         countTokens: vi.fn(),
         embedContent: vi.fn(),
       };
-      client['contentGenerator'] = mockContentGenerator as any;
+      client['contentGenerator'] = mockContentGenerator as ContentGenerator;
 
       const initialChat = client['chat'];
 
@@ -476,9 +475,9 @@ describe('Gemini Client (client.ts)', () => {
           apiKey: 'test-api-key',
         }),
       };
-      client['config'] = mockConfig as any;
+      client['config'] = mockConfig as unknown as Config;
 
-      (global.fetch as any).mockResolvedValue({
+      (global.fetch as unknown as Mock).mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue({ models: mockModels }),
       });
@@ -504,7 +503,7 @@ describe('Gemini Client (client.ts)', () => {
           authType: AuthType.LOGIN_WITH_GOOGLE_PERSONAL,
         }),
       };
-      client['config'] = mockConfig as any;
+      client['config'] = mockConfig as unknown as Config;
 
       // Act
       const models = await client.listAvailableModels();
@@ -528,9 +527,11 @@ describe('Gemini Client (client.ts)', () => {
           apiKey: 'test-api-key',
         }),
       };
-      client['config'] = mockConfig as any;
+      client['config'] = mockConfig as unknown as Config;
 
-      (global.fetch as any).mockRejectedValue(new Error('Network error'));
+      (global.fetch as unknown as Mock).mockRejectedValue(
+        new Error('Network error'),
+      );
 
       // Act
       const models = await client.listAvailableModels();
@@ -546,7 +547,7 @@ describe('Gemini Client (client.ts)', () => {
           authType: undefined,
         }),
       };
-      client['config'] = mockConfig as any;
+      client['config'] = mockConfig as unknown as Config;
 
       // Act
       const models = await client.listAvailableModels();

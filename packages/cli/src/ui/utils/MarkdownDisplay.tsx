@@ -172,7 +172,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       } else {
         contentBlocks.push(
           <Box key={key}>
-            <Text wrap="wrap">
+            <Text color={Colors.Foreground} wrap="wrap">
               <RenderInline text={line} />
             </Text>
           </Box>,
@@ -323,12 +323,22 @@ const RenderInlineInternal: React.FC<RenderInlineProps> = ({ text }) => {
       renderedNode = null;
     }
 
-    nodes.push(renderedNode ?? <Text key={key}>{fullMatch}</Text>);
+    nodes.push(
+      renderedNode ?? (
+        <Text key={key} color={Colors.Foreground}>
+          {fullMatch}
+        </Text>
+      ),
+    );
     lastIndex = inlineRegex.lastIndex;
   }
 
   if (lastIndex < text.length) {
-    nodes.push(<Text key={`t-${lastIndex}`}>{text.slice(lastIndex)}</Text>);
+    nodes.push(
+      <Text key={`t-${lastIndex}`} color={Colors.Foreground}>
+        {text.slice(lastIndex)}
+      </Text>,
+    );
   }
 
   return <>{nodes.filter((node) => node !== null)}</>;
@@ -430,10 +440,10 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
       flexDirection="row"
     >
       <Box width={prefixWidth}>
-        <Text>{prefix}</Text>
+        <Text color={Colors.Foreground}>{prefix}</Text>
       </Box>
       <Box flexGrow={LIST_ITEM_TEXT_FLEX_GROW}>
-        <Text wrap="wrap">
+        <Text color={Colors.Foreground} wrap="wrap">
           <RenderInline text={itemText} />
         </Text>
       </Box>

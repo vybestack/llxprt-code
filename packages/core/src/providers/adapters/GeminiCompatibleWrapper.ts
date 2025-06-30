@@ -23,14 +23,25 @@ import {
 /**
  * Wrapper that makes any IProvider compatible with Gemini's ContentGenerator interface
  */
+
 export class GeminiCompatibleWrapper {
-  constructor(private readonly provider: Provider) {}
+  private readonly provider: Provider;
+
+  constructor(provider: Provider) {
+    this.provider = provider;
+  }
 
   /**
    * Convert Gemini tools format to provider tools format
    */
   private convertGeminiToolsToProviderTools(
-    geminiTools: any[],
+    geminiTools: Array<{
+      functionDeclarations?: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
   ): ProviderTool[] {
     const providerTools: ProviderTool[] = [];
 
@@ -43,7 +54,7 @@ export class GeminiCompatibleWrapper {
             function: {
               name: func.name,
               description: func.description || '',
-              parameters: func.parameters || {
+              parameters: (func.parameters as Record<string, unknown>) ?? {
                 type: 'object',
                 properties: {},
                 required: [],
@@ -136,7 +147,7 @@ export class GeminiCompatibleWrapper {
 
     // Extract and convert tools from config if available
     let providerTools: ProviderTool[] | undefined;
-    const geminiTools = (params.config as any)?.tools;
+    const geminiTools = (params.config as { tools?: unknown })?.tools;
     if (geminiTools && Array.isArray(geminiTools)) {
       console.log(
         '[GeminiCompatibleWrapper] Gemini tools provided:',
@@ -149,7 +160,7 @@ export class GeminiCompatibleWrapper {
       );
       console.log(
         '[GeminiCompatibleWrapper] Tool names:',
-        providerTools.map((t) => t.function.name).join(', '),
+        providerTools.map((t) => t.function?.name ?? '').join(', '),
       );
       if (providerTools.length > 0) {
         console.log(
@@ -332,8 +343,15 @@ export class GeminiCompatibleWrapper {
     for (const content of contentArray) {
       // Check for function responses (tool results)
       const functionResponses = (content.parts || []).filter(
-        (part): part is Part & { functionResponse: any } =>
-          'functionResponse' in part,
+        (
+          part,
+        ): part is Part & {
+          functionResponse: {
+            id: string;
+            name: string;
+            response: { error?: string; llmContent?: string; output?: string };
+          };
+        } => 'functionResponse' in part,
       );
 
       if (functionResponses.length > 0) {
@@ -356,9 +374,9 @@ export class GeminiCompatibleWrapper {
           } else if (response?.error) {
             content = `Error: ${response.error}`;
           } else if (response?.llmContent) {
-            content = response.llmContent;
+            content = String(response.llmContent);
           } else if (response?.output) {
-            content = response.output;
+            content = String(response.output);
           } else {
             content = JSON.stringify(response);
           }
@@ -398,8 +416,15 @@ export class GeminiCompatibleWrapper {
       } else {
         // Check for function calls (tool calls from the model)
         const functionCalls = (content.parts || []).filter(
-          (part): part is Part & { functionCall: any } =>
-            'functionCall' in part,
+          (
+            part,
+          ): part is Part & {
+            functionCall: {
+              id?: string;
+              name: string;
+              args?: Record<string, unknown>;
+            };
+          } => 'functionCall' in part,
         );
 
         // Regular text content

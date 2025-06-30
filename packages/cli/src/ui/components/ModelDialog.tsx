@@ -24,14 +24,43 @@ export const ModelDialog: React.FC<ModelDialogProps> = ({
   const [loading, setLoading] = useState(true);
   const [_error, _setError] = useState<string | null>(null);
 
-  // Hardcoded models for OAuth users
-  const models = [
-    { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
-    { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
-  ];
+  const [models, setModels] = useState<Array<{ label: string; value: string }>>(
+    [],
+  );
 
   const currentModel = config?.getModel() || 'gemini-2.5-pro';
-  const initialIndex = models.findIndex((m) => m.value === currentModel);
+  const [initialIndex, setInitialIndex] = useState(0);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      // Default models when API key not available or listing fails
+      let modelList = [
+        { label: 'Gemini 2.5 Pro', value: 'gemini-2.5-pro' },
+        { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+      ];
+
+      try {
+        const client = await config?.getGeminiClient?.();
+        if (client) {
+          const fetched = await client.listAvailableModels();
+          // Check for OAuth special marker or empty list
+          if (fetched.length > 0 && fetched[0].name !== 'oauth-not-supported') {
+            modelList = fetched.map((m) => ({
+              label: m.displayName || m.name,
+              value: m.name,
+            }));
+          }
+        }
+      } catch {
+        /* ignore fall back to default */
+      }
+      setModels(modelList);
+      const idx = modelList.findIndex((m) => m.value === currentModel);
+      setInitialIndex(idx >= 0 ? idx : 0);
+      setLoading(false);
+    };
+    loadModels();
+  }, [config, currentModel]);
 
   useEffect(() => {
     // Simulate loading
@@ -76,7 +105,7 @@ export const ModelDialog: React.FC<ModelDialogProps> = ({
       </Text>
       <RadioButtonSelect
         items={models}
-        initialIndex={initialIndex >= 0 ? initialIndex : 0}
+        initialIndex={initialIndex}
         onSelect={handleModelSelect}
         isFocused={true}
       />
