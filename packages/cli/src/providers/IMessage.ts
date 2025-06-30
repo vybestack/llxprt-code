@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
+import { ContentGeneratorRole } from './types.js';
+
 export interface IMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool';
+  role: ContentGeneratorRole | 'system';
   content: string;
   tool_call_id?: string;
   tool_calls?: Array<{

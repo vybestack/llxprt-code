@@ -14,6 +14,7 @@ import { ProviderManager } from './ProviderManager.js';
 import { IProvider } from './IProvider.js';
 import { IMessage } from './IMessage.js';
 import { ITool } from './ITool.js';
+import { ContentGeneratorRole } from './types.js';
 
 /**
  * Adapter that makes the CLI's ProviderManager compatible with the core's ProviderManager interface
@@ -60,11 +61,31 @@ class ProviderAdapter implements Provider {
     tools?: ProviderTool[],
   ): AsyncIterableIterator<ProviderMessage> {
     // Convert core messages to CLI messages
-    const cliMessages: IMessage[] = messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-      tool_calls: msg.tool_calls,
-    }));
+    const cliMessages: IMessage[] = messages.map((msg) => {
+      let role: ContentGeneratorRole | 'system';
+      switch (msg.role) {
+        case 'user':
+          role = ContentGeneratorRole.USER;
+          break;
+        case 'assistant':
+          role = ContentGeneratorRole.ASSISTANT;
+          break;
+        case 'tool':
+          role = ContentGeneratorRole.TOOL;
+          break;
+        case 'system':
+          role = 'system';
+          break;
+        default:
+          throw new Error(`Unknown role: ${msg.role}`);
+      }
+      return {
+        role,
+        content: msg.content,
+        tool_calls: msg.tool_calls,
+        tool_call_id: msg.tool_call_id,
+      };
+    });
 
     // Convert core tools to CLI tools
     const cliTools: ITool[] | undefined = tools?.map((tool) => ({
@@ -81,10 +102,28 @@ class ProviderAdapter implements Provider {
       cliTools,
     )) {
       const message = cliMessage as IMessage;
+      let coreRole: 'system' | 'user' | 'assistant' | 'tool';
+      switch (message.role) {
+        case ContentGeneratorRole.USER:
+          coreRole = 'user';
+          break;
+        case ContentGeneratorRole.ASSISTANT:
+          coreRole = 'assistant';
+          break;
+        case ContentGeneratorRole.TOOL:
+          coreRole = 'tool';
+          break;
+        case 'system':
+          coreRole = 'system';
+          break;
+        default:
+          throw new Error(`Unknown role: ${message.role}`);
+      }
       yield {
-        role: message.role as 'system' | 'user' | 'assistant',
+        role: coreRole,
         content: message.content || '',
         tool_calls: message.tool_calls,
+        tool_call_id: message.tool_call_id,
       };
     }
   }

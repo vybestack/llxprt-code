@@ -19,6 +19,7 @@ import {
   MCPServerStatus,
   getMCPDiscoveryState,
   getMCPServerStatus,
+  AuthType,
 } from '@google/gemini-cli-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
@@ -725,11 +726,11 @@ export const useSlashCommandProcessor = (
 
               // Refresh auth to go back to Gemini
               if (config) {
-                const currentAuthType =
-                  config.getContentGeneratorConfig()?.authType;
-                if (currentAuthType) {
-                  await config.refreshAuth(currentAuthType);
-                }
+                // When switching back to Gemini, use the auth type from settings
+                // or fall back to the default USE_GEMINI
+                const originalAuthType =
+                  settings.merged.selectedAuthType || AuthType.USE_GEMINI;
+                await config.refreshAuth(originalAuthType);
               }
 
               addMessage({

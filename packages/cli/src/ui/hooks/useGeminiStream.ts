@@ -339,7 +339,9 @@ export const useGeminiStream = (
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
           text: newGeminiMessageBuffer,
-          model: (item as Partial<HistoryItemGemini>)?.model || getDisplayModelName(config),
+          model:
+            (item as Partial<HistoryItemGemini>)?.model ||
+            getDisplayModelName(config),
         }));
       } else {
         // This indicates that we need to split up this Gemini Message.
@@ -359,8 +361,8 @@ export const useGeminiStream = (
           type: itemType || 'gemini',
           text: beforeText,
           model:
-            (pendingHistoryItemRef.current as Partial<HistoryItemGemini>)?.model ||
-            getDisplayModelName(config),
+            (pendingHistoryItemRef.current as Partial<HistoryItemGemini>)
+              ?.model || getDisplayModelName(config),
         };
         addItem(historyItem, userMessageTimestamp);
         setPendingHistoryItem({
@@ -703,15 +705,191 @@ export const useGeminiStream = (
         return;
       }
 
-      const responsesToSend: PartListUnion[] = geminiTools.map(
-        (toolCall) => toolCall.response.responseParts,
-      );
+      const responsesToSend: PartListUnion[] = geminiTools.map((toolCall) => {
+        // Ensure the response is properly formatted with the callId
+        const response = toolCall.response.responseParts;
+
+        // Enhanced debug logging
+        onDebugMessage(
+          `[RESPONSE_DEBUG] Processing ${toolCall.request.name} (${toolCall.request.callId})`,
+        );
+        onDebugMessage(
+          `[RESPONSE_DEBUG] responseParts type: ${typeof response}, isArray: ${Array.isArray(response)}`,
+        );
+        if (response) {
+          onDebugMessage(
+            `[RESPONSE_DEBUG] responseParts content: ${JSON.stringify(response).substring(0, 300)}`,
+          );
+        }
+
+        // Debug logging for multiple tool responses
+        if (geminiTools.length > 1) {
+          onDebugMessage(
+            `Processing tool response for ${toolCall.request.name} (${toolCall.request.callId}), type: ${typeof response}, isArray: ${Array.isArray(response)}`,
+          );
+          if (response && typeof response === 'object') {
+            onDebugMessage(
+              `Response structure: ${JSON.stringify(response).substring(0, 200)}`,
+            );
+          }
+        }
+
+        // Additional debug for tool call ID tracking
+        onDebugMessage(
+          `[TOOL_ID_DEBUG] Processing ${toolCall.request.name} with callId: ${toolCall.request.callId}`,
+        );
+
+        // If it's already a functionResponse, ensure it has the correct id
+        if (Array.isArray(response)) {
+          return response.map((part) => {
+            if (
+              part &&
+              typeof part === 'object' &&
+              'functionResponse' in part
+            ) {
+              // Ensure the functionResponse has the correct id
+              const finalId =
+                part.functionResponse?.id || toolCall.request.callId;
+              onDebugMessage(
+                `[TOOL_ID_DEBUG] Array part - Setting ID for ${part.functionResponse?.name}: ${finalId}`,
+              );
+              return {
+                functionResponse: {
+                  ...part.functionResponse,
+                  id: finalId,
+                },
+              };
+            }
+            return part;
+          });
+        } else if (
+          response &&
+          typeof response === 'object' &&
+          'functionResponse' in response
+        ) {
+          // Single functionResponse object (Part with functionResponse property)
+          const responsePart = response as Part;
+          const finalId =
+            responsePart.functionResponse?.id || toolCall.request.callId;
+          onDebugMessage(
+            `[TOOL_ID_DEBUG] Single part - Setting ID for ${responsePart.functionResponse?.name}: ${finalId}`,
+          );
+          return {
+            functionResponse: {
+              ...responsePart.functionResponse,
+              id: finalId,
+            },
+          };
+        } else if (typeof response === 'string') {
+          // If it's a string, wrap it in a functionResponse
+          onDebugMessage(
+            `[TOOL_ID_DEBUG] String response - Creating functionResponse for ${toolCall.request.name} with ID: ${toolCall.request.callId}`,
+          );
+          return {
+            functionResponse: {
+              id: toolCall.request.callId,
+              name: toolCall.request.name,
+              response: { output: response },
+            },
+          };
+        }
+
+        // Return as-is if it's not a functionResponse (shouldn't happen with proper tool execution)
+        onDebugMessage(
+          `WARNING: Tool response for ${toolCall.request.name} is not in expected format: ${JSON.stringify(response).substring(0, 100)}`,
+        );
+
+        // Emergency fallback: if response has any structure, try to ensure it has an ID
+        if (response && typeof response === 'object') {
+          onDebugMessage(
+            `[EMERGENCY] Attempting to fix response structure for ${toolCall.request.name}`,
+          );
+          // Check if it's a Part array that we missed
+          if (Array.isArray(response)) {
+            return response.map((part: any) => {
+              if (
+                part &&
+                typeof part === 'object' &&
+                'functionResponse' in part &&
+                !part.functionResponse.id
+              ) {
+                onDebugMessage(
+                  `[EMERGENCY] Found functionResponse without ID in array, adding: ${toolCall.request.callId}`,
+                );
+                return {
+                  functionResponse: {
+                    ...part.functionResponse,
+                    id: toolCall.request.callId,
+                    name: part.functionResponse.name || toolCall.request.name,
+                  },
+                };
+              }
+              return part;
+            });
+          }
+          // Check if it's a bare functionResponse without wrapper
+          if ('response' in response && !('functionResponse' in response)) {
+            onDebugMessage(
+              `[EMERGENCY] Found bare response object, wrapping with functionResponse`,
+            );
+            return {
+              functionResponse: {
+                id: toolCall.request.callId,
+                name: toolCall.request.name,
+                response: (response as any).response || response,
+              },
+            };
+          }
+        }
+
+        return response;
+      });
       const callIdsToMarkAsSubmitted = geminiTools.map(
         (toolCall) => toolCall.request.callId,
       );
 
       markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-      submitQuery(mergePartListUnions(responsesToSend), {
+      const mergedResponses = mergePartListUnions(responsesToSend);
+      if (geminiTools.length > 1) {
+        onDebugMessage(
+          `Submitting merged tool responses: ${JSON.stringify(mergedResponses).substring(0, 300)}`,
+        );
+      }
+
+      // Debug: Verify all function responses have IDs
+      onDebugMessage(`[TOOL_ID_DEBUG] Final merged responses before submit:`);
+      if (Array.isArray(mergedResponses)) {
+        mergedResponses.forEach((part: any, idx: number) => {
+          if (part && typeof part === 'object' && 'functionResponse' in part) {
+            onDebugMessage(
+              `[TOOL_ID_DEBUG] Part ${idx}: ${part.functionResponse.name} has ID: ${part.functionResponse.id}`,
+            );
+
+            // Final safety check: ensure ID exists
+            if (!part.functionResponse.id) {
+              onDebugMessage(
+                `[CRITICAL] Missing ID for ${part.functionResponse.name}, this will cause an error!`,
+              );
+              // Try to find the corresponding tool call to get the ID
+              const matchingTool = geminiTools.find(
+                (t) => t.request.name === part.functionResponse.name,
+              );
+              if (matchingTool) {
+                onDebugMessage(
+                  `[CRITICAL] Found matching tool, adding ID: ${matchingTool.request.callId}`,
+                );
+                part.functionResponse.id = matchingTool.request.callId;
+              }
+            }
+          }
+        });
+      } else {
+        onDebugMessage(
+          `[TOOL_ID_DEBUG] mergedResponses is not an array: ${typeof mergedResponses}`,
+        );
+      }
+
+      submitQuery(mergedResponses, {
         isContinuation: true,
       });
     };

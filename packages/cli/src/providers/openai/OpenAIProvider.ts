@@ -18,6 +18,7 @@ import { IProvider } from '../IProvider.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../types.js';
 import OpenAI from 'openai';
 
 export class OpenAIProvider implements IProvider {
@@ -44,8 +45,8 @@ export class OpenAIProvider implements IProvider {
       const models: IModel[] = [];
 
       for await (const model of response) {
-        // Filter for chat models (GPT models)
-        if (model.id.includes('gpt')) {
+        // Only filter out models obviously unsuited for chat (like embeddings)
+        if (!/embedding|whisper|audio|tts|image|vision/i.test(model.id)) {
           models.push({
             id: model.id,
             name: model.id,
@@ -119,6 +120,26 @@ export class OpenAIProvider implements IProvider {
       }
     }
 
+    // Validate tool messages have required tool_call_id
+    const toolMessages = messages.filter((msg) => msg.role === 'tool');
+    const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
+
+    if (missingIds.length > 0) {
+      console.error(
+        '[OpenAIProvider] FATAL: Tool messages missing tool_call_id:',
+        missingIds,
+      );
+      throw new Error(
+        `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
+      );
+    }
+
+    if (toolMessages.length > 0) {
+      console.log(
+        `[OpenAIProvider] Processing ${toolMessages.length} tool call(s)`,
+      );
+    }
+
     const stream = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
@@ -138,12 +159,12 @@ export class OpenAIProvider implements IProvider {
 
       if (delta?.content) {
         fullContent += delta.content;
-        yield { role: 'assistant', content: delta.content };
+        yield { role: ContentGeneratorRole.ASSISTANT, content: delta.content };
       }
 
       if (delta?.tool_calls) {
-        console.debug(
-          '[OpenAIProvider] Received tool call chunk:',
+        console.log(
+          '[OpenAIProvider] 🎯 TOOL CALL RECEIVED! Chunk:',
           JSON.stringify(delta.tool_calls),
         );
         for (const toolCall of delta.tool_calls) {
@@ -168,11 +189,17 @@ export class OpenAIProvider implements IProvider {
 
     // Yield final message with tool calls if any
     if (accumulatedToolCalls.length > 0) {
+      console.log(
+        '[OpenAIProvider] 🎯 YIELDING TOOL CALLS:',
+        accumulatedToolCalls.length,
+      );
       yield {
-        role: 'assistant',
+        role: ContentGeneratorRole.ASSISTANT,
         content: fullContent || '',
         tool_calls: accumulatedToolCalls,
       };
+    } else {
+      console.log('[OpenAIProvider] ❌ NO TOOL CALLS TO YIELD');
     }
   }
 
