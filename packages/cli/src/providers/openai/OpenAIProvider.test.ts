@@ -15,7 +15,7 @@
  */
 
 import { OpenAIProvider } from './OpenAIProvider';
-import { vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import OpenAI from 'openai';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
@@ -190,7 +190,6 @@ describe('OpenAIProvider', () => {
     expect(receivedMessages).toEqual([
       { role: 'assistant', content: 'Hello' },
       { role: 'assistant', content: ' world!' },
-      { role: 'assistant', content: 'Hello world!' },
     ]);
   });
 

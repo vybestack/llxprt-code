@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Config } from '@google/gemini-cli-core';
 import { enhanceConfigWithProviders } from './enhanceConfigWithProviders.js';
 import {
   getProviderManager,
@@ -15,6 +14,7 @@ import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import type { Config } from '@google/gemini-cli-core';
 
 describe('enhanceConfigWithProviders Integration Test', () => {
   let apiKey: string | null = null;
@@ -46,22 +46,12 @@ describe('enhanceConfigWithProviders Integration Test', () => {
       return;
     }
 
-    // Create a minimal config
-    const config = new Config({
-      sessionId: 'test-session',
-      model: 'gpt-4',
-      targetDir: process.cwd(),
-      debugMode: false,
-      question: '',
-      fullContext: false,
-      userMemory: '',
-      geminiMdFileCount: 0,
-      proxy: undefined,
-      cwd: process.cwd(),
-    });
-
-    // Mock refreshAuth to avoid actual auth
-    config.refreshAuth = async () => Promise.resolve();
+    // Create a mock config
+    const mockConfig = {
+      refreshAuth: async () => Promise.resolve(),
+      getGeminiClient: () => ({ chat: { contentGenerator: null } }),
+      getModel: () => 'gpt-4',
+    } as unknown as Config;
 
     // Register OpenAI provider
     const providerManager = getProviderManager();
@@ -69,14 +59,14 @@ describe('enhanceConfigWithProviders Integration Test', () => {
     providerManager.registerProvider(openaiProvider);
     providerManager.setActiveProvider('openai');
 
-    // Enhance the config after mocking refreshAuth
-    const enhancedConfig = enhanceConfigWithProviders(config);
+    // Enhance the config
+    const enhancedConfig = enhanceConfigWithProviders(mockConfig);
 
-    // Verify it's the same config instance
-    expect(enhancedConfig).toBe(config);
+    // Verify it's the same config instance (no-op)
+    expect(enhancedConfig).toBe(mockConfig);
 
     // Now call refreshAuth to trigger provider integration
-    await config.refreshAuth('test-auth');
+    await mockConfig.refreshAuth('test-auth');
 
     // Verify that the provider is being used
     const activeProvider = providerManager.getActiveProvider();
@@ -88,31 +78,21 @@ describe('enhanceConfigWithProviders Integration Test', () => {
     // Reset provider manager to ensure clean state
     resetProviderManager();
 
-    // Create a minimal config
-    const config = new Config({
-      sessionId: 'test-session',
-      model: 'gemini-2.5-flash',
-      targetDir: process.cwd(),
-      debugMode: false,
-      question: '',
-      fullContext: false,
-      userMemory: '',
-      geminiMdFileCount: 0,
-      proxy: undefined,
-      cwd: process.cwd(),
-    });
-
-    // Mock refreshAuth to avoid actual auth
-    config.refreshAuth = async () => Promise.resolve();
+    // Create a mock config
+    const mockConfig = {
+      refreshAuth: async () => Promise.resolve(),
+      getGeminiClient: () => ({ chat: { contentGenerator: null } }),
+      getModel: () => 'gemini-2.5-flash',
+    } as unknown as Config;
 
     // Don't register any providers
-    const enhancedConfig = enhanceConfigWithProviders(config);
+    const enhancedConfig = enhanceConfigWithProviders(mockConfig);
 
     // Verify it's the same config instance
-    expect(enhancedConfig).toBe(config);
+    expect(enhancedConfig).toBe(mockConfig);
 
     // Simulate refreshAuth
-    await config.refreshAuth('test-auth');
+    await mockConfig.refreshAuth('test-auth');
 
     // Verify provider handling when no provider is manually registered
     const providerManager = getProviderManager();

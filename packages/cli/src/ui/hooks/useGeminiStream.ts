@@ -54,6 +54,7 @@ import {
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   const resultParts: PartListUnion = [];
@@ -111,6 +112,14 @@ export const useGeminiStream = (
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
   const logger = useLogger();
   const { startNewTurn, addUsage } = useSessionStats();
+
+  // NEW: Track announced tool calls and cancellation state
+  const announcedToolCallsRef = useRef<
+    Map<string, { name: string; announced: number }>
+  >(new Map());
+  const cancelledTurnRef = useRef(false);
+  const gracePeriodTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cancelledToolIdsRef = useRef<Set<string>>(new Set());
   const gitService = useMemo(() => {
     if (!config.getProjectRoot()) {
       return;
@@ -186,20 +195,140 @@ export const useGeminiStream = (
       if (turnCancelledRef.current) {
         return;
       }
+
+      onDebugMessage('[ESC] Cancellation initiated');
+      onDebugMessage(
+        `[ESC] Current tool calls: ${toolCalls
+          .map((tc) => `${tc.request.name}(${tc.request.callId}):${tc.status}`)
+          .join(', ')}`,
+      );
+      onDebugMessage(
+        `[ESC] Announced tools: ${Array.from(
+          announcedToolCallsRef.current.entries(),
+        )
+          .map(([id, info]) => `${info.name}(${id})`)
+          .join(', ')}`,
+      );
+
       turnCancelledRef.current = true;
+      cancelledTurnRef.current = true;
       abortControllerRef.current?.abort();
+
+      // Handle any pending history items
       if (pendingHistoryItemRef.current) {
         addItem(pendingHistoryItemRef.current, Date.now());
       }
+
+      // NEW: Handle pending tool calls for OpenAI and other providers
+      const providerManager = getProviderManager();
+      if (providerManager.hasActiveProvider()) {
+        // Get all tool calls that have been submitted to the model
+        const submittedIds = new Set(
+          toolCalls
+            .filter(
+              (tc) =>
+                (tc.status === 'success' ||
+                  tc.status === 'error' ||
+                  tc.status === 'cancelled') &&
+                (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
+                  .responseSubmittedToGemini,
+            )
+            .map((tc) => tc.request.callId),
+        );
+
+        const pendingCancellations: Part[] = [];
+
+        // First, add cancellations for all announced tools that haven't been submitted
+        announcedToolCallsRef.current.forEach((toolInfo, callId) => {
+          if (
+            !submittedIds.has(callId) &&
+            !cancelledToolIdsRef.current.has(callId)
+          ) {
+            pendingCancellations.push({
+              functionResponse: {
+                id: callId,
+                name: toolInfo.name,
+                response: {
+                  error: 'Operation cancelled by user',
+                  llmContent:
+                    'The operation was cancelled by the user pressing ESC.',
+                },
+              },
+            });
+            cancelledToolIdsRef.current.add(callId);
+          }
+        });
+
+        // Also check for any tools in toolCalls that are in progress
+        toolCalls.forEach((tc) => {
+          if (
+            !submittedIds.has(tc.request.callId) &&
+            announcedToolCallsRef.current.has(tc.request.callId) &&
+            tc.status !== 'cancelled' &&
+            !cancelledToolIdsRef.current.has(tc.request.callId)
+          ) {
+            // Mark this tool as needing cancellation
+            const toolInfo = announcedToolCallsRef.current.get(
+              tc.request.callId,
+            );
+            if (
+              toolInfo &&
+              !pendingCancellations.some(
+                (p) => p.functionResponse?.id === tc.request.callId,
+              )
+            ) {
+              pendingCancellations.push({
+                functionResponse: {
+                  id: tc.request.callId,
+                  name: toolInfo.name,
+                  response: {
+                    error: 'Operation cancelled by user',
+                    llmContent:
+                      'The operation was cancelled by the user pressing ESC.',
+                  },
+                },
+              });
+              cancelledToolIdsRef.current.add(tc.request.callId);
+            }
+          }
+        });
+
+        if (pendingCancellations.length > 0) {
+          onDebugMessage(
+            `[ESC] Sending ${pendingCancellations.length} cancellation responses for pending tool calls`,
+          );
+          // Send cancellation responses immediately
+          submitQuery(pendingCancellations, {
+            isContinuation: true,
+            isCancellation: true,
+          });
+        }
+      }
+
+      // Clear announced tools tracking
+      announcedToolCallsRef.current.clear();
+
       addItem(
         {
           type: MessageType.INFO,
-          text: 'Request cancelled.',
+          text: 'Request cancelled. Please wait a moment before sending a new message...',
         },
         Date.now(),
       );
+
       setPendingHistoryItem(null);
       setIsResponding(false);
+
+      // NEW: Set grace period
+      if (gracePeriodTimeoutRef.current) {
+        clearTimeout(gracePeriodTimeoutRef.current);
+      }
+      gracePeriodTimeoutRef.current = setTimeout(() => {
+        cancelledTurnRef.current = false;
+        gracePeriodTimeoutRef.current = null;
+        cancelledToolIdsRef.current.clear();
+        onDebugMessage('[ESC] Grace period ended, new messages allowed');
+      }, 500); // Half second grace period
     }
   });
 
@@ -469,6 +598,11 @@ export const useGeminiStream = (
             break;
           case ServerGeminiEventType.ToolCallRequest:
             toolCallRequests.push(event.value);
+            // NEW: Track that this tool was announced
+            announcedToolCallsRef.current.set(event.value.callId, {
+              name: event.value.name,
+              announced: Date.now(),
+            });
             break;
           case ServerGeminiEventType.UserCancelled:
             handleUserCancelledEvent(userMessageTimestamp);
@@ -509,7 +643,25 @@ export const useGeminiStream = (
   );
 
   const submitQuery = useCallback(
-    async (query: PartListUnion, options?: { isContinuation: boolean }) => {
+    async (
+      query: PartListUnion,
+      options?: {
+        isContinuation?: boolean;
+        isCancellation?: boolean;
+      },
+    ) => {
+      // Check if we're in the grace period after cancellation
+      if (cancelledTurnRef.current && !options?.isCancellation) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Please wait a moment for the cancellation to complete...',
+          },
+          Date.now(),
+        );
+        return;
+      }
+
       if (
         (streamingState === StreamingState.Responding ||
           streamingState === StreamingState.WaitingForConfirmation) &&
@@ -523,6 +675,11 @@ export const useGeminiStream = (
       abortControllerRef.current = new AbortController();
       const abortSignal = abortControllerRef.current.signal;
       turnCancelledRef.current = false;
+
+      // Clear any previous cancellation tracking
+      if (!options?.isCancellation) {
+        cancelledToolIdsRef.current.clear();
+      }
 
       const { queryToSend, shouldProceed } = await prepareQueryForGemini(
         query,
@@ -606,6 +763,11 @@ export const useGeminiStream = (
         return;
       }
 
+      // Don't submit any tools if we're in a cancelled state
+      if (cancelledTurnRef.current) {
+        return;
+      }
+
       const completedAndReadyToSubmitTools = toolCalls.filter(
         (
           tc: TrackedToolCall,
@@ -619,9 +781,11 @@ export const useGeminiStream = (
             const completedOrCancelledCall = tc as
               | TrackedCompletedToolCall
               | TrackedCancelledToolCall;
+            // Don't submit if we've already sent a cancellation for this tool
             return (
               !completedOrCancelledCall.responseSubmittedToGemini &&
-              completedOrCancelledCall.response?.responseParts !== undefined
+              completedOrCancelledCall.response?.responseParts !== undefined &&
+              !cancelledToolIdsRef.current.has(tc.request.callId)
             );
           }
           return false;
@@ -851,6 +1015,22 @@ export const useGeminiStream = (
       );
 
       markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+
+      // Clear announced tools tracking after successful submission
+      callIdsToMarkAsSubmitted.forEach((id) => {
+        announcedToolCallsRef.current.delete(id);
+      });
+
+      // Clear cancellation state if all tools are complete
+      if (announcedToolCallsRef.current.size === 0) {
+        cancelledTurnRef.current = false;
+        cancelledToolIdsRef.current.clear();
+        if (gracePeriodTimeoutRef.current) {
+          clearTimeout(gracePeriodTimeoutRef.current);
+          gracePeriodTimeoutRef.current = null;
+        }
+      }
+
       const mergedResponses = mergePartListUnions(responsesToSend);
       if (geminiTools.length > 1) {
         onDebugMessage(
@@ -1023,5 +1203,6 @@ export const useGeminiStream = (
     initError,
     pendingHistoryItems,
     thought,
+    isInGracePeriod: cancelledTurnRef.current,
   };
 };

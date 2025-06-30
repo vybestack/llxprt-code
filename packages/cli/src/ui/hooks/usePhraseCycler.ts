@@ -153,6 +153,7 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
     WITTY_LOADING_PHRASES[0],
   );
   const phraseIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const prevPhraseRef = useRef<string>(WITTY_LOADING_PHRASES[0]);
 
   useEffect(() => {
     if (isWaiting) {
@@ -172,11 +173,17 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
       setCurrentLoadingPhrase(WITTY_LOADING_PHRASES[initialRandomIndex]);
 
       phraseIntervalRef.current = setInterval(() => {
-        // Select a new random phrase
-        const randomIndex = Math.floor(
-          Math.random() * WITTY_LOADING_PHRASES.length,
-        );
-        setCurrentLoadingPhrase(WITTY_LOADING_PHRASES[randomIndex]);
+        // Pick a new phrase that is different from the current one (when possible)
+        let nextPhrase = currentLoadingPhrase;
+        if (WITTY_LOADING_PHRASES.length > 1) {
+          do {
+            const randomIndex = Math.floor(
+              Math.random() * WITTY_LOADING_PHRASES.length,
+            );
+            nextPhrase = WITTY_LOADING_PHRASES[randomIndex];
+          } while (nextPhrase === currentLoadingPhrase);
+        }
+        setCurrentLoadingPhrase(nextPhrase);
       }, PHRASE_CHANGE_INTERVAL_MS);
     } else {
       // Idle or other states, clear the phrase interval
@@ -194,7 +201,8 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
         phraseIntervalRef.current = null;
       }
     };
-  }, [isActive, isWaiting]);
+  prevPhraseRef.current = currentLoadingPhrase;
+  }, [isActive, isWaiting, currentLoadingPhrase]);
 
   return currentLoadingPhrase;
 };

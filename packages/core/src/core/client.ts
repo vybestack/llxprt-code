@@ -117,8 +117,9 @@ export class GeminiClient {
         }
         const data = await response.json();
         return data.models || [];
-      } catch (error) {
-        throw new Error(`Failed to list models: ${error}`);
+      } catch (_error) {
+        // Network or parsing errors – return empty array so callers can fallback gracefully
+        return [];
       }
     } else if (authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
       // For OAuth, model listing is not supported by the Code Assist API

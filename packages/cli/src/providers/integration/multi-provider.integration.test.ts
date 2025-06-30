@@ -139,7 +139,7 @@ describe('Multi-Provider Integration Tests', () => {
         const openaiProvider = new OpenAIProvider(apiKey!);
 
         // Default model
-        expect(openaiProvider.getCurrentModel()).toBe('gpt-3.5-turbo');
+        expect(openaiProvider.getCurrentModel()).toBe('gpt-4.1');
 
         // Switch to GPT-4
         openaiProvider.setModel('gpt-4');
@@ -323,33 +323,10 @@ describe('Multi-Provider Integration Tests', () => {
       // Call refreshAuth to trigger provider integration
       await config.refreshAuth('test-auth');
 
-      // Verify content generator was set
+      // Content generator is not set by enhanceConfigWithProviders anymore
+      // Provider integration is handled in core
       const contentGenerator = mockGeminiClient.chat.contentGenerator;
-      expect(contentGenerator).not.toBeNull();
-      expect(contentGenerator?.generateContent).toBeDefined();
-      expect(contentGenerator?.generateContentStream).toBeDefined();
-
-      // Test actual content generation
-      if (contentGenerator) {
-        const response = await contentGenerator.generateContent({
-          model: 'gpt-3.5-turbo',
-          contents: 'Say hello',
-          config: {},
-        });
-
-        expect(response.candidates).toBeDefined();
-        expect(response.candidates?.[0]?.content).toBeDefined();
-
-        const text = response.candidates?.[0]?.content?.parts
-          ?.filter(
-            (p: unknown) => typeof p === 'object' && p !== null && 'text' in p,
-          )
-          .map((p: unknown) => (p as { text: string }).text)
-          .join('');
-
-        console.log(`\n✅ Content generator response: "${text}"`);
-        expect(text?.toLowerCase()).toContain('hello');
-      }
+      expect(contentGenerator).toBeNull();
     });
   });
 

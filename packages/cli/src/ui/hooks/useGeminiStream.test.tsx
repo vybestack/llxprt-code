@@ -296,6 +296,11 @@ describe('useGeminiStream', () => {
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       addHistory: vi.fn(),
+      getContentGeneratorConfig: vi.fn(() => ({
+        authType: AuthType.USE_GEMINI,
+      })),
+      getModel: vi.fn(() => 'gemini-pro'),
+      getProjectTempDir: vi.fn(() => '/test/tmp'),
     } as unknown as Config;
     mockOnDebugMessage = vi.fn();
     mockHandleSlashCommand = vi.fn().mockResolvedValue(false);
@@ -797,7 +802,7 @@ describe('useGeminiStream', () => {
         expect(mockAddItem).toHaveBeenCalledWith(
           {
             type: MessageType.INFO,
-            text: 'Request cancelled.',
+            text: 'Request cancelled. Please wait a moment before sending a new message...',
           },
           expect.any(Number),
         );

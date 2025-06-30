@@ -104,14 +104,14 @@ describe('Provider-Gemini Switching', () => {
     // Enhance config
     enhanceConfigWithProviders(config);
 
-    // refreshAuth should be wrapped
-    expect(config.refreshAuth).not.toBe(originalRefreshAuth);
+    // refreshAuth should remain the same (no wrapping in new implementation)
+    expect(config.refreshAuth).toBe(originalRefreshAuth);
 
     // Call refreshAuth
     await config.refreshAuth('test-auth');
 
-    // Should have updated the content generator
-    expect(mockGeminiClient.chat.contentGenerator).not.toBeNull();
+    // Content generator remains null (provider support is in core now)
+    expect(mockGeminiClient.chat.contentGenerator).toBeNull();
   });
 
   it('should switch back to Gemini when provider is cleared', async () => {

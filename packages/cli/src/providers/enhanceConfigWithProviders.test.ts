@@ -51,7 +51,7 @@ describe('Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator', (
     // Create mock GeminiClient
     mockGeminiClient = {
       chat: {
-        contentGenerator: null, // Will be updated by enhanceConfigWithProviders
+        contentGenerator: null,
       },
     } as unknown as GeminiClient;
 
@@ -77,40 +77,35 @@ describe('Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator', (
     // Should return the same config instance
     expect(enhancedConfig).toBe(mockConfig);
 
-    // refreshAuth should be overridden
-    expect(mockConfig.refreshAuth).not.toBe(originalRefreshAuth);
+    // refreshAuth should remain the same (no wrapper needed)
+    expect(mockConfig.refreshAuth).toBe(originalRefreshAuth);
   });
 
-  it('should integrate GeminiCompatibleWrapper when provider is active', async () => {
+  it('should not modify refreshAuth', async () => {
     enhanceConfigWithProviders(mockConfig);
 
-    // Call the enhanced refreshAuth
+    // refreshAuth should remain unchanged
+    expect(mockConfig.refreshAuth).toBe(originalRefreshAuth);
+
+    // Call refreshAuth to ensure it works
     await mockConfig.refreshAuth('test-auth');
 
     // Original refreshAuth should have been called
     expect(originalRefreshAuth).toHaveBeenCalledWith('test-auth');
-
-    // Provider manager should have been queried
-    expect(mockProviderManager.listProviders).toHaveBeenCalled();
-    expect(mockProviderManager.getActiveProvider).toHaveBeenCalled();
   });
 
-  it('should update contentGenerator in GeminiClient when provider is active', async () => {
+  it('should not modify contentGenerator in GeminiClient', async () => {
     enhanceConfigWithProviders(mockConfig);
 
-    // Call the enhanced refreshAuth
+    // Call refreshAuth
     await mockConfig.refreshAuth('test-auth');
 
-    // Check that contentGenerator was updated
+    // Check that contentGenerator remains unchanged
     const chat = (mockGeminiClient as Record<string, unknown>).chat as {
       contentGenerator: ContentGenerator | null;
     };
-    expect(chat.contentGenerator).toBeDefined();
-    expect(chat.contentGenerator).not.toBeNull();
-
-    // Verify it has the required methods
-    expect(chat.contentGenerator.generateContent).toBeDefined();
-    expect(chat.contentGenerator.generateContentStream).toBeDefined();
+    // contentGenerator should remain null as provider support is in core
+    expect(chat.contentGenerator).toBeNull();
   });
 
   it('should handle case when no providers are available', async () => {
@@ -133,56 +128,32 @@ describe('Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator', (
     expect(chat.contentGenerator).toBeNull();
   });
 
-  it('should handle errors gracefully', async () => {
-    // Setup provider manager to throw error
-    mockProviderManager.getActiveProvider = vi.fn().mockImplementation(() => {
-      throw new Error('Provider error');
-    });
-
+  it('should log debug message when enhancing config', () => {
     const consoleSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     enhanceConfigWithProviders(mockConfig);
 
-    // Call the enhanced refreshAuth - should not throw
-    await mockConfig.refreshAuth('test-auth');
-
-    // Original refreshAuth should have been called
-    expect(originalRefreshAuth).toHaveBeenCalledWith('test-auth');
-
-    // Error should be logged
+    // Should log that it's enhancing config
     expect(consoleSpy).toHaveBeenCalledWith(
-      'Failed to enhance with provider support:',
-      expect.any(Error),
+      '[enhanceConfigWithProviders] Enhancing config with provider support',
     );
 
     consoleSpy.mockRestore();
   });
 
-  it('should create provider ContentGenerator with correct interface', async () => {
+  it('should be a no-op function for backward compatibility', async () => {
+    // Store the config state before enhancement
+    const configBefore = { ...mockConfig };
+
     enhanceConfigWithProviders(mockConfig);
 
-    await mockConfig.refreshAuth('test-auth');
+    // Config should be unchanged
+    expect(mockConfig.refreshAuth).toBe(configBefore.refreshAuth);
+    expect(mockConfig.getGeminiClient).toBe(configBefore.getGeminiClient);
+    expect(mockConfig.getModel).toBe(configBefore.getModel);
 
-    const chat = (mockGeminiClient as Record<string, unknown>).chat as {
-      contentGenerator: ContentGenerator | null;
-    };
-    const contentGenerator = chat.contentGenerator as ContentGenerator;
-
-    // Test that unsupported methods throw appropriate errors
-    await expect(
-      contentGenerator.countTokens({
-        model: 'test',
-        contents: [],
-      }),
-    ).rejects.toThrow(
-      'Token counting not supported for provider-based generators',
-    );
-
-    await expect(
-      contentGenerator.embedContent({
-        model: 'test',
-        content: 'test',
-      }),
-    ).rejects.toThrow('Embeddings not supported for provider-based generators');
+    // Provider manager should not be used
+    expect(mockProviderManager.getActiveProvider).not.toHaveBeenCalled();
+    expect(mockProviderManager.hasActiveProvider).not.toHaveBeenCalled();
   });
 });

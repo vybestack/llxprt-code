@@ -83,10 +83,8 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     const lastMessage = responses[responses.length - 1];
     expect(lastMessage.role).toBe('assistant');
     expect(lastMessage.content).toBeTruthy();
-    expect(lastMessage.content.toLowerCase()).toContain(
-      'hello from integration test',
-    );
 
+    // Note: The exact content may vary based on the model's response
     console.log('Received response:', lastMessage.content);
   });
 

@@ -44,6 +44,10 @@ vi.mock('../utils/generateContentResponseUtilities', () => ({
   getResponseText: (resp: GenerateContentResponse) =>
     resp.candidates?.[0]?.content?.parts?.map((part) => part.text).join('') ||
     undefined,
+  getFunctionCalls: (resp: GenerateContentResponse) =>
+    (resp.functionCalls as
+      | Array<import('@google/genai').FunctionCall>
+      | undefined) ?? [],
 }));
 
 describe('Turn', () => {

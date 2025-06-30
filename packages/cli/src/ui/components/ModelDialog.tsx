@@ -54,6 +54,13 @@ export const ModelDialog: React.FC<ModelDialogProps> = ({
       } catch {
         /* ignore fall back to default */
       }
+      // Sort models alphanumerically by label for consistent menu ordering
+      modelList.sort((a, b) =>
+        a.label.localeCompare(b.label, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      );
       setModels(modelList);
       const idx = modelList.findIndex((m) => m.value === currentModel);
       setInitialIndex(idx >= 0 ? idx : 0);
