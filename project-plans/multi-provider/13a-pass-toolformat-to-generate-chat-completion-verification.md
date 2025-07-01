@@ -17,45 +17,72 @@
       npm run start
       ```
     - Inside the running CLI, execute the following commands:
-      - Set the provider:
+      
+      **Test Structured Path (ToolFormatter):**
+      - Set provider and model:
         ```
         /provider openai
-        ```
-      - Set a model (ensure it supports tools, e.g., `gpt-3.5-turbo` or `gpt-4`):
-        ```
         /model gpt-3.5-turbo
         ```
-      - Set the tool format:
+      - Override tool format:
         ```
         /toolformat openai
         ```
-      - Send a message that should trigger a tool call (e.g., if you have a `read_file` tool, ask to read a file):
+      - Send a message that triggers a tool call:
         ```
         Read the file packages/cli/package.json
         ```
-        - **Expected:** The model should respond by attempting to call the `read_file` tool. You should see output indicating tool execution (if your CLI provides it) and then a follow-up response from the model based on the tool's output. This verifies that the `toolFormat` is correctly passed and used for both outgoing tool definitions and incoming tool call parsing.
+      
+      **Test Text-Based Path (TextToolCallParser):**
+      - Set provider and model:
+        ```
+        /provider openai
+        /baseurl http://localhost:1234/v1/
+        /model gemma-3-12b-it
+        ```
+      - Check auto-detected format:
+        ```
+        /toolformat
+        ```
+      - Send a message that triggers a tool call:
+        ```
+        List files in the current directory
+        ```
+      
+      **Test Format Override:**
+      - Override to text format:
+        ```
+        /toolformat text
+        ```
+      - Verify tool calls are parsed as text even for structured models
 
-4.  **Code Inspection (grep):**
-    - Verify `generateChatCompletion` signature in `IProvider.ts` includes `toolFormat?: string`:
+4.  **Code Inspection - Verify Dual-Path Architecture:**
+    - Verify `setToolFormatOverride` method exists:
       ```bash
-      grep -q "generateChatCompletion(messages: IMessage[], tools?: ITool[], toolFormat?: string): AsyncIterableIterator<any>;" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/IProvider.ts
+      grep -q "setToolFormatOverride" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
       ```
-    - Verify `generateChatCompletion` signature in `OpenAIProvider.ts` includes `toolFormat?: string`:
+    - Verify override is checked in `getToolFormat`:
       ```bash
-      grep -q "async *generateChatCompletion(messages: IMessage[], tools?: ITool[], toolFormat?: string): AsyncIterableIterator<any>" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
+      grep -q "toolFormatOverride" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
       ```
-    - Verify `ToolFormatter.toProviderFormat` is called with `toolFormat` in `OpenAIProvider.ts`:
+    - Verify TextToolCallParser is used for text formats:
       ```bash
-      grep -q "ToolFormatter.toProviderFormat(tools, toolFormat)" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
+      grep -q "requiresTextToolCallParsing" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
       ```
-    - Verify `ToolFormatter.fromProviderFormat` is called with `toolFormat` in `OpenAIProvider.ts`:
+    - Verify ToolFormatter is used for structured formats:
       ```bash
-      grep -q "ToolFormatter.fromProviderFormat(toolCall, toolFormat)" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
+      grep -q "toolFormatter.toProviderFormat.*toolFormat" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
       ```
-    - Verify the main chat loop passes the `toolFormat` to `generateChatCompletion` (adjust path as needed):
+    - Verify both paths output `IMessage['tool_calls']` format:
       ```bash
-      grep -r "generateChatCompletion(.*,.*,.*, toolFormat)" packages/cli/src/
+      grep -q "tool_calls:" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
       ```
+
+## Dual-Path Testing
+
+Ensure both paths work correctly:
+1. **Structured formats** (openai, deepseek, qwen) → ToolFormatter → accumulateStreamingToolCall
+2. **Text formats** (gemma, hermes, xml, llama) → TextToolCallParser → parse
 
 ## Outcome
 

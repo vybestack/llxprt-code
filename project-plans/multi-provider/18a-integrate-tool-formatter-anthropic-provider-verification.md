@@ -16,18 +16,29 @@
     ```
     - **Expected Output:** All tests in `AnthropicProvider.test.ts` should pass. These tests should now cover the correct integration of `ToolFormatter`.
 4.  **Verify `AnthropicProvider.ts` Integration Details:**
-    - Ensure `ToolFormatter` is imported:
+    - Ensure `ToolFormatter` is imported (with .js extension):
       ```bash
-      grep -q "import { ToolFormatter } from '../../tools/ToolFormatter';" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
+      grep -q "import { ToolFormatter } from '../../tools/ToolFormatter.js';" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
       ```
     - Ensure `toProviderFormat` is used for outgoing tools:
       ```bash
-      grep -q "ToolFormatter.toProviderFormat(tools, 'anthropic')" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
+      grep -q "toolFormatter.toProviderFormat(tools, 'anthropic')" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
       ```
-    - Ensure `fromProviderFormat` is used for incoming tool calls:
+    - Verify Anthropic uses structured path only (no TextToolCallParser):
       ```bash
-      grep -q "ToolFormatter.fromProviderFormat(toolCall, 'anthropic')" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
+      ! grep -q "TextToolCallParser" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
       ```
+    - Check for appropriate tool call handling (either streaming accumulation or direct conversion):
+      ```bash
+      grep -E "accumulateStreamingToolCall|tool_calls:" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/anthropic/AnthropicProvider.ts
+      ```
+
+## Architecture Verification
+
+Confirm that Anthropic is correctly identified as a structured format provider:
+- Uses ToolFormatter for both outgoing and incoming tool handling
+- Does NOT use TextToolCallParser (that's only for text-based formats)
+- Tool format is fixed as 'anthropic' (no dynamic detection needed)
 
 ## Outcome
 

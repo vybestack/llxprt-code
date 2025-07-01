@@ -5,24 +5,47 @@ This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-To integrate the `ToolFormatter` into the `OpenAIProvider` so that it correctly formats outgoing tool definitions and parses incoming tool calls using the `openai` format.
+To integrate the `ToolFormatter` into the `OpenAIProvider` so that it correctly formats outgoing tool definitions and handles incoming tool calls using dynamic format detection to support multiple OpenAI-compatible providers.
+
+## Background
+
+The OpenAIProvider now supports two paths:
+1. **Structured Path**: For providers that return tool calls as JSON (OpenAI, DeepSeek, Qwen) → Uses ToolFormatter
+2. **Text-Based Path**: For models that output tool calls as text (Gemma, Hermes, XML, Llama) → Uses TextToolCallParser
 
 ## Deliverables
 
-- Modified `/Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts` to use `ToolFormatter`.
+- Modified `/Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts` to use `ToolFormatter` with dynamic format detection.
 - Modified `/Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.test.ts` to reflect the integration.
 
 ## Checklist (implementer)
 
 - [ ] Update `packages/cli/src/providers/openai/OpenAIProvider.ts`:
-  - [ ] Import `ToolFormatter` from `../../tools/ToolFormatter`.
-  - [ ] Instantiate `ToolFormatter` in the constructor or as a static instance.
+  - [ ] Import `ToolFormatter` from `../../tools/ToolFormatter.js`.
+  - [ ] Import `ToolFormat` from `../../tools/IToolFormatter.js`.
+  - [ ] Add `toolFormatter: ToolFormatter` property and instantiate in constructor.
+  - [ ] Add `toolFormat: ToolFormat` property to track current format.
+  - [ ] Implement `getToolFormat()` method for dynamic format detection:
+    ```typescript
+    private getToolFormat(): ToolFormat {
+      if (this.currentModel.includes('deepseek') || this.baseURL?.includes('deepseek')) {
+        return 'deepseek';
+      }
+      if (this.currentModel.includes('qwen') || this.baseURL?.includes('qwen')) {
+        return 'qwen';
+      }
+      return 'openai'; // default
+    }
+    ```
   - [ ] In `generateChatCompletion`:
-    - [ ] Before sending `tools` to `openai.chat.completions.create`, use `ToolFormatter.toProviderFormat(tools, 'openai')` to convert them to the OpenAI-specific format.
-    - [ ] When processing incoming `delta.tool_calls` or `message.tool_calls` from OpenAI, use `ToolFormatter.fromProviderFormat(rawToolCall, 'openai')` to convert them into the internal `IMessage['tool_calls']` format.
+    - [ ] Set `this.toolFormat = this.getToolFormat()` before formatting tools.
+    - [ ] Use `this.toolFormatter.toProviderFormat(tools, this.toolFormat)` to convert tools.
+    - [ ] For streaming tool calls, use `this.toolFormatter.accumulateStreamingToolCall(toolCall, accumulatedToolCalls, this.toolFormat)`.
+    - [ ] Keep existing TextToolCallParser integration for text-based models.
 - [ ] Update `packages/cli/src/providers/openai/OpenAIProvider.test.ts`:
-  - [ ] Ensure tests for `generateChatCompletion` now implicitly test the `ToolFormatter` integration by providing `ITool` objects and asserting that the mocked OpenAI API receives the correctly formatted tools, and that the parsed tool calls from the mocked OpenAI response are in the correct internal `IMessage` format.
-  - [ ] You might need to mock `ToolFormatter` in these tests to isolate `OpenAIProvider`'s logic, or ensure `ToolFormatter`'s tests are robust enough that you can rely on its correct behavior here.
+  - [ ] Ensure tests verify dynamic format detection.
+  - [ ] Test that different models/baseURLs result in correct format selection.
+  - [ ] Verify both structured and text-based paths work correctly.
 
 ## Self-verify
 

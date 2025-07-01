@@ -5,7 +5,11 @@ This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-To integrate the `ToolFormatter` into the `AnthropicProvider` so that it correctly formats outgoing tool definitions and parses incoming tool calls using the `anthropic` format.
+To integrate the `ToolFormatter` into the `AnthropicProvider` so that it correctly formats outgoing tool definitions and handles incoming tool calls using the `anthropic` format. Note that Anthropic uses the structured path (not text-based).
+
+## Background
+
+Anthropic is a structured format provider like OpenAI. It returns tool calls as JSON objects in the response, not as text. The ToolFormatter handles conversion between internal format and Anthropic's specific format.
 
 ## Deliverables
 
@@ -15,14 +19,19 @@ To integrate the `ToolFormatter` into the `AnthropicProvider` so that it correct
 ## Checklist (implementer)
 
 - [ ] Update `packages/cli/src/providers/anthropic/AnthropicProvider.ts`:
-  - [ ] Import `ToolFormatter` from `../../tools/ToolFormatter`.
-  - [ ] Instantiate `ToolFormatter` in the constructor or as a static instance.
+  - [ ] Import `ToolFormatter` from `../../tools/ToolFormatter.js`.
+  - [ ] Import `ToolFormat` from `../../tools/IToolFormatter.js`.
+  - [ ] Add `toolFormatter: ToolFormatter` property and instantiate in constructor.
+  - [ ] Set `toolFormat: ToolFormat = 'anthropic'` (Anthropic doesn't need dynamic detection).
   - [ ] In `generateChatCompletion`:
-    - [ ] Before sending `tools` to `this.anthropic.messages.create`, use `ToolFormatter.toProviderFormat(tools, 'anthropic')` to convert them to the Anthropic-specific format.
-    - [ ] When processing incoming `tool_use` objects from Anthropic's streaming response, use `ToolFormatter.fromProviderFormat(rawToolCall, 'anthropic')` to convert them into the internal `IMessage['tool_calls']` format.
+    - [ ] Before sending `tools` to `this.anthropic.messages.create`, use `this.toolFormatter.toProviderFormat(tools, 'anthropic')` to convert them to the Anthropic-specific format.
+    - [ ] For streaming tool calls, use `this.toolFormatter.accumulateStreamingToolCall()` similar to OpenAI (if Anthropic supports streaming tool calls).
+    - [ ] If Anthropic doesn't stream tool calls, convert the complete tool call objects using appropriate ToolFormatter methods.
+  - [ ] Note: Anthropic does NOT use TextToolCallParser - it's a structured format only.
 - [ ] Update `packages/cli/src/providers/anthropic/AnthropicProvider.test.ts`:
-  - [ ] Ensure tests for `generateChatCompletion` now implicitly test the `ToolFormatter` integration by providing `ITool` objects and asserting that the mocked Anthropic API receives the correctly formatted tools, and that the parsed tool calls from the mocked Anthropic response are in the correct internal `IMessage` format.
-  - [ ] You might need to mock `ToolFormatter` in these tests to isolate `AnthropicProvider`'s logic, or ensure `ToolFormatter`'s tests are robust enough that you can rely on its correct behavior here.
+  - [ ] Ensure tests verify ToolFormatter integration.
+  - [ ] Test that tools are correctly formatted for Anthropic's API.
+  - [ ] Verify tool calls are properly converted to internal format.
 
 ## Self-verify
 
