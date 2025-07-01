@@ -186,6 +186,22 @@ In addition to a project settings file, a project's `.gemini` directory can cont
     "usageStatisticsEnabled": false
     ```
 
+- **`enableTextToolCallParsing`** (boolean):
+  - **Description:** Enables or disables text-based tool call parsing for models that output tool calls as formatted text rather than structured JSON.
+  - **Default:** `true`
+  - **Example:**
+    ```json
+    "enableTextToolCallParsing": true
+    ```
+
+- **`textToolCallModels`** (array of strings):
+  - **Description:** Specifies additional model names that require text-based tool call parsing. The system automatically detects common models like gemma-3-12b-it and gemma-2-27b-it, but you can add custom models here.
+  - **Default:** `[]`
+  - **Example:**
+    ```json
+    "textToolCallModels": ["my-custom-model", "local-llama-model"]
+    ```
+
 ### Example `settings.json`:
 
 ```json

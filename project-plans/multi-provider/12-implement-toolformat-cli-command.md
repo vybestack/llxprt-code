@@ -5,20 +5,32 @@ This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-To implement the `/toolformat` command in the CLI, allowing users to specify the tool calling format. This format will be stored in the application's context or configuration.
+To implement the `/toolformat` command in the CLI, allowing users to override the auto-detected tool calling format when needed. Tool formats are automatically detected based on model name and base URL, but this command provides manual control when auto-detection is incorrect.
 
 ## Deliverables
 
 - Modified CLI command parsing to handle `/toolformat`.
-- Updated application context/configuration to store the selected tool format.
+- Updated provider to support manual tool format override.
+- Clear feedback showing current format and auto-detection status.
 
 ## Checklist (implementer)
 
 - [ ] Update the CLI's command parsing logic (where `/` commands are handled):
-  - [ ] Implement the `/toolformat <format_name>` command.
-  - [ ] Validate `format_name` against a predefined list of supported formats (e.g., `['openai', 'hermes', 'xml']`). If an invalid format is provided, display an error message.
-  - [ ] Store the selected `format_name` in a suitable place in the application's context (e.g., `this.context.toolFormat` if such a context object exists, or a new configuration property).
-  - [ ] Provide user feedback confirming the tool format has been set.
+  - [ ] Implement the `/toolformat` command with these options:
+    - `/toolformat` - Show current format and whether it's auto-detected or manual
+    - `/toolformat auto` - Return to auto-detection (default)
+    - `/toolformat <format_name>` - Force a specific format
+  - [ ] Validate `format_name` against supported formats:
+    - Structured formats: `['openai', 'anthropic', 'deepseek', 'qwen']`
+    - Text formats: `['hermes', 'xml', 'llama', 'gemma']`
+  - [ ] Store the override in provider settings (e.g., `toolFormatOverride`)
+  - [ ] Update provider's `getToolFormat()` to check override first
+  - [ ] Show feedback:
+    ```
+    Current tool format: openai (auto-detected from model gpt-4)
+    To override: /toolformat <format>
+    To return to auto: /toolformat auto
+    ```
 
 ## Self-verify
 

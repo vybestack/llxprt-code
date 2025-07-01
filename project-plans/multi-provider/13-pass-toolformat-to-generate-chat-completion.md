@@ -5,23 +5,44 @@ This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-To modify the CLI's main chat loop to pass the selected `toolFormat` (set by the `/toolformat` command) to the `generateChatCompletion` method of the active provider. This ensures that the correct tool formatting is used when making API calls.
+To ensure the tool format override mechanism (set by `/toolformat` command) properly flows through the system. Since tool formats are already auto-detected in the provider, this phase focuses on implementing the override functionality.
 
 ## Deliverables
 
-- Modified CLI main chat loop (e.g., in `packages/cli/src/index.ts` or relevant chat handling logic).
-- Modified `packages/cli/src/providers/IProvider.ts` (if `toolFormat` was not already part of the signature).
-- Modified `packages/cli/src/providers/openai/OpenAIProvider.ts`'s `generateChatCompletion` to accept and utilize the `toolFormat` parameter.
+- Modified provider to support tool format override
+- Updated `getToolFormat()` method to check for manual override
+- Ensure both structured and text-based tool paths respect the override
 
 ## Checklist (implementer)
 
-- [ ] Ensure `packages/cli/src/providers/IProvider.ts`'s `generateChatCompletion` signature includes `toolFormat?: string`.
-- [ ] Update `packages/cli/src/providers/openai/OpenAIProvider.ts`:
-  - [ ] Ensure `generateChatCompletion` method accepts `toolFormat?: string`.
-  - [ ] Pass this `toolFormat` parameter to the `ToolFormatter.toProviderFormat` and `ToolFormatter.fromProviderFormat` calls within `generateChatCompletion`.
-- [ ] Modify the main chat loop in the CLI (where user input is sent to the LLM):
-  - [ ] Retrieve the currently selected `toolFormat` from the application's context/configuration.
-  - [ ] Pass this `toolFormat` as the last argument to `providerManager.getActiveProvider().generateChatCompletion(messages, tools, currentToolFormat)`.
+- [ ] Update `OpenAIProvider` (and base provider if needed):
+  - [ ] Add `toolFormatOverride?: ToolFormat` property
+  - [ ] Add `setToolFormatOverride(format: ToolFormat | null)` method
+  - [ ] Update `getToolFormat()` to check override first:
+    ```typescript
+    private getToolFormat(): ToolFormat {
+      // Check manual override first
+      if (this.toolFormatOverride) {
+        return this.toolFormatOverride;
+      }
+      
+      // Otherwise auto-detect
+      if (this.currentModel.includes('deepseek') || this.baseURL?.includes('deepseek')) {
+        return 'deepseek';
+      }
+      // ... rest of auto-detection
+    }
+    ```
+
+- [ ] Update format detection to handle text-based formats:
+  - [ ] If format is in `['hermes', 'xml', 'llama', 'gemma']`, use TextToolCallParser
+  - [ ] If format is in `['openai', 'anthropic', 'deepseek', 'qwen']`, use ToolFormatter
+  - [ ] Add appropriate patterns to TextToolCallParser for new formats
+
+- [ ] Connect `/toolformat` command to provider:
+  - [ ] When user sets format, call `provider.setToolFormatOverride(format)`
+  - [ ] When user sets 'auto', call `provider.setToolFormatOverride(null)`
+  - [ ] Ensure override persists across messages in the same session
 
 ## Self-verify
 

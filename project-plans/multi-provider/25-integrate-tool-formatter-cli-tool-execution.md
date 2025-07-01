@@ -5,18 +5,44 @@ This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-To integrate the `ToolFormatter` into the main CLI's tool execution logic. This ensures that tool calls received from any provider, regardless of their native format, are correctly parsed into the internal `IMessage['tool_calls']` format before execution.
+To ensure the CLI's tool execution logic correctly handles tool calls from both structured (ToolFormatter) and text-based (TextToolCallParser) paths. Since we now have two parallel systems for extracting tool calls, the execution layer must handle both seamlessly.
+
+## Background
+
+Current architecture:
+1. **Structured path**: Provider → ToolFormatter → Standard format → Execution
+2. **Text-based path**: Provider → TextToolCallParser → Standard format → Execution
+
+Both paths output the same `IMessage['tool_calls']` format, but they arrive there differently.
 
 ## Deliverables
 
-- Modified CLI tool execution logic (e.g., in `packages/cli/src/index.ts` or a dedicated tool execution module) to use `ToolFormatter.fromProviderFormat`.
+- Verified tool execution works for both paths
+- Updated execution logic if needed to handle edge cases
+- Tests covering both structured and text-based tool calls
 
 ## Checklist (implementer)
 
-- [ ] Identify the part of the CLI code that receives tool calls from the `generateChatCompletion` stream (or non-streaming response) and prepares them for execution.
-- [ ] In this section, ensure that `ToolFormatter.fromProviderFormat(rawToolCall, currentToolFormat)` is used to convert the raw tool call object (as received from the provider) into the standardized `IMessage['tool_calls']` format.
-- [ ] The `currentToolFormat` should be the one determined by the active provider and potentially overridden by the `/toolformat` command.
-- [ ] Ensure that the tool execution logic (which calls the actual tool functions) operates on this standardized `IMessage['tool_calls']` format.
+- [ ] Verify current tool execution logic location:
+  - [ ] Check where tool calls from `generateChatCompletion` are executed
+  - [ ] Confirm it operates on `IMessage['tool_calls']` format
+  - [ ] Ensure it doesn't assume a specific source (structured vs text)
+
+- [ ] Test both paths end-to-end:
+  - [ ] Structured: OpenAI/Anthropic → ToolFormatter → Execution
+  - [ ] Text-based: Gemma/Hermes → TextToolCallParser → Execution
+  - [ ] Mixed: Multiple tool calls from different sources
+
+- [ ] Handle edge cases:
+  - [ ] Tool calls with missing IDs (text-parsed often generate IDs)
+  - [ ] Malformed arguments that passed parsing but fail execution
+  - [ ] Multiple sequential tool calls
+  - [ ] Tool calls mixed with regular content
+
+- [ ] Update logging/debugging:
+  - [ ] Log which path (structured/text) tool calls came from
+  - [ ] Include format information in debug output
+  - [ ] Make troubleshooting easier for users
 
 ## Self-verify
 

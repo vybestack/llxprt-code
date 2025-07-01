@@ -1,34 +1,53 @@
-# Phase 23 – Implement ToolFormatter for Hermes (multi-provider)
+# Phase 23 – Implement Text Parser for Hermes Tool Format (multi-provider)
 
 **STOP**
 This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-To implement the `toProviderFormat` and `fromProviderFormat` methods in `ToolFormatter` specifically for the `hermes` tool format. This will enable the conversion of internal tool representations to Hermes's format and vice-versa.
+To add support for Hermes tool call format to the TextToolCallParser. Hermes models output tool calls as text with `<tool_call>` XML-like tags containing JSON.
+
+## Background
+
+Hermes format example:
+```
+<|im_start|>assistant
+<tool_call>
+{"arguments": {"symbol": "TSLA"}, "name": "get_stock_fundamentals"}
+</tool_call>
+<|im_end|>
+```
 
 ## Deliverables
 
-- Modified `/Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/tools/ToolFormatter.ts` with `hermes` specific logic.
-- Modified `/Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/tools/ToolFormatter.test.ts` with tests for `hermes` tool formatting.
+- Updated `TextToolCallParser` with Hermes pattern
+- Tests for Hermes format parsing
+- Updated format detection logic
 
 ## Checklist (implementer)
 
-- [ ] Update `packages/cli/src/tools/ToolFormatter.ts`:
-  - [ ] Implement `toProviderFormat(tools: ITool[], format: ToolFormat): any`:
-    - [ ] If `format` is 'hermes', convert the `ITool[]` array into the format expected by Hermes (e.g., a specific JSON structure or XML representation).
-    - [ ] For other formats, continue to throw `NotYetImplemented`.
-  - [ ] Implement `fromProviderFormat(rawToolCall: any, format: ToolFormat): IMessage['tool_calls']`:
-    - [ ] If `format` is 'hermes', parse the raw tool call object (from a model's response) into the `IMessage['tool_calls']` internal format.
-    - [ ] For other formats, continue to throw `NotYetImplemented`.
-- [ ] Update `packages/cli/src/tools/ToolFormatter.test.ts`:
-  - [ ] Add tests for `toProviderFormat` with `format: 'hermes'`:
-    - [ ] Provide sample `ITool[]` input.
-    - [ ] Assert that the output matches Hermes's expected tool format.
-  - [ ] Add tests for `fromProviderFormat` with `format: 'hermes'`:
-    - [ ] Provide sample raw Hermes tool call objects.
-    - [ ] Assert that the output matches the `IMessage['tool_calls']` internal format.
-  - [ ] Ensure existing `NotYetImplemented` tests for other formats still pass.
+- [ ] Update `packages/cli/src/providers/parsers/TextToolCallParser.ts`:
+  - [ ] Add Hermes pattern to patterns array:
+    ```typescript
+    // Format 5: Hermes format with <tool_call> tags
+    /<tool_call>\s*({.*?"name":\s*"(\w+)".*?})\s*<\/tool_call>/gs,
+    ```
+  - [ ] Update parsing logic to handle this pattern
+  - [ ] Ensure special tokens like `<|im_start|>` are cleaned up
+
+- [ ] Create `HermesToolCallParser` class (optional):
+  - [ ] If Hermes needs special handling, create dedicated parser
+  - [ ] Otherwise, use updated GemmaToolCallParser
+
+- [ ] Update format detection:
+  - [ ] Add 'hermes' to text-based formats list
+  - [ ] Update `requiresTextToolCallParsing()` to include Hermes models
+
+- [ ] Add tests to `TextToolCallParser.test.ts`:
+  - [ ] Test single Hermes tool call
+  - [ ] Test multiple tool calls
+  - [ ] Test with special tokens
+  - [ ] Test malformed Hermes format
 
 ## Self-verify
 

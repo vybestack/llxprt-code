@@ -80,6 +80,26 @@ gemini
 - For more comprehensive documentation, see the [full documentation](./docs/index.md).
 - Take a look at some [popular tasks](#popular-tasks) for more inspiration.
 
+### Text-Based Tool Support
+
+The Gemini CLI automatically detects and parses tool calls from models that output them as text rather than structured JSON. This includes models like:
+
+- **Gemma models** (gemma-3-12b-it, gemma-2-27b-it)
+- **Hermes models** (using `<tool_call>` XML tags)
+- **DeepSeek models** (with special Unicode tokens)
+- **Llama models** (pythonic or function tag formats)
+
+To configure text-based tool parsing:
+
+```json
+{
+  "enableTextToolCallParsing": true,
+  "textToolCallModels": ["my-custom-model", "another-text-model"]
+}
+```
+
+For more details on supported formats and troubleshooting, see the [tool parsing documentation](./docs/tool-parsing.md).
+
 ### Troubleshooting
 
 Head over to the [troubleshooting](docs/troubleshooting.md) guide if you're
