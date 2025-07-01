@@ -40,7 +40,8 @@ export const Footer: React.FC<FooterProps> = ({
   totalTokenCount,
 }) => {
   const limit = tokenLimit(model);
-  const percentage = totalTokenCount / limit;
+  // Protect against division by zero in edge cases
+  const percentage = limit > 0 ? totalTokenCount / limit : 0;
 
   return (
     <Box marginTop={1} justifyContent="space-between" width="100%">

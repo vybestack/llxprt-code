@@ -64,6 +64,10 @@ export interface Settings {
   // UI setting. Does not display the ANSI-controlled terminal title.
   hideWindowTitle?: boolean;
 
+  // Provider configuration settings
+  providerApiKeys?: Record<string, string>;
+  providerBaseUrls?: Record<string, string>;
+
   // Add other settings here.
 }
 
@@ -119,10 +123,10 @@ export class LoadedSettings {
   setValue(
     scope: SettingScope,
     key: keyof Settings,
-    value: string | Record<string, MCPServerConfig> | undefined,
+    value: string | Record<string, MCPServerConfig> | Record<string, string> | undefined,
   ): void {
     const settingsFile = this.forScope(scope);
-    // @ts-expect-error - value can be string | Record<string, MCPServerConfig>
+    // @ts-expect-error - value can be string | Record<string, MCPServerConfig> | Record<string, string>
     settingsFile.settings[key] = value;
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);

@@ -614,6 +614,7 @@ export const useGeminiStream = (
             handleChatCompressionEvent(event.value);
             break;
           case ServerGeminiEventType.UsageMetadata:
+            console.log('[useGeminiStream] 📊 USAGE EVENT RECEIVED:', JSON.stringify(event.value, null, 2));
             addUsage(event.value);
             break;
           case ServerGeminiEventType.ToolCallConfirmation:

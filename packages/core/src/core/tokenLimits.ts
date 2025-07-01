@@ -10,9 +10,13 @@ type TokenCount = number;
 export const DEFAULT_TOKEN_LIMIT = 1_048_576;
 
 export function tokenLimit(model: Model): TokenCount {
+  // Strip provider prefix if present (e.g., "openai:gpt-4o" -> "gpt-4o")
+  const modelWithoutPrefix = model.includes(':') ? model.split(':')[1] : model;
+  
   // Add other models as they become relevant or if specified by config
   // Pulled from https://ai.google.dev/gemini-api/docs/models
-  switch (model) {
+  switch (modelWithoutPrefix) {
+    // Gemini models
     case 'gemini-1.5-pro':
       return 2_097_152;
     case 'gemini-1.5-flash':
@@ -25,6 +29,19 @@ export function tokenLimit(model: Model): TokenCount {
       return 1_048_576;
     case 'gemini-2.0-flash-preview-image-generation':
       return 32_000;
+    
+    // OpenAI models
+    case 'o4-mini':
+    case 'o3':
+    case 'o3-mini':
+    case 'gpt-4.1':
+    case 'gpt-4o':
+    case 'gpt-4o-mini':
+      return 128_000;
+    case 'o1':
+    case 'o1-mini':
+      return 200_000;
+    
     default:
       return DEFAULT_TOKEN_LIMIT;
   }

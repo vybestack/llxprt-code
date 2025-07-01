@@ -899,7 +899,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
             candidatesTokenCount={
               sessionStats.currentResponse.candidatesTokenCount
             }
-            totalTokenCount={sessionStats.currentResponse.totalTokenCount}
+            totalTokenCount={sessionStats.cumulative.totalTokenCount}
           />
         </Box>
       </Box>

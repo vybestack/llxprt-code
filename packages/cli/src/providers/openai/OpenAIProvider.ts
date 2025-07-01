@@ -25,12 +25,16 @@ export class OpenAIProvider implements IProvider {
   name: string = 'openai';
   private openai: OpenAI;
   private currentModel: string = 'gpt-4.1';
+  private apiKey: string;
+  private baseURL?: string;
 
   constructor(apiKey: string, baseURL?: string) {
     if (!apiKey || apiKey.trim() === '') {
       throw new Error('OpenAI API key is required');
     }
 
+    this.apiKey = apiKey;
+    this.baseURL = baseURL;
     this.openai = new OpenAI({
       apiKey,
       baseURL,
@@ -149,6 +153,7 @@ export class OpenAIProvider implements IProvider {
       messages:
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
       stream: true,
+      stream_options: { include_usage: true },
       tools: tools
         ? (tools as OpenAI.Chat.Completions.ChatCompletionTool[])
         : undefined,
@@ -157,6 +162,7 @@ export class OpenAIProvider implements IProvider {
 
     let fullContent = '';
     const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
+    let usageData: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
@@ -189,9 +195,19 @@ export class OpenAIProvider implements IProvider {
           }
         }
       }
+
+      // Check for usage data in the chunk
+      if (chunk.usage) {
+        console.log('[OpenAIProvider] 📊 USAGE DATA RECEIVED:', JSON.stringify(chunk.usage, null, 2));
+        usageData = {
+          prompt_tokens: chunk.usage.prompt_tokens,
+          completion_tokens: chunk.usage.completion_tokens,
+          total_tokens: chunk.usage.total_tokens,
+        };
+      }
     }
 
-    // Yield final message with tool calls if any
+    // Yield final message with tool calls and/or usage information
     if (accumulatedToolCalls.length > 0) {
       console.log(
         '[OpenAIProvider] 🎯 YIELDING TOOL CALLS:',
@@ -201,9 +217,15 @@ export class OpenAIProvider implements IProvider {
         role: ContentGeneratorRole.ASSISTANT,
         content: fullContent || '',
         tool_calls: accumulatedToolCalls,
+        usage: usageData,
       };
-    } else {
-      console.log('[OpenAIProvider] ❌ NO TOOL CALLS TO YIELD');
+    } else if (usageData) {
+      // Always emit usage data so downstream consumers can update stats
+      yield {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: '',
+        usage: usageData,
+      };
     }
   }
 
@@ -213,5 +235,30 @@ export class OpenAIProvider implements IProvider {
 
   getCurrentModel(): string {
     return this.currentModel;
+  }
+
+  setApiKey(apiKey: string): void {
+    if (!apiKey || apiKey.trim() === '') {
+      throw new Error('OpenAI API key is required');
+    }
+    
+    this.apiKey = apiKey;
+    // Create a new OpenAI client with the updated API key
+    this.openai = new OpenAI({
+      apiKey,
+      baseURL: this.baseURL,
+      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
+    });
+  }
+
+  setBaseUrl(baseUrl?: string): void {
+    // If no baseUrl is provided, clear to default (undefined)
+    this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+    // Create a new OpenAI client with the updated (or cleared) base URL
+    this.openai = new OpenAI({
+      apiKey: this.apiKey,
+      baseURL: this.baseURL,
+      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
+    });
   }
 }

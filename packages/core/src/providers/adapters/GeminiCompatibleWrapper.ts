@@ -18,6 +18,7 @@ import {
   ServerGeminiStreamEvent,
   ServerGeminiContentEvent,
   ServerGeminiToolCallRequestEvent,
+  ServerGeminiUsageMetadataEvent,
 } from '../../core/turn.js';
 
 /**
@@ -245,6 +246,24 @@ export class GeminiCompatibleWrapper {
         }
       } else if (message.tool_calls !== undefined) {
         console.log('[GeminiCompatibleWrapper] ❌ Empty tool_calls array');
+      }
+
+      // Emit usage metadata event if message has usage data
+      if (message.usage) {
+        console.log('[GeminiCompatibleWrapper] 📊 EMITTING USAGE EVENT:', JSON.stringify({
+          prompt_tokens: message.usage.prompt_tokens,
+          completion_tokens: message.usage.completion_tokens,
+          total_tokens: message.usage.total_tokens,
+        }, null, 2));
+        const usageEvent: ServerGeminiUsageMetadataEvent = {
+          type: GeminiEventType.UsageMetadata,
+          value: {
+            promptTokenCount: message.usage.prompt_tokens,
+            candidatesTokenCount: message.usage.completion_tokens,
+            totalTokenCount: message.usage.total_tokens,
+          },
+        };
+        yield usageEvent;
       }
     }
   }

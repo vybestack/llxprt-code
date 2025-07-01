@@ -14,23 +14,6 @@
  * limitations under the License.
  */
 
-import { ContentGeneratorRole } from './types.js';
-
-export interface IMessage {
-  role: ContentGeneratorRole | 'system';
-  content: string;
-  tool_call_id?: string;
-  tool_calls?: Array<{
-    id: string;
-    type: 'function';
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+export interface ITokenizer {
+  countTokens(text: string, model: string): Promise<number>;
 }

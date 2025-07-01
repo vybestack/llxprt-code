@@ -30,11 +30,12 @@ import {
 } from '../types.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { homedir } from 'os';
 import { createShowMemoryAction } from './useShowMemoryCommand.js';
 import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
-import { LoadedSettings } from '../../config/settings.js';
+import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export interface SlashCommandActionReturn {
@@ -1054,6 +1055,219 @@ export const useSlashCommandProcessor = (
           setPendingCompressionItem(null);
         },
       },
+      {
+        name: 'key',
+        description: 'set API key for the current provider',
+        action: async (_mainCommand, apiKey, _args) => {
+          const providerManager = getProviderManager();
+          
+          if (!providerManager.hasActiveProvider()) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: 'No active provider. Use /provider to select a provider first.',
+              timestamp: new Date(),
+            });
+            return;
+          }
+          
+          if (!apiKey || apiKey.trim() === '') {
+            addMessage({
+              type: MessageType.ERROR,
+              content: 'Usage: /key <api_key>',
+              timestamp: new Date(),
+            });
+            return;
+          }
+          
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+            
+            // Update the provider's API key
+            if (activeProvider.setApiKey) {
+              activeProvider.setApiKey(apiKey);
+              
+              // Save to settings
+              const currentKeys = settings.merged.providerApiKeys || {};
+              currentKeys[providerName] = apiKey;
+              settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
+              
+              addMessage({
+                type: MessageType.INFO,
+                content: `API key updated for provider '${providerName}'`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${providerName}' does not support API key updates`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to set API key: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'keyfile',
+        description: 'set API key from file for the current provider',
+        action: async (_mainCommand, filePath, _args) => {
+          const providerManager = getProviderManager();
+          
+          if (!providerManager.hasActiveProvider()) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: 'No active provider. Use /provider to select a provider first.',
+              timestamp: new Date(),
+            });
+            return;
+          }
+          
+          if (!filePath || filePath.trim() === '') {
+            addMessage({
+              type: MessageType.ERROR,
+              content: 'Usage: /keyfile <path>',
+              timestamp: new Date(),
+            });
+            return;
+          }
+          
+          try {
+            // Resolve ~ to home directory
+            const resolvedPath = filePath.replace(/^~/, homedir());
+            
+            // Read the API key from file
+            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
+            
+            if (!apiKey) {
+              addMessage({
+                type: MessageType.ERROR,
+                content: 'The specified file is empty',
+                timestamp: new Date(),
+              });
+              return;
+            }
+            
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+            
+            // Update the provider's API key
+            if (activeProvider.setApiKey) {
+              activeProvider.setApiKey(apiKey);
+              
+              // Save to settings
+              const currentKeys = settings.merged.providerApiKeys || {};
+              currentKeys[providerName] = apiKey;
+              settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
+              
+              addMessage({
+                type: MessageType.INFO,
+                content: `API key loaded from ${resolvedPath} for provider '${providerName}'`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${providerName}' does not support API key updates`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to read API key file: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'baseurl',
+        description: 'set base URL for the current provider',
+        action: async (_mainCommand, baseUrl, _args) => {
+          const providerManager = getProviderManager();
+          
+          if (!providerManager.hasActiveProvider()) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: 'No active provider. Use /provider to select a provider first.',
+              timestamp: new Date(),
+            });
+            return;
+          }
+          
+          if (!baseUrl || baseUrl.trim() === '') {
+            // Clear base URL to provider default
+            try {
+              const activeProvider = providerManager.getActiveProvider();
+              const providerName = activeProvider.name;
+              if (activeProvider.setBaseUrl) {
+                activeProvider.setBaseUrl(undefined);
+                // Remove from settings
+                const currentUrls = settings.merged.providerBaseUrls || {};
+                delete currentUrls[providerName];
+                settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Base URL cleared for provider '${providerName}' (using default).`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${providerName}' does not support base URL updates`,
+                  timestamp: new Date(),
+                });
+              }
+            } catch (error) {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Failed to clear base URL: ${error instanceof Error ? error.message : String(error)}`,
+                timestamp: new Date(),
+              });
+            }
+            return;
+          }
+          
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+            
+            // Update the provider's base URL
+            if (activeProvider.setBaseUrl) {
+              activeProvider.setBaseUrl(baseUrl);
+              
+              // Save to settings
+              const currentUrls = settings.merged.providerBaseUrls || {};
+              currentUrls[providerName] = baseUrl;
+              settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+              
+              addMessage({
+                type: MessageType.INFO,
+                content: `Base URL updated to '${baseUrl}' for provider '${providerName}'`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${providerName}' does not support base URL updates`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to set base URL: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
     ];
 
     if (config?.getCheckpointingEnabled()) {
@@ -1202,7 +1416,7 @@ export const useSlashCommandProcessor = (
     setQuittingMessages,
     pendingCompressionItemRef,
     setPendingCompressionItem,
-    settings.merged.selectedAuthType,
+    settings,
   ]);
 
   const handleSlashCommand = useCallback(

@@ -14,6 +14,12 @@ export interface ProviderMessage {
   // For tool messages (responses to tool calls)
   tool_call_id?: string;
   name?: string;
+  // Token usage information
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 /**
