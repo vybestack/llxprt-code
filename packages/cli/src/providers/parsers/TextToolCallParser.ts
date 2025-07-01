@@ -1,3 +1,19 @@
+/**
+ * Copyright 2025 Vybestack LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 export interface TextToolCall {
   name: string;
   arguments: Record<string, unknown>;
@@ -50,9 +66,12 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
     // Process each match
     for (const { fullMatch, toolName, args } of matches) {
+      // Remove the tool call pattern from the content regardless of parsing success so markers are always stripped
+      cleanedContent = cleanedContent.replace(fullMatch, '');
+
       try {
         let parsedArgs: Record<string, unknown>;
-        
+
         if (typeof args === 'string') {
           // Handle JSON string arguments
           parsedArgs = JSON.parse(args);
@@ -60,14 +79,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           // Already parsed (from key-value format)
           parsedArgs = args;
         }
-        
+
         toolCalls.push({
           name: toolName,
-          arguments: parsedArgs
+          arguments: parsedArgs,
         });
-        
-        // Remove the tool call pattern from the content
-        cleanedContent = cleanedContent.replace(fullMatch, '');
       } catch (error) {
         if (typeof args === 'string') {
           // Try to extract a simpler JSON pattern if the full match fails
@@ -93,8 +109,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
     }
 
-    // Clean up any extra whitespace
-    cleanedContent = cleanedContent.replace(/\s+/g, ' ').trim();
+    // Clean up any extra whitespace and stray markers that were not matched (best effort)
+    cleanedContent = cleanedContent.replace(/\[TOOL_REQUEST(?:_END)?]/g, '').replace(/\s+/g, ' ').trim();
 
     return {
       cleanedContent,

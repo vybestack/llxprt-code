@@ -22,6 +22,7 @@ import { ContentGeneratorRole } from '../types.js';
 import OpenAI from 'openai';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { Settings } from '../../config/settings.js';
+import { ToolFormatter } from '../../tools/ToolFormatter.js';
 
 export class OpenAIProvider implements IProvider {
   name: string = 'openai';
@@ -30,6 +31,7 @@ export class OpenAIProvider implements IProvider {
   private apiKey: string;
   private baseURL?: string;
   private settings?: Settings;
+  private toolFormatter: ToolFormatter;
 
   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
     if (!apiKey || apiKey.trim() === '') {
@@ -39,6 +41,7 @@ export class OpenAIProvider implements IProvider {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
     this.settings = settings;
+    this.toolFormatter = new ToolFormatter();
     this.openai = new OpenAI({
       apiKey,
       baseURL,
@@ -175,15 +178,18 @@ export class OpenAIProvider implements IProvider {
       );
     }
 
+    // Format tools using ToolFormatter
+    const formattedTools = tools
+      ? this.toolFormatter.toProviderFormat(tools, 'openai')
+      : undefined;
+
     const stream = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
       stream: true,
       stream_options: { include_usage: true },
-      tools: tools
-        ? (tools as OpenAI.Chat.Completions.ChatCompletionTool[])
-        : undefined,
+      tools: formattedTools as OpenAI.Chat.Completions.ChatCompletionTool[] | undefined,
       tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
     });
 
