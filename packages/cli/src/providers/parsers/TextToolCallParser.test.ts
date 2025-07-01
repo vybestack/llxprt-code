@@ -45,4 +45,18 @@ describe('GemmaToolCallParser', () => {
     // Parsing should fail, resulting in zero tool calls and no throw
     expect(result.toolCalls).toHaveLength(0);
   });
+
+  it('should parse JSON object format with END_TOOL_REQUEST', () => {
+    const content = `1 {"name": "list_directory", "arguments": {"path": "/Users/acoliver/projects/gemini-code/gemini-cli/project-plans"}}
+2 [END_TOOL_REQUEST]`;
+
+    const result = parser.parse(content);
+
+    expect(result.cleanedContent).toBe('');
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].name).toBe('list_directory');
+    expect(result.toolCalls[0].arguments).toEqual({
+      path: '/Users/acoliver/projects/gemini-code/gemini-cli/project-plans',
+    });
+  });
 });

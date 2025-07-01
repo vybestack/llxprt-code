@@ -34,7 +34,9 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     // Format 2: ✦ tool_call: toolName for key value pairs
     /✦\s*tool_call:\s*(\w+)\s+for\s+(.+?)(?=✦|$)/gs,
     // Format 3: Simple function call format
-    /(\w+)\s*\(({.*?})\)/gs
+    /(\w+)\s*\(({.*?})\)/gs,
+    // Format 4: JSON object with name/arguments followed by [END_TOOL_REQUEST]
+    /(\d+\s+)?{"name":\s*"(\w+)",\s*"arguments":\s*({.*?})}\s*(?:\n\s*\d+\s+)?\[END_TOOL_REQUEST\]/gs,
   ];
 
   parse(content: string): {
@@ -43,7 +45,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   } {
     const toolCalls: TextToolCall[] = [];
     let cleanedContent = content;
-    const matches: Array<{ fullMatch: string; toolName: string; args: string | Record<string, unknown> }> = [];
+    const matches: Array<{
+      fullMatch: string;
+      toolName: string;
+      args: string | Record<string, unknown>;
+    }> = [];
 
     // Try each pattern
     for (const pattern of this.patterns) {
@@ -54,8 +60,12 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           const [fullMatch, toolName, argsStr] = match;
           const args = this.parseKeyValuePairs(argsStr);
           matches.push({ fullMatch, toolName, args });
+        } else if (pattern === this.patterns[3]) {
+          // Format 4: JSON object format {"name": "tool", "arguments": {...}}
+          const [fullMatch, , toolName, jsonArgs] = match;
+          matches.push({ fullMatch, toolName, args: jsonArgs });
         } else {
-          // Format 1 and 3: JSON arguments
+          // Format 1 and 3: tool name followed by JSON arguments
           const [fullMatch, toolName, jsonArgs] = match;
           matches.push({ fullMatch, toolName, args: jsonArgs });
         }
@@ -92,17 +102,23 @@ export class GemmaToolCallParser implements ITextToolCallParser {
             try {
               const parsedArgs = JSON.parse(simpleJsonMatch[0]);
               toolCalls.push({
-                name: toolName,  
-                arguments: parsedArgs
+                name: toolName,
+                arguments: parsedArgs,
               });
               cleanedContent = cleanedContent.replace(fullMatch, '');
             } catch (_secondError) {
-              console.error(`[GemmaToolCallParser] Failed to parse tool arguments for ${toolName}:`, error);
+              console.error(
+                `[GemmaToolCallParser] Failed to parse tool arguments for ${toolName}:`,
+                error,
+              );
               console.error(`[GemmaToolCallParser] Raw arguments: ${args}`);
               // Keep the original text if we can't parse it
             }
           } else {
-            console.error(`[GemmaToolCallParser] Failed to parse tool arguments for ${toolName}:`, error);
+            console.error(
+              `[GemmaToolCallParser] Failed to parse tool arguments for ${toolName}:`,
+              error,
+            );
             console.error(`[GemmaToolCallParser] Raw arguments: ${args}`);
           }
         }
@@ -110,43 +126,46 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     }
 
     // Clean up any extra whitespace and stray markers that were not matched (best effort)
-    cleanedContent = cleanedContent.replace(/\[TOOL_REQUEST(?:_END)?]/g, '').replace(/\s+/g, ' ').trim();
+    cleanedContent = cleanedContent
+      .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     return {
       cleanedContent,
-      toolCalls
+      toolCalls,
     };
   }
 
   private parseKeyValuePairs(str: string): Record<string, unknown> {
     const args: Record<string, unknown> = {};
-    
+
     // Parse "key value key2 value2" format
     // Example: "path /Users/acoliver/projects/gemini-code/gemini-cli/docs"
     const parts = str.trim().split(/\s+/);
-    
+
     for (let i = 0; i < parts.length; i += 2) {
       if (i + 1 < parts.length) {
         const key = parts[i];
         let value: string | number | boolean = parts[i + 1];
-        
+
         // Handle quoted strings that might contain spaces
         if (value.startsWith('"') || value.startsWith("'")) {
           const quote = value[0];
           let endIndex = i + 1;
-          
+
           // Find the closing quote
           while (endIndex < parts.length && !parts[endIndex].endsWith(quote)) {
             endIndex++;
           }
-          
+
           if (endIndex < parts.length) {
             value = parts.slice(i + 1, endIndex + 1).join(' ');
             value = value.slice(1, -1); // Remove quotes
             i = endIndex - 1; // Adjust loop counter
           }
         }
-        
+
         // Try to parse as number or boolean
         if (!isNaN(Number(value))) {
           args[key] = Number(value);
@@ -157,7 +176,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         }
       }
     }
-    
+
     return args;
   }
 }

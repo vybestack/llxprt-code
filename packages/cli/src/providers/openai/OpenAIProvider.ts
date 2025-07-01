@@ -23,6 +23,7 @@ import OpenAI from 'openai';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { Settings } from '../../config/settings.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import { ToolFormat } from '../../tools/IToolFormatter.js';
 
 export class OpenAIProvider implements IProvider {
   name: string = 'openai';
@@ -32,6 +33,7 @@ export class OpenAIProvider implements IProvider {
   private baseURL?: string;
   private settings?: Settings;
   private toolFormatter: ToolFormatter;
+  private toolFormat: ToolFormat = 'openai';
 
   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
     if (!apiKey || apiKey.trim() === '') {
@@ -60,6 +62,21 @@ export class OpenAIProvider implements IProvider {
     const allModels = [...defaultModels, ...configuredModels];
 
     return allModels.includes(this.currentModel);
+  }
+
+  private getToolFormat(): ToolFormat {
+    // Detect tool format based on model or base URL
+    if (
+      this.currentModel.includes('deepseek') ||
+      this.baseURL?.includes('deepseek')
+    ) {
+      return 'deepseek';
+    }
+    if (this.currentModel.includes('qwen') || this.baseURL?.includes('qwen')) {
+      return 'qwen';
+    }
+    // Default to OpenAI format
+    return 'openai';
   }
 
   async getModels(): Promise<IModel[]> {
@@ -178,9 +195,12 @@ export class OpenAIProvider implements IProvider {
       );
     }
 
+    // Determine tool format
+    this.toolFormat = this.getToolFormat();
+
     // Format tools using ToolFormatter
     const formattedTools = tools
-      ? this.toolFormatter.toProviderFormat(tools, 'openai')
+      ? this.toolFormatter.toProviderFormat(tools, this.toolFormat)
       : undefined;
 
     const stream = await this.openai.chat.completions.create({
@@ -189,7 +209,9 @@ export class OpenAIProvider implements IProvider {
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
       stream: true,
       stream_options: { include_usage: true },
-      tools: formattedTools as OpenAI.Chat.Completions.ChatCompletionTool[] | undefined,
+      tools: formattedTools as
+        | OpenAI.Chat.Completions.ChatCompletionTool[]
+        | undefined,
       tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
     });
 
@@ -210,7 +232,10 @@ export class OpenAIProvider implements IProvider {
         fullContent += delta.content;
         // For text-based models, don't yield content chunks yet
         if (!parser) {
-          yield { role: ContentGeneratorRole.ASSISTANT, content: delta.content };
+          yield {
+            role: ContentGeneratorRole.ASSISTANT,
+            content: delta.content,
+          };
         }
       }
 
@@ -220,21 +245,11 @@ export class OpenAIProvider implements IProvider {
           JSON.stringify(delta.tool_calls),
         );
         for (const toolCall of delta.tool_calls) {
-          if (toolCall.index !== undefined) {
-            if (!accumulatedToolCalls[toolCall.index]) {
-              accumulatedToolCalls[toolCall.index] = {
-                id: toolCall.id || '',
-                type: 'function',
-                function: { name: '', arguments: '' },
-              };
-            }
-            const tc = accumulatedToolCalls[toolCall.index];
-            if (toolCall.id) tc.id = toolCall.id;
-            if (toolCall.function?.name)
-              tc.function.name = toolCall.function.name;
-            if (toolCall.function?.arguments)
-              tc.function.arguments += toolCall.function.arguments;
-          }
+          this.toolFormatter.accumulateStreamingToolCall(
+            toolCall,
+            accumulatedToolCalls,
+            this.toolFormat,
+          );
         }
       }
 
@@ -254,12 +269,15 @@ export class OpenAIProvider implements IProvider {
 
     // After stream ends, parse text-based tool calls if needed
     if (parser && fullContent) {
-      console.log('[OpenAIProvider] Parsing content for tool calls:', fullContent);
+      console.log(
+        '[OpenAIProvider] Parsing content for tool calls:',
+        fullContent,
+      );
       const { cleanedContent, toolCalls } = parser.parse(fullContent);
 
       if (toolCalls.length > 0) {
         console.log('[OpenAIProvider] Parsed tool calls:', toolCalls);
-        
+
         // Convert to standard format
         const standardToolCalls = toolCalls.map((tc, index) => ({
           id: `call_${Date.now()}_${index}`,
@@ -291,6 +309,7 @@ export class OpenAIProvider implements IProvider {
           '[OpenAIProvider] 🎯 YIELDING TOOL CALLS:',
           accumulatedToolCalls.length,
         );
+
         yield {
           role: ContentGeneratorRole.ASSISTANT,
           content: fullContent || '',

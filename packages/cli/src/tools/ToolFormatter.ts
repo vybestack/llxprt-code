@@ -22,51 +22,104 @@ export class ToolFormatter implements IToolFormatter {
   toProviderFormat(tools: ITool[], format: 'openai'): OpenAITool[];
   toProviderFormat(tools: ITool[], format: ToolFormat): unknown;
   toProviderFormat(tools: ITool[], format: ToolFormat): OpenAITool[] | unknown {
-    if (format === 'openai') {
-      return tools.map((tool) => ({
-        type: 'function',
-        function: {
-          name: tool.function.name,
-          description: tool.function.description,
-          parameters: tool.function.parameters,
-        },
-      }));
+    switch (format) {
+      case 'openai':
+      case 'deepseek': // DeepSeek uses same format as OpenAI for now
+      case 'qwen': // Qwen uses same format as OpenAI for now
+        return tools.map((tool) => ({
+          type: 'function',
+          function: {
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters: tool.function.parameters,
+          },
+        }));
+      default:
+        throw new Error(`Tool format '${format}' not yet implemented`);
     }
-    throw new Error('NotYetImplemented');
   }
 
   fromProviderFormat(
     rawToolCall: unknown,
     format: ToolFormat,
   ): IMessage['tool_calls'] {
-    if (format === 'openai') {
-      // Assuming rawToolCall is an object with a 'function_call' property
-      // that contains 'name' and 'arguments' (as a JSON string)
-      const openAiToolCall = rawToolCall as {
-        id: string;
-        function: { name: string; arguments: string };
-      };
+    switch (format) {
+      case 'openai':
+      case 'deepseek':
+      case 'qwen': {
+        const openAiToolCall = rawToolCall as {
+          id: string;
+          type?: string;
+          function: { name: string; arguments: string };
+        };
 
-      if (
-        !openAiToolCall ||
-        !openAiToolCall.function ||
-        !openAiToolCall.function.name ||
-        !openAiToolCall.function.arguments
-      ) {
-        throw new Error('Invalid OpenAI tool call format');
-      }
+        if (
+          !openAiToolCall ||
+          !openAiToolCall.function ||
+          !openAiToolCall.function.name ||
+          !openAiToolCall.function.arguments
+        ) {
+          throw new Error(`Invalid ${format} tool call format`);
+        }
 
-      return [
-        {
-          id: openAiToolCall.id,
-          type: 'function' as const,
-          function: {
-            name: openAiToolCall.function.name,
-            arguments: openAiToolCall.function.arguments,
+        return [
+          {
+            id: openAiToolCall.id,
+            type: 'function' as const,
+            function: {
+              name: openAiToolCall.function.name,
+              arguments: openAiToolCall.function.arguments,
+            },
           },
-        },
-      ];
+        ];
+      }
+      default:
+        throw new Error(`Tool format '${format}' not yet implemented`);
     }
-    throw new Error('NotYetImplemented');
+  }
+
+  /**
+   * Handles streaming tool call accumulation for OpenAI-compatible providers
+   * This accumulates partial tool calls from streaming responses
+   */
+  accumulateStreamingToolCall(
+    deltaToolCall: {
+      index?: number;
+      id?: string;
+      type?: string;
+      function?: {
+        name?: string;
+        arguments?: string;
+      };
+    },
+    accumulatedToolCalls: NonNullable<IMessage['tool_calls']>,
+    format: ToolFormat,
+  ): void {
+    switch (format) {
+      case 'openai':
+      case 'deepseek':
+      case 'qwen':
+        // All use same accumulation logic for now
+        if (deltaToolCall.index !== undefined) {
+          if (!accumulatedToolCalls[deltaToolCall.index]) {
+            accumulatedToolCalls[deltaToolCall.index] = {
+              id: deltaToolCall.id || '',
+              type: 'function',
+              function: { name: '', arguments: '' },
+            };
+          }
+          const tc = accumulatedToolCalls[deltaToolCall.index];
+          if (deltaToolCall.id) tc.id = deltaToolCall.id;
+          if (deltaToolCall.function?.name)
+            tc.function.name = deltaToolCall.function.name;
+          if (deltaToolCall.function?.arguments)
+            tc.function.arguments += deltaToolCall.function.arguments;
+        }
+        break;
+      default:
+        throw new Error(
+          `Streaming accumulation for format '${format}' not yet implemented`,
+        );
+    }
   }
 }

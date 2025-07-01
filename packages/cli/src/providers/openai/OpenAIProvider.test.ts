@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ContentGeneratorRole } from '../types.js';
-
 
 // Mock OpenAI module
 vi.mock('openai', () => ({
@@ -45,7 +43,9 @@ describe('OpenAIProvider', () => {
     vi.clearAllMocks();
     provider = new OpenAIProvider('test-api-key');
     // Get the mocked OpenAI instance (typed as unknown then cast)
-    mockOpenAIInstance = (provider as unknown as { openai: typeof mockOpenAIInstance }).openai; // Cast for test
+    mockOpenAIInstance = (
+      provider as unknown as { openai: typeof mockOpenAIInstance }
+    ).openai; // Cast for test
   });
 
   describe('generateChatCompletion with usage tracking', () => {
@@ -242,7 +242,9 @@ describe('OpenAIProvider', () => {
       provider.setBaseUrl(newUrl);
 
       // Verify new OpenAI instance was created with base URL
-      expect((provider as unknown as { baseURL?: string }).baseURL).toBe(newUrl);
+      expect((provider as unknown as { baseURL?: string }).baseURL).toBe(
+        newUrl,
+      );
     });
   });
 });

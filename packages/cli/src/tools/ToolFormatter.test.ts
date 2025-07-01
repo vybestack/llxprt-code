@@ -67,7 +67,7 @@ describe('ToolFormatter', () => {
   it('should throw an error for invalid OpenAI tool call format', () => {
     const rawToolCall = {};
     expect(() => formatter.fromProviderFormat(rawToolCall, 'openai')).toThrow(
-      'Invalid OpenAI tool call format',
+      'Invalid openai tool call format',
     );
   });
 
@@ -91,7 +91,9 @@ describe('ToolFormatter', () => {
       },
     ];
 
-    expect(formatter.fromProviderFormat(rawToolCall, 'openai')).toEqual(expected);
+    expect(formatter.fromProviderFormat(rawToolCall, 'openai')).toEqual(
+      expected,
+    );
   });
 
   it('should throw NotYetImplemented for non-OpenAI formats in toProviderFormat', () => {
@@ -107,10 +109,10 @@ describe('ToolFormatter', () => {
     ];
 
     expect(() => formatter.toProviderFormat(tools, 'hermes' as const)).toThrow(
-      'NotYetImplemented',
+      "Tool format 'hermes' not yet implemented",
     );
     expect(() => formatter.toProviderFormat(tools, 'xml' as const)).toThrow(
-      'NotYetImplemented',
+      "Tool format 'xml' not yet implemented",
     );
   });
 
@@ -118,10 +120,34 @@ describe('ToolFormatter', () => {
     const rawToolCall = { test: 'data' };
 
     expect(() => formatter.fromProviderFormat(rawToolCall, 'hermes')).toThrow(
-      'NotYetImplemented',
+      "Tool format 'hermes' not yet implemented",
     );
     expect(() => formatter.fromProviderFormat(rawToolCall, 'xml')).toThrow(
-      'NotYetImplemented',
+      "Tool format 'xml' not yet implemented",
     );
+  });
+
+  it('should format tools correctly for DeepSeek and Qwen providers', () => {
+    const tools: ITool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'test_function',
+          description: 'A test function',
+          parameters: { type: 'object', properties: {} },
+        },
+      },
+    ];
+
+    // DeepSeek and Qwen use the same format as OpenAI
+    const deepseekResult = formatter.toProviderFormat(
+      tools,
+      'deepseek' as const,
+    );
+    const qwenResult = formatter.toProviderFormat(tools, 'qwen' as const);
+    const openaiResult = formatter.toProviderFormat(tools, 'openai');
+
+    expect(deepseekResult).toEqual(openaiResult);
+    expect(qwenResult).toEqual(openaiResult);
   });
 });
