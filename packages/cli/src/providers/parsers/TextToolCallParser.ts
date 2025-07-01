@@ -31,11 +31,9 @@ export class GemmaToolCallParser implements ITextToolCallParser {
   private readonly patterns = [
     // Format 1: [TOOL_REQUEST] toolName {args} [TOOL_REQUEST_END]
     /\[TOOL_REQUEST\]\s*(\w+)\s+({.*?})\s*\[TOOL_REQUEST_END\]/gs,
-    // Format 2: ✦ tool_call: toolName for key value pairs
-    /✦\s*tool_call:\s*(\w+)\s+for\s+(.+?)(?=✦|$)/gs,
-    // Format 3: Simple function call format
-    /(\w+)\s*\(({.*?})\)/gs,
-    // Format 4: JSON object with name/arguments followed by [END_TOOL_REQUEST]
+    // Format 2: ✦ tool_call: toolName for key value pairs (more specific to avoid false positives)
+    /✦\s*tool_call:\s*(\w+)\s+for\s+(.+?)(?=\n|✦|$)/gs,
+    // Format 3: JSON object with name/arguments followed by [END_TOOL_REQUEST]
     /(\d+\s+)?{"name":\s*"(\w+)",\s*"arguments":\s*({.*?})}\s*(?:\n\s*\d+\s+)?\[END_TOOL_REQUEST\]/gs,
   ];
 
@@ -51,6 +49,16 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       args: string | Record<string, unknown>;
     }> = [];
 
+    // Quick check: if content doesn't contain any tool call markers, return early
+    if (
+      !content.includes('[TOOL_REQUEST') &&
+      !content.includes('tool_call:') &&
+      !content.includes('[END_TOOL_REQUEST]') &&
+      !content.includes('{"name":')
+    ) {
+      return { cleanedContent: content, toolCalls: [] };
+    }
+
     // Try each pattern
     for (const pattern of this.patterns) {
       let match;
@@ -60,12 +68,12 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           const [fullMatch, toolName, argsStr] = match;
           const args = this.parseKeyValuePairs(argsStr);
           matches.push({ fullMatch, toolName, args });
-        } else if (pattern === this.patterns[3]) {
-          // Format 4: JSON object format {"name": "tool", "arguments": {...}}
+        } else if (pattern === this.patterns[2]) {
+          // Format 3: JSON object format {"name": "tool", "arguments": {...}}
           const [fullMatch, , toolName, jsonArgs] = match;
           matches.push({ fullMatch, toolName, args: jsonArgs });
         } else {
-          // Format 1 and 3: tool name followed by JSON arguments
+          // Format 1: tool name followed by JSON arguments
           const [fullMatch, toolName, jsonArgs] = match;
           matches.push({ fullMatch, toolName, args: jsonArgs });
         }

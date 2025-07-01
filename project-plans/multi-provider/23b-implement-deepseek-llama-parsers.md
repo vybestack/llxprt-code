@@ -10,6 +10,7 @@ To add support for DeepSeek and Llama tool call formats to the TextToolCallParse
 ## Background
 
 ### DeepSeek Format:
+
 ```
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>get_weather
 {"location": "San Francisco", "unit": "celsius"}
@@ -17,6 +18,7 @@ To add support for DeepSeek and Llama tool call formats to the TextToolCallParse
 ```
 
 ### Llama Formats:
+
 ```python
 # Pythonic format (Llama 3.2)
 [get_user_info(user_id=7890, special='black')]
@@ -37,6 +39,7 @@ To add support for DeepSeek and Llama tool call formats to the TextToolCallParse
 ## Checklist (implementer)
 
 - [ ] Update `packages/cli/src/providers/parsers/TextToolCallParser.ts`:
+
   - [ ] Add DeepSeek pattern:
     ```typescript
     // Format 8: DeepSeek with special tokens
@@ -57,11 +60,13 @@ To add support for DeepSeek and Llama tool call formats to the TextToolCallParse
     ```
 
 - [ ] Update format detection:
+
   - [ ] Add model detection for DeepSeek variants
   - [ ] Add model detection for Llama variants
   - [ ] Map models to their preferred formats
 
 - [ ] Handle format-specific quirks:
+
   - [ ] DeepSeek's special Unicode characters
   - [ ] Llama's mixed quote styles in pythonic format
   - [ ] Multiple tool calls in sequence

@@ -11,6 +11,7 @@ Many open-source and specialized models don't support OpenAI's structured tool c
 The system consists of two parallel paths for tool extraction:
 
 1. **Structured Path**: For providers that return tool calls as JSON objects (OpenAI, Anthropic)
+
    - Provider → ToolFormatter → Standard format → Execution
 
 2. **Text-Based Path**: For models that embed tool calls in text (Gemma, Hermes, DeepSeek, Llama)
@@ -21,6 +22,7 @@ Both paths produce the same `IMessage['tool_calls']` format, ensuring consistent
 ## Supported Formats
 
 ### 1. Gemma Format (TOOL_REQUEST)
+
 ```
 [TOOL_REQUEST]
 list_directory {"path": "/home/user"}
@@ -28,12 +30,14 @@ list_directory {"path": "/home/user"}
 ```
 
 ### 2. JSON Object with END_TOOL_REQUEST
+
 ```
 {"name": "search", "arguments": {"query": "climate change"}}
 [END_TOOL_REQUEST]
 ```
 
 ### 3. Hermes Format (tool_call tags)
+
 ```xml
 <tool_call>
 {"arguments": {"symbol": "TSLA"}, "name": "get_stock_fundamentals"}
@@ -41,6 +45,7 @@ list_directory {"path": "/home/user"}
 ```
 
 ### 4. DeepSeek Format (Unicode tokens)
+
 ```
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>function<｜tool▁sep｜>get_weather
 {"location": "San Francisco", "unit": "celsius"}
@@ -50,23 +55,27 @@ list_directory {"path": "/home/user"}
 ### 5. Llama Formats
 
 #### Pythonic Style (Llama 3.2):
+
 ```python
 [get_user_info(user_id=7890, special='black')]
 ```
 
 #### Function Tag Style:
+
 ```xml
 <function=example_function>{"example_name": "example_value"}</function>
 ```
 
 #### JSON Style (Llama 3.1):
+
 ```json
-{"name": "function_name", "parameters": {"arg": "value"}}
+{ "name": "function_name", "parameters": { "arg": "value" } }
 ```
 
 ### 6. XML Formats
 
 #### Claude-style:
+
 ```xml
 <invoke name="get_weather">
 <parameter name="location">San Francisco</parameter>
@@ -74,6 +83,7 @@ list_directory {"path": "/home/user"}
 ```
 
 #### Generic XML:
+
 ```xml
 <tool>
   <name>search</name>
@@ -84,6 +94,7 @@ list_directory {"path": "/home/user"}
 ```
 
 ### 7. Key-Value Format
+
 ```
 ✦ tool_call: list_directory for path /home/user ignore *.log
 ```
@@ -107,12 +118,14 @@ Configure text-based tool parsing in your settings file:
 ### Default Models
 
 The following models automatically use text-based parsing:
+
 - gemma-3-12b-it
 - gemma-2-27b-it
 
 ### Auto-Detection
 
 The system automatically detects the appropriate parser based on:
+
 1. Model name (e.g., models containing "gemma", "hermes", "deepseek")
 2. Base URL (for custom endpoints)
 3. Manual override via `/toolformat` command
@@ -120,6 +133,7 @@ The system automatically detects the appropriate parser based on:
 ### Examples
 
 #### Basic Configuration
+
 ```json
 {
   "enableTextToolCallParsing": true,
@@ -128,18 +142,22 @@ The system automatically detects the appropriate parser based on:
 ```
 
 #### Using with OpenAI-Compatible Providers
+
 ```json
 {
-  "providers": [{
-    "name": "openai",
-    "apiKey": "$OPENAI_API_KEY",
-    "baseURL": "https://api.deepseek.com/v1"
-  }],
+  "providers": [
+    {
+      "name": "openai",
+      "apiKey": "$OPENAI_API_KEY",
+      "baseURL": "https://api.deepseek.com/v1"
+    }
+  ],
   "textToolCallModels": ["deepseek-chat"]
 }
 ```
 
 #### Testing Tool Parsing
+
 ```bash
 # Check current format
 > /toolformat
@@ -158,6 +176,7 @@ Tool format set to: text
 To add support for a new text-based format:
 
 1. **Add Pattern to TextToolCallParser**:
+
 ```typescript
 // In TextToolCallParser.ts
 private readonly patterns = [
@@ -168,6 +187,7 @@ private readonly patterns = [
 ```
 
 2. **Update Parsing Logic**:
+
 ```typescript
 if (pattern === this.patterns[X]) {
   // Custom parsing logic for your format
@@ -177,6 +197,7 @@ if (pattern === this.patterns[X]) {
 ```
 
 3. **Add Tests**:
+
 ```typescript
 it('should parse new format', () => {
   const content = 'Your format example';
@@ -187,6 +208,7 @@ it('should parse new format', () => {
 ```
 
 4. **Update Format Detection**:
+
 - Add model names to default lists
 - Update `requiresTextToolCallParsing()` logic
 
@@ -195,11 +217,13 @@ it('should parse new format', () => {
 ### Enable Debug Logging
 
 Set environment variable:
+
 ```bash
 export DEBUG=openai:*,parser:*
 ```
 
 This will show:
+
 - Parser attempts and matches
 - Failed parsing attempts with error details
 - Tool call extraction process
@@ -208,18 +232,21 @@ This will show:
 ### Common Issues
 
 1. **Tool calls not detected**:
+
    - Check if model is in `textToolCallModels` list
    - Verify the format matches a supported pattern
    - Look for debug logs showing parsing attempts
    - Try manually overriding with `/toolformat text`
 
 2. **Malformed arguments**:
+
    - Parser logs failed JSON parsing attempts
    - Check for proper escaping of quotes in arguments
    - Verify JSON structure is valid
    - Common issue: nested quotes not escaped
 
 3. **Partial tool calls**:
+
    - Ensure complete markers are present (opening and closing tags)
    - Check for truncated responses from the model
    - May need to increase max_tokens for the model
@@ -232,16 +259,19 @@ This will show:
 ### Testing New Formats
 
 1. Create a test file with sample output:
+
 ```bash
 echo 'Your tool call format here' > test-format.txt
 ```
 
 2. Run the parser test:
+
 ```bash
 npm test -- --grep "YourFormat"
 ```
 
 3. Check debug output:
+
 ```bash
 DEBUG=parser:* npm test
 ```
@@ -249,6 +279,7 @@ DEBUG=parser:* npm test
 ### Troubleshooting Steps
 
 1. **Verify Model Configuration**:
+
 ```bash
 # Check current provider and format
 /provider
@@ -256,6 +287,7 @@ DEBUG=parser:* npm test
 ```
 
 2. **Test Tool Call Parsing**:
+
 ```bash
 # Enable debug logging
 export DEBUG=parser:*
@@ -265,6 +297,7 @@ export DEBUG=parser:*
 ```
 
 3. **Check Parser Patterns**:
+
    - Look in `TextToolCallParser.ts` for supported patterns
    - Verify your model's format matches one of them
    - Add custom pattern if needed
@@ -278,16 +311,19 @@ export DEBUG=parser:*
 ### Pattern Regex Explanations
 
 1. **Gemma Format** (`[TOOL_REQUEST]`):
+
    - Matches: `[TOOL_REQUEST]\nfunction_name {args}\n[TOOL_REQUEST_END]`
    - Captures: function name and JSON arguments
    - Multiline with optional whitespace
 
 2. **JSON with END_TOOL_REQUEST**:
+
    - Matches: `{"name": "func", "arguments": {...}}[END_TOOL_REQUEST]`
    - Supports optional line numbers (e.g., `1 {"name"...`)
    - Flexible whitespace handling
 
 3. **Hermes XML Format**:
+
    - Matches: `<tool_call>{...}</tool_call>`
    - Extracts JSON from within XML tags
    - Handles nested XML properly

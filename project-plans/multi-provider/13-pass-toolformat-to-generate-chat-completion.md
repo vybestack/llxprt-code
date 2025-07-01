@@ -16,6 +16,7 @@ To ensure the tool format override mechanism (set by `/toolformat` command) prop
 ## Checklist (implementer)
 
 - [ ] Update `OpenAIProvider` (and base provider if needed):
+
   - [ ] Add `toolFormatOverride?: ToolFormat` property
   - [ ] Add `setToolFormatOverride(format: ToolFormat | null)` method
   - [ ] Update `getToolFormat()` to check override first:
@@ -25,7 +26,7 @@ To ensure the tool format override mechanism (set by `/toolformat` command) prop
       if (this.toolFormatOverride) {
         return this.toolFormatOverride;
       }
-      
+
       // Otherwise auto-detect
       if (this.currentModel.includes('deepseek') || this.baseURL?.includes('deepseek')) {
         return 'deepseek';
@@ -35,6 +36,7 @@ To ensure the tool format override mechanism (set by `/toolformat` command) prop
     ```
 
 - [ ] Update format detection to handle text-based formats:
+
   - [ ] If format is in `['hermes', 'xml', 'llama', 'gemma']`, use TextToolCallParser
   - [ ] If format is in `['openai', 'anthropic', 'deepseek', 'qwen']`, use ToolFormatter
   - [ ] Add appropriate patterns to TextToolCallParser for new formats

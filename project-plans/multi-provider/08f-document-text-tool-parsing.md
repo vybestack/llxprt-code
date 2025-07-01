@@ -15,23 +15,30 @@ Document the text-based tool call parsing system for users and developers, expla
 ### User Documentation
 
 - [ ] Add section to README.md explaining text-based tool support:
-  ```markdown
+
+  ````markdown
   ## Text-Based Tool Call Support
-  
+
   Some models output tool calls as text rather than structured JSON. The CLI automatically detects and parses these formats.
-  
+
   ### Supported Models
+
   - gemma-3-12b-it
   - gemma-2-27b-it
   - Custom models (configurable)
-  
+
   ### Configuration
+
   ```json
   {
     "enableTextToolCallParsing": true,
     "textToolCallModels": ["my-custom-model"]
   }
   ```
+  ````
+
+  ```
+
   ```
 
 ### Developer Documentation

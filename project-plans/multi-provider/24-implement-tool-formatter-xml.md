@@ -10,6 +10,7 @@ To add support for XML-based tool call formats to the TextToolCallParser. Some m
 ## Background
 
 XML format examples vary by model:
+
 ```xml
 <!-- Claude-style -->
 <function_calls>
@@ -36,6 +37,7 @@ XML format examples vary by model:
 ## Checklist (implementer)
 
 - [ ] Update `packages/cli/src/providers/parsers/TextToolCallParser.ts`:
+
   - [ ] Add XML patterns to patterns array:
     ```typescript
     // Format 6: XML with <invoke> tags (Claude-style)
@@ -52,12 +54,14 @@ XML format examples vary by model:
     ```
 
 - [ ] Handle XML-specific edge cases:
+
   - [ ] Nested XML tags
   - [ ] CDATA sections
   - [ ] HTML entities (&lt;, &gt;, etc.)
   - [ ] Multiple parameter formats
 
 - [ ] Update format detection:
+
   - [ ] Add 'xml' to text-based formats list
   - [ ] Consider creating `XMLToolCallParser` if complexity warrants
 

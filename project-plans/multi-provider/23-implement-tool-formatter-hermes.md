@@ -10,6 +10,7 @@ To add support for Hermes tool call format to the TextToolCallParser. Hermes mod
 ## Background
 
 Hermes format example:
+
 ```
 <|im_start|>assistant
 <tool_call>
@@ -27,6 +28,7 @@ Hermes format example:
 ## Checklist (implementer)
 
 - [ ] Update `packages/cli/src/providers/parsers/TextToolCallParser.ts`:
+
   - [ ] Add Hermes pattern to patterns array:
     ```typescript
     // Format 5: Hermes format with <tool_call> tags
@@ -36,10 +38,12 @@ Hermes format example:
   - [ ] Ensure special tokens like `<|im_start|>` are cleaned up
 
 - [ ] Create `HermesToolCallParser` class (optional):
+
   - [ ] If Hermes needs special handling, create dedicated parser
   - [ ] Otherwise, use updated GemmaToolCallParser
 
 - [ ] Update format detection:
+
   - [ ] Add 'hermes' to text-based formats list
   - [ ] Update `requiresTextToolCallParsing()` to include Hermes models
 
