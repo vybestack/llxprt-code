@@ -7,9 +7,12 @@
 import { ProviderManager } from './ProviderManager.js';
 import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { GeminiProvider } from './gemini/GeminiProvider.js';
-import { readFileSync } from 'fs';
+import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
+import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { Settings, USER_SETTINGS_PATH } from '../config/settings.js';
+import stripJsonComments from 'strip-json-comments';
 
 let providerManagerInstance: ProviderManager | null = null;
 
@@ -23,19 +26,62 @@ export function getProviderManager(): ProviderManager {
       const geminiProvider = new GeminiProvider();
       providerManagerInstance.registerProvider(geminiProvider);
 
-      // Initialize with OpenAI provider if API key is available
+      // Load user settings to check for saved API keys
+      let savedApiKeys: Record<string, string> = {};
       try {
-        const apiKeyPath = join(homedir(), '.openai_key');
-        const apiKey = readFileSync(apiKeyPath, 'utf-8').trim();
-        if (apiKey) {
-          const openaiProvider = new OpenAIProvider(apiKey);
-          providerManagerInstance.registerProvider(openaiProvider);
-          // Don't set as active automatically - let user choose
-          console.debug('OpenAI provider registered (not active by default)');
+        if (existsSync(USER_SETTINGS_PATH)) {
+          const userContent = readFileSync(USER_SETTINGS_PATH, 'utf-8');
+          const userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
+          savedApiKeys = userSettings.providerApiKeys || {};
         }
       } catch (_error) {
-        // No OpenAI key available, that's OK
-        // Note: console.debug might not work in all environments
+        // Failed to load user settings, that's OK
+      }
+
+      // Initialize with OpenAI provider if API key is available
+      // Priority: CLI /key (in settings) > Environment variable > keyfile
+      let openaiApiKey: string | undefined = savedApiKeys.openai;
+      
+      if (!openaiApiKey) {
+        openaiApiKey = process.env.OPENAI_API_KEY;
+      }
+      
+      if (!openaiApiKey) {
+        try {
+          const apiKeyPath = join(homedir(), '.openai_key');
+          openaiApiKey = readFileSync(apiKeyPath, 'utf-8').trim();
+        } catch (_error) {
+          // No OpenAI keyfile available, that's OK
+        }
+      }
+      
+      if (openaiApiKey) {
+        const openaiProvider = new OpenAIProvider(openaiApiKey);
+        providerManagerInstance.registerProvider(openaiProvider);
+        console.debug('OpenAI provider registered (not active by default)');
+      }
+      
+      // Initialize with Anthropic provider if API key is available
+      // Priority: CLI /key (in settings) > Environment variable > keyfile
+      let anthropicApiKey: string | undefined = savedApiKeys.anthropic;
+      
+      if (!anthropicApiKey) {
+        anthropicApiKey = process.env.ANTHROPIC_API_KEY;
+      }
+      
+      if (!anthropicApiKey) {
+        try {
+          const apiKeyPath = join(homedir(), '.anthropic_key');
+          anthropicApiKey = readFileSync(apiKeyPath, 'utf-8').trim();
+        } catch (_error) {
+          // No Anthropic keyfile available, that's OK
+        }
+      }
+      
+      if (anthropicApiKey) {
+        const anthropicProvider = new AnthropicProvider(anthropicApiKey);
+        providerManagerInstance.registerProvider(anthropicProvider);
+        console.debug('Anthropic provider registered (not active by default)');
       }
     }
   }

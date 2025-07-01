@@ -33,7 +33,7 @@ export class OpenAIProvider implements IProvider {
   private baseURL?: string;
   private settings?: Settings;
   private toolFormatter: ToolFormatter;
-  private toolFormat: ToolFormat = 'openai';
+  private toolFormatOverride?: ToolFormat;
 
   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
     if (!apiKey || apiKey.trim() === '') {
@@ -57,6 +57,13 @@ export class OpenAIProvider implements IProvider {
       return false;
     }
 
+    // Check if current tool format requires text-based parsing
+    const currentFormat = this.getToolFormat();
+    const textBasedFormats: ToolFormat[] = ['hermes', 'xml', 'llama', 'gemma'];
+    if (textBasedFormats.includes(currentFormat)) {
+      return true;
+    }
+
     const defaultModels = ['gemma-3-12b-it', 'gemma-2-27b-it'];
     const configuredModels = this.settings?.textToolCallModels || [];
     const allModels = [...defaultModels, ...configuredModels];
@@ -64,8 +71,18 @@ export class OpenAIProvider implements IProvider {
     return allModels.includes(this.currentModel);
   }
 
-  private getToolFormat(): ToolFormat {
-    // Detect tool format based on model or base URL
+  getToolFormat(): ToolFormat {
+    // Check manual override first
+    if (this.toolFormatOverride) {
+      return this.toolFormatOverride;
+    }
+
+    // Check for settings override
+    if (this.settings?.providerToolFormatOverrides?.[this.name]) {
+      return this.settings.providerToolFormatOverrides[this.name] as ToolFormat;
+    }
+
+    // Auto-detect tool format based on model or base URL
     if (
       this.currentModel.includes('deepseek') ||
       this.baseURL?.includes('deepseek')
@@ -195,12 +212,12 @@ export class OpenAIProvider implements IProvider {
       );
     }
 
-    // Determine tool format
-    this.toolFormat = this.getToolFormat();
+    // Get current tool format (with override support)
+    const currentToolFormat = this.getToolFormat();
 
     // Format tools using ToolFormatter
     const formattedTools = tools
-      ? this.toolFormatter.toProviderFormat(tools, this.toolFormat)
+      ? this.toolFormatter.toProviderFormat(tools, currentToolFormat)
       : undefined;
 
     const stream = await this.openai.chat.completions.create({
@@ -248,7 +265,7 @@ export class OpenAIProvider implements IProvider {
           this.toolFormatter.accumulateStreamingToolCall(
             toolCall,
             accumulatedToolCalls,
-            this.toolFormat,
+            currentToolFormat,
           );
         }
       }
@@ -362,5 +379,9 @@ export class OpenAIProvider implements IProvider {
 
   setSettings(settings: Settings): void {
     this.settings = settings;
+  }
+
+  setToolFormatOverride(format: ToolFormat | null): void {
+    this.toolFormatOverride = format || undefined;
   }
 }

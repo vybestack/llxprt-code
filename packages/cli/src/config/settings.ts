@@ -67,6 +67,7 @@ export interface Settings {
   // Provider configuration settings
   providerApiKeys?: Record<string, string>;
   providerBaseUrls?: Record<string, string>;
+  providerToolFormatOverrides?: Record<string, string>;
 
   // Text-based tool call parsing settings
   enableTextToolCallParsing?: boolean;

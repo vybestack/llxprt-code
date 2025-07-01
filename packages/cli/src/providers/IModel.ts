@@ -19,4 +19,6 @@ export interface IModel {
   name: string;
   provider: string;
   supportedToolFormats: string[];
+  contextWindow?: number;
+  maxOutputTokens?: number;
 }

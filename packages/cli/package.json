@@ -31,6 +31,7 @@
     "sandboxImageUri": "gemini-cli-sandbox"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
     "@google/gemini-cli-core": "*",
     "@types/update-notifier": "^6.0.8",

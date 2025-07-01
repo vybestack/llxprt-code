@@ -34,6 +34,15 @@ export class ToolFormatter implements IToolFormatter {
             parameters: tool.function.parameters,
           },
         }));
+      case 'anthropic':
+        return tools.map((tool) => ({
+          name: tool.function.name,
+          description: tool.function.description || '',
+          input_schema: {
+            type: 'object' as const,
+            ...tool.function.parameters,
+          },
+        }));
       default:
         throw new Error(`Tool format '${format}' not yet implemented`);
     }
@@ -69,6 +78,35 @@ export class ToolFormatter implements IToolFormatter {
             function: {
               name: openAiToolCall.function.name,
               arguments: openAiToolCall.function.arguments,
+            },
+          },
+        ];
+      }
+      case 'anthropic': {
+        const anthropicToolCall = rawToolCall as {
+          id: string;
+          type?: string;
+          name?: string;
+          input?: unknown;
+        };
+
+        if (
+          !anthropicToolCall ||
+          !anthropicToolCall.id ||
+          !anthropicToolCall.name
+        ) {
+          throw new Error(`Invalid ${format} tool call format`);
+        }
+
+        return [
+          {
+            id: anthropicToolCall.id,
+            type: 'function' as const,
+            function: {
+              name: anthropicToolCall.name,
+              arguments: anthropicToolCall.input
+                ? JSON.stringify(anthropicToolCall.input)
+                : '',
             },
           },
         ];

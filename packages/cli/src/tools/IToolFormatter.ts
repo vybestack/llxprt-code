@@ -17,7 +17,7 @@
 import { ITool } from '../providers/ITool.js';
 import { IMessage } from '../providers/IMessage.js';
 
-export type ToolFormat = 'openai' | 'deepseek' | 'qwen' | 'hermes' | 'xml'; // Extend as needed
+export type ToolFormat = 'openai' | 'anthropic' | 'deepseek' | 'qwen' | 'hermes' | 'xml' | 'llama' | 'gemma';
 
 export interface OpenAIFunction {
   name: string;

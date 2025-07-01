@@ -42,6 +42,29 @@ export function tokenLimit(model: Model): TokenCount {
     case 'o1-mini':
       return 200_000;
 
+    // Anthropic models
+    // Claude 4 series - larger context windows
+    case 'claude-opus-4-latest':
+    case 'claude-opus-4-20250514':
+      return 500_000;
+    case 'claude-sonnet-4-latest':
+    case 'claude-sonnet-4-20250301':
+      return 400_000;
+    // Claude 3.7 series
+    case 'claude-3-7-opus-20250115':
+    case 'claude-3-7-sonnet-20250115':
+      return 300_000;
+    // Claude 3.5 and 3.0 series
+    case 'claude-3-opus-20240229':
+    case 'claude-3-sonnet-20240229':
+    case 'claude-3-haiku-20240307':
+    case 'claude-3.5-sonnet-20240620':
+    case 'claude-3.5-sonnet-20241022':
+    case 'claude-3.5-haiku-20241022':
+    case 'claude-3-5-sonnet-20241022':
+    case 'claude-3-5-haiku-20241022':
+      return 200_000;
+
     default:
       return DEFAULT_TOKEN_LIMIT;
   }

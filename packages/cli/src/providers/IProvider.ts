@@ -31,6 +31,8 @@ export interface IProvider {
   // Methods for updating provider configuration
   setApiKey?(apiKey: string): void;
   setBaseUrl?(baseUrl?: string): void;
+  getToolFormat?(): string;
+  setToolFormatOverride?(format: string | null): void;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 }
 

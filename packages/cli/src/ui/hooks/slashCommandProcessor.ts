@@ -1287,6 +1287,121 @@ export const useSlashCommandProcessor = (
           }
         },
       },
+      {
+        name: 'toolformat',
+        description: 'override the auto-detected tool calling format',
+        action: async (_mainCommand, formatName, _args) => {
+          const providerManager = getProviderManager();
+
+          if (!providerManager.hasActiveProvider()) {
+            addMessage({
+              type: MessageType.ERROR,
+              content:
+                'No active provider. Use /provider to select a provider first.',
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          const activeProvider = providerManager.getActiveProvider();
+          const providerName = activeProvider.name;
+
+          // Supported formats
+          const structuredFormats = ['openai', 'anthropic', 'deepseek', 'qwen'];
+          const textFormats = ['hermes', 'xml', 'llama', 'gemma'];
+          const allFormats = [...structuredFormats, ...textFormats];
+
+          // Show current format
+          if (!formatName) {
+            const currentFormat = activeProvider.getToolFormat
+              ? activeProvider.getToolFormat()
+              : 'unknown';
+            const isAutoDetected = !(
+              settings.merged.providerToolFormatOverrides &&
+              settings.merged.providerToolFormatOverrides[providerName]
+            );
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Current tool format: ${currentFormat} (${isAutoDetected ? 'auto-detected' : 'manual override'})
+To override: /toolformat <format>
+To return to auto: /toolformat auto
+Supported formats:
+  Structured: ${structuredFormats.join(', ')}
+  Text-based: ${textFormats.join(', ')}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          // Return to auto-detection
+          if (formatName === 'auto') {
+            // Clear override in provider
+            if (activeProvider.setToolFormatOverride) {
+              activeProvider.setToolFormatOverride(null);
+            }
+
+            // Also clear from settings
+            const currentOverrides =
+              settings.merged.providerToolFormatOverrides || {};
+            delete currentOverrides[providerName];
+            settings.setValue(
+              SettingScope.User,
+              'providerToolFormatOverrides',
+              currentOverrides,
+            );
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Tool format override cleared for provider '${providerName}'. Using auto-detection.`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          // Validate format
+          if (!allFormats.includes(formatName)) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Invalid format '${formatName}'. Supported formats:
+  Structured: ${structuredFormats.join(', ')}
+  Text-based: ${textFormats.join(', ')}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          // Set override
+          try {
+            // Update provider directly
+            if (activeProvider.setToolFormatOverride) {
+              activeProvider.setToolFormatOverride(formatName);
+            }
+
+            // Also save to settings for persistence
+            const currentOverrides =
+              settings.merged.providerToolFormatOverrides || {};
+            currentOverrides[providerName] = formatName;
+            settings.setValue(
+              SettingScope.User,
+              'providerToolFormatOverrides',
+              currentOverrides,
+            );
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Tool format override set to '${formatName}' for provider '${providerName}'`,
+              timestamp: new Date(),
+            });
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to set tool format override: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
     ];
 
     if (config?.getCheckpointingEnabled()) {

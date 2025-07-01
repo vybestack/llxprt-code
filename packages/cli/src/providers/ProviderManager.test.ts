@@ -42,6 +42,41 @@ vi.mock('./openai/OpenAIProvider.js', () => {
   };
 });
 
+// Mock the AnthropicProvider module
+vi.mock('./anthropic/AnthropicProvider.js', () => {
+  class MockAnthropicProvider implements IProvider {
+    name: string = 'anthropic';
+    constructor(_apiKey: string, _baseURL?: string) {}
+    async getModels(): Promise<IModel[]> {
+      return [
+        {
+          id: 'claude-3-opus-20240229',
+          name: 'Claude 3 Opus',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+        },
+        {
+          id: 'claude-3-sonnet-20240229',
+          name: 'Claude 3 Sonnet',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+        },
+      ];
+    }
+    async *generateChatCompletion(
+      _messages: IMessage[],
+      _tools?: ITool[],
+      _toolFormat?: string,
+    ): AsyncIterableIterator<IMessage> {
+      yield { role: 'assistant', content: 'mock anthropic response' };
+    }
+  }
+
+  return {
+    AnthropicProvider: MockAnthropicProvider,
+  };
+});
+
 // Import ProviderManager after the mock
 import { ProviderManager } from './ProviderManager.js';
 
@@ -50,6 +85,23 @@ describe('ProviderManager', () => {
 
   beforeEach(() => {
     manager = new ProviderManager();
+  });
+
+  describe('provider registration', () => {
+    it('should allow registering anthropic provider', () => {
+      const mockAnthropicProvider: IProvider = {
+        name: 'anthropic',
+        async getModels() {
+          return [];
+        },
+        async *generateChatCompletion() {
+          yield { role: 'assistant', content: 'test' };
+        },
+      };
+      
+      expect(() => manager.registerProvider(mockAnthropicProvider)).not.toThrow();
+      expect(manager.listProviders()).toContain('anthropic');
+    });
   });
 
   describe('setActiveProvider', () => {
@@ -70,9 +122,26 @@ describe('ProviderManager', () => {
     });
 
     it('should throw error for non-existent provider', () => {
-      expect(() => manager.setActiveProvider('anthropic')).toThrow(
+      expect(() => manager.setActiveProvider('non-existent')).toThrow(
         'Provider not found',
       );
+    });
+
+    it('should set anthropic as active provider', () => {
+      // Register anthropic provider
+      const mockAnthropicProvider: IProvider = {
+        name: 'anthropic',
+        async getModels() {
+          return [];
+        },
+        async *generateChatCompletion() {
+          yield { role: 'assistant', content: 'anthropic response' };
+        },
+      };
+      manager.registerProvider(mockAnthropicProvider);
+
+      expect(() => manager.setActiveProvider('anthropic')).not.toThrow();
+      expect(manager.getActiveProviderName()).toBe('anthropic');
     });
   });
 
@@ -183,6 +252,40 @@ describe('ProviderManager', () => {
       await expect(manager.getAvailableModels('non-existent')).rejects.toThrow(
         "Provider 'non-existent' not found",
       );
+    });
+
+    it('should return models from anthropic provider', async () => {
+      // Register anthropic provider
+      const mockAnthropicProvider: IProvider = {
+        name: 'anthropic',
+        async getModels() {
+          return [
+            {
+              id: 'claude-3-opus-20240229',
+              name: 'Claude 3 Opus',
+              provider: 'anthropic',
+              supportedToolFormats: ['anthropic'],
+            },
+            {
+              id: 'claude-3-sonnet-20240229',
+              name: 'Claude 3 Sonnet',
+              provider: 'anthropic',
+              supportedToolFormats: ['anthropic'],
+            },
+          ];
+        },
+        async *generateChatCompletion() {
+          yield { role: 'assistant', content: 'anthropic response' };
+        },
+      };
+      manager.registerProvider(mockAnthropicProvider);
+
+      const models = await manager.getAvailableModels('anthropic');
+      expect(models).toHaveLength(2);
+      expect(models[0].id).toBe('claude-3-opus-20240229');
+      expect(models[0].provider).toBe('anthropic');
+      expect(models[1].id).toBe('claude-3-sonnet-20240229');
+      expect(models[1].provider).toBe('anthropic');
     });
   });
 });

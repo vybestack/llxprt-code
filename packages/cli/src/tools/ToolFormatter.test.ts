@@ -96,6 +96,65 @@ describe('ToolFormatter', () => {
     );
   });
 
+  it('should correctly format tools for Anthropic provider', () => {
+    const tools: ITool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'search',
+          description: 'Search for information',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'Search query' },
+              limit: { type: 'number', description: 'Max results' },
+            },
+            required: ['query'],
+          },
+        },
+      },
+    ];
+
+    const expected = [
+      {
+        name: 'search',
+        description: 'Search for information',
+        input_schema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            limit: { type: 'number', description: 'Max results' },
+          },
+          required: ['query'],
+        },
+      },
+    ];
+
+    expect(formatter.toProviderFormat(tools, 'anthropic')).toEqual(expected);
+  });
+
+  it('should handle empty description for Anthropic provider', () => {
+    const tools: ITool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'calculate',
+          parameters: {
+            type: 'object',
+            properties: { x: { type: 'number' } },
+          },
+        },
+      },
+    ];
+
+    const result = formatter.toProviderFormat(tools, 'anthropic') as Array<{
+      name: string;
+      description: string;
+      input_schema: object;
+    }>;
+    expect(result[0].description).toBe('');
+  });
+
   it('should throw NotYetImplemented for non-OpenAI formats in toProviderFormat', () => {
     const tools: ITool[] = [
       {
@@ -114,6 +173,67 @@ describe('ToolFormatter', () => {
     expect(() => formatter.toProviderFormat(tools, 'xml' as const)).toThrow(
       "Tool format 'xml' not yet implemented",
     );
+  });
+
+  it('should correctly parse Anthropic tool calls from provider format', () => {
+    const rawToolCall = {
+      id: 'toolu_01abc123',
+      type: 'tool_use',
+      name: 'search',
+      input: { query: 'test search', limit: 10 },
+    };
+
+    const expected = [
+      {
+        id: 'toolu_01abc123',
+        type: 'function' as const,
+        function: {
+          name: 'search',
+          arguments: '{"query":"test search","limit":10}',
+        },
+      },
+    ];
+
+    expect(formatter.fromProviderFormat(rawToolCall, 'anthropic')).toEqual(
+      expected,
+    );
+  });
+
+  it('should handle Anthropic tool calls without input', () => {
+    const rawToolCall = {
+      id: 'toolu_01xyz789',
+      name: 'get_time',
+    };
+
+    const expected = [
+      {
+        id: 'toolu_01xyz789',
+        type: 'function' as const,
+        function: {
+          name: 'get_time',
+          arguments: '',
+        },
+      },
+    ];
+
+    expect(formatter.fromProviderFormat(rawToolCall, 'anthropic')).toEqual(
+      expected,
+    );
+  });
+
+  it('should throw an error for invalid Anthropic tool call format', () => {
+    const invalidCalls = [
+      {},
+      { id: 'test' }, // missing name
+      { name: 'test' }, // missing id
+      null,
+    ];
+
+    invalidCalls.forEach((rawToolCall) => {
+      expect(() =>
+        formatter.fromProviderFormat(rawToolCall, 'anthropic'),
+      ).toThrow('Invalid anthropic tool call format');
+    });
   });
 
   it('should throw NotYetImplemented for non-OpenAI formats in fromProviderFormat', () => {
