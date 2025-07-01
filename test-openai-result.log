@@ -1,0 +1,185 @@
+Testing OpenAI provider with multiple tool calls...
+================================================
+
+1. Testing search and read operations (multiple tools):
+
+> @google/gemini-cli@0.1.5 start
+> node scripts/start.js
+
+Checking build status...
+Build is up-to-date.
+OpenAI provider registered (not active by default)
+[enhanceConfigWithProviders] Enhancing config with provider support
+[enhanceConfigWithProviders] Enhancing config with provider support
+[GeminiClient] Tool registry loaded, tool count: 8
+[GeminiClient] Tool names: list_directory, read_file, search_file_content, glob, web_fetch...
+The AI responses are not being themed correctly. I will investigate the theming configuration, diagnose the problem, and apply a fix to ensure the AI's output is displayed in the correct color.
+
+First, I will search for files related to theming within the `packages/cli` directory to locate the relevant configuration and logic.I've located the theme-related files. To diagnose the issue, I'll start by examining `packages/cli/src/ui/themes/theme.ts` to understand how themes and colors are defined.The `theme.ts` file defines the color themes and the `Theme` class, which processes styles for syntax highlighting. The themes (`lightTheme`, `darkTheme`, `ansiTheme`) specify colors for UI elements, including `AccentGreen`, which should correspond to the AI's output.
+
+Now, I will examine `packages/cli/src/ui/themes/theme-manager.ts` to see how these themes are loaded and applied. This will help me understand how the `Theme` class is used and where the theming logic might be failing.The `theme-manager.ts` file is responsible for managing and activating themes. It imports various themes, including `DefaultDark`, which is set as the default. The `ThemeManager` class loads all available themes and provides a method to set the active theme.
+
+Now, I will inspect `packages/cli/src/ui/hooks/useThemeCommand.ts` to see how the active theme is applied to the UI. This will help me understand how the theme's colors are used in the command's output.The `useThemeCommand.ts` hook manages theme selection and application. It reads the theme from `loadedSettings` and uses `themeManager.setActiveTheme` to apply it. If the theme is not found, it opens a theme selection dialog.
+
+The problem likely lies in how the AI's response is rendered and which color from the theme is being used. The `useThemeCommand.ts` hook sets the theme, but it doesn't directly apply colors to UI components. The issue is probably in the component that renders the AI's response.
+
+I will now search for the component that renders the AI's response to see how it uses the theme to color the text. I'll search for files that use the `Content` component, which is likely responsible for rendering the AI's output.I've found the `GeminiMessageContent.tsx` component, which is likely responsible for rendering the AI's response. I'll examine its code to see how it applies colors from the theme.Attempt 1 failed with status 429. Retrying with backoff... GaxiosError: {
+  "error": {
+    "code": 429,
+    "message": "Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at Gaxios._request (/Users/acoliver/projects/gemini-code/gemini-cli/node_modules/gaxios/build/src/gaxios.js:142:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async OAuth2Client.requestAsync (/Users/acoliver/projects/gemini-code/gemini-cli/node_modules/google-auth-library/build/src/auth/oauth2client.js:429:18)
+    at async CodeAssistServer.streamEndpoint (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/code_assist/server.js:60:21)
+    at async CodeAssistServer.generateContentStream (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/code_assist/server.js:21:23)
+    at async retryWithBackoff (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/utils/retry.js:61:20)
+    at async GeminiChat.sendMessageStream (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/core/geminiChat.js:287:36)
+    at async runNonInteractive (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/dist/src/nonInteractiveCli.js:43:36)
+    at async main (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/dist/src/gemini.js:152:5) {
+  config: {
+    url: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse',
+    method: 'POST',
+    params: { alt: 'sse' },
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'GeminiCLI/0.1.5 (darwin; arm64)',
+      Authorization: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.'
+    },
+    responseType: 'stream',
+    body: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.',
+    signal: AbortSignal { aborted: false },
+    paramsSerializer: [Function: paramsSerializer],
+    validateStatus: [Function: validateStatus],
+    errorRedactor: [Function: defaultErrorRedactor]
+  },
+  response: {
+    config: {
+      url: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse',
+      method: 'POST',
+      params: [Object],
+      headers: [Object],
+      responseType: 'stream',
+      body: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.',
+      signal: [AbortSignal],
+      paramsSerializer: [Function: paramsSerializer],
+      validateStatus: [Function: validateStatus],
+      errorRedactor: [Function: defaultErrorRedactor]
+    },
+    data: '{\n' +
+      '  "error": {\n' +
+      '    "code": 429,\n' +
+      '    "message": "Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.",\n' +
+      '    "status": "RESOURCE_EXHAUSTED"\n' +
+      '  }\n' +
+      '}\n',
+    headers: {
+      'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000',
+      'content-length': '238',
+      'content-type': 'text/event-stream',
+      date: 'Mon, 30 Jun 2025 16:30:48 GMT',
+      server: 'ESF',
+      'server-timing': 'gfet4t7; dur=601',
+      vary: 'Origin, X-Origin, Referer',
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'SAMEORIGIN',
+      'x-xss-protection': '0'
+    },
+    status: 429,
+    statusText: 'Too Many Requests',
+    request: {
+      responseURL: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse'
+    }
+  },
+  error: undefined,
+  status: 429,
+  Symbol(gaxios-gaxios-error): '6.7.1'
+}
+Attempt 2 failed with status 429. Retrying with backoff... GaxiosError: {
+  "error": {
+    "code": 429,
+    "message": "Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.",
+    "status": "RESOURCE_EXHAUSTED"
+  }
+}
+
+    at Gaxios._request (/Users/acoliver/projects/gemini-code/gemini-cli/node_modules/gaxios/build/src/gaxios.js:142:23)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async OAuth2Client.requestAsync (/Users/acoliver/projects/gemini-code/gemini-cli/node_modules/google-auth-library/build/src/auth/oauth2client.js:429:18)
+    at async CodeAssistServer.streamEndpoint (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/code_assist/server.js:60:21)
+    at async CodeAssistServer.generateContentStream (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/code_assist/server.js:21:23)
+    at async retryWithBackoff (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/utils/retry.js:61:20)
+    at async GeminiChat.sendMessageStream (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/core/dist/src/core/geminiChat.js:287:36)
+    at async runNonInteractive (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/dist/src/nonInteractiveCli.js:43:36)
+    at async main (file:///Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/dist/src/gemini.js:152:5) {
+  config: {
+    url: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse',
+    method: 'POST',
+    params: { alt: 'sse' },
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'GeminiCLI/0.1.5 (darwin; arm64)',
+      Authorization: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.'
+    },
+    responseType: 'stream',
+    body: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.',
+    signal: AbortSignal { aborted: false },
+    paramsSerializer: [Function: paramsSerializer],
+    validateStatus: [Function: validateStatus],
+    errorRedactor: [Function: defaultErrorRedactor]
+  },
+  response: {
+    config: {
+      url: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse',
+      method: 'POST',
+      params: [Object],
+      headers: [Object],
+      responseType: 'stream',
+      body: '<<REDACTED> - See `errorRedactor` option in `gaxios` for configuration>.',
+      signal: [AbortSignal],
+      paramsSerializer: [Function: paramsSerializer],
+      validateStatus: [Function: validateStatus],
+      errorRedactor: [Function: defaultErrorRedactor]
+    },
+    data: '{\n' +
+      '  "error": {\n' +
+      '    "code": 429,\n' +
+      '    "message": "Resource exhausted. Please try again later. Please refer to https://cloud.google.com/vertex-ai/generative-ai/docs/error-code-429 for more details.",\n' +
+      '    "status": "RESOURCE_EXHAUSTED"\n' +
+      '  }\n' +
+      '}\n',
+    headers: {
+      'alt-svc': 'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000',
+      'content-length': '238',
+      'content-type': 'text/event-stream',
+      date: 'Mon, 30 Jun 2025 16:30:53 GMT',
+      server: 'ESF',
+      'server-timing': 'gfet4t7; dur=615',
+      vary: 'Origin, X-Origin, Referer',
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'SAMEORIGIN',
+      'x-xss-protection': '0'
+    },
+    status: 429,
+    statusText: 'Too Many Requests',
+    request: {
+      responseURL: 'https://cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse'
+    }
+  },
+  error: undefined,
+  status: 429,
+  Symbol(gaxios-gaxios-error): '6.7.1'
+}
+The `GeminiMessageContent.tsx` component uses `MarkdownDisplay` to render the AI's response. The issue is likely within the `MarkdownDisplay` component, which is responsible for applying the theme's colors to the markdown content.
+
+Now, I will inspect `packages/cli/src/ui/utils/MarkdownDisplay.tsx` to see how it uses the theme to color the markdown.The `MarkdownDisplay.tsx` component is responsible for rendering markdown content. It appears that the issue is in the `RenderInlineInternal` component, which handles inline markdown elements. The `RenderInlineInternal` component does not apply any color to plain text, so it defaults to the terminal's default color.
+
+To fix this, I will modify the `RenderInlineInternal` component to use the `Foreground` color from the theme for plain text. This will ensure that the AI's response is displayed in the correct color.
+
+I will start by importing the `themeManager` and getting the active theme. Then, I will use the `defaultColor` from the theme to color the plain text.
+
+
+Test completed. Check the output for any tool_call_id errors.

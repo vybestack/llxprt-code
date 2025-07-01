@@ -212,7 +212,9 @@ export const useGeminiStream = (
 
       turnCancelledRef.current = true;
       cancelledTurnRef.current = true;
-      abortControllerRef.current?.abort();
+      // NOTE: Do not abort the provider stream here. We avoid aborting so we
+      // can receive the final chunk containing all tool_call IDs, preventing
+      // 400 errors from missing responses.
 
       // Handle any pending history items
       if (pendingHistoryItemRef.current) {
@@ -614,7 +616,10 @@ export const useGeminiStream = (
             handleChatCompressionEvent(event.value);
             break;
           case ServerGeminiEventType.UsageMetadata:
-            console.log('[useGeminiStream] 📊 USAGE EVENT RECEIVED:', JSON.stringify(event.value, null, 2));
+            console.log(
+              '[useGeminiStream] 📊 USAGE EVENT RECEIVED:',
+              JSON.stringify(event.value, null, 2),
+            );
             addUsage(event.value);
             break;
           case ServerGeminiEventType.ToolCallConfirmation:

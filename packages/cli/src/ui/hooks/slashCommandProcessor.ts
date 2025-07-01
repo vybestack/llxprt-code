@@ -1060,16 +1060,17 @@ export const useSlashCommandProcessor = (
         description: 'set API key for the current provider',
         action: async (_mainCommand, apiKey, _args) => {
           const providerManager = getProviderManager();
-          
+
           if (!providerManager.hasActiveProvider()) {
             addMessage({
               type: MessageType.ERROR,
-              content: 'No active provider. Use /provider to select a provider first.',
+              content:
+                'No active provider. Use /provider to select a provider first.',
               timestamp: new Date(),
             });
             return;
           }
-          
+
           if (!apiKey || apiKey.trim() === '') {
             addMessage({
               type: MessageType.ERROR,
@@ -1078,20 +1079,24 @@ export const useSlashCommandProcessor = (
             });
             return;
           }
-          
+
           try {
             const activeProvider = providerManager.getActiveProvider();
             const providerName = activeProvider.name;
-            
+
             // Update the provider's API key
             if (activeProvider.setApiKey) {
               activeProvider.setApiKey(apiKey);
-              
+
               // Save to settings
               const currentKeys = settings.merged.providerApiKeys || {};
               currentKeys[providerName] = apiKey;
-              settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
-              
+              settings.setValue(
+                SettingScope.User,
+                'providerApiKeys',
+                currentKeys,
+              );
+
               addMessage({
                 type: MessageType.INFO,
                 content: `API key updated for provider '${providerName}'`,
@@ -1118,16 +1123,17 @@ export const useSlashCommandProcessor = (
         description: 'set API key from file for the current provider',
         action: async (_mainCommand, filePath, _args) => {
           const providerManager = getProviderManager();
-          
+
           if (!providerManager.hasActiveProvider()) {
             addMessage({
               type: MessageType.ERROR,
-              content: 'No active provider. Use /provider to select a provider first.',
+              content:
+                'No active provider. Use /provider to select a provider first.',
               timestamp: new Date(),
             });
             return;
           }
-          
+
           if (!filePath || filePath.trim() === '') {
             addMessage({
               type: MessageType.ERROR,
@@ -1136,14 +1142,14 @@ export const useSlashCommandProcessor = (
             });
             return;
           }
-          
+
           try {
             // Resolve ~ to home directory
             const resolvedPath = filePath.replace(/^~/, homedir());
-            
+
             // Read the API key from file
             const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-            
+
             if (!apiKey) {
               addMessage({
                 type: MessageType.ERROR,
@@ -1152,19 +1158,23 @@ export const useSlashCommandProcessor = (
               });
               return;
             }
-            
+
             const activeProvider = providerManager.getActiveProvider();
             const providerName = activeProvider.name;
-            
+
             // Update the provider's API key
             if (activeProvider.setApiKey) {
               activeProvider.setApiKey(apiKey);
-              
+
               // Save to settings
               const currentKeys = settings.merged.providerApiKeys || {};
               currentKeys[providerName] = apiKey;
-              settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
-              
+              settings.setValue(
+                SettingScope.User,
+                'providerApiKeys',
+                currentKeys,
+              );
+
               addMessage({
                 type: MessageType.INFO,
                 content: `API key loaded from ${resolvedPath} for provider '${providerName}'`,
@@ -1191,16 +1201,17 @@ export const useSlashCommandProcessor = (
         description: 'set base URL for the current provider',
         action: async (_mainCommand, baseUrl, _args) => {
           const providerManager = getProviderManager();
-          
+
           if (!providerManager.hasActiveProvider()) {
             addMessage({
               type: MessageType.ERROR,
-              content: 'No active provider. Use /provider to select a provider first.',
+              content:
+                'No active provider. Use /provider to select a provider first.',
               timestamp: new Date(),
             });
             return;
           }
-          
+
           if (!baseUrl || baseUrl.trim() === '') {
             // Clear base URL to provider default
             try {
@@ -1211,7 +1222,11 @@ export const useSlashCommandProcessor = (
                 // Remove from settings
                 const currentUrls = settings.merged.providerBaseUrls || {};
                 delete currentUrls[providerName];
-                settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+                settings.setValue(
+                  SettingScope.User,
+                  'providerBaseUrls',
+                  currentUrls,
+                );
                 addMessage({
                   type: MessageType.INFO,
                   content: `Base URL cleared for provider '${providerName}' (using default).`,
@@ -1233,20 +1248,24 @@ export const useSlashCommandProcessor = (
             }
             return;
           }
-          
+
           try {
             const activeProvider = providerManager.getActiveProvider();
             const providerName = activeProvider.name;
-            
+
             // Update the provider's base URL
             if (activeProvider.setBaseUrl) {
               activeProvider.setBaseUrl(baseUrl);
-              
+
               // Save to settings
               const currentUrls = settings.merged.providerBaseUrls || {};
               currentUrls[providerName] = baseUrl;
-              settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
-              
+              settings.setValue(
+                SettingScope.User,
+                'providerBaseUrls',
+                currentUrls,
+              );
+
               addMessage({
                 type: MessageType.INFO,
                 content: `Base URL updated to '${baseUrl}' for provider '${providerName}'`,

@@ -12,6 +12,7 @@ To verify that the text-based tool call parsing implementation correctly handles
 ### 1. Code Review
 
 - [ ] Verify TextToolCallParser implementation:
+
   - [ ] Correctly parses `[TOOL_REQUEST]...[TOOL_REQUEST_END]` format
   - [ ] Handles JSON parsing errors gracefully
   - [ ] Returns cleaned content without tool call markers
@@ -30,19 +31,20 @@ Create test file `packages/cli/src/providers/parsers/TextToolCallParser.test.ts`
 ```typescript
 describe('GemmaToolCallParser', () => {
   it('should parse single tool call', () => {
-    const content = 'Here is the result:\n[TOOL_REQUEST]\nlist_directory {"path": "/home"}\n[TOOL_REQUEST_END]';
+    const content =
+      'Here is the result:\n[TOOL_REQUEST]\nlist_directory {"path": "/home"}\n[TOOL_REQUEST_END]';
     const { cleanedContent, toolCalls } = parser.parse(content);
-    
+
     expect(cleanedContent).toBe('Here is the result:\n');
     expect(toolCalls).toHaveLength(1);
     expect(toolCalls[0].name).toBe('list_directory');
     expect(toolCalls[0].arguments).toEqual({ path: '/home' });
   });
-  
+
   it('should parse multiple tool calls', () => {
     // Test with multiple tool calls
   });
-  
+
   it('should handle malformed JSON', () => {
     // Test with invalid JSON in arguments
   });

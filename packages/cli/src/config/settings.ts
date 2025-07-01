@@ -68,6 +68,10 @@ export interface Settings {
   providerApiKeys?: Record<string, string>;
   providerBaseUrls?: Record<string, string>;
 
+  // Text-based tool call parsing settings
+  enableTextToolCallParsing?: boolean;
+  textToolCallModels?: string[];
+
   // Add other settings here.
 }
 
@@ -123,7 +127,11 @@ export class LoadedSettings {
   setValue(
     scope: SettingScope,
     key: keyof Settings,
-    value: string | Record<string, MCPServerConfig> | Record<string, string> | undefined,
+    value:
+      | string
+      | Record<string, MCPServerConfig>
+      | Record<string, string>
+      | undefined,
   ): void {
     const settingsFile = this.forScope(scope);
     // @ts-expect-error - value can be string | Record<string, MCPServerConfig> | Record<string, string>

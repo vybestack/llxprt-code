@@ -20,6 +20,8 @@ import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../types.js';
 import OpenAI from 'openai';
+import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
+import { Settings } from '../../config/settings.js';
 
 export class OpenAIProvider implements IProvider {
   name: string = 'openai';
@@ -27,20 +29,34 @@ export class OpenAIProvider implements IProvider {
   private currentModel: string = 'gpt-4.1';
   private apiKey: string;
   private baseURL?: string;
+  private settings?: Settings;
 
-  constructor(apiKey: string, baseURL?: string) {
+  constructor(apiKey: string, baseURL?: string, settings?: Settings) {
     if (!apiKey || apiKey.trim() === '') {
       throw new Error('OpenAI API key is required');
     }
 
     this.apiKey = apiKey;
     this.baseURL = baseURL;
+    this.settings = settings;
     this.openai = new OpenAI({
       apiKey,
       baseURL,
       // Allow browser environment for tests
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
     });
+  }
+
+  private requiresTextToolCallParsing(): boolean {
+    if (this.settings?.enableTextToolCallParsing === false) {
+      return false;
+    }
+
+    const defaultModels = ['gemma-3-12b-it', 'gemma-2-27b-it'];
+    const configuredModels = this.settings?.textToolCallModels || [];
+    const allModels = [...defaultModels, ...configuredModels];
+
+    return allModels.includes(this.currentModel);
   }
 
   async getModels(): Promise<IModel[]> {
@@ -148,6 +164,17 @@ export class OpenAIProvider implements IProvider {
       );
     }
 
+    const parser = this.requiresTextToolCallParsing()
+      ? new GemmaToolCallParser()
+      : null;
+
+    if (parser) {
+      console.log(
+        '[OpenAIProvider] Text-based tool parsing enabled for model:',
+        this.currentModel,
+      );
+    }
+
     const stream = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
@@ -162,14 +189,23 @@ export class OpenAIProvider implements IProvider {
 
     let fullContent = '';
     const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
-    let usageData: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined;
+    let usageData:
+      | {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+        }
+      | undefined;
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
 
       if (delta?.content) {
         fullContent += delta.content;
-        yield { role: ContentGeneratorRole.ASSISTANT, content: delta.content };
+        // For text-based models, don't yield content chunks yet
+        if (!parser) {
+          yield { role: ContentGeneratorRole.ASSISTANT, content: delta.content };
+        }
       }
 
       if (delta?.tool_calls) {
@@ -198,7 +234,10 @@ export class OpenAIProvider implements IProvider {
 
       // Check for usage data in the chunk
       if (chunk.usage) {
-        console.log('[OpenAIProvider] 📊 USAGE DATA RECEIVED:', JSON.stringify(chunk.usage, null, 2));
+        console.log(
+          '[OpenAIProvider] 📊 USAGE DATA RECEIVED:',
+          JSON.stringify(chunk.usage, null, 2),
+        );
         usageData = {
           prompt_tokens: chunk.usage.prompt_tokens,
           completion_tokens: chunk.usage.completion_tokens,
@@ -207,25 +246,59 @@ export class OpenAIProvider implements IProvider {
       }
     }
 
-    // Yield final message with tool calls and/or usage information
-    if (accumulatedToolCalls.length > 0) {
-      console.log(
-        '[OpenAIProvider] 🎯 YIELDING TOOL CALLS:',
-        accumulatedToolCalls.length,
-      );
-      yield {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: fullContent || '',
-        tool_calls: accumulatedToolCalls,
-        usage: usageData,
-      };
-    } else if (usageData) {
-      // Always emit usage data so downstream consumers can update stats
-      yield {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: '',
-        usage: usageData,
-      };
+    // After stream ends, parse text-based tool calls if needed
+    if (parser && fullContent) {
+      console.log('[OpenAIProvider] Parsing content for tool calls:', fullContent);
+      const { cleanedContent, toolCalls } = parser.parse(fullContent);
+
+      if (toolCalls.length > 0) {
+        console.log('[OpenAIProvider] Parsed tool calls:', toolCalls);
+        
+        // Convert to standard format
+        const standardToolCalls = toolCalls.map((tc, index) => ({
+          id: `call_${Date.now()}_${index}`,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments),
+          },
+        }));
+
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: cleanedContent,
+          tool_calls: standardToolCalls,
+          usage: usageData,
+        };
+      } else {
+        // No tool calls found, yield cleaned content
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: cleanedContent,
+          usage: usageData,
+        };
+      }
+    } else {
+      // Standard OpenAI tool call handling
+      if (accumulatedToolCalls.length > 0) {
+        console.log(
+          '[OpenAIProvider] 🎯 YIELDING TOOL CALLS:',
+          accumulatedToolCalls.length,
+        );
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: fullContent || '',
+          tool_calls: accumulatedToolCalls,
+          usage: usageData,
+        };
+      } else if (usageData) {
+        // Always emit usage data so downstream consumers can update stats
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: '',
+          usage: usageData,
+        };
+      }
     }
   }
 
@@ -241,7 +314,7 @@ export class OpenAIProvider implements IProvider {
     if (!apiKey || apiKey.trim() === '') {
       throw new Error('OpenAI API key is required');
     }
-    
+
     this.apiKey = apiKey;
     // Create a new OpenAI client with the updated API key
     this.openai = new OpenAI({
@@ -260,5 +333,9 @@ export class OpenAIProvider implements IProvider {
       baseURL: this.baseURL,
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
     });
+  }
+
+  setSettings(settings: Settings): void {
+    this.settings = settings;
   }
 }

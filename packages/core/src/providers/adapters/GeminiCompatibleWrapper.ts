@@ -250,11 +250,18 @@ export class GeminiCompatibleWrapper {
 
       // Emit usage metadata event if message has usage data
       if (message.usage) {
-        console.log('[GeminiCompatibleWrapper] 📊 EMITTING USAGE EVENT:', JSON.stringify({
-          prompt_tokens: message.usage.prompt_tokens,
-          completion_tokens: message.usage.completion_tokens,
-          total_tokens: message.usage.total_tokens,
-        }, null, 2));
+        console.log(
+          '[GeminiCompatibleWrapper] 📊 EMITTING USAGE EVENT:',
+          JSON.stringify(
+            {
+              prompt_tokens: message.usage.prompt_tokens,
+              completion_tokens: message.usage.completion_tokens,
+              total_tokens: message.usage.total_tokens,
+            },
+            null,
+            2,
+          ),
+        );
         const usageEvent: ServerGeminiUsageMetadataEvent = {
           type: GeminiEventType.UsageMetadata,
           value: {

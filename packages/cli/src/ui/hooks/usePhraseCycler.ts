@@ -201,7 +201,7 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
         phraseIntervalRef.current = null;
       }
     };
-  prevPhraseRef.current = currentLoadingPhrase;
+    prevPhraseRef.current = currentLoadingPhrase;
   }, [isActive, isWaiting, currentLoadingPhrase]);
 
   return currentLoadingPhrase;

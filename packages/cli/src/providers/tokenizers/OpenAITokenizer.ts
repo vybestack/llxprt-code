@@ -18,7 +18,10 @@ import { encoding_for_model, TiktokenModel } from '@dqbd/tiktoken';
 import { ITokenizer } from './ITokenizer.js';
 
 export class OpenAITokenizer implements ITokenizer {
-  private encoderCache = new Map<string, ReturnType<typeof encoding_for_model>>();
+  private encoderCache = new Map<
+    string,
+    ReturnType<typeof encoding_for_model>
+  >();
 
   async countTokens(text: string, model: string): Promise<number> {
     try {
@@ -31,7 +34,9 @@ export class OpenAITokenizer implements ITokenizer {
           this.encoderCache.set(model, encoder);
         } catch (_error) {
           // Fall back to cl100k_base encoding for newer models
-          console.warn(`No specific encoding for model ${model}, using cl100k_base`);
+          console.warn(
+            `No specific encoding for model ${model}, using cl100k_base`,
+          );
           encoder = encoding_for_model('gpt-4');
           this.encoderCache.set(model, encoder);
         }

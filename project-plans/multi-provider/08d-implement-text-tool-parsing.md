@@ -28,23 +28,28 @@ tool_name {"param1":"value1"}
 ### Part A: Create Tool Call Parser
 
 - [ ] Create `packages/cli/src/providers/parsers/TextToolCallParser.ts`:
+
   ```typescript
   export interface TextToolCall {
     name: string;
     arguments: Record<string, unknown>;
   }
-  
+
   export interface ITextToolCallParser {
-    parse(content: string): { 
-      cleanedContent: string; 
-      toolCalls: TextToolCall[] 
+    parse(content: string): {
+      cleanedContent: string;
+      toolCalls: TextToolCall[];
     };
   }
-  
+
   export class GemmaToolCallParser implements ITextToolCallParser {
-    private readonly pattern = /\[TOOL_REQUEST\]\s*(\w+)\s+({[^}]+})\s*\[TOOL_REQUEST_END\]/g;
-    
-    parse(content: string): { cleanedContent: string; toolCalls: TextToolCall[] } {
+    private readonly pattern =
+      /\[TOOL_REQUEST\]\s*(\w+)\s+({[^}]+})\s*\[TOOL_REQUEST_END\]/g;
+
+    parse(content: string): {
+      cleanedContent: string;
+      toolCalls: TextToolCall[];
+    } {
       // Implementation
     }
   }
@@ -74,29 +79,32 @@ tool_name {"param1":"value1"}
 - [ ] Modify the `generateChatCompletion` method in OpenAIProvider:
   - [ ] Add parser instance:
     ```typescript
-    const parser = this.requiresTextToolCallParsing() ? new GemmaToolCallParser() : null;
+    const parser = this.requiresTextToolCallParsing()
+      ? new GemmaToolCallParser()
+      : null;
     ```
   - [ ] Update content accumulation to parse tool calls:
+
     ```typescript
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
-      
+
       if (delta?.content) {
         fullContent += delta.content;
-        
+
         // For text-based models, don't yield content chunks yet
         if (!parser) {
           yield { role: ContentGeneratorRole.ASSISTANT, content: delta.content };
         }
       }
-      
+
       // ... existing tool_calls handling ...
     }
-    
+
     // After stream ends, parse text-based tool calls if needed
     if (parser && fullContent) {
       const { cleanedContent, toolCalls } = parser.parse(fullContent);
-      
+
       if (toolCalls.length > 0) {
         // Convert to standard format
         const standardToolCalls = toolCalls.map((tc, index) => ({
@@ -107,7 +115,7 @@ tool_name {"param1":"value1"}
             arguments: JSON.stringify(tc.arguments),
           },
         }));
-        
+
         yield {
           role: ContentGeneratorRole.ASSISTANT,
           content: cleanedContent,
@@ -132,7 +140,10 @@ tool_name {"param1":"value1"}
 - [ ] Handle partial tool call patterns (incomplete markers)
 - [ ] Add logging for debugging:
   ```typescript
-  console.log('[OpenAIProvider] Text-based tool parsing enabled for model:', this.currentModel);
+  console.log(
+    '[OpenAIProvider] Text-based tool parsing enabled for model:',
+    this.currentModel,
+  );
   console.log('[OpenAIProvider] Parsed tool calls:', toolCalls);
   ```
 
@@ -150,11 +161,11 @@ tool_name {"param1":"value1"}
       if (this.settings?.enableTextToolCallParsing === false) {
         return false;
       }
-      
+
       const defaultModels = ['gemma-3-12b-it', 'gemma-2-27b-it'];
       const configuredModels = this.settings?.textToolCallModels || [];
       const allModels = [...defaultModels, ...configuredModels];
-      
+
       return allModels.includes(this.currentModel);
     }
     ```

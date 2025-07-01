@@ -14,35 +14,38 @@
  * limitations under the License.
  */
 
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ContentGeneratorRole } from '../types.js';
 
+
 // Mock OpenAI module
-vi.mock('openai', () => {
-  return {
-    default: vi.fn().mockImplementation(() => ({
-      chat: {
-        completions: {
-          create: vi.fn(),
-        },
+vi.mock('openai', () => ({
+  default: vi.fn().mockImplementation(() => ({
+    chat: {
+      completions: {
+        create: vi.fn(),
       },
-      models: {
-        list: vi.fn(),
-      },
-    })),
-  };
-});
+    },
+    models: {
+      list: vi.fn(),
+    },
+  })),
+}));
 
 describe('OpenAIProvider', () => {
   let provider: OpenAIProvider;
-  let mockOpenAIInstance: any;
+  let mockOpenAIInstance: {
+    chat: { completions: { create: ReturnType<typeof vi.fn> } };
+    models: { list: ReturnType<typeof vi.fn> };
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     provider = new OpenAIProvider('test-api-key');
-    // Get the mocked OpenAI instance
-    mockOpenAIInstance = (provider as any).openai;
+    // Get the mocked OpenAI instance (typed as unknown then cast)
+    mockOpenAIInstance = (provider as unknown as { openai: typeof mockOpenAIInstance }).openai; // Cast for test
   });
 
   describe('generateChatCompletion with usage tracking', () => {
@@ -65,12 +68,10 @@ describe('OpenAIProvider', () => {
 
       mockOpenAIInstance.chat.completions.create.mockResolvedValue(mockStream);
 
-      const messages = [
-        { role: ContentGeneratorRole.USER, content: 'Hi' },
-      ];
+      const messages = [{ role: ContentGeneratorRole.USER, content: 'Hi' }];
 
       const generator = provider.generateChatCompletion(messages);
-      const results = [];
+      const results: unknown[] = [];
       for await (const chunk of generator) {
         results.push(chunk);
       }
@@ -103,19 +104,17 @@ describe('OpenAIProvider', () => {
 
       mockOpenAIInstance.chat.completions.create.mockResolvedValue(mockStream);
 
-      const messages = [
-        { role: ContentGeneratorRole.USER, content: 'Test' },
-      ];
+      const messages = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
 
       const generator = provider.generateChatCompletion(messages);
-      const results = [];
+      const results: unknown[] = [];
       for await (const chunk of generator) {
         results.push(chunk);
       }
 
       // Should have content chunk and usage chunk
       expect(results).toHaveLength(2);
-      
+
       // Check content chunk
       expect(results[0]).toMatchObject({
         role: ContentGeneratorRole.ASSISTANT,
@@ -138,15 +137,22 @@ describe('OpenAIProvider', () => {
       const mockStream = {
         async *[Symbol.asyncIterator]() {
           yield {
-            choices: [{
-              delta: {
-                tool_calls: [{
-                  index: 0,
-                  id: 'call_123',
-                  function: { name: 'test_tool', arguments: '{"param": "value"}' },
-                }],
+            choices: [
+              {
+                delta: {
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call_123',
+                      function: {
+                        name: 'test_tool',
+                        arguments: '{"param": "value"}',
+                      },
+                    },
+                  ],
+                },
               },
-            }],
+            ],
           };
           yield {
             choices: [{ delta: {} }],
@@ -164,16 +170,18 @@ describe('OpenAIProvider', () => {
       const messages = [
         { role: ContentGeneratorRole.USER, content: 'Use a tool' },
       ];
-      const tools = [{
-        type: 'function' as const,
-        function: {
-          name: 'test_tool',
-          parameters: { type: 'object', properties: {} },
+      const tools = [
+        {
+          type: 'function' as const,
+          function: {
+            name: 'test_tool',
+            parameters: { type: 'object', properties: {} },
+          },
         },
-      }];
+      ];
 
       const generator = provider.generateChatCompletion(messages, tools);
-      const results = [];
+      const results: unknown[] = [];
       for await (const chunk of generator) {
         results.push(chunk);
       }
@@ -183,14 +191,16 @@ describe('OpenAIProvider', () => {
       expect(results[0]).toMatchObject({
         role: ContentGeneratorRole.ASSISTANT,
         content: '',
-        tool_calls: [{
-          id: 'call_123',
-          type: 'function',
-          function: {
-            name: 'test_tool',
-            arguments: '{"param": "value"}',
+        tool_calls: [
+          {
+            id: 'call_123',
+            type: 'function',
+            function: {
+              name: 'test_tool',
+              arguments: '{"param": "value"}',
+            },
           },
-        }],
+        ],
         usage: {
           prompt_tokens: 50,
           completion_tokens: 25,
@@ -203,7 +213,7 @@ describe('OpenAIProvider', () => {
   describe('model management', () => {
     it('should set and get current model', () => {
       expect(provider.getCurrentModel()).toBe('gpt-4.1');
-      
+
       provider.setModel('gpt-4o');
       expect(provider.getCurrentModel()).toBe('gpt-4o');
     });
@@ -213,22 +223,26 @@ describe('OpenAIProvider', () => {
     it('should update API key', () => {
       const newKey = 'new-test-key';
       provider.setApiKey(newKey);
-      
+
       // Verify new OpenAI instance was created
-      expect((provider as any).apiKey).toBe(newKey);
+      expect((provider as unknown as { apiKey: string }).apiKey).toBe(newKey);
     });
 
     it('should throw error for empty API key', () => {
-      expect(() => provider.setApiKey('')).toThrow('OpenAI API key is required');
-      expect(() => provider.setApiKey('  ')).toThrow('OpenAI API key is required');
+      expect(() => provider.setApiKey('')).toThrow(
+        'OpenAI API key is required',
+      );
+      expect(() => provider.setApiKey('  ')).toThrow(
+        'OpenAI API key is required',
+      );
     });
 
     it('should update base URL', () => {
       const newUrl = 'https://custom.openai.com';
       provider.setBaseUrl(newUrl);
-      
+
       // Verify new OpenAI instance was created with base URL
-      expect((provider as any).baseURL).toBe(newUrl);
+      expect((provider as unknown as { baseURL?: string }).baseURL).toBe(newUrl);
     });
   });
 });
