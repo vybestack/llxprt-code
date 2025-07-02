@@ -212,9 +212,9 @@ export const useGeminiStream = (
 
       turnCancelledRef.current = true;
       cancelledTurnRef.current = true;
-      // NOTE: Do not abort the provider stream here. We avoid aborting so we
-      // can receive the final chunk containing all tool_call IDs, preventing
-      // 400 errors from missing responses.
+
+      // Abort in-flight Gemini request to stop further stream processing
+      abortControllerRef.current?.abort();
 
       // Handle any pending history items
       if (pendingHistoryItemRef.current) {
@@ -633,6 +633,11 @@ export const useGeminiStream = (
           }
         }
       }
+      if (turnCancelledRef.current) {
+        // Stop processing further events once the user has cancelled.
+        return StreamProcessingStatus.UserCancelled;
+      }
+
       if (toolCallRequests.length > 0) {
         scheduleToolCalls(toolCallRequests, signal);
       }
@@ -765,10 +770,6 @@ export const useGeminiStream = (
    */
   useEffect(() => {
     const run = async () => {
-      if (isResponding) {
-        return;
-      }
-
       // Don't submit any tools if we're in a cancelled state
       if (cancelledTurnRef.current) {
         return;

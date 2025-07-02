@@ -4,7 +4,7 @@
 
 1. Run `npm run preflight` and confirm it passes.
 2. Grep recursively for `gemini` and `google`, e.g.:  
-   `grep -i 'gemini\|google' . | less`  
+   `grep -i 'gemini\|google' . | less`
    - Manually inspect to ensure all matches are listed in `project-plans/trademarks/ALLOWED-FAIR-USE.txt` and are truly required for fair use (such as `GeminiProvider`).
    - There must be no branding, logo, or product name uses beyond fair use in code, CLI, docs, or assets.
 3. Visually inspect README.md, UI screens, and images for accidental branding remains. Compare design with "LLxprt Code" branding requirements.
@@ -12,6 +12,7 @@
 5. All checklist boxes in `01-remove-trademarks.md` must be ticked `[x]`.
 
 ## Outcome
+
 If ALL steps are satisfied and no unauthorised branding remains, emit:
 
 ✅

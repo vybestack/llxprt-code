@@ -24,11 +24,11 @@ describe('tokenLimit', () => {
 
   describe('OpenAI models', () => {
     it('should return correct limit for o3', () => {
-      expect(tokenLimit('o3')).toBe(128_000);
+      expect(tokenLimit('o3')).toBe(200_000);
     });
 
     it('should return correct limit for o3-mini', () => {
-      expect(tokenLimit('o3-mini')).toBe(128_000);
+      expect(tokenLimit('o3-mini')).toBe(200_000);
     });
 
     it('should return correct limit for o4-mini', () => {
@@ -36,7 +36,7 @@ describe('tokenLimit', () => {
     });
 
     it('should return correct limit for gpt-4.1', () => {
-      expect(tokenLimit('gpt-4.1')).toBe(128_000);
+      expect(tokenLimit('gpt-4.1')).toBe(1_000_000);
     });
 
     it('should return correct limit for gpt-4o', () => {

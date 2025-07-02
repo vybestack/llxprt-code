@@ -11,9 +11,11 @@
     npm run lint
     ```
 3.  **Run Tests for OpenAIProvider Implementation:**
+
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
+
     - **Expected Output:** All tests in `OpenAIProvider.test.ts` should pass. These tests should now cover the correct integration of `ToolFormatter` and dynamic format detection.
 
 4.  **Verify Multi-Format Architecture Integration:**
@@ -41,6 +43,7 @@
 ## Multi-Format Architecture
 
 The OpenAIProvider now supports two paths:
+
 1. **Structured Path**: For OpenAI, DeepSeek, Qwen formats → Uses ToolFormatter
 2. **Text-Based Path**: For Gemma, Hermes, XML, Llama formats → Uses TextToolCallParser
 

@@ -13,6 +13,38 @@ export function tokenLimit(model: Model): TokenCount {
   // Strip provider prefix if present (e.g., "openai:gpt-4o" -> "gpt-4o")
   const modelWithoutPrefix = model.includes(':') ? model.split(':')[1] : model;
 
+  // Check OpenAI models with version suffixes first
+  if (modelWithoutPrefix.startsWith('gpt-4.1')) {
+    return 1_000_000;
+  }
+  // Check more specific models first
+  if (
+    modelWithoutPrefix.startsWith('o3-pro') ||
+    modelWithoutPrefix.startsWith('o3-mini') ||
+    modelWithoutPrefix.startsWith('o1-mini')
+  ) {
+    return 200_000;
+  }
+  // Then check base models
+  if (
+    modelWithoutPrefix.startsWith('o3') ||
+    modelWithoutPrefix.startsWith('o1')
+  ) {
+    return 200_000;
+  }
+  if (
+    modelWithoutPrefix.startsWith('o4-mini') ||
+    modelWithoutPrefix.startsWith('gpt-4o-mini') ||
+    modelWithoutPrefix.startsWith('gpt-4o-realtime') ||
+    modelWithoutPrefix.startsWith('gpt-4o') ||
+    modelWithoutPrefix.startsWith('gpt-4-turbo')
+  ) {
+    return 128_000;
+  }
+  if (modelWithoutPrefix.startsWith('gpt-3.5-turbo')) {
+    return 16_385;
+  }
+
   // Add other models as they become relevant or if specified by config
   // Pulled from https://ai.google.dev/gemini-api/docs/models
   switch (modelWithoutPrefix) {
@@ -30,25 +62,11 @@ export function tokenLimit(model: Model): TokenCount {
     case 'gemini-2.0-flash-preview-image-generation':
       return 32_000;
 
-    // OpenAI models
-    case 'o4-mini':
-    case 'o3':
-    case 'o3-mini':
-    case 'gpt-4.1':
-    case 'gpt-4o':
-    case 'gpt-4o-mini':
-      return 128_000;
-    case 'o1':
-    case 'o1-mini':
-      return 200_000;
-
     // Anthropic models
     // Claude 4 series - larger context windows
     case 'claude-opus-4-latest':
-    case 'claude-opus-4-20250514':
       return 500_000;
     case 'claude-sonnet-4-latest':
-    case 'claude-sonnet-4-20250301':
       return 400_000;
     // Claude 3.7 series
     case 'claude-3-7-opus-20250115':

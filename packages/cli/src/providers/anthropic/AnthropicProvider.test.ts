@@ -20,15 +20,21 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
     }),
     fromProviderFormat: vi.fn((rawToolCall: unknown, format: string) => {
       if (format === 'anthropic') {
-        const toolCall = rawToolCall as { id: string; name: string; input?: unknown };
-        return [{
-          id: toolCall.id,
-          type: 'function',
-          function: {
-            name: toolCall.name,
-            arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
+        const toolCall = rawToolCall as {
+          id: string;
+          name: string;
+          input?: unknown;
+        };
+        return [
+          {
+            id: toolCall.id,
+            type: 'function',
+            function: {
+              name: toolCall.name,
+              arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
+            },
           },
-        }];
+        ];
       }
       return [rawToolCall];
     }),
@@ -47,13 +53,31 @@ vi.mock('@anthropic-ai/sdk', () => ({
           async *[Symbol.asyncIterator]() {
             const models = [
               { id: 'claude-opus-4-20250514', display_name: 'Claude 4 Opus' },
-              { id: 'claude-sonnet-4-20250301', display_name: 'Claude 4 Sonnet' },
-              { id: 'claude-3-7-opus-20250115', display_name: 'Claude 3.7 Opus' },
-              { id: 'claude-3-7-sonnet-20250115', display_name: 'Claude 3.7 Sonnet' },
-              { id: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet' },
-              { id: 'claude-3-5-haiku-20241022', display_name: 'Claude 3.5 Haiku' },
+              {
+                id: 'claude-sonnet-4-20250514',
+                display_name: 'Claude 4 Sonnet',
+              },
+              {
+                id: 'claude-3-7-opus-20250115',
+                display_name: 'Claude 3.7 Opus',
+              },
+              {
+                id: 'claude-3-7-sonnet-20250115',
+                display_name: 'Claude 3.7 Sonnet',
+              },
+              {
+                id: 'claude-3-5-sonnet-20241022',
+                display_name: 'Claude 3.5 Sonnet',
+              },
+              {
+                id: 'claude-3-5-haiku-20241022',
+                display_name: 'Claude 3.5 Haiku',
+              },
               { id: 'claude-3-opus-20240229', display_name: 'Claude 3 Opus' },
-              { id: 'claude-3-sonnet-20240229', display_name: 'Claude 3 Sonnet' },
+              {
+                id: 'claude-3-sonnet-20240229',
+                display_name: 'Claude 3 Sonnet',
+              },
               { id: 'claude-3-haiku-20240307', display_name: 'Claude 3 Haiku' },
             ];
             for (const model of models) {
@@ -74,10 +98,10 @@ describe('AnthropicProvider', () => {
   beforeEach(async () => {
     // Clear all mocks before each test
     vi.clearAllMocks();
-    
+
     // Create provider with test API key
     provider = new AnthropicProvider('test-api-key');
-    
+
     // Get the mocked Anthropic instance
     const Anthropic = vi.mocked((await import('@anthropic-ai/sdk')).default);
     mockAnthropicInstance = Anthropic.mock.results[0].value;
@@ -86,23 +110,29 @@ describe('AnthropicProvider', () => {
   describe('getModels', () => {
     it('should return a list of Anthropic models including latest aliases', async () => {
       const models = await provider.getModels();
-      
+
       expect(models).toHaveLength(11); // 2 latest aliases + 9 specific versions
-      
+
       // Check for latest aliases
-      expect(models.some(m => m.id === 'claude-opus-4-latest')).toBe(true);
-      expect(models.some(m => m.id === 'claude-sonnet-4-latest')).toBe(true);
-      
+      expect(models.some((m) => m.id === 'claude-opus-4-latest')).toBe(true);
+      expect(models.some((m) => m.id === 'claude-sonnet-4-latest')).toBe(true);
+
       // Check for Claude 4 models
-      expect(models.some(m => m.id === 'claude-opus-4-20250514')).toBe(true);
-      expect(models.some(m => m.id === 'claude-sonnet-4-20250301')).toBe(true);
-      
+      expect(models.some((m) => m.id === 'claude-opus-4-20250514')).toBe(true);
+      expect(models.some((m) => m.id === 'claude-sonnet-4-20250514')).toBe(
+        true,
+      );
+
       // Check for Claude 3.7 models
-      expect(models.some(m => m.id === 'claude-3-7-opus-20250115')).toBe(true);
-      expect(models.some(m => m.id === 'claude-3-7-sonnet-20250115')).toBe(true);
-      
+      expect(models.some((m) => m.id === 'claude-3-7-opus-20250115')).toBe(
+        true,
+      );
+      expect(models.some((m) => m.id === 'claude-3-7-sonnet-20250115')).toBe(
+        true,
+      );
+
       // Check that all models have correct provider
-      models.forEach(model => {
+      models.forEach((model) => {
         expect(model.provider).toBe('anthropic');
         expect(model.supportedToolFormats).toContain('anthropic');
       });
@@ -110,8 +140,8 @@ describe('AnthropicProvider', () => {
 
     it('should return models with correct structure', async () => {
       const models = await provider.getModels();
-      
-      models.forEach(model => {
+
+      models.forEach((model) => {
         expect(model).toHaveProperty('id');
         expect(model).toHaveProperty('name');
         expect(model).toHaveProperty('provider');
@@ -127,8 +157,14 @@ describe('AnthropicProvider', () => {
       // Mock streaming response
       const mockStream = {
         async *[Symbol.asyncIterator]() {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } };
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: ' world' } };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Hello' },
+          };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: ' world' },
+          };
         },
       };
 
@@ -148,7 +184,7 @@ describe('AnthropicProvider', () => {
       ]);
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
-        model: 'claude-sonnet-4-latest',
+        model: 'claude-sonnet-4-20250514',
         messages: [{ role: 'user', content: 'Say hello' }],
         max_tokens: 64000,
         stream: true,
@@ -174,7 +210,10 @@ describe('AnthropicProvider', () => {
             },
           };
           yield { type: 'content_block_stop' };
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Result' } };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Result' },
+          };
         },
       };
 
@@ -191,7 +230,7 @@ describe('AnthropicProvider', () => {
           },
         },
       ];
-      
+
       const generator = provider.generateChatCompletion(messages, tools);
 
       const chunks = [];
@@ -203,20 +242,22 @@ describe('AnthropicProvider', () => {
         {
           role: 'assistant',
           content: '',
-          tool_calls: [{
-            id: 'tool-123',
-            type: 'function',
-            function: {
-              name: 'get_weather',
-              arguments: '{"location":"San Francisco"}',
+          tool_calls: [
+            {
+              id: 'tool-123',
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                arguments: '{"location":"San Francisco"}',
+              },
             },
-          }],
+          ],
         },
         { role: 'assistant', content: 'Result' },
       ]);
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
-        model: 'claude-sonnet-4-latest',
+        model: 'claude-sonnet-4-20250514',
         messages: [{ role: 'user', content: 'What is the weather?' }],
         max_tokens: 64000,
         stream: true,
@@ -231,31 +272,41 @@ describe('AnthropicProvider', () => {
     });
 
     it('should handle API errors', async () => {
-      mockAnthropicInstance.messages.create.mockRejectedValue(new Error('API Error'));
+      mockAnthropicInstance.messages.create.mockRejectedValue(
+        new Error('API Error'),
+      );
 
       const messages = [{ role: 'user', content: 'test' }];
       const generator = provider.generateChatCompletion(messages);
 
-      await expect(generator.next()).rejects.toThrow('Anthropic API error: API Error');
+      await expect(generator.next()).rejects.toThrow(
+        'Anthropic API error: API Error',
+      );
     });
 
     it('should handle usage tracking', async () => {
       const mockStream = {
         async *[Symbol.asyncIterator]() {
-          yield { 
-            type: 'message_start', 
-            message: { 
-              usage: { input_tokens: 10, output_tokens: 0 } 
-            } 
+          yield {
+            type: 'message_start',
+            message: {
+              usage: { input_tokens: 10, output_tokens: 0 },
+            },
           };
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } };
-          yield { 
-            type: 'message_delta', 
-            usage: { input_tokens: 10, output_tokens: 5 } 
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Hello' },
           };
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: ' world' } };
-          yield { 
-            type: 'message_stop'
+          yield {
+            type: 'message_delta',
+            usage: { input_tokens: 10, output_tokens: 5 },
+          };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: ' world' },
+          };
+          yield {
+            type: 'message_stop',
           };
         },
       };
@@ -271,23 +322,23 @@ describe('AnthropicProvider', () => {
       }
 
       // Filter out usage chunks for verification
-      const usageChunks = chunks.filter(c => c.usage);
+      const usageChunks = chunks.filter((c) => c.usage);
       expect(usageChunks).toHaveLength(3);
-      
+
       // Check first usage (from message_start)
       expect(usageChunks[0].usage).toEqual({
         prompt_tokens: 10,
         completion_tokens: 0,
         total_tokens: 10,
       });
-      
+
       // Check updated usage from message_delta
       expect(usageChunks[1].usage).toEqual({
         prompt_tokens: 10,
         completion_tokens: 5,
         total_tokens: 15,
       });
-      
+
       // Check final usage from message_stop (same as last update)
       expect(usageChunks[2].usage).toEqual({
         prompt_tokens: 10,
@@ -299,10 +350,16 @@ describe('AnthropicProvider', () => {
     it('should ignore unknown chunk types', async () => {
       const mockStream = {
         async *[Symbol.asyncIterator]() {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hello' } };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Hello' },
+          };
           yield { type: 'content_block_stop' }; // Should be ignored
           yield { type: 'message_delta' }; // Should be ignored without usage
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: ' world' } };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: ' world' },
+          };
         },
       };
 
@@ -317,7 +374,7 @@ describe('AnthropicProvider', () => {
       }
 
       // Filter to only content chunks
-      const contentChunks = chunks.filter(c => c.content);
+      const contentChunks = chunks.filter((c) => c.content);
       expect(contentChunks).toHaveLength(2);
       expect(contentChunks[0].content).toBe('Hello');
       expect(contentChunks[1].content).toBe(' world');
@@ -326,7 +383,10 @@ describe('AnthropicProvider', () => {
     it('should use ToolFormatter for tool conversion', async () => {
       const mockStream = {
         async *[Symbol.asyncIterator]() {
-          yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Done' } };
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Done' },
+          };
         },
       };
 
@@ -338,7 +398,10 @@ describe('AnthropicProvider', () => {
           function: {
             name: 'test_tool',
             description: 'A test tool',
-            parameters: { type: 'object', properties: { foo: { type: 'string' } } },
+            parameters: {
+              type: 'object',
+              properties: { foo: { type: 'string' } },
+            },
           },
         },
       ];
@@ -352,19 +415,31 @@ describe('AnthropicProvider', () => {
       }
 
       // Verify ToolFormatter was used
-      const ToolFormatterMock = vi.mocked((await import('../../tools/ToolFormatter.js')).ToolFormatter);
+      const ToolFormatterMock = vi.mocked(
+        (await import('../../tools/ToolFormatter.js')).ToolFormatter,
+      );
       const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
-      
-      expect(toolFormatterInstance.toProviderFormat).toHaveBeenCalledWith(tools, 'anthropic');
+
+      expect(toolFormatterInstance.toProviderFormat).toHaveBeenCalledWith(
+        tools,
+        'anthropic',
+      );
     });
 
     it('should retry on rate limit errors', async () => {
       // First call fails with overloaded error
       mockAnthropicInstance.messages.create
-        .mockRejectedValueOnce(new Error('Anthropic API error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'))
+        .mockRejectedValueOnce(
+          new Error(
+            'Anthropic API error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+          ),
+        )
         .mockResolvedValueOnce({
           async *[Symbol.asyncIterator]() {
-            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Success' } };
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Success' },
+            };
           },
         });
 
@@ -376,21 +451,23 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      expect(chunks).toEqual([
-        { role: 'assistant', content: 'Success' },
-      ]);
+      expect(chunks).toEqual([{ role: 'assistant', content: 'Success' }]);
 
       // Should have been called twice (first failed, second succeeded)
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledTimes(2);
     });
 
     it('should not retry on non-retryable errors', async () => {
-      mockAnthropicInstance.messages.create.mockRejectedValue(new Error('Invalid API key'));
+      mockAnthropicInstance.messages.create.mockRejectedValue(
+        new Error('Invalid API key'),
+      );
 
       const messages = [{ role: 'user', content: 'Test' }];
       const generator = provider.generateChatCompletion(messages);
 
-      await expect(generator.next()).rejects.toThrow('Anthropic API error: Invalid API key');
+      await expect(generator.next()).rejects.toThrow(
+        'Anthropic API error: Invalid API key',
+      );
 
       // Should have only been called once (no retry)
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledTimes(1);
@@ -399,29 +476,38 @@ describe('AnthropicProvider', () => {
     it('should validate and fix tool_use/tool_result mismatches on retry', async () => {
       // First call fails after partial tool use
       mockAnthropicInstance.messages.create
-        .mockRejectedValueOnce(new Error('Anthropic API error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'))
+        .mockRejectedValueOnce(
+          new Error(
+            'Anthropic API error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+          ),
+        )
         .mockResolvedValueOnce({
           async *[Symbol.asyncIterator]() {
-            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Fixed and working' } };
+            yield {
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: 'Fixed and working' },
+            };
           },
         });
 
       // Messages with a tool call but no tool result (simulating corrupted state)
       const messages = [
         { role: 'user', content: 'Test' },
-        { 
-          role: 'assistant', 
+        {
+          role: 'assistant',
           content: '',
-          tool_calls: [{
-            id: 'broken-tool-123',
-            type: 'function' as const,
-            function: {
-              name: 'test_tool',
-              arguments: '{}',
+          tool_calls: [
+            {
+              id: 'broken-tool-123',
+              type: 'function' as const,
+              function: {
+                name: 'test_tool',
+                arguments: '{}',
+              },
             },
-          }]
+          ],
         },
-        { role: 'user', content: 'Continue' }  // This would normally cause an error
+        { role: 'user', content: 'Continue' }, // This would normally cause an error
       ];
 
       const generator = provider.generateChatCompletion(messages);
@@ -436,18 +522,21 @@ describe('AnthropicProvider', () => {
       ]);
 
       // Check the second call had fixed messages
-      const secondCallArgs = mockAnthropicInstance.messages.create.mock.calls[1][0];
+      const secondCallArgs =
+        mockAnthropicInstance.messages.create.mock.calls[1][0];
       const anthropicMessages = secondCallArgs.messages;
-      
+
       // Should have the tool result added automatically
       expect(anthropicMessages).toHaveLength(4);
       expect(anthropicMessages[2]).toEqual({
         role: 'user',
-        content: [{
-          type: 'tool_result',
-          tool_use_id: 'broken-tool-123',
-          content: 'Error: Tool execution was interrupted. Please retry.',
-        }],
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'broken-tool-123',
+            content: 'Error: Tool execution was interrupted. Please retry.',
+          },
+        ],
       });
     });
   });

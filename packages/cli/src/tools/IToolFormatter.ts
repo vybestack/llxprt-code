@@ -17,7 +17,15 @@
 import { ITool } from '../providers/ITool.js';
 import { IMessage } from '../providers/IMessage.js';
 
-export type ToolFormat = 'openai' | 'anthropic' | 'deepseek' | 'qwen' | 'hermes' | 'xml' | 'llama' | 'gemma';
+export type ToolFormat =
+  | 'openai'
+  | 'anthropic'
+  | 'deepseek'
+  | 'qwen'
+  | 'hermes'
+  | 'xml'
+  | 'llama'
+  | 'gemma';
 
 export interface OpenAIFunction {
   name: string;
@@ -30,6 +38,14 @@ export interface OpenAITool {
   function: OpenAIFunction;
 }
 
+export interface ResponsesTool {
+  type: 'function';
+  name: string;
+  description?: string | null;
+  parameters: Record<string, unknown> | null;
+  strict: boolean | null;
+}
+
 export interface IToolFormatter {
   toProviderFormat(tools: ITool[], format: 'openai'): OpenAITool[];
   toProviderFormat(tools: ITool[], format: ToolFormat): unknown;
@@ -37,4 +53,5 @@ export interface IToolFormatter {
     rawToolCall: unknown,
     format: ToolFormat,
   ): IMessage['tool_calls'];
+  toResponsesTool(tools: ITool[]): ResponsesTool[];
 }

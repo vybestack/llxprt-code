@@ -20,6 +20,7 @@ To ensure the tool format override mechanism (set by `/toolformat` command) prop
   - [ ] Add `toolFormatOverride?: ToolFormat` property
   - [ ] Add `setToolFormatOverride(format: ToolFormat | null)` method
   - [ ] Update `getToolFormat()` to check override first:
+
     ```typescript
     private getToolFormat(): ToolFormat {
       // Check manual override first

@@ -30,6 +30,7 @@ import { GitService } from '../services/gitService.js';
 import { getProjectTempDir } from '../utils/paths.js';
 import {
   initializeTelemetry,
+  shutdownTelemetry,
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
   TelemetryTarget,
@@ -479,6 +480,25 @@ export class Config {
 
   getProviderManager(): ProviderManager | undefined {
     return this.providerManager;
+  }
+
+  /**
+   * Enable or disable telemetry at runtime and persist in the in-memory settings.
+   * This does not automatically persist to disk – callers (e.g. CLI slash
+   * command) should update the user settings file separately.
+   */
+  setTelemetryEnabled(enabled: boolean): void {
+    if (enabled === this.telemetrySettings.enabled) {
+      return; // no-op
+    }
+    this.telemetrySettings.enabled = enabled;
+    if (enabled) {
+      initializeTelemetry(this);
+    } else {
+      shutdownTelemetry().catch(() => {
+        /* swallow */
+      });
+    }
   }
 }
 

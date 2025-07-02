@@ -140,7 +140,7 @@ export const WITTY_LOADING_PHRASES = [
   'Have you tried turning it off and on again? (The loading screen, not me.)',
 ];
 
-export const PHRASE_CHANGE_INTERVAL_MS = 15000;
+export const PHRASE_CHANGE_INTERVAL_MS = 15000; // 15 seconds between phrase changes
 
 /**
  * Custom hook to manage cycling through loading phrases.
@@ -173,17 +173,19 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
       setCurrentLoadingPhrase(WITTY_LOADING_PHRASES[initialRandomIndex]);
 
       phraseIntervalRef.current = setInterval(() => {
-        // Pick a new phrase that is different from the current one (when possible)
-        let nextPhrase = currentLoadingPhrase;
-        if (WITTY_LOADING_PHRASES.length > 1) {
-          do {
-            const randomIndex = Math.floor(
-              Math.random() * WITTY_LOADING_PHRASES.length,
-            );
-            nextPhrase = WITTY_LOADING_PHRASES[randomIndex];
-          } while (nextPhrase === currentLoadingPhrase);
-        }
-        setCurrentLoadingPhrase(nextPhrase);
+        setCurrentLoadingPhrase((prevPhrase) => {
+          // Pick a new phrase that is different from the previous one (when possible)
+          let nextPhrase = prevPhrase;
+          if (WITTY_LOADING_PHRASES.length > 1) {
+            do {
+              const randomIndex = Math.floor(
+                Math.random() * WITTY_LOADING_PHRASES.length,
+              );
+              nextPhrase = WITTY_LOADING_PHRASES[randomIndex];
+            } while (nextPhrase === prevPhrase);
+          }
+          return nextPhrase;
+        });
       }, PHRASE_CHANGE_INTERVAL_MS);
     } else {
       // Idle or other states, clear the phrase interval
@@ -202,7 +204,7 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
       }
     };
     prevPhraseRef.current = currentLoadingPhrase;
-  }, [isActive, isWaiting, currentLoadingPhrase]);
+  }, [isActive, isWaiting]);
 
   return currentLoadingPhrase;
 };

@@ -98,8 +98,10 @@ describe('ProviderManager', () => {
           yield { role: 'assistant', content: 'test' };
         },
       };
-      
-      expect(() => manager.registerProvider(mockAnthropicProvider)).not.toThrow();
+
+      expect(() =>
+        manager.registerProvider(mockAnthropicProvider),
+      ).not.toThrow();
       expect(manager.listProviders()).toContain('anthropic');
     });
   });

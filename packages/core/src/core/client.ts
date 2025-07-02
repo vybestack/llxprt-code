@@ -115,7 +115,13 @@ export class GeminiClient {
             `Failed to list models: ${response.status} ${response.statusText} - ${errorBody}`,
           );
         }
-        const data = await response.json();
+        const data = (await response.json()) as {
+          models?: Array<{
+            name: string;
+            displayName?: string;
+            description?: string;
+          }>;
+        };
         return data.models || [];
       } catch (_error) {
         // Network or parsing errors – return empty array so callers can fallback gracefully

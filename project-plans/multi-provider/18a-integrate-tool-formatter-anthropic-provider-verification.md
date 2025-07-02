@@ -36,6 +36,7 @@
 ## Architecture Verification
 
 Confirm that Anthropic is correctly identified as a structured format provider:
+
 - Uses ToolFormatter for both outgoing and incoming tool handling
 - Does NOT use TextToolCallParser (that's only for text-based formats)
 - Tool format is fixed as 'anthropic' (no dynamic detection needed)

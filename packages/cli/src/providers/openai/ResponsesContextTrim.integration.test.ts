@@ -1,0 +1,274 @@
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { OpenAIProvider } from './OpenAIProvider.js';
+import { IMessage } from '../IMessage.js';
+
+// Mock fetch globally
+global.fetch = vi.fn();
+
+// Mock console methods
+const originalWarn = console.warn;
+const originalDebug = console.debug;
+
+describe('ResponsesContextTrim Integration', () => {
+  let provider: OpenAIProvider;
+  let consoleWarnMock: typeof vi.fn;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    provider = new OpenAIProvider('test-api-key');
+    provider.setModel('gpt-4o');
+
+    // Mock console.warn to capture warnings
+    consoleWarnMock = vi.fn();
+    console.warn = consoleWarnMock;
+    console.debug = vi.fn();
+  });
+
+  afterEach(() => {
+    console.warn = originalWarn;
+    console.debug = originalDebug;
+  });
+
+  function createSSEResponse(chunks: string[]): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        chunks.forEach((chunk) => {
+          controller.enqueue(encoder.encode(chunk));
+        });
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  }
+
+  it('should warn when approaching context limit', async () => {
+    // Set up cache with 120k tokens accumulated
+    const cache = provider.getConversationCache();
+    cache.set('conv-123', 'parent-456', [], 120000);
+
+    // Prepare a 10k token prompt (roughly 40k characters)
+    const largeContent = 'This is a test message. '.repeat(1600); // ~40k chars = ~10k tokens
+    const messages: IMessage[] = [{ role: 'user', content: largeContent }];
+
+    // Mock successful response
+    const chunks = [
+      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Response"}}]}\n\n',
+      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks));
+
+    // Call the provider with conversation context
+    const generator = provider.generateChatCompletion(messages);
+    const results: IMessage[] = [];
+
+    for await (const message of generator) {
+      results.push(message);
+    }
+
+    // Should have warned about low context
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining('[OpenAI] Warning: Only'),
+    );
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining('tokens remaining'),
+    );
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      expect.stringContaining('Consider starting a new conversation'),
+    );
+  });
+
+  it('should handle 422 context_length_exceeded error and retry', async () => {
+    // Set up cache with high token count
+    const cache = provider.getConversationCache();
+    cache.set('conv-123', 'parent-456', [], 125000);
+
+    const messages: IMessage[] = [
+      { role: 'user', content: 'This will exceed the context limit' },
+    ];
+
+    // First call fails with 422
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            message: 'context_length_exceeded: The conversation is too long',
+            type: 'invalid_request_error',
+          },
+        }),
+        {
+          status: 422,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+
+    // Second call (retry) succeeds
+    const chunks = [
+      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Retry successful"}}]}\n\n',
+      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks));
+
+    // Call the provider
+    const generator = provider.generateChatCompletion(messages);
+    const results: IMessage[] = [];
+
+    for await (const message of generator) {
+      results.push(message);
+    }
+
+    // Should have warned about retry
+    expect(consoleWarnMock).toHaveBeenCalledWith(
+      '[OpenAI] Context length exceeded, invalidating cache and retrying stateless...',
+    );
+
+    // Should have made two fetch calls
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // First call should include conversation context
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://api.openai.com/v1/responses',
+      expect.objectContaining({
+        body: expect.stringContaining('"conversation_id":"conv-123"'),
+      }),
+    );
+
+    // Second call should NOT include conversation context
+    const secondCallBody = JSON.parse(
+      vi.mocked(global.fetch).mock.calls[1][1]?.body as string,
+    );
+    expect(secondCallBody.conversation_id).toBeUndefined();
+    expect(secondCallBody.parent_id).toBeUndefined();
+
+    // Should have received the retry response
+    expect(results.some((m) => m.content === 'Retry successful')).toBe(true);
+
+    // Cache should be invalidated
+    expect(cache.has('conv-123', 'parent-456')).toBe(false);
+  });
+
+  it('should not retry on non-422 errors', async () => {
+    const messages: IMessage[] = [{ role: 'user', content: 'Test message' }];
+
+    // Return a 500 error
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            message: 'Internal server error',
+            type: 'server_error',
+          },
+        }),
+        {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+
+    // Should throw without retry
+    await expect(async () => {
+      const generator = provider.generateChatCompletion(messages);
+      for await (const _message of generator) {
+        // Should throw before yielding
+      }
+    }).rejects.toThrow('Internal server error');
+
+    // Should have only made one call
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('should track token accumulation across multiple calls', async () => {
+    const cache = provider.getConversationCache();
+    const conversationId = 'conv-accumulate';
+    const parentId = 'parent-accumulate';
+
+    // First call
+    const messages1: IMessage[] = [{ role: 'user', content: 'First message' }];
+
+    const chunks1 = [
+      'data: {"id":"resp-1","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"First response"}}]}\n\n',
+      'data: {"id":"resp-1","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks1));
+
+    const gen1 = await (
+      provider as unknown as {
+        callResponsesEndpoint: (
+          messages: IMessage[],
+          tools: unknown[],
+          options: Record<string, unknown>,
+        ) => Promise<AsyncIterableIterator<IMessage>>;
+      }
+    ).callResponsesEndpoint(messages1, [], {
+      conversationId,
+      parentId,
+      stream: true,
+    });
+
+    for await (const _message of gen1) {
+      // Process messages
+    }
+
+    // Check initial accumulation
+    const tokens1 = cache.getAccumulatedTokens(conversationId, parentId);
+    expect(tokens1).toBeGreaterThan(0);
+
+    // Second call
+    const messages2: IMessage[] = [
+      { role: 'user', content: 'Second message with more content' },
+    ];
+
+    const chunks2 = [
+      'data: {"id":"resp-2","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Second response with even more content"}}]}\n\n',
+      'data: {"id":"resp-2","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks2));
+
+    const gen2 = await (
+      provider as unknown as {
+        callResponsesEndpoint: (
+          messages: IMessage[],
+          tools: unknown[],
+          options: Record<string, unknown>,
+        ) => Promise<AsyncIterableIterator<IMessage>>;
+      }
+    ).callResponsesEndpoint(messages2, [], {
+      conversationId,
+      parentId,
+      stream: true,
+    });
+
+    for await (const _message of gen2) {
+      // Process messages
+    }
+
+    // Check accumulated tokens increased
+    const tokens2 = cache.getAccumulatedTokens(conversationId, parentId);
+    expect(tokens2).toBeGreaterThan(tokens1);
+
+    // Verify context estimation includes accumulated tokens
+    const contextInfo = provider.estimateContextUsage(
+      conversationId,
+      parentId,
+      messages2,
+    );
+
+    expect(contextInfo.remoteTokens).toBe(tokens2);
+    expect(contextInfo.totalTokens).toBeGreaterThan(contextInfo.promptTokens);
+  });
+});

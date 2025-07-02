@@ -20,7 +20,7 @@
     "clean": "node scripts/clean.js",
     "prepare": "npm run bundle",
     "test": "npm run test --workspaces",
-    "test:ci": "npm run test:ci --workspaces --if-present",
+    "test:ci": "cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present",
     "test:e2e": "npm run test:integration:sandbox:none -- --verbose --keep-output",
     "test:integration:all": "npm run test:integration:sandbox:none && npm run test:integration:sandbox:docker && npm run test:integration:sandbox:podman",
     "test:integration:sandbox:none": "GEMINI_SANDBOX=false node integration-tests/run-tests.js",

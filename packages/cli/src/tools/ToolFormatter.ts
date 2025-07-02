@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-import { IToolFormatter, ToolFormat, OpenAITool } from './IToolFormatter.js';
+import {
+  IToolFormatter,
+  ToolFormat,
+  OpenAITool,
+  ResponsesTool,
+} from './IToolFormatter.js';
 import { ITool } from '../providers/ITool.js';
 import { IMessage } from '../providers/IMessage.js';
 
@@ -159,5 +164,19 @@ export class ToolFormatter implements IToolFormatter {
           `Streaming accumulation for format '${format}' not yet implemented`,
         );
     }
+  }
+
+  /**
+   * Formats tools specifically for the OpenAI Responses API
+   * The Responses API expects a flatter format than the regular OpenAI API
+   */
+  toResponsesTool(tools: ITool[]): ResponsesTool[] {
+    return tools.map((tool) => ({
+      type: 'function' as const,
+      name: tool.function.name,
+      description: tool.function.description || null,
+      parameters: (tool.function.parameters as Record<string, unknown>) || null,
+      strict: null,
+    }));
   }
 }

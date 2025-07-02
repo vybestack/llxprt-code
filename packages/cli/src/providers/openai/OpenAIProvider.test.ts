@@ -42,6 +42,8 @@ describe('OpenAIProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     provider = new OpenAIProvider('test-api-key');
+    // Set a model that doesn't use the Responses API
+    provider.setModel('gpt-3.5-turbo');
     // Get the mocked OpenAI instance (typed as unknown then cast)
     mockOpenAIInstance = (
       provider as unknown as { openai: typeof mockOpenAIInstance }
@@ -212,7 +214,8 @@ describe('OpenAIProvider', () => {
 
   describe('model management', () => {
     it('should set and get current model', () => {
-      expect(provider.getCurrentModel()).toBe('gpt-4.1');
+      // We set it to gpt-3.5-turbo in beforeEach to avoid Responses API
+      expect(provider.getCurrentModel()).toBe('gpt-3.5-turbo');
 
       provider.setModel('gpt-4o');
       expect(provider.getCurrentModel()).toBe('gpt-4o');

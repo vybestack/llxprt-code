@@ -31,7 +31,9 @@ export function getProviderManager(): ProviderManager {
       try {
         if (existsSync(USER_SETTINGS_PATH)) {
           const userContent = readFileSync(USER_SETTINGS_PATH, 'utf-8');
-          const userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
+          const userSettings = JSON.parse(
+            stripJsonComments(userContent),
+          ) as Settings;
           savedApiKeys = userSettings.providerApiKeys || {};
         }
       } catch (_error) {
@@ -41,11 +43,11 @@ export function getProviderManager(): ProviderManager {
       // Initialize with OpenAI provider if API key is available
       // Priority: CLI /key (in settings) > Environment variable > keyfile
       let openaiApiKey: string | undefined = savedApiKeys.openai;
-      
+
       if (!openaiApiKey) {
         openaiApiKey = process.env.OPENAI_API_KEY;
       }
-      
+
       if (!openaiApiKey) {
         try {
           const apiKeyPath = join(homedir(), '.openai_key');
@@ -54,21 +56,21 @@ export function getProviderManager(): ProviderManager {
           // No OpenAI keyfile available, that's OK
         }
       }
-      
+
       if (openaiApiKey) {
         const openaiProvider = new OpenAIProvider(openaiApiKey);
         providerManagerInstance.registerProvider(openaiProvider);
         console.debug('OpenAI provider registered (not active by default)');
       }
-      
+
       // Initialize with Anthropic provider if API key is available
       // Priority: CLI /key (in settings) > Environment variable > keyfile
       let anthropicApiKey: string | undefined = savedApiKeys.anthropic;
-      
+
       if (!anthropicApiKey) {
         anthropicApiKey = process.env.ANTHROPIC_API_KEY;
       }
-      
+
       if (!anthropicApiKey) {
         try {
           const apiKeyPath = join(homedir(), '.anthropic_key');
@@ -77,7 +79,7 @@ export function getProviderManager(): ProviderManager {
           // No Anthropic keyfile available, that's OK
         }
       }
-      
+
       if (anthropicApiKey) {
         const anthropicProvider = new AnthropicProvider(anthropicApiKey);
         providerManagerInstance.registerProvider(anthropicProvider);

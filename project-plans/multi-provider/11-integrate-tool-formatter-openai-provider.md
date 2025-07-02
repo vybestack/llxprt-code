@@ -10,6 +10,7 @@ To integrate the `ToolFormatter` into the `OpenAIProvider` so that it correctly 
 ## Background
 
 The OpenAIProvider now supports two paths:
+
 1. **Structured Path**: For providers that return tool calls as JSON (OpenAI, DeepSeek, Qwen) → Uses ToolFormatter
 2. **Text-Based Path**: For models that output tool calls as text (Gemma, Hermes, XML, Llama) → Uses TextToolCallParser
 

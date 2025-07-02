@@ -107,9 +107,15 @@ vi.mock('./useLogger.js', () => ({
 const mockStartNewTurn = vi.fn();
 const mockAddUsage = vi.fn();
 vi.mock('../contexts/SessionContext.js', () => ({
+  useSessionStatsDispatch: vi.fn(() => ({
+    startNewTurn: mockStartNewTurn,
+    addUsage: mockAddUsage,
+  })),
+  useSessionStatsState: vi.fn(() => ({})),
   useSessionStats: vi.fn(() => ({
     startNewTurn: mockStartNewTurn,
     addUsage: mockAddUsage,
+    stats: {},
   })),
 }));
 

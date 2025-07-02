@@ -20,6 +20,8 @@ import {
   getMCPDiscoveryState,
   getMCPServerStatus,
   AuthType,
+  initializeTelemetry,
+  shutdownTelemetry,
 } from '@google/gemini-cli-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {

@@ -24,6 +24,17 @@ import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { Settings } from '../../config/settings.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
+import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
+import { ConversationCache } from './ConversationCache.js';
+import {
+  estimateMessagesTokens,
+  estimateRemoteTokens,
+} from './estimateRemoteTokens.js';
+import {
+  parseResponsesStream,
+  parseErrorResponse,
+} from './parseResponsesStream.js';
+import { buildResponsesRequest } from './buildResponsesRequest.js';
 
 export class OpenAIProvider implements IProvider {
   name: string = 'openai';
@@ -34,6 +45,7 @@ export class OpenAIProvider implements IProvider {
   private settings?: Settings;
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
+  private conversationCache: ConversationCache;
 
   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
     if (!apiKey || apiKey.trim() === '') {
@@ -44,6 +56,7 @@ export class OpenAIProvider implements IProvider {
     this.baseURL = baseURL;
     this.settings = settings;
     this.toolFormatter = new ToolFormatter();
+    this.conversationCache = new ConversationCache();
     this.openai = new OpenAI({
       apiKey,
       baseURL,
@@ -94,6 +107,269 @@ export class OpenAIProvider implements IProvider {
     }
     // Default to OpenAI format
     return 'openai';
+  }
+
+  private shouldUseResponses(model: string): boolean {
+    // Check env flag override
+    if (process.env.OPENAI_RESPONSES_DISABLE === 'true') {
+      return false;
+    }
+
+    // Check if model starts with any of the responses API model prefixes
+    return RESPONSES_API_MODELS.some((responsesModel) =>
+      model.startsWith(responsesModel),
+    );
+  }
+
+  private async callResponsesEndpoint(
+    messages: IMessage[],
+    tools?: ITool[],
+    options?: {
+      stream?: boolean;
+      conversationId?: string;
+      parentId?: string;
+      tool_choice?: string | object;
+      stateful?: boolean;
+    },
+  ): Promise<AsyncIterableIterator<IMessage>> {
+    // For now, we only support stateless mode
+    if (options?.stateful) {
+      throw new Error('Stateful mode not yet implemented for Responses API');
+    }
+
+    // Check context usage and warn if getting close to limit
+    if (options?.conversationId && options?.parentId) {
+      const contextInfo = this.estimateContextUsage(
+        options.conversationId,
+        options.parentId,
+        messages,
+      );
+
+      // Warn if less than 4k tokens remaining
+      if (contextInfo.tokensRemaining < 4000) {
+        console.warn(
+          `[OpenAI] Warning: Only ${contextInfo.tokensRemaining} tokens remaining ` +
+            `(${contextInfo.contextUsedPercent.toFixed(1)}% context used). ` +
+            `Consider starting a new conversation.`,
+        );
+      }
+    }
+
+    // Check cache for existing conversation
+    if (options?.conversationId && options?.parentId) {
+      const cachedMessages = this.conversationCache.get(
+        options.conversationId,
+        options.parentId,
+      );
+      if (cachedMessages) {
+        // Return cached messages as an async iterable
+        return (async function* () {
+          for (const message of cachedMessages) {
+            yield message;
+          }
+        })();
+      }
+    }
+
+    // Format tools for Responses API
+    const formattedTools = tools
+      ? this.toolFormatter.toResponsesTool(tools)
+      : undefined;
+
+    // Build the request
+    const request = buildResponsesRequest({
+      model: this.currentModel,
+      messages,
+      tools: formattedTools,
+      stream: options?.stream ?? true,
+      conversationId: options?.conversationId,
+      parentId: options?.parentId,
+      tool_choice: options?.tool_choice,
+    });
+
+    // Debug log the request (commented out for production)
+    // console.log('[OpenAI] Sending request to Responses API:', JSON.stringify(request, null, 2));
+
+    // Make the API call
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    // Handle errors
+    if (!response.ok) {
+      const errorBody = await response.text();
+
+      // Handle 422 context_length_exceeded error
+      if (
+        response.status === 422 &&
+        errorBody.includes('context_length_exceeded')
+      ) {
+        console.warn(
+          '[OpenAI] Context length exceeded, invalidating cache and retrying stateless...',
+        );
+
+        // Invalidate the cache for this conversation
+        if (options?.conversationId && options?.parentId) {
+          this.conversationCache.invalidate(
+            options.conversationId,
+            options.parentId,
+          );
+        }
+
+        // Retry without conversation context (pure stateless)
+        const retryRequest = buildResponsesRequest({
+          model: this.currentModel,
+          messages,
+          tools: formattedTools,
+          stream: options?.stream ?? true,
+          // Omit conversationId and parentId for stateless retry
+          tool_choice: options?.tool_choice,
+        });
+
+        const retryResponse = await fetch(
+          'https://api.openai.com/v1/responses',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(retryRequest),
+          },
+        );
+
+        if (!retryResponse.ok) {
+          const retryErrorBody = await retryResponse.text();
+          throw parseErrorResponse(retryResponse.status, retryErrorBody);
+        }
+
+        // Use the retry response
+        return this.handleResponsesApiResponse(
+          retryResponse,
+          messages,
+          undefined, // No conversation context on retry
+          undefined,
+          options?.stream !== false,
+        );
+      }
+
+      throw parseErrorResponse(response.status, errorBody);
+    }
+
+    // Handle the response
+    return this.handleResponsesApiResponse(
+      response,
+      messages,
+      options?.conversationId,
+      options?.parentId,
+      options?.stream !== false,
+    );
+  }
+
+  private async handleResponsesApiResponse(
+    response: Response,
+    messages: IMessage[],
+    conversationId: string | undefined,
+    parentId: string | undefined,
+    isStreaming: boolean,
+  ): Promise<AsyncIterableIterator<IMessage>> {
+    // Handle streaming response
+    if (isStreaming && response.body) {
+      const collectedMessages: IMessage[] = [];
+      const cache = this.conversationCache;
+
+      return (async function* () {
+        for await (const message of parseResponsesStream(response.body!)) {
+          // Collect messages for caching
+          if (message.content || message.tool_calls) {
+            collectedMessages.push(message);
+          }
+
+          yield message;
+        }
+
+        // Cache the collected messages with token count
+        if (conversationId && parentId && collectedMessages.length > 0) {
+          // Get previous accumulated tokens
+          const previousTokens = cache.getAccumulatedTokens(
+            conversationId,
+            parentId,
+          );
+
+          // Calculate tokens for this request (messages + response)
+          const requestTokens = estimateMessagesTokens(messages);
+          const responseTokens = estimateMessagesTokens(collectedMessages);
+          const totalTokensForRequest = requestTokens + responseTokens;
+
+          // Update cache with new accumulated total
+          cache.set(
+            conversationId,
+            parentId,
+            collectedMessages,
+            previousTokens + totalTokensForRequest,
+          );
+        }
+      })();
+    }
+
+    // Handle non-streaming response
+    const data = await response.json();
+    const resultMessages: IMessage[] = [];
+
+    if (data.choices && data.choices.length > 0) {
+      const choice = data.choices[0];
+      const message: IMessage = {
+        role: choice.message.role as ContentGeneratorRole,
+        content: choice.message.content || '',
+      };
+
+      if (choice.message.tool_calls) {
+        message.tool_calls = choice.message.tool_calls;
+      }
+
+      if (data.usage) {
+        message.usage = {
+          prompt_tokens: data.usage.prompt_tokens,
+          completion_tokens: data.usage.completion_tokens,
+          total_tokens: data.usage.total_tokens,
+        };
+      }
+
+      resultMessages.push(message);
+    }
+
+    // Cache the result with token count
+    if (conversationId && parentId && resultMessages.length > 0) {
+      // Get previous accumulated tokens
+      const previousTokens = this.conversationCache.getAccumulatedTokens(
+        conversationId,
+        parentId,
+      );
+
+      // Calculate tokens for this request
+      const requestTokens = estimateMessagesTokens(messages);
+      const responseTokens = estimateMessagesTokens(resultMessages);
+      const totalTokensForRequest = requestTokens + responseTokens;
+
+      // Update cache with new accumulated total
+      this.conversationCache.set(
+        conversationId,
+        parentId,
+        resultMessages,
+        previousTokens + totalTokensForRequest,
+      );
+    }
+
+    return (async function* () {
+      for (const message of resultMessages) {
+        yield message;
+      }
+    })();
   }
 
   async getModels(): Promise<IModel[]> {
@@ -179,6 +455,20 @@ export class OpenAIProvider implements IProvider {
           );
         }
       }
+    }
+
+    // Check if we should use responses endpoint
+    if (this.shouldUseResponses(this.currentModel)) {
+      console.debug(
+        '[OpenAIProvider] Using Responses API for model:',
+        this.currentModel,
+      );
+      yield* await this.callResponsesEndpoint(messages, tools, {
+        stream: true,
+        tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
+        stateful: false, // Always stateless for Phase 22-01
+      });
+      return;
     }
 
     // Validate tool messages have required tool_call_id
@@ -383,5 +673,36 @@ export class OpenAIProvider implements IProvider {
 
   setToolFormatOverride(format: ToolFormat | null): void {
     this.toolFormatOverride = format || undefined;
+  }
+
+  /**
+   * Estimates the remote context usage for the current conversation
+   * @param conversationId The conversation ID
+   * @param parentId The parent message ID
+   * @param promptMessages The messages being sent in the current prompt
+   * @returns Context usage information including remote tokens
+   */
+  estimateContextUsage(
+    conversationId: string | undefined,
+    parentId: string | undefined,
+    promptMessages: IMessage[],
+  ) {
+    const promptTokens = estimateMessagesTokens(promptMessages);
+
+    return estimateRemoteTokens(
+      this.currentModel,
+      this.conversationCache,
+      conversationId,
+      parentId,
+      promptTokens,
+    );
+  }
+
+  /**
+   * Get the conversation cache instance
+   * @returns The conversation cache
+   */
+  getConversationCache(): ConversationCache {
+    return this.conversationCache;
   }
 }

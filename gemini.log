@@ -1,0 +1,10 @@
+
+> @google/gemini-cli@0.1.5 start
+> node scripts/start.js
+
+Checking build status...
+Build is up-to-date.
+OpenAI provider registered (not active by default)
+Anthropic provider registered (not active by default)
+[enhanceConfigWithProviders] Enhancing config with provider support
+No input provided via stdin.
