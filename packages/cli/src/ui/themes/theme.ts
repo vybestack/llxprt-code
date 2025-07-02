@@ -6,6 +6,25 @@
 
 import type { CSSProperties } from 'react';
 
+// Type for syntax highlighter theme styles
+// These come from react-syntax-highlighter and include additional properties
+interface HighlightJSStyle {
+  color?: string;
+  background?: string;
+  backgroundColor?: string;
+  display?: string;
+  fontStyle?: string;
+  fontWeight?: string;
+  textDecoration?: string;
+  textTransform?: string;
+  borderRight?: string;
+  paddingRight?: string;
+  paddingLeft?: string;
+  overflowX?: string;
+  padding?: string;
+  [key: string]: any; // Allow other CSS properties
+}
+
 export type ThemeType = 'light' | 'dark' | 'ansi';
 
 export interface ColorsTheme {
@@ -258,7 +277,7 @@ export class Theme {
   constructor(
     readonly name: string,
     readonly type: ThemeType,
-    rawMappings: Record<string, CSSProperties>,
+    rawMappings: Record<string, HighlightJSStyle>,
     readonly colors: ColorsTheme,
   ) {
     this._colorMap = Object.freeze(this._buildColorMap(rawMappings)); // Build and freeze the map
@@ -314,7 +333,7 @@ export class Theme {
    * @returns An Ink-compatible theme map (Record<string, string>).
    */
   protected _buildColorMap(
-    hljsTheme: Record<string, CSSProperties>,
+    hljsTheme: Record<string, HighlightJSStyle>,
   ): Record<string, string> {
     const inkTheme: Record<string, string> = {};
     for (const key in hljsTheme) {

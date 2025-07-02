@@ -64,9 +64,10 @@ import { useLogger } from './hooks/useLogger.js';
 import { StreamingContext } from './contexts/StreamingContext.js';
 import {
   SessionStatsProvider,
-  useSessionStatsState,
+  useSessionStats,
 } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
+import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 import * as fs from 'fs';
 import { UpdateNotification } from './components/UpdateNotification.js';
@@ -74,6 +75,7 @@ import { checkForUpdates } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
+import { PrivacyNotice } from './privacy/PrivacyNotice.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -98,6 +100,7 @@ export const AppWrapper = (props: AppProps) => (
 );
 
 const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
+  useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const { stdout } = useStdout();
 
@@ -111,7 +114,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     handleNewMessage,
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
-  const sessionStats = useSessionStatsState();
+  const { stats: sessionStats } = useSessionStats();
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -140,6 +143,11 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
+
+  const openPrivacyNotice = useCallback(() => {
+    setShowPrivacyNotice(true);
+  }, []);
 
   const errorCount = useMemo(
     () => consoleMessages.filter((msg) => msg.type === 'error').length,
@@ -157,7 +165,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     isAuthDialogOpen,
     openAuthDialog,
     handleAuthSelect,
-    handleAuthHighlight,
     isAuthenticating,
     cancelAuthentication,
   } = useAuthCommand(settings, setAuthError, config);
@@ -276,7 +283,8 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
         {
           type: MessageType.INFO,
           text: `⚡ Slow response times detected. Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ To avoid this you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+⚡ To avoid this you can either upgrade to Standard tier. See: https://goo.gle/set-up-gemini-code-assist
+⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
 ⚡ You can switch authentication methods by typing /auth`,
         },
         Date.now(),
@@ -310,6 +318,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     toggleCorgiMode,
     showToolDescriptions,
     setQuittingMessages,
+    openPrivacyNotice,
   );
   const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
@@ -377,18 +386,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
       // the user starts interacting with the app.
       enteringConstrainHeightMode = true;
       setConstrainHeight(true);
-
-      // If our pending history item happens to exceed the terminal height we will most likely need to refresh
-      // our static collection to ensure no duplication or tearing. This is currently working around a core bug
-      // in Ink which we have a PR out to fix: https://github.com/vadimdemedes/ink/pull/717
-      if (pendingHistoryItemRef.current && pendingHistoryItems.length > 0) {
-        const pendingItemDimensions = measureElement(
-          pendingHistoryItemRef.current,
-        );
-        if (pendingItemDimensions.height > availableTerminalHeight) {
-          refreshStatic();
-        }
-      }
     }
 
     if (key.ctrl && input === 'o') {
@@ -558,23 +555,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   }, [terminalWidth, terminalHeight, refreshStatic]);
 
   useEffect(() => {
-    if (!pendingHistoryItems.length) {
-      return;
-    }
-
-    const pendingItemDimensions = measureElement(
-      pendingHistoryItemRef.current!,
-    );
-
-    // If our pending history item happens to exceed the terminal height we will most likely need to refresh
-    // our static collection to ensure no duplication or tearing. This is currently working around a core bug
-    // in Ink which we have a PR out to fix: https://github.com/vadimdemedes/ink/pull/717
-    if (pendingItemDimensions.height > availableTerminalHeight) {
-      setStaticNeedsRefresh(true);
-    }
-  }, [pendingHistoryItems.length, availableTerminalHeight, streamingState]);
-
-  useEffect(() => {
     if (streamingState === StreamingState.Idle && staticNeedsRefresh) {
       setStaticNeedsRefresh(false);
       refreshStatic();
@@ -640,7 +620,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
           items={[
             <Box flexDirection="column" key="header">
               <Header terminalWidth={terminalWidth} />
-              <Tips config={config} />
+              {!settings.merged.hideTips && <Tips config={config} />}
               {updateMessage && <UpdateNotification message={updateMessage} />}
             </Box>,
             ...history.map((h) => (
@@ -728,7 +708,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
             <Box flexDirection="column">
               <AuthDialog
                 onSelect={handleAuthSelect}
-                onHighlight={handleAuthHighlight}
                 settings={settings}
                 initialErrorMessage={authError}
               />
@@ -763,6 +742,11 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 onModelSelected={handleModelSelection}
               />
             </Box>
+          ) : showPrivacyNotice ? (
+            <PrivacyNotice
+              onExit={() => setShowPrivacyNotice(false)}
+              config={config}
+            />
           ) : (
             <>
               <LoadingIndicator
@@ -895,11 +879,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
             showMemoryUsage={
               config.getDebugMode() || config.getShowMemoryUsage()
             }
-            promptTokenCount={sessionStats.currentResponse.promptTokenCount}
-            candidatesTokenCount={
-              sessionStats.currentResponse.candidatesTokenCount
-            }
-            totalTokenCount={sessionStats.cumulative.totalTokenCount}
+            promptTokenCount={sessionStats.lastPromptTokenCount}
           />
         </Box>
       </Box>

@@ -25,10 +25,6 @@ interface FooterProps {
   showErrorDetails: boolean;
   showMemoryUsage?: boolean;
   promptTokenCount: number;
-  candidatesTokenCount: number;
-  totalTokenCount: number;
-  conversationId?: string;
-  parentId?: string;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -41,39 +37,10 @@ export const Footer: React.FC<FooterProps> = ({
   errorCount,
   showErrorDetails,
   showMemoryUsage,
-  totalTokenCount,
-  conversationId,
-  parentId,
+  promptTokenCount,
 }) => {
-  // Check if we're using OpenAI provider with remote context
-  let limit = tokenLimit(model);
-  let percentage = limit > 0 ? totalTokenCount / limit : 0;
-  let remoteTokens = 0;
-
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-
-      // Check if it's OpenAI provider and we have conversation context
-      if (provider instanceof OpenAIProvider && conversationId && parentId) {
-        // Get remote context estimation
-        const contextInfo = provider.estimateContextUsage(
-          conversationId,
-          parentId,
-          [], // Empty array since we're just checking accumulated tokens
-        );
-
-        // Use the remote-aware context calculation
-        limit = contextInfo.maxTokens;
-        percentage = contextInfo.contextUsedPercent / 100;
-        remoteTokens = contextInfo.remoteTokens;
-      }
-    }
-  } catch (error) {
-    // Fallback to local calculation if there's any error
-    console.debug('Error getting remote context:', error);
-  }
+  const limit = tokenLimit(model);
+  const percentage = promptTokenCount / limit;
 
   return (
     <Box marginTop={1} justifyContent="space-between" width="100%">
@@ -118,11 +85,7 @@ export const Footer: React.FC<FooterProps> = ({
           {' '}
           {model}{' '}
           <Text color={Colors.Gray}>
-            ({Math.max(0, Math.round((1 - percentage) * 100))}% context left
-            {remoteTokens > 0
-              ? ` [${Math.round(remoteTokens / 1000)}k remote]`
-              : ''}
-            )
+            ({Math.max(0, Math.round((1 - percentage) * 100))}% context left)
           </Text>
         </Text>
         {corgiMode && (

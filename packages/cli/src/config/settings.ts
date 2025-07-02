@@ -63,6 +63,7 @@ export interface Settings {
 
   // UI setting. Does not display the ANSI-controlled terminal title.
   hideWindowTitle?: boolean;
+  hideTips?: boolean;
 
   // Provider configuration settings
   providerApiKeys?: Record<string, string>;

@@ -53,8 +53,6 @@ describe('ContextIndicator UI', () => {
         errorCount={0}
         showErrorDetails={false}
         promptTokenCount={1000}
-        candidatesTokenCount={500}
-        totalTokenCount={1500}
       />,
     );
 
@@ -84,10 +82,6 @@ describe('ContextIndicator UI', () => {
         errorCount={0}
         showErrorDetails={false}
         promptTokenCount={1000}
-        candidatesTokenCount={500}
-        totalTokenCount={1500}
-        conversationId="conv-123"
-        parentId="parent-456"
       />,
     );
 
@@ -116,10 +110,6 @@ describe('ContextIndicator UI', () => {
         errorCount={0}
         showErrorDetails={false}
         promptTokenCount={1000}
-        candidatesTokenCount={500}
-        totalTokenCount={1500}
-        conversationId="conv-123"
-        parentId="parent-456"
       />,
     );
 
@@ -143,10 +133,6 @@ describe('ContextIndicator UI', () => {
         errorCount={0}
         showErrorDetails={false}
         promptTokenCount={1000}
-        candidatesTokenCount={500}
-        totalTokenCount={1500}
-        conversationId="conv-123"
-        parentId="parent-456"
       />,
     );
 
@@ -171,10 +157,6 @@ describe('ContextIndicator UI', () => {
         errorCount={0}
         showErrorDetails={false}
         promptTokenCount={1000}
-        candidatesTokenCount={500}
-        totalTokenCount={1500}
-        conversationId="conv-123"
-        parentId="parent-456"
       />,
     );
 
@@ -194,8 +176,6 @@ describe('ContextIndicator UI', () => {
         errorCount={0}
         showErrorDetails={false}
         promptTokenCount={1000}
-        candidatesTokenCount={500}
-        totalTokenCount={1500}
         // No conversationId or parentId
       />,
     );

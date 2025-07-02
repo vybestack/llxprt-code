@@ -84,6 +84,7 @@ export const useSlashCommandProcessor = (
   toggleCorgiMode: () => void,
   showToolDescriptions: boolean = false,
   setQuittingMessages: (message: HistoryItem[]) => void,
+  openPrivacyNotice: () => void,
 ) => {
   const session = useSessionStats();
   const gitService = useMemo(() => {
@@ -111,18 +112,25 @@ export const useSlashCommandProcessor = (
           osVersion: message.osVersion,
           sandboxEnv: message.sandboxEnv,
           modelVersion: message.modelVersion,
+          selectedAuthType: message.selectedAuthType,
+          gcpProject: message.gcpProject,
         };
       } else if (message.type === MessageType.STATS) {
         historyItemContent = {
           type: 'stats',
-          stats: message.stats,
-          lastTurnStats: message.lastTurnStats,
           duration: message.duration,
+        };
+      } else if (message.type === MessageType.MODEL_STATS) {
+        historyItemContent = {
+          type: 'model_stats',
+        };
+      } else if (message.type === MessageType.TOOL_STATS) {
+        historyItemContent = {
+          type: 'tool_stats',
         };
       } else if (message.type === MessageType.QUIT) {
         historyItemContent = {
           type: 'quit',
-          stats: message.stats,
           duration: message.duration,
         };
       } else if (message.type === MessageType.COMPRESSION) {
@@ -132,10 +140,7 @@ export const useSlashCommandProcessor = (
         };
       } else {
         historyItemContent = {
-          type: message.type as
-            | MessageType.INFO
-            | MessageType.ERROR
-            | MessageType.USER,
+          type: message.type,
           text: message.content,
         };
       }
@@ -261,18 +266,37 @@ export const useSlashCommandProcessor = (
         },
       },
       {
+        name: 'privacy',
+        description: 'display the privacy notice',
+        action: (_mainCommand, _subCommand, _args) => {
+          openPrivacyNotice();
+        },
+      },
+      {
         name: 'stats',
         altName: 'usage',
-        description: 'check session stats',
-        action: (_mainCommand, _subCommand, _args) => {
+        description: 'check session stats. Usage: /stats [model|tools]',
+        action: (_mainCommand, subCommand, _args) => {
+          if (subCommand === 'model') {
+            addMessage({
+              type: MessageType.MODEL_STATS,
+              timestamp: new Date(),
+            });
+            return;
+          } else if (subCommand === 'tools') {
+            addMessage({
+              type: MessageType.TOOL_STATS,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
           const now = new Date();
-          const { sessionStartTime, cumulative, currentTurn } = session.stats;
+          const { sessionStartTime } = session.stats;
           const wallDuration = now.getTime() - sessionStartTime.getTime();
 
           addMessage({
             type: MessageType.STATS,
-            stats: cumulative,
-            lastTurnStats: currentTurn,
             duration: formatDuration(wallDuration),
             timestamp: new Date(),
           });
@@ -402,8 +426,8 @@ export const useSlashCommandProcessor = (
               const descLines = server.description.trim().split('\n');
               if (descLines) {
                 message += ':\n';
-                for (let i = 0; i < descLines.length; i++) {
-                  message += `    ${ansi.accentGreen(descLines[i])}\n`;
+                for (const descLine of descLines) {
+                  message += `    ${ansi.accentGreen(descLine)}\n`;
                 }
               } else {
                 message += '\n';
@@ -425,8 +449,8 @@ export const useSlashCommandProcessor = (
                   const descLines = tool.description.trim().split('\n');
                   if (descLines) {
                     message += ':\n';
-                    for (let i = 0; i < descLines.length; i++) {
-                      message += `      ${ansi.accentGreen(descLines[i])}\n`;
+                    for (const descLine of descLines) {
+                      message += `      ${ansi.accentGreen(descLine)}\n`;
                     }
                   } else {
                     message += '\n';
@@ -447,8 +471,8 @@ export const useSlashCommandProcessor = (
                     .trim()
                     .split('\n');
                   if (paramsLines) {
-                    for (let i = 0; i < paramsLines.length; i++) {
-                      message += `      ${ansi.accentGreen(paramsLines[i])}\n`;
+                    for (const paramsLine of paramsLines) {
+                      message += `      ${ansi.accentGreen(paramsLine)}\n`;
                     }
                   }
                 }
@@ -544,8 +568,8 @@ export const useSlashCommandProcessor = (
 
                 // If there are multiple lines, add proper indentation for each line
                 if (descLines) {
-                  for (let i = 0; i < descLines.length; i++) {
-                    message += `      ${ansi.accentGreen(descLines[i])}\n`;
+                  for (const descLine of descLines) {
+                    message += `      ${ansi.accentGreen(descLine)}\n`;
                   }
                 }
               } else {
@@ -784,6 +808,8 @@ export const useSlashCommandProcessor = (
           }
           const modelVersion = config?.getModel() || 'Unknown';
           const cliVersion = await getCliVersion();
+          const selectedAuthType = settings.merged.selectedAuthType || '';
+          const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || '';
           addMessage({
             type: MessageType.ABOUT,
             timestamp: new Date(),
@@ -791,6 +817,8 @@ export const useSlashCommandProcessor = (
             osVersion,
             sandboxEnv,
             modelVersion,
+            selectedAuthType,
+            gcpProject,
           });
         },
       },
@@ -859,7 +887,7 @@ export const useSlashCommandProcessor = (
       {
         name: 'chat',
         description:
-          'Manage conversation history. Usage: /chat <list|save|resume> [tag]',
+          'Manage conversation history. Usage: /chat <list|save|resume> <tag>',
         action: async (_mainCommand, subCommand, args) => {
           const tag = (args || '').trim();
           const logger = new Logger(config?.getSessionId() || '');
@@ -876,19 +904,27 @@ export const useSlashCommandProcessor = (
           if (!subCommand) {
             addMessage({
               type: MessageType.ERROR,
-              content: 'Missing command\nUsage: /chat <list|save|resume> [tag]',
+              content: 'Missing command\nUsage: /chat <list|save|resume> <tag>',
               timestamp: new Date(),
             });
             return;
           }
           switch (subCommand) {
             case 'save': {
+              if (!tag) {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: 'Missing tag. Usage: /chat save <tag>',
+                  timestamp: new Date(),
+                });
+                return;
+              }
               const history = chat.getHistory();
               if (history.length > 0) {
                 await logger.saveCheckpoint(chat?.getHistory() || [], tag);
                 addMessage({
                   type: MessageType.INFO,
-                  content: `Conversation checkpoint saved${tag ? ' with tag: ' + tag : ''}.`,
+                  content: `Conversation checkpoint saved with tag: ${tag}.`,
                   timestamp: new Date(),
                 });
               } else {
@@ -903,11 +939,19 @@ export const useSlashCommandProcessor = (
             case 'resume':
             case 'restore':
             case 'load': {
+              if (!tag) {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: 'Missing tag. Usage: /chat resume <tag>',
+                  timestamp: new Date(),
+                });
+                return;
+              }
               const conversation = await logger.loadCheckpoint(tag);
               if (conversation.length === 0) {
                 addMessage({
                   type: MessageType.INFO,
-                  content: `No saved checkpoint found${tag ? ' with tag: ' + tag : ''}.`,
+                  content: `No saved checkpoint found with tag: ${tag}.`,
                   timestamp: new Date(),
                 });
                 return;
@@ -982,7 +1026,7 @@ export const useSlashCommandProcessor = (
         description: 'exit the cli',
         action: async (mainCommand, _subCommand, _args) => {
           const now = new Date();
-          const { sessionStartTime, cumulative } = session.stats;
+          const { sessionStartTime } = session.stats;
           const wallDuration = now.getTime() - sessionStartTime.getTime();
 
           setQuittingMessages([
@@ -993,7 +1037,6 @@ export const useSlashCommandProcessor = (
             },
             {
               type: 'quit',
-              stats: cumulative,
               duration: formatDuration(wallDuration),
               id: now.getTime(),
             },
@@ -1544,6 +1587,7 @@ Supported formats:
     toggleCorgiMode,
     savedChatTags,
     config,
+    settings,
     showToolDescriptions,
     session,
     gitService,
@@ -1552,7 +1596,7 @@ Supported formats:
     setQuittingMessages,
     pendingCompressionItemRef,
     setPendingCompressionItem,
-    settings,
+    openPrivacyNotice,
   ]);
 
   const handleSlashCommand = useCallback(

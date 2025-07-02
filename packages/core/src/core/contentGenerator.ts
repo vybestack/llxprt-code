@@ -37,7 +37,7 @@ export interface ContentGenerator {
 }
 
 export enum AuthType {
-  LOGIN_WITH_GOOGLE_PERSONAL = 'oauth-personal',
+  LOGIN_WITH_GOOGLE = 'oauth-personal',
   USE_GEMINI = 'gemini-api-key',
   USE_VERTEX_AI = 'vertex-ai',
   USE_PROVIDER = 'provider',
@@ -70,11 +70,10 @@ export async function createContentGeneratorConfig(
   };
 
   // if we are using google auth nothing else to validate for now
-  if (authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
+  if (authType === AuthType.LOGIN_WITH_GOOGLE) {
     return contentGeneratorConfig;
   }
 
-  //
   if (authType === AuthType.USE_GEMINI && geminiApiKey) {
     contentGeneratorConfig.apiKey = geminiApiKey;
     contentGeneratorConfig.model = await getEffectiveModel(
@@ -106,6 +105,7 @@ export async function createContentGeneratorConfig(
 
 export async function createContentGenerator(
   config: ContentGeneratorConfig,
+  sessionId?: string,
 ): Promise<ContentGenerator> {
   const version = process.env.CLI_VERSION || process.version;
   const httpOptions = {
@@ -124,8 +124,12 @@ export async function createContentGenerator(
     return new ProviderContentGenerator(config.providerManager, config);
   }
 
-  if (config.authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
-    return createCodeAssistContentGenerator(httpOptions, config.authType);
+  if (config.authType === AuthType.LOGIN_WITH_GOOGLE) {
+    return createCodeAssistContentGenerator(
+      httpOptions,
+      config.authType,
+      sessionId,
+    );
   }
 
   if (
