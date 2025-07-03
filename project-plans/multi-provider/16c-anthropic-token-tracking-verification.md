@@ -49,7 +49,6 @@ ls packages/cli/src/providers/tokenizers/AnthropicTokenizer.ts
    ```
 
 2. **Send messages and observe context percentage:**
-
    - Initial message should show < 100% context left
    - Each message should decrease available context
    - Context percentage should reflect 200k token limit

@@ -180,18 +180,15 @@ Goodbye! 👋
 ## Troubleshooting
 
 1. **"No OpenAI API key found"**
-
    - Make sure `~/.openai_key` exists and contains valid API key
    - Check file permissions: `ls -la ~/.openai_key`
 
 2. **"Connection error" in tests**
-
    - Check internet connection
    - Verify API key is valid
    - OpenAI API might be down
 
 3. **"Model does not exist"**
-
    - Some models require specific API access
    - Try with `gpt-3.5-turbo` which is widely available
 

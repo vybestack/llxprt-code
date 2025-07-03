@@ -11,10 +11,13 @@
     npm run lint
     ```
 3.  **Run Tests for OpenAIProvider Implementation:**
+
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
+
     - **Expected Output:** All tests in `OpenAIProvider.test.ts` should pass, including the new tests for `getModels` and the existing tests for `generateChatCompletion`.
+
 4.  **Verify `OpenAIProvider.ts` Implementation Details:**
     - Ensure `getModels` no longer throws `NotYetImplemented`:
       ```bash

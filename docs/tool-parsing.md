@@ -11,7 +11,6 @@ Many open-source and specialized models don't support OpenAI's structured tool c
 The system consists of two parallel paths for tool extraction:
 
 1. **Structured Path**: For providers that return tool calls as JSON objects (OpenAI, Anthropic)
-
    - Provider → ToolFormatter → Standard format → Execution
 
 2. **Text-Based Path**: For models that embed tool calls in text (Gemma, Hermes, DeepSeek, Llama)
@@ -232,21 +231,18 @@ This will show:
 ### Common Issues
 
 1. **Tool calls not detected**:
-
    - Check if model is in `textToolCallModels` list
    - Verify the format matches a supported pattern
    - Look for debug logs showing parsing attempts
    - Try manually overriding with `/toolformat text`
 
 2. **Malformed arguments**:
-
    - Parser logs failed JSON parsing attempts
    - Check for proper escaping of quotes in arguments
    - Verify JSON structure is valid
    - Common issue: nested quotes not escaped
 
 3. **Partial tool calls**:
-
    - Ensure complete markers are present (opening and closing tags)
    - Check for truncated responses from the model
    - May need to increase max_tokens for the model
@@ -297,7 +293,6 @@ export DEBUG=parser:*
 ```
 
 3. **Check Parser Patterns**:
-
    - Look in `TextToolCallParser.ts` for supported patterns
    - Verify your model's format matches one of them
    - Add custom pattern if needed
@@ -311,19 +306,16 @@ export DEBUG=parser:*
 ### Pattern Regex Explanations
 
 1. **Gemma Format** (`[TOOL_REQUEST]`):
-
    - Matches: `[TOOL_REQUEST]\nfunction_name {args}\n[TOOL_REQUEST_END]`
    - Captures: function name and JSON arguments
    - Multiline with optional whitespace
 
 2. **JSON with END_TOOL_REQUEST**:
-
    - Matches: `{"name": "func", "arguments": {...}}[END_TOOL_REQUEST]`
    - Supports optional line numbers (e.g., `1 {"name"...`)
    - Flexible whitespace handling
 
 3. **Hermes XML Format**:
-
    - Matches: `<tool_call>{...}</tool_call>`
    - Extracts JSON from within XML tags
    - Handles nested XML properly

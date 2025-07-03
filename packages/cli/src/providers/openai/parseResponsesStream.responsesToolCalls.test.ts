@@ -104,8 +104,10 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
 
     const toolCallMessages = messages.filter((m) => m.tool_calls);
     expect(toolCallMessages).toHaveLength(2);
-    
-    const tool1 = toolCallMessages.find(m => m.tool_calls?.[0].function.name === 'tool1');
+
+    const tool1 = toolCallMessages.find(
+      (m) => m.tool_calls?.[0].function.name === 'tool1',
+    );
     expect(tool1?.tool_calls?.[0]).toEqual({
       id: 'call_001',
       type: 'function',
@@ -115,7 +117,9 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       },
     });
 
-    const tool2 = toolCallMessages.find(m => m.tool_calls?.[0].function.name === 'tool2');
+    const tool2 = toolCallMessages.find(
+      (m) => m.tool_calls?.[0].function.name === 'tool2',
+    );
     expect(tool2?.tool_calls?.[0]).toEqual({
       id: 'call_002',
       type: 'function',
@@ -166,7 +170,9 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     }
 
     // Should have content message and tool call message
-    expect(messages.some((m) => m.content === 'Let me search for that...')).toBe(true);
+    expect(
+      messages.some((m) => m.content === 'Let me search for that...'),
+    ).toBe(true);
     expect(messages.some((m) => m.tool_calls)).toBe(true);
   });
 

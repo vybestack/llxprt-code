@@ -290,7 +290,7 @@ export async function getGoogleAccountId(
       return null;
     }
 
-    const userInfo = await response.json() as { id?: string };
+    const userInfo = (await response.json()) as { id?: string };
     return userInfo.id || null;
   } catch (error) {
     console.error('Error retrieving Google Account ID:', error);

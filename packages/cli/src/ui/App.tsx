@@ -96,6 +96,22 @@ function getDisplayModelName(config: Config): string {
   return config.getModel();
 }
 
+/**
+ * Get the payment mode status from the current provider
+ */
+function getProviderPaymentMode(): boolean | undefined {
+  try {
+    const providerManager = getProviderManager();
+    if (providerManager.hasActiveProvider()) {
+      const provider = providerManager.getActiveProvider();
+      return provider.isPaidMode?.();
+    }
+  } catch (_e) {
+    // Return undefined if we can't determine payment mode
+  }
+  return undefined;
+}
+
 interface AppProps {
   config: Config;
   settings: LoadedSettings;
@@ -124,6 +140,39 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   const { stats: sessionStats } = useSessionStats();
+
+  // Add payment mode warning to startup warnings only at startup
+  const allStartupWarnings = useMemo(() => {
+    const warnings = [...startupWarnings];
+
+    // Only show payment warnings at startup (when history is empty)
+    if (history.length === 0) {
+      try {
+        const providerManager = getProviderManager();
+        if (providerManager.hasActiveProvider()) {
+          const provider = providerManager.getActiveProvider();
+          const isPaidMode = provider.isPaidMode?.();
+
+          if (isPaidMode !== undefined) {
+            if (isPaidMode) {
+              warnings.push(
+                `⚠️  PAID MODE: You are using ${provider.name} with API credentials - usage will be charged to your account`,
+              );
+            } else if (provider.name === 'gemini') {
+              warnings.push(
+                `✅ FREE MODE: You are using Gemini with OAuth authentication - no charges will apply`,
+              );
+            }
+          }
+        }
+      } catch (_e) {
+        // Ignore errors when checking payment mode
+      }
+    }
+
+    return warnings;
+  }, [startupWarnings, history]);
+  const [transientWarnings, setTransientWarnings] = useState<string[]>([]);
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -140,6 +189,17 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   const [footerHeight, setFooterHeight] = useState<number>(0);
   const [corgiMode, setCorgiMode] = useState(false);
   const [currentModel, setCurrentModel] = useState(getDisplayModelName(config));
+  const [isPaidMode, setIsPaidMode] = useState<boolean | undefined>(
+    getProviderPaymentMode(),
+  );
+  const [lastProvider, setLastProvider] = useState<string | undefined>(() => {
+    try {
+      const providerManager = getProviderManager();
+      return providerManager.getActiveProvider().name;
+    } catch (_e) {
+      return undefined;
+    }
+  });
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -195,7 +255,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, setEditorError, addItem);
 
-
   const providerModelDialog = useProviderModelDialog({
     addMessage: (m) =>
       addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
@@ -205,6 +264,55 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
+
+  // Function to manually check and show payment mode change
+  const checkPaymentModeChange = useCallback((forcePreviousProvider?: string) => {
+    const newPaymentMode = getProviderPaymentMode();
+    let currentProviderName: string | undefined;
+    
+    try {
+      const providerManager = getProviderManager();
+      const provider = providerManager.getActiveProvider();
+      currentProviderName = provider.name;
+    } catch (_e) {
+      // ignore
+    }
+    
+    // Use forced previous provider if provided, otherwise use state
+    const previousProvider = forcePreviousProvider || lastProvider;
+    
+    // Check for both payment mode changes and provider changes
+    const providerChanged = currentProviderName && currentProviderName !== previousProvider;
+    const paymentModeChanged = newPaymentMode !== isPaidMode && newPaymentMode !== undefined;
+    
+    // For provider changes, always show banner. For other changes, only after startup
+    if ((paymentModeChanged || providerChanged) && (providerChanged || history.length > 0)) {
+      setIsPaidMode(newPaymentMode);
+      setLastProvider(currentProviderName);
+      
+      try {
+        const providerManager = getProviderManager();
+        const provider = providerManager.getActiveProvider();
+        
+        if (newPaymentMode === true) {
+          // Switching to paid mode (or paid provider)
+          setTransientWarnings([
+            `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+          ]);
+        } else if (newPaymentMode === false && provider.name === 'gemini') {
+          // Switching to free mode (only for Gemini)
+          setTransientWarnings([
+            `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+          ]);
+        }
+        
+        // Clear the warning after 10 seconds
+        setTimeout(() => setTransientWarnings([]), 10000);
+      } catch (_e) {
+        // ignore
+      }
+    }
+  }, [isPaidMode, lastProvider, history.length]);
 
   const performMemoryRefresh = useCallback(async () => {
     addItem(
@@ -257,6 +365,37 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
       if (displayModel !== currentModel) {
         setCurrentModel(displayModel);
       }
+
+      // Also update payment mode
+      const paymentMode = getProviderPaymentMode();
+      if (paymentMode !== isPaidMode) {
+        setIsPaidMode(paymentMode);
+        
+        // Show banner on any payment mode change (not at startup)
+        if (paymentMode !== undefined && isPaidMode !== undefined && history.length > 0) {
+          try {
+            const providerManager = getProviderManager();
+            const provider = providerManager.getActiveProvider();
+            
+            if (paymentMode === true) {
+              // Switching to paid mode
+              setTransientWarnings([
+                `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+              ]);
+            } else if (paymentMode === false && provider.name === 'gemini') {
+              // Switching to free mode (only for Gemini)
+              setTransientWarnings([
+                `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+              ]);
+            }
+            
+            // Clear the warning after 10 seconds
+            setTimeout(() => setTransientWarnings([]), 10000);
+          } catch (_e) {
+            // ignore
+          }
+        }
+      }
     };
 
     // Check immediately and then periodically
@@ -264,7 +403,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     const interval = setInterval(checkModelChange, 1000); // Check every second
 
     return () => clearInterval(interval);
-  }, [config, currentModel]);
+  }, [config, currentModel, isPaidMode, history.length]);
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -312,6 +451,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     showToolDescriptions,
     setQuittingMessages,
     openPrivacyNotice,
+    checkPaymentModeChange,
   );
   const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
@@ -654,7 +794,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
         {showHelp && <Help commands={slashCommands} />}
 
         <Box flexDirection="column" ref={mainControlsRef}>
-          {startupWarnings.length > 0 && (
+          {(allStartupWarnings.length > 0 || transientWarnings.length > 0) && (
             <Box
               borderStyle="round"
               borderColor={Colors.AccentYellow}
@@ -662,7 +802,12 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
               marginY={1}
               flexDirection="column"
             >
-              {startupWarnings.map((warning, index) => (
+              {allStartupWarnings.map((warning, index) => (
+                <Text key={index} color={Colors.AccentYellow}>
+                  {warning}
+                </Text>
+              ))}
+              {transientWarnings.map((warning, index) => (
                 <Text key={index} color={Colors.AccentYellow}>
                   {warning}
                 </Text>
@@ -865,6 +1010,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
               config.getDebugMode() || config.getShowMemoryUsage()
             }
             promptTokenCount={sessionStats.lastPromptTokenCount}
+            isPaidMode={isPaidMode}
           />
         </Box>
       </Box>

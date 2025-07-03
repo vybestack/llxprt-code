@@ -23,6 +23,7 @@ interface FooterProps {
   showErrorDetails: boolean;
   showMemoryUsage?: boolean;
   promptTokenCount: number;
+  isPaidMode?: boolean;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -36,6 +37,7 @@ export const Footer: React.FC<FooterProps> = ({
   showErrorDetails,
   showMemoryUsage,
   promptTokenCount,
+  isPaidMode,
 }) => {
   const limit = tokenLimit(model);
   const percentage = promptTokenCount / limit;
@@ -86,6 +88,14 @@ export const Footer: React.FC<FooterProps> = ({
             ({Math.max(0, Math.round((1 - percentage) * 100))}% context left)
           </Text>
         </Text>
+        {isPaidMode !== undefined && (
+          <Text>
+            <Text color={Colors.Gray}> | </Text>
+            <Text color={isPaidMode ? Colors.AccentYellow : Colors.AccentGreen}>
+              {isPaidMode ? 'paid mode' : 'free mode'}
+            </Text>
+          </Text>
+        )}
         {corgiMode && (
           <Text>
             <Text color={Colors.Gray}>| </Text>

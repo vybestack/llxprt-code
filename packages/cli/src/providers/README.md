@@ -109,23 +109,19 @@ Similar setup will be available for Anthropic once implemented.
 ### Common Issues
 
 1. **"No active provider set" error**:
-
    - This can occur after using a non-Gemini provider
    - Solution: Run `/provider gemini` to switch back to default
 
 2. **OpenAI 400 error "Missing parameter 'tool_call_id'"**:
-
    - This happens when tool responses don't include the required ID
    - The system now automatically handles this conversion
 
 3. **Model not found**:
-
    - Different providers have different model names
    - Use `/model` without arguments to see available models
    - Example: OpenAI uses `gpt-4` while Gemini uses `gemini-pro`
 
 4. **Authentication errors**:
-
    - Ensure your API key is correctly set up
    - Check file permissions on `~/.openai_key` (should be readable)
    - Verify the API key is valid and has appropriate permissions

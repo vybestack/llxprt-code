@@ -25,19 +25,16 @@ Both paths output the same `IMessage['tool_calls']` format, but they arrive ther
 ## Checklist (implementer)
 
 - [ ] Verify current tool execution logic location:
-
   - [ ] Check where tool calls from `generateChatCompletion` are executed
   - [ ] Confirm it operates on `IMessage['tool_calls']` format
   - [ ] Ensure it doesn't assume a specific source (structured vs text)
 
 - [ ] Test both paths end-to-end:
-
   - [ ] Structured: OpenAI/Anthropic → ToolFormatter → Execution
   - [ ] Text-based: Gemma/Hermes → TextToolCallParser → Execution
   - [ ] Mixed: Multiple tool calls from different sources
 
 - [ ] Handle edge cases:
-
   - [ ] Tool calls with missing IDs (text-parsed often generate IDs)
   - [ ] Malformed arguments that passed parsing but fail execution
   - [ ] Multiple sequential tool calls

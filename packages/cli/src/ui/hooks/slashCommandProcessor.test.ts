@@ -88,7 +88,7 @@ vi.mock('./useShowMemoryCommand.js', () => ({
 
 vi.mock('open', () => ({
   default: vi.fn(),
-}))
+}));
 
 vi.mock('../../providers/providerManagerInstance.js', () => ({
   getProviderManager: vi.fn(),
@@ -519,13 +519,15 @@ describe('useSlashCommandProcessor', () => {
         getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
         setModel: vi.fn(),
       };
-      
+
       mockProviderManager = {
         getActiveProvider: vi.fn().mockReturnValue(mockActiveProvider),
         hasActiveProvider: vi.fn().mockReturnValue(true),
       };
-      
-      (getProviderManager as ReturnType<typeof vi.fn>).mockReturnValue(mockProviderManager);
+
+      (getProviderManager as ReturnType<typeof vi.fn>).mockReturnValue(
+        mockProviderManager,
+      );
     });
 
     it('/model should open model dialog and return true', async () => {
@@ -546,7 +548,9 @@ describe('useSlashCommandProcessor', () => {
       });
 
       expect(mockOpenProviderModelDialog).not.toHaveBeenCalled();
-      expect(mockActiveProvider.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(mockActiveProvider.setModel).toHaveBeenCalledWith(
+        'gemini-2.5-flash',
+      );
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -565,7 +569,9 @@ describe('useSlashCommandProcessor', () => {
         commandResult = await handleSlashCommand('/model gemini-2.5-pro');
       });
 
-      expect(mockActiveProvider.setModel).toHaveBeenCalledWith('gemini-2.5-pro');
+      expect(mockActiveProvider.setModel).toHaveBeenCalledWith(
+        'gemini-2.5-pro',
+      );
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,

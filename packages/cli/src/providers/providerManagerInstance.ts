@@ -39,7 +39,7 @@ export function getProviderManager(): ProviderManager {
       // Register GeminiProvider
       const geminiProvider = new GeminiProvider();
       providerManagerInstance.registerProvider(geminiProvider);
-      
+
       // If there's a saved Gemini API key, apply it
       if (savedApiKeys.gemini) {
         geminiProvider.setApiKey(savedApiKeys.gemini);

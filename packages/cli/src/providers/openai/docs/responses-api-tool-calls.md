@@ -25,12 +25,15 @@ The Responses API uses a different event structure than the Chat Completions API
 The parser maintains a `Map` of in-progress function calls:
 
 ```typescript
-const functionCalls = new Map<string, {
-  id: string;           // call_id or item.id
-  name: string;         // function name
-  arguments: string;    // accumulated JSON arguments
-  output_index: number; // position in output array
-}>();
+const functionCalls = new Map<
+  string,
+  {
+    id: string; // call_id or item.id
+    name: string; // function name
+    arguments: string; // accumulated JSON arguments
+    output_index: number; // position in output array
+  }
+>();
 ```
 
 ### Event Processing
@@ -83,6 +86,7 @@ Tool calls are yielded in the standard format expected by the rest of the system
 ## Testing
 
 See `parseResponsesStream.responsesToolCalls.test.ts` for comprehensive test coverage including:
+
 - Basic tool call parsing
 - Streaming argument assembly
 - Multiple concurrent tool calls

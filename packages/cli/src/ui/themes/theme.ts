@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-
 // Type for syntax highlighter theme styles
 // These come from react-syntax-highlighter and include additional properties
 interface HighlightJSStyle {

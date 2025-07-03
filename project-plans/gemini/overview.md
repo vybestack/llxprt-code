@@ -7,6 +7,7 @@ This plan addresses the current dual-path architecture where Gemini operates bot
 ## Current State
 
 ### Problems
+
 1. **Dual-Path Architecture**: Gemini works in two modes:
    - Legacy mode (when `activeProviderName = ''`)
    - Provider mode (when explicitly activated via `/provider gemini`)
@@ -24,11 +25,13 @@ This plan addresses the current dual-path architecture where Gemini operates bot
 ## Design Goals
 
 ### 1. Unified Provider Architecture
+
 - Make `GeminiProvider` always active by default (not empty `activeProviderName`)
 - Remove dual-path logic throughout the codebase
 - All Gemini interactions go through the provider interface
 
 ### 2. Authentication Strategy
+
 - **No auth prompt on startup** - only when needed
 - **GeminiProvider handles all auth types**:
   - OAuth (personal authentication)
@@ -37,11 +40,13 @@ This plan addresses the current dual-path architecture where Gemini operates bot
 - **Fallback hierarchy**: Vertex key → Gemini key → OAuth prompt
 
 ### 3. Model Management
+
 - **OAuth mode**: Return fixed list (gemini-2.5-pro, gemini-2.5-flash)
 - **API key modes**: Fetch real model list from API
 - **Consistent model naming**: Always use provider-prefixed format
 
 ### 4. Command Behavior
+
 - `/key` and `/keyfile` work immediately (no need to activate provider first)
 - `/model` always uses provider model dialog
 - `/auth` manages authentication mode within the provider

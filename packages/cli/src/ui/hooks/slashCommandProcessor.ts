@@ -82,6 +82,7 @@ export const useSlashCommandProcessor = (
   showToolDescriptions: boolean = false,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
+  checkPaymentModeChange?: (forcePreviousProvider?: string) => void,
 ) => {
   const session = useSessionStats();
   const gitService = useMemo(() => {
@@ -253,21 +254,21 @@ export const useSlashCommandProcessor = (
         description: 'change the auth method',
         action: async (_mainCommand, authMode, _args) => {
           const providerManager = getProviderManager();
-          
+
           // If no auth mode specified, open the dialog
           if (!authMode) {
             openAuthDialog();
             return;
           }
-          
+
           // Handle specific auth mode changes for Gemini provider
           try {
             const activeProvider = providerManager.getActiveProvider();
-            
+
             // Check if this is the Gemini provider
             if (activeProvider.name === 'gemini' && config) {
               const validModes = ['oauth', 'api-key', 'vertex'];
-              
+
               if (!validModes.includes(authMode)) {
                 addMessage({
                   type: MessageType.ERROR,
@@ -276,7 +277,7 @@ export const useSlashCommandProcessor = (
                 });
                 return;
               }
-              
+
               // Map the auth mode to the appropriate AuthType
               let authType: AuthType;
               switch (authMode) {
@@ -292,10 +293,10 @@ export const useSlashCommandProcessor = (
                 default:
                   authType = AuthType.LOGIN_WITH_GOOGLE;
               }
-              
+
               // Refresh auth with the new type
               await config.refreshAuth(authType);
-              
+
               addMessage({
                 type: MessageType.INFO,
                 content: `Switched to ${authMode} authentication mode`,
@@ -304,7 +305,8 @@ export const useSlashCommandProcessor = (
             } else {
               addMessage({
                 type: MessageType.ERROR,
-                content: 'Auth mode switching is only supported for the Gemini provider',
+                content:
+                  'Auth mode switching is only supported for the Gemini provider',
                 timestamp: new Date(),
               });
             }
@@ -737,20 +739,17 @@ export const useSlashCommandProcessor = (
             const fromProvider = currentProvider || 'none';
             providerManager.setActiveProvider(providerName);
 
-            // Refresh auth to use the new provider
-            if (config) {
-              const currentAuthType =
-                config.getContentGeneratorConfig()?.authType;
-              if (currentAuthType) {
-                await config.refreshAuth(currentAuthType);
-              }
-            }
-
             addMessage({
               type: MessageType.INFO,
               content: `Switched from ${fromProvider} to ${providerName}`,
               timestamp: new Date(),
             });
+            
+            // Trigger payment mode check to show banner when switching providers
+            // Pass the previous provider to ensure proper detection
+            if (checkPaymentModeChange) {
+              setTimeout(() => checkPaymentModeChange(fromProvider), 100);
+            }
           } catch (error) {
             addMessage({
               type: MessageType.ERROR,
@@ -1084,7 +1083,11 @@ export const useSlashCommandProcessor = (
             const providerName = activeProvider.name;
 
             // If no key provided or 'none', remove the key
-            if (!apiKey || apiKey.trim() === '' || apiKey.trim().toLowerCase() === 'none') {
+            if (
+              !apiKey ||
+              apiKey.trim() === '' ||
+              apiKey.trim().toLowerCase() === 'none'
+            ) {
               // Clear the API key
               if (activeProvider.setApiKey) {
                 activeProvider.setApiKey('');
@@ -1104,11 +1107,22 @@ export const useSlashCommandProcessor = (
                   await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
                 }
 
+                // Check payment mode after auth refresh
+                const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+                const paymentMessage = !isPaidMode && providerName === 'gemini'
+                  ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+                  : '';
+
                 addMessage({
                   type: MessageType.INFO,
-                  content: `API key removed for provider '${providerName}'`,
+                  content: `API key removed for provider '${providerName}'${paymentMessage}`,
                   timestamp: new Date(),
                 });
+                
+                // Trigger payment mode check to show banner
+                if (checkPaymentModeChange) {
+                  setTimeout(checkPaymentModeChange, 100);
+                }
               } else {
                 addMessage({
                   type: MessageType.ERROR,
@@ -1137,11 +1151,22 @@ export const useSlashCommandProcessor = (
                 await config.refreshAuth(AuthType.USE_GEMINI);
               }
 
+              // Check if we're now in paid mode
+              const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+              const paymentWarning = isPaidMode
+                ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
+                : '';
+
               addMessage({
                 type: MessageType.INFO,
-                content: `API key updated for provider '${providerName}'`,
+                content: `API key updated for provider '${providerName}'${paymentWarning}`,
                 timestamp: new Date(),
               });
+              
+              // Trigger payment mode check to show banner
+              if (checkPaymentModeChange) {
+                setTimeout(checkPaymentModeChange, 100);
+              }
             } else {
               addMessage({
                 type: MessageType.ERROR,
@@ -1232,11 +1257,22 @@ export const useSlashCommandProcessor = (
                   await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
                 }
 
+                // Check payment mode after auth refresh
+                const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+                const paymentMessage = !isPaidMode && providerName === 'gemini'
+                  ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+                  : '';
+
                 addMessage({
                   type: MessageType.INFO,
-                  content: `Keyfile removed for provider '${providerName}'`,
+                  content: `Keyfile removed for provider '${providerName}'${paymentMessage}`,
                   timestamp: new Date(),
                 });
+                
+                // Trigger payment mode check to show banner
+                if (checkPaymentModeChange) {
+                  setTimeout(checkPaymentModeChange, 100);
+                }
               } else {
                 addMessage({
                   type: MessageType.ERROR,
@@ -1275,11 +1311,22 @@ export const useSlashCommandProcessor = (
                 currentKeys,
               );
 
+              // Check if we're now in paid mode
+              const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+              const paymentWarning = isPaidMode
+                ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
+                : '';
+
               addMessage({
                 type: MessageType.INFO,
-                content: `API key loaded from ${resolvedPath} for provider '${providerName}'`,
+                content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
                 timestamp: new Date(),
               });
+              
+              // Trigger payment mode check to show banner
+              if (checkPaymentModeChange) {
+                setTimeout(checkPaymentModeChange, 100);
+              }
             } else {
               addMessage({
                 type: MessageType.ERROR,
@@ -1631,6 +1678,7 @@ Supported formats:
     pendingCompressionItemRef,
     setPendingCompressionItem,
     openPrivacyNotice,
+    checkPaymentModeChange,
   ]);
 
   const handleSlashCommand = useCallback(

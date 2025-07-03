@@ -11,7 +11,6 @@
     npm run lint
     ```
 3.  **Manual CLI Interaction Test:**
-
     - Start the CLI application:
       ```bash
       npm run start
@@ -19,7 +18,6 @@
     - Inside the running CLI, execute the following commands:
 
       **Test Structured Path (ToolFormatter):**
-
       - Set provider and model:
         ```
         /provider openai
@@ -35,7 +33,6 @@
         ```
 
       **Test Text-Based Path (TextToolCallParser):**
-
       - Set provider and model:
         ```
         /provider openai
@@ -52,7 +49,6 @@
         ```
 
       **Test Format Override:**
-
       - Override to text format:
         ```
         /toolformat text

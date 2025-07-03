@@ -3,9 +3,11 @@
 **⚠️ STOP after completing all tasks in this phase and wait for verification.**
 
 ## Goal
+
 Add billing warnings when users configure API keys that will result in charges.
 
 ## Deliverables
+
 - [ ] Warning on `/key` command for Gemini provider
 - [ ] Warning on keyfile detection during startup
 - [ ] Warning on `/auth` command showing billing status
@@ -14,13 +16,15 @@ Add billing warnings when users configure API keys that will result in charges.
 ## Implementation Checklist
 
 - [ ] Add billing warning to `/key` command in `packages/cli/src/ui/hooks/slashCommandProcessor.ts`:
+
   ```typescript
   // When setting key for gemini provider
   if (providerName === 'gemini') {
     addMessage({
       type: MessageType.WARNING,
-      content: '⚠️ Warning: Using a Gemini API key will result in charges to your Google Cloud account.\n' +
-               'To use Gemini CLI for free, use /auth with OAuth and remove any API keys.',
+      content:
+        '⚠️ Warning: Using a Gemini API key will result in charges to your Google Cloud account.\n' +
+        'To use Gemini CLI for free, use /auth with OAuth and remove any API keys.',
       timestamp: new Date(),
     });
   }
@@ -41,14 +45,17 @@ Add billing warnings when users configure API keys that will result in charges.
 - [ ] Create billing warning constants in `packages/cli/src/constants/billing.ts`:
   ```typescript
   export const BILLING_WARNINGS = {
-    API_KEY: '⚠️ Warning: Using a Gemini API key will result in charges to your Google Cloud account.\n' +
-             'To use Gemini CLI for free, use /auth with OAuth and remove any API keys.',
-    KEYFILE: '⚠️ A Gemini API key file was detected. This will result in charges to your Google Cloud account.\n' +
-             'To use Gemini CLI for free, remove the key file and use /auth with OAuth.',
+    API_KEY:
+      '⚠️ Warning: Using a Gemini API key will result in charges to your Google Cloud account.\n' +
+      'To use Gemini CLI for free, use /auth with OAuth and remove any API keys.',
+    KEYFILE:
+      '⚠️ A Gemini API key file was detected. This will result in charges to your Google Cloud account.\n' +
+      'To use Gemini CLI for free, remove the key file and use /auth with OAuth.',
   };
   ```
 
 ## Self-Verify Commands
+
 ```bash
 # Type checking should pass
 npm run typecheck
@@ -70,6 +77,7 @@ rm ~/.gemini_key
 ```
 
 ## Notes
+
 - Only show warnings for Gemini provider (OpenAI/Anthropic users expect billing)
 - Don't show warnings repeatedly in same session
 - OAuth users should never see billing warnings

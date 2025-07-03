@@ -3,9 +3,11 @@
 **⚠️ STOP after completing all tasks in this phase and wait for verification.**
 
 ## Goal
+
 Integrate rate limit information into the UI, showing wait progress and allowing cancellation.
 
 ## Deliverables
+
 - [ ] Rate limit status display in UI
 - [ ] Wait countdown/progress indicator
 - [ ] Cancellable wait with Ctrl+C handling
@@ -14,6 +16,7 @@ Integrate rate limit information into the UI, showing wait progress and allowing
 ## Implementation Checklist
 
 - [ ] Update `packages/core/src/core/client.ts` to pass rate limit info to CLI:
+
   ```typescript
   // Add to response handling
   if (response.headers['x-ratelimit-remaining']) {
@@ -36,6 +39,7 @@ Integrate rate limit information into the UI, showing wait progress and allowing
   - Implement cancellable wait with fallback option
 
 - [ ] Add rate limit handler in retry logic:
+
   ```typescript
   // After 3 failures, check for fallback model
   if (attemptCount >= 3 && settings.fallbackModel) {
@@ -52,6 +56,7 @@ Integrate rate limit information into the UI, showing wait progress and allowing
   - Offer to use fallback model or exit
 
 ## Self-Verify Commands
+
 ```bash
 # Type checking should pass
 npm run typecheck
@@ -67,6 +72,7 @@ cd packages/cli && npm test -- RateLimitStatus
 ```
 
 ## Notes
+
 - Wait UI should be non-blocking (user can still type commands)
 - Show estimated wait time based on reset timestamp
 - Clear indication when using fallback model

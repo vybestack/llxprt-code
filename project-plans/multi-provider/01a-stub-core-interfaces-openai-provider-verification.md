@@ -20,16 +20,22 @@
     npm run lint
     ```
 4.  **Run Tests for OpenAIProvider Stub:**
+
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
+
     - **Expected Output:** The tests should pass, confirming that `NotYetImplemented` errors are correctly thrown.
+
 5.  **Verify Stub Content (No Cheating):**
     - Ensure `OpenAIProvider.ts` contains `throw new Error('NotYetImplemented');` for `getModels` and `generateChatCompletion`.
+
     ```bash
     grep -q "throw new Error('NotYetImplemented');" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
     ```
+
     - Ensure `OpenAIProvider.test.ts` asserts `rejects.toThrow('NotYetImplemented')`.
+
     ```bash
     grep -q "rejects.toThrow('NotYetImplemented')" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```

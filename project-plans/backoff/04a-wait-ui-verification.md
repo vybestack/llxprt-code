@@ -3,49 +3,56 @@
 ## Verification Steps
 
 1. **Check rate limit info storage**:
+
    ```bash
    grep -n "lastRateLimitInfo" packages/core/src/core/client.ts
    # Should show rate limit info being stored
    ```
 
 2. **Verify RateLimitStatus component**:
+
    ```bash
    # Check component exists
    ls packages/cli/src/ui/components/RateLimitStatus.tsx
-   
+
    # Check component structure
    grep -n "remaining\|resetTime\|countdown" packages/cli/src/ui/components/RateLimitStatus.tsx
    # Should show rate limit display logic
    ```
 
 3. **Check useGeminiStream integration**:
+
    ```bash
    grep -n "rate.*limit\|wait" packages/cli/src/ui/hooks/useGeminiStream.ts
    # Should show rate limit handling
-   
-   grep -n "fallbackModel" packages/cli/src/ui/hooks/useGeminiStream.ts  
+
+   grep -n "fallbackModel" packages/cli/src/ui/hooks/useGeminiStream.ts
    # Should show fallback model usage after 3 failures
    ```
 
 4. **Verify Ctrl+C handling**:
+
    ```bash
    grep -n "SIGINT\|process.on" packages/cli/src/ui/hooks/useGeminiStream.ts
    # Should show signal handler for cancellation
    ```
 
 5. **Run type checking**:
+
    ```bash
    npm run typecheck
    # Must pass with no errors
    ```
 
 6. **Run component tests**:
+
    ```bash
    cd packages/cli && npm test -- RateLimitStatus
    # Tests must pass
    ```
 
 7. **Check for proper countdown**:
+
    ```bash
    # Look for interval/timeout for countdown updates
    grep -n "setInterval\|setTimeout" packages/cli/src/ui/components/RateLimitStatus.tsx

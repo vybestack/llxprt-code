@@ -58,7 +58,6 @@ grep -A5 "usage\?:" packages/core/src/providers/types.ts
    ```
 
 2. **Send messages and observe context percentage:**
-
    - Initial message should show < 100% context left
    - Each message should decrease available context
    - Context percentage should be accurate

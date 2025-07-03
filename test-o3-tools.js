@@ -3,7 +3,9 @@
 import fs from 'fs';
 import fetch from 'node-fetch';
 
-const apiKey = fs.readFileSync(process.env.HOME + '/.openai_key', 'utf8').trim();
+const apiKey = fs
+  .readFileSync(process.env.HOME + '/.openai_key', 'utf8')
+  .trim();
 
 async function testResponsesAPIWithTools() {
   const request = {
@@ -11,8 +13,8 @@ async function testResponsesAPIWithTools() {
     input: [
       {
         role: 'user',
-        content: 'What is the weather in San Francisco?'
-      }
+        content: 'What is the weather in San Francisco?',
+      },
     ],
     tools: [
       {
@@ -24,15 +26,15 @@ async function testResponsesAPIWithTools() {
           properties: {
             location: {
               type: 'string',
-              description: 'The city and state, e.g. San Francisco, CA'
-            }
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
           },
-          required: ['location']
+          required: ['location'],
         },
-        strict: null
-      }
+        strict: null,
+      },
     ],
-    stream: true
+    stream: true,
   };
 
   console.log('Sending request with tools...\n');
@@ -40,7 +42,7 @@ async function testResponsesAPIWithTools() {
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(request),
@@ -58,15 +60,15 @@ async function testResponsesAPIWithTools() {
   if (response.body) {
     const decoder = new TextDecoder();
     let buffer = '';
-    
+
     for await (const chunk of response.body) {
       buffer += decoder.decode(chunk, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
-      
+
       for (const line of lines) {
         if (line.trim() === '') continue;
-        
+
         // Only log tool-related events
         if (line.includes('tool') || line.includes('function')) {
           console.log(line);

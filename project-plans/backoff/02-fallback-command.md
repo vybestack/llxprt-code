@@ -3,9 +3,11 @@
 **⚠️ STOP after completing all tasks in this phase and wait for verification.**
 
 ## Goal
+
 Implement the `/fallback-model` command to allow users to configure an optional fallback model.
 
 ## Deliverables
+
 - [ ] `/fallback-model` command in slash command processor
 - [ ] Settings integration for fallback model persistence
 - [ ] Command help text and usage examples
@@ -14,6 +16,7 @@ Implement the `/fallback-model` command to allow users to configure an optional 
 ## Implementation Checklist
 
 - [ ] Add `fallbackModel` to settings schema in `packages/cli/src/config/settings.ts`:
+
   ```typescript
   fallbackModel?: string; // User-configured fallback model
   ```
@@ -25,6 +28,7 @@ Implement the `/fallback-model` command to allow users to configure an optional 
   - Validate model exists in available models list
 
 - [ ] Add command to help text with description:
+
   ```
   /fallback-model [model] - Set fallback model for rate limit scenarios (use 'none' to disable)
   ```
@@ -34,22 +38,24 @@ Implement the `/fallback-model` command to allow users to configure an optional 
 - [ ] Add fallback model info to `/settings` command output
 
 ## Self-Verify Commands
+
 ```bash
 # Type checking should pass
 npm run typecheck
 
-# Lint should pass  
+# Lint should pass
 npm run lint
 
 # Manual test (start CLI and test command)
 npm start
 # Try: /fallback-model
-# Try: /fallback-model gemini-2.5-flash  
+# Try: /fallback-model gemini-2.5-flash
 # Try: /fallback-model none
 # Try: /fallback-model invalid-model-name
 ```
 
 ## Notes
+
 - Command should work regardless of active provider
 - Model validation should check against all available models
 - Settings should persist across sessions

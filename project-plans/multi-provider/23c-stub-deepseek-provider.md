@@ -5,7 +5,7 @@ This worker must stop after completing the tasks in this phase.
 
 ## Goal
 
-Introduce a compile-time stub for a new `DeepSeekProvider` that subclasses our existing `OpenAIProvider`.  The stub must be registered in `ProviderManager` so that `/provider deepseek` is accepted by the CLI, but every API call throws `NotYetImplemented` until later phases.
+Introduce a compile-time stub for a new `DeepSeekProvider` that subclasses our existing `OpenAIProvider`. The stub must be registered in `ProviderManager` so that `/provider deepseek` is accepted by the CLI, but every API call throws `NotYetImplemented` until later phases.
 
 ## Deliverables
 
@@ -18,6 +18,7 @@ Introduce a compile-time stub for a new `DeepSeekProvider` that subclasses our e
 
 - [ ] **Create directory** `packages/cli/src/providers/deepseek/` if it does not exist.
 - [ ] **DeepSeekProvider.ts**
+
   ```ts
   import { OpenAIProvider } from '../openai/OpenAIProvider';
 
@@ -29,7 +30,10 @@ Introduce a compile-time stub for a new `DeepSeekProvider` that subclasses our e
   export class DeepSeekProvider extends OpenAIProvider {
     name: string = 'deepseek';
 
-    constructor(apiKey?: string, baseURL: string = 'https://api.deepseek.com/v1') {
+    constructor(
+      apiKey?: string,
+      baseURL: string = 'https://api.deepseek.com/v1',
+    ) {
       super(apiKey, baseURL);
     }
 
@@ -41,7 +45,9 @@ Introduce a compile-time stub for a new `DeepSeekProvider` that subclasses our e
     }
   }
   ```
+
 - [ ] **DeepSeekProvider.test.ts**
+
   ```ts
   import { describe, it, expect, beforeEach } from 'vitest';
   import { DeepSeekProvider } from './DeepSeekProvider';
@@ -67,12 +73,13 @@ Introduce a compile-time stub for a new `DeepSeekProvider` that subclasses our e
   ```
 
 - [ ] **Aggregate exports**
+
   ```ts
   // packages/cli/src/providers/index.ts
   export { DeepSeekProvider } from './deepseek/DeepSeekProvider.js';
   ```
 
-- [ ] **ProviderManager registration**  (constructor)
+- [ ] **ProviderManager registration** (constructor)
   ```ts
   import { DeepSeekProvider } from './deepseek/DeepSeekProvider.js';
   // …

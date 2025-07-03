@@ -50,12 +50,10 @@ With the introduction of text-based tool parsing alongside structured tool forma
 ### Integration Tests
 
 1. **Format Auto-Detection**
-
    - Switch models and verify format changes
    - Test models with same provider but different formats
 
 2. **Text Parsing Robustness**
-
    - Multiple formats in single response
    - Partial/malformed tool calls
    - Tool calls with complex nested arguments

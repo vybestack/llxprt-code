@@ -30,7 +30,6 @@ To verify the OpenAIProvider implementation works correctly with the real OpenAI
    ```
 
    **Expected Output:**
-
    - ✓ Model listing returns real OpenAI models
    - ✓ Chat completion generates actual response
    - ✓ Tool calling works with real API

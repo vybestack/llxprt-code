@@ -11,10 +11,13 @@
     npm run lint
     ```
 3.  **Run Tests for ProviderManager Implementation:**
+
     ```bash
     npm test packages/cli/src/providers/ProviderManager.test.ts
     ```
+
     - **Expected Output:** All tests in `ProviderManager.test.ts` should pass, including the new tests for Anthropic provider registration and activation.
+
 4.  **Verify `ProviderManager.ts` Integration Details:**
     - Ensure `AnthropicProvider` is imported:
       ```bash

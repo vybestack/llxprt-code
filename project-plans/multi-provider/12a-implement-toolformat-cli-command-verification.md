@@ -11,26 +11,33 @@
     npm run lint
     ```
 3.  **Manual CLI Interaction Test:**
-
     - Start the CLI application:
       ```bash
       npm run start
       ```
     - Inside the running CLI, execute the following commands and observe the output:
       - Set a valid tool format:
+
         ```
         /toolformat openai
         ```
+
         - **Expected:** Confirmation message that the tool format is set to 'openai'.
+
       - Set another valid tool format:
+
         ```
         /toolformat hermes
         ```
+
         - **Expected:** Confirmation message that the tool format is set to 'hermes'.
+
       - Attempt to set an invalid tool format:
+
         ```
         /toolformat unknown_format
         ```
+
         - **Expected:** An error message indicating that 'unknown_format' is not a valid tool format.
 
 4.  **Code Inspection (grep):**

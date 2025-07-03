@@ -34,6 +34,7 @@ export interface IProvider {
   setBaseUrl?(baseUrl?: string): void;
   getToolFormat?(): string;
   setToolFormatOverride?(format: string | null): void;
+  isPaidMode?(): boolean;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 }
 

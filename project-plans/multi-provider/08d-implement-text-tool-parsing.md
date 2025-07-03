@@ -77,7 +77,6 @@ tool_name {"param1":"value1"}
 ### Part C: Integrate Parser in Stream Processing
 
 - [ ] Modify the `generateChatCompletion` method in OpenAIProvider:
-
   - [ ] Add parser instance:
     ```typescript
     const parser = this.requiresTextToolCallParsing()
@@ -151,7 +150,6 @@ tool_name {"param1":"value1"}
 ### Part E: Add Configuration Option
 
 - [ ] Add setting to enable/disable text tool parsing:
-
   - [ ] Update Settings interface:
     ```typescript
     enableTextToolCallParsing?: boolean;

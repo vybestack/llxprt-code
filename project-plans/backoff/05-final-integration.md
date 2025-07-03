@@ -3,9 +3,11 @@
 **⚠️ STOP after completing all tasks in this phase and wait for verification.**
 
 ## Goal
+
 Complete the integration of all components and ensure the feature works end-to-end.
 
 ## Deliverables
+
 - [ ] Remove old Flash fallback code completely
 - [ ] Update documentation
 - [ ] Integration tests for new behavior
@@ -37,19 +39,23 @@ Complete the integration of all components and ensure the feature works end-to-e
   - Remove Flash fallback references
 
 - [ ] Create migration notice in `packages/cli/CHANGELOG.md`:
+
   ```markdown
   ## Breaking Changes
+
   - Removed automatic Flash fallback for rate-limited users
   - Rate limits now cause the CLI to wait for the model to become available
   - Use `/fallback-model <model>` to configure optional fallback behavior
-  
-  ## New Features  
+
+  ## New Features
+
   - `/fallback-model` command for configuring fallback models
   - Intelligent rate limit backoff using API headers
   - Billing warnings for API key usage
   ```
 
 ## Self-Verify Commands
+
 ```bash
 # Full test suite should pass
 npm test
@@ -66,6 +72,7 @@ grep -r "flashFallback\|onPersistent429" packages/ --exclude-dir=node_modules
 ```
 
 ## Notes
+
 - Ensure all old Flash fallback code is removed
 - Documentation should clearly explain the new behavior
 - Consider adding telemetry for fallback model usage

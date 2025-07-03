@@ -11,10 +11,13 @@
     npm run lint
     ```
 3.  **Run Tests for OpenAIProvider Implementation:**
+
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
+
     - **Expected Output:** All tests in `OpenAIProvider.test.ts` should pass, including those for both standard Chat Completions API and the new Responses API integration.
+
 4.  **Verify `OpenAIProvider.ts` Implementation Details:**
     - Ensure `RESPONSES_API_MODELS` array is defined:
       ```bash

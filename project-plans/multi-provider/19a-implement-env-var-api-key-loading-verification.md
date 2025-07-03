@@ -11,7 +11,6 @@
     npm run lint
     ```
 3.  **Manual CLI Interaction Test:**
-
     - Start the CLI application:
       ```bash
       npm run start

@@ -12,7 +12,6 @@ To verify that the text-based tool call parsing implementation correctly handles
 ### 1. Code Review
 
 - [ ] Verify TextToolCallParser implementation:
-
   - [ ] Correctly parses `[TOOL_REQUEST]...[TOOL_REQUEST_END]` format
   - [ ] Handles JSON parsing errors gracefully
   - [ ] Returns cleaned content without tool call markers

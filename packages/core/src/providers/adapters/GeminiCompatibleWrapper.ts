@@ -183,12 +183,46 @@ export class GeminiCompatibleWrapper {
       providerTools,
     );
 
+    // Collect all chunks to batch telemetry events
+    const collectedChunks: GenerateContentResponse[] = [];
+    let hasUsageMetadata = false;
+
     for await (const chunk of stream) {
       console.debug(
         '[GeminiCompatibleWrapper] Received chunk from provider:',
         JSON.stringify(chunk, null, 2),
       );
-      yield this.convertMessageToStreamResponse(chunk as ProviderMessage);
+      const response = this.convertMessageToStreamResponse(
+        chunk as ProviderMessage,
+      );
+      collectedChunks.push(response);
+
+      // Check if this chunk has usage metadata
+      if ((chunk as ProviderMessage).usage) {
+        hasUsageMetadata = true;
+      }
+
+      // Yield the response chunk immediately for UI updates
+      yield response;
+    }
+
+    // After streaming is complete, yield a final response with usage metadata if we collected any
+    // This mimics how geminiChat.ts logs telemetry after collecting all chunks
+    if (hasUsageMetadata && collectedChunks.length > 0) {
+      // Find the last chunk with usage metadata
+      const lastChunkWithUsage = [...collectedChunks].reverse().find((chunk) =>
+        // Check if any message in the chunk had usage data
+        chunk.candidates?.some((candidate) =>
+          candidate.content?.parts?.some((part: Part) => 'usage' in part),
+        ),
+      );
+
+      if (lastChunkWithUsage) {
+        // The telemetry will be logged by the consuming code when it sees the usage metadata
+        console.debug(
+          '[GeminiCompatibleWrapper] Stream complete, usage metadata was included in chunks',
+        );
+      }
     }
   }
 
@@ -289,7 +323,7 @@ export class GeminiCompatibleWrapper {
       '[GeminiCompatibleWrapper] convertContentsToMessages called with:',
       JSON.stringify(contents, null, 2).substring(0, 500),
     );
-    
+
     // Check if contents is undefined or null
     if (!contents) {
       console.error('[GeminiCompatibleWrapper] Contents is undefined or null!');
@@ -317,8 +351,10 @@ export class GeminiCompatibleWrapper {
 
     if (Array.isArray(contents)) {
       // Filter out any undefined/null elements
-      const validContents = contents.filter((item) => item !== undefined && item !== null);
-      
+      const validContents = contents.filter(
+        (item) => item !== undefined && item !== null,
+      );
+
       // If it's already an array, check if it's Content[] or PartUnion[]
       if (validContents.length === 0) {
         contentArray = [];
@@ -384,12 +420,18 @@ export class GeminiCompatibleWrapper {
     for (const content of contentArray) {
       // Validate content object
       if (!content || typeof content !== 'object') {
-        console.error('[GeminiCompatibleWrapper] Invalid content object:', content);
+        console.error(
+          '[GeminiCompatibleWrapper] Invalid content object:',
+          content,
+        );
         continue;
       }
-      
+
       if (!content.role) {
-        console.error('[GeminiCompatibleWrapper] Content missing role:', content);
+        console.error(
+          '[GeminiCompatibleWrapper] Content missing role:',
+          content,
+        );
         continue;
       }
       // Check for function responses (tool results)
@@ -581,7 +623,7 @@ export class GeminiCompatibleWrapper {
       }
     }
 
-    return {
+    const response: GenerateContentResponse = {
       candidates: [
         {
           content: {
@@ -591,5 +633,17 @@ export class GeminiCompatibleWrapper {
         },
       ],
     } as GenerateContentResponse;
+
+    // Include usage metadata if present in the message
+    // This ensures telemetry is only triggered when we have complete usage data
+    if (message.usage) {
+      response.usageMetadata = {
+        promptTokenCount: message.usage.prompt_tokens || 0,
+        candidatesTokenCount: message.usage.completion_tokens || 0,
+        totalTokenCount: message.usage.total_tokens || 0,
+      };
+    }
+
+    return response;
   }
 }

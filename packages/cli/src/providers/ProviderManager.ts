@@ -17,7 +17,7 @@ export class ProviderManager {
 
   registerProvider(provider: IProvider): void {
     this.providers.set(provider.name, provider);
-    
+
     // If this is the default provider and no provider is active, set it as active
     if (provider.isDefault && !this.activeProviderName) {
       this.activeProviderName = provider.name;

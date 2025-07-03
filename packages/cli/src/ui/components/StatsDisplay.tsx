@@ -59,7 +59,9 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, children }) => (
   <Box flexDirection="column" width="100%" marginBottom={1}>
-    <Text bold color={Colors.Foreground}>{title}</Text>
+    <Text bold color={Colors.Foreground}>
+      {title}
+    </Text>
     {children}
   </Box>
 );
@@ -79,16 +81,24 @@ const ModelUsageTable: React.FC<{
       {/* Header */}
       <Box>
         <Box width={nameWidth}>
-          <Text bold color={Colors.Foreground}>Model Usage</Text>
+          <Text bold color={Colors.Foreground}>
+            Model Usage
+          </Text>
         </Box>
         <Box width={requestsWidth} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>Reqs</Text>
+          <Text bold color={Colors.Foreground}>
+            Reqs
+          </Text>
         </Box>
         <Box width={inputTokensWidth} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>Input Tokens</Text>
+          <Text bold color={Colors.Foreground}>
+            Input Tokens
+          </Text>
         </Box>
         <Box width={outputTokensWidth} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>Output Tokens</Text>
+          <Text bold color={Colors.Foreground}>
+            Output Tokens
+          </Text>
         </Box>
       </Box>
       {/* Divider */}
@@ -109,7 +119,9 @@ const ModelUsageTable: React.FC<{
             <Text color={Colors.Foreground}>{name.replace('-001', '')}</Text>
           </Box>
           <Box width={requestsWidth} justifyContent="flex-end">
-            <Text color={Colors.Foreground}>{modelMetrics.api.totalRequests}</Text>
+            <Text color={Colors.Foreground}>
+              {modelMetrics.api.totalRequests}
+            </Text>
           </Box>
           <Box width={inputTokensWidth} justifyContent="flex-end">
             <Text color={Colors.Foreground}>
@@ -228,7 +240,9 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
           <Text color={Colors.Foreground}>{duration}</Text>
         </StatRow>
         <StatRow title="Agent Active:">
-          <Text color={Colors.Foreground}>{formatDuration(computed.agentActiveTime)}</Text>
+          <Text color={Colors.Foreground}>
+            {formatDuration(computed.agentActiveTime)}
+          </Text>
         </StatRow>
         <SubStatRow title="API Time:">
           <Text color={Colors.Foreground}>

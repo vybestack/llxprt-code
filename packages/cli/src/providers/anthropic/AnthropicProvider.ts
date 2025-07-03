@@ -610,4 +610,11 @@ export class AnthropicProvider implements IProvider {
 
     return fixedMessages;
   }
+
+  /**
+   * Anthropic always requires payment (API key)
+   */
+  isPaidMode(): boolean {
+    return true;
+  }
 }

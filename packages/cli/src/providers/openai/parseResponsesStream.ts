@@ -59,12 +59,15 @@ export async function* parseResponsesStream(
   let buffer = '';
 
   // Track function calls being assembled
-  const functionCalls = new Map<string, {
-    id: string;
-    name: string;
-    arguments: string;
-    output_index: number;
-  }>();
+  const functionCalls = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      arguments: string;
+      output_index: number;
+    }
+  >();
 
   try {
     while (true) {
@@ -120,7 +123,11 @@ export async function* parseResponsesStream(
 
               case 'response.function_call_arguments.delta':
                 // Accumulate function call arguments
-                if (event.item_id && event.delta && functionCalls.has(event.item_id)) {
+                if (
+                  event.item_id &&
+                  event.delta &&
+                  functionCalls.has(event.item_id)
+                ) {
                   const call = functionCalls.get(event.item_id)!;
                   call.arguments += event.delta;
                 }
@@ -128,28 +135,34 @@ export async function* parseResponsesStream(
 
               case 'response.output_item.done':
                 // Function call is complete, yield it
-                if (event.item?.type === 'function_call' && event.item.id && functionCalls.has(event.item.id)) {
+                if (
+                  event.item?.type === 'function_call' &&
+                  event.item.id &&
+                  functionCalls.has(event.item.id)
+                ) {
                   const call = functionCalls.get(event.item.id)!;
-                  
+
                   // Update with final data from the done event
                   if (event.item.arguments) {
                     call.arguments = event.item.arguments;
                   }
-                  
+
                   // Convert to tool_calls array format
                   yield {
                     role: ContentGeneratorRole.ASSISTANT,
                     content: '',
-                    tool_calls: [{
-                      id: call.id,
-                      type: 'function',
-                      function: {
-                        name: call.name,
-                        arguments: call.arguments,
+                    tool_calls: [
+                      {
+                        id: call.id,
+                        type: 'function',
+                        function: {
+                          name: call.name,
+                          arguments: call.arguments,
+                        },
                       },
-                    }],
+                    ],
                   };
-                  
+
                   // Remove the completed call
                   functionCalls.delete(event.item.id);
                 }

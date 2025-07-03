@@ -74,7 +74,6 @@ To implement proper token tracking and context percentage display for OpenAI pro
   ```
 
 - [ ] Create tokenizer utilities:
-
   - [ ] Create `packages/cli/src/providers/tokenizers/ITokenizer.ts`:
     ```typescript
     export interface ITokenizer {

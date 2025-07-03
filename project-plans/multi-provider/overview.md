@@ -63,14 +63,12 @@ Key goals include:
 ### Phase 1: Architectural Foundation & Configuration
 
 1.  **Define Core Interfaces (TypeScript):**
-
     - `IProvider`: Interface for all LLM providers, defining methods like `getModels()`, `generateCompletion()`, `generateChatCompletion()`, `getToolDefinitions()`.
     - `IModel`: Interface for LLM models, including properties like `id`, `name`, `provider`, `supportedToolFormats`.
     - `ITool`: Standardized internal representation of a tool.
     - `IMessage`: Standardized message format for conversation history.
 
 2.  **Centralized Configuration Management:**
-
     - Create a `config.ts` module (e.g., `packages/cli/src/config/providerConfig.ts`) to manage provider configurations.
     - This module will handle loading configurations from:
       - Command-line arguments (`/provider`, `/key`, `/keyfile`, `/baseurl`, `/toolformat`).
@@ -88,7 +86,6 @@ Key goals include:
 ### Phase 2: Provider Implementations & Tooling
 
 1.  **Develop `OpenAIProvider`:**
-
     - Create `packages/cli/src/providers/openai/OpenAIProvider.ts`.
     - Implement `IProvider` interface.
     - Integrate the `openai` npm package.
@@ -97,7 +94,6 @@ Key goals include:
     - Implement `getModels()` to dynamically fetch models from OpenAI.
 
 2.  **Develop `AnthropicProvider`:**
-
     - Create `packages/cli/src/providers/anthropic/AnthropicProvider.ts`.
     - Implement `IProvider` interface.
     - Integrate the `@anthropic-ai/sdk` npm package.
@@ -113,12 +109,10 @@ Key goals include:
 ### Phase 3: CLI Integration & Streaming
 
 1.  **Update CLI Command Handlers:**
-
     - Modify `packages/cli/src/index.ts` (or relevant command parsing logic) to recognize and handle new commands: `/provider`, `/model`, `/key`, `/keyfile`, `/baseurl`, `/toolformat`.
     - These commands will update the `ProviderManager`'s active configuration.
 
 2.  **Refactor Main Interaction Loop:**
-
     - The core logic that sends user input to the LLM and processes responses will be updated to use the `ProviderManager`.
     - Instead of direct `openai` calls, it will call `providerManager.getActiveProvider().generateChatCompletion(...)`.
 

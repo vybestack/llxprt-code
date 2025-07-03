@@ -11,10 +11,13 @@
     npm run lint
     ```
 3.  **Run Tests for ToolFormatter Implementation:**
+
     ```bash
     npm test packages/cli/src/tools/ToolFormatter.test.ts
     ```
+
     - **Expected Output:** All tests in `ToolFormatter.test.ts` should pass, including the new tests for `openai` tool formatting and the existing `NotYetImplemented` tests for other formats.
+
 4.  **Verify `ToolFormatter.ts` Implementation Details:**
     - Ensure `toProviderFormat` handles `openai` format and does not throw `NotYetImplemented` for it:
       ```bash

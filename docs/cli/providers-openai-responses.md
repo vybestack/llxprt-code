@@ -290,13 +290,11 @@ const response = await provider.generateChatCompletion({
 ### Common Issues
 
 1. **Responses API not being used**
-
    - Check if `OPENAI_RESPONSES_DISABLE` is set
    - Verify the model is in the supported list
    - Check debug logs: `DEBUG=gemini:* gemini chat ...`
 
 2. **Tool calls not working**
-
    - Ensure tools are properly formatted for Responses API
    - Check that `tool_choice` is used instead of `function_call`
    - Verify tool response format matches expected structure

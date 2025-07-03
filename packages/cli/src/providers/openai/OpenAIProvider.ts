@@ -705,4 +705,11 @@ export class OpenAIProvider implements IProvider {
   getConversationCache(): ConversationCache {
     return this.conversationCache;
   }
+
+  /**
+   * OpenAI always requires payment (API key)
+   */
+  isPaidMode(): boolean {
+    return true;
+  }
 }
