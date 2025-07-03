@@ -267,12 +267,25 @@ export class GeminiCompatibleWrapper {
             toolCall.function.name,
             toolCall.function.arguments,
           );
+          let args: any = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch (e) {
+            console.error(
+              `[GeminiCompatibleWrapper] Failed to parse tool call arguments for ${toolCall.function.name}:`,
+              toolCall.function.arguments,
+              'Error:',
+              e,
+            );
+            // Use empty object as fallback
+          }
+          
           const toolEvent: ServerGeminiToolCallRequestEvent = {
             type: GeminiEventType.ToolCallRequest,
             value: {
               callId: toolCall.id,
               name: toolCall.function.name,
-              args: JSON.parse(toolCall.function.arguments),
+              args,
               isClientInitiated: false,
             } as ToolCallRequestInfo,
           };
@@ -574,10 +587,23 @@ export class GeminiCompatibleWrapper {
     for (const message of messages) {
       if (message.tool_calls) {
         for (const toolCall of message.tool_calls) {
+          let args: any = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch (e) {
+            console.error(
+              `[GeminiCompatibleWrapper] Failed to parse tool call arguments for ${toolCall.function.name}:`,
+              toolCall.function.arguments,
+              'Error:',
+              e,
+            );
+            // Use empty object as fallback
+          }
+          
           parts.push({
             functionCall: {
               name: toolCall.function.name,
-              args: JSON.parse(toolCall.function.arguments),
+              args,
             },
           } as Part);
         }
@@ -612,10 +638,23 @@ export class GeminiCompatibleWrapper {
     // Add tool calls as function calls
     if (message.tool_calls) {
       for (const toolCall of message.tool_calls) {
+        let args: any = {};
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch (e) {
+          console.error(
+            `[GeminiCompatibleWrapper] Failed to parse tool call arguments for ${toolCall.function.name}:`,
+            toolCall.function.arguments,
+            'Error:',
+            e,
+          );
+          // Use empty object as fallback
+        }
+        
         parts.push({
           functionCall: {
             name: toolCall.function.name,
-            args: JSON.parse(toolCall.function.arguments),
+            args,
             // Store the tool call ID in the functionCall for later retrieval
             id: toolCall.id,
           },
