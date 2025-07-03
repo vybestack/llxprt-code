@@ -15,10 +15,12 @@ interface UseProviderModelDialogParams {
     content: string;
     timestamp: Date;
   }) => void;
+  onModelChange?: () => void;
 }
 
 export const useProviderModelDialog = ({
   addMessage,
+  onModelChange,
 }: UseProviderModelDialogParams) => {
   const [showDialog, setShowDialog] = useState(false);
   const [models, setModels] = useState<IModel[]>([]);
@@ -53,6 +55,7 @@ export const useProviderModelDialog = ({
           content: `Switched from ${prev} to ${modelId} in provider '${provider.name}'`,
           timestamp: new Date(),
         });
+        onModelChange?.();
       } catch (e) {
         addMessage({
           type: MessageType.ERROR,
@@ -62,7 +65,7 @@ export const useProviderModelDialog = ({
       }
       setShowDialog(false);
     },
-    [addMessage],
+    [addMessage, onModelChange],
   );
 
   return {

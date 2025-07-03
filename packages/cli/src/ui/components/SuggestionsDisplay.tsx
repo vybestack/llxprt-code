@@ -57,7 +57,7 @@ export function SuggestionsDisplay({
       {visibleSuggestions.map((suggestion, index) => {
         const originalIndex = startIndex + index;
         const isActive = originalIndex === activeIndex;
-        const textColor = isActive ? Colors.AccentPurple : Colors.Gray;
+        const textColor = isActive ? '#00ff00' : Colors.Foreground;
 
         return (
           <Box key={`${suggestion}-${originalIndex}`} width={width}>

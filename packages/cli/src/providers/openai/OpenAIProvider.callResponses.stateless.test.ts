@@ -35,8 +35,8 @@ describe('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
 
   it('should make successful stateless streaming call', async () => {
     const chunks = [
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Hello"}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\n',
+      'data: {"type":"response.output_text.delta","delta":"Hello"}\n\n',
+      'data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":1,"total_tokens":11}}}\n\n',
       'data: [DONE]\n\n',
     ];
 
@@ -125,9 +125,9 @@ describe('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
 
   it('should handle tool calls in stateless mode', async () => {
     const chunks = [
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_123","type":"function","function":{"name":"test_tool","arguments":"{"}}]}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\\"value\\": \\"test\\"}"}}]}}]}\n\n',
-      'data: {"id":"resp-123","model":"gpt-4o","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n',
+      'data: {"type":"response.output_item.added","item":{"id":"item1","type":"function_call","name":"test_tool","call_id":"call_123"}}\n\n',
+      'data: {"type":"response.function_call_arguments.delta","item_id":"item1","delta":"{\\"value\\": \\"test\\"}"}\n\n',
+      'data: {"type":"response.output_item.done","item":{"id":"item1","type":"function_call","arguments":"{\\"value\\": \\"test\\"}"}}\n\n',
       'data: [DONE]\n\n',
     ];
 

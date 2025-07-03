@@ -17,13 +17,14 @@ export class ProviderManager {
 
   registerProvider(provider: IProvider): void {
     this.providers.set(provider.name, provider);
+    
+    // If this is the default provider and no provider is active, set it as active
+    if (provider.isDefault && !this.activeProviderName) {
+      this.activeProviderName = provider.name;
+    }
   }
 
   setActiveProvider(name: string): void {
-    if (name === 'gemini') {
-      this.clearActiveProvider();
-      return;
-    }
     if (!this.providers.has(name)) {
       throw new Error('Provider not found');
     }

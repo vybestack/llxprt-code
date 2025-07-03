@@ -20,8 +20,6 @@ import {
   getMCPDiscoveryState,
   getMCPServerStatus,
   AuthType,
-  initializeTelemetry,
-  shutdownTelemetry,
 } from '@google/gemini-cli-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
@@ -78,7 +76,6 @@ export const useSlashCommandProcessor = (
   openThemeDialog: () => void,
   openAuthDialog: () => void,
   openEditorDialog: () => void,
-  openModelDialog: () => void,
   openProviderModelDialog: () => void,
   performMemoryRefresh: () => Promise<void>,
   toggleCorgiMode: () => void,
@@ -254,8 +251,70 @@ export const useSlashCommandProcessor = (
       {
         name: 'auth',
         description: 'change the auth method',
-        action: (_mainCommand, _subCommand, _args) => {
-          openAuthDialog();
+        action: async (_mainCommand, authMode, _args) => {
+          const providerManager = getProviderManager();
+          
+          // If no auth mode specified, open the dialog
+          if (!authMode) {
+            openAuthDialog();
+            return;
+          }
+          
+          // Handle specific auth mode changes for Gemini provider
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            
+            // Check if this is the Gemini provider
+            if (activeProvider.name === 'gemini' && config) {
+              const validModes = ['oauth', 'api-key', 'vertex'];
+              
+              if (!validModes.includes(authMode)) {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Invalid auth mode. Valid modes: ${validModes.join(', ')}`,
+                  timestamp: new Date(),
+                });
+                return;
+              }
+              
+              // Map the auth mode to the appropriate AuthType
+              let authType: AuthType;
+              switch (authMode) {
+                case 'oauth':
+                  authType = AuthType.LOGIN_WITH_GOOGLE;
+                  break;
+                case 'api-key':
+                  authType = AuthType.USE_GEMINI;
+                  break;
+                case 'vertex':
+                  authType = AuthType.USE_VERTEX_AI;
+                  break;
+                default:
+                  authType = AuthType.LOGIN_WITH_GOOGLE;
+              }
+              
+              // Refresh auth with the new type
+              await config.refreshAuth(authType);
+              
+              addMessage({
+                type: MessageType.INFO,
+                content: `Switched to ${authMode} authentication mode`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: 'Auth mode switching is only supported for the Gemini provider',
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to switch auth mode: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
         },
       },
       {
@@ -591,91 +650,38 @@ export const useSlashCommandProcessor = (
       },
       {
         name: 'model',
-        description: 'select or switch model (Gemini or provider model)',
+        description: 'select or switch model',
         action: async (_mainCommand, _subCommand, _args) => {
           const modelName = _subCommand || _args;
-
-          // Check if we're using a provider
           const providerManager = getProviderManager();
 
-          if (providerManager.hasActiveProvider()) {
-            // Provider mode
-            if (!modelName) {
-              openProviderModelDialog();
-              return;
-            }
-
-            // Switch model in provider
-            try {
-              const activeProvider = providerManager.getActiveProvider();
-              const currentModel = activeProvider.getCurrentModel
-                ? activeProvider.getCurrentModel()
-                : 'unknown';
-
-              if (activeProvider.setModel) {
-                activeProvider.setModel(modelName);
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
-                  timestamp: new Date(),
-                });
-              } else {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: `Provider '${activeProvider.name}' does not support model switching`,
-                  timestamp: new Date(),
-                });
-              }
-            } catch (error) {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
-                timestamp: new Date(),
-              });
-            }
-            return;
-          }
-
-          // Fallback to Gemini mode
-          // If no model specified, open the interactive dialog
+          // Always use provider model dialog
           if (!modelName) {
-            openModelDialog();
+            openProviderModelDialog();
             return;
           }
 
-          // Direct model switching for command with argument
+          // Switch model in provider
           try {
-            if (!config) {
-              addMessage({
-                type: MessageType.ERROR,
-                content: 'Configuration not available',
-                timestamp: new Date(),
-              });
-              return;
-            }
+            const activeProvider = providerManager.getActiveProvider();
+            const currentModel = activeProvider.getCurrentModel
+              ? activeProvider.getCurrentModel()
+              : 'unknown';
 
-            const currentModel = config.getModel();
-
-            if (modelName === currentModel) {
+            if (activeProvider.setModel) {
+              activeProvider.setModel(modelName);
               addMessage({
                 type: MessageType.INFO,
-                content: `Already using model: ${currentModel}`,
+                content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
                 timestamp: new Date(),
               });
-              return;
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${activeProvider.name}' does not support model switching`,
+                timestamp: new Date(),
+              });
             }
-
-            // Update the model in config
-            config.setModel(modelName);
-
-            // Update the model in the Gemini client
-            await config.getGeminiClient()?.updateModel(modelName);
-
-            addMessage({
-              type: MessageType.INFO,
-              content: `Switched from ${currentModel} to ${modelName}`,
-              timestamp: new Date(),
-            });
           } catch (error) {
             addMessage({
               type: MessageType.ERROR,
@@ -697,13 +703,10 @@ export const useSlashCommandProcessor = (
             const providers = providerManager.listProviders();
             const currentProvider = providerManager.getActiveProviderName();
 
-            // Build provider list including gemini as an option
-            const allProviders = ['gemini', ...providers];
-            const providerList = allProviders
+            // Build provider list
+            const providerList = providers
               .map((name) => {
-                if (name === 'gemini' && !currentProvider) {
-                  return 'gemini (active)';
-                } else if (name === currentProvider) {
+                if (name === currentProvider) {
                   return `${name} (active)`;
                 }
                 return name;
@@ -721,37 +724,7 @@ export const useSlashCommandProcessor = (
           try {
             const currentProvider = providerManager.getActiveProviderName();
 
-            // Handle switching to gemini (default)
-            if (providerName.toLowerCase() === 'gemini') {
-              if (!currentProvider) {
-                addMessage({
-                  type: MessageType.INFO,
-                  content: 'Already using Gemini (default provider)',
-                  timestamp: new Date(),
-                });
-                return;
-              }
-
-              providerManager.clearActiveProvider();
-
-              // Refresh auth to go back to Gemini
-              if (config) {
-                // When switching back to Gemini, use the auth type from settings
-                // or fall back to the default USE_GEMINI
-                const originalAuthType =
-                  settings.merged.selectedAuthType || AuthType.USE_GEMINI;
-                await config.refreshAuth(originalAuthType);
-              }
-
-              addMessage({
-                type: MessageType.INFO,
-                content: `Switched from ${currentProvider} to Gemini (default)`,
-                timestamp: new Date(),
-              });
-              return;
-            }
-
-            // Handle switching to other providers
+            // Handle switching to same provider
             if (providerName === currentProvider) {
               addMessage({
                 type: MessageType.INFO,
@@ -761,8 +734,8 @@ export const useSlashCommandProcessor = (
               return;
             }
 
+            const fromProvider = currentProvider || 'none';
             providerManager.setActiveProvider(providerName);
-            const fromProvider = currentProvider || 'gemini';
 
             // Refresh auth to use the new provider
             if (config) {
@@ -1102,32 +1075,49 @@ export const useSlashCommandProcessor = (
       },
       {
         name: 'key',
-        description: 'set API key for the current provider',
+        description: 'set or remove API key for the current provider',
         action: async (_mainCommand, apiKey, _args) => {
           const providerManager = getProviderManager();
-
-          if (!providerManager.hasActiveProvider()) {
-            addMessage({
-              type: MessageType.ERROR,
-              content:
-                'No active provider. Use /provider to select a provider first.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          if (!apiKey || apiKey.trim() === '') {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'Usage: /key <api_key>',
-              timestamp: new Date(),
-            });
-            return;
-          }
 
           try {
             const activeProvider = providerManager.getActiveProvider();
             const providerName = activeProvider.name;
+
+            // If no key provided or 'none', remove the key
+            if (!apiKey || apiKey.trim() === '' || apiKey.trim().toLowerCase() === 'none') {
+              // Clear the API key
+              if (activeProvider.setApiKey) {
+                activeProvider.setApiKey('');
+
+                // Remove from settings
+                const currentKeys = settings.merged.providerApiKeys || {};
+                delete currentKeys[providerName];
+                settings.setValue(
+                  SettingScope.User,
+                  'providerApiKeys',
+                  currentKeys,
+                );
+
+                // If this is the Gemini provider, we might need to switch auth mode
+                if (providerName === 'gemini' && config) {
+                  // Switch to OAuth if no API key
+                  await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+                }
+
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `API key removed for provider '${providerName}'`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${providerName}' does not support API key updates`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
 
             // Update the provider's API key
             if (activeProvider.setApiKey) {
@@ -1141,6 +1131,11 @@ export const useSlashCommandProcessor = (
                 'providerApiKeys',
                 currentKeys,
               );
+
+              // If this is the Gemini provider, we need to refresh auth to use API key mode
+              if (providerName === 'gemini' && config) {
+                await config.refreshAuth(AuthType.USE_GEMINI);
+              }
 
               addMessage({
                 type: MessageType.INFO,
@@ -1165,30 +1160,93 @@ export const useSlashCommandProcessor = (
       },
       {
         name: 'keyfile',
-        description: 'set API key from file for the current provider',
+        description: 'manage API key file for the current provider',
         action: async (_mainCommand, filePath, _args) => {
           const providerManager = getProviderManager();
 
-          if (!providerManager.hasActiveProvider()) {
-            addMessage({
-              type: MessageType.ERROR,
-              content:
-                'No active provider. Use /provider to select a provider first.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          if (!filePath || filePath.trim() === '') {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'Usage: /keyfile <path>',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
           try {
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+
+            // If no path provided, check for existing keyfile
+            if (!filePath || filePath.trim() === '') {
+              // Check common keyfile locations
+              const keyfilePaths = [
+                path.join(homedir(), `.${providerName}_key`),
+                path.join(homedir(), `.${providerName}-key`),
+                path.join(homedir(), `.${providerName}_api_key`),
+              ];
+
+              // For specific providers, check their known keyfile locations
+              if (providerName === 'openai') {
+                keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
+              } else if (providerName === 'anthropic') {
+                keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
+              }
+
+              let foundKeyfile: string | null = null;
+              for (const keyfilePath of keyfilePaths) {
+                try {
+                  await fs.access(keyfilePath);
+                  foundKeyfile = keyfilePath;
+                  break;
+                } catch {
+                  // File doesn't exist, continue checking
+                }
+              }
+
+              if (foundKeyfile) {
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
+
+            // If 'none' is specified, remove the keyfile setting
+            if (filePath.trim().toLowerCase() === 'none') {
+              // Clear the API key
+              if (activeProvider.setApiKey) {
+                activeProvider.setApiKey('');
+
+                // Remove from settings
+                const currentKeys = settings.merged.providerApiKeys || {};
+                delete currentKeys[providerName];
+                settings.setValue(
+                  SettingScope.User,
+                  'providerApiKeys',
+                  currentKeys,
+                );
+
+                // If this is the Gemini provider, we might need to switch auth mode
+                if (providerName === 'gemini' && config) {
+                  // Switch to OAuth if no API key
+                  await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+                }
+
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Keyfile removed for provider '${providerName}'`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${providerName}' does not support API key updates`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
+
             // Resolve ~ to home directory
             const resolvedPath = filePath.replace(/^~/, homedir());
 
@@ -1203,9 +1261,6 @@ export const useSlashCommandProcessor = (
               });
               return;
             }
-
-            const activeProvider = providerManager.getActiveProvider();
-            const providerName = activeProvider.name;
 
             // Update the provider's API key
             if (activeProvider.setApiKey) {
@@ -1235,7 +1290,7 @@ export const useSlashCommandProcessor = (
           } catch (error) {
             addMessage({
               type: MessageType.ERROR,
-              content: `Failed to read API key file: ${error instanceof Error ? error.message : String(error)}`,
+              content: `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
               timestamp: new Date(),
             });
           }
@@ -1246,16 +1301,6 @@ export const useSlashCommandProcessor = (
         description: 'set base URL for the current provider',
         action: async (_mainCommand, baseUrl, _args) => {
           const providerManager = getProviderManager();
-
-          if (!providerManager.hasActiveProvider()) {
-            addMessage({
-              type: MessageType.ERROR,
-              content:
-                'No active provider. Use /provider to select a provider first.',
-              timestamp: new Date(),
-            });
-            return;
-          }
 
           if (!baseUrl || baseUrl.trim() === '') {
             // Clear base URL to provider default
@@ -1337,16 +1382,6 @@ export const useSlashCommandProcessor = (
         description: 'override the auto-detected tool calling format',
         action: async (_mainCommand, formatName, _args) => {
           const providerManager = getProviderManager();
-
-          if (!providerManager.hasActiveProvider()) {
-            addMessage({
-              type: MessageType.ERROR,
-              content:
-                'No active provider. Use /provider to select a provider first.',
-              timestamp: new Date(),
-            });
-            return;
-          }
 
           const activeProvider = providerManager.getActiveProvider();
           const providerName = activeProvider.name;
@@ -1577,7 +1612,6 @@ Supported formats:
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
-    openModelDialog,
     openProviderModelDialog,
     clearItems,
     performMemoryRefresh,

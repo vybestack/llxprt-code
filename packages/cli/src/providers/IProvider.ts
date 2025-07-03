@@ -20,6 +20,7 @@ import { IMessage } from './IMessage.js';
 
 export interface IProvider {
   name: string;
+  isDefault?: boolean;
   getModels(): Promise<IModel[]>;
   generateChatCompletion(
     messages: IMessage[],

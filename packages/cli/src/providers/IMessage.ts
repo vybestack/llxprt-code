@@ -20,6 +20,7 @@ export interface IMessage {
   role: ContentGeneratorRole | 'system';
   content: string;
   tool_call_id?: string;
+  tool_name?: string; // Added to track the function name for tool responses
   tool_calls?: Array<{
     id: string;
     type: 'function';

@@ -54,7 +54,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     const selected = i === index;
     return (
       <Box key={m.id} width={colWidth} marginRight={2}>
-        <Text color={selected ? Colors.AccentGreen : Colors.Foreground}>
+        <Text color={selected ? '#00ff00' : Colors.Foreground}>
           {selected ? '● ' : '○ '}
           {m.id}
         </Text>

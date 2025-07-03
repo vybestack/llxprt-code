@@ -75,6 +75,7 @@ import { useSessionStats } from '../contexts/SessionContext.js';
 import { LoadedSettings } from '../../config/settings.js';
 import * as ShowMemoryCommandModule from './useShowMemoryCommand.js';
 import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(),
@@ -87,6 +88,10 @@ vi.mock('./useShowMemoryCommand.js', () => ({
 
 vi.mock('open', () => ({
   default: vi.fn(),
+}))
+
+vi.mock('../../providers/providerManagerInstance.js', () => ({
+  getProviderManager: vi.fn(),
 }));
 
 describe('useSlashCommandProcessor', () => {
@@ -99,8 +104,7 @@ describe('useSlashCommandProcessor', () => {
   let mockOpenThemeDialog: ReturnType<typeof vi.fn>;
   let mockOpenAuthDialog: ReturnType<typeof vi.fn>;
   let mockOpenEditorDialog: ReturnType<typeof vi.fn>;
-  let mockOpenModelDialog: ReturnType<typeof vi.fn>;
-  let _mockOpenProviderModelDialog: ReturnType<typeof vi.fn>;
+  let mockOpenProviderModelDialog: ReturnType<typeof vi.fn>;
   let mockPerformMemoryRefresh: ReturnType<typeof vi.fn>;
   let mockSetQuittingMessages: ReturnType<typeof vi.fn>;
   let mockTryCompressChat: ReturnType<typeof vi.fn>;
@@ -120,8 +124,7 @@ describe('useSlashCommandProcessor', () => {
     mockOpenThemeDialog = vi.fn();
     mockOpenAuthDialog = vi.fn();
     mockOpenEditorDialog = vi.fn();
-    mockOpenModelDialog = vi.fn();
-    _mockOpenProviderModelDialog = vi.fn();
+    mockOpenProviderModelDialog = vi.fn();
     mockPerformMemoryRefresh = vi.fn().mockResolvedValue(undefined);
     mockSetQuittingMessages = vi.fn();
     mockTryCompressChat = vi.fn();
@@ -181,8 +184,7 @@ describe('useSlashCommandProcessor', () => {
         mockOpenThemeDialog,
         mockOpenAuthDialog,
         mockOpenEditorDialog,
-        mockOpenModelDialog,
-        _mockOpenProviderModelDialog,
+        mockOpenProviderModelDialog,
         mockPerformMemoryRefresh,
         mockCorgiMode,
         showToolDescriptions,
@@ -404,8 +406,7 @@ describe('useSlashCommandProcessor', () => {
           mockOpenThemeDialog,
           mockOpenAuthDialog,
           mockOpenEditorDialog,
-          mockOpenModelDialog,
-          _mockOpenProviderModelDialog,
+          mockOpenProviderModelDialog,
           mockPerformMemoryRefresh,
           mockCorgiMode,
           false,
@@ -505,36 +506,51 @@ describe('useSlashCommandProcessor', () => {
   });
 
   describe('/model command', () => {
+    let mockProviderManager: ReturnType<typeof vi.fn>;
+    let mockActiveProvider: {
+      name: string;
+      getCurrentModel?: () => string;
+      setModel?: (model: string) => Promise<void>;
+    };
+
+    beforeEach(() => {
+      mockActiveProvider = {
+        name: 'gemini',
+        getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+        setModel: vi.fn(),
+      };
+      
+      mockProviderManager = {
+        getActiveProvider: vi.fn().mockReturnValue(mockActiveProvider),
+        hasActiveProvider: vi.fn().mockReturnValue(true),
+      };
+      
+      (getProviderManager as ReturnType<typeof vi.fn>).mockReturnValue(mockProviderManager);
+    });
+
     it('/model should open model dialog and return true', async () => {
       const { handleSlashCommand } = getProcessor();
       let commandResult: SlashCommandActionReturn | boolean = false;
       await act(async () => {
         commandResult = await handleSlashCommand('/model');
       });
-      expect(mockOpenModelDialog).toHaveBeenCalled();
+      expect(mockOpenProviderModelDialog).toHaveBeenCalled();
       expect(commandResult).toBe(true);
     });
 
     it('/model with model name should switch models directly', async () => {
-      const mockUpdateModel = vi.fn().mockResolvedValue(undefined);
-      mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
-      mockConfig.setModel = vi.fn();
-      mockGeminiClient.updateModel = mockUpdateModel;
-      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockGeminiClient);
-
       const { handleSlashCommand } = getProcessor();
       let commandResult: SlashCommandActionReturn | boolean = false;
       await act(async () => {
         commandResult = await handleSlashCommand('/model gemini-2.5-flash');
       });
 
-      expect(mockOpenModelDialog).not.toHaveBeenCalled();
-      expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
-      expect(mockUpdateModel).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(mockOpenProviderModelDialog).not.toHaveBeenCalled();
+      expect(mockActiveProvider.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Switched from gemini-2.5-pro to gemini-2.5-flash',
+          text: "Switched from gemini-2.5-pro to gemini-2.5-flash in provider 'gemini'",
         }),
         expect.any(Number),
       );
@@ -542,21 +558,18 @@ describe('useSlashCommandProcessor', () => {
     });
 
     it('/model with same model name should show already using message', async () => {
-      mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
-      mockConfig.setModel = vi.fn();
-      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockGeminiClient);
-
+      // The /model command now always switches even if same model
       const { handleSlashCommand } = getProcessor();
       let commandResult: SlashCommandActionReturn | boolean = false;
       await act(async () => {
         commandResult = await handleSlashCommand('/model gemini-2.5-pro');
       });
 
-      expect(mockConfig.setModel).not.toHaveBeenCalled();
+      expect(mockActiveProvider.setModel).toHaveBeenCalledWith('gemini-2.5-pro');
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Already using model: gemini-2.5-pro',
+          text: "Switched from gemini-2.5-pro to gemini-2.5-pro in provider 'gemini'",
         }),
         expect.any(Number),
       );
@@ -564,13 +577,9 @@ describe('useSlashCommandProcessor', () => {
     });
 
     it('/model should handle error when switching models', async () => {
-      const mockUpdateModel = vi
-        .fn()
-        .mockRejectedValue(new Error('Update failed'));
-      mockConfig.getModel = vi.fn().mockReturnValue('gemini-2.5-pro');
-      mockConfig.setModel = vi.fn();
-      mockGeminiClient.updateModel = mockUpdateModel;
-      mockConfig.getGeminiClient = vi.fn().mockReturnValue(mockGeminiClient);
+      mockActiveProvider.setModel = vi.fn().mockImplementation(() => {
+        throw new Error('Update failed');
+      });
 
       const { handleSlashCommand } = getProcessor();
       let commandResult: SlashCommandActionReturn | boolean = false;

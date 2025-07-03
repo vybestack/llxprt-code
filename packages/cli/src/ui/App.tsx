@@ -23,7 +23,6 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
-import { useModelCommand } from './hooks/useModelCommand.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
@@ -39,7 +38,6 @@ import { ThemeDialog } from './components/ThemeDialog.js';
 import { AuthDialog } from './components/AuthDialog.js';
 import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
-import { ModelDialog } from './components/ModelDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
 import { loadHierarchicalGeminiMemory } from '../config/config.js';
@@ -76,6 +74,7 @@ import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -83,6 +82,16 @@ const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
  * Get the display model name
  */
 function getDisplayModelName(config: Config): string {
+  try {
+    const providerManager = getProviderManager();
+    if (providerManager.hasActiveProvider()) {
+      const provider = providerManager.getActiveProvider();
+      const model = provider.getCurrentModel?.() || 'unknown';
+      return `${provider.name}:${model}`;
+    }
+  } catch (_e) {
+    // Fall back to config model if provider manager fails
+  }
   // The config.getModel() is now enhanced to include provider prefix
   return config.getModel();
 }
@@ -186,26 +195,11 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, setEditorError, addItem);
 
-  const {
-    showModelDialog,
-    openModelDialog,
-    closeModelDialog,
-    handleModelSelection,
-  } = useModelCommand({
-    config,
-    addMessage: (message) =>
-      addItem(
-        {
-          type: message.type,
-          text: message.content,
-        },
-        message.timestamp.getTime(),
-      ),
-  });
 
   const providerModelDialog = useProviderModelDialog({
     addMessage: (m) =>
       addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+    onModelChange: () => setCurrentModel(getDisplayModelName(config)),
   });
 
   const toggleCorgiMode = useCallback(() => {
@@ -312,7 +306,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
-    openModelDialog,
     providerModelDialog.openDialog,
     performMemoryRefresh,
     toggleCorgiMode,
@@ -732,14 +725,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 currentModel={providerModelDialog.currentModel}
                 onSelect={providerModelDialog.handleSelect}
                 onClose={providerModelDialog.closeDialog}
-              />
-            </Box>
-          ) : showModelDialog ? (
-            <Box flexDirection="column">
-              <ModelDialog
-                config={config}
-                onClose={closeModelDialog}
-                onModelSelected={handleModelSelection}
               />
             </Box>
           ) : showPrivacyNotice ? (

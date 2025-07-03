@@ -62,6 +62,7 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
     "@types/command-exists": "^1.2.3",
     "@types/diff": "^7.0.2",

@@ -32,6 +32,11 @@ interface ResponsesMessage {
   role: 'assistant' | 'system' | 'developer' | 'user';
   content: string;
   // tool_call_id is not supported, tool responses are transformed to user messages
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
 }
 
 export interface ResponsesRequest {
@@ -129,25 +134,28 @@ export function buildResponsesRequest(
   // Transform messages for Responses API format
   let transformedMessages: ResponsesMessage[] | undefined;
   if (processedMessages) {
-    transformedMessages = processedMessages.map(msg => {
-      // Remove tool_calls field as it's not accepted by Responses API
-      const { tool_calls, tool_call_id, usage, ...cleanMsg } = msg;
-      
-      // Transform tool messages to user messages with special formatting
-      if (msg.role === 'tool') {
+    transformedMessages = processedMessages
+      .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
+      .map(msg => {
+        // Remove tool_calls field as it's not accepted by Responses API
+        const { tool_calls: _tool_calls, tool_call_id, usage, ...cleanMsg } = msg;
+        
+        // Transform tool messages to user messages with special formatting
+        if (msg.role === 'tool') {
+          return {
+            role: 'user' as const,
+            content: `[Tool Response - ${tool_call_id}]\n${msg.content}`,
+          };
+        }
+        
+        // Ensure role is valid for Responses API
+        const validRole = cleanMsg.role as 'user' | 'assistant' | 'system' | 'developer';
         return {
-          role: 'user' as const,
-          content: `[Tool Response - ${tool_call_id}]\n${msg.content}`,
+          role: validRole,
+          content: cleanMsg.content,
+          ...(usage ? { usage } : {}), // Preserve usage data if present
         };
-      }
-      
-      // Ensure role is valid for Responses API
-      const validRole = cleanMsg.role as 'user' | 'assistant' | 'system' | 'developer';
-      return {
-        role: validRole,
-        content: cleanMsg.content,
-      };
-    });
+      });
   }
 
   // Build the request object with conditional fields

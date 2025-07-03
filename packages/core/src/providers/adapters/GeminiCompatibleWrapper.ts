@@ -284,6 +284,18 @@ export class GeminiCompatibleWrapper {
     // Normalize ContentListUnion to Content[]
     let contentArray: Content[];
 
+    // Add debug logging for the contents parameter
+    console.debug(
+      '[GeminiCompatibleWrapper] convertContentsToMessages called with:',
+      JSON.stringify(contents, null, 2).substring(0, 500),
+    );
+    
+    // Check if contents is undefined or null
+    if (!contents) {
+      console.error('[GeminiCompatibleWrapper] Contents is undefined or null!');
+      return [];
+    }
+
     // Debug logging for multiple tool responses
     if (Array.isArray(contents) && contents.length > 0) {
       const hasFunctionResponses = contents.some(
@@ -304,19 +316,22 @@ export class GeminiCompatibleWrapper {
     }
 
     if (Array.isArray(contents)) {
+      // Filter out any undefined/null elements
+      const validContents = contents.filter((item) => item !== undefined && item !== null);
+      
       // If it's already an array, check if it's Content[] or PartUnion[]
-      if (contents.length === 0) {
+      if (validContents.length === 0) {
         contentArray = [];
       } else if (
-        typeof contents[0] === 'object' &&
-        contents[0] !== null &&
-        'role' in contents[0]
+        validContents[0] &&
+        typeof validContents[0] === 'object' &&
+        'role' in validContents[0]
       ) {
         // It's Content[]
-        contentArray = contents as Content[];
+        contentArray = validContents as Content[];
       } else {
         // It's PartUnion[] - convert to Part[] and wrap in a single Content with user role
-        const parts: Part[] = contents.map((item) =>
+        const parts: Part[] = validContents.map((item) =>
           typeof item === 'string' ? { text: item } : (item as Part),
         );
 
@@ -367,6 +382,16 @@ export class GeminiCompatibleWrapper {
     const messages: ProviderMessage[] = [];
 
     for (const content of contentArray) {
+      // Validate content object
+      if (!content || typeof content !== 'object') {
+        console.error('[GeminiCompatibleWrapper] Invalid content object:', content);
+        continue;
+      }
+      
+      if (!content.role) {
+        console.error('[GeminiCompatibleWrapper] Content missing role:', content);
+        continue;
+      }
       // Check for function responses (tool results)
       const functionResponses = (content.parts || []).filter(
         (

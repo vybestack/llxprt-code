@@ -204,7 +204,7 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
       }
     };
     prevPhraseRef.current = currentLoadingPhrase;
-  }, [isActive, isWaiting]);
+  }, [isActive, isWaiting, currentLoadingPhrase]);
 
   return currentLoadingPhrase;
 };

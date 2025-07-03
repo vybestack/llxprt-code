@@ -9,8 +9,6 @@ import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { shortenPath, tildeifyPath, tokenLimit } from '@google/gemini-cli-core';
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { OpenAIProvider } from '../../providers/openai/OpenAIProvider.js';
 import process from 'node:process';
 import { MemoryUsageDisplay } from './MemoryUsageDisplay.js';
 

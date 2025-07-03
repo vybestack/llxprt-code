@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CSSProperties } from 'react';
 
 // Type for syntax highlighter theme styles
 // These come from react-syntax-highlighter and include additional properties
@@ -22,7 +21,7 @@ interface HighlightJSStyle {
   paddingLeft?: string;
   overflowX?: string;
   padding?: string;
-  [key: string]: any; // Allow other CSS properties
+  [key: string]: string | undefined; // Allow other CSS properties
 }
 
 export type ThemeType = 'light' | 'dark' | 'ansi';

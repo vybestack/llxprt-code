@@ -22,10 +22,6 @@ export function getProviderManager(): ProviderManager {
 
     // Only auto-initialize providers when not in test environment
     if (process.env.NODE_ENV !== 'test') {
-      // Register GeminiProvider
-      const geminiProvider = new GeminiProvider();
-      providerManagerInstance.registerProvider(geminiProvider);
-
       // Load user settings to check for saved API keys
       let savedApiKeys: Record<string, string> = {};
       try {
@@ -38,6 +34,15 @@ export function getProviderManager(): ProviderManager {
         }
       } catch (_error) {
         // Failed to load user settings, that's OK
+      }
+
+      // Register GeminiProvider
+      const geminiProvider = new GeminiProvider();
+      providerManagerInstance.registerProvider(geminiProvider);
+      
+      // If there's a saved Gemini API key, apply it
+      if (savedApiKeys.gemini) {
+        geminiProvider.setApiKey(savedApiKeys.gemini);
       }
 
       // Initialize with OpenAI provider if API key is available

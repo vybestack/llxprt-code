@@ -29,7 +29,7 @@ const StatRow: React.FC<StatRowProps> = ({ title, children }) => (
   <Box>
     {/* Fixed width for the label creates a clean "gutter" for alignment */}
     <Box width={28}>
-      <Text color={Colors.LightBlue}>{title}</Text>
+      <Text color={Colors.Foreground}>{title}</Text>
     </Box>
     {children}
   </Box>
@@ -45,7 +45,7 @@ const SubStatRow: React.FC<SubStatRowProps> = ({ title, children }) => (
   <Box paddingLeft={2}>
     {/* Adjust width for the "» " prefix */}
     <Box width={26}>
-      <Text>» {title}</Text>
+      <Text color={Colors.Foreground}>» {title}</Text>
     </Box>
     {children}
   </Box>
@@ -59,7 +59,7 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, children }) => (
   <Box flexDirection="column" width="100%" marginBottom={1}>
-    <Text bold>{title}</Text>
+    <Text bold color={Colors.Foreground}>{title}</Text>
     {children}
   </Box>
 );
@@ -79,16 +79,16 @@ const ModelUsageTable: React.FC<{
       {/* Header */}
       <Box>
         <Box width={nameWidth}>
-          <Text bold>Model Usage</Text>
+          <Text bold color={Colors.Foreground}>Model Usage</Text>
         </Box>
         <Box width={requestsWidth} justifyContent="flex-end">
-          <Text bold>Reqs</Text>
+          <Text bold color={Colors.Foreground}>Reqs</Text>
         </Box>
         <Box width={inputTokensWidth} justifyContent="flex-end">
-          <Text bold>Input Tokens</Text>
+          <Text bold color={Colors.Foreground}>Input Tokens</Text>
         </Box>
         <Box width={outputTokensWidth} justifyContent="flex-end">
-          <Text bold>Output Tokens</Text>
+          <Text bold color={Colors.Foreground}>Output Tokens</Text>
         </Box>
       </Box>
       {/* Divider */}
@@ -98,6 +98,7 @@ const ModelUsageTable: React.FC<{
         borderTop={false}
         borderLeft={false}
         borderRight={false}
+        borderColor={Colors.Comment}
         width={nameWidth + requestsWidth + inputTokensWidth + outputTokensWidth}
       ></Box>
 
@@ -105,18 +106,18 @@ const ModelUsageTable: React.FC<{
       {Object.entries(models).map(([name, modelMetrics]) => (
         <Box key={name}>
           <Box width={nameWidth}>
-            <Text>{name.replace('-001', '')}</Text>
+            <Text color={Colors.Foreground}>{name.replace('-001', '')}</Text>
           </Box>
           <Box width={requestsWidth} justifyContent="flex-end">
-            <Text>{modelMetrics.api.totalRequests}</Text>
+            <Text color={Colors.Foreground}>{modelMetrics.api.totalRequests}</Text>
           </Box>
           <Box width={inputTokensWidth} justifyContent="flex-end">
-            <Text color={Colors.AccentYellow}>
+            <Text color={Colors.Foreground}>
               {modelMetrics.tokens.prompt.toLocaleString()}
             </Text>
           </Box>
           <Box width={outputTokensWidth} justifyContent="flex-end">
-            <Text color={Colors.AccentYellow}>
+            <Text color={Colors.Foreground}>
               {modelMetrics.tokens.candidates.toLocaleString()}
             </Text>
           </Box>
@@ -124,13 +125,13 @@ const ModelUsageTable: React.FC<{
       ))}
       {cacheEfficiency > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text>
+          <Text color={Colors.Foreground}>
             <Text color={Colors.AccentGreen}>Savings Highlight:</Text>{' '}
             {totalCachedTokens.toLocaleString()} ({cacheEfficiency.toFixed(1)}
             %) of input tokens were served from the cache, reducing costs.
           </Text>
           <Box height={1} />
-          <Text color={Colors.Gray}>
+          <Text color={Colors.Comment}>
             » Tip: For a full token breakdown, run `/stats model`.
           </Text>
         </Box>
@@ -189,7 +190,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={Colors.Gray}
+      borderColor={Colors.Comment}
       flexDirection="column"
       paddingY={1}
       paddingX={2}
@@ -200,7 +201,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       {tools.totalCalls > 0 && (
         <Section title="Interaction Summary">
           <StatRow title="Tool Calls:">
-            <Text>
+            <Text color={Colors.Foreground}>
               {tools.totalCalls} ({' '}
               <Text color={Colors.AccentGreen}>✔ {tools.totalSuccess}</Text>{' '}
               <Text color={Colors.AccentRed}>✖ {tools.totalFail}</Text> )
@@ -213,7 +214,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
             <StatRow title="User Agreement:">
               <Text color={agreementColor}>
                 {computed.agreementRate.toFixed(1)}%{' '}
-                <Text color={Colors.Gray}>
+                <Text color={Colors.Comment}>
                   ({computed.totalDecisions} reviewed)
                 </Text>
               </Text>
@@ -224,23 +225,23 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
 
       <Section title="Performance">
         <StatRow title="Wall Time:">
-          <Text>{duration}</Text>
+          <Text color={Colors.Foreground}>{duration}</Text>
         </StatRow>
         <StatRow title="Agent Active:">
-          <Text>{formatDuration(computed.agentActiveTime)}</Text>
+          <Text color={Colors.Foreground}>{formatDuration(computed.agentActiveTime)}</Text>
         </StatRow>
         <SubStatRow title="API Time:">
-          <Text>
+          <Text color={Colors.Foreground}>
             {formatDuration(computed.totalApiTime)}{' '}
-            <Text color={Colors.Gray}>
+            <Text color={Colors.Comment}>
               ({computed.apiTimePercent.toFixed(1)}%)
             </Text>
           </Text>
         </SubStatRow>
         <SubStatRow title="Tool Time:">
-          <Text>
+          <Text color={Colors.Foreground}>
             {formatDuration(computed.totalToolTime)}{' '}
-            <Text color={Colors.Gray}>
+            <Text color={Colors.Comment}>
               ({computed.toolTimePercent.toFixed(1)}%)
             </Text>
           </Text>

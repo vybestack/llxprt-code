@@ -51,7 +51,7 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
       role: 'assistant',
       content: '',
     });
-    expect((request.input?.[1] as any).tool_calls).toBeUndefined();
+    expect((request.input?.[1] as Record<string, unknown>).tool_calls).toBeUndefined();
     
     // Third message (tool response) should be transformed to user message
     expect(request.input?.[2]).toEqual({
@@ -127,6 +127,6 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
         total_tokens: 30,
       },
     });
-    expect((request.input?.[0] as any).tool_calls).toBeUndefined();
+    expect((request.input?.[0] as Record<string, unknown>).tool_calls).toBeUndefined();
   });
 });

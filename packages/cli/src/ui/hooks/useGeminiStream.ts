@@ -53,7 +53,6 @@ import {
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
-import { useSessionStats } from '../contexts/SessionContext.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
@@ -111,7 +110,6 @@ export const useGeminiStream = (
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
   const logger = useLogger();
-  const { stats } = useSessionStats();
 
   // NEW: Track announced tool calls and cancellation state
   const announcedToolCallsRef = useRef<
