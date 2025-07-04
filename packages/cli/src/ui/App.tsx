@@ -24,7 +24,9 @@ import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
+import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
+import { ProviderDialog } from './components/ProviderDialog.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
@@ -261,6 +263,17 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     onModelChange: () => setCurrentModel(getDisplayModelName(config)),
   });
 
+  // Provider selection dialog
+  const providerDialog = useProviderDialog({
+    addMessage: (m) =>
+      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+    onProviderChange: () => {
+      // Refresh model display and payment banner when provider changes
+      setCurrentModel(getDisplayModelName(config));
+      checkPaymentModeChange?.();
+    },
+  });
+
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
@@ -445,6 +458,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
+    providerDialog.openDialog,
     providerModelDialog.openDialog,
     performMemoryRefresh,
     toggleCorgiMode,

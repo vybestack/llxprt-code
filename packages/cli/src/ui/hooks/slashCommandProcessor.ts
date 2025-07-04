@@ -76,6 +76,7 @@ export const useSlashCommandProcessor = (
   openThemeDialog: () => void,
   openAuthDialog: () => void,
   openEditorDialog: () => void,
+  openProviderDialog: () => void,
   openProviderModelDialog: () => void,
   performMemoryRefresh: () => Promise<void>,
   toggleCorgiMode: () => void,
@@ -701,25 +702,8 @@ export const useSlashCommandProcessor = (
           const providerManager = getProviderManager();
 
           if (!providerName) {
-            // List available providers
-            const providers = providerManager.listProviders();
-            const currentProvider = providerManager.getActiveProviderName();
-
-            // Build provider list
-            const providerList = providers
-              .map((name) => {
-                if (name === currentProvider) {
-                  return `${name} (active)`;
-                }
-                return name;
-              })
-              .join(', ');
-
-            addMessage({
-              type: MessageType.INFO,
-              content: `Available providers: ${providerList}`,
-              timestamp: new Date(),
-            });
+            // Open interactive provider selection dialog
+            openProviderDialog();
             return;
           }
 
