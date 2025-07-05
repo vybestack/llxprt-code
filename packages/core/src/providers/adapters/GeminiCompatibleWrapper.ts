@@ -267,7 +267,7 @@ export class GeminiCompatibleWrapper {
             toolCall.function.name,
             toolCall.function.arguments,
           );
-          let args: any = {};
+          let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
           } catch (e) {
@@ -587,7 +587,7 @@ export class GeminiCompatibleWrapper {
     for (const message of messages) {
       if (message.tool_calls) {
         for (const toolCall of message.tool_calls) {
-          let args: any = {};
+          let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
           } catch (e) {
@@ -638,7 +638,7 @@ export class GeminiCompatibleWrapper {
     // Add tool calls as function calls
     if (message.tool_calls) {
       for (const toolCall of message.tool_calls) {
-        let args: any = {};
+        let args: Record<string, unknown> = {};
         try {
           args = JSON.parse(toolCall.function.arguments);
         } catch (e) {

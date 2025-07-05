@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { describe, it, expect, beforeEach } from 'vitest';
 import { ToolFormatter } from './ToolFormatter';
 import { ITool } from '../providers/ITool';
 
@@ -155,7 +156,7 @@ describe('ToolFormatter', () => {
     expect(result[0].description).toBe('');
   });
 
-  it('should throw NotYetImplemented for non-OpenAI formats in toProviderFormat', () => {
+  it('should not throw for implemented formats in toProviderFormat', () => {
     const tools: ITool[] = [
       {
         type: 'function',
@@ -167,12 +168,48 @@ describe('ToolFormatter', () => {
       },
     ];
 
-    expect(() => formatter.toProviderFormat(tools, 'hermes' as const)).toThrow(
-      "Tool format 'hermes' not yet implemented",
-    );
-    expect(() => formatter.toProviderFormat(tools, 'xml' as const)).toThrow(
-      "Tool format 'xml' not yet implemented",
-    );
+    // All these formats are now implemented and should not throw
+    expect(() => formatter.toProviderFormat(tools, 'openai')).not.toThrow();
+    expect(() => formatter.toProviderFormat(tools, 'anthropic')).not.toThrow();
+    expect(() => formatter.toProviderFormat(tools, 'hermes')).not.toThrow();
+    expect(() => formatter.toProviderFormat(tools, 'xml')).not.toThrow();
+    expect(() => formatter.toProviderFormat(tools, 'deepseek')).not.toThrow();
+    expect(() => formatter.toProviderFormat(tools, 'qwen')).not.toThrow();
+  });
+
+  it('should correctly format tools for Hermes provider', () => {
+    const tools: ITool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'get_stock_fundamentals',
+          description: 'Get fundamental data for a stock',
+          parameters: {
+            type: 'object',
+            properties: {
+              symbol: { type: 'string', description: 'Stock symbol' },
+            },
+            required: ['symbol'],
+          },
+        },
+      },
+    ];
+
+    const expected = [
+      {
+        name: 'get_stock_fundamentals',
+        description: 'Get fundamental data for a stock',
+        parameters: {
+          type: 'object',
+          properties: {
+            symbol: { type: 'string', description: 'Stock symbol' },
+          },
+          required: ['symbol'],
+        },
+      },
+    ];
+
+    expect(formatter.toProviderFormat(tools, 'hermes')).toEqual(expected);
   });
 
   it('should correctly parse Anthropic tool calls from provider format', () => {
@@ -236,15 +273,125 @@ describe('ToolFormatter', () => {
     });
   });
 
-  it('should throw NotYetImplemented for non-OpenAI formats in fromProviderFormat', () => {
-    const rawToolCall = { test: 'data' };
+  it('should correctly parse Hermes tool calls from provider format', () => {
+    const rawToolCall = {
+      name: 'get_stock_fundamentals',
+      arguments: { symbol: 'AAPL' },
+    };
 
-    expect(() => formatter.fromProviderFormat(rawToolCall, 'hermes')).toThrow(
-      "Tool format 'hermes' not yet implemented",
-    );
-    expect(() => formatter.fromProviderFormat(rawToolCall, 'xml')).toThrow(
-      "Tool format 'xml' not yet implemented",
-    );
+    const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('function');
+    expect(result[0].function.name).toBe('get_stock_fundamentals');
+    expect(result[0].function.arguments).toBe('{"symbol":"AAPL"}');
+    expect(result[0].id).toMatch(/^hermes_/); // Should have generated ID
+  });
+
+  it('should handle Hermes tool calls without arguments', () => {
+    const rawToolCall = {
+      name: 'get_current_time',
+      arguments: {},
+    };
+
+    const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].function.name).toBe('get_current_time');
+    expect(result[0].function.arguments).toBe('{}');
+  });
+
+  it('should throw error for invalid Hermes tool call format', () => {
+    const invalidCalls = [
+      {},
+      { arguments: {} }, // missing name
+      null,
+    ];
+
+    invalidCalls.forEach((rawToolCall) => {
+      expect(() =>
+        formatter.fromProviderFormat(rawToolCall, 'hermes'),
+      ).toThrow('Invalid hermes tool call format');
+    });
+  });
+
+  it('should correctly format tools for XML provider', () => {
+    const tools: ITool[] = [
+      {
+        type: 'function',
+        function: {
+          name: 'weather_tool',
+          description: 'Get weather information',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string', description: 'City name' },
+              units: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+            },
+            required: ['location'],
+          },
+        },
+      },
+    ];
+
+    const expected = [
+      {
+        name: 'weather_tool',
+        description: 'Get weather information',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: { type: 'string', description: 'City name' },
+            units: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+          },
+          required: ['location'],
+        },
+      },
+    ];
+
+    expect(formatter.toProviderFormat(tools, 'xml')).toEqual(expected);
+  });
+
+  it('should correctly parse XML tool calls from provider format', () => {
+    const rawToolCall = {
+      name: 'weather_tool',
+      arguments: { location: 'Paris', units: 'celsius' },
+    };
+
+    const result = formatter.fromProviderFormat(rawToolCall, 'xml');
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('function');
+    expect(result[0].function.name).toBe('weather_tool');
+    expect(result[0].function.arguments).toBe('{"location":"Paris","units":"celsius"}');
+    expect(result[0].id).toMatch(/^xml_/); // Should have generated ID
+  });
+
+  it('should handle XML tool calls without arguments', () => {
+    const rawToolCall = {
+      name: 'get_time',
+      arguments: {},
+    };
+
+    const result = formatter.fromProviderFormat(rawToolCall, 'xml');
+    
+    expect(result).toHaveLength(1);
+    expect(result[0].function.name).toBe('get_time');
+    expect(result[0].function.arguments).toBe('{}');
+  });
+
+  it('should throw error for invalid XML tool call format', () => {
+    const invalidCalls = [
+      {},
+      { arguments: {} }, // missing name
+      null,
+    ];
+
+    invalidCalls.forEach((rawToolCall) => {
+      expect(() =>
+        formatter.fromProviderFormat(rawToolCall, 'xml'),
+      ).toThrow('Invalid xml tool call format');
+    });
   });
 
   it('should format tools correctly for DeepSeek and Qwen providers', () => {

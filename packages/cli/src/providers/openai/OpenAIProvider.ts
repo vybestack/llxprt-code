@@ -433,6 +433,18 @@ export class OpenAIProvider implements IProvider {
   ): AsyncIterableIterator<IMessage> {
     console.debug('[OpenAIProvider] generateChatCompletion called');
     console.debug('[OpenAIProvider] Model:', this.currentModel);
+    console.debug('[OpenAIProvider] Number of messages:', messages.length);
+    
+    // Log message roles to understand conversation flow
+    const messageRoles = messages.map(m => m.role);
+    console.debug('[OpenAIProvider] Message roles:', messageRoles);
+    
+    // Check for tool messages
+    const toolMessagesCount = messages.filter(m => m.role === 'tool').length;
+    if (toolMessagesCount > 0) {
+      console.debug('[OpenAIProvider] Tool messages in conversation:', toolMessagesCount);
+    }
+    
     console.debug(
       '[OpenAIProvider] Messages:',
       JSON.stringify(messages, null, 2),

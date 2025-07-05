@@ -265,7 +265,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
 
   // Provider selection dialog
   const providerDialog = useProviderDialog({
-    addMessage: (m) =>
+    addMessage: (m: { type: MessageType; content: string; timestamp: Date }) =>
       addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
     onProviderChange: () => {
       // Refresh model display and payment banner when provider changes
@@ -884,6 +884,15 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 currentModel={providerModelDialog.currentModel}
                 onSelect={providerModelDialog.handleSelect}
                 onClose={providerModelDialog.closeDialog}
+              />
+            </Box>
+          ) : providerDialog.showDialog ? (
+            <Box flexDirection="column">
+              <ProviderDialog
+                providers={providerDialog.providers}
+                currentProvider={providerDialog.currentProvider}
+                onSelect={providerDialog.handleSelect}
+                onClose={providerDialog.closeDialog}
               />
             </Box>
           ) : showPrivacyNotice ? (

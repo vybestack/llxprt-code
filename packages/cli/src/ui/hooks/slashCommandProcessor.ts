@@ -1644,6 +1644,7 @@ Supported formats:
     openAuthDialog,
     openEditorDialog,
     openProviderModelDialog,
+    openProviderDialog,
     clearItems,
     performMemoryRefresh,
     showMemoryAction,

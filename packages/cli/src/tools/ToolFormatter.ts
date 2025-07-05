@@ -48,6 +48,22 @@ export class ToolFormatter implements IToolFormatter {
             ...tool.function.parameters,
           },
         }));
+      case 'hermes':
+        // Hermes uses text-based format, tools are provided as system prompt
+        // Return a text description of tools for the system prompt
+        return tools.map((tool) => ({
+          name: tool.function.name,
+          description: tool.function.description || '',
+          parameters: tool.function.parameters,
+        }));
+      case 'xml':
+        // XML format also uses text-based format similar to Hermes
+        // Tools are typically described in the system prompt
+        return tools.map((tool) => ({
+          name: tool.function.name,
+          description: tool.function.description || '',
+          parameters: tool.function.parameters,
+        }));
       default:
         throw new Error(`Tool format '${format}' not yet implemented`);
     }
@@ -112,6 +128,50 @@ export class ToolFormatter implements IToolFormatter {
               arguments: anthropicToolCall.input
                 ? JSON.stringify(anthropicToolCall.input)
                 : '',
+            },
+          },
+        ];
+      }
+      case 'hermes': {
+        // Hermes format comes from TextToolCallParser
+        const hermesToolCall = rawToolCall as {
+          name: string;
+          arguments: Record<string, unknown>;
+        };
+
+        if (!hermesToolCall || !hermesToolCall.name) {
+          throw new Error(`Invalid ${format} tool call format`);
+        }
+
+        return [
+          {
+            id: `hermes_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            type: 'function' as const,
+            function: {
+              name: hermesToolCall.name,
+              arguments: JSON.stringify(hermesToolCall.arguments || {}),
+            },
+          },
+        ];
+      }
+      case 'xml': {
+        // XML format also comes from TextToolCallParser
+        const xmlToolCall = rawToolCall as {
+          name: string;
+          arguments: Record<string, unknown>;
+        };
+
+        if (!xmlToolCall || !xmlToolCall.name) {
+          throw new Error(`Invalid ${format} tool call format`);
+        }
+
+        return [
+          {
+            id: `xml_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            type: 'function' as const,
+            function: {
+              name: xmlToolCall.name,
+              arguments: JSON.stringify(xmlToolCall.arguments || {}),
             },
           },
         ];
