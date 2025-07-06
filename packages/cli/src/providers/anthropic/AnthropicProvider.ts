@@ -4,6 +4,7 @@ import { RawMessageStreamEvent } from '@anthropic-ai/sdk/resources/messages.js';
 import { IProvider, IModel, ITool, IMessage } from '../IProvider.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
+import { retryWithBackoff } from '@google/gemini-cli-core';
 
 export class AnthropicProvider implements IProvider {
   name: string = 'anthropic';
@@ -19,9 +20,6 @@ export class AnthropicProvider implements IProvider {
   private readonly modelCacheTTL = 5 * 60 * 1000; // 5 minutes
 
   // Retry configuration
-  private readonly maxRetries = 5;
-  private readonly initialRetryDelay = 1000; // 1 second
-  private readonly maxRetryDelay = 60000; // 60 seconds
   private readonly retryableErrorMessages = [
     'overloaded',
     'rate_limit',
@@ -97,260 +95,237 @@ export class AnthropicProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
-    let lastError: Error | undefined;
+    let attemptCount = 0;
+    
+    const apiCall = async () => {
+      attemptCount++;
+      
+      // Resolve model if it uses -latest placeholder
+      const resolvedModel = await this.resolveLatestModel(this.currentModel);
 
-    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
-      try {
-        // Resolve model if it uses -latest placeholder
-        const resolvedModel = await this.resolveLatestModel(this.currentModel);
+      // Validate and fix message history to prevent tool_use/tool_result mismatches
+      const validatedMessages =
+        attemptCount > 1 ? this.validateAndFixMessages(messages) : messages;
 
-        // Validate and fix message history to prevent tool_use/tool_result mismatches
-        const validatedMessages =
-          attempt > 0 ? this.validateAndFixMessages(messages) : messages;
+      // Use the resolved model for the API call
+      const modelForApi = resolvedModel;
 
-        // Use the resolved model for the API call
-        const modelForApi = resolvedModel;
-
-        // Extract system message if present and handle tool responses
-        let systemMessage: string | undefined;
-        const anthropicMessages: Array<{
-          role: 'user' | 'assistant';
-          content:
-            | string
-            | Array<
-                | { type: 'text'; text: string }
-                | { type: 'tool_use'; id: string; name: string; input: unknown }
-                | { type: 'tool_result'; tool_use_id: string; content: string }
-              >;
-        }> = [];
-
-        for (const msg of validatedMessages) {
-          if (msg.role === 'system') {
-            systemMessage = msg.content;
-          } else if (msg.role === 'tool') {
-            // Anthropic expects tool responses as user messages with tool_result content
-            anthropicMessages.push({
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: msg.tool_call_id || 'unknown',
-                  content: msg.content,
-                },
-              ],
-            });
-          } else if (msg.role === 'assistant' && msg.tool_calls) {
-            // Handle assistant messages with tool calls
-            const content: Array<
+      // Extract system message if present and handle tool responses
+      let systemMessage: string | undefined;
+      const anthropicMessages: Array<{
+        role: 'user' | 'assistant';
+        content:
+          | string
+          | Array<
               | { type: 'text'; text: string }
               | { type: 'tool_use'; id: string; name: string; input: unknown }
-            > = [];
+              | { type: 'tool_result'; tool_use_id: string; content: string }
+            >;
+      }> = [];
 
-            if (msg.content) {
-              content.push({ type: 'text', text: msg.content });
-            }
+      for (const msg of validatedMessages) {
+        if (msg.role === 'system') {
+          systemMessage = msg.content;
+        } else if (msg.role === 'tool') {
+          // Anthropic expects tool responses as user messages with tool_result content
+          anthropicMessages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.tool_call_id || 'unknown',
+                content: msg.content,
+              },
+            ],
+          });
+        } else if (msg.role === 'assistant' && msg.tool_calls) {
+          // Handle assistant messages with tool calls
+          const content: Array<
+            | { type: 'text'; text: string }
+            | { type: 'tool_use'; id: string; name: string; input: unknown }
+          > = [];
 
-            for (const toolCall of msg.tool_calls) {
-              content.push({
-                type: 'tool_use',
-                id: toolCall.id,
-                name: toolCall.function.name,
-                input: toolCall.function.arguments
-                  ? JSON.parse(toolCall.function.arguments)
-                  : {},
-              });
-            }
+          if (msg.content) {
+            content.push({ type: 'text', text: msg.content });
+          }
 
-            anthropicMessages.push({
-              role: 'assistant',
-              content,
-            });
-          } else {
-            // Regular user/assistant messages
-            anthropicMessages.push({
-              role: msg.role as 'user' | 'assistant',
-              content: msg.content,
+          for (const toolCall of msg.tool_calls) {
+            content.push({
+              type: 'tool_use',
+              id: toolCall.id,
+              name: toolCall.function.name,
+              input: toolCall.function.arguments
+                ? JSON.parse(toolCall.function.arguments)
+                : {},
             });
           }
+
+          anthropicMessages.push({
+            role: 'assistant',
+            content,
+          });
+        } else {
+          // Regular user/assistant messages
+          anthropicMessages.push({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+          });
         }
-
-        // Convert ITool[] to Anthropic's tool format if tools are provided
-        const anthropicTools = tools
-          ? this.toolFormatter.toProviderFormat(tools, 'anthropic')
-          : undefined;
-
-        // Create the stream with proper typing
-        const createOptions: Parameters<
-          typeof this.anthropic.messages.create
-        >[0] = {
-          model: modelForApi,
-          messages: anthropicMessages,
-          max_tokens: this.getMaxTokensForModel(resolvedModel),
-          stream: true,
-        };
-
-        // Add system message as top-level parameter if present
-        if (systemMessage) {
-          createOptions.system = systemMessage;
-        }
-
-        if (anthropicTools) {
-          createOptions.tools = anthropicTools as Parameters<
-            typeof this.anthropic.messages.create
-          >[0]['tools'];
-        }
-
-        const stream = (await this.anthropic.messages.create(
-          createOptions,
-        )) as Stream<RawMessageStreamEvent>;
-
-        let currentUsage:
-          | { input_tokens: number; output_tokens: number }
-          | undefined;
-        // Track current tool call being streamed
-        let currentToolCall:
-          | { id: string; name: string; input: string }
-          | undefined;
-
-        // Process the stream
-        for await (const chunk of stream) {
-          if (chunk.type === 'message_start') {
-            // Initial usage info
-            if (chunk.message.usage) {
-              const usage = chunk.message.usage;
-              if (usage.input_tokens !== null && usage.output_tokens !== null) {
-                currentUsage = {
-                  input_tokens: usage.input_tokens,
-                  output_tokens: usage.output_tokens,
-                };
-                yield {
-                  role: 'assistant',
-                  content: '',
-                  usage: {
-                    prompt_tokens: currentUsage.input_tokens,
-                    completion_tokens: currentUsage.output_tokens,
-                    total_tokens:
-                      currentUsage.input_tokens + currentUsage.output_tokens,
-                  },
-                } as IMessage;
-              }
-            }
-          } else if (chunk.type === 'content_block_start') {
-            // Handle tool use blocks
-            if (chunk.content_block.type === 'tool_use') {
-              currentToolCall = {
-                id: chunk.content_block.id,
-                name: chunk.content_block.name,
-                input: '',
-              };
-            }
-          } else if (chunk.type === 'content_block_delta') {
-            // Yield content chunks
-            if (chunk.delta.type === 'text_delta') {
-              yield {
-                role: 'assistant',
-                content: chunk.delta.text,
-              } as IMessage;
-            } else if (
-              chunk.delta.type === 'input_json_delta' &&
-              currentToolCall
-            ) {
-              // Handle input deltas for tool calls
-              currentToolCall.input += chunk.delta.partial_json;
-            }
-          } else if (chunk.type === 'content_block_stop') {
-            // Complete the tool call
-            if (currentToolCall) {
-              const toolCallResult = this.toolFormatter.fromProviderFormat(
-                {
-                  id: currentToolCall.id,
-                  type: 'tool_use',
-                  name: currentToolCall.name,
-                  input: currentToolCall.input
-                    ? JSON.parse(currentToolCall.input)
-                    : undefined,
-                },
-                'anthropic',
-              );
-              yield {
-                role: 'assistant',
-                content: '',
-                tool_calls: toolCallResult,
-              } as IMessage;
-              currentToolCall = undefined;
-            }
-          } else if (chunk.type === 'message_delta') {
-            // Update usage if provided
-            if (
-              chunk.usage &&
-              chunk.usage.input_tokens !== null &&
-              chunk.usage.output_tokens !== null
-            ) {
-              currentUsage = {
-                input_tokens: chunk.usage.input_tokens,
-                output_tokens: chunk.usage.output_tokens,
-              };
-              yield {
-                role: 'assistant',
-                content: '',
-                usage: {
-                  prompt_tokens: currentUsage.input_tokens,
-                  completion_tokens: currentUsage.output_tokens,
-                  total_tokens:
-                    currentUsage.input_tokens + currentUsage.output_tokens,
-                },
-              } as IMessage;
-            }
-          } else if (chunk.type === 'message_stop') {
-            // Final usage info
-            if (currentUsage) {
-              yield {
-                role: 'assistant',
-                content: '',
-                usage: {
-                  prompt_tokens: currentUsage.input_tokens,
-                  completion_tokens: currentUsage.output_tokens,
-                  total_tokens:
-                    currentUsage.input_tokens + currentUsage.output_tokens,
-                },
-              } as IMessage;
-            }
-          }
-        }
-
-        // If we reach here, the request was successful
-        return;
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        // Check if this is a retryable error
-        if (!this.isRetryableError(lastError)) {
-          throw new Error(`Anthropic API error: ${lastError.message}`);
-        }
-
-        // Don't retry on the last attempt
-        if (attempt === this.maxRetries - 1) {
-          throw new Error(
-            `Anthropic API error after ${this.maxRetries} attempts: ${lastError.message}`,
-          );
-        }
-
-        // Calculate backoff delay
-        const delay = this.calculateBackoff(attempt);
-        console.error(
-          `Anthropic API error (attempt ${attempt + 1}/${this.maxRetries}), retrying in ${delay}ms:`,
-          lastError.message,
-        );
-
-        // Wait before retrying
-        await this.sleep(delay);
       }
-    }
 
-    // This should never be reached, but just in case
-    throw new Error(
-      `Anthropic API error: ${lastError?.message || 'Unknown error'}`,
-    );
+      // Convert ITool[] to Anthropic's tool format if tools are provided
+      const anthropicTools = tools
+        ? this.toolFormatter.toProviderFormat(tools, 'anthropic')
+        : undefined;
+
+      // Create the stream with proper typing
+      const createOptions: Parameters<
+        typeof this.anthropic.messages.create
+      >[0] = {
+        model: modelForApi,
+        messages: anthropicMessages,
+        max_tokens: this.getMaxTokensForModel(resolvedModel),
+        stream: true,
+      };
+
+      // Add system message as top-level parameter if present
+      if (systemMessage) {
+        createOptions.system = systemMessage;
+      }
+
+      if (anthropicTools) {
+        createOptions.tools = anthropicTools as Parameters<
+          typeof this.anthropic.messages.create
+        >[0]['tools'];
+      }
+
+      return this.anthropic.messages.create(createOptions) as Promise<
+        Stream<RawMessageStreamEvent>
+      >;
+    };
+
+    try {
+      const stream = await retryWithBackoff(apiCall, {
+        shouldRetry: (error: Error) => this.isRetryableError(error),
+      });
+
+      let currentUsage:
+        | { input_tokens: number; output_tokens: number }
+        | undefined;
+      // Track current tool call being streamed
+      let currentToolCall:
+        | { id: string; name: string; input: string }
+        | undefined;
+
+      // Process the stream
+      for await (const chunk of stream) {
+        if (chunk.type === 'message_start') {
+          // Initial usage info
+          if (chunk.message.usage) {
+            const usage = chunk.message.usage;
+            if (usage.input_tokens !== null && usage.output_tokens !== null) {
+              currentUsage = {
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+              };
+              yield {
+                role: 'assistant',
+                content: '',
+                usage: {
+                  prompt_tokens: currentUsage.input_tokens,
+                  completion_tokens: currentUsage.output_tokens,
+                  total_tokens:
+                    currentUsage.input_tokens + currentUsage.output_tokens,
+                },
+              } as IMessage;
+            }
+          }
+        } else if (chunk.type === 'content_block_start') {
+          // Handle tool use blocks
+          if (chunk.content_block.type === 'tool_use') {
+            currentToolCall = {
+              id: chunk.content_block.id,
+              name: chunk.content_block.name,
+              input: '',
+            };
+          }
+        } else if (chunk.type === 'content_block_delta') {
+          // Yield content chunks
+          if (chunk.delta.type === 'text_delta') {
+            yield {
+              role: 'assistant',
+              content: chunk.delta.text,
+            } as IMessage;
+          } else if (
+            chunk.delta.type === 'input_json_delta' &&
+            currentToolCall
+          ) {
+            // Handle input deltas for tool calls
+            currentToolCall.input += chunk.delta.partial_json;
+          }
+        } else if (chunk.type === 'content_block_stop') {
+          // Complete the tool call
+          if (currentToolCall) {
+            const toolCallResult = this.toolFormatter.fromProviderFormat(
+              {
+                id: currentToolCall.id,
+                type: 'tool_use',
+                name: currentToolCall.name,
+                input: currentToolCall.input
+                  ? JSON.parse(currentToolCall.input)
+                  : undefined,
+              },
+              'anthropic',
+            );
+            yield {
+              role: 'assistant',
+              content: '',
+              tool_calls: toolCallResult,
+            } as IMessage;
+            currentToolCall = undefined;
+          }
+        } else if (chunk.type === 'message_delta') {
+          // Update usage if provided
+          if (
+            chunk.usage &&
+            chunk.usage.input_tokens !== null &&
+            chunk.usage.output_tokens !== null
+          ) {
+            currentUsage = {
+              input_tokens: chunk.usage.input_tokens,
+              output_tokens: chunk.usage.output_tokens,
+            };
+            yield {
+              role: 'assistant',
+              content: '',
+              usage: {
+                prompt_tokens: currentUsage.input_tokens,
+                completion_tokens: currentUsage.output_tokens,
+                total_tokens:
+                  currentUsage.input_tokens + currentUsage.output_tokens,
+              },
+            } as IMessage;
+          }
+        } else if (chunk.type === 'message_stop') {
+          // Final usage info
+          if (currentUsage) {
+            yield {
+              role: 'assistant',
+              content: '',
+              usage: {
+                prompt_tokens: currentUsage.input_tokens,
+                completion_tokens: currentUsage.output_tokens,
+                total_tokens:
+                  currentUsage.input_tokens + currentUsage.output_tokens,
+              },
+            } as IMessage;
+          }
+        }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(`Anthropic API error: ${errorMessage}`);
+    }
   }
 
   setApiKey(apiKey: string): void {
@@ -404,6 +379,44 @@ export class AnthropicProvider implements IProvider {
     }
   }
 
+  /**
+   * Resolves a model ID that may contain "-latest" to the actual model ID.
+   * Caches the result to avoid frequent API calls.
+   */
+  private async resolveLatestModel(modelId: string): Promise<string> {
+    // If it's not a latest alias, return as-is
+    if (!modelId.endsWith('-latest')) {
+      return modelId;
+    }
+
+    // Check cache
+    const now = Date.now();
+    if (this.modelCache && now - this.modelCache.timestamp < this.modelCacheTTL) {
+      // Find the corresponding model from cache
+      const model = this.modelCache.models.find(m => m.id === modelId);
+      if (model) {
+        // The latest aliases are synthetic, find the real model
+        const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
+        const realModel = this.modelCache.models
+          .filter(m => m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'))
+          .sort((a, b) => b.id.localeCompare(a.id))[0];
+        return realModel ? realModel.id : modelId;
+      }
+    }
+
+    // Fetch fresh models
+    const models = await this.getModels();
+    this.modelCache = { models, timestamp: now };
+
+    // Find the real model for this latest alias
+    const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
+    const realModel = models
+      .filter(m => m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'))
+      .sort((a, b) => b.id.localeCompare(a.id))[0];
+
+    return realModel ? realModel.id : modelId;
+  }
+
   private getMaxTokensForModel(modelId: string): number {
     // Handle latest aliases explicitly
     if (
@@ -451,6 +464,8 @@ export class AnthropicProvider implements IProvider {
 
     const errorMessage = error.message.toLowerCase();
 
+    if (error.message.includes('rate_limit_error')) return true;
+
     // Check for Anthropic-specific error patterns
     if (error.message.includes('Anthropic API error:')) {
       // Extract the actual error content
@@ -477,76 +492,7 @@ export class AnthropicProvider implements IProvider {
     );
   }
 
-  private async sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  private async resolveLatestModel(modelId: string): Promise<string> {
-    // Only resolve if it ends with -latest
-    if (!modelId.endsWith('-latest')) {
-      return modelId;
-    }
-
-    try {
-      // Check cache first
-      let models: IModel[];
-      const now = Date.now();
-
-      if (
-        this.modelCache &&
-        now - this.modelCache.timestamp < this.modelCacheTTL
-      ) {
-        models = this.modelCache.models;
-      } else {
-        // Fetch and cache models
-        models = await this.getModels();
-        this.modelCache = { models, timestamp: now };
-      }
-
-      // Extract the base pattern (e.g., "claude-sonnet-4" from "claude-sonnet-4-latest")
-      const basePattern = modelId.replace('-latest', '');
-
-      // Find all models matching the base pattern (excluding -latest aliases)
-      const matchingModels = models
-        .filter(
-          (m) =>
-            m.id.startsWith(basePattern + '-') && !m.id.endsWith('-latest'),
-        )
-        .map((m) => m.id)
-        .sort((a, b) => {
-          // Extract dates and sort descending (newest first)
-          const dateA = a.split('-').pop() || '';
-          const dateB = b.split('-').pop() || '';
-          return dateB.localeCompare(dateA);
-        });
-
-      // Return the first (newest) match, or fall back
-      if (matchingModels.length > 0) {
-        console.log(`Resolved ${modelId} to ${matchingModels[0]}`);
-        return matchingModels[0];
-      }
-
-      // If no matches found, return the original and let it fail properly
-      console.warn(`Could not resolve ${modelId}, no Claude 4 models found`);
-      return modelId;
-    } catch (error) {
-      // If resolution fails, return the original model ID
-      console.warn(`Failed to resolve latest model for ${modelId}:`, error);
-      return modelId;
-    }
-  }
-
-  private calculateBackoff(attempt: number): number {
-    // Exponential backoff with jitter
-    const exponentialDelay = Math.min(
-      this.initialRetryDelay * Math.pow(2, attempt),
-      this.maxRetryDelay,
-    );
-
-    // Add jitter (±25% of the delay)
-    const jitter = exponentialDelay * 0.25 * (Math.random() * 2 - 1);
-    return Math.floor(exponentialDelay + jitter);
-  }
+  
 
   /**
    * Validates and potentially fixes the message history to ensure proper tool_use/tool_result pairing.

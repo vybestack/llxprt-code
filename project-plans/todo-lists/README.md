@@ -47,11 +47,6 @@ The todo list feature provides LLMs with task management capabilities to:
 
 ## Running the Implementation
 
-Execute phases sequentially using:
-```bash
-gemini-cli --dangerously-skip-permissions < project-plans/todo-lists/01-stub-scaffolding.md
-# Verify with 01a, then continue...
-```
 
 ## Success Metrics
 
