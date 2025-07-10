@@ -63,19 +63,13 @@ export function getInstallationId(): string {
  * @returns A string ID for the user (Google Account ID if available, otherwise installation ID).
  */
 export function getObfuscatedGoogleAccountId(): string {
-  // Try to get cached Google Account ID first
-  try {
-    // Dynamically import to avoid circular dependencies
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
-    const { getCachedGoogleAccountId } = require('../code_assist/oauth2.js');
-    const googleAccountId = getCachedGoogleAccountId();
-    if (googleAccountId) {
-      return googleAccountId;
-    }
-  } catch (error) {
-    // If there's any error accessing Google Account ID, just return empty string
-    console.debug('Could not get cached Google Account ID:', error);
-  }
-
+  // TODO: Fix circular dependency issue with oauth2.js
+  // For now, just return empty string to avoid require errors in ESM
+  // The actual implementation would:
+  // 1. Import getCachedGoogleAccountId from '../code_assist/oauth2.js'
+  // 2. Return the cached Google Account ID if available
+  // 3. Fall back to empty string if not available
+  
+  // Temporarily disabled due to ESM/CommonJS compatibility issues
   return '';
 }
