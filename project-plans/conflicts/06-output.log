@@ -1,0 +1,17 @@
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unterminated string in JSON at position 374367 (line 2702 column 9447)
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098770970
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+The conflict resolution for `packages/cli/src/config/config.ts` has been completed successfully. The file has been resolved by:
+
+1. Adding missing imports from the multi-provider branch (dotenv, path, fs, os)
+2. Adding the GEMINI_DIR constant
+3. Keeping the allowed MCP server names filtering feature from HEAD
+4. Merging both the extension handling from HEAD and the provider manager from multi-provider
+5. Including the environment loading functionality from multi-provider
+
+The resolved file has been staged with `git add` and is ready for commit.

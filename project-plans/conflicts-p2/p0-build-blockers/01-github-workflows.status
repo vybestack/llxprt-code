@@ -1,0 +1,18 @@
+Status: COMPLETED
+Started: 2025-07-10
+Completed: 2025-07-10
+Final Step: All conflicts resolved and YAML validated
+
+Files processed:
+- [x] .github/workflows/community-report.yml
+- [x] .github/workflows/gemini-automated-issue-triage.yml
+- [x] .github/workflows/gemini-scheduled-issue-triage.yml
+
+Resolution Summary:
+- Used theirs version as base for all files
+- Added back repository checks (if statement)
+- Updated actions/create-github-app-token from v1 to v2
+- Added telemetry settings where missing
+- Kept OTLP_GCP_SERVICE_ACCOUNT additions
+- All YAML files validated successfully
+- Git status shows files as modified (M), not conflicted (AA)

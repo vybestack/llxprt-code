@@ -1,0 +1,1 @@
+Fixed the TypeScript error in todo-read.ts by importing Type from '@google/genai' and changing 'object' to Type.OBJECT. Documentation created at project-plans/conflicts/type-fix-todo-read-status.md.

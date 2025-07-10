@@ -1,0 +1,8 @@
+I've successfully fixed the TypeScript errors in `packages/core/src/tools/shell.ts` by:
+
+1. Adding the import for Type from '@google/genai'
+2. Replacing all string type literals with Type enum values:
+   - 'object' → Type.OBJECT
+   - 'string' → Type.STRING
+
+The changes have been documented in `project-plans/conflicts/type-fix-shell-status.md`.

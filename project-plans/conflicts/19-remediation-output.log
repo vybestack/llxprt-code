@@ -1,0 +1,1 @@
+Task 19 conflict resolution has been completed successfully. The MCP client now properly supports both the multi-provider architecture and the improvements from the main branch, with the sanitizeParameters function correctly imported from tool-registry.ts instead of being duplicated.

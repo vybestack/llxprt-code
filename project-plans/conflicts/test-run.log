@@ -1,0 +1,5 @@
+Test suite run completed with 3 failures out of 852 tests. Created `project-plans/conflicts/test-report.md` documenting:
+- 849 passed tests
+- 3 failed tests (token count mismatch, model update issue, shell path handling)
+- Memory heap error despite 8GB allocation
+- Recommendations for fixes

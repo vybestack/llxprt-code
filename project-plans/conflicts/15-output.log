@@ -1,0 +1,16 @@
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unterminated string in JSON at position 514552 (line 4041 column 1074)
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098770970
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+Task completed successfully! I've resolved all merge conflicts in `packages/cli/src/ui/hooks/useGeminiStream.ts` by:
+
+1. Keeping the import for `getProviderManager` from the multi-provider branch
+2. Preserving the new refs for tracking announced tool calls and cancellation state
+3. Including the UsageMetadata event handling
+4. Adding `onDebugMessage` to the dependency array in `handleCompletedTools`
+
+The file has been validated with linting and staged in git.

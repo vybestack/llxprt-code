@@ -1,0 +1,10 @@
+Task completed successfully. The conflict in `packages/core/src/config/config.ts` has been resolved by merging features from both branches. The file now includes:
+
+1. Both `activeExtensions` and `providerManager` in the ConfigParameters interface
+2. All constructor parameter assignments from both branches
+3. The enhanced `refreshAuth` method with provider support from the multi-provider branch
+4. All methods from both branches including `refreshMemory`, `createToolRegistry`, `getProviderManager`, and `setTelemetryEnabled`
+5. The `createToolRegistry` function as both a class method and a standalone export
+6. TodoRead and TodoWrite tools added to the tool registry
+
+The file has been successfully added to git staging and is ready for commit.

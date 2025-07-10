@@ -1,0 +1,6 @@
+Task completed. I've successfully resolved the conflicts in `docs/cli/authentication.md` by:
+1. Removing the blank line conflict 
+2. Keeping the Cloud Shell section from HEAD
+3. Staging the file
+
+The multi-provider branch didn't actually contain OpenAI or Anthropic authentication documentation in this file, so the resolution was straightforward.

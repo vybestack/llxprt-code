@@ -1,0 +1,8 @@
+Conflict resolution completed successfully. The contentGenerator.ts file has been resolved by:
+
+1. Keeping both new AuthType values (CLOUD_SHELL from main, USE_PROVIDER from multi-provider)
+2. Preserving Cloud Shell auth validation from main
+3. Merging provider support with Cloud Shell support in the content generator creation
+4. Maintaining the correct execution order with provider checks first
+
+The file has been added to git and is ready for commit.

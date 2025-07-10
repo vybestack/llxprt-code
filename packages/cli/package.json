@@ -1,6 +1,6 @@
 {
   "name": "@google/gemini-cli",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Gemini CLI",
   "repository": {
     "type": "git",
@@ -31,7 +31,7 @@
     "dist"
   ],
   "config": {
-    "sandboxImageUri": "us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.9"
+    "sandboxImageUri": "us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.10"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",

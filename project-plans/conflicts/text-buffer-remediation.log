@@ -1,0 +1,1 @@
+The merge conflict in text-buffer.ts has been successfully resolved. The issue was an incomplete conflict marker (only `<<<<<<< HEAD` without the corresponding markers) and an extra closing brace. Both issues have been fixed, the file has been staged, and documentation has been created at `project-plans/conflicts/text-buffer-remediation.md`.

@@ -1,0 +1,25 @@
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unterminated string in JSON at position 242059 (line 2630 column 259)
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098976011
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unexpected end of JSON input
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098976019
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+Task completed successfully! I've resolved all merge conflicts in `packages/cli/src/ui/components/InputPrompt.tsx` by:
+
+1. Preserving the improved slash command completion logic with parent path checking from HEAD
+2. Maintaining shell mode activation using `buffer.text` 
+3. Combining tab and return key handling for suggestions
+4. Keeping the proper history navigation structure
+5. Preserving all keyboard shortcuts and input handling features
+
+The file now compiles without TypeScript errors and has been staged with `git add`.

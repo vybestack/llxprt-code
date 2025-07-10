@@ -1,0 +1,22 @@
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unexpected end of JSON input
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098975998
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unterminated string in JSON at position 24568 (line 501 column 139)
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098976000
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+Task completed successfully! I've resolved the merge conflicts in `packages/core/src/core/turn.ts` by:
+
+1. Keeping the `ServerGeminiUsageMetadataEvent` type definition from the multi-provider branch
+2. Including both `ServerGeminiThoughtEvent` and `ServerGeminiUsageMetadataEvent` in the union type
+
+The file has been staged with `git add` and is ready for the merge commit.

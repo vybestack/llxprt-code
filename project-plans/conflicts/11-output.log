@@ -1,0 +1,9 @@
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted: Unexpected end of JSON input
+
+Claude configuration file at /Users/acoliver/.claude.json is corrupted
+The corrupted file has been backed up to: /Users/acoliver/.claude.json.corrupted.1752098770987
+A backup file exists at: /Users/acoliver/.claude.json.backup
+You can manually restore it by running: cp "/Users/acoliver/.claude.json.backup" "/Users/acoliver/.claude.json"
+
+Conflict in Footer.tsx resolved. The isPaidMode prop from the multi-provider branch has been integrated with the main branch changes.

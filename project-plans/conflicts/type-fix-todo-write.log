@@ -1,0 +1,7 @@
+I've successfully fixed the TypeScript errors in `packages/core/src/tools/todo-write.ts` by:
+
+1. Adding the import for `Type` from '@google/genai'
+2. Replacing all string type literals ('object', 'string', 'array') with their corresponding Type enum values (Type.OBJECT, Type.STRING, Type.ARRAY)
+3. The `minLength: 1` on line 38 was already correctly typed as a number, so no change was needed there
+
+The changes have been documented in `project-plans/conflicts/type-fix-todo-write-status.md`.

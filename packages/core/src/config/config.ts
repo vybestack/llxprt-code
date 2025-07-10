@@ -27,8 +27,6 @@ import {
   GEMINI_CONFIG_DIR as GEMINI_DIR,
 } from '../tools/memoryTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
-import { TodoRead } from '../tools/todo-read.js';
-import { TodoWrite } from '../tools/todo-write.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
@@ -36,7 +34,6 @@ import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import { getProjectTempDir } from '../utils/paths.js';
 import {
   initializeTelemetry,
-  shutdownTelemetry,
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
   TelemetryTarget,
@@ -47,7 +44,6 @@ import {
   DEFAULT_GEMINI_FLASH_MODEL,
 } from './models.js';
 import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
-import { ProviderManager } from '../providers/types.js';
 
 export enum ApprovalMode {
   DEFAULT = 'default',
@@ -108,7 +104,7 @@ export type FlashFallbackHandler = (
   currentModel: string,
   fallbackModel: string,
   error?: unknown,
-) => Promise<boolean>;
+) => Promise<boolean | string | null>;
 
 export interface ConfigParameters {
   sessionId: string;
@@ -145,7 +141,6 @@ export interface ConfigParameters {
   extensionContextFilePaths?: string[];
   listExtensions?: boolean;
   activeExtensions?: ActiveExtension[];
-  providerManager?: ProviderManager;
 }
 
 export class Config {
@@ -188,7 +183,7 @@ export class Config {
   private readonly listExtensions: boolean;
   private readonly _activeExtensions: ActiveExtension[];
   flashFallbackHandler?: FlashFallbackHandler;
-  private readonly providerManager: ProviderManager | undefined;
+  private quotaErrorOccurred: boolean = false;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -232,7 +227,6 @@ export class Config {
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
     this.listExtensions = params.listExtensions ?? false;
     this._activeExtensions = params.activeExtensions ?? [];
-    this.providerManager = params.providerManager;
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
@@ -265,42 +259,13 @@ export class Config {
   }
 
   async refreshAuth(authMethod: AuthType) {
-    // Check if we should use a provider instead
-    let effectiveAuthMethod = authMethod;
-    if (this.providerManager && this.providerManager.hasActiveProvider()) {
-      effectiveAuthMethod = AuthType.USE_PROVIDER;
-    }
-
-    // Check if this is actually a switch to a different auth method
-    const previousAuthType = this.contentGeneratorConfig?.authType;
-    const _isAuthMethodSwitch =
-      previousAuthType && previousAuthType !== effectiveAuthMethod;
-
-    // Always use the original default model when switching auth methods
-    // This ensures users don't stay on Flash after switching between auth types
-    // and allows API key users to get proper fallback behavior from getEffectiveModel
-    const modelToUse = this.model; // Use the original default model
-
-    // Temporarily clear contentGeneratorConfig to prevent getModel() from returning
-    // the previous session's model (which might be Flash)
-    this.contentGeneratorConfig = undefined!;
-
-    const contentConfig = await createContentGeneratorConfig(
-      modelToUse,
-      effectiveAuthMethod,
-      this,
+    this.contentGeneratorConfig = await createContentGeneratorConfig(
+      this.model,
+      authMethod,
     );
 
-    // Add provider manager to config if using providers
-    if (effectiveAuthMethod === AuthType.USE_PROVIDER) {
-      contentConfig.providerManager = this.providerManager;
-    }
-
-    const gc = new GeminiClient(this);
-    this.geminiClient = gc;
-    this.toolRegistry = await createToolRegistry(this);
-    await gc.initialize(contentConfig);
-    this.contentGeneratorConfig = contentConfig;
+    this.geminiClient = new GeminiClient(this);
+    await this.geminiClient.initialize(this.contentGeneratorConfig);
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.modelSwitchedDuringSession = false;
@@ -315,14 +280,6 @@ export class Config {
   }
 
   getModel(): string {
-    // Check if we're using a provider
-    if (this.providerManager && this.providerManager.hasActiveProvider()) {
-      const provider = this.providerManager.getActiveProvider();
-      if (provider) {
-        const providerModel = provider.getCurrentModel?.() || this.model;
-        return `${provider.name}:${providerModel}`;
-      }
-    }
     return this.contentGeneratorConfig?.model || this.model;
   }
 
@@ -346,6 +303,14 @@ export class Config {
 
   setFlashFallbackHandler(handler: FlashFallbackHandler): void {
     this.flashFallbackHandler = handler;
+  }
+
+  setQuotaErrorOccurred(value: boolean): void {
+    this.quotaErrorOccurred = value;
+  }
+
+  getQuotaErrorOccurred(): boolean {
+    return this.quotaErrorOccurred;
   }
 
   getEmbeddingModel(): string {
@@ -580,88 +545,10 @@ export class Config {
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool);
     registerCoreTool(WebSearchTool, this);
-    registerCoreTool(TodoRead);
-    registerCoreTool(TodoWrite);
 
     await registry.discoverTools();
     return registry;
-  }
-
-  getProviderManager(): ProviderManager | undefined {
-    return this.providerManager;
-  }
-
-  /**
-   * Enable or disable telemetry at runtime and persist in the in-memory settings.
-   * This does not automatically persist to disk – callers (e.g. CLI slash
-   * command) should update the user settings file separately.
-   */
-  setTelemetryEnabled(enabled: boolean): void {
-    if (enabled === this.telemetrySettings.enabled) {
-      return; // no-op
-    }
-    this.telemetrySettings.enabled = enabled;
-    if (enabled) {
-      initializeTelemetry(this);
-    } else {
-      shutdownTelemetry().catch(() => {
-        /* swallow */
-      });
-    }
   }
 }
 // Export model constants for use in CLI
 export { DEFAULT_GEMINI_FLASH_MODEL };
-
-export function createToolRegistry(config: Config): Promise<ToolRegistry> {
-  const registry = new ToolRegistry(config);
-  const targetDir = config.getTargetDir();
-
-  // helper to create & register core tools that are enabled
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const registerCoreTool = (ToolClass: any, ...args: unknown[]) => {
-    const className = ToolClass.name;
-    const toolName = ToolClass.Name || className;
-    const coreTools = config.getCoreTools();
-    const excludeTools = config.getExcludeTools();
-
-    let isEnabled = false;
-    if (coreTools === undefined) {
-      isEnabled = true;
-    } else {
-      isEnabled = coreTools.some(
-        (tool) =>
-          tool === className ||
-          tool === toolName ||
-          tool.startsWith(`${className}(`) ||
-          tool.startsWith(`${toolName}(`),
-      );
-    }
-
-    if (excludeTools?.includes(className) || excludeTools?.includes(toolName)) {
-      isEnabled = false;
-    }
-
-    if (isEnabled) {
-      registry.registerTool(new ToolClass(...args));
-    }
-  };
-
-  registerCoreTool(LSTool, targetDir, config);
-  registerCoreTool(ReadFileTool, targetDir, config);
-  registerCoreTool(GrepTool, targetDir);
-  registerCoreTool(GlobTool, targetDir, config);
-  registerCoreTool(EditTool, config);
-  registerCoreTool(WriteFileTool, config);
-  registerCoreTool(WebFetchTool, config);
-  registerCoreTool(ReadManyFilesTool, targetDir, config);
-  registerCoreTool(ShellTool, config);
-  registerCoreTool(MemoryTool);
-  registerCoreTool(WebSearchTool, config);
-  registerCoreTool(TodoRead);
-  registerCoreTool(TodoWrite);
-  return (async () => {
-    await registry.discoverTools();
-    return registry;
-  })();
-}

@@ -1,0 +1,9 @@
+Task completed successfully! I've resolved the merge conflict in `packages/core/src/tools/shell.ts` by:
+
+1. Using the string-based type definitions from the multi-provider branch ('object', 'string' instead of Type.OBJECT, Type.STRING)
+2. Keeping the enhanced error reporting from the main branch (returning objects with detailed reasons instead of just booleans)
+3. Adding backtick blocking to the command substitution check for additional security
+4. Removing the unused Type import
+5. Ensuring schema validation uses the correct property reference
+
+The file has been added to git staging area and passes ESLint validation.

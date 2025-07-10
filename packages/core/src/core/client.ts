@@ -121,70 +121,6 @@ export class GeminiClient {
     return this.contentGenerator;
   }
 
-  async getPublicContentGenerator(): Promise<ContentGenerator> {
-    return this.getContentGenerator();
-  }
-
-  async updateModel(newModel: string): Promise<void> {
-    this.config.setModel(newModel);
-
-    // Re-initialize the chat with the new model
-    this.chat = await this.startChat();
-  }
-
-  async listAvailableModels(): Promise<
-    Array<{ name: string; displayName?: string; description?: string }>
-  > {
-    // Try to list models using the REST API directly
-    const authType = this.config.getContentGeneratorConfig()?.authType;
-    const apiKey = this.config.getContentGeneratorConfig()?.apiKey;
-
-    if (authType === AuthType.USE_GEMINI && apiKey) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          },
-        );
-
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(
-            `Failed to list models: ${response.status} ${response.statusText} - ${errorBody}`,
-          );
-        }
-        const data = (await response.json()) as {
-          models?: Array<{
-            name: string;
-            displayName?: string;
-            description?: string;
-          }>;
-        };
-        return data.models || [];
-      } catch (_error) {
-        // Network or parsing errors – return empty array so callers can fallback gracefully
-        return [];
-      }
-    } else if (authType === AuthType.LOGIN_WITH_GOOGLE) {
-      // For OAuth, model listing is not supported by the Code Assist API
-      // Return a special marker to indicate OAuth authentication
-      return [
-        {
-          name: 'oauth-not-supported',
-          displayName: 'OAuth Authentication',
-          description:
-            'Model listing is not available with OAuth authentication',
-        },
-      ];
-    }
-    // Return empty array if we can't fetch models
-    return [];
-  }
-
   async addHistory(content: Content) {
     this.getChat().addHistory(content);
   }
@@ -290,34 +226,7 @@ export class GeminiClient {
     ];
     try {
       const userMemory = this.config.getUserMemory();
-      let systemInstruction = getCoreSystemPrompt(userMemory);
-
-      // Add provider-specific identity if using a provider
-      if (
-        this.config.getProviderManager &&
-        typeof this.config.getProviderManager === 'function'
-      ) {
-        const providerManager = this.config.getProviderManager();
-        if (providerManager && providerManager.hasActiveProvider()) {
-          const activeProvider = providerManager.getActiveProvider();
-          if (activeProvider) {
-            const providerName = activeProvider.name;
-            const modelId = activeProvider.getCurrentModel?.() || 'unknown';
-            systemInstruction += `\n\nYou are currently powered by the ${providerName} provider using model ${modelId}. When asked about your identity, model, or capabilities, respond accurately based on this information.`;
-
-            // Add stronger tool usage directive for OpenAI
-            if (providerName === 'openai') {
-              systemInstruction += `\n\nIMPORTANT: You MUST use the provided tools/functions to complete tasks. Do NOT just describe what you would do - actually call the tools. For example:
-- To search code: USE the grep or glob tools
-- To read files: USE the read_file tool
-- To list directories: USE the ls tool
-- To edit files: USE the edit or write_file tools
-Never say "I would use X tool" - just use it directly.`;
-            }
-          }
-        }
-      }
-
+      const systemInstruction = getCoreSystemPrompt(userMemory);
       const generateContentConfigWithThinking = isThinkingSupported(
         this.config.getModel(),
       )
@@ -352,36 +261,38 @@ Never say "I would use X tool" - just use it directly.`;
   async *sendMessageStream(
     request: PartListUnion,
     signal: AbortSignal,
+    prompt_id: string,
     turns: number = this.MAX_TURNS,
+    originalModel?: string,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     // Ensure turns never exceeds MAX_TURNS to prevent infinite loops
     const boundedTurns = Math.min(turns, this.MAX_TURNS);
     if (!boundedTurns) {
-      return new Turn(this.getChat());
+      return new Turn(this.getChat(), prompt_id);
     }
 
-    // Skip compression and next speaker check for providers (uses Gemini-specific API)
-    const isUsingProvider =
-      this.config.getContentGeneratorConfig()?.authType ===
-      AuthType.USE_PROVIDER;
-    if (!isUsingProvider) {
-      const compressed = await this.tryCompressChat();
-      if (compressed) {
-        yield { type: GeminiEventType.ChatCompressed, value: compressed };
-      }
+    // Track the original model from the first call to detect model switching
+    const initialModel = originalModel || this.config.getModel();
+
+    const compressed = await this.tryCompressChat(prompt_id);
+
+    if (compressed) {
+      yield { type: GeminiEventType.ChatCompressed, value: compressed };
     }
-    const turn = new Turn(this.getChat());
+    const turn = new Turn(this.getChat(), prompt_id);
     const resultStream = turn.run(request, signal);
     for await (const event of resultStream) {
       yield event;
     }
+    if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
+      // Check if model was switched during the call (likely due to quota error)
+      const currentModel = this.config.getModel();
+      if (currentModel !== initialModel) {
+        // Model was switched (likely due to quota error fallback)
+        // Don't continue with recursive call to prevent unwanted Flash execution
+        return turn;
+      }
 
-    if (
-      !turn.pendingToolCalls.length &&
-      signal &&
-      !signal.aborted &&
-      !isUsingProvider
-    ) {
       const nextSpeakerCheck = await checkNextSpeaker(
         this.getChat(),
         this,
@@ -391,7 +302,13 @@ Never say "I would use X tool" - just use it directly.`;
         const nextRequest = [{ text: 'Please continue.' }];
         // This recursive call's events will be yielded out, but the final
         // turn object will be from the top-level call.
-        yield* this.sendMessageStream(nextRequest, signal, boundedTurns - 1);
+        yield* this.sendMessageStream(
+          nextRequest,
+          signal,
+          prompt_id,
+          boundedTurns - 1,
+          initialModel,
+        );
       }
     }
     return turn;
@@ -401,9 +318,12 @@ Never say "I would use X tool" - just use it directly.`;
     contents: Content[],
     schema: SchemaUnion,
     abortSignal: AbortSignal,
-    model: string = DEFAULT_GEMINI_FLASH_MODEL,
+    model?: string,
     config: GenerateContentConfig = {},
   ): Promise<Record<string, unknown>> {
+    // Use current model from config instead of hardcoded Flash model
+    const modelToUse =
+      model || this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
     try {
       const userMemory = this.config.getUserMemory();
       const systemInstruction = getCoreSystemPrompt(userMemory);
@@ -415,7 +335,7 @@ Never say "I would use X tool" - just use it directly.`;
 
       const apiCall = () =>
         this.getContentGenerator().generateContent({
-          model,
+          model: modelToUse,
           config: {
             ...requestConfig,
             systemInstruction,
@@ -575,6 +495,7 @@ Never say "I would use X tool" - just use it directly.`;
   }
 
   async tryCompressChat(
+    prompt_id: string,
     force: boolean = false,
   ): Promise<ChatCompressionInfo | null> {
     const curatedHistory = this.getChat().getHistory(true);
@@ -621,14 +542,17 @@ Never say "I would use X tool" - just use it directly.`;
 
     this.getChat().setHistory(historyToCompress);
 
-    const { text: summary } = await this.getChat().sendMessage({
-      message: {
-        text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+    const { text: summary } = await this.getChat().sendMessage(
+      {
+        message: {
+          text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+        },
+        config: {
+          systemInstruction: { text: getCompressionPrompt() },
+        },
       },
-      config: {
-        systemInstruction: { text: getCompressionPrompt() },
-      },
-    });
+      prompt_id,
+    );
     this.chat = await this.startChat([
       {
         role: 'user',
@@ -688,9 +612,13 @@ Never say "I would use X tool" - just use it directly.`;
           fallbackModel,
           error,
         );
-        if (accepted) {
+        if (accepted !== false && accepted !== null) {
           this.config.setModel(fallbackModel);
           return fallbackModel;
+        }
+        // Check if the model was switched manually in the handler
+        if (this.config.getModel() === fallbackModel) {
+          return null; // Model was switched but don't continue with current prompt
         }
       } catch (error) {
         console.warn('Flash fallback handler failed:', error);

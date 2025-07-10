@@ -1,0 +1,16 @@
+I've completed the investigation of the telemetry errors. The detailed report has been created at `project-plans/conflicts/telemetry-investigation.md`. 
+
+## Key Findings:
+
+1. **Root Cause**: Using CommonJS `require()` in an ES module context at `packages/core/src/utils/user_id.ts:70`
+
+2. **Why It Happens**: The code attempts to dynamically load a module to avoid circular dependencies between `user_id.ts` and `oauth2.ts`
+
+3. **Impact**: Non-fatal error that prevents Google Account ID from being included in telemetry, creating debug log noise
+
+4. **Proposed Solutions**: 
+   - Convert to async dynamic import (recommended)
+   - Refactor to eliminate circular dependency
+   - Other architectural approaches
+
+The error occurs frequently throughout CLI usage but doesn't affect core functionality.

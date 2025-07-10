@@ -1,0 +1,10 @@
+Excellent! Both files have been successfully resolved and added to git. The task is now complete.
+
+## Summary
+
+I've successfully resolved the conflicts in both requested test files:
+
+1. **packages/core/src/core/client.test.ts** - Fixed 5 conflict areas including variable naming, type casting, and merged test suites from both branches
+2. **packages/core/src/core/coreToolScheduler.test.ts** - Added the required import for ModifiableTool and ModifyContext
+
+Both files now compile without errors and have been added to git. The status tracking file has been created and marked as completed.

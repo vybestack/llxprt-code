@@ -1,0 +1,7 @@
+Task completed. I have successfully resolved the three specified "both added" conflicts:
+
+1. **docs/quota-and-pricing.md** - Used HEAD version (correct grammar)
+2. **packages/cli/src/ui/utils/MarkdownDisplay.test.tsx** - Used HEAD version (more comprehensive tests)
+3. **packages/cli/src/ui/utils/TableRenderer.tsx** - Used HEAD version (supports inline markdown)
+
+All files have been staged with `git add` and the status tracking file has been created at `project-plans/conflicts/26a-status.md` marking the task as completed.
