@@ -776,7 +776,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: 'h',
         }),
       );
@@ -786,7 +785,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: 'i',
         }),
       );
@@ -803,7 +801,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\r',
         }),
       );
@@ -825,7 +822,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x7f',
         }),
       );
@@ -921,7 +917,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x1b[D',
         }),
       ); // cursor [0,1]
@@ -932,7 +927,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: '\x1b[C',
         }),
       ); // cursor [0,2]
@@ -947,11 +941,10 @@ describe('useTextBuffer', () => {
       // Simulate pasting by calling handleInput with a string longer than 1 char
       act(() =>
         result.current.handleInput({
-          name: '',
+          name: undefined,
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: textWithAnsi,
         }),
       );
@@ -968,7 +961,6 @@ describe('useTextBuffer', () => {
           ctrl: false,
           meta: false,
           shift: true,
-          paste: false,
           sequence: '\r',
         }),
       ); // Simulates Shift+Enter in VSCode terminal
@@ -1158,11 +1150,10 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const textWithAnsi = '\x1B[31mHello\x1B[0m';
       act(() =>
         result.current.handleInput({
-          name: '',
+          name: undefined,
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: textWithAnsi,
         }),
       );
@@ -1176,11 +1167,10 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const textWithControlChars = 'H\x07e\x08l\x0Bl\x0Co'; // BELL, BACKSPACE, VT, FF
       act(() =>
         result.current.handleInput({
-          name: '',
+          name: undefined,
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: textWithControlChars,
         }),
       );
@@ -1194,11 +1184,10 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const textWithMixed = '\u001B[4mH\u001B[0mello';
       act(() =>
         result.current.handleInput({
-          name: '',
+          name: undefined,
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: textWithMixed,
         }),
       );
@@ -1212,11 +1201,10 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const validText = 'Hello World\nThis is a test.';
       act(() =>
         result.current.handleInput({
-          name: '',
+          name: undefined,
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: validText,
         }),
       );
@@ -1230,11 +1218,10 @@ Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots 
       const pastedText = '\u001B[4mPasted\u001B[4m Text';
       act(() =>
         result.current.handleInput({
-          name: '',
+          name: undefined,
           ctrl: false,
           meta: false,
           shift: false,
-          paste: false,
           sequence: pastedText,
         }),
       );

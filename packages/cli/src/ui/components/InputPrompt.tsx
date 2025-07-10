@@ -220,7 +220,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           completion.navigateDown();
           return;
         }
-
         if (key.name === 'tab' || (key.name === 'return' && !key.ctrl)) {
           if (completion.suggestions.length > 0) {
             const targetIndex =
@@ -307,7 +306,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         buffer.killLineLeft();
         return;
       }
-
       // External editor
       const isCtrlX = key.ctrl && (key.name === 'x' || key.sequence === '\x18');
       if (isCtrlX) {
@@ -394,7 +392,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                 }
               }
               return (
-                <Text key={`line-${visualIdxInRenderedSet}`}>{display}</Text>
+                <Text
+                  color={Colors.Foreground}
+                  key={`line-${visualIdxInRenderedSet}`}
+                >
+                  {display}
+                </Text>
               );
             })
           )}

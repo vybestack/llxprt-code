@@ -15,7 +15,10 @@ import {
   ToolResult,
   ToolResultDisplay,
 } from '../tools/tools.js';
-import { getResponseText } from '../utils/generateContentResponseUtilities.js';
+import {
+  getResponseText,
+  getFunctionCalls,
+} from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import {
   getErrorMessage,
@@ -48,6 +51,7 @@ export enum GeminiEventType {
   Error = 'error',
   ChatCompressed = 'chat_compressed',
   Thought = 'thought',
+  UsageMetadata = 'usage_metadata',
 }
 
 export interface StructuredError {
@@ -127,6 +131,15 @@ export type ServerGeminiChatCompressedEvent = {
   value: ChatCompressionInfo | null;
 };
 
+export type ServerGeminiUsageMetadataEvent = {
+  type: GeminiEventType.UsageMetadata;
+  value: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+    cachedContentTokenCount?: number;
+  };
+};
 // The original union type, now composed of the individual types
 export type ServerGeminiStreamEvent =
   | ServerGeminiContentEvent
@@ -136,7 +149,8 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiUserCancelledEvent
   | ServerGeminiErrorEvent
   | ServerGeminiChatCompressedEvent
-  | ServerGeminiThoughtEvent;
+  | ServerGeminiThoughtEvent
+  | ServerGeminiUsageMetadataEvent;
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
@@ -196,7 +210,7 @@ export class Turn {
         }
 
         // Handle function calls (requesting tool execution)
-        const functionCalls = resp.functionCalls ?? [];
+        const functionCalls = getFunctionCalls(resp) ?? [];
         for (const fnCall of functionCalls) {
           const event = this.handlePendingFunctionCall(fnCall);
           if (event) {

@@ -33,6 +33,7 @@ export * from './utils/memoryDiscovery.js';
 export * from './utils/gitIgnoreParser.js';
 export * from './utils/editor.js';
 export * from './utils/quotaErrorDetection.js';
+export * from './utils/retry.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -56,7 +57,23 @@ export * from './tools/web-search.js';
 export * from './tools/read-many-files.js';
 export * from './tools/mcp-client.js';
 export * from './tools/mcp-tool.js';
+export * from './tools/todo-read.js';
+export * from './tools/todo-write.js';
+export * from './tools/todo-schemas.js';
+export * from './tools/todo-store.js';
 
 // Export telemetry functions
 export * from './telemetry/index.js';
+export * from './telemetry/uiTelemetry.js';
 export { sessionId } from './utils/session.js';
+
+// Export provider types and classes
+export type {
+  Provider,
+  ProviderManager,
+  ProviderMessage,
+  ProviderTool,
+  ProviderToolCall,
+} from './providers/types.js';
+export * from './providers/ProviderContentGenerator.js';
+export * from './providers/adapters/GeminiCompatibleWrapper.js';

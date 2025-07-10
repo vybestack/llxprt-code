@@ -168,8 +168,14 @@ export function convertToFunctionResponse(
         ) || '';
       return createFunctionResponsePart(callId, toolName, stringifiedOutput);
     }
-    // It's a functionResponse that we should pass through as is.
-    return contentToProcess;
+    // It's a functionResponse - ensure it has the correct id and name
+    return {
+      functionResponse: {
+        ...contentToProcess.functionResponse,
+        id: callId,
+        name: toolName,
+      },
+    };
   }
 
   if (contentToProcess.inlineData || contentToProcess.fileData) {

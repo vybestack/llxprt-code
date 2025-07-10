@@ -47,7 +47,7 @@ export function AuthInProgress({
         </Text>
       ) : (
         <Box>
-          <Text>
+          <Text color={Colors.Foreground}>
             <Spinner type="dots" /> Waiting for auth... (Press ESC to cancel)
           </Text>
         </Box>

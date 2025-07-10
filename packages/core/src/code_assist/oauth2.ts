@@ -62,7 +62,6 @@ export async function getOauthClient(
     clientId: OAUTH_CLIENT_ID,
     clientSecret: OAUTH_CLIENT_SECRET,
   });
-
   client.on('tokens', async (tokens: Credentials) => {
     await cacheCredentials(tokens);
   });

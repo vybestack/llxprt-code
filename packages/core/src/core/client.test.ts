@@ -15,6 +15,8 @@ import {
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
 import { AuthType, ContentGenerator } from './contentGenerator.js';
+import type { Mock } from 'vitest';
+import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { Turn } from './turn.js';
@@ -124,15 +126,15 @@ describe('Gemini Client (client.ts)', () => {
 
     // Set up the mock for GoogleGenAI constructor and its methods
     const MockedGoogleGenAI = vi.mocked(GoogleGenAI);
-    MockedGoogleGenAI.mockImplementation(() => {
-      const mock = {
+    MockedGoogleGenAI.mockImplementation((..._args: unknown[]): GoogleGenAI => {
+      const mockInstance = {
         chats: { create: mockChatCreateFn },
         models: {
           generateContent: mockGenerateContentFn,
           embedContent: mockEmbedContentFn,
         },
       };
-      return mock as unknown as GoogleGenAI;
+      return mockInstance as unknown as GoogleGenAI;
     });
 
     mockChatCreateFn.mockResolvedValue({} as Chat);
@@ -161,17 +163,15 @@ describe('Gemini Client (client.ts)', () => {
       vertexai: false,
       authType: AuthType.USE_GEMINI,
     };
-    MockedConfig.mockImplementation(() => {
-      const mock = {
+    MockedConfig.mockImplementation((): Config => {
+      const mock: Partial<Config> = {
         getContentGeneratorConfig: vi
           .fn()
           .mockReturnValue(contentGeneratorConfig),
         getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
         getModel: vi.fn().mockReturnValue('test-model'),
         getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
-        getApiKey: vi.fn().mockReturnValue('test-key'),
-        getVertexAI: vi.fn().mockReturnValue(false),
-        getUserAgent: vi.fn().mockReturnValue('test-agent'),
+
         getUserMemory: vi.fn().mockReturnValue(''),
         getFullContext: vi.fn().mockReturnValue(false),
         getSessionId: vi.fn().mockReturnValue('test-session-id'),
@@ -179,12 +179,12 @@ describe('Gemini Client (client.ts)', () => {
         getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
         getFileService: vi.fn().mockReturnValue(fileService),
       };
-      return mock as unknown as Config;
+      return mock as Config;
     });
 
     // We can instantiate the client here since Config is mocked
     // and the constructor will use the mocked GoogleGenAI
-    const mockConfig = new Config({} as never);
+    const mockConfig = new Config({} as ConfigParameters);
     client = new GeminiClient(mockConfig);
     await client.initialize(contentGeneratorConfig);
   });
@@ -317,6 +317,8 @@ describe('Gemini Client (client.ts)', () => {
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: mockGenerateContentFn,
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -345,6 +347,8 @@ describe('Gemini Client (client.ts)', () => {
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: mockGenerateContentFn,
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -370,8 +374,8 @@ describe('Gemini Client (client.ts)', () => {
       const mockChat = {
         addHistory: vi.fn(),
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      client['chat'] = mockChat as any;
+
+      client['chat'] = mockChat as unknown as GeminiChat;
 
       const newContent = {
         role: 'user',
@@ -536,6 +540,9 @@ describe('Gemini Client (client.ts)', () => {
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
+        embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -738,7 +745,7 @@ describe('Gemini Client (client.ts)', () => {
     });
   });
 
-  describe('generateContent', () => {
+  describe('generateContent model usage', () => {
     it('should use current model from config for content generation', async () => {
       const initialModel = client['config'].getModel();
       const contents = [{ role: 'user', parts: [{ text: 'test' }] }];
@@ -767,7 +774,7 @@ describe('Gemini Client (client.ts)', () => {
     });
   });
 
-  describe('tryCompressChat', () => {
+  describe('tryCompressChat model usage', () => {
     it('should use current model from config for token counting after sendMessage', async () => {
       const initialModel = client['config'].getModel();
 
@@ -847,6 +854,153 @@ describe('Gemini Client (client.ts)', () => {
         fallbackModel,
         undefined,
       );
+    });
+  });
+
+  describe('updateModel', () => {
+    it('should update model in config and reinitialize chat', async () => {
+      // Arrange
+      const mockSetModel = vi.fn();
+      const mockConfig = {
+        getModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+        setModel: mockSetModel,
+        getProjectRoot: vi.fn().mockReturnValue('/test'),
+        getWorkingDir: vi.fn().mockReturnValue('/test'),
+        getFullContext: vi.fn().mockReturnValue(false),
+        getUserMemory: vi.fn().mockReturnValue(''),
+        getGeminiMdFileCount: vi.fn().mockReturnValue(0),
+        getFileService: vi.fn().mockReturnValue(null),
+        getCheckpointingEnabled: vi.fn().mockReturnValue(false),
+        getToolRegistry: vi.fn().mockResolvedValue({
+          generateSchema: vi.fn().mockReturnValue([]),
+          getToolTelemetry: vi.fn().mockReturnValue([]),
+          getFunctionDeclarations: vi.fn().mockReturnValue([]),
+        }),
+      };
+      client['config'] = mockConfig as unknown as Config;
+
+      // Mock the content generator and chat
+      const mockContentGenerator: ContentGenerator = {
+        generateContent: vi.fn(),
+        generateContentStream: vi.fn(),
+        countTokens: vi.fn(),
+        embedContent: vi.fn(),
+      };
+      client['contentGenerator'] = mockContentGenerator as ContentGenerator;
+
+      const initialChat = client['chat'];
+
+      // Act
+      await client.updateModel('gemini-2.5-flash');
+
+      // Assert
+      expect(mockSetModel).toHaveBeenCalledWith('gemini-2.5-flash');
+      expect(client['model']).toBe('gemini-2.5-flash');
+      expect(client['chat']).not.toBe(initialChat); // Chat should be reinitialized
+    });
+  });
+
+  describe('listAvailableModels', () => {
+    beforeEach(() => {
+      global.fetch = vi.fn();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should fetch models from API for GEMINI auth type', async () => {
+      // Arrange
+      const mockModels = [
+        { name: 'models/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro' },
+        { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
+      ];
+
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.USE_GEMINI,
+          apiKey: 'test-api-key',
+        }),
+      };
+      client['config'] = mockConfig as unknown as Config;
+
+      (global.fetch as unknown as Mock).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ models: mockModels }),
+      });
+
+      // Act
+      const models = await client.listAvailableModels();
+
+      // Assert
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=test-api-key',
+        expect.objectContaining({
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      expect(models).toEqual(mockModels);
+    });
+
+    it('should return OAuth marker for OAuth auth types', async () => {
+      // Arrange
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.LOGIN_WITH_GOOGLE,
+        }),
+      };
+      client['config'] = mockConfig as unknown as Config;
+
+      // Act
+      const models = await client.listAvailableModels();
+
+      // Assert
+      expect(models).toEqual([
+        {
+          name: 'oauth-not-supported',
+          displayName: 'OAuth Authentication',
+          description:
+            'Model listing is not available with OAuth authentication',
+        },
+      ]);
+    });
+
+    it('should return empty array when API call fails', async () => {
+      // Arrange
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: AuthType.USE_GEMINI,
+          apiKey: 'test-api-key',
+        }),
+      };
+      client['config'] = mockConfig as unknown as Config;
+
+      (global.fetch as unknown as Mock).mockRejectedValue(
+        new Error('Network error'),
+      );
+
+      // Act
+      const models = await client.listAvailableModels();
+
+      // Assert
+      expect(models).toEqual([]);
+    });
+
+    it('should return empty array for unsupported auth type', async () => {
+      // Arrange
+      const mockConfig = {
+        getContentGeneratorConfig: vi.fn().mockReturnValue({
+          authType: undefined,
+        }),
+      };
+      client['config'] = mockConfig as unknown as Config;
+
+      // Act
+      const models = await client.listAvailableModels();
+
+      // Assert
+      expect(models).toEqual([]);
     });
   });
 });

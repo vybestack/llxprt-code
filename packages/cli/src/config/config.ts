@@ -23,6 +23,15 @@ import { Settings } from './settings.js';
 import { Extension, filterActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
+import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
+import { ProviderManagerAdapter } from '../providers/ProviderManagerAdapter.js';
+import * as dotenv from 'dotenv';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+
+const GEMINI_DIR = '.gemini';
 
 // Simple console logger for now - replace with actual logger if available
 const logger = {
@@ -261,7 +270,11 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(settings, argv);
 
-  return new Config({
+  // Create provider manager adapter
+  const cliProviderManager = getProviderManager();
+  const providerManagerAdapter = new ProviderManagerAdapter(cliProviderManager);
+
+  const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
     sandbox: sandboxConfig,
@@ -317,7 +330,11 @@ export async function loadCliConfig(
       name: e.config.name,
       version: e.config.version,
     })),
+    providerManager: providerManagerAdapter,
   });
+
+  // Enhance the config with provider support
+  return enhanceConfigWithProviders(config);
 }
 
 function mergeMcpServers(settings: Settings, extensions: Extension[]) {
@@ -349,4 +366,40 @@ function mergeExcludeTools(
     }
   }
   return [...allExcludeTools];
+}
+
+function findEnvFile(startDir: string): string | null {
+  let currentDir = path.resolve(startDir);
+  while (true) {
+    // prefer gemini-specific .env under GEMINI_DIR
+    const geminiEnvPath = path.join(currentDir, GEMINI_DIR, '.env');
+    if (fs.existsSync(geminiEnvPath)) {
+      return geminiEnvPath;
+    }
+    const envPath = path.join(currentDir, '.env');
+    if (fs.existsSync(envPath)) {
+      return envPath;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir || !parentDir) {
+      // check .env under home as fallback, again preferring gemini-specific .env
+      const homeGeminiEnvPath = path.join(os.homedir(), GEMINI_DIR, '.env');
+      if (fs.existsSync(homeGeminiEnvPath)) {
+        return homeGeminiEnvPath;
+      }
+      const homeEnvPath = path.join(os.homedir(), '.env');
+      if (fs.existsSync(homeEnvPath)) {
+        return homeEnvPath;
+      }
+      return null;
+    }
+    currentDir = parentDir;
+  }
+}
+
+export function loadEnvironment(): void {
+  const envFilePath = findEnvFile(process.cwd());
+  if (envFilePath) {
+    dotenv.config({ path: envFilePath, quiet: true });
+  }
 }

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="3" failures="0" errors="0" time="3.565383167">
+    <testsuite name="src/providers/integration/multi-provider.integration.test.ts" timestamp="2025-06-27T15:38:03.511Z" hostname="Andrews-MacBook-Pro-2.local" tests="3" failures="0" errors="0" skipped="0" time="3.565383167">
+        <testcase classname="src/providers/integration/multi-provider.integration.test.ts" name="Multi-Provider Integration Tests (OpenAI) &gt; should list OpenAI models when OpenAI is active" time="1.080636208">
+        </testcase>
+        <testcase classname="src/providers/integration/multi-provider.integration.test.ts" name="Multi-Provider Integration Tests (OpenAI) &gt; should generate chat completion from OpenAI" time="0.873051625">
+            <system-out>
+🔴 [OpenAIProvider] generateChatCompletion ACTUALLY CALLED!
+🔴 [OpenAIProvider] Model: gpt-3.5-turbo
+🔴 [OpenAIProvider] First 3 messages: [ { role: [32m&apos;user&apos;[39m, content: [32m&apos;Hello, how are you?...&apos;[39m } ]
+[OpenAIProvider] generateChatCompletion called
+[OpenAIProvider] Model: gpt-3.5-turbo
+[OpenAIProvider] Messages: [
+  {
+    &quot;role&quot;: &quot;user&quot;,
+    &quot;content&quot;: &quot;Hello, how are you?&quot;
+  }
+]
+[OpenAIProvider] Tools provided: [33m0[39m
+[OpenAIProvider] Converted messages for OpenAI: [
+  {
+    &quot;role&quot;: &quot;user&quot;,
+    &quot;content&quot;: &quot;Hello, how are you?&quot;
+  }
+]
+
+            </system-out>
+        </testcase>
+        <testcase classname="src/providers/integration/multi-provider.integration.test.ts" name="Multi-Provider Integration Tests (OpenAI) &gt; should handle tool calls with OpenAI" time="1.605996667">
+            <system-out>
+🔴 [OpenAIProvider] generateChatCompletion ACTUALLY CALLED!
+🔴 [OpenAIProvider] Model: gpt-3.5-turbo
+🔴 [OpenAIProvider] First 3 messages: [ { role: [32m&apos;user&apos;[39m, content: [32m&apos;What is the weather like in Boston?...&apos;[39m } ]
+[OpenAIProvider] generateChatCompletion called
+[OpenAIProvider] Model: gpt-3.5-turbo
+[OpenAIProvider] Messages: [
+  {
+    &quot;role&quot;: &quot;user&quot;,
+    &quot;content&quot;: &quot;What is the weather like in Boston?&quot;
+  }
+]
+[OpenAIProvider] Tools provided: [33m1[39m
+[OpenAIProvider] Tool details: [
+  {
+    &quot;type&quot;: &quot;function&quot;,
+    &quot;function&quot;: {
+      &quot;name&quot;: &quot;get_current_weather&quot;,
+      &quot;description&quot;: &quot;Get the current weather in a given location&quot;,
+      &quot;parameters&quot;: {
+        &quot;type&quot;: &quot;object&quot;,
+        &quot;properties&quot;: {
+          &quot;location&quot;: {
+            &quot;type&quot;: &quot;string&quot;,
+            &quot;description&quot;: &quot;The city and state, e.g. San Francisco, CA&quot;
+          },
+          &quot;unit&quot;: {
+            &quot;type&quot;: &quot;string&quot;,
+            &quot;enum&quot;: [
+              &quot;celsius&quot;,
+              &quot;fahrenheit&quot;
+            ]
+          }
+        },
+        &quot;required&quot;: [
+          &quot;location&quot;
+        ]
+      }
+    }
+  }
+]
+[OpenAIProvider] Converted messages for OpenAI: [
+  {
+    &quot;role&quot;: &quot;user&quot;,
+    &quot;content&quot;: &quot;What is the weather like in Boston?&quot;
+  }
+]
+
+            </system-out>
+        </testcase>
+    </testsuite>
+</testsuites>

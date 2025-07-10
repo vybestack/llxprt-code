@@ -233,7 +233,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       } else {
         contentBlocks.push(
           <Box key={key}>
-            <Text wrap="wrap">
+            <Text color={Colors.Foreground} wrap="wrap">
               <RenderInline text={line} />
             </Text>
           </Box>,
@@ -366,10 +366,10 @@ const RenderListItemInternal: React.FC<RenderListItemProps> = ({
       flexDirection="row"
     >
       <Box width={prefixWidth}>
-        <Text>{prefix}</Text>
+        <Text color={Colors.Foreground}>{prefix}</Text>
       </Box>
       <Box flexGrow={LIST_ITEM_TEXT_FLEX_GROW}>
-        <Text wrap="wrap">
+        <Text color={Colors.Foreground} wrap="wrap">
           <RenderInline text={itemText} />
         </Text>
       </Box>

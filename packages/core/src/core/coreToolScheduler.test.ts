@@ -401,4 +401,39 @@ describe('convertToFunctionResponse', () => {
       },
     });
   });
+
+  it('should ensure correct id when llmContent contains functionResponse without id', () => {
+    const llmContent: Part = {
+      functionResponse: {
+        name: 'originalTool',
+        response: { output: 'Tool completed successfully' },
+      },
+    };
+    const result = convertToFunctionResponse(toolName, callId, llmContent);
+    expect(result).toEqual({
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response: { output: 'Tool completed successfully' },
+      },
+    });
+  });
+
+  it('should override id when llmContent contains functionResponse with different id', () => {
+    const llmContent: Part = {
+      functionResponse: {
+        id: 'wrong_id',
+        name: 'originalTool',
+        response: { output: 'Tool completed successfully' },
+      },
+    };
+    const result = convertToFunctionResponse(toolName, callId, llmContent);
+    expect(result).toEqual({
+      functionResponse: {
+        id: callId, // Should use the provided callId, not 'wrong_id'
+        name: toolName, // Should use the provided toolName
+        response: { output: 'Tool completed successfully' },
+      },
+    });
+  });
 });

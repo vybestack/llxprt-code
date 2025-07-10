@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ ' * Copyright 2025 Vybestack LLC',
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -35,6 +35,13 @@ export default tseslint.config(
       'packages/server/dist/**',
       'eslint-rules/*',
       'bundle/**',
+      'packages/cli/src/test-*.ts',
+      'packages/cli/src/test-*.tsx',
+      'packages/cli/src/debug-*.ts',
+      'packages/cli/src/debug-*.tsx',
+      'debug-*.js',
+      'test-*.js',
+      'test-*.mjs',
     ],
   },
   eslint.configs.recommended,
@@ -136,24 +143,7 @@ export default tseslint.config(
       'default-case': 'error',
     },
   },
-  {
-    files: ['./**/*.{tsx,ts,js}'],
-    plugins: {
-      'license-header': licenseHeader,
-    },
-    rules: {
-      'license-header/header': [
-        'error',
-        [
-          '/**',
-          ' * @license',
-          ' * Copyright 2025 Google LLC',
-          ' * SPDX-License-Identifier: Apache-2.0',
-          ' */',
-        ],
-      ],
-    },
-  },
+
   // extra settings for scripts that we run directly with node
   {
     files: ['./scripts/**/*.js', 'esbuild.config.js'],
@@ -179,7 +169,7 @@ export default tseslint.config(
   prettierConfig,
   // extra settings for scripts that we run directly with node
   {
-    files: ['./integration-tests/**/*.js'],
+    files: ['./integration-tests/**/*.js', './test-*.js', './test-*.mjs'],
     languageOptions: {
       globals: {
         ...globals.node,

@@ -23,6 +23,10 @@ import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
+import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
+import { useProviderDialog } from './hooks/useProviderDialog.js';
+import { ProviderModelDialog } from './components/ProviderModelDialog.js';
+import { ProviderDialog } from './components/ProviderDialog.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
@@ -76,8 +80,43 @@ import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
+
+/**
+ * Get the display model name
+ */
+function getDisplayModelName(config: Config): string {
+  try {
+    const providerManager = getProviderManager();
+    if (providerManager.hasActiveProvider()) {
+      const provider = providerManager.getActiveProvider();
+      const model = provider.getCurrentModel?.() || 'unknown';
+      return `${provider.name}:${model}`;
+    }
+  } catch (_e) {
+    // Fall back to config model if provider manager fails
+  }
+  // The config.getModel() is now enhanced to include provider prefix
+  return config.getModel();
+}
+
+/**
+ * Get the payment mode status from the current provider
+ */
+function getProviderPaymentMode(): boolean | undefined {
+  try {
+    const providerManager = getProviderManager();
+    if (providerManager.hasActiveProvider()) {
+      const provider = providerManager.getActiveProvider();
+      return provider.isPaidMode?.();
+    }
+  } catch (_e) {
+    // Return undefined if we can't determine payment mode
+  }
+  return undefined;
+}
 
 interface AppProps {
   config: Config;
@@ -107,6 +146,39 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   const { stats: sessionStats } = useSessionStats();
+
+  // Add payment mode warning to startup warnings only at startup
+  const allStartupWarnings = useMemo(() => {
+    const warnings = [...startupWarnings];
+
+    // Only show payment warnings at startup (when history is empty)
+    if (history.length === 0) {
+      try {
+        const providerManager = getProviderManager();
+        if (providerManager.hasActiveProvider()) {
+          const provider = providerManager.getActiveProvider();
+          const isPaidMode = provider.isPaidMode?.();
+
+          if (isPaidMode !== undefined) {
+            if (isPaidMode) {
+              warnings.push(
+                `⚠️  PAID MODE: You are using ${provider.name} with API credentials - usage will be charged to your account`,
+              );
+            } else if (provider.name === 'gemini') {
+              warnings.push(
+                `✅ FREE MODE: You are using Gemini with OAuth authentication - no charges will apply`,
+              );
+            }
+          }
+        }
+      } catch (_e) {
+        // Ignore errors when checking payment mode
+      }
+    }
+
+    return warnings;
+  }, [startupWarnings, history]);
+  const [transientWarnings, setTransientWarnings] = useState<string[]>([]);
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -122,7 +194,18 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   const [editorError, setEditorError] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState<number>(0);
   const [corgiMode, setCorgiMode] = useState(false);
-  const [currentModel, setCurrentModel] = useState(config.getModel());
+  const [currentModel, setCurrentModel] = useState(getDisplayModelName(config));
+  const [isPaidMode, setIsPaidMode] = useState<boolean | undefined>(
+    getProviderPaymentMode(),
+  );
+  const [lastProvider, setLastProvider] = useState<string | undefined>(() => {
+    try {
+      const providerManager = getProviderManager();
+      return providerManager.getActiveProvider().name;
+    } catch (_e) {
+      return undefined;
+    }
+  });
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -178,9 +261,75 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, setEditorError, addItem);
 
+  const providerModelDialog = useProviderModelDialog({
+    addMessage: (m) =>
+      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+    onModelChange: () => setCurrentModel(getDisplayModelName(config)),
+  });
+
+  // Provider selection dialog
+  const providerDialog = useProviderDialog({
+    addMessage: (m: { type: MessageType; content: string; timestamp: Date }) =>
+      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+    onProviderChange: () => {
+      // Refresh model display and payment banner when provider changes
+      setCurrentModel(getDisplayModelName(config));
+      checkPaymentModeChange?.();
+    },
+  });
+
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
+
+  // Function to manually check and show payment mode change
+  const checkPaymentModeChange = useCallback((forcePreviousProvider?: string) => {
+    const newPaymentMode = getProviderPaymentMode();
+    let currentProviderName: string | undefined;
+    
+    try {
+      const providerManager = getProviderManager();
+      const provider = providerManager.getActiveProvider();
+      currentProviderName = provider.name;
+    } catch (_e) {
+      // ignore
+    }
+    
+    // Use forced previous provider if provided, otherwise use state
+    const previousProvider = forcePreviousProvider || lastProvider;
+    
+    // Check for both payment mode changes and provider changes
+    const providerChanged = currentProviderName && currentProviderName !== previousProvider;
+    const paymentModeChanged = newPaymentMode !== isPaidMode && newPaymentMode !== undefined;
+    
+    // For provider changes, always show banner. For other changes, only after startup
+    if ((paymentModeChanged || providerChanged) && (providerChanged || history.length > 0)) {
+      setIsPaidMode(newPaymentMode);
+      setLastProvider(currentProviderName);
+      
+      try {
+        const providerManager = getProviderManager();
+        const provider = providerManager.getActiveProvider();
+        
+        if (newPaymentMode === true) {
+          // Switching to paid mode (or paid provider)
+          setTransientWarnings([
+            `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+          ]);
+        } else if (newPaymentMode === false && provider.name === 'gemini') {
+          // Switching to free mode (only for Gemini)
+          setTransientWarnings([
+            `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+          ]);
+        }
+        
+        // Clear the warning after 10 seconds
+        setTimeout(() => setTransientWarnings([]), 10000);
+      } catch (_e) {
+        // ignore
+      }
+    }
+  }, [isPaidMode, lastProvider, history.length]);
 
   const performMemoryRefresh = useCallback(async () => {
     addItem(
@@ -229,9 +378,40 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   // Watch for model changes (e.g., from Flash fallback)
   useEffect(() => {
     const checkModelChange = () => {
-      const configModel = config.getModel();
-      if (configModel !== currentModel) {
-        setCurrentModel(configModel);
+      const displayModel = getDisplayModelName(config);
+      if (displayModel !== currentModel) {
+        setCurrentModel(displayModel);
+      }
+
+      // Also update payment mode
+      const paymentMode = getProviderPaymentMode();
+      if (paymentMode !== isPaidMode) {
+        setIsPaidMode(paymentMode);
+        
+        // Show banner on any payment mode change (not at startup)
+        if (paymentMode !== undefined && isPaidMode !== undefined && history.length > 0) {
+          try {
+            const providerManager = getProviderManager();
+            const provider = providerManager.getActiveProvider();
+            
+            if (paymentMode === true) {
+              // Switching to paid mode
+              setTransientWarnings([
+                `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+              ]);
+            } else if (paymentMode === false && provider.name === 'gemini') {
+              // Switching to free mode (only for Gemini)
+              setTransientWarnings([
+                `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+              ]);
+            }
+            
+            // Clear the warning after 10 seconds
+            setTimeout(() => setTransientWarnings([]), 10000);
+          } catch (_e) {
+            // ignore
+          }
+        }
       }
     };
 
@@ -240,7 +420,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     const interval = setInterval(checkModelChange, 1000); // Check every second
 
     return () => clearInterval(interval);
-  }, [config, currentModel]);
+  }, [config, currentModel, isPaidMode, history.length]);
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -302,10 +482,14 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
+    providerDialog.openDialog,
+    providerModelDialog.openDialog,
+    performMemoryRefresh,
     toggleCorgiMode,
     showToolDescriptions,
     setQuittingMessages,
     openPrivacyNotice,
+    checkPaymentModeChange,
   );
   const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
@@ -433,6 +617,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     initError,
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
+    isInGracePeriod,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -652,7 +837,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
         {showHelp && <Help commands={slashCommands} />}
 
         <Box flexDirection="column" ref={mainControlsRef}>
-          {startupWarnings.length > 0 && (
+          {(allStartupWarnings.length > 0 || transientWarnings.length > 0) && (
             <Box
               borderStyle="round"
               borderColor={Colors.AccentYellow}
@@ -660,7 +845,12 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
               marginY={1}
               flexDirection="column"
             >
-              {startupWarnings.map((warning, index) => (
+              {allStartupWarnings.map((warning, index) => (
+                <Text key={index} color={Colors.AccentYellow}>
+                  {warning}
+                </Text>
+              ))}
+              {transientWarnings.map((warning, index) => (
                 <Text key={index} color={Colors.AccentYellow}>
                   {warning}
                 </Text>
@@ -716,6 +906,24 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 onExit={exitEditorDialog}
               />
             </Box>
+          ) : providerModelDialog.showDialog ? (
+            <Box flexDirection="column">
+              <ProviderModelDialog
+                models={providerModelDialog.models}
+                currentModel={providerModelDialog.currentModel}
+                onSelect={providerModelDialog.handleSelect}
+                onClose={providerModelDialog.closeDialog}
+              />
+            </Box>
+          ) : providerDialog.showDialog ? (
+            <Box flexDirection="column">
+              <ProviderDialog
+                providers={providerDialog.providers}
+                currentProvider={providerDialog.currentProvider}
+                onSelect={providerDialog.handleSelect}
+                onClose={providerDialog.closeDialog}
+              />
+            </Box>
           ) : showPrivacyNotice ? (
             <PrivacyNotice
               onExit={() => setShowPrivacyNotice(false)}
@@ -754,6 +962,10 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                   ) : ctrlDPressedOnce ? (
                     <Text color={Colors.AccentYellow}>
                       Press Ctrl+D again to exit.
+                    </Text>
+                  ) : isInGracePeriod ? (
+                    <Text color={Colors.AccentYellow}>
+                      Cancelling operations... Please wait...
                     </Text>
                   ) : (
                     <ContextSummaryDisplay
@@ -853,6 +1065,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
               config.getDebugMode() || config.getShowMemoryUsage()
             }
             promptTokenCount={sessionStats.lastPromptTokenCount}
+            isPaidMode={isPaidMode}
           />
         </Box>
       </Box>

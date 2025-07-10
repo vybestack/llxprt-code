@@ -16,7 +16,6 @@ import {
   ToolExecuteConfirmationDetails,
   ToolConfirmationOutcome,
 } from './tools.js';
-import { Type } from '@google/genai';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import stripAnsi from 'strip-ansi';
@@ -52,19 +51,19 @@ Signal: Signal number or \`(none)\` if no signal was received.
 Background PIDs: List of background processes started or \`(none)\`.
 Process Group PGID: Process group started or \`(none)\``,
       {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
           command: {
-            type: Type.STRING,
+            type: 'string',
             description: 'Exact bash command to execute as `bash -c <command>`',
           },
           description: {
-            type: Type.STRING,
+            type: 'string',
             description:
               'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
           },
           directory: {
-            type: Type.STRING,
+            type: 'string',
             description:
               '(OPTIONAL) Directory to run the command in, if not the project root directory. Must be relative to the project root directory and must already exist.',
           },
@@ -117,11 +116,11 @@ Process Group PGID: Process group started or \`(none)\``,
    */
   isCommandAllowed(command: string): { allowed: boolean; reason?: string } {
     // 0. Disallow command substitution
-    if (command.includes('$(')) {
+    if (command.includes('$(') || command.includes('`')) {
       return {
         allowed: false,
         reason:
-          'Command substitution using $() is not allowed for security reasons',
+          'Command substitution using $() or backticks is not allowed for security reasons',
       };
     }
 
@@ -224,9 +223,13 @@ Process Group PGID: Process group started or \`(none)\``,
       }
       return commandCheck.reason;
     }
-    const errors = SchemaValidator.validate(this.schema.parameters, params);
-    if (errors) {
-      return errors;
+    if (
+      !SchemaValidator.validate(
+        this.parameterSchema as Record<string, unknown>,
+        params,
+      )
+    ) {
+      return `Parameters failed schema validation.`;
     }
     if (!params.command.trim()) {
       return 'Command cannot be empty.';

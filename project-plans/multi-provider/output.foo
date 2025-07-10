@@ -1,0 +1,407 @@
+diff --git a/packages/cli/src/config/config.ts b/packages/cli/src/config/config.ts
+index 2213a99..66242aa 100644
+--- a/packages/cli/src/config/config.ts
++++ b/packages/cli/src/config/config.ts
+@@ -29,6 +29,8 @@ import * as path from 'node:path';
+ import * as os from 'node:os';
+ import { loadSandboxConfig } from './sandboxConfig.js';
+ import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
++import { getProviderManager } from '../providers/providerManagerInstance.js';
++import { ProviderManagerAdapter } from '../providers/ProviderManagerAdapter.js';
+ 
+ // Simple console logger for now - replace with actual logger if available
+ const logger = {
+@@ -198,6 +200,10 @@ export async function loadCliConfig(
+ 
+   const sandboxConfig = await loadSandboxConfig(settings, argv);
+ 
++  // Create provider manager adapter
++  const cliProviderManager = getProviderManager();
++  const providerManagerAdapter = new ProviderManagerAdapter(cliProviderManager);
++
+   const config = new Config({
+     sessionId,
+     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
+@@ -246,6 +252,7 @@ export async function loadCliConfig(
+     bugCommand: settings.bugCommand,
+     model: argv.model!,
+     extensionContextFilePaths,
++    providerManager: providerManagerAdapter,
+   });
+ 
+   // Enhance the config with provider support
+diff --git a/packages/cli/src/providers/enhanceConfigWithProviders.ts b/packages/cli/src/providers/enhanceConfigWithProviders.ts
+index e163ddd..bab83f5 100644
+--- a/packages/cli/src/providers/enhanceConfigWithProviders.ts
++++ b/packages/cli/src/providers/enhanceConfigWithProviders.ts
+@@ -16,8 +16,8 @@ export function enhanceConfigWithProviders(config: Config): Config {
+     '[enhanceConfigWithProviders] Enhancing config with provider support',
+   );
+ 
+-  // Provider integration is now handled directly in useGeminiStream hook
+-  // This function is kept for compatibility but doesn't need to do anything
++  // Provider support is now built into the core Config class
++  // This function is kept for backward compatibility
+ 
+   return config;
+-}
++}
+\ No newline at end of file
+diff --git a/packages/cli/src/ui/App.tsx b/packages/cli/src/ui/App.tsx
+index fc565b9..78dbb95 100644
+--- a/packages/cli/src/ui/App.tsx
++++ b/packages/cli/src/ui/App.tsx
+@@ -72,26 +72,15 @@ import { checkForUpdates } from './utils/updateCheck.js';
+ import ansiEscapes from 'ansi-escapes';
+ import { OverflowProvider } from './contexts/OverflowContext.js';
+ import { ShowMoreLines } from './components/ShowMoreLines.js';
+-import { getProviderManager } from '../providers/providerManagerInstance.js';
+ 
+ const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
+ 
+ /**
+- * Get the display model name, including provider prefix if using a provider
++ * Get the display model name
+  */
+ function getDisplayModelName(config: Config): string {
+-  const baseModel = config.getModel();
+-  try {
+-    const providerManager = getProviderManager();
+-    if (providerManager.hasActiveProvider()) {
+-      const provider = providerManager.getActiveProvider();
+-      const providerModel = provider.getCurrentModel?.() || baseModel;
+-      return `${provider.name}:${providerModel}`;
+-    }
+-  } catch {
+-    // If there's any error accessing provider manager, fall back to base model
+-  }
+-  return baseModel;
++  // The config.getModel() is now enhanced to include provider prefix
++  return config.getModel();
+ }
+ 
+ interface AppProps {
+diff --git a/packages/cli/src/ui/hooks/useGeminiStream.ts b/packages/cli/src/ui/hooks/useGeminiStream.ts
+index 6305441..679af42 100644
+--- a/packages/cli/src/ui/hooks/useGeminiStream.ts
++++ b/packages/cli/src/ui/hooks/useGeminiStream.ts
+@@ -46,8 +46,6 @@ import { UseHistoryManagerReturn } from './useHistoryManager.js';
+ import { useLogger } from './useLogger.js';
+ import { promises as fs } from 'fs';
+ import path from 'path';
+-import { getProviderManager } from '../../providers/providerManagerInstance.js';
+-import { GeminiCompatibleWrapper } from '../../providers/adapters/GeminiCompatibleWrapper.js';
+ import {
+   useReactToolScheduler,
+   mapToDisplay as mapTrackedToolCallsToDisplay,
+@@ -76,76 +74,12 @@ enum StreamProcessingStatus {
+ }
+ 
+ /**
+- * Get the display model name, including provider prefix if using a provider
++ * Get the display model name
+  */
+ function getDisplayModelName(config: Config): string {
+-  const baseModel = config.getModel();
+-  try {
+-    const providerManager = getProviderManager();
+-    if (providerManager.hasActiveProvider()) {
+-      const provider = providerManager.getActiveProvider();
+-      const providerModel = provider.getCurrentModel?.() || baseModel;
+-      return `${provider.name}:${providerModel}`;
+-    }
+-  } catch {
+-    // If there's any error accessing provider manager, fall back to base model
+-  }
+-  return baseModel;
++  return config.getModel();
+ }
+ 
+-/**
+- * Convert provider stream to Gemini event stream
+- */
+-async function* convertProviderStreamToGeminiEvents(
+-  providerStream: AsyncGenerator<any>,
+-  providerName: string,
+-  modelName: string,
+-): AsyncGenerator<GeminiEvent> {
+-  try {
+-    for await (const chunk of providerStream) {
+-      // The GeminiCompatibleWrapper converts provider messages to Gemini format
+-      // Check for content in parts
+-      if (chunk.candidates?.[0]?.content?.parts) {
+-        const parts = chunk.candidates[0].content.parts;
+-
+-        for (const part of parts) {
+-          // Handle text content
+-          if (part.text) {
+-            yield {
+-              type: ServerGeminiEventType.Content,
+-              value: part.text,
+-            } as unknown as ContentEvent;
+-          }
+-
+-          // Handle function calls (tool calls)
+-          if (part.functionCall) {
+-            yield {
+-              type: ServerGeminiEventType.ToolCallRequest,
+-              value: {
+-                callId:
+-                  (part.functionCall as any).id ||
+-                  `${part.functionCall.name}-${Date.now()}`, // Use provided ID or generate one
+-                name: part.functionCall.name,
+-                args: part.functionCall.args || {},
+-              },
+-            } as unknown as GeminiEvent;
+-          }
+-        }
+-      }
+-    }
+-  } catch (error) {
+-    // ErrorEvent.value.error is a StructuredError
+-    yield {
+-      type: ServerGeminiEventType.Error,
+-      value: {
+-        error: {
+-          message: error instanceof Error ? error.message : String(error),
+-          type: 'provider_error',
+-        },
+-      },
+-    } as unknown as ErrorEvent;
+-  }
+-}
+ 
+ /**
+  * Manages the Gemini stream, including user input, command processing,
+@@ -607,78 +541,7 @@ export const useGeminiStream = (
+       setInitError(null);
+ 
+       try {
+-        // Check if we should use a provider instead of Gemini
+-        let stream;
+-        const providerManager = getProviderManager();
+-
+-        if (providerManager.hasActiveProvider()) {
+-          console.debug('[useGeminiStream] Using provider for message');
+-          const provider = providerManager.getActiveProvider();
+-          const wrapper = new GeminiCompatibleWrapper(provider);
+-
+-          // Get the full conversation history
+-          const chatHistory = await geminiClient.getHistory();
+-          console.debug(
+-            '[useGeminiStream] Chat history length:',
+-            chatHistory.length,
+-          );
+-
+-          // Convert current query to content format
+-          const currentMessage =
+-            typeof queryToSend === 'string'
+-              ? { role: 'user' as const, parts: [{ text: queryToSend }] }
+-              : Array.isArray(queryToSend)
+-                ? {
+-                    role: 'user' as const,
+-                    parts: queryToSend.map((p) =>
+-                      typeof p === 'string' ? { text: p } : p,
+-                    ),
+-                  }
+-                : { role: 'user' as const, parts: [queryToSend] };
+-
+-          // Combine history with current message
+-          const contents = [...chatHistory, currentMessage];
+-
+-          // Get tools from config to pass to provider
+-          let tools: any;
+-          try {
+-            const toolRegistry = await config.getToolRegistry();
+-            const availableTools = toolRegistry.getAllTools();
+-            // Convert tools to provider format if needed
+-            tools = availableTools.map((tool: any) => ({
+-              type: 'function' as const,
+-              function: {
+-                name: tool.name,
+-                description: tool.description || '',
+-                parameters: tool.schema?.parameters || tool.parameterSchema || {},
+-              },
+-            }));
+-            console.debug(
+-              '[useGeminiStream] Passing',
+-              tools.length,
+-              'tools to provider',
+-            );
+-          } catch (error) {
+-            console.debug('[useGeminiStream] Could not get tools:', error);
+-          }
+-
+-          // Get the provider stream
+-          const providerStream = await wrapper.generateContentStream({
+-            model: provider.getCurrentModel?.() || config.getModel(),
+-            contents,
+-            config: { tools } as any,
+-          });
+-
+-          // Convert provider stream to Gemini event stream
+-          stream = convertProviderStreamToGeminiEvents(
+-            providerStream,
+-            provider.name,
+-            provider.getCurrentModel?.() || 'unknown',
+-          );
+-        } else {
+-          console.debug('[useGeminiStream] Using Gemini for message');
+-          stream = geminiClient.sendMessageStream(queryToSend, abortSignal);
+-        }
++        const stream = geminiClient.sendMessageStream(queryToSend, abortSignal);
+ 
+         const processingStatus = await processGeminiStreamEvents(
+           stream,
+diff --git a/packages/core/src/config/config.ts b/packages/core/src/config/config.ts
+index b266512..4944de8 100644
+--- a/packages/core/src/config/config.ts
++++ b/packages/core/src/config/config.ts
+@@ -40,6 +40,7 @@ import {
+   DEFAULT_GEMINI_FLASH_MODEL,
+ } from './models.js';
+ import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
++import { ProviderManager } from '../providers/types.js';
+ 
+ export enum ApprovalMode {
+   DEFAULT = 'default',
+@@ -126,6 +127,7 @@ export interface ConfigParameters {
+   bugCommand?: BugCommandSettings;
+   model: string;
+   extensionContextFilePaths?: string[];
++  providerManager?: ProviderManager;
+ }
+ 
+ export class Config {
+@@ -166,6 +168,7 @@ export class Config {
+   private readonly extensionContextFilePaths: string[];
+   private modelSwitchedDuringSession: boolean = false;
+   flashFallbackHandler?: FlashFallbackHandler;
++  private readonly providerManager: ProviderManager | undefined;
+ 
+   constructor(params: ConfigParameters) {
+     this.sessionId = params.sessionId;
+@@ -207,6 +210,7 @@ export class Config {
+     this.bugCommand = params.bugCommand;
+     this.model = params.model;
+     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
++    this.providerManager = params.providerManager;
+ 
+     if (params.contextFileName) {
+       setGeminiMdFilename(params.contextFileName);
+@@ -226,10 +230,16 @@ export class Config {
+   }
+ 
+   async refreshAuth(authMethod: AuthType) {
++    // Check if we should use a provider instead
++    let effectiveAuthMethod = authMethod;
++    if (this.providerManager && this.providerManager.hasActiveProvider()) {
++      effectiveAuthMethod = AuthType.USE_PROVIDER;
++    }
++
+     // Check if this is actually a switch to a different auth method
+     const previousAuthType = this.contentGeneratorConfig?.authType;
+     const _isAuthMethodSwitch =
+-      previousAuthType && previousAuthType !== authMethod;
++      previousAuthType && previousAuthType !== effectiveAuthMethod;
+ 
+     // Always use the original default model when switching auth methods
+     // This ensures users don't stay on Flash after switching between auth types
+@@ -242,9 +252,14 @@ export class Config {
+ 
+     const contentConfig = await createContentGeneratorConfig(
+       modelToUse,
+-      authMethod,
++      effectiveAuthMethod,
+       this,
+     );
++    
++    // Add provider manager to config if using providers
++    if (effectiveAuthMethod === AuthType.USE_PROVIDER) {
++      contentConfig.providerManager = this.providerManager;
++    }
+ 
+     const gc = new GeminiClient(this);
+     this.geminiClient = gc;
+@@ -267,6 +282,14 @@ export class Config {
+   }
+ 
+   getModel(): string {
++    // Check if we're using a provider
++    if (this.providerManager && this.providerManager.hasActiveProvider()) {
++      const provider = this.providerManager.getActiveProvider();
++      if (provider) {
++        const providerModel = provider.getCurrentModel?.() || this.model;
++        return `${provider.name}:${providerModel}`;
++      }
++    }
+     return this.contentGeneratorConfig?.model || this.model;
+   }
+ 
+@@ -453,6 +476,10 @@ export class Config {
+     }
+     return this.gitService;
+   }
++
++  getProviderManager(): ProviderManager | undefined {
++    return this.providerManager;
++  }
+ }
+ 
+ export function createToolRegistry(config: Config): Promise<ToolRegistry> {
+diff --git a/packages/core/src/core/contentGenerator.ts b/packages/core/src/core/contentGenerator.ts
+index 7021adc..111b44d 100644
+--- a/packages/core/src/core/contentGenerator.ts
++++ b/packages/core/src/core/contentGenerator.ts
+@@ -16,6 +16,8 @@ import {
+ import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
+ import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
+ import { getEffectiveModel } from './modelCheck.js';
++import { ProviderManager } from '../providers/types.js';
++import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
+ 
+ /**
+  * Interface abstracting the core functionalities for generating content and counting tokens.
+@@ -38,6 +40,7 @@ export enum AuthType {
+   LOGIN_WITH_GOOGLE_PERSONAL = 'oauth-personal',
+   USE_GEMINI = 'gemini-api-key',
+   USE_VERTEX_AI = 'vertex-ai',
++  USE_PROVIDER = 'provider',
+ }
+ 
+ export type ContentGeneratorConfig = {
+@@ -45,6 +48,7 @@ export type ContentGeneratorConfig = {
+   apiKey?: string;
+   vertexai?: boolean;
+   authType?: AuthType | undefined;
++  providerManager?: ProviderManager;
+ };
+ 
+ export async function createContentGeneratorConfig(
+@@ -109,6 +113,15 @@ export async function createContentGenerator(
+       'User-Agent': `GeminiCLI/${version} (${process.platform}; ${process.arch})`,
+     },
+   };
++
++  // Check if we should use a provider
++  if (config.authType === AuthType.USE_PROVIDER) {
++    if (!config.providerManager) {
++      throw new Error('Provider manager is required for USE_PROVIDER auth type');
++    }
++    return new ProviderContentGenerator(config.providerManager, config);
++  }
++
+   if (config.authType === AuthType.LOGIN_WITH_GOOGLE_PERSONAL) {
+     return createCodeAssistContentGenerator(httpOptions, config.authType);
+   }
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index 3a12345..4e2d0a2 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -57,3 +57,6 @@ export * from './tools/mcp-tool.js';
+ // Export telemetry functions
+ export * from './telemetry/index.js';
+ export { sessionId } from './utils/session.js';
++
++// Export provider types
++export type { Provider, ProviderManager, ProviderMessage, ProviderTool, ProviderToolCall } from './providers/types.js';

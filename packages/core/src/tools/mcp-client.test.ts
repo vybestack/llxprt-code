@@ -385,6 +385,7 @@ describe('discoverMcpTools', () => {
         {},
       );
     });
+<<<<<<< HEAD
 
     it('should pass oauth token when provided', async () => {
       const headers = {
@@ -397,6 +398,8 @@ describe('discoverMcpTools', () => {
         { requestInit: { headers } },
       );
     });
+=======
+>>>>>>> multi-provider
   });
 
   it('should prefix tool names if multiple MCP servers are configured', async () => {

@@ -6,7 +6,9 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
+
+const waitFor = vi.waitFor;
 import { useGeminiStream, mergePartListUnions } from './useGeminiStream.js';
 import { useInput } from 'ink';
 import {
@@ -112,9 +114,15 @@ vi.mock('./useLogger.js', () => ({
 const mockStartNewTurn = vi.fn();
 const mockAddUsage = vi.fn();
 vi.mock('../contexts/SessionContext.js', () => ({
+  useSessionStatsDispatch: vi.fn(() => ({
+    startNewTurn: mockStartNewTurn,
+    addUsage: mockAddUsage,
+  })),
+  useSessionStatsState: vi.fn(() => ({})),
   useSessionStats: vi.fn(() => ({
     startNewTurn: mockStartNewTurn,
     addUsage: mockAddUsage,
+    stats: {},
   })),
 }));
 
@@ -301,6 +309,11 @@ describe('useGeminiStream', () => {
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       addHistory: vi.fn(),
+      getContentGeneratorConfig: vi.fn(() => ({
+        authType: AuthType.USE_GEMINI,
+      })),
+      getModel: vi.fn(() => 'gemini-pro'),
+      getProjectTempDir: vi.fn(() => '/test/tmp'),
     } as unknown as Config;
     mockOnDebugMessage = vi.fn();
     mockHandleSlashCommand = vi.fn().mockResolvedValue(false);
@@ -864,7 +877,7 @@ describe('useGeminiStream', () => {
         expect(mockAddItem).toHaveBeenCalledWith(
           {
             type: MessageType.INFO,
-            text: 'Request cancelled.',
+            text: 'Request cancelled. Please wait a moment before sending a new message...',
           },
           expect.any(Number),
         );

@@ -23,6 +23,7 @@ interface FooterProps {
   showErrorDetails: boolean;
   showMemoryUsage?: boolean;
   promptTokenCount: number;
+  isPaidMode?: boolean;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -36,6 +37,7 @@ export const Footer: React.FC<FooterProps> = ({
   showErrorDetails,
   showMemoryUsage,
   promptTokenCount,
+  isPaidMode,
 }) => {
   const limit = tokenLimit(model);
   const percentage = promptTokenCount / limit;
@@ -62,7 +64,7 @@ export const Footer: React.FC<FooterProps> = ({
         display="flex"
       >
         {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-          <Text color="green">
+          <Text color={Colors.AccentGreen}>
             {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
           </Text>
         ) : process.env.SANDBOX === 'sandbox-exec' ? (
@@ -83,9 +85,17 @@ export const Footer: React.FC<FooterProps> = ({
           {' '}
           {model}{' '}
           <Text color={Colors.Gray}>
-            ({((1 - percentage) * 100).toFixed(0)}% context left)
+            ({Math.max(0, Math.round((1 - percentage) * 100))}% context left)
           </Text>
         </Text>
+        {isPaidMode !== undefined && (
+          <Text>
+            <Text color={Colors.Gray}> | </Text>
+            <Text color={isPaidMode ? Colors.AccentYellow : Colors.AccentGreen}>
+              {isPaidMode ? 'paid mode' : 'free mode'}
+            </Text>
+          </Text>
+        )}
         {corgiMode && (
           <Text>
             <Text color={Colors.Gray}>| </Text>

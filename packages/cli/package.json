@@ -18,8 +18,14 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
     "test:ci": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "test:legacy": "OPENAI_RESPONSES_DISABLE=true vitest run -t \"legacy|gpt-3.5-turbo\"",
+    "typecheck": "tsc --noEmit",
+    "prerelease:version": "node ../../scripts/bind_package_version.js",
+    "prerelease:deps": "node ../../scripts/bind_package_dependencies.js",
+    "prepack": "npm run build",
+    "prepublishOnly": "node ../../scripts/prepublish.js"
   },
   "files": [
     "dist"
@@ -28,8 +34,11 @@
     "sandboxImageUri": "us-docker.pkg.dev/gemini-code-dev/gemini-cli/sandbox:0.1.9"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.55.1",
+    "@dqbd/tiktoken": "^1.0.21",
     "@google/gemini-cli-core": "file:../core",
     "@types/update-notifier": "^6.0.8",
+    "chalk": "^5.3.0",
     "command-exists": "^1.2.9",
     "diff": "^7.0.0",
     "dotenv": "^17.1.0",
@@ -57,6 +66,7 @@
   },
   "devDependencies": {
     "@babel/runtime": "^7.27.6",
+    "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.3.0",
     "@types/command-exists": "^1.2.3",
     "@types/diff": "^7.0.2",

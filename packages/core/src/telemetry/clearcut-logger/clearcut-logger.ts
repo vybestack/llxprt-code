@@ -19,6 +19,7 @@ import { EventMetadataKey } from './event-metadata-key.js';
 import { Config } from '../../config/config.js';
 import { getInstallationId } from '../../utils/user_id.js';
 import { getGoogleAccountId } from '../../utils/user_id.js';
+import { getObfuscatedGoogleAccountId } from '../../utils/user_id.js';
 
 const start_session_event_name = 'start_session';
 const new_prompt_event_name = 'new_prompt';
@@ -70,6 +71,7 @@ export class ClearcutLogger {
       console_type: 'GEMINI_CLI',
       application: 102,
       event_name: name,
+      obfuscated_google_account_id: getObfuscatedGoogleAccountId(),
       client_install_id: getInstallationId(),
       event_metadata: [data] as object[],
     };

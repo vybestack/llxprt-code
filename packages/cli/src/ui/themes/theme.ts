@@ -4,7 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CSSProperties } from 'react';
+// Type for syntax highlighter theme styles
+// These come from react-syntax-highlighter and include additional properties
+interface HighlightJSStyle {
+  color?: string;
+  background?: string;
+  backgroundColor?: string;
+  display?: string;
+  fontStyle?: string;
+  fontWeight?: string;
+  textDecoration?: string;
+  textTransform?: string;
+  borderRight?: string;
+  paddingRight?: string;
+  paddingLeft?: string;
+  overflowX?: string;
+  padding?: string;
+  [key: string]: string | undefined; // Allow other CSS properties
+}
 
 export type ThemeType = 'light' | 'dark' | 'ansi';
 
@@ -43,7 +60,7 @@ export const lightTheme: ColorsTheme = {
 export const darkTheme: ColorsTheme = {
   type: 'dark',
   Background: '#1E1E2E',
-  Foreground: '#CDD6F4',
+  Foreground: '#6a9955',
   LightBlue: '#ADD8E6',
   AccentBlue: '#89B4FA',
   AccentPurple: '#CBA6F7',
@@ -258,7 +275,7 @@ export class Theme {
   constructor(
     readonly name: string,
     readonly type: ThemeType,
-    rawMappings: Record<string, CSSProperties>,
+    rawMappings: Record<string, HighlightJSStyle>,
     readonly colors: ColorsTheme,
   ) {
     this._colorMap = Object.freeze(this._buildColorMap(rawMappings)); // Build and freeze the map
@@ -314,7 +331,7 @@ export class Theme {
    * @returns An Ink-compatible theme map (Record<string, string>).
    */
   protected _buildColorMap(
-    hljsTheme: Record<string, CSSProperties>,
+    hljsTheme: Record<string, HighlightJSStyle>,
   ): Record<string, string> {
     const inkTheme: Record<string, string> = {};
     for (const key in hljsTheme) {

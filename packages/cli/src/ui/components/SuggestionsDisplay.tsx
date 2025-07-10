@@ -33,7 +33,7 @@ export function SuggestionsDisplay({
   if (isLoading) {
     return (
       <Box paddingX={1} width={width}>
-        <Text color="gray">Loading suggestions...</Text>
+        <Text color={Colors.Gray}>Loading suggestions...</Text>
       </Box>
     );
   }
@@ -57,7 +57,7 @@ export function SuggestionsDisplay({
       {visibleSuggestions.map((suggestion, index) => {
         const originalIndex = startIndex + index;
         const isActive = originalIndex === activeIndex;
-        const textColor = isActive ? Colors.AccentPurple : Colors.Gray;
+        const textColor = isActive ? '#00ff00' : Colors.Foreground;
 
         return (
           <Box key={`${suggestion}-${originalIndex}`} width={width}>
@@ -82,9 +82,9 @@ export function SuggestionsDisplay({
           </Box>
         );
       })}
-      {endIndex < suggestions.length && <Text color="gray">▼</Text>}
+      {endIndex < suggestions.length && <Text color={Colors.Gray}>▼</Text>}
       {suggestions.length > MAX_SUGGESTIONS_TO_SHOW && (
-        <Text color="gray">
+        <Text color={Colors.Gray}>
           ({activeIndex + 1}/{suggestions.length})
         </Text>
       )}

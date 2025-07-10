@@ -1,0 +1,2 @@
+/provider openai
+ai responses aren't being themed correctly. If they were being applied the AI response would be green. presently it is a white color.

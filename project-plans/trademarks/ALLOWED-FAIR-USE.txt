@@ -1,0 +1,27 @@
+# Explicitly Allowed Fair Use Exceptions – Trademarks Plan
+
+This file defines exactly what remains permissible regarding Google and Gemini branding after rebrand/removal. ONLY the named occurrences here are allowed in the final source tree. ALL other direct, indirect, or variant uses (such as "Gemini CLI", "gemini-cli", "GeminiCLI", "@google/gemini-cli", "Google AI", etc.) must be replaced or deleted, except as below. "CLI"/"cli" alone is always allowed and must NOT be removed/modified, as it is generic and not owned by Google.
+
+Allowed examples (expand as encountered):
+- GeminiProvider (explicit: required for API compatibility only)
+- Copyright/license statements referencing "Google" for legal accuracy
+- Legacy commit messages (git log)
+- Comments ONLY as required for protocol names, API accuracy, or factual background
+
+DO NOT flag or attempt to remove generic uses of "CLI"/"cli" (e.g. directory names, flags, program entrypoints) – this is generic technical terminology.
+
+---
+
+## Additional allowed fair use (current codebase as of rebranding):
+
+- Any file that communicates directly with Gemini APIs or protocols where protocol naming is factual (e.g. `packages/core/src/core/geminiRequest.ts`, `packages/core/src/core/geminiChat.ts`)
+- API wrapper/adapters granting Gemini compatibility (e.g. `GeminiCompatibleWrapper.ts`)
+- Provider modules explicitly targeting Gemini, for runtime support of Gemini models (e.g. `GeminiProvider.ts`)
+- Theme or formatting modules named for compatibility (only if default/offered as a third-party theme, e.g. `themes/googlecode.ts`). If ported for general use, should be renamed.
+- Test files for Gemini protocol wrappers (e.g. `geminiChat.test.ts`, `geminiRequest.test.ts`, etc.)
+- Message classes/components that accurately display or handle Gemini-specific responses (“GeminiRespondingSpinner”, “GeminiMessage”, etc.), provided they reference Gemini in a protocol/compatibility sense only.
+- Import statements or type references like `import { ... } from '@google/genai';` or in JSDoc comments when referencing required API/module names.
+
+Notes:
+- Any items here must be factual, protocol-level, or API-level, not branding or marketing.
+- Names should eventually be generalized or mapped in multi-provider ports, except for compatibility modules.

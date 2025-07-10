@@ -44,7 +44,7 @@ export function AuthDialog({
         ]
       : []),
     {
-      label: 'Use Gemini API Key',
+      label: 'Gemini API Key (AI Studio)',
       value: AuthType.USE_GEMINI,
     },
     { label: 'Vertex AI', value: AuthType.USE_VERTEX_AI },
@@ -61,7 +61,6 @@ export function AuthDialog({
 
     return item.value === AuthType.LOGIN_WITH_GOOGLE;
   });
-
   const handleAuthSelect = (authMethod: AuthType) => {
     const error = validateAuthMethod(authMethod);
     if (error) {

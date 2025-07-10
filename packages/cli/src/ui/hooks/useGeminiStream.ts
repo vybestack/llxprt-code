@@ -32,6 +32,8 @@ import {
   HistoryItem,
   HistoryItemWithoutId,
   HistoryItemToolGroup,
+  HistoryItemGemini,
+  HistoryItemGeminiContent,
   MessageType,
   SlashCommandProcessorResult,
   ToolCallStatus,
@@ -53,6 +55,7 @@ import {
   TrackedCompletedToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   const resultParts: PartListUnion = [];
@@ -70,6 +73,13 @@ enum StreamProcessingStatus {
   Completed,
   UserCancelled,
   Error,
+}
+
+/**
+ * Get the display model name
+ */
+function getDisplayModelName(config: Config): string {
+  return config.getModel();
 }
 
 /**
@@ -100,6 +110,14 @@ export const useGeminiStream = (
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
   const logger = useLogger();
+
+  // NEW: Track announced tool calls and cancellation state
+  const announcedToolCallsRef = useRef<
+    Map<string, { name: string; announced: number }>
+  >(new Map());
+  const cancelledTurnRef = useRef(false);
+  const gracePeriodTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cancelledToolIdsRef = useRef<Set<string>>(new Set());
   const gitService = useMemo(() => {
     if (!config.getProjectRoot()) {
       return;
@@ -179,20 +197,142 @@ export const useGeminiStream = (
       if (turnCancelledRef.current) {
         return;
       }
+
+      onDebugMessage('[ESC] Cancellation initiated');
+      onDebugMessage(
+        `[ESC] Current tool calls: ${toolCalls
+          .map((tc) => `${tc.request.name}(${tc.request.callId}):${tc.status}`)
+          .join(', ')}`,
+      );
+      onDebugMessage(
+        `[ESC] Announced tools: ${Array.from(
+          announcedToolCallsRef.current.entries(),
+        )
+          .map(([id, info]) => `${info.name}(${id})`)
+          .join(', ')}`,
+      );
+
       turnCancelledRef.current = true;
+      cancelledTurnRef.current = true;
+
+      // Abort in-flight Gemini request to stop further stream processing
       abortControllerRef.current?.abort();
+
+      // Handle any pending history items
       if (pendingHistoryItemRef.current) {
         addItem(pendingHistoryItemRef.current, Date.now());
       }
+
+      // NEW: Handle pending tool calls for OpenAI and other providers
+      const providerManager = getProviderManager();
+      if (providerManager.hasActiveProvider()) {
+        // Get all tool calls that have been submitted to the model
+        const submittedIds = new Set(
+          toolCalls
+            .filter(
+              (tc) =>
+                (tc.status === 'success' ||
+                  tc.status === 'error' ||
+                  tc.status === 'cancelled') &&
+                (tc as TrackedCompletedToolCall | TrackedCancelledToolCall)
+                  .responseSubmittedToGemini,
+            )
+            .map((tc) => tc.request.callId),
+        );
+
+        const pendingCancellations: Part[] = [];
+
+        // First, add cancellations for all announced tools that haven't been submitted
+        announcedToolCallsRef.current.forEach((toolInfo, callId) => {
+          if (
+            !submittedIds.has(callId) &&
+            !cancelledToolIdsRef.current.has(callId)
+          ) {
+            pendingCancellations.push({
+              functionResponse: {
+                id: callId,
+                name: toolInfo.name,
+                response: {
+                  error: 'Operation cancelled by user',
+                  llmContent:
+                    'The operation was cancelled by the user pressing ESC.',
+                },
+              },
+            });
+            cancelledToolIdsRef.current.add(callId);
+          }
+        });
+
+        // Also check for any tools in toolCalls that are in progress
+        toolCalls.forEach((tc) => {
+          if (
+            !submittedIds.has(tc.request.callId) &&
+            announcedToolCallsRef.current.has(tc.request.callId) &&
+            tc.status !== 'cancelled' &&
+            !cancelledToolIdsRef.current.has(tc.request.callId)
+          ) {
+            // Mark this tool as needing cancellation
+            const toolInfo = announcedToolCallsRef.current.get(
+              tc.request.callId,
+            );
+            if (
+              toolInfo &&
+              !pendingCancellations.some(
+                (p) => p.functionResponse?.id === tc.request.callId,
+              )
+            ) {
+              pendingCancellations.push({
+                functionResponse: {
+                  id: tc.request.callId,
+                  name: toolInfo.name,
+                  response: {
+                    error: 'Operation cancelled by user',
+                    llmContent:
+                      'The operation was cancelled by the user pressing ESC.',
+                  },
+                },
+              });
+              cancelledToolIdsRef.current.add(tc.request.callId);
+            }
+          }
+        });
+
+        if (pendingCancellations.length > 0) {
+          onDebugMessage(
+            `[ESC] Sending ${pendingCancellations.length} cancellation responses for pending tool calls`,
+          );
+          // Send cancellation responses immediately
+          submitQuery(pendingCancellations, {
+            isContinuation: true,
+            isCancellation: true,
+          });
+        }
+      }
+
+      // Clear announced tools tracking
+      announcedToolCallsRef.current.clear();
+
       addItem(
         {
           type: MessageType.INFO,
-          text: 'Request cancelled.',
+          text: 'Request cancelled. Please wait a moment before sending a new message...',
         },
         Date.now(),
       );
+
       setPendingHistoryItem(null);
       setIsResponding(false);
+
+      // NEW: Set grace period
+      if (gracePeriodTimeoutRef.current) {
+        clearTimeout(gracePeriodTimeoutRef.current);
+      }
+      gracePeriodTimeoutRef.current = setTimeout(() => {
+        cancelledTurnRef.current = false;
+        gracePeriodTimeoutRef.current = null;
+        cancelledToolIdsRef.current.clear();
+        onDebugMessage('[ESC] Grace period ended, new messages allowed');
+      }, 500); // Half second grace period
     }
   });
 
@@ -312,7 +452,11 @@ export const useGeminiStream = (
         if (pendingHistoryItemRef.current) {
           addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         }
-        setPendingHistoryItem({ type: 'gemini', text: '' });
+        setPendingHistoryItem({
+          type: 'gemini',
+          text: '',
+          model: getDisplayModelName(config),
+        });
         newGeminiMessageBuffer = eventValue;
       }
       // Split large messages for better rendering performance. Ideally,
@@ -323,6 +467,9 @@ export const useGeminiStream = (
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
           text: newGeminiMessageBuffer,
+          model:
+            (item as Partial<HistoryItemGemini>)?.model ||
+            getDisplayModelName(config),
         }));
       } else {
         // This indicates that we need to split up this Gemini Message.
@@ -335,21 +482,27 @@ export const useGeminiStream = (
         // broken up so that there are more "statically" rendered.
         const beforeText = newGeminiMessageBuffer.substring(0, splitPoint);
         const afterText = newGeminiMessageBuffer.substring(splitPoint);
-        addItem(
-          {
-            type: pendingHistoryItemRef.current?.type as
-              | 'gemini'
-              | 'gemini_content',
-            text: beforeText,
-          },
-          userMessageTimestamp,
-        );
-        setPendingHistoryItem({ type: 'gemini_content', text: afterText });
+        const itemType = pendingHistoryItemRef.current?.type as
+          | 'gemini'
+          | 'gemini_content';
+        const historyItem: HistoryItemGemini | HistoryItemGeminiContent = {
+          type: itemType || 'gemini',
+          text: beforeText,
+          model:
+            (pendingHistoryItemRef.current as Partial<HistoryItemGemini>)
+              ?.model || getDisplayModelName(config),
+        };
+        addItem(historyItem, userMessageTimestamp);
+        setPendingHistoryItem({
+          type: 'gemini_content',
+          text: afterText,
+          model: getDisplayModelName(config),
+        });
         newGeminiMessageBuffer = afterText;
       }
       return newGeminiMessageBuffer;
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config],
   );
 
   const handleUserCancelledEvent = useCallback(
@@ -447,6 +600,11 @@ export const useGeminiStream = (
             break;
           case ServerGeminiEventType.ToolCallRequest:
             toolCallRequests.push(event.value);
+            // NEW: Track that this tool was announced
+            announcedToolCallsRef.current.set(event.value.callId, {
+              name: event.value.name,
+              announced: Date.now(),
+            });
             break;
           case ServerGeminiEventType.UserCancelled:
             handleUserCancelledEvent(userMessageTimestamp);
@@ -456,6 +614,13 @@ export const useGeminiStream = (
             break;
           case ServerGeminiEventType.ChatCompressed:
             handleChatCompressionEvent(event.value);
+            break;
+          case ServerGeminiEventType.UsageMetadata:
+            console.log(
+              '[useGeminiStream] 📊 USAGE EVENT RECEIVED:',
+              JSON.stringify(event.value, null, 2),
+            );
+            // Token counting is handled by uiTelemetryService in main branch
             break;
           case ServerGeminiEventType.ToolCallConfirmation:
           case ServerGeminiEventType.ToolCallResponse:
@@ -468,6 +633,11 @@ export const useGeminiStream = (
           }
         }
       }
+      if (turnCancelledRef.current) {
+        // Stop processing further events once the user has cancelled.
+        return StreamProcessingStatus.UserCancelled;
+      }
+
       if (toolCallRequests.length > 0) {
         scheduleToolCalls(toolCallRequests, signal);
       }
@@ -483,7 +653,25 @@ export const useGeminiStream = (
   );
 
   const submitQuery = useCallback(
-    async (query: PartListUnion, options?: { isContinuation: boolean }) => {
+    async (
+      query: PartListUnion,
+      options?: {
+        isContinuation?: boolean;
+        isCancellation?: boolean;
+      },
+    ) => {
+      // Check if we're in the grace period after cancellation
+      if (cancelledTurnRef.current && !options?.isCancellation) {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Please wait a moment for the cancellation to complete...',
+          },
+          Date.now(),
+        );
+        return;
+      }
+
       if (
         (streamingState === StreamingState.Responding ||
           streamingState === StreamingState.WaitingForConfirmation) &&
@@ -497,6 +685,11 @@ export const useGeminiStream = (
       abortControllerRef.current = new AbortController();
       const abortSignal = abortControllerRef.current.signal;
       turnCancelledRef.current = false;
+
+      // Clear any previous cancellation tracking
+      if (!options?.isCancellation) {
+        cancelledToolIdsRef.current.clear();
+      }
 
       const { queryToSend, shouldProceed } = await prepareQueryForGemini(
         query,
@@ -513,6 +706,7 @@ export const useGeminiStream = (
 
       try {
         const stream = geminiClient.sendMessageStream(queryToSend, abortSignal);
+
         const processingStatus = await processGeminiStreamEvents(
           stream,
           userMessageTimestamp,
@@ -527,15 +721,15 @@ export const useGeminiStream = (
           addItem(pendingHistoryItemRef.current, userMessageTimestamp);
           setPendingHistoryItem(null);
         }
-      } catch (error: unknown) {
-        if (error instanceof UnauthorizedError) {
+      } catch (err: unknown) {
+        if (err instanceof UnauthorizedError) {
           onAuthError();
-        } else if (!isNodeError(error) || error.name !== 'AbortError') {
+        } else if (!isNodeError(err) || err.name !== 'AbortError') {
           addItem(
             {
               type: MessageType.ERROR,
               text: parseAndFormatApiError(
-                getErrorMessage(error) || 'Unknown error',
+                getErrorMessage(err) || 'Unknown error',
                 config.getContentGeneratorConfig().authType,
                 undefined,
                 config.getModel(),
@@ -660,15 +854,214 @@ export const useGeminiStream = (
         return;
       }
 
-      const responsesToSend: PartListUnion[] = geminiTools.map(
-        (toolCall) => toolCall.response.responseParts,
-      );
+      const responsesToSend: PartListUnion[] = geminiTools.map((toolCall) => {
+        // Ensure the response is properly formatted with the callId
+        const response: PartListUnion = toolCall.response.responseParts;
+
+        // Enhanced debug logging
+        onDebugMessage(
+          `[RESPONSE_DEBUG] Processing ${toolCall.request.name} (${toolCall.request.callId})`,
+        );
+        onDebugMessage(
+          `[RESPONSE_DEBUG] responseParts type: ${typeof response}, isArray: ${Array.isArray(response)}`,
+        );
+        if (response) {
+          onDebugMessage(
+            `[RESPONSE_DEBUG] responseParts content: ${JSON.stringify(response).substring(0, 300)}`,
+          );
+        }
+
+        // Debug logging for multiple tool responses
+        if (geminiTools.length > 1) {
+          onDebugMessage(
+            `Processing tool response for ${toolCall.request.name} (${toolCall.request.callId}), type: ${typeof response}, isArray: ${Array.isArray(response)}`,
+          );
+          if (response && typeof response === 'object') {
+            onDebugMessage(
+              `Response structure: ${JSON.stringify(response).substring(0, 200)}`,
+            );
+          }
+        }
+
+        // Additional debug for tool call ID tracking
+        onDebugMessage(
+          `[TOOL_ID_DEBUG] Processing ${toolCall.request.name} with callId: ${toolCall.request.callId}`,
+        );
+
+        // If it's already a functionResponse, ensure it has the correct id
+        if (Array.isArray(response)) {
+          return response.map((part) => {
+            if (
+              part &&
+              typeof part === 'object' &&
+              'functionResponse' in part
+            ) {
+              // Ensure the functionResponse has the correct id
+              const finalId =
+                part.functionResponse?.id || toolCall.request.callId;
+              onDebugMessage(
+                `[TOOL_ID_DEBUG] Array part - Setting ID for ${part.functionResponse?.name}: ${finalId}`,
+              );
+              return {
+                functionResponse: {
+                  ...part.functionResponse,
+                  id: finalId,
+                },
+              } as Part;
+            }
+            return part;
+          });
+        } else if (
+          response &&
+          typeof response === 'object' &&
+          'functionResponse' in response
+        ) {
+          // Single functionResponse object (Part with functionResponse property)
+          const responsePart = response as Part;
+          const finalId =
+            responsePart.functionResponse?.id || toolCall.request.callId;
+          onDebugMessage(
+            `[TOOL_ID_DEBUG] Single part - Setting ID for ${responsePart.functionResponse?.name}: ${finalId}`,
+          );
+          return {
+            functionResponse: {
+              ...responsePart.functionResponse,
+              id: finalId,
+            },
+          } as Part;
+        } else if (typeof response === 'string') {
+          // If it's a string, wrap it in a functionResponse
+          onDebugMessage(
+            `[TOOL_ID_DEBUG] String response - Creating functionResponse for ${toolCall.request.name} with ID: ${toolCall.request.callId}`,
+          );
+          return {
+            functionResponse: {
+              id: toolCall.request.callId,
+              name: toolCall.request.name,
+              response: { output: response } as Record<string, unknown>,
+            },
+          } as Part;
+        }
+
+        // Return as-is if it's not a functionResponse (shouldn't happen with proper tool execution)
+        onDebugMessage(
+          `WARNING: Tool response for ${toolCall.request.name} is not in expected format: ${JSON.stringify(response).substring(0, 100)}`,
+        );
+
+        // Emergency fallback: if response has any structure, try to ensure it has an ID
+        if (response && typeof response === 'object') {
+          onDebugMessage(
+            `[EMERGENCY] Attempting to fix response structure for ${toolCall.request.name}`,
+          );
+          // Check if it's a Part array that we missed
+          if (Array.isArray(response)) {
+            return response.map((part) => {
+              if (
+                part &&
+                typeof part === 'object' &&
+                'functionResponse' in part &&
+                !part.functionResponse?.id
+              ) {
+                onDebugMessage(
+                  `[EMERGENCY] Found functionResponse without ID in array, adding: ${toolCall.request.callId}`,
+                );
+                return {
+                  functionResponse: {
+                    ...part.functionResponse,
+                    id: toolCall.request.callId,
+                    name: part.functionResponse.name || toolCall.request.name,
+                  },
+                } as Part;
+              }
+              return part;
+            });
+          }
+          // Check if it's a bare functionResponse without wrapper
+          if ('response' in response && !('functionResponse' in response)) {
+            onDebugMessage(
+              `[EMERGENCY] Found bare response object, wrapping with functionResponse`,
+            );
+            return {
+              functionResponse: {
+                id: toolCall.request.callId,
+                name: toolCall.request.name,
+                response:
+                  (response as { response: Record<string, unknown> })
+                    .response || (response as Record<string, unknown>),
+              },
+            } as Part;
+          }
+        }
+
+        return response;
+      });
       const callIdsToMarkAsSubmitted = geminiTools.map(
         (toolCall) => toolCall.request.callId,
       );
 
       markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-      submitQuery(mergePartListUnions(responsesToSend), {
+
+      // Clear announced tools tracking after successful submission
+      callIdsToMarkAsSubmitted.forEach((id) => {
+        announcedToolCallsRef.current.delete(id);
+      });
+
+      // Clear cancellation state if all tools are complete
+      if (announcedToolCallsRef.current.size === 0) {
+        cancelledTurnRef.current = false;
+        cancelledToolIdsRef.current.clear();
+        if (gracePeriodTimeoutRef.current) {
+          clearTimeout(gracePeriodTimeoutRef.current);
+          gracePeriodTimeoutRef.current = null;
+        }
+      }
+
+      const mergedResponses = mergePartListUnions(responsesToSend);
+      if (geminiTools.length > 1) {
+        onDebugMessage(
+          `Submitting merged tool responses: ${JSON.stringify(mergedResponses).substring(0, 300)}`,
+        );
+      }
+
+      // Debug: Verify all function responses have IDs
+      onDebugMessage(`[TOOL_ID_DEBUG] Final merged responses before submit:`);
+      if (Array.isArray(mergedResponses)) {
+        (mergedResponses as Part[]).forEach((part: Part, idx: number) => {
+          if (
+            part &&
+            typeof part === 'object' &&
+            'functionResponse' in part &&
+            part.functionResponse
+          ) {
+            onDebugMessage(
+              `[TOOL_ID_DEBUG] Part ${idx}: ${part.functionResponse.name} has ID: ${part.functionResponse.id}`,
+            );
+
+            // Final safety check: ensure ID exists
+            if (!part.functionResponse.id) {
+              onDebugMessage(
+                `[CRITICAL] Missing ID for ${part.functionResponse.name}, this will cause an error!`,
+              );
+              // Try to find the corresponding tool call to get the ID
+              const matchingTool = geminiTools.find(
+                (t) => t.request.name === part.functionResponse?.name,
+              );
+              if (matchingTool) {
+                onDebugMessage(
+                  `[CRITICAL] Found matching tool, adding ID: ${matchingTool.request.callId}`,
+                );
+                part.functionResponse.id = matchingTool.request.callId;
+              }
+            }
+          }
+        });
+      } else {
+        onDebugMessage(
+          `[TOOL_ID_DEBUG] mergedResponses is not an array: ${typeof mergedResponses}`,
+        );
+      }
+
+      submitQuery(mergedResponses, {
         isContinuation: true,
       });
     },
@@ -678,6 +1071,7 @@ export const useGeminiStream = (
       markToolsAsSubmitted,
       geminiClient,
       performMemoryRefresh,
+      onDebugMessage,
     ],
   );
 
@@ -792,5 +1186,6 @@ export const useGeminiStream = (
     initError,
     pendingHistoryItems,
     thought,
+    isInGracePeriod: cancelledTurnRef.current,
   };
 };

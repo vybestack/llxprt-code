@@ -39,6 +39,7 @@ export interface HttpOptions {
   headers?: Record<string, string>;
 }
 
+// TODO: Use production endpoint once it supports our methods.
 export const CODE_ASSIST_ENDPOINT = 'https://cloudcode-pa.googleapis.com';
 export const CODE_ASSIST_API_VERSION = 'v1internal';
 

@@ -49,6 +49,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         isPending={isPending}
         availableTerminalHeight={availableTerminalHeight}
         terminalWidth={terminalWidth}
+        model={item.model}
       />
     )}
     {item.type === 'gemini_content' && (

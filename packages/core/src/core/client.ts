@@ -121,6 +121,70 @@ export class GeminiClient {
     return this.contentGenerator;
   }
 
+  async getPublicContentGenerator(): Promise<ContentGenerator> {
+    return this.getContentGenerator();
+  }
+
+  async updateModel(newModel: string): Promise<void> {
+    this.config.setModel(newModel);
+
+    // Re-initialize the chat with the new model
+    this.chat = await this.startChat();
+  }
+
+  async listAvailableModels(): Promise<
+    Array<{ name: string; displayName?: string; description?: string }>
+  > {
+    // Try to list models using the REST API directly
+    const authType = this.config.getContentGeneratorConfig()?.authType;
+    const apiKey = this.config.getContentGeneratorConfig()?.apiKey;
+
+    if (authType === AuthType.USE_GEMINI && apiKey) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          },
+        );
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          throw new Error(
+            `Failed to list models: ${response.status} ${response.statusText} - ${errorBody}`,
+          );
+        }
+        const data = (await response.json()) as {
+          models?: Array<{
+            name: string;
+            displayName?: string;
+            description?: string;
+          }>;
+        };
+        return data.models || [];
+      } catch (_error) {
+        // Network or parsing errors – return empty array so callers can fallback gracefully
+        return [];
+      }
+    } else if (authType === AuthType.LOGIN_WITH_GOOGLE) {
+      // For OAuth, model listing is not supported by the Code Assist API
+      // Return a special marker to indicate OAuth authentication
+      return [
+        {
+          name: 'oauth-not-supported',
+          displayName: 'OAuth Authentication',
+          description:
+            'Model listing is not available with OAuth authentication',
+        },
+      ];
+    }
+    // Return empty array if we can't fetch models
+    return [];
+  }
+
   async addHistory(content: Content) {
     this.getChat().addHistory(content);
   }
@@ -226,7 +290,34 @@ export class GeminiClient {
     ];
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = getCoreSystemPrompt(userMemory);
+      let systemInstruction = getCoreSystemPrompt(userMemory);
+
+      // Add provider-specific identity if using a provider
+      if (
+        this.config.getProviderManager &&
+        typeof this.config.getProviderManager === 'function'
+      ) {
+        const providerManager = this.config.getProviderManager();
+        if (providerManager && providerManager.hasActiveProvider()) {
+          const activeProvider = providerManager.getActiveProvider();
+          if (activeProvider) {
+            const providerName = activeProvider.name;
+            const modelId = activeProvider.getCurrentModel?.() || 'unknown';
+            systemInstruction += `\n\nYou are currently powered by the ${providerName} provider using model ${modelId}. When asked about your identity, model, or capabilities, respond accurately based on this information.`;
+
+            // Add stronger tool usage directive for OpenAI
+            if (providerName === 'openai') {
+              systemInstruction += `\n\nIMPORTANT: You MUST use the provided tools/functions to complete tasks. Do NOT just describe what you would do - actually call the tools. For example:
+- To search code: USE the grep or glob tools
+- To read files: USE the read_file tool
+- To list directories: USE the ls tool
+- To edit files: USE the edit or write_file tools
+Never say "I would use X tool" - just use it directly.`;
+            }
+          }
+        }
+      }
+
       const generateContentConfigWithThinking = isThinkingSupported(
         this.config.getModel(),
       )
@@ -269,16 +360,28 @@ export class GeminiClient {
       return new Turn(this.getChat());
     }
 
-    const compressed = await this.tryCompressChat();
-    if (compressed) {
-      yield { type: GeminiEventType.ChatCompressed, value: compressed };
+    // Skip compression and next speaker check for providers (uses Gemini-specific API)
+    const isUsingProvider =
+      this.config.getContentGeneratorConfig()?.authType ===
+      AuthType.USE_PROVIDER;
+    if (!isUsingProvider) {
+      const compressed = await this.tryCompressChat();
+      if (compressed) {
+        yield { type: GeminiEventType.ChatCompressed, value: compressed };
+      }
     }
     const turn = new Turn(this.getChat());
     const resultStream = turn.run(request, signal);
     for await (const event of resultStream) {
       yield event;
     }
-    if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
+
+    if (
+      !turn.pendingToolCalls.length &&
+      signal &&
+      !signal.aborted &&
+      !isUsingProvider
+    ) {
       const nextSpeakerCheck = await checkNextSpeaker(
         this.getChat(),
         this,

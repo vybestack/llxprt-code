@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getOauthClient, getCachedGoogleAccountId } from './oauth2.js';
 import { OAuth2Client, Compute } from 'google-auth-library';
 import * as fs from 'fs';
@@ -38,7 +38,7 @@ describe('oauth2', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-cli-test-home-'),
     );
-    (os.homedir as Mock).mockReturnValue(tempHomeDir);
+    vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
   });
   afterEach(() => {
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
@@ -88,15 +88,15 @@ describe('oauth2', () => {
       credentials: mockTokens,
       on: vi.fn(),
     } as unknown as OAuth2Client;
-    (OAuth2Client as unknown as Mock).mockImplementation(
+    vi.mocked(OAuth2Client).mockImplementation(
       () => mockOAuth2Client,
     );
 
     vi.spyOn(crypto, 'randomBytes').mockReturnValue(mockState as never);
-    (open as Mock).mockImplementation(async () => ({}) as never);
+    vi.mocked(open).mockImplementation(async () => ({}) as never);
 
     // Mock the UserInfo API response
-    (global.fetch as Mock).mockResolvedValue({
+    vi.mocked(global.fetch).mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ id: 'test-google-account-id-123' }),
     } as unknown as Response);
@@ -128,7 +128,7 @@ describe('oauth2', () => {
       on: vi.fn(),
       address: () => ({ port: capturedPort }),
     };
-    (http.createServer as Mock).mockImplementation((cb) => {
+    vi.mocked(http.createServer).mockImplementation((cb) => {
       requestCallback = cb as http.RequestListener<
         typeof http.IncomingMessage,
         typeof http.ServerResponse
@@ -193,7 +193,7 @@ describe('oauth2', () => {
         getAccessToken: mockGetAccessToken,
       } as unknown as Compute;
 
-      (Compute as unknown as Mock).mockImplementation(() => mockComputeClient);
+      vi.mocked(Compute).mockImplementation(() => mockComputeClient);
     });
 
     it('should attempt to load cached credentials first', async () => {
@@ -210,7 +210,7 @@ describe('oauth2', () => {
       };
 
       // To mock the new OAuth2Client() inside the function
-      (OAuth2Client as unknown as Mock).mockImplementation(
+      vi.mocked(OAuth2Client).mockImplementation(
         () => mockClient as unknown as OAuth2Client,
       );
 

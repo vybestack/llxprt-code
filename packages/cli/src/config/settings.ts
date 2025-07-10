@@ -67,6 +67,15 @@ export interface Settings {
   hideWindowTitle?: boolean;
   hideTips?: boolean;
 
+  // Provider configuration settings
+  providerApiKeys?: Record<string, string>;
+  providerBaseUrls?: Record<string, string>;
+  providerToolFormatOverrides?: Record<string, string>;
+
+  // Text-based tool call parsing settings
+  enableTextToolCallParsing?: boolean;
+  textToolCallModels?: string[];
+
   // Add other settings here.
 }
 
@@ -122,10 +131,14 @@ export class LoadedSettings {
   setValue(
     scope: SettingScope,
     key: keyof Settings,
-    value: string | Record<string, MCPServerConfig> | undefined,
+    value:
+      | string
+      | Record<string, MCPServerConfig>
+      | Record<string, string>
+      | undefined,
   ): void {
     const settingsFile = this.forScope(scope);
-    // @ts-expect-error - value can be string | Record<string, MCPServerConfig>
+    // @ts-expect-error - value can be string | Record<string, MCPServerConfig> | Record<string, string>
     settingsFile.settings[key] = value;
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);

@@ -64,12 +64,12 @@ export class GrepTool extends BaseTool<GrepToolParams, ToolResult> {
     super(
       GrepTool.Name,
       'SearchText',
-      'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers.',
+      'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers. IMPORTANT: This tool expects regular expression patterns, not literal strings.',
       {
         properties: {
           pattern: {
             description:
-              "The regular expression (regex) pattern to search for within file contents (e.g., 'function\\s+myFunction', 'import\\s+\\{.*\\}\\s+from\\s+.*').",
+              "The regular expression (regex) pattern to search for within file contents. Special characters like ( ) [ ] { } . * + ? ^ $ \\ | must be escaped with a backslash. Examples: 'openModelDialog\\(' to find 'openModelDialog(', 'function\\s+myFunction' to find function declarations, '\\.test\\.' to find '.test.' in filenames.",
             type: Type.STRING,
           },
           path: {

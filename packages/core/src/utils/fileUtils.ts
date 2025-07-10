@@ -94,7 +94,7 @@ export function isBinaryFile(filePath: string): boolean {
 /**
  * Detects the type of file based on extension and content.
  * @param filePath Path to the file.
- * @returns 'text', 'image', 'pdf', 'audio', 'video', or 'binary'.
+ * @returns 'text', 'image', 'pdf', 'audio', 'video', 'binary', or 'svg'.
  */
 export function detectFileType(
   filePath: string,

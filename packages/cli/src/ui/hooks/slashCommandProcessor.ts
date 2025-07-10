@@ -8,6 +8,7 @@ import { useCallback, useMemo, useEffect, useState } from 'react';
 import { type PartListUnion } from '@google/genai';
 import open from 'open';
 import process from 'node:process';
+import { ansi } from '../colors.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { useStateAndRef } from './useStateAndRef.js';
 import {
@@ -18,6 +19,7 @@ import {
   MCPServerStatus,
   getMCPDiscoveryState,
   getMCPServerStatus,
+  AuthType,
 } from '@google/gemini-cli-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
@@ -29,16 +31,19 @@ import {
 } from '../types.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { homedir } from 'os';
+import { createShowMemoryAction } from './useShowMemoryCommand.js';
 import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
-import { LoadedSettings } from '../../config/settings.js';
+import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import {
   type CommandContext,
   type SlashCommandActionReturn,
   type SlashCommand,
 } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 // This interface is for the old, inline command definitions.
 // It will be removed once all commands are migrated to the new system.
@@ -73,10 +78,14 @@ export const useSlashCommandProcessor = (
   openThemeDialog: () => void,
   openAuthDialog: () => void,
   openEditorDialog: () => void,
+  openProviderDialog: () => void,
+  openProviderModelDialog: () => void,
+  performMemoryRefresh: () => Promise<void>,
   toggleCorgiMode: () => void,
   showToolDescriptions: boolean = false,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
+  checkPaymentModeChange?: (forcePreviousProvider?: string) => void,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<SlashCommand[]>([]);
@@ -104,6 +113,11 @@ export const useSlashCommandProcessor = (
     }
     return items;
   }, [pendingCompressionItemRef]);
+
+  const showMemoryAction = useMemo(
+    () => createShowMemoryAction(addItem),
+    [addItem],
+  );
 
   const addMessage = useCallback(
     (message: Message) => {
@@ -252,7 +266,72 @@ export const useSlashCommandProcessor = (
       {
         name: 'auth',
         description: 'change the auth method',
-        action: (_mainCommand, _subCommand, _args) => openAuthDialog(),
+        action: async (_mainCommand, authMode, _args) => {
+          const providerManager = getProviderManager();
+
+          // If no auth mode specified, open the dialog
+          if (!authMode) {
+            openAuthDialog();
+            return;
+          }
+
+          // Handle specific auth mode changes for Gemini provider
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+
+            // Check if this is the Gemini provider
+            if (activeProvider.name === 'gemini' && config) {
+              const validModes = ['oauth', 'api-key', 'vertex'];
+
+              if (!validModes.includes(authMode)) {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Invalid auth mode. Valid modes: ${validModes.join(', ')}`,
+                  timestamp: new Date(),
+                });
+                return;
+              }
+
+              // Map the auth mode to the appropriate AuthType
+              let authType: AuthType;
+              switch (authMode) {
+                case 'oauth':
+                  authType = AuthType.LOGIN_WITH_GOOGLE;
+                  break;
+                case 'api-key':
+                  authType = AuthType.USE_GEMINI;
+                  break;
+                case 'vertex':
+                  authType = AuthType.USE_VERTEX_AI;
+                  break;
+                default:
+                  authType = AuthType.LOGIN_WITH_GOOGLE;
+              }
+
+              // Refresh auth with the new type
+              await config.refreshAuth(authType);
+
+              addMessage({
+                type: MessageType.INFO,
+                content: `Switched to ${authMode} authentication mode`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content:
+                  'Auth mode switching is only supported for the Gemini provider',
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to switch auth mode: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
       },
       {
         name: 'editor',
@@ -363,8 +442,14 @@ export const useSlashCommandProcessor = (
             discoveryState === MCPDiscoveryState.IN_PROGRESS ||
             connectingServers.length > 0
           ) {
-            message += `\u001b[33m⏳ MCP servers are starting up (${connectingServers.length} initializing)...\u001b[0m\n`;
-            message += `\u001b[90mNote: First startup may take longer. Tool availability will update automatically.\u001b[0m\n\n`;
+            message +=
+              ansi.accentYellow(
+                `⏳ MCP servers are starting up (${connectingServers.length} initializing)...`,
+              ) + '\n';
+            message +=
+              ansi.gray(
+                'Note: First startup may take longer. Tool availability will update automatically.',
+              ) + '\n\n';
           }
 
           message += 'Configured MCP servers:\n\n';
@@ -396,7 +481,7 @@ export const useSlashCommandProcessor = (
             const server = mcpServers[serverName];
 
             // Format server header with bold formatting and status
-            message += `${statusIndicator} \u001b[1m${serverName}\u001b[0m - ${statusText}`;
+            message += `${statusIndicator} ${ansi.bold(serverName)} - ${statusText}`;
 
             // Add tool count with conditional messaging
             if (status === MCPServerStatus.CONNECTED) {
@@ -409,14 +494,11 @@ export const useSlashCommandProcessor = (
 
             // Add server description with proper handling of multi-line descriptions
             if ((useShowDescriptions || useShowSchema) && server?.description) {
-              const greenColor = '\u001b[32m';
-              const resetColor = '\u001b[0m';
-
               const descLines = server.description.trim().split('\n');
               if (descLines) {
                 message += ':\n';
                 for (const descLine of descLines) {
-                  message += `    ${greenColor}${descLine}${resetColor}\n`;
+                  message += `    ${ansi.accentGreen(descLine)}\n`;
                 }
               } else {
                 message += '\n';
@@ -425,9 +507,6 @@ export const useSlashCommandProcessor = (
               message += '\n';
             }
 
-            // Reset formatting after server entry
-            message += '\u001b[0m';
-
             if (serverTools.length > 0) {
               serverTools.forEach((tool) => {
                 if (
@@ -435,33 +514,25 @@ export const useSlashCommandProcessor = (
                   tool.description
                 ) {
                   // Format tool name in cyan using simple ANSI cyan color
-                  message += `  - \u001b[36m${tool.name}\u001b[0m`;
-
-                  // Apply green color to the description text
-                  const greenColor = '\u001b[32m';
-                  const resetColor = '\u001b[0m';
+                  message += `  - ${ansi.accentCyan(tool.name)}`;
 
                   // Handle multi-line descriptions by properly indenting and preserving formatting
                   const descLines = tool.description.trim().split('\n');
                   if (descLines) {
                     message += ':\n';
                     for (const descLine of descLines) {
-                      message += `      ${greenColor}${descLine}${resetColor}\n`;
+                      message += `      ${ansi.accentGreen(descLine)}\n`;
                     }
                   } else {
                     message += '\n';
                   }
-                  // Reset is handled inline with each line now
                 } else {
                   // Use cyan color for the tool name even when not showing descriptions
-                  message += `  - \u001b[36m${tool.name}\u001b[0m\n`;
+                  message += `  - ${ansi.accentCyan(tool.name)}\n`;
                 }
                 if (useShowSchema) {
                   // Prefix the parameters in cyan
-                  message += `    \u001b[36mParameters:\u001b[0m\n`;
-                  // Apply green color to the parameter text
-                  const greenColor = '\u001b[32m';
-                  const resetColor = '\u001b[0m';
+                  message += `    ${ansi.accentCyan('Parameters')}:\n`;
 
                   const paramsLines = JSON.stringify(
                     tool.schema.parameters,
@@ -472,7 +543,7 @@ export const useSlashCommandProcessor = (
                     .split('\n');
                   if (paramsLines) {
                     for (const paramsLine of paramsLines) {
-                      message += `      ${greenColor}${paramsLine}${resetColor}\n`;
+                      message += `      ${ansi.accentGreen(paramsLine)}\n`;
                     }
                   }
                 }
@@ -482,9 +553,6 @@ export const useSlashCommandProcessor = (
             }
             message += '\n';
           }
-
-          // Make sure to reset any ANSI formatting at the end to prevent it from affecting the terminal
-          message += '\u001b[0m';
 
           addMessage({
             type: MessageType.INFO,
@@ -560,11 +628,7 @@ export const useSlashCommandProcessor = (
             geminiTools.forEach((tool) => {
               if (useShowDescriptions && tool.description) {
                 // Format tool name in cyan using simple ANSI cyan color
-                message += `  - \u001b[36m${tool.displayName} (${tool.name})\u001b[0m:\n`;
-
-                // Apply green color to the description text
-                const greenColor = '\u001b[32m';
-                const resetColor = '\u001b[0m';
+                message += `  - ${ansi.accentCyan(`${tool.displayName} (${tool.name})`)}:\n`;
 
                 // Handle multi-line descriptions by properly indenting and preserving formatting
                 const descLines = tool.description.trim().split('\n');
@@ -572,12 +636,12 @@ export const useSlashCommandProcessor = (
                 // If there are multiple lines, add proper indentation for each line
                 if (descLines) {
                   for (const descLine of descLines) {
-                    message += `      ${greenColor}${descLine}${resetColor}\n`;
+                    message += `      ${ansi.accentGreen(descLine)}\n`;
                   }
                 }
               } else {
                 // Use cyan color for the tool name even when not showing descriptions
-                message += `  - \u001b[36m${tool.displayName}\u001b[0m\n`;
+                message += `  - ${ansi.accentCyan(tool.displayName)}\n`;
               }
             });
           } else {
@@ -585,14 +649,103 @@ export const useSlashCommandProcessor = (
           }
           message += '\n';
 
-          // Make sure to reset any ANSI formatting at the end to prevent it from affecting the terminal
-          message += '\u001b[0m';
-
           addMessage({
             type: MessageType.INFO,
             content: message,
             timestamp: new Date(),
           });
+        },
+      },
+      {
+        name: 'model',
+        description: 'select or switch model',
+        action: async (_mainCommand, _subCommand, _args) => {
+          const modelName = _subCommand || _args;
+          const providerManager = getProviderManager();
+
+          // Always use provider model dialog
+          if (!modelName) {
+            openProviderModelDialog();
+            return;
+          }
+
+          // Switch model in provider
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            const currentModel = activeProvider.getCurrentModel
+              ? activeProvider.getCurrentModel()
+              : 'unknown';
+
+            if (activeProvider.setModel) {
+              activeProvider.setModel(modelName);
+              addMessage({
+                type: MessageType.INFO,
+                content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${activeProvider.name}' does not support model switching`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'provider',
+        description:
+          'switch between different AI providers (openai, anthropic, etc.)',
+        action: async (_mainCommand, providerName, _args) => {
+          const providerManager = getProviderManager();
+
+          if (!providerName) {
+            // Open interactive provider selection dialog
+            openProviderDialog();
+            return;
+          }
+
+          try {
+            const currentProvider = providerManager.getActiveProviderName();
+
+            // Handle switching to same provider
+            if (providerName === currentProvider) {
+              addMessage({
+                type: MessageType.INFO,
+                content: `Already using provider: ${currentProvider}`,
+                timestamp: new Date(),
+              });
+              return;
+            }
+
+            const fromProvider = currentProvider || 'none';
+            providerManager.setActiveProvider(providerName);
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Switched from ${fromProvider} to ${providerName}`,
+              timestamp: new Date(),
+            });
+            
+            // Trigger payment mode check to show banner when switching providers
+            // Pass the previous provider to ensure proper detection
+            if (checkPaymentModeChange) {
+              setTimeout(() => checkPaymentModeChange(fromProvider), 100);
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
         },
       },
       {
@@ -908,6 +1061,463 @@ export const useSlashCommandProcessor = (
           setPendingCompressionItem(null);
         },
       },
+      {
+        name: 'key',
+        description: 'set or remove API key for the current provider',
+        action: async (_mainCommand, apiKey, _args) => {
+          const providerManager = getProviderManager();
+
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+
+            // If no key provided or 'none', remove the key
+            if (
+              !apiKey ||
+              apiKey.trim() === '' ||
+              apiKey.trim().toLowerCase() === 'none'
+            ) {
+              // Clear the API key
+              if (activeProvider.setApiKey) {
+                activeProvider.setApiKey('');
+
+                // Remove from settings
+                const currentKeys = settings.merged.providerApiKeys || {};
+                delete currentKeys[providerName];
+                settings.setValue(
+                  SettingScope.User,
+                  'providerApiKeys',
+                  currentKeys,
+                );
+
+                // If this is the Gemini provider, we might need to switch auth mode
+                if (providerName === 'gemini' && config) {
+                  // Switch to OAuth if no API key
+                  await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+                }
+
+                // Check payment mode after auth refresh
+                const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+                const paymentMessage = !isPaidMode && providerName === 'gemini'
+                  ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+                  : '';
+
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `API key removed for provider '${providerName}'${paymentMessage}`,
+                  timestamp: new Date(),
+                });
+                
+                // Trigger payment mode check to show banner
+                if (checkPaymentModeChange) {
+                  setTimeout(checkPaymentModeChange, 100);
+                }
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${providerName}' does not support API key updates`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
+
+            // Update the provider's API key
+            if (activeProvider.setApiKey) {
+              activeProvider.setApiKey(apiKey);
+
+              // Save to settings
+              const currentKeys = settings.merged.providerApiKeys || {};
+              currentKeys[providerName] = apiKey;
+              settings.setValue(
+                SettingScope.User,
+                'providerApiKeys',
+                currentKeys,
+              );
+
+              // If this is the Gemini provider, we need to refresh auth to use API key mode
+              if (providerName === 'gemini' && config) {
+                await config.refreshAuth(AuthType.USE_GEMINI);
+              }
+
+              // Check if we're now in paid mode
+              const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+              const paymentWarning = isPaidMode
+                ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
+                : '';
+
+              addMessage({
+                type: MessageType.INFO,
+                content: `API key updated for provider '${providerName}'${paymentWarning}`,
+                timestamp: new Date(),
+              });
+              
+              // Trigger payment mode check to show banner
+              if (checkPaymentModeChange) {
+                setTimeout(checkPaymentModeChange, 100);
+              }
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${providerName}' does not support API key updates`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to set API key: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'keyfile',
+        description: 'manage API key file for the current provider',
+        action: async (_mainCommand, filePath, _args) => {
+          const providerManager = getProviderManager();
+
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+
+            // If no path provided, check for existing keyfile
+            if (!filePath || filePath.trim() === '') {
+              // Check common keyfile locations
+              const keyfilePaths = [
+                path.join(homedir(), `.${providerName}_key`),
+                path.join(homedir(), `.${providerName}-key`),
+                path.join(homedir(), `.${providerName}_api_key`),
+              ];
+
+              // For specific providers, check their known keyfile locations
+              if (providerName === 'openai') {
+                keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
+              } else if (providerName === 'anthropic') {
+                keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
+              }
+
+              let foundKeyfile: string | null = null;
+              for (const keyfilePath of keyfilePaths) {
+                try {
+                  await fs.access(keyfilePath);
+                  foundKeyfile = keyfilePath;
+                  break;
+                } catch {
+                  // File doesn't exist, continue checking
+                }
+              }
+
+              if (foundKeyfile) {
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
+
+            // If 'none' is specified, remove the keyfile setting
+            if (filePath.trim().toLowerCase() === 'none') {
+              // Clear the API key
+              if (activeProvider.setApiKey) {
+                activeProvider.setApiKey('');
+
+                // Remove from settings
+                const currentKeys = settings.merged.providerApiKeys || {};
+                delete currentKeys[providerName];
+                settings.setValue(
+                  SettingScope.User,
+                  'providerApiKeys',
+                  currentKeys,
+                );
+
+                // If this is the Gemini provider, we might need to switch auth mode
+                if (providerName === 'gemini' && config) {
+                  // Switch to OAuth if no API key
+                  await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+                }
+
+                // Check payment mode after auth refresh
+                const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+                const paymentMessage = !isPaidMode && providerName === 'gemini'
+                  ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+                  : '';
+
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Keyfile removed for provider '${providerName}'${paymentMessage}`,
+                  timestamp: new Date(),
+                });
+                
+                // Trigger payment mode check to show banner
+                if (checkPaymentModeChange) {
+                  setTimeout(checkPaymentModeChange, 100);
+                }
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${providerName}' does not support API key updates`,
+                  timestamp: new Date(),
+                });
+              }
+              return;
+            }
+
+            // Resolve ~ to home directory
+            const resolvedPath = filePath.replace(/^~/, homedir());
+
+            // Read the API key from file
+            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
+
+            if (!apiKey) {
+              addMessage({
+                type: MessageType.ERROR,
+                content: 'The specified file is empty',
+                timestamp: new Date(),
+              });
+              return;
+            }
+
+            // Update the provider's API key
+            if (activeProvider.setApiKey) {
+              activeProvider.setApiKey(apiKey);
+
+              // Save to settings
+              const currentKeys = settings.merged.providerApiKeys || {};
+              currentKeys[providerName] = apiKey;
+              settings.setValue(
+                SettingScope.User,
+                'providerApiKeys',
+                currentKeys,
+              );
+
+              // Check if we're now in paid mode
+              const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+              const paymentWarning = isPaidMode
+                ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
+                : '';
+
+              addMessage({
+                type: MessageType.INFO,
+                content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
+                timestamp: new Date(),
+              });
+              
+              // Trigger payment mode check to show banner
+              if (checkPaymentModeChange) {
+                setTimeout(checkPaymentModeChange, 100);
+              }
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${providerName}' does not support API key updates`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'baseurl',
+        description: 'set base URL for the current provider',
+        action: async (_mainCommand, baseUrl, _args) => {
+          const providerManager = getProviderManager();
+
+          if (!baseUrl || baseUrl.trim() === '') {
+            // Clear base URL to provider default
+            try {
+              const activeProvider = providerManager.getActiveProvider();
+              const providerName = activeProvider.name;
+              if (activeProvider.setBaseUrl) {
+                activeProvider.setBaseUrl(undefined);
+                // Remove from settings
+                const currentUrls = settings.merged.providerBaseUrls || {};
+                delete currentUrls[providerName];
+                settings.setValue(
+                  SettingScope.User,
+                  'providerBaseUrls',
+                  currentUrls,
+                );
+                addMessage({
+                  type: MessageType.INFO,
+                  content: `Base URL cleared for provider '${providerName}' (using default).`,
+                  timestamp: new Date(),
+                });
+              } else {
+                addMessage({
+                  type: MessageType.ERROR,
+                  content: `Provider '${providerName}' does not support base URL updates`,
+                  timestamp: new Date(),
+                });
+              }
+            } catch (error) {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Failed to clear base URL: ${error instanceof Error ? error.message : String(error)}`,
+                timestamp: new Date(),
+              });
+            }
+            return;
+          }
+
+          try {
+            const activeProvider = providerManager.getActiveProvider();
+            const providerName = activeProvider.name;
+
+            // Update the provider's base URL
+            if (activeProvider.setBaseUrl) {
+              activeProvider.setBaseUrl(baseUrl);
+
+              // Save to settings
+              const currentUrls = settings.merged.providerBaseUrls || {};
+              currentUrls[providerName] = baseUrl;
+              settings.setValue(
+                SettingScope.User,
+                'providerBaseUrls',
+                currentUrls,
+              );
+
+              addMessage({
+                type: MessageType.INFO,
+                content: `Base URL updated to '${baseUrl}' for provider '${providerName}'`,
+                timestamp: new Date(),
+              });
+            } else {
+              addMessage({
+                type: MessageType.ERROR,
+                content: `Provider '${providerName}' does not support base URL updates`,
+                timestamp: new Date(),
+              });
+            }
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to set base URL: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
+      {
+        name: 'toolformat',
+        description: 'override the auto-detected tool calling format',
+        action: async (_mainCommand, formatName, _args) => {
+          const providerManager = getProviderManager();
+
+          const activeProvider = providerManager.getActiveProvider();
+          const providerName = activeProvider.name;
+
+          // Supported formats
+          const structuredFormats = ['openai', 'anthropic', 'deepseek', 'qwen'];
+          const textFormats = ['hermes', 'xml', 'llama', 'gemma'];
+          const allFormats = [...structuredFormats, ...textFormats];
+
+          // Show current format
+          if (!formatName) {
+            const currentFormat = activeProvider.getToolFormat
+              ? activeProvider.getToolFormat()
+              : 'unknown';
+            const isAutoDetected = !(
+              settings.merged.providerToolFormatOverrides &&
+              settings.merged.providerToolFormatOverrides[providerName]
+            );
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Current tool format: ${currentFormat} (${isAutoDetected ? 'auto-detected' : 'manual override'})
+To override: /toolformat <format>
+To return to auto: /toolformat auto
+Supported formats:
+  Structured: ${structuredFormats.join(', ')}
+  Text-based: ${textFormats.join(', ')}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          // Return to auto-detection
+          if (formatName === 'auto') {
+            // Clear override in provider
+            if (activeProvider.setToolFormatOverride) {
+              activeProvider.setToolFormatOverride(null);
+            }
+
+            // Also clear from settings
+            const currentOverrides =
+              settings.merged.providerToolFormatOverrides || {};
+            delete currentOverrides[providerName];
+            settings.setValue(
+              SettingScope.User,
+              'providerToolFormatOverrides',
+              currentOverrides,
+            );
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Tool format override cleared for provider '${providerName}'. Using auto-detection.`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          // Validate format
+          if (!allFormats.includes(formatName)) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Invalid format '${formatName}'. Supported formats:
+  Structured: ${structuredFormats.join(', ')}
+  Text-based: ${textFormats.join(', ')}`,
+              timestamp: new Date(),
+            });
+            return;
+          }
+
+          // Set override
+          try {
+            // Update provider directly
+            if (activeProvider.setToolFormatOverride) {
+              activeProvider.setToolFormatOverride(formatName);
+            }
+
+            // Also save to settings for persistence
+            const currentOverrides =
+              settings.merged.providerToolFormatOverrides || {};
+            currentOverrides[providerName] = formatName;
+            settings.setValue(
+              SettingScope.User,
+              'providerToolFormatOverrides',
+              currentOverrides,
+            );
+
+            addMessage({
+              type: MessageType.INFO,
+              content: `Tool format override set to '${formatName}' for provider '${providerName}'`,
+              timestamp: new Date(),
+            });
+          } catch (error) {
+            addMessage({
+              type: MessageType.ERROR,
+              content: `Failed to set tool format override: ${error instanceof Error ? error.message : String(error)}`,
+              timestamp: new Date(),
+            });
+          }
+        },
+      },
     ];
 
     if (config?.getCheckpointingEnabled()) {
@@ -1036,7 +1646,14 @@ export const useSlashCommandProcessor = (
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
+    openProviderModelDialog,
+    openProviderDialog,
     openPrivacyNotice,
+    clearItems,
+    refreshStatic,
+    performMemoryRefresh,
+    showMemoryAction,
+    addMessage,
     toggleCorgiMode,
     savedChatTags,
     config,
@@ -1049,8 +1666,7 @@ export const useSlashCommandProcessor = (
     setQuittingMessages,
     pendingCompressionItemRef,
     setPendingCompressionItem,
-    clearItems,
-    refreshStatic,
+    checkPaymentModeChange,
   ]);
 
   const handleSlashCommand = useCallback(
