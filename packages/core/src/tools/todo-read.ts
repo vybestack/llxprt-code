@@ -7,6 +7,7 @@
 import { BaseTool, ToolResult } from './tools.js';
 import { TodoStore } from './todo-store.js';
 import { Todo } from './todo-schemas.js';
+import { Type } from '@google/genai';
 
 export type TodoReadParams = Record<string, never>;
 
@@ -19,9 +20,8 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       'TodoRead',
       'Read the current todo list for the session. Returns all todos with their status, priority, and content.',
       {
-        type: 'object',
+        type: Type.OBJECT,
         properties: {},
-        additionalProperties: false,
       },
       true, // isOutputMarkdown
       false, // canUpdateOutput

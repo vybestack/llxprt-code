@@ -465,6 +465,7 @@ export const useGeminiStream = (
             break;
           case ServerGeminiEventType.ToolCallConfirmation:
           case ServerGeminiEventType.ToolCallResponse:
+          case ServerGeminiEventType.UsageMetadata:
             // do nothing
             break;
           default: {

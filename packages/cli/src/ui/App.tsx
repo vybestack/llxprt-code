@@ -655,7 +655,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
     initError,
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
-    isInGracePeriod,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -1002,10 +1001,6 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                   ) : ctrlDPressedOnce ? (
                     <Text color={Colors.AccentYellow}>
                       Press Ctrl+D again to exit.
-                    </Text>
-                  ) : isInGracePeriod ? (
-                    <Text color={Colors.AccentYellow}>
-                      Cancelling operations... Please wait...
                     </Text>
                   ) : (
                     <ContextSummaryDisplay

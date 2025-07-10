@@ -18,6 +18,7 @@ import {
 } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
+import { Type } from '@google/genai';
 import stripAnsi from 'strip-ansi';
 
 export interface ShellToolParams {
@@ -51,19 +52,19 @@ Signal: Signal number or \`(none)\` if no signal was received.
 Background PIDs: List of background processes started or \`(none)\`.
 Process Group PGID: Process group started or \`(none)\``,
       {
-        type: 'object',
+        type: Type.OBJECT,
         properties: {
           command: {
-            type: 'string',
+            type: Type.STRING,
             description: 'Exact bash command to execute as `bash -c <command>`',
           },
           description: {
-            type: 'string',
+            type: Type.STRING,
             description:
               'Brief description of the command for the user. Be specific and concise. Ideally a single sentence. Can be up to 3 sentences for clarity. No line breaks.',
           },
           directory: {
-            type: 'string',
+            type: Type.STRING,
             description:
               '(OPTIONAL) Directory to run the command in, if not the project root directory. Must be relative to the project root directory and must already exist.',
           },

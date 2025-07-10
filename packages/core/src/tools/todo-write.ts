@@ -7,6 +7,7 @@
 import { BaseTool, ToolResult } from './tools.js';
 import { Todo, TodoArraySchema } from './todo-schemas.js';
 import { TodoStore } from './todo-store.js';
+import { Type } from '@google/genai';
 
 export interface TodoWriteParams {
   todos: Todo[];
@@ -21,41 +22,39 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       'TodoWrite',
       'Create and manage a structured task list for the current coding session. Updates the entire todo list.',
       {
-        type: 'object',
+        type: Type.OBJECT,
         properties: {
           todos: {
-            type: 'array',
+            type: Type.ARRAY,
             items: {
-              type: 'object',
+              type: Type.OBJECT,
               properties: {
                 id: {
-                  type: 'string',
+                  type: Type.STRING,
                   description: 'Unique identifier for the todo item',
                 },
                 content: {
-                  type: 'string',
+                  type: Type.STRING,
                   description: 'Description of the todo item',
-                  minLength: 1,
+                  minLength: '1',
                 },
                 status: {
-                  type: 'string',
+                  type: Type.STRING,
                   enum: ['pending', 'in_progress', 'completed'],
                   description: 'Current status of the todo item',
                 },
                 priority: {
-                  type: 'string',
+                  type: Type.STRING,
                   enum: ['high', 'medium', 'low'],
                   description: 'Priority level of the todo item',
                 },
               },
               required: ['id', 'content', 'status', 'priority'],
-              additionalProperties: false,
             },
             description: 'The updated todo list',
           },
         },
         required: ['todos'],
-        additionalProperties: false,
       },
       true, // isOutputMarkdown
       false, // canUpdateOutput

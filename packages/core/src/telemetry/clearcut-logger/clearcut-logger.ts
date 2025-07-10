@@ -18,7 +18,6 @@ import {
 import { EventMetadataKey } from './event-metadata-key.js';
 import { Config } from '../../config/config.js';
 import { getInstallationId } from '../../utils/user_id.js';
-import { getGoogleAccountId } from '../../utils/user_id.js';
 import { getObfuscatedGoogleAccountId } from '../../utils/user_id.js';
 
 const start_session_event_name = 'start_session';
@@ -95,7 +94,7 @@ export class ClearcutLogger {
     const eventsToSend = [...this.events];
     this.events.length = 0;
 
-    const googleAccountId = await getGoogleAccountId();
+    const googleAccountId = getObfuscatedGoogleAccountId();
 
     return new Promise<Buffer>((resolve, reject) => {
       const request = [

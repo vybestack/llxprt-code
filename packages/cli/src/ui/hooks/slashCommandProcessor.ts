@@ -114,11 +114,6 @@ export const useSlashCommandProcessor = (
     return items;
   }, [pendingCompressionItemRef]);
 
-  const showMemoryAction = useMemo(
-    () => createShowMemoryAction(addItem),
-    [addItem],
-  );
-
   const addMessage = useCallback(
     (message: Message) => {
       // Convert Message to HistoryItemWithoutId
@@ -165,6 +160,11 @@ export const useSlashCommandProcessor = (
       addItem(historyItemContent, message.timestamp.getTime());
     },
     [addItem],
+  );
+
+  const showMemoryAction = useMemo(
+    () => createShowMemoryAction(config, settings, addMessage),
+    [config, settings, addMessage],
   );
 
   const commandContext = useMemo(
@@ -1654,7 +1654,6 @@ Supported formats:
     refreshStatic,
     performMemoryRefresh,
     showMemoryAction,
-    addMessage,
     toggleCorgiMode,
     savedChatTags,
     config,

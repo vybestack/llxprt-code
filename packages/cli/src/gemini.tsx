@@ -20,7 +20,6 @@ import {
   loadSettings,
   USER_SETTINGS_PATH,
   SettingScope,
-  USER_SETTINGS_PATH,
 } from './config/settings.js';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
