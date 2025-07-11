@@ -286,53 +286,61 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
   }, []);
 
   // Function to manually check and show payment mode change
-  const checkPaymentModeChange = useCallback((forcePreviousProvider?: string) => {
-    const newPaymentMode = getProviderPaymentMode();
-    let currentProviderName: string | undefined;
-    
-    try {
-      const providerManager = getProviderManager();
-      const provider = providerManager.getActiveProvider();
-      currentProviderName = provider.name;
-    } catch (_e) {
-      // ignore
-    }
-    
-    // Use forced previous provider if provided, otherwise use state
-    const previousProvider = forcePreviousProvider || lastProvider;
-    
-    // Check for both payment mode changes and provider changes
-    const providerChanged = currentProviderName && currentProviderName !== previousProvider;
-    const paymentModeChanged = newPaymentMode !== isPaidMode && newPaymentMode !== undefined;
-    
-    // For provider changes, always show banner. For other changes, only after startup
-    if ((paymentModeChanged || providerChanged) && (providerChanged || history.length > 0)) {
-      setIsPaidMode(newPaymentMode);
-      setLastProvider(currentProviderName);
-      
+  const checkPaymentModeChange = useCallback(
+    (forcePreviousProvider?: string) => {
+      const newPaymentMode = getProviderPaymentMode();
+      let currentProviderName: string | undefined;
+
       try {
         const providerManager = getProviderManager();
         const provider = providerManager.getActiveProvider();
-        
-        if (newPaymentMode === true) {
-          // Switching to paid mode (or paid provider)
-          setTransientWarnings([
-            `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
-          ]);
-        } else if (newPaymentMode === false && provider.name === 'gemini') {
-          // Switching to free mode (only for Gemini)
-          setTransientWarnings([
-            `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-          ]);
-        }
-        
-        // Clear the warning after 10 seconds
-        setTimeout(() => setTransientWarnings([]), 10000);
+        currentProviderName = provider.name;
       } catch (_e) {
         // ignore
       }
-    }
-  }, [isPaidMode, lastProvider, history.length]);
+
+      // Use forced previous provider if provided, otherwise use state
+      const previousProvider = forcePreviousProvider || lastProvider;
+
+      // Check for both payment mode changes and provider changes
+      const providerChanged =
+        currentProviderName && currentProviderName !== previousProvider;
+      const paymentModeChanged =
+        newPaymentMode !== isPaidMode && newPaymentMode !== undefined;
+
+      // For provider changes, always show banner. For other changes, only after startup
+      if (
+        (paymentModeChanged || providerChanged) &&
+        (providerChanged || history.length > 0)
+      ) {
+        setIsPaidMode(newPaymentMode);
+        setLastProvider(currentProviderName);
+
+        try {
+          const providerManager = getProviderManager();
+          const provider = providerManager.getActiveProvider();
+
+          if (newPaymentMode === true) {
+            // Switching to paid mode (or paid provider)
+            setTransientWarnings([
+              `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+            ]);
+          } else if (newPaymentMode === false && provider.name === 'gemini') {
+            // Switching to free mode (only for Gemini)
+            setTransientWarnings([
+              `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+            ]);
+          }
+
+          // Clear the warning after 10 seconds
+          setTimeout(() => setTransientWarnings([]), 10000);
+        } catch (_e) {
+          // ignore
+        }
+      }
+    },
+    [isPaidMode, lastProvider, history.length],
+  );
 
   const performMemoryRefresh = useCallback(async () => {
     addItem(
@@ -390,13 +398,17 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
       const paymentMode = getProviderPaymentMode();
       if (paymentMode !== isPaidMode) {
         setIsPaidMode(paymentMode);
-        
+
         // Show banner on any payment mode change (not at startup)
-        if (paymentMode !== undefined && isPaidMode !== undefined && history.length > 0) {
+        if (
+          paymentMode !== undefined &&
+          isPaidMode !== undefined &&
+          history.length > 0
+        ) {
           try {
             const providerManager = getProviderManager();
             const provider = providerManager.getActiveProvider();
-            
+
             if (paymentMode === true) {
               // Switching to paid mode
               setTransientWarnings([
@@ -408,7 +420,7 @@ const App = ({ config, settings, startupWarnings = [] }: AppProps) => {
                 `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
               ]);
             }
-            
+
             // Clear the warning after 10 seconds
             setTimeout(() => setTransientWarnings([]), 10000);
           } catch (_e) {

@@ -220,28 +220,6 @@ export class GeminiProvider implements IProvider {
           },
         };
 
-        // Debug: Log the request to see if tools are being sent
-        console.debug(
-          '[GeminiProvider] OAuth request:',
-          JSON.stringify(
-            {
-              model: request.model,
-              hasContents: !!request.contents,
-              contentsLength: request.contents?.length,
-              hasTools: !!request.config.tools,
-              toolsCount:
-                request.config.tools?.[0]?.functionDeclarations?.length || 0,
-              toolNames: request.config.tools?.[0]?.functionDeclarations?.map(
-                (t) => t.name,
-              ),
-              // Full tools structure for debugging
-              tools: request.config.tools,
-            },
-            null,
-            2,
-          ),
-        );
-
         // Use the content generator stream
         const streamResult =
           await contentGenerator.generateContentStream(request);

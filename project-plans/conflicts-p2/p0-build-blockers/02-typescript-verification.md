@@ -1,11 +1,13 @@
 # Task: Verify and Fix Remaining TypeScript Errors
 
 ## Objective
+
 The build-fix-report indicates some TypeScript errors were fixed, but the merge-analysis-report lists additional errors. Verify which errors still exist and fix them.
 
 ## Files to Check and Potentially Modify
 
 ### Priority 1 - Reported in merge-analysis but may be fixed:
+
 1. **`packages/cli/src/gemini.tsx`**
    - Check for duplicate `USER_SETTINGS_PATH` declaration (lines 21 and 23)
    - Remove duplicate if present
@@ -27,23 +29,28 @@ The build-fix-report indicates some TypeScript errors were fixed, but the merge-
    - Fix type to match expected
 
 ### Priority 2 - Test file:
+
 6. **`packages/core/src/core/client.test.ts`**
    - Line 898: Check 'model' property access
    - Update test to match current API
 
 ## Verification Steps
+
 1. Run `npm run typecheck` from root directory
 2. If any errors found, fix them according to the specific issues above
 3. Re-run `npm run typecheck` to confirm all errors resolved
 4. Run `npm run lint` to ensure no new linting issues
 
 ## Dependencies
+
 - None (can be done immediately)
 
 ## Estimated Time
+
 30 minutes
 
 ## Notes
+
 - Some of these errors may already be fixed per the build-fix-report
 - Focus on actual compilation errors, not just warnings
 - The duplicate identifier issue is likely the most critical

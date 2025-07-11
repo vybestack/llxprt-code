@@ -62,9 +62,10 @@ interface CliArgs {
   allowedMcpServerNames: string[] | undefined;
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
+  provider: string | undefined;
 }
 
-async function parseArguments(): Promise<CliArgs> {
+export async function parseArguments(): Promise<CliArgs> {
   const yargsInstance = yargs(hideBin(process.argv))
     .scriptName('gemini')
     .usage(
@@ -177,6 +178,11 @@ async function parseArguments(): Promise<CliArgs> {
       type: 'boolean',
       description: 'List all available extensions and exit.',
     })
+    .option('provider', {
+      type: 'string',
+      description: 'The provider to use.',
+      default: 'gemini',
+    })
 
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
@@ -217,8 +223,11 @@ export async function loadCliConfig(
   settings: Settings,
   extensions: Extension[],
   sessionId: string,
+  argv?: Awaited<ReturnType<typeof parseArguments>>,
 ): Promise<Config> {
-  const argv = await parseArguments();
+  if (!argv) {
+    argv = await parseArguments();
+  }
   const debugMode =
     argv.debug ||
     [process.env.DEBUG, process.env.DEBUG_MODE].some(
@@ -290,7 +299,7 @@ export async function loadCliConfig(
     mcpServers,
     userMemory: memoryContent,
     geminiMdFileCount: fileCount,
-    approvalMode: argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT,
+    approvalMode: argv.yolo ? ApprovalMode.YOLO : ApprovalMode.DEFAULT,
     showMemoryUsage:
       argv.showMemoryUsage ||
       argv.show_memory_usage ||
@@ -331,6 +340,7 @@ export async function loadCliConfig(
       version: e.config.version,
     })),
     providerManager: providerManagerAdapter,
+    provider: argv.provider,
   });
 
   // Enhance the config with provider support

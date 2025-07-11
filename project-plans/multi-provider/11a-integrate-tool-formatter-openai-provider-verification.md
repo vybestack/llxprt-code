@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
-
     - **Expected Output:** All tests in `OpenAIProvider.test.ts` should pass. These tests should now cover the correct integration of `ToolFormatter` and dynamic format detection.
 
 4.  **Verify Multi-Format Architecture Integration:**

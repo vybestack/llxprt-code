@@ -214,6 +214,9 @@ Process Group PGID: Process group started or \`(none)\``,
   }
 
   validateToolParams(params: ShellToolParams): string | null {
+    console.log('[ShellTool] Starting validateToolParams');
+    console.log('[ShellTool] Params:', JSON.stringify(params, null, 2));
+    
     const commandCheck = this.isCommandAllowed(params.command);
     if (!commandCheck.allowed) {
       if (!commandCheck.reason) {
@@ -224,14 +227,22 @@ Process Group PGID: Process group started or \`(none)\``,
       }
       return commandCheck.reason;
     }
-    if (
-      !SchemaValidator.validate(
-        this.parameterSchema as Record<string, unknown>,
-        params,
-      )
-    ) {
+    
+    console.log('[ShellTool] About to validate schema');
+    console.log('[ShellTool] parameterSchema:', JSON.stringify(this.parameterSchema, null, 2));
+    
+    const schemaValidationResult = SchemaValidator.validate(
+      this.parameterSchema as Record<string, unknown>,
+      params,
+    );
+    
+    console.log('[ShellTool] Schema validation result:', schemaValidationResult);
+    
+    if (schemaValidationResult !== null) {
+      console.log('[ShellTool] Schema validation failed');
       return `Parameters failed schema validation.`;
     }
+    
     if (!params.command.trim()) {
       return 'Command cannot be empty.';
     }
@@ -250,6 +261,8 @@ Process Group PGID: Process group started or \`(none)\``,
         return 'Directory must exist.';
       }
     }
+    
+    console.log('[ShellTool] validateToolParams passed all checks');
     return null;
   }
 

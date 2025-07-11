@@ -1,9 +1,11 @@
 # Phase 3b - Reminder System Implementation (todo-lists)
 
 ## Goal
+
 Implement the automatic reminder system that notifies LLMs about empty todo lists and provides post-update confirmations.
 
 ## Deliverables
+
 - [ ] Empty todo list reminder functionality
 - [ ] Post-TodoWrite state confirmation system
 - [ ] Integration with tool response handling
@@ -12,18 +14,21 @@ Implement the automatic reminder system that notifies LLMs about empty todo list
 ## Implementation Tasks
 
 ### Empty Todo Reminder
+
 - [ ] Create reminder message generator in `/packages/core/src/tools/todo-reminders.ts`
 - [ ] Hook into conversation context to detect empty todo state
 - [ ] Inject reminder as system message when appropriate
 - [ ] Ensure reminder doesn't appear in user-visible output
 
 ### Post-Write Confirmation
+
 - [ ] Modify TodoWrite tool to include state summary in response
 - [ ] Format current todo list state in tool response metadata
 - [ ] Include instruction not to mention the update to user
 - [ ] Ensure state is injected into LLM context
 
 ### Reminder Templates
+
 ```typescript
 // Empty todo reminder
 const EMPTY_TODO_REMINDER = `
@@ -41,6 +46,7 @@ ${JSON.stringify(todos)}. You DO NOT need to use the TodoRead tool again, since 
 ```
 
 ## Checklist (implementer)
+
 - [ ] Reminder system triggers appropriately
 - [ ] Reminders are injected as system messages
 - [ ] User never sees reminder text directly
@@ -49,6 +55,7 @@ ${JSON.stringify(todos)}. You DO NOT need to use the TodoRead tool again, since 
 - [ ] No performance impact from reminder checks
 
 ## Self-verify
+
 ```bash
 npm run test -- todo-reminders
 npm run typecheck

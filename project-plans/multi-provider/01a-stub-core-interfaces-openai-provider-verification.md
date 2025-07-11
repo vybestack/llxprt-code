@@ -24,7 +24,6 @@
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
-
     - **Expected Output:** The tests should pass, confirming that `NotYetImplemented` errors are correctly thrown.
 
 5.  **Verify Stub Content (No Cheating):**
@@ -33,7 +32,6 @@
     ```bash
     grep -q "throw new Error('NotYetImplemented');" /Users/acoliver/projects/gemini-code/gemini-cli/packages/cli/src/providers/openai/OpenAIProvider.ts
     ```
-
     - Ensure `OpenAIProvider.test.ts` asserts `rejects.toThrow('NotYetImplemented')`.
 
     ```bash

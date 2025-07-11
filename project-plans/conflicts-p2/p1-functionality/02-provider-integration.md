@@ -1,11 +1,13 @@
 # Task: Complete Provider Integration
 
 ## Objective
+
 Ensure the multi-provider system is properly integrated with the core Gemini client and all provider features work correctly.
 
 ## Files to Modify
 
 ### Priority 1 - Core Integration:
+
 1. **`packages/core/src/core/client.ts`**
    - Verify ProviderManager integration
    - Ensure proper provider selection logic
@@ -22,6 +24,7 @@ Ensure the multi-provider system is properly integrated with the core Gemini cli
    - Ensure proper error handling
 
 ### Priority 2 - Tool Integration:
+
 4. **`packages/core/src/core/coreToolScheduler.ts`**
    - Verify ToolFormatter integration
    - Ensure tools work with all providers
@@ -33,6 +36,7 @@ Ensure the multi-provider system is properly integrated with the core Gemini cli
    - Ensure proper format selection
 
 ### Priority 3 - Configuration:
+
 6. **`packages/cli/src/config/config.ts`**
    - Ensure provider settings integrated
    - Check API key management
@@ -41,6 +45,7 @@ Ensure the multi-provider system is properly integrated with the core Gemini cli
 ## Specific Changes Needed
 
 ### Provider Manager Integration:
+
 1. In client.ts, ensure ProviderManager is used for:
    - Model selection
    - Chat completion generation
@@ -52,16 +57,19 @@ Ensure the multi-provider system is properly integrated with the core Gemini cli
    - Used consistently throughout
 
 ### Tool Execution Flow:
+
 1. Ensure tools are formatted correctly for each provider
 2. Verify tool responses are parsed properly
 3. Check text-based parsing for non-JSON providers
 
 ### Configuration Flow:
+
 1. Ensure provider settings persist
 2. Verify API keys are loaded from env vars
 3. Check provider switching updates config
 
 ## Verification Steps
+
 1. Test provider switching: `/provider openai`, `/provider anthropic`
 2. Test tool execution with each provider
 3. Verify model selection works per provider
@@ -69,12 +77,15 @@ Ensure the multi-provider system is properly integrated with the core Gemini cli
 5. Test with actual API calls (if keys available)
 
 ## Dependencies
+
 - P0 tasks must be complete
 
 ## Estimated Time
+
 1.5 hours
 
 ## Notes
+
 - This is critical for multi-provider functionality
 - Focus on runtime behavior, not just compilation
 - Test with multiple providers if possible

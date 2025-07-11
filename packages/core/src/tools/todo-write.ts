@@ -74,50 +74,53 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     const result = TodoArraySchema.safeParse(params.todos);
     if (!result.success) {
       const error = result.error.errors[0];
-      throw new Error(`Validation error: ${error.path.join('.')} - ${error.message}`);
+      throw new Error(
+        `Validation error: ${error.path.join('.')} - ${error.message}`,
+      );
     }
-    
+
     // Get session and agent IDs from context
-    const sessionId = (this as unknown as { sessionId?: string }).sessionId || 'default';
+    const sessionId =
+      (this as unknown as { sessionId?: string }).sessionId || 'default';
     const agentId = (this as unknown as { agentId?: string }).agentId;
-    
+
     const store = new TodoStore(sessionId, agentId);
-    
+
     // Read old todos for diff tracking
     const oldTodos = await store.readTodos();
-    
+
     // Write new todos
     await store.writeTodos(params.todos);
-    
+
     // Generate output
     const output = this.generateOutput(oldTodos, params.todos);
-    
+
     return {
       llmContent: output,
       returnDisplay: output,
     };
   }
-  
+
   private generateOutput(oldTodos: Todo[], newTodos: Todo[]): string {
     let output = 'Todo list updated successfully\n\n';
-    
+
     output += `Previous: ${oldTodos.length} todos\n`;
     output += `Updated: ${newTodos.length} todos\n\n`;
-    
+
     // Calculate changes
-    const added = newTodos.filter(newTodo => 
-      !oldTodos.some(oldTodo => oldTodo.id === newTodo.id)
+    const added = newTodos.filter(
+      (newTodo) => !oldTodos.some((oldTodo) => oldTodo.id === newTodo.id),
     );
-    
-    const removed = oldTodos.filter(oldTodo => 
-      !newTodos.some(newTodo => newTodo.id === oldTodo.id)
+
+    const removed = oldTodos.filter(
+      (oldTodo) => !newTodos.some((newTodo) => newTodo.id === oldTodo.id),
     );
-    
-    const statusChanges = newTodos.filter(newTodo => {
-      const oldTodo = oldTodos.find(t => t.id === newTodo.id);
+
+    const statusChanges = newTodos.filter((newTodo) => {
+      const oldTodo = oldTodos.find((t) => t.id === newTodo.id);
       return oldTodo && oldTodo.status !== newTodo.status;
     });
-    
+
     if (added.length > 0) {
       output += `Added: ${added.length}\n`;
     }
@@ -127,7 +130,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     if (statusChanges.length > 0) {
       output += `Status changes: ${statusChanges.length}\n`;
     }
-    
+
     return output;
   }
 }

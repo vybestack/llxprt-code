@@ -33,7 +33,7 @@ export class ToolFormatter implements IToolFormatter {
     }
 
     const newSchema: Record<string, unknown> = { ...schema };
-    
+
     // Handle properties
     if (newSchema.properties && typeof newSchema.properties === 'object') {
       const newProperties: Record<string, unknown> = {};
@@ -42,21 +42,23 @@ export class ToolFormatter implements IToolFormatter {
       }
       newSchema.properties = newProperties;
     }
-    
+
     // Handle items
     if (newSchema.items) {
       if (Array.isArray(newSchema.items)) {
-        newSchema.items = newSchema.items.map((item) => this.convertGeminiSchemaToStandard(item));
+        newSchema.items = newSchema.items.map((item) =>
+          this.convertGeminiSchemaToStandard(item),
+        );
       } else {
         newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
       }
     }
-    
+
     // Convert type from UPPERCASE enum to lowercase string
     if (newSchema.type) {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
-    
+
     return newSchema;
   }
 
@@ -72,7 +74,9 @@ export class ToolFormatter implements IToolFormatter {
           function: {
             name: tool.function.name,
             description: tool.function.description,
-            parameters: this.convertGeminiSchemaToStandard(tool.function.parameters),
+            parameters: this.convertGeminiSchemaToStandard(
+              tool.function.parameters,
+            ),
           },
         }));
       case 'anthropic':
@@ -271,7 +275,11 @@ export class ToolFormatter implements IToolFormatter {
       type: 'function' as const,
       name: tool.function.name,
       description: tool.function.description || null,
-      parameters: this.convertGeminiSchemaToStandard(tool.function.parameters) as Record<string, unknown> || null,
+      parameters:
+        (this.convertGeminiSchemaToStandard(tool.function.parameters) as Record<
+          string,
+          unknown
+        >) || null,
       strict: null,
     }));
   }

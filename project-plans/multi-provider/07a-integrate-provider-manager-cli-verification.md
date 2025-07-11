@@ -24,7 +24,6 @@
         ```
         /provider openai
         ```
-
         - **Expected:** Confirmation message that the provider is set to 'openai'.
 
       - Set an OpenAI model (ensure you have a valid OpenAI API key configured for this to work):
@@ -32,7 +31,6 @@
         ```
         /model gpt-3.5-turbo
         ```
-
         - **Expected:** Confirmation message that the model is set to 'gpt-3.5-turbo'.
 
       - Send a chat message:
@@ -40,7 +38,6 @@
         ```
         Hello, how are you?
         ```
-
         - **Expected:** The response from the model should be streamed character by character or word by word, not appear all at once. The content should be a coherent response from `gpt-3.5-turbo`.
 
 4.  **Code Inspection (grep):**

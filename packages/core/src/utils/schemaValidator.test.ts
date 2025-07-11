@@ -45,18 +45,18 @@ describe('SchemaValidator', () => {
         properties: {
           items: {
             type: Type.ARRAY,
-            minItems: '2' as any, // Simulating string from @google/genai
-            maxItems: '5' as any,
+            minItems: '2', // @google/genai Schema expects strings for numeric properties
+            maxItems: '5',
           },
           text: {
             type: Type.STRING,
-            minLength: '3' as any,
-            maxLength: '10' as any,
+            minLength: '3',
+            maxLength: '10',
           },
           count: {
             type: Type.NUMBER,
-            minimum: '0' as any,
-            maximum: '100' as any,
+            minimum: 0,
+            maximum: 100,
           },
         },
       };
@@ -93,17 +93,14 @@ describe('SchemaValidator', () => {
         type: Type.OBJECT,
         properties: {
           value: {
-            anyOf: [
-              { type: Type.STRING },
-              { type: Type.NUMBER },
-            ],
+            anyOf: [{ type: Type.STRING }, { type: Type.NUMBER }],
           },
         },
       };
 
       expect(SchemaValidator.validate(schema, { value: 'test' })).toBeNull();
       expect(SchemaValidator.validate(schema, { value: 123 })).toBeNull();
-      
+
       const error = SchemaValidator.validate(schema, { value: true });
       expect(error).toContain('must match a schema in anyOf');
     });
@@ -154,10 +151,10 @@ describe('SchemaValidator', () => {
 
     it('should convert UPPERCASE type enums to lowercase', () => {
       const schema = {
-        type: 'OBJECT' as any, // Simulating uppercase from @google/genai
+        type: Type.OBJECT,
         properties: {
-          name: { type: 'STRING' as any },
-          count: { type: 'NUMBER' as any },
+          name: { type: Type.STRING },
+          count: { type: Type.NUMBER },
         },
       };
 

@@ -62,11 +62,13 @@ describe('TodoWrite', () => {
     it('should create new todos with valid schema', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       const result = await tool.execute({ todos: validTodos }, abortSignal);
-      
+
       expect(result.llmContent).toContain('2 todos');
-      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(validTodos);
+      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
+        validTodos,
+      );
     });
 
     it('should validate todo schema and reject invalid data', async () => {
@@ -127,29 +129,33 @@ describe('TodoWrite', () => {
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       const result = await tool.execute({ todos: singleTodo }, abortSignal);
-      
-      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(singleTodo);
+
+      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
+        singleTodo,
+      );
       expect(result.llmContent).toContain('1 todo');
     });
 
     it('should handle empty todo list', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       const result = await tool.execute({ todos: [] }, abortSignal);
-      
-      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith([]);
+
+      expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
+        [],
+      );
       expect(result.llmContent).toContain('0 todos');
     });
 
     it('should return both old and new todos for diff tracking', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       const result = await tool.execute({ todos: validTodos }, abortSignal);
-      
+
       expect(result.llmContent).toContain('Previous: 3 todos');
       expect(result.llmContent).toContain('Updated: 2 todos');
     });
@@ -170,9 +176,11 @@ describe('TodoWrite', () => {
       const invalidParams = {
         todos: [{ invalid: 'structure' }],
       };
-      
+
       // This test verifies the params are validated
-      expect(tool.validateToolParams(invalidParams as unknown as TodoWriteParams)).toBeNull();
+      expect(
+        tool.validateToolParams(invalidParams as unknown as TodoWriteParams),
+      ).toBeNull();
     });
   });
 
@@ -192,9 +200,9 @@ describe('TodoWrite', () => {
     it('should return ToolResult with success message', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       const result = await tool.execute({ todos: validTodos }, abortSignal);
-      
+
       expect(result).toMatchObject({
         llmContent: expect.any(String),
         returnDisplay: expect.any(String),
@@ -205,48 +213,69 @@ describe('TodoWrite', () => {
     it('should include summary of changes in output', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(existingTodos);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       const result = await tool.execute({ todos: validTodos }, abortSignal);
-      
+
       expect(result.llmContent).toMatch(/Added.*Removed/s);
     });
   });
 
   describe('session and agent handling', () => {
     it('should use session ID from context', async () => {
-      const toolWithSession = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool);
-      (toolWithSession as unknown as { sessionId: string }).sessionId = 'test-session-123';
-      
+      const toolWithSession = Object.assign(
+        Object.create(Object.getPrototypeOf(tool)),
+        tool,
+      );
+      (toolWithSession as unknown as { sessionId: string }).sessionId =
+        'test-session-123';
+
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       await toolWithSession.execute({ todos: validTodos }, abortSignal);
-      
+
       expect(TodoStore).toHaveBeenCalledWith('test-session-123', undefined);
     });
 
     it('should use agent ID when available', async () => {
-      const toolWithAgent = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool);
-      (toolWithAgent as unknown as { sessionId: string; agentId: string }).sessionId = 'test-session-123';
-      (toolWithAgent as unknown as { sessionId: string; agentId: string }).agentId = 'test-agent-456';
-      
+      const toolWithAgent = Object.assign(
+        Object.create(Object.getPrototypeOf(tool)),
+        tool,
+      );
+      (
+        toolWithAgent as unknown as { sessionId: string; agentId: string }
+      ).sessionId = 'test-session-123';
+      (
+        toolWithAgent as unknown as { sessionId: string; agentId: string }
+      ).agentId = 'test-agent-456';
+
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
+
       await toolWithAgent.execute({ todos: validTodos }, abortSignal);
-      
-      expect(TodoStore).toHaveBeenCalledWith('test-session-123', 'test-agent-456');
+
+      expect(TodoStore).toHaveBeenCalledWith(
+        'test-session-123',
+        'test-agent-456',
+      );
     });
 
     it('should work without agent ID', async () => {
-      const toolNoAgent = Object.assign(Object.create(Object.getPrototypeOf(tool)), tool);
-      (toolNoAgent as unknown as { sessionId: string }).sessionId = 'test-session-123';
-      
+      const toolNoAgent = Object.assign(
+        Object.create(Object.getPrototypeOf(tool)),
+        tool,
+      );
+      (toolNoAgent as unknown as { sessionId: string }).sessionId =
+        'test-session-123';
+
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
-      
-      const result = await toolNoAgent.execute({ todos: validTodos }, abortSignal);
-      
+
+      const result = await toolNoAgent.execute(
+        { todos: validTodos },
+        abortSignal,
+      );
+
       expect(result.llmContent).toBeDefined();
       expect(TodoStore).toHaveBeenCalledWith('test-session-123', undefined);
     });
@@ -255,8 +284,10 @@ describe('TodoWrite', () => {
   describe('error handling', () => {
     it('should handle write errors gracefully', async () => {
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
-      vi.mocked(TodoStore.prototype.writeTodos).mockRejectedValue(new Error('Write failed'));
-      
+      vi.mocked(TodoStore.prototype.writeTodos).mockRejectedValue(
+        new Error('Write failed'),
+      );
+
       await expect(
         tool.execute({ todos: validTodos }, abortSignal),
       ).rejects.toThrow('Write failed');

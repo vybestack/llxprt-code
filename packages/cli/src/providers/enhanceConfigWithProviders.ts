@@ -12,10 +12,6 @@ import { Config } from '@google/gemini-cli-core';
  * @returns The same config instance with provider support
  */
 export function enhanceConfigWithProviders(config: Config): Config {
-  console.debug(
-    '[enhanceConfigWithProviders] Enhancing config with provider support',
-  );
-
   // Provider support is now built into the core Config class
   // This function is kept for backward compatibility
 

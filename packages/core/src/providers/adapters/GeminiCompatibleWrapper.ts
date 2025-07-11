@@ -42,27 +42,35 @@ export class GeminiCompatibleWrapper {
     }
 
     const newSchema: Record<string, unknown> = { ...schema };
-    
+
     // Handle schema composition keywords
     if (newSchema.anyOf && Array.isArray(newSchema.anyOf)) {
-      newSchema.anyOf = newSchema.anyOf.map((v) => this.convertGeminiSchemaToStandard(v));
+      newSchema.anyOf = newSchema.anyOf.map((v) =>
+        this.convertGeminiSchemaToStandard(v),
+      );
     }
     if (newSchema.allOf && Array.isArray(newSchema.allOf)) {
-      newSchema.allOf = newSchema.allOf.map((v) => this.convertGeminiSchemaToStandard(v));
+      newSchema.allOf = newSchema.allOf.map((v) =>
+        this.convertGeminiSchemaToStandard(v),
+      );
     }
     if (newSchema.oneOf && Array.isArray(newSchema.oneOf)) {
-      newSchema.oneOf = newSchema.oneOf.map((v) => this.convertGeminiSchemaToStandard(v));
+      newSchema.oneOf = newSchema.oneOf.map((v) =>
+        this.convertGeminiSchemaToStandard(v),
+      );
     }
-    
+
     // Handle items (can be a schema or array of schemas for tuples)
     if (newSchema.items) {
       if (Array.isArray(newSchema.items)) {
-        newSchema.items = newSchema.items.map((item) => this.convertGeminiSchemaToStandard(item));
+        newSchema.items = newSchema.items.map((item) =>
+          this.convertGeminiSchemaToStandard(item),
+        );
       } else {
         newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
       }
     }
-    
+
     // Handle properties
     if (newSchema.properties && typeof newSchema.properties === 'object') {
       const newProperties: Record<string, unknown> = {};
@@ -71,21 +79,29 @@ export class GeminiCompatibleWrapper {
       }
       newSchema.properties = newProperties;
     }
-    
+
     // Handle additionalProperties if it's a schema
-    if (newSchema.additionalProperties && typeof newSchema.additionalProperties === 'object') {
-      newSchema.additionalProperties = this.convertGeminiSchemaToStandard(newSchema.additionalProperties);
+    if (
+      newSchema.additionalProperties &&
+      typeof newSchema.additionalProperties === 'object'
+    ) {
+      newSchema.additionalProperties = this.convertGeminiSchemaToStandard(
+        newSchema.additionalProperties,
+      );
     }
-    
+
     // Handle patternProperties
-    if (newSchema.patternProperties && typeof newSchema.patternProperties === 'object') {
+    if (
+      newSchema.patternProperties &&
+      typeof newSchema.patternProperties === 'object'
+    ) {
       const newPatternProperties: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(newSchema.patternProperties)) {
         newPatternProperties[key] = this.convertGeminiSchemaToStandard(value);
       }
       newSchema.patternProperties = newPatternProperties;
     }
-    
+
     // Handle dependencies (can be array of property names or schema)
     if (newSchema.dependencies && typeof newSchema.dependencies === 'object') {
       const newDependencies: Record<string, unknown> = {};
@@ -100,7 +116,7 @@ export class GeminiCompatibleWrapper {
       }
       newSchema.dependencies = newDependencies;
     }
-    
+
     // Handle if/then/else
     if (newSchema.if) {
       newSchema.if = this.convertGeminiSchemaToStandard(newSchema.if);
@@ -111,17 +127,17 @@ export class GeminiCompatibleWrapper {
     if (newSchema.else) {
       newSchema.else = this.convertGeminiSchemaToStandard(newSchema.else);
     }
-    
+
     // Handle not
     if (newSchema.not) {
       newSchema.not = this.convertGeminiSchemaToStandard(newSchema.not);
     }
-    
+
     // Convert type from UPPERCASE enum to lowercase string
     if (newSchema.type) {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
-    
+
     // Convert all numeric properties from strings to numbers
     const numericProperties = [
       'minItems',
@@ -132,15 +148,15 @@ export class GeminiCompatibleWrapper {
       'maximum',
       'minProperties',
       'maxProperties',
-      'multipleOf'
+      'multipleOf',
     ];
-    
+
     for (const prop of numericProperties) {
       if (newSchema[prop] !== undefined) {
         newSchema[prop] = Number(newSchema[prop]);
       }
     }
-    
+
     return newSchema;
   }
 
@@ -167,7 +183,9 @@ export class GeminiCompatibleWrapper {
             function: {
               name: func.name,
               description: func.description || '',
-              parameters: this.convertGeminiSchemaToStandard(func.parameters) as Record<string, unknown> ?? {
+              parameters: (this.convertGeminiSchemaToStandard(
+                func.parameters,
+              ) as Record<string, unknown>) ?? {
                 type: 'object',
                 properties: {},
                 required: [],
@@ -216,21 +234,11 @@ export class GeminiCompatibleWrapper {
     contents: ContentListUnion;
     config?: GenerateContentConfig;
   }): AsyncGenerator<GenerateContentResponse> {
-    console.debug(
-      '[GeminiCompatibleWrapper] generateContentStream called with model:',
-      params.model,
-    );
-    console.debug(
-      '[GeminiCompatibleWrapper] Using provider:',
-      this.provider.name,
-    );
-
     // Convert Gemini contents to provider messages
     let messages = this.convertContentsToMessages(params.contents);
 
     // Add system instruction if provided
     if (params.config?.systemInstruction) {
-      console.log('[GeminiCompatibleWrapper] Adding system instruction');
       let systemContent: string;
 
       // Handle different systemInstruction formats
@@ -253,55 +261,11 @@ export class GeminiCompatibleWrapper {
       ];
     }
 
-    console.debug(
-      '[GeminiCompatibleWrapper] Converted messages:',
-      JSON.stringify(messages, null, 2),
-    );
-
     // Extract and convert tools from config if available
     let providerTools: ProviderTool[] | undefined;
     const geminiTools = (params.config as { tools?: unknown })?.tools;
     if (geminiTools && Array.isArray(geminiTools)) {
-      console.log(
-        '[GeminiCompatibleWrapper] Gemini tools provided:',
-        geminiTools.length,
-      );
-      console.log(
-        '[GeminiCompatibleWrapper] Raw Gemini tools before conversion:',
-        JSON.stringify(geminiTools[0], null, 2),
-      );
       providerTools = this.convertGeminiToolsToProviderTools(geminiTools);
-      console.log(
-        '[GeminiCompatibleWrapper] Converted provider tools:',
-        providerTools.length,
-      );
-      console.log(
-        '[GeminiCompatibleWrapper] Tool names:',
-        providerTools.map((t) => t.function?.name ?? '').join(', '),
-      );
-      if (providerTools.length > 0) {
-        console.log(
-          '[GeminiCompatibleWrapper] First tool details:',
-          JSON.stringify(providerTools[0], null, 2),
-        );
-        // Check if conversion worked
-        const firstTool = providerTools[0];
-        if (firstTool.function?.parameters && 'type' in firstTool.function.parameters) {
-          const paramType = firstTool.function.parameters.type as string;
-          console.log(
-            '[GeminiCompatibleWrapper] First tool type after conversion:',
-            paramType,
-            'Is lowercase?',
-            paramType === paramType.toLowerCase()
-          );
-        }
-      }
-    } else {
-      console.log('[GeminiCompatibleWrapper] NO TOOLS PROVIDED IN CONFIG');
-      console.log(
-        '[GeminiCompatibleWrapper] Config keys:',
-        Object.keys(params.config || {}),
-      );
     }
 
     // Stream from provider and convert each chunk
@@ -315,10 +279,6 @@ export class GeminiCompatibleWrapper {
     let hasUsageMetadata = false;
 
     for await (const chunk of stream) {
-      console.debug(
-        '[GeminiCompatibleWrapper] Received chunk from provider:',
-        JSON.stringify(chunk, null, 2),
-      );
       const response = this.convertMessageToStreamResponse(
         chunk as ProviderMessage,
       );
@@ -344,11 +304,10 @@ export class GeminiCompatibleWrapper {
         ),
       );
 
+      // The telemetry will be logged by the consuming code when it sees the usage metadata
       if (lastChunkWithUsage) {
-        // The telemetry will be logged by the consuming code when it sees the usage metadata
-        console.debug(
-          '[GeminiCompatibleWrapper] Stream complete, usage metadata was included in chunks',
-        );
+        // Usage data is included in the stream for telemetry purposes
+        void lastChunkWithUsage; // Mark as intentionally unused
       }
     }
   }
@@ -384,29 +343,14 @@ export class GeminiCompatibleWrapper {
 
       // Emit tool call events if message has tool calls
       if (message.tool_calls && message.tool_calls.length > 0) {
-        console.log(
-          '[GeminiCompatibleWrapper] 🎯 CONVERTING TOOL CALLS TO EVENTS:',
-          message.tool_calls.length,
-        );
         for (const toolCall of message.tool_calls) {
-          console.log(
-            '[GeminiCompatibleWrapper] Tool call:',
-            toolCall.function.name,
-            toolCall.function.arguments,
-          );
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
-          } catch (e) {
-            console.error(
-              `[GeminiCompatibleWrapper] Failed to parse tool call arguments for ${toolCall.function.name}:`,
-              toolCall.function.arguments,
-              'Error:',
-              e,
-            );
+          } catch (_e) {
             // Use empty object as fallback
           }
-          
+
           const toolEvent: ServerGeminiToolCallRequestEvent = {
             type: GeminiEventType.ToolCallRequest,
             value: {
@@ -418,24 +362,10 @@ export class GeminiCompatibleWrapper {
           };
           yield toolEvent;
         }
-      } else if (message.tool_calls !== undefined) {
-        console.log('[GeminiCompatibleWrapper] ❌ Empty tool_calls array');
       }
 
       // Emit usage metadata event if message has usage data
       if (message.usage) {
-        console.log(
-          '[GeminiCompatibleWrapper] 📊 EMITTING USAGE EVENT:',
-          JSON.stringify(
-            {
-              prompt_tokens: message.usage.prompt_tokens,
-              completion_tokens: message.usage.completion_tokens,
-              total_tokens: message.usage.total_tokens,
-            },
-            null,
-            2,
-          ),
-        );
         const usageEvent: ServerGeminiUsageMetadataEvent = {
           type: GeminiEventType.UsageMetadata,
           value: {
@@ -458,21 +388,14 @@ export class GeminiCompatibleWrapper {
     // Normalize ContentListUnion to Content[]
     let contentArray: Content[];
 
-    // Add debug logging for the contents parameter
-    console.debug(
-      '[GeminiCompatibleWrapper] convertContentsToMessages called with:',
-      JSON.stringify(contents, null, 2).substring(0, 500),
-    );
-
     // Check if contents is undefined or null
     if (!contents) {
-      console.error('[GeminiCompatibleWrapper] Contents is undefined or null!');
       return [];
     }
 
     // Debug logging for multiple tool responses
     if (Array.isArray(contents) && contents.length > 0) {
-      const hasFunctionResponses = contents.some(
+      const _hasFunctionResponses = contents.some(
         (content) =>
           typeof content === 'object' &&
           content !== null &&
@@ -480,13 +403,6 @@ export class GeminiCompatibleWrapper {
           Array.isArray(content.parts) &&
           content.parts.some((part) => 'functionResponse' in part),
       );
-      if (hasFunctionResponses) {
-        console.log(
-          '[GeminiCompatibleWrapper] Processing contents with function responses:',
-          contents.length,
-          'items',
-        );
-      }
     }
 
     if (Array.isArray(contents)) {
@@ -512,16 +428,10 @@ export class GeminiCompatibleWrapper {
         );
 
         // Special handling: check if all parts are functionResponses
-        const allFunctionResponses = parts.every(
+        const _allFunctionResponses = parts.every(
           (part) =>
             part && typeof part === 'object' && 'functionResponse' in part,
         );
-
-        if (allFunctionResponses && parts.length > 1) {
-          console.log(
-            '[GeminiCompatibleWrapper] Multiple functionResponse parts detected, wrapping in single Content',
-          );
-        }
 
         contentArray = [
           {
@@ -560,18 +470,10 @@ export class GeminiCompatibleWrapper {
     for (const content of contentArray) {
       // Validate content object
       if (!content || typeof content !== 'object') {
-        console.error(
-          '[GeminiCompatibleWrapper] Invalid content object:',
-          content,
-        );
         continue;
       }
 
       if (!content.role) {
-        console.error(
-          '[GeminiCompatibleWrapper] Content missing role:',
-          content,
-        );
         continue;
       }
       // Check for function responses (tool results)
@@ -588,17 +490,8 @@ export class GeminiCompatibleWrapper {
       );
 
       if (functionResponses.length > 0) {
-        if (functionResponses.length > 1) {
-          console.log(
-            `[GeminiCompatibleWrapper] Processing ${functionResponses.length} function responses from single Content object`,
-          );
-        }
         // Convert each function response to a tool message
         for (const part of functionResponses) {
-          console.log(
-            `[GeminiCompatibleWrapper] Processing functionResponse part:`,
-            JSON.stringify(part, null, 2),
-          );
           const response = part.functionResponse.response;
           let content: string;
 
@@ -717,16 +610,10 @@ export class GeminiCompatibleWrapper {
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
-          } catch (e) {
-            console.error(
-              `[GeminiCompatibleWrapper] Failed to parse tool call arguments for ${toolCall.function.name}:`,
-              toolCall.function.arguments,
-              'Error:',
-              e,
-            );
+          } catch (_e) {
             // Use empty object as fallback
           }
-          
+
           parts.push({
             functionCall: {
               name: toolCall.function.name,
@@ -768,16 +655,10 @@ export class GeminiCompatibleWrapper {
         let args: Record<string, unknown> = {};
         try {
           args = JSON.parse(toolCall.function.arguments);
-        } catch (e) {
-          console.error(
-            `[GeminiCompatibleWrapper] Failed to parse tool call arguments for ${toolCall.function.name}:`,
-            toolCall.function.arguments,
-            'Error:',
-            e,
-          );
+        } catch (_e) {
           // Use empty object as fallback
         }
-        
+
         parts.push({
           functionCall: {
             name: toolCall.function.name,

@@ -903,7 +903,7 @@ describe('Gemini Client (client.ts)', () => {
       // expect(mockSetModel).toHaveBeenCalledWith('gemini-2.5-flash');
       // expect(client['model']).toBe('gemini-2.5-flash');
       // expect(client['chat']).not.toBe(initialChat); // Chat should be reinitialized
-      
+
       // Skip test - updateModel method not implemented yet
       expect(true).toBe(true);
     });

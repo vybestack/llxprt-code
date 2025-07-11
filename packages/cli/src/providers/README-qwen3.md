@@ -18,6 +18,7 @@ The Qwen3-Fireworks provider enables the Gemini CLI to use the Qwen3-235B model 
 Located at: `packages/cli/src/providers/openai/Qwen3FireworksProvider.ts`
 
 Key methods:
+
 - `cleanQwen3Content()`: Removes control tokens and normalizes whitespace
 - `generateChatCompletion()`: Wraps the parent method to clean content
 - `getModels()`: Returns the Qwen3-235B model configuration
@@ -26,6 +27,7 @@ Key methods:
 ### Registration
 
 The provider is registered in `providerManagerInstance.ts` with the following priority for API keys:
+
 1. Saved key for 'qwen3-fireworks'
 2. `FIREWORKS_API_KEY` environment variable
 3. OpenAI API key (as fallback)
@@ -44,6 +46,7 @@ export FIREWORKS_API_KEY=your-api-key
 ## Testing
 
 Tests are included in `Qwen3FireworksProvider.test.ts` covering:
+
 - Provider initialization
 - Model listing
 - Token cleaning functionality

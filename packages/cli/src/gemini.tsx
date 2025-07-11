@@ -7,7 +7,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
-import { loadCliConfig } from './config/config.js';
+import { loadCliConfig, parseArguments } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
@@ -28,7 +28,6 @@ import { runNonInteractive } from './nonInteractiveCli.js';
 import { loadExtensions, Extension } from './config/extension.js';
 import { cleanupCheckpoints } from './utils/cleanup.js';
 import {
-  ApprovalMode,
   Config,
   EditTool,
   ShellTool,
@@ -88,6 +87,7 @@ async function relaunchWithAdditionalArgs(additionalArgs: string[]) {
 export async function main() {
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
+  const argv = await parseArguments();
 
   await cleanupCheckpoints();
   if (settings.errors.length > 0) {
@@ -100,7 +100,12 @@ export async function main() {
   }
 
   const extensions = loadExtensions(workspaceRoot);
-  const config = await loadCliConfig(settings.merged, extensions, sessionId);
+  const config = await loadCliConfig(
+    settings.merged,
+    extensions,
+    sessionId,
+    argv,
+  );
 
   if (config.getListExtensions()) {
     console.log('Installed extensions:');
@@ -164,6 +169,18 @@ export async function main() {
       }
     }
   }
+
+  const providerManager = getProviderManager();
+  const configProvider = config.getProvider();
+  if (configProvider) {
+    try {
+      await providerManager.setActiveProvider(configProvider);
+    } catch (e) {
+      console.error(chalk.red((e as Error).message));
+      process.exit(1);
+    }
+  }
+
   let input = config.getQuestion();
   const startupWarnings = [
     ...(await getStartupWarnings()),
@@ -171,11 +188,18 @@ export async function main() {
   ];
 
   // Check if a provider is already active on startup
-  const providerManager = getProviderManager();
   const activeProvider = providerManager.getActiveProvider();
-  if (activeProvider && activeProvider.name !== 'gemini' && !settings.merged.selectedAuthType) {
+  if (
+    activeProvider &&
+    activeProvider.name !== 'gemini' &&
+    !settings.merged.selectedAuthType
+  ) {
     // Set selectedAuthType to USE_PROVIDER if a non-Gemini provider is active
-    settings.setValue(SettingScope.User, 'selectedAuthType', AuthType.USE_PROVIDER);
+    settings.setValue(
+      SettingScope.User,
+      'selectedAuthType',
+      AuthType.USE_PROVIDER,
+    );
   }
 
   // Render UI, passing necessary config values. Check that there is no command line question.
@@ -218,6 +242,7 @@ export async function main() {
     config,
     extensions,
     settings,
+    argv,
   );
 
   await runNonInteractive(nonInteractiveConfig, input, prompt_id);
@@ -258,9 +283,11 @@ async function loadNonInteractiveConfig(
   config: Config,
   extensions: Extension[],
   settings: LoadedSettings,
+  argv: Awaited<ReturnType<typeof parseArguments>>,
 ) {
   let finalConfig = config;
-  if (config.getApprovalMode() !== ApprovalMode.YOLO) {
+
+  if (!argv.yolo) {
     // Everything is not allowed, ensure that only read-only tools are configured.
     const existingExcludeTools = settings.merged.excludeTools || [];
     const interactiveTools = [
@@ -281,6 +308,7 @@ async function loadNonInteractiveConfig(
       nonInteractiveSettings,
       extensions,
       config.getSessionId(),
+      argv,
     );
     await finalConfig.initialize();
   }

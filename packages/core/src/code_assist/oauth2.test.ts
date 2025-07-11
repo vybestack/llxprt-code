@@ -88,9 +88,7 @@ describe('oauth2', () => {
       credentials: mockTokens,
       on: vi.fn(),
     } as unknown as OAuth2Client;
-    vi.mocked(OAuth2Client).mockImplementation(
-      () => mockOAuth2Client,
-    );
+    vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
     vi.spyOn(crypto, 'randomBytes').mockReturnValue(mockState as never);
     vi.mocked(open).mockImplementation(async () => ({}) as never);

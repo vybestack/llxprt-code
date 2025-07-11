@@ -1,11 +1,13 @@
 # Task: Final Verification and Testing
 
 ## Objective
+
 Perform comprehensive verification that all issues are resolved and the Gemini CLI works correctly with all providers.
 
 ## Verification Steps
 
 ### 1. Build Verification
+
 ```bash
 # From project root
 npm run clean
@@ -16,6 +18,7 @@ npm run typecheck   # Must pass with 0 errors
 ```
 
 ### 2. Test Suite Verification
+
 ```bash
 # Run all tests
 npm test
@@ -27,6 +30,7 @@ npm test
 ```
 
 ### 3. CLI Launch Test
+
 ```bash
 # Navigate to CLI directory
 cd packages/cli
@@ -41,6 +45,7 @@ node lib/gemini.js
 ```
 
 ### 4. Basic Functionality Test
+
 ```bash
 # Test with default Gemini provider
 node lib/gemini.js -p 'List the files in the current directory using the LS tool'
@@ -53,13 +58,14 @@ node lib/gemini.js -p 'List the files in the current directory using the LS tool
 ```
 
 ### 5. Provider Switching Test
+
 ```bash
 # Start CLI
 node lib/gemini.js
 
 # Test provider switching
 /provider openai     # Should switch to OpenAI
-/provider anthropic  # Should switch to Anthropic  
+/provider anthropic  # Should switch to Anthropic
 /provider gemini     # Should switch back to Gemini
 
 # Test with each provider (if API keys configured):
@@ -69,6 +75,7 @@ node lib/gemini.js
 ```
 
 ### 6. Tool Execution Test
+
 ```bash
 # Test various tools with different providers:
 
@@ -76,7 +83,7 @@ node lib/gemini.js
 "Read the package.json file"
 "List all TypeScript files in the src directory"
 
-# Code operations  
+# Code operations
 "Search for 'ProviderManager' in the codebase"
 "Show me the current git status"
 
@@ -84,6 +91,7 @@ node lib/gemini.js
 ```
 
 ### 7. Configuration Test
+
 ```bash
 # Test configuration commands
 /auth openai sk-test-key
@@ -94,6 +102,7 @@ node lib/gemini.js
 ```
 
 ### 8. Memory and Performance Test
+
 ```bash
 # Have a longer conversation
 # Monitor memory usage
@@ -110,7 +119,7 @@ node lib/gemini.js
 ✅ Basic tool execution works  
 ✅ Provider switching works  
 ✅ No memory leaks observed  
-✅ Configuration persists correctly  
+✅ Configuration persists correctly
 
 ## Known Acceptable Issues
 
@@ -120,7 +129,7 @@ node lib/gemini.js
 ## Final Checklist
 
 - [ ] No TypeScript errors
-- [ ] No linting errors  
+- [ ] No linting errors
 - [ ] All tests pass (or failures documented)
 - [ ] CLI launches successfully
 - [ ] Tool execution works
@@ -129,12 +138,15 @@ node lib/gemini.js
 - [ ] Documentation updated
 
 ## Dependencies
+
 - All P0, P1, and P2 tasks must be complete
 
 ## Estimated Time
+
 30 minutes
 
 ## Notes
+
 - Document any issues found for future fixes
 - If any critical issues found, create follow-up tasks
 - Consider creating automated smoke test for future merges

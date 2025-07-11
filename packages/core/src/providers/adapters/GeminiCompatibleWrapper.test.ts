@@ -90,19 +90,35 @@ describe('GeminiCompatibleWrapper', () => {
 
       // Check that generateChatCompletion was called with converted tools
       expect(mockProvider.generateChatCompletion).toHaveBeenCalled();
-      const [_messages, tools] = (mockProvider.generateChatCompletion as Mock).mock.calls[0];
+      const [_messages, tools] = (mockProvider.generateChatCompletion as Mock)
+        .mock.calls[0];
 
       // Verify tools were converted correctly
       expect(tools).toBeDefined();
       expect(tools.length).toBe(1);
       expect(tools[0].function.parameters.type).toBe('object'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.stringParam.type).toBe('string'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.numberParam.type).toBe('number'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.booleanParam.type).toBe('boolean'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.arrayParam.type).toBe('array'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.arrayParam.items.type).toBe('string'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.objectParam.type).toBe('object'); // Should be lowercase
-      expect(tools[0].function.parameters.properties.objectParam.properties.nestedString.type).toBe('string'); // Should be lowercase
+      expect(tools[0].function.parameters.properties.stringParam.type).toBe(
+        'string',
+      ); // Should be lowercase
+      expect(tools[0].function.parameters.properties.numberParam.type).toBe(
+        'number',
+      ); // Should be lowercase
+      expect(tools[0].function.parameters.properties.booleanParam.type).toBe(
+        'boolean',
+      ); // Should be lowercase
+      expect(tools[0].function.parameters.properties.arrayParam.type).toBe(
+        'array',
+      ); // Should be lowercase
+      expect(
+        tools[0].function.parameters.properties.arrayParam.items.type,
+      ).toBe('string'); // Should be lowercase
+      expect(tools[0].function.parameters.properties.objectParam.type).toBe(
+        'object',
+      ); // Should be lowercase
+      expect(
+        tools[0].function.parameters.properties.objectParam.properties
+          .nestedString.type,
+      ).toBe('string'); // Should be lowercase
     });
 
     it('should handle tools without Type enum values', async () => {
@@ -160,13 +176,16 @@ describe('GeminiCompatibleWrapper', () => {
 
       // Check that generateChatCompletion was called with tools unchanged
       expect(mockProvider.generateChatCompletion).toHaveBeenCalled();
-      const [_messages, tools] = (mockProvider.generateChatCompletion as Mock).mock.calls[0];
+      const [_messages, tools] = (mockProvider.generateChatCompletion as Mock)
+        .mock.calls[0];
 
       // Verify tools remain unchanged
       expect(tools).toBeDefined();
       expect(tools.length).toBe(1);
       expect(tools[0].function.parameters.type).toBe('object'); // Should remain lowercase
-      expect(tools[0].function.parameters.properties.stringParam.type).toBe('string'); // Should remain lowercase
+      expect(tools[0].function.parameters.properties.stringParam.type).toBe(
+        'string',
+      ); // Should remain lowercase
     });
   });
 });

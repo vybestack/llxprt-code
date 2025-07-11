@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/providers/anthropic/AnthropicProvider.test.ts
     ```
-
     - **Expected Output:** All tests in `AnthropicProvider.test.ts` should pass, including the new tests for `getModels` and the existing tests for `generateChatCompletion`.
 
 4.  **Verify `AnthropicProvider.ts` Implementation Details:**

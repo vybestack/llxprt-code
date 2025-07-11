@@ -25,7 +25,6 @@
         ```
         /key sk-YOUR_TEST_API_KEY_HERE
         ```
-
         - **Expected:** Confirmation message that the API key is set. Subsequent chat messages should use this key.
 
       - Test `/keyfile` (create a temporary file, e.g., `/tmp/test_openai_key.txt` with your API key inside):
@@ -34,7 +33,6 @@
         echo "sk-YOUR_TEST_API_KEY_FROM_FILE" > /tmp/test_openai_key.txt
         /keyfile /tmp/test_openai_key.txt
         ```
-
         - **Expected:** Confirmation message that the key file is set. Subsequent chat messages should use the key from the file.
 
       - Test `/baseurl` (you might need a local OpenAI-compatible proxy or mock server for full verification):
@@ -42,7 +40,6 @@
         ```
         /baseurl http://localhost:8080/v1
         ```
-
         - **Expected:** Confirmation message that the base URL is set. Subsequent chat messages should attempt to connect to this URL.
 
       - After each `/key`, `/keyfile`, or `/baseurl` command, send a test message (e.g., `Hello`) to verify the configuration is active and the model responds correctly.

@@ -22,7 +22,10 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
   onClose,
 }) => {
   const [index, setIndex] = useState(() =>
-    Math.max(0, providers.findIndex((p) => p === currentProvider)),
+    Math.max(
+      0,
+      providers.findIndex((p) => p === currentProvider),
+    ),
   );
 
   const columns = 3;

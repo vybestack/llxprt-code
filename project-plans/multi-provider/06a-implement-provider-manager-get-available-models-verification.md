@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/providers/ProviderManager.test.ts
     ```
-
     - **Expected Output:** All tests in `ProviderManager.test.ts` should pass, including the new tests for `getAvailableModels`.
 
 4.  **Verify `ProviderManager.ts` Implementation Details:**

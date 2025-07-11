@@ -24,7 +24,6 @@
         /toolformat openai
         Read the file packages/cli/package.json
         ```
-
         - **Expected:** The `read_file` tool should be called and its output displayed, followed by a response from the OpenAI model. This verifies `ToolFormatter.fromProviderFormat` is correctly handling OpenAI's tool calls.
 
       - **Test with Anthropic (default tool format):**
@@ -35,7 +34,6 @@
         /toolformat anthropic
         Read the file packages/cli/package.json
         ```
-
         - **Expected:** The `read_file` tool should be called and its output displayed, followed by a response from the Anthropic model. This verifies `ToolFormatter.fromProviderFormat` is correctly handling Anthropic's tool calls.
 
       - **(Optional) Test with other tool formats (if implemented in previous phases):**

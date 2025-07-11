@@ -86,9 +86,15 @@ export class GemmaToolCallParser implements ITextToolCallParser {
           const [fullMatch, hermesJson, toolName] = match;
           try {
             const parsed = JSON.parse(hermesJson);
-            matches.push({ fullMatch, toolName, args: JSON.stringify(parsed.arguments || {}) });
+            matches.push({
+              fullMatch,
+              toolName,
+              args: JSON.stringify(parsed.arguments || {}),
+            });
           } catch (error) {
-            console.error(`[GemmaToolCallParser] Failed to parse Hermes format: ${error}`);
+            console.error(
+              `[GemmaToolCallParser] Failed to parse Hermes format: ${error}`,
+            );
             // Still need to track the match to remove it from content
             matches.push({ fullMatch, toolName: '', args: '' });
           }
@@ -125,7 +131,10 @@ export class GemmaToolCallParser implements ITextToolCallParser {
 
         if (typeof args === 'string') {
           // Check if it's XML content (Claude-style or generic)
-          if (args.includes('<parameter') || args.includes('<') && args.includes('>')) {
+          if (
+            args.includes('<parameter') ||
+            (args.includes('<') && args.includes('>'))
+          ) {
             parsedArgs = this.parseXMLParameters(args);
           } else {
             // Handle JSON string arguments
@@ -240,7 +249,8 @@ export class GemmaToolCallParser implements ITextToolCallParser {
     const args: Record<string, unknown> = {};
 
     // Parse Claude-style <parameter name="key">value</parameter>
-    const parameterPattern = /<parameter\s+name="([^"]+)">([^<]*)<\/parameter>/g;
+    const parameterPattern =
+      /<parameter\s+name="([^"]+)">([^<]*)<\/parameter>/g;
     let match;
     while ((match = parameterPattern.exec(xmlContent)) !== null) {
       const [, key, value] = match;

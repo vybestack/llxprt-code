@@ -80,7 +80,7 @@ export async function getOauthClient(
         // Non-fatal, continue with existing auth.
       }
     }
-    console.log('Loaded cached credentials.');
+    // Loaded cached credentials
     return client;
   }
 

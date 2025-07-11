@@ -29,9 +29,7 @@ export function getProviderManager(): ProviderManager {
       try {
         if (existsSync(USER_SETTINGS_PATH)) {
           const userContent = readFileSync(USER_SETTINGS_PATH, 'utf-8');
-          userSettings = JSON.parse(
-            stripJsonComments(userContent),
-          ) as Settings;
+          userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
           savedApiKeys = userSettings.providerApiKeys || {};
         }
       } catch (_error) {
@@ -67,7 +65,7 @@ export function getProviderManager(): ProviderManager {
       if (openaiApiKey) {
         const openaiProvider = new OpenAIProvider(openaiApiKey);
         providerManagerInstance.registerProvider(openaiProvider);
-        console.debug('OpenAI provider registered (not active by default)');
+        // OpenAI provider registered
       }
 
       // Initialize with Anthropic provider if API key is available
@@ -90,26 +88,29 @@ export function getProviderManager(): ProviderManager {
       if (anthropicApiKey) {
         const anthropicProvider = new AnthropicProvider(anthropicApiKey);
         providerManagerInstance.registerProvider(anthropicProvider);
-        console.debug('Anthropic provider registered (not active by default)');
+        // Anthropic provider registered
       }
 
       // Initialize Qwen3-Fireworks provider if API key is available
       // Priority: Environment variable > OpenAI API key (since Fireworks uses OpenAI-compatible API)
       let fireworksApiKey: string | undefined = savedApiKeys['qwen3-fireworks'];
-      
+
       if (!fireworksApiKey) {
         fireworksApiKey = process.env.FIREWORKS_API_KEY;
       }
-      
+
       // If no Fireworks-specific key, try using OpenAI key as fallback
       if (!fireworksApiKey) {
         fireworksApiKey = openaiApiKey;
       }
-      
+
       if (fireworksApiKey) {
-        const qwen3Provider = new Qwen3FireworksProvider(fireworksApiKey, userSettings);
+        const qwen3Provider = new Qwen3FireworksProvider(
+          fireworksApiKey,
+          userSettings,
+        );
         providerManagerInstance.registerProvider(qwen3Provider);
-        console.debug('Qwen3-Fireworks provider registered (not active by default)');
+        // Qwen3-Fireworks provider registered
       }
     }
   }

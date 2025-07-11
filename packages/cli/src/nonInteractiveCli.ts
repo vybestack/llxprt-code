@@ -48,7 +48,17 @@ export async function runNonInteractive(
   input: string,
   prompt_id: string,
 ): Promise<void> {
-  await config.initialize();
+  console.log('[YOLO DEBUG] runNonInteractive started');
+  console.log('[YOLO DEBUG] approvalMode:', config.getApprovalMode());
+
+  console.log('[YOLO DEBUG] Initializing config...');
+  try {
+    await config.initialize();
+    console.log('[YOLO DEBUG] Config initialized');
+  } catch (error) {
+    console.error('[YOLO DEBUG] Error initializing config:', error);
+    throw error;
+  }
   // Handle EPIPE errors when the output is piped to a command that closes early.
   process.stdout.on('error', (err: NodeJS.ErrnoException) => {
     if (err.code === 'EPIPE') {
@@ -58,15 +68,28 @@ export async function runNonInteractive(
   });
 
   const geminiClient = config.getGeminiClient();
-  const toolRegistry: ToolRegistry = await config.getToolRegistry();
+  console.log('[YOLO DEBUG] Got gemini client');
 
+  const toolRegistry: ToolRegistry = await config.getToolRegistry();
+  console.log(
+    '[YOLO DEBUG] Available tools:',
+    toolRegistry.getFunctionDeclarations().map((f) => f.name),
+  );
+
+  console.log('[YOLO DEBUG] Getting chat...');
   const chat = await geminiClient.getChat();
+  console.log('[YOLO DEBUG] Got chat');
+
   const abortController = new AbortController();
   let currentMessages: Content[] = [{ role: 'user', parts: [{ text: input }] }];
+  console.log('[YOLO DEBUG] Initial message:', input);
 
   try {
     while (true) {
       const functionCalls: FunctionCall[] = [];
+
+      console.log('[YOLO DEBUG] Sending message to chat...');
+      console.log('[YOLO DEBUG] Message parts:', currentMessages[0]?.parts);
 
       const responseStream = await chat.sendMessageStream(
         {
@@ -81,21 +104,62 @@ export async function runNonInteractive(
         prompt_id,
       );
 
+      console.log('[YOLO DEBUG] Got response stream');
+
       for await (const resp of responseStream) {
+        console.log(
+          '[YOLO DEBUG] Response received:',
+          JSON.stringify(resp, null, 2),
+        );
+
         if (abortController.signal.aborted) {
           console.error('Operation cancelled.');
           return;
         }
         const textPart = getResponseText(resp);
         if (textPart) {
+          console.log('[YOLO DEBUG] Text response:', textPart);
           process.stdout.write(textPart);
         }
+
+        // Extract function calls from the response
+        if (resp.candidates && resp.candidates.length > 0) {
+          const candidate = resp.candidates[0];
+          if (candidate.content && candidate.content.parts) {
+            const extractedFunctionCalls = candidate.content.parts
+              .filter((part) => !!part.functionCall)
+              .map((part) => part.functionCall as FunctionCall);
+
+            console.log(
+              '[YOLO DEBUG] Extracted function calls:',
+              extractedFunctionCalls,
+            );
+
+            if (extractedFunctionCalls.length > 0) {
+              functionCalls.push(...extractedFunctionCalls);
+              console.log(
+                '[YOLO DEBUG] Total function calls so far:',
+                functionCalls.length,
+              );
+            }
+          }
+        }
+
+        // Also check the old way just in case
         if (resp.functionCalls) {
+          console.log(
+            '[YOLO DEBUG] Found resp.functionCalls (old way):',
+            resp.functionCalls,
+          );
           functionCalls.push(...resp.functionCalls);
         }
       }
 
       if (functionCalls.length > 0) {
+        console.log(
+          '[YOLO DEBUG] Function calls detected:',
+          functionCalls.map((fc) => fc.name),
+        );
         const toolResponseParts: Part[] = [];
 
         for (const fc of functionCalls) {
@@ -107,6 +171,13 @@ export async function runNonInteractive(
             isClientInitiated: false,
             prompt_id,
           };
+
+          console.log(
+            '[YOLO DEBUG] Executing tool:',
+            fc.name,
+            'with args:',
+            fc.args,
+          );
 
           const toolResponse = await executeToolCall(
             config,
@@ -125,6 +196,12 @@ export async function runNonInteractive(
             if (!isToolNotFound) {
               process.exit(1);
             }
+          } else {
+            console.log('[YOLO DEBUG] Tool executed successfully:', fc.name);
+            console.log(
+              '[YOLO DEBUG] Tool response:',
+              toolResponse.resultDisplay,
+            );
           }
 
           if (toolResponse.responseParts) {

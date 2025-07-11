@@ -5,6 +5,7 @@ These examples should be included in the system prompts to demonstrate proper to
 ## Examples of When to Use the Todo List
 
 ### Example 1: Multi-Feature Implementation
+
 ```
 User: I need to implement these features for my e-commerce site: user registration, product catalog, shopping cart, and checkout flow.
 Assistant: I'll help implement these features. Let me create a todo list to track this implementation.
@@ -22,6 +23,7 @@ Let me start with the user registration system.
 ```
 
 ### Example 2: Complex Refactoring
+
 ```
 User: Help me rename the function getCwd to getCurrentWorkingDirectory across my project
 Assistant: I'll search for all occurrences of getCwd first.
@@ -38,6 +40,7 @@ I found 15 instances across 8 files. Let me create a todo list to track these ch
 ```
 
 ### Example 3: Debugging with Unknown Scope
+
 ```
 User: Can you help optimize my React application? It's rendering slowly.
 Assistant: I'll analyze your React application for performance issues.
@@ -58,6 +61,7 @@ Let me start with the ProductList memoization.
 ## Examples of When NOT to Use the Todo List
 
 ### Example 1: Simple Information Request
+
 ```
 User: What does the git status command do?
 Assistant: The git status command shows the current state of your working directory and staging area. It displays which changes have been staged, which haven't, and which files aren't being tracked by Git.
@@ -65,6 +69,7 @@ Assistant: The git status command shows the current state of your working direct
 ```
 
 ### Example 2: Single Trivial Task
+
 ```
 User: Can you add a comment to the calculateTotal function?
 Assistant: I'll add a comment to the calculateTotal function.
@@ -73,6 +78,7 @@ Assistant: I'll add a comment to the calculateTotal function.
 ```
 
 ### Example 3: Quick Command Execution
+
 ```
 User: Run npm install for me
 Assistant: I'll run npm install.

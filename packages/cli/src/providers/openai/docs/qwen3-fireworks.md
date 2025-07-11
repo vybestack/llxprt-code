@@ -7,10 +7,11 @@ This provider enables support for the Qwen3-235B model through Fireworks AI's Op
 1. Get a Fireworks AI API key from https://app.fireworks.ai/
 
 2. Set your API key using one of these methods:
+
    ```bash
    # Environment variable
    export FIREWORKS_API_KEY=your-api-key
-   
+
    # Or use the CLI
    gemini-cli
    /provider qwen3-fireworks
@@ -32,6 +33,7 @@ This provider enables support for the Qwen3-235B model through Fireworks AI's Op
 ## Implementation Details
 
 The provider extends the OpenAI provider with:
+
 - Automatic cleaning of Qwen3 control tokens (`<|im_start|>`, `<|im_end|>`, etc.)
 - Removal of special function tokens (`<|reserved_special_token_*|>`)
 - Proper handling of multiple newlines in responses

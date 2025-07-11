@@ -21,7 +21,6 @@
         ```
         /toolformat openai
         ```
-
         - **Expected:** Confirmation message that the tool format is set to 'openai'.
 
       - Set another valid tool format:
@@ -29,7 +28,6 @@
         ```
         /toolformat hermes
         ```
-
         - **Expected:** Confirmation message that the tool format is set to 'hermes'.
 
       - Attempt to set an invalid tool format:
@@ -37,7 +35,6 @@
         ```
         /toolformat unknown_format
         ```
-
         - **Expected:** An error message indicating that 'unknown_format' is not a valid tool format.
 
 4.  **Code Inspection (grep):**

@@ -35,10 +35,10 @@ export class TodoStore {
   async writeTodos(todos: Todo[]): Promise<void> {
     const filePath = this.getFilePath();
     const dir = path.dirname(filePath);
-    
+
     // Create directory if it doesn't exist
     await fs.mkdir(dir, { recursive: true });
-    
+
     // Write todos to file
     await fs.writeFile(filePath, JSON.stringify(todos, null, 2), 'utf-8');
   }
@@ -58,11 +58,11 @@ export class TodoStore {
   private getFilePath(): string {
     const homeDir = process.env.HOME || os.homedir();
     const todosDir = path.join(homeDir, '.gemini', 'todos');
-    
-    const fileName = this.agentId 
+
+    const fileName = this.agentId
       ? `${this.sessionId}-agent-${this.agentId}.json`
       : `${this.sessionId}.json`;
-      
+
     return path.join(todosDir, fileName);
   }
 }

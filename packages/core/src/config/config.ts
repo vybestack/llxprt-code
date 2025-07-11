@@ -145,6 +145,7 @@ export interface ConfigParameters {
   listExtensions?: boolean;
   activeExtensions?: ActiveExtension[];
   providerManager?: ProviderManager;
+  provider?: string;
 }
 
 export class Config {
@@ -189,6 +190,7 @@ export class Config {
   flashFallbackHandler?: FlashFallbackHandler;
   private quotaErrorOccurred: boolean = false;
   private readonly providerManager?: ProviderManager;
+  private readonly provider?: string;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -233,6 +235,7 @@ export class Config {
     this.listExtensions = params.listExtensions ?? false;
     this._activeExtensions = params.activeExtensions ?? [];
     this.providerManager = params.providerManager;
+    this.provider = params.provider;
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
@@ -252,7 +255,7 @@ export class Config {
       console.log('Data collection is disabled.');
     }
     */
-    console.log('Data collection is disabled.');
+    // Data collection is disabled
   }
 
   async initialize(): Promise<void> {
@@ -273,7 +276,7 @@ export class Config {
       this.model,
       authMethod,
     );
-    
+
     // Add provider manager to the config if available
     if (this.providerManager) {
       this.contentGeneratorConfig.providerManager = this.providerManager;
@@ -490,6 +493,10 @@ export class Config {
     return this._activeExtensions;
   }
 
+  getProvider(): string | undefined {
+    return this.provider;
+  }
+
   async getGitService(): Promise<GitService> {
     if (!this.gitService) {
       this.gitService = new GitService(this.targetDir);
@@ -544,6 +551,11 @@ export class Config {
         isEnabled = false;
       }
 
+      console.log(`[Config] Tool ${toolName} (${className}) - enabled: ${isEnabled}`);
+      if (!isEnabled) {
+        console.log(`[Config] Tool ${toolName} excluded. coreTools:`, coreTools, 'excludeTools:', excludeTools);
+      }
+      
       if (isEnabled) {
         registry.registerTool(new ToolClass(...args));
       }

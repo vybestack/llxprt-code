@@ -116,7 +116,7 @@ export function parseAndFormatApiError(
       return text;
     }
   }
-  
+
   if (isStructuredError(error)) {
     let text = `[API Error: ${error.message}]`;
     if (error.status === 429) {

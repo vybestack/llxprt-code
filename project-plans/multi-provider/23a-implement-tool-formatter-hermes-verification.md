@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/tools/ToolFormatter.test.ts
     ```
-
     - **Expected Output:** All tests in `ToolFormatter.test.ts` should pass, including the new tests for `hermes` tool formatting and the existing `NotYetImplemented` tests for other formats.
 
 4.  **Verify `ToolFormatter.ts` Implementation Details:**

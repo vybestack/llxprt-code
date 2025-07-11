@@ -69,7 +69,7 @@ export function getObfuscatedGoogleAccountId(): string {
   // 1. Import getCachedGoogleAccountId from '../code_assist/oauth2.js'
   // 2. Return the cached Google Account ID if available
   // 3. Fall back to empty string if not available
-  
+
   // Temporarily disabled due to ESM/CommonJS compatibility issues
   return '';
 }

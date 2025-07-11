@@ -5,6 +5,7 @@ This directory contains a comprehensive implementation plan for adding Claude Co
 ## Overview
 
 The todo list feature provides LLMs with task management capabilities to:
+
 - Track multi-step tasks
 - Show progress to users
 - Maintain focus on complex work
@@ -24,6 +25,7 @@ The todo list feature provides LLMs with task management capabilities to:
 ## Key Features
 
 ### Behavioral Directives
+
 - Detailed rules for when to use/not use todos
 - Proactiveness emphasis ("use frequently", "when in doubt")
 - Real-time status updates
@@ -31,6 +33,7 @@ The todo list feature provides LLMs with task management capabilities to:
 - Concrete examples for edge cases
 
 ### Technical Implementation
+
 - TodoRead and TodoWrite tools with Zod validation
 - File-based persistence in `~/.gemini/todos/`
 - Agent-specific storage (`{sessionId}-agent-{agentId}.json`)
@@ -40,13 +43,13 @@ The todo list feature provides LLMs with task management capabilities to:
 - Automatic reminder system with state tracking
 
 ### User Experience
+
 - Visual todo display in CLI
 - Status indicators (⏳ ○ ✓)
 - Priority levels
 - Automatic display on updates
 
 ## Running the Implementation
-
 
 ## Success Metrics
 

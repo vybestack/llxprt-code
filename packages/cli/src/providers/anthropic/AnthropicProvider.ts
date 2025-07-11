@@ -96,10 +96,10 @@ export class AnthropicProvider implements IProvider {
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
     let attemptCount = 0;
-    
+
     const apiCall = async () => {
       attemptCount++;
-      
+
       // Resolve model if it uses -latest placeholder
       const resolvedModel = await this.resolveLatestModel(this.currentModel);
 
@@ -323,7 +323,8 @@ export class AnthropicProvider implements IProvider {
         }
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       throw new Error(`Anthropic API error: ${errorMessage}`);
     }
   }
@@ -391,14 +392,20 @@ export class AnthropicProvider implements IProvider {
 
     // Check cache
     const now = Date.now();
-    if (this.modelCache && now - this.modelCache.timestamp < this.modelCacheTTL) {
+    if (
+      this.modelCache &&
+      now - this.modelCache.timestamp < this.modelCacheTTL
+    ) {
       // Find the corresponding model from cache
-      const model = this.modelCache.models.find(m => m.id === modelId);
+      const model = this.modelCache.models.find((m) => m.id === modelId);
       if (model) {
         // The latest aliases are synthetic, find the real model
         const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
         const realModel = this.modelCache.models
-          .filter(m => m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'))
+          .filter(
+            (m) =>
+              m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'),
+          )
           .sort((a, b) => b.id.localeCompare(a.id))[0];
         return realModel ? realModel.id : modelId;
       }
@@ -411,7 +418,10 @@ export class AnthropicProvider implements IProvider {
     // Find the real model for this latest alias
     const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
     const realModel = models
-      .filter(m => m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'))
+      .filter(
+        (m) =>
+          m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'),
+      )
       .sort((a, b) => b.id.localeCompare(a.id))[0];
 
     return realModel ? realModel.id : modelId;
@@ -491,8 +501,6 @@ export class AnthropicProvider implements IProvider {
       errorMessage.includes(msg),
     );
   }
-
-  
 
   /**
    * Validates and potentially fixes the message history to ensure proper tool_use/tool_result pairing.

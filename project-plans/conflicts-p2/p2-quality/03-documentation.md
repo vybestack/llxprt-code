@@ -1,11 +1,13 @@
 # Task: Documentation Updates
 
 ## Objective
+
 Update documentation to reflect the multi-provider functionality and ensure all new features are properly documented.
 
 ## Files to Create/Modify
 
 ### Priority 1 - User Documentation:
+
 1. **`docs/cli/providers.md`** (create if doesn't exist)
    - Document available providers
    - Explain provider switching
@@ -23,6 +25,7 @@ Update documentation to reflect the multi-provider functionality and ensure all 
    - Add quick start for providers
 
 ### Priority 2 - API Documentation:
+
 4. **`packages/cli/src/providers/README.md`** (update)
    - Document provider interface
    - Explain architecture
@@ -34,6 +37,7 @@ Update documentation to reflect the multi-provider functionality and ensure all 
    - Document tool parsing formats
 
 ### Priority 3 - Migration Guide:
+
 6. **`docs/migration/multi-provider.md`** (create)
    - Breaking changes
    - Migration steps
@@ -42,24 +46,29 @@ Update documentation to reflect the multi-provider functionality and ensure all 
 ## Specific Documentation Needed
 
 ### Provider Usage Guide:
-```markdown
+
+````markdown
 ## Multi-Provider Support
 
 Gemini CLI now supports multiple AI providers:
 
 ### Available Providers
+
 - Google Gemini (default)
 - OpenAI (GPT-4, GPT-3.5)
 - Anthropic (Claude)
 
 ### Switching Providers
+
 ```bash
 /provider openai
 /provider anthropic
 /provider gemini
 ```
+````
 
 ### Authentication
+
 ```bash
 # Set API keys via environment
 export OPENAI_API_KEY=sk-...
@@ -68,6 +77,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 # Or use /auth command
 /auth openai sk-...
 ```
+
 ```
 
 ### Configuration Documentation:
@@ -100,3 +110,4 @@ export ANTHROPIC_API_KEY=sk-ant-...
 - Include working examples
 - Document any limitations
 - Consider adding troubleshooting section
+```

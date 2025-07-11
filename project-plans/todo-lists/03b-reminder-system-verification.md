@@ -3,11 +3,13 @@
 ## Verification Steps
 
 1. Check reminder implementation exists:
+
    ```bash
    test -f packages/core/src/tools/todo-reminders.ts || echo "❌ todo-reminders.ts missing"
    ```
 
 2. Verify reminder templates:
+
    ```bash
    grep -q "system-reminder" packages/core/src/tools/todo-reminders.ts || echo "❌ Missing system-reminder tags"
    grep -q "empty.*DO NOT mention" packages/core/src/tools/todo-reminders.ts || echo "❌ Missing empty todo reminder"
@@ -15,12 +17,14 @@
    ```
 
 3. Check TodoWrite integration:
+
    ```bash
    grep -q "todo-reminders" packages/core/src/tools/todo-write.ts || echo "❌ TodoWrite not importing reminders"
    grep -q "confirmation.*state" packages/core/src/tools/todo-write.ts || echo "❌ TodoWrite missing state confirmation"
    ```
 
 4. Test reminder injection:
+
    ```bash
    npm run test -- todo-reminders || echo "❌ Reminder tests failing"
    ```
@@ -31,4 +35,5 @@
    ```
 
 ## Outcome
+
 If all checks pass, emit ✅. Otherwise list all ❌ failures.

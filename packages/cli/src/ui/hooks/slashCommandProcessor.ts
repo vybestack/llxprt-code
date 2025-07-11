@@ -32,7 +32,7 @@ import {
 import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
-import { createShowMemoryAction } from './useShowMemoryCommand.js';
+// import { createShowMemoryAction } from './useShowMemoryCommand.js';
 import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
@@ -162,10 +162,10 @@ export const useSlashCommandProcessor = (
     [addItem],
   );
 
-  const showMemoryAction = useMemo(
-    () => createShowMemoryAction(config, settings, addMessage),
-    [config, settings, addMessage],
-  );
+  // const showMemoryAction = useMemo(
+  //   () => createShowMemoryAction(config, settings, addMessage),
+  //   [config, settings, addMessage],
+  // );
 
   const commandContext = useMemo(
     (): CommandContext => ({
@@ -730,10 +730,18 @@ export const useSlashCommandProcessor = (
 
             // Set the appropriate auth type based on provider
             if (providerName === 'gemini') {
-              settings.setValue(SettingScope.User, 'selectedAuthType', AuthType.USE_GEMINI);
+              settings.setValue(
+                SettingScope.User,
+                'selectedAuthType',
+                AuthType.USE_GEMINI,
+              );
               await config?.refreshAuth(AuthType.USE_GEMINI);
             } else {
-              settings.setValue(SettingScope.User, 'selectedAuthType', AuthType.USE_PROVIDER);
+              settings.setValue(
+                SettingScope.User,
+                'selectedAuthType',
+                AuthType.USE_PROVIDER,
+              );
               await config?.refreshAuth(AuthType.USE_PROVIDER);
             }
 
@@ -742,7 +750,7 @@ export const useSlashCommandProcessor = (
               content: `Switched from ${fromProvider} to ${providerName}`,
               timestamp: new Date(),
             });
-            
+
             // Trigger payment mode check to show banner when switching providers
             // Pass the previous provider to ensure proper detection
             if (checkPaymentModeChange) {
@@ -1108,16 +1116,17 @@ export const useSlashCommandProcessor = (
 
                 // Check payment mode after auth refresh
                 const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-                const paymentMessage = !isPaidMode && providerName === 'gemini'
-                  ? '\n✅ You are now in FREE MODE - using OAuth authentication'
-                  : '';
+                const paymentMessage =
+                  !isPaidMode && providerName === 'gemini'
+                    ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+                    : '';
 
                 addMessage({
                   type: MessageType.INFO,
                   content: `API key removed for provider '${providerName}'${paymentMessage}`,
                   timestamp: new Date(),
                 });
-                
+
                 // Trigger payment mode check to show banner
                 if (checkPaymentModeChange) {
                   setTimeout(checkPaymentModeChange, 100);
@@ -1161,7 +1170,7 @@ export const useSlashCommandProcessor = (
                 content: `API key updated for provider '${providerName}'${paymentWarning}`,
                 timestamp: new Date(),
               });
-              
+
               // Trigger payment mode check to show banner
               if (checkPaymentModeChange) {
                 setTimeout(checkPaymentModeChange, 100);
@@ -1258,16 +1267,17 @@ export const useSlashCommandProcessor = (
 
                 // Check payment mode after auth refresh
                 const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-                const paymentMessage = !isPaidMode && providerName === 'gemini'
-                  ? '\n✅ You are now in FREE MODE - using OAuth authentication'
-                  : '';
+                const paymentMessage =
+                  !isPaidMode && providerName === 'gemini'
+                    ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+                    : '';
 
                 addMessage({
                   type: MessageType.INFO,
                   content: `Keyfile removed for provider '${providerName}'${paymentMessage}`,
                   timestamp: new Date(),
                 });
-                
+
                 // Trigger payment mode check to show banner
                 if (checkPaymentModeChange) {
                   setTimeout(checkPaymentModeChange, 100);
@@ -1321,7 +1331,7 @@ export const useSlashCommandProcessor = (
                 content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
                 timestamp: new Date(),
               });
-              
+
               // Trigger payment mode check to show banner
               if (checkPaymentModeChange) {
                 setTimeout(checkPaymentModeChange, 100);
@@ -1661,8 +1671,6 @@ Supported formats:
     openPrivacyNotice,
     clearItems,
     refreshStatic,
-    performMemoryRefresh,
-    showMemoryAction,
     toggleCorgiMode,
     savedChatTags,
     config,

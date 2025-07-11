@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/providers/anthropic/AnthropicProvider.test.ts
     ```
-
     - **Expected Output:** All tests in `AnthropicProvider.test.ts` should pass. These tests should now cover the correct integration of `ToolFormatter`.
 
 4.  **Verify `AnthropicProvider.ts` Integration Details:**

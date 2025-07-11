@@ -162,7 +162,11 @@ export class WriteFileTool
     params: WriteFileToolParams,
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
-    if (this.config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
+    const approvalMode = this.config.getApprovalMode();
+    if (
+      approvalMode === ApprovalMode.AUTO_EDIT ||
+      approvalMode === ApprovalMode.YOLO
+    ) {
       return false;
     }
 

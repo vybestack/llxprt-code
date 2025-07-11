@@ -21,6 +21,7 @@ The merge between the multi-provider branch and main is **incomplete and problem
 ### 1. Unresolved Merge Conflicts
 
 Three GitHub workflow files have unresolved conflicts:
+
 - `.github/workflows/community-report.yml`
 - `.github/workflows/gemini-automated-issue-triage.yml`
 - `.github/workflows/gemini-scheduled-issue-triage.yml`
@@ -35,7 +36,7 @@ These files appear to be added in both branches with different content, causing 
    - `USER_SETTINGS_PATH` is declared twice (lines 21 and 23)
    - Likely a merge artifact where import was duplicated
 
-2. **Missing Arguments** 
+2. **Missing Arguments**
    - `slashCommandProcessor.ts(118,11)`: Expected 3 arguments, got 1
    - `config.ts(291,7)`: Expected 2 arguments, got 3
    - Function signatures changed between branches
@@ -68,6 +69,7 @@ These files appear to be added in both branches with different content, causing 
 ### 4. Provider Integration Analysis
 
 #### Successfully Integrated Features:
+
 - ✅ Multi-provider architecture (IProvider, ProviderManager)
 - ✅ OpenAI provider with Responses API support
 - ✅ Anthropic provider implementation
@@ -127,6 +129,7 @@ These files appear to be added in both branches with different content, causing 
 ## Affected Files
 
 ### High Priority (Blocking Build):
+
 - `packages/cli/src/gemini.tsx`
 - `packages/cli/src/ui/hooks/slashCommandProcessor.ts`
 - `packages/core/src/config/config.ts`
@@ -134,11 +137,13 @@ These files appear to be added in both branches with different content, causing 
 - `packages/core/src/tools/todo-write.ts`
 
 ### Medium Priority (Test Failures):
+
 - `packages/core/src/core/client.test.ts`
 - `packages/core/src/tools/shell.test.ts`
 - Test snapshots in `prompts.test.ts`
 
 ### Workflow Conflicts:
+
 - `.github/workflows/community-report.yml`
 - `.github/workflows/gemini-automated-issue-triage.yml`
 - `.github/workflows/gemini-scheduled-issue-triage.yml`
@@ -213,6 +218,6 @@ These files appear to be added in both branches with different content, causing 
 
 ## Conclusion
 
-The multi-provider merge has successfully added significant new functionality but has introduced critical issues that prevent the codebase from building or passing tests. The provider system appears well-designed but incompletely integrated with the existing Gemini infrastructure. 
+The multi-provider merge has successfully added significant new functionality but has introduced critical issues that prevent the codebase from building or passing tests. The provider system appears well-designed but incompletely integrated with the existing Gemini infrastructure.
 
 Immediate action is required to resolve build blockers and ensure the provider system works harmoniously with the existing codebase. Once these issues are resolved, the multi-provider functionality will significantly enhance the CLI's capabilities by supporting multiple AI providers with different tool calling formats.

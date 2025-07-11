@@ -88,7 +88,9 @@ And also:
 
       const result = parser.parse(content);
 
-      expect(result.cleanedContent).toBe('Let me check that for you. And also:');
+      expect(result.cleanedContent).toBe(
+        'Let me check that for you. And also:',
+      );
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('get_stock_fundamentals');
       expect(result.toolCalls[0].arguments).toEqual({ symbol: 'AAPL' });
@@ -164,7 +166,9 @@ And also:
       expect(result.cleanedContent).toBe('And also:');
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('search');
-      expect(result.toolCalls[0].arguments).toEqual({ query: 'climate change' });
+      expect(result.toolCalls[0].arguments).toEqual({
+        query: 'climate change',
+      });
       expect(result.toolCalls[1].name).toBe('calculator');
       expect(result.toolCalls[1].arguments).toEqual({ expression: '2 + 2' });
     });
@@ -243,7 +247,9 @@ And also:
       expect(result.cleanedContent).toBe('');
       expect(result.toolCalls).toHaveLength(2);
       expect(result.toolCalls[0].name).toBe('read_file');
-      expect(result.toolCalls[0].arguments).toEqual({ path: '/home/user/doc.txt' });
+      expect(result.toolCalls[0].arguments).toEqual({
+        path: '/home/user/doc.txt',
+      });
       expect(result.toolCalls[1].name).toBe('write_file');
       expect(result.toolCalls[1].arguments).toEqual({
         path: '/home/user/output.txt',

@@ -1,9 +1,11 @@
 # Phase 3c - Tool Response Formatting (todo-lists)
 
 ## Goal
+
 Implement proper tool response formatting to match Claude's behavior and enable UI integration.
 
 ## Deliverables
+
 - [ ] Update TodoRead response format
 - [ ] Update TodoWrite response format with diff tracking
 - [ ] Add tool result mapping for LLM responses
@@ -12,6 +14,7 @@ Implement proper tool response formatting to match Claude's behavior and enable 
 ## Implementation Details
 
 ### TodoRead Response Format
+
 ```typescript
 // Tool execution response
 {
@@ -27,6 +30,7 @@ Implement proper tool response formatting to match Claude's behavior and enable 
 ```
 
 ### TodoWrite Response Format
+
 ```typescript
 // Tool execution response
 {
@@ -43,12 +47,15 @@ Implement proper tool response formatting to match Claude's behavior and enable 
 ```
 
 ### Tool Response Methods
+
 Each tool needs to implement:
+
 - `renderToolUseMessage()` - Initial confirmation
 - `renderToolResultMessage()` - Display results in UI
 - `mapToolResultToToolResultBlockParam()` - Format for LLM
 
 ## Checklist (implementer)
+
 - [ ] TodoRead returns raw array in LLM response
 - [ ] TodoWrite returns confirmation message to LLM
 - [ ] TodoWrite includes old/new todos in execution result
@@ -57,6 +64,7 @@ Each tool needs to implement:
 - [ ] Type safety maintained throughout
 
 ## Self-verify
+
 ```bash
 npm run test -- todo-read.test.ts
 npm run test -- todo-write.test.ts

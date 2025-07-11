@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
-
     - **Expected Output:** All tests in `OpenAIProvider.test.ts` should pass, including the new tests for `generateChatCompletion` and the existing test for `getModels` (which should still assert `NotYetImplemented`).
 
 4.  **Verify `OpenAIProvider.ts` Implementation Details:**

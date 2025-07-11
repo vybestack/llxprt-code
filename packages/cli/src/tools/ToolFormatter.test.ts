@@ -280,7 +280,7 @@ describe('ToolFormatter', () => {
     };
 
     const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
-    
+
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('function');
     expect(result[0].function.name).toBe('get_stock_fundamentals');
@@ -295,7 +295,7 @@ describe('ToolFormatter', () => {
     };
 
     const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
-    
+
     expect(result).toHaveLength(1);
     expect(result[0].function.name).toBe('get_current_time');
     expect(result[0].function.arguments).toBe('{}');
@@ -309,9 +309,9 @@ describe('ToolFormatter', () => {
     ];
 
     invalidCalls.forEach((rawToolCall) => {
-      expect(() =>
-        formatter.fromProviderFormat(rawToolCall, 'hermes'),
-      ).toThrow('Invalid hermes tool call format');
+      expect(() => formatter.fromProviderFormat(rawToolCall, 'hermes')).toThrow(
+        'Invalid hermes tool call format',
+      );
     });
   });
 
@@ -359,11 +359,13 @@ describe('ToolFormatter', () => {
     };
 
     const result = formatter.fromProviderFormat(rawToolCall, 'xml');
-    
+
     expect(result).toHaveLength(1);
     expect(result[0].type).toBe('function');
     expect(result[0].function.name).toBe('weather_tool');
-    expect(result[0].function.arguments).toBe('{"location":"Paris","units":"celsius"}');
+    expect(result[0].function.arguments).toBe(
+      '{"location":"Paris","units":"celsius"}',
+    );
     expect(result[0].id).toMatch(/^xml_/); // Should have generated ID
   });
 
@@ -374,7 +376,7 @@ describe('ToolFormatter', () => {
     };
 
     const result = formatter.fromProviderFormat(rawToolCall, 'xml');
-    
+
     expect(result).toHaveLength(1);
     expect(result[0].function.name).toBe('get_time');
     expect(result[0].function.arguments).toBe('{}');
@@ -388,9 +390,9 @@ describe('ToolFormatter', () => {
     ];
 
     invalidCalls.forEach((rawToolCall) => {
-      expect(() =>
-        formatter.fromProviderFormat(rawToolCall, 'xml'),
-      ).toThrow('Invalid xml tool call format');
+      expect(() => formatter.fromProviderFormat(rawToolCall, 'xml')).toThrow(
+        'Invalid xml tool call format',
+      );
     });
   });
 

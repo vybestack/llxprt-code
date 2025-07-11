@@ -66,5 +66,12 @@ export const useProviderDialog = ({
     [addMessage, onProviderChange],
   );
 
-  return { showDialog, openDialog, closeDialog, providers, currentProvider, handleSelect };
+  return {
+    showDialog,
+    openDialog,
+    closeDialog,
+    providers,
+    currentProvider,
+    handleSelect,
+  };
 };

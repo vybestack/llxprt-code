@@ -15,7 +15,6 @@
     ```bash
     npm test packages/cli/src/providers/openai/OpenAIProvider.test.ts
     ```
-
     - **Expected Output:** All tests in `OpenAIProvider.test.ts` should pass, including those for both standard Chat Completions API and the new Responses API integration.
 
 4.  **Verify `OpenAIProvider.ts` Implementation Details:**

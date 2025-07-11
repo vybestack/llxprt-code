@@ -38,56 +38,57 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     // Get session and agent IDs from context
-    const sessionId = (this as unknown as { sessionId?: string }).sessionId || 'default';
+    const sessionId =
+      (this as unknown as { sessionId?: string }).sessionId || 'default';
     const agentId = (this as unknown as { agentId?: string }).agentId;
-    
+
     const store = new TodoStore(sessionId, agentId);
     const todos = await store.readTodos();
-    
+
     if (todos.length === 0) {
       return {
         llmContent: 'No todos found',
         returnDisplay: 'No todos found',
       };
     }
-    
+
     // Sort todos
     const sortedTodos = this.sortTodos(todos);
-    
+
     // Format output
     const output = this.formatTodos(sortedTodos);
-    
+
     return {
       llmContent: output,
       returnDisplay: output,
     };
   }
-  
+
   private sortTodos(todos: Todo[]): Todo[] {
     const statusOrder = { in_progress: 0, pending: 1, completed: 2 };
     const priorityOrder = { high: 0, medium: 1, low: 2 };
-    
+
     return [...todos].sort((a, b) => {
       const statusDiff = statusOrder[a.status] - statusOrder[b.status];
       if (statusDiff !== 0) return statusDiff;
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
   }
-  
+
   private formatTodos(todos: Todo[]): string {
     const statusIcons = {
       in_progress: '⏳',
       pending: '○',
       completed: '✓',
     };
-    
+
     let output = '# Todo List\n\n';
-    
+
     for (const todo of todos) {
       const icon = statusIcons[todo.status];
       output += `${icon} **${todo.content}** (${todo.priority})\n`;
     }
-    
+
     return output;
   }
 }

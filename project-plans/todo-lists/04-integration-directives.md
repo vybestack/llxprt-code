@@ -1,9 +1,11 @@
 # Phase 4 - Integration and Directives (todo-lists)
 
 ## Goal
+
 Integrate todo tools into the system and add comprehensive usage directives to guide LLM behavior with the same effectiveness as Claude Code.
 
 ## Deliverables
+
 - [ ] Update system prompts to include comprehensive todo list usage instructions
 - [ ] Add todo-specific reminders and guidance system
 - [ ] Implement automatic empty todo list reminders
@@ -13,9 +15,11 @@ Integrate todo tools into the system and add comprehensive usage directives to g
 ## Integration Tasks
 
 ### System Prompt Updates
+
 Add the following comprehensive directives to `/packages/core/src/core/prompts.ts`:
 
 #### Core Todo Usage Rules
+
 ```
 # Task Management
 You have access to the TodoWrite and TodoRead tools to help you manage and plan tasks. Use these tools VERY frequently to ensure that you are tracking your tasks and giving the user visibility into your progress.
@@ -65,26 +69,31 @@ When in doubt, use this tool. Being proactive with task management demonstrates 
 ```
 
 #### Add Concrete Examples
+
 Include 4-5 detailed examples showing proper todo usage (copy from Phase 4 examples section).
 
 ### System Reminder Integration
+
 - [ ] Implement automatic reminder system when todo list is empty
 - [ ] Add post-TodoWrite confirmations with current todo state
 - [ ] Create helper to inject todo state into LLM context
 
 ### Provider Integration
+
 - [ ] Verify todo tools work with all providers (OpenAI, Anthropic, Gemini, etc.)
 - [ ] Test todo persistence across multiple interactions
 - [ ] Ensure proper error handling and user feedback
 - [ ] Add provider-specific prompt adjustments if needed
 
 ### Documentation
+
 - [ ] Create inline documentation for todo tools
 - [ ] Add JSDoc comments with usage examples
 - [ ] Document the todo item schema clearly
 - [ ] Include behavioral guidance in tool descriptions
 
 ## Checklist (implementer)
+
 - [ ] System prompts include ALL todo usage rules from above
 - [ ] Proactiveness emphasis is clear ("use frequently", "when in doubt")
 - [ ] Real-time update rules are explicit
@@ -96,6 +105,7 @@ Include 4-5 detailed examples showing proper todo usage (copy from Phase 4 examp
 - [ ] Type checking and linting pass
 
 ## Self-verify
+
 ```bash
 npm run test -- --grep "todo.*integration"
 npm run typecheck

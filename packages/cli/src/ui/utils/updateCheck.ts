@@ -4,32 +4,33 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import updateNotifier from 'update-notifier';
 import semver from 'semver';
 import { getPackageJson } from '../../utils/package.js';
+// TODO: Fix web_fetch import - currently broken
+// import { web_fetch } from '@google/gemini-cli-core';
+
+const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/acoliver/gemini-cli/main/package.json'; // Replace with your custom URL
 
 export async function checkForUpdates(): Promise<string | null> {
+  // TODO: Fix web_fetch import and re-enable update check
+  return null;
+  
+  /*
   try {
     const packageJson = await getPackageJson();
     if (!packageJson || !packageJson.name || !packageJson.version) {
       return null;
     }
-    const notifier = updateNotifier({
-      pkg: {
-        name: packageJson.name,
-        version: packageJson.version,
-      },
-      // check every time
-      updateCheckInterval: 0,
-      // allow notifier to run in scripts
-      shouldNotifyInNpmScript: true,
-    });
+
+    const response = await web_fetch(`Fetch latest package.json from ${UPDATE_CHECK_URL}`);
+    const latestPackageJson = JSON.parse(response.content);
 
     if (
-      notifier.update &&
-      semver.gt(notifier.update.latest, notifier.update.current)
+      latestPackageJson &&
+      latestPackageJson.version &&
+      semver.gt(latestPackageJson.version, packageJson.version)
     ) {
-      return `Gemini CLI update available! ${notifier.update.current} → ${notifier.update.latest}\nRun npm install -g ${packageJson.name} to update`;
+      return `Gemini CLI update available! ${packageJson.version} → ${latestPackageJson.version}\nRun npm install -g ${packageJson.name} to update`;
     }
 
     return null;
@@ -37,4 +38,5 @@ export async function checkForUpdates(): Promise<string | null> {
     console.warn('Failed to check for updates: ' + e);
     return null;
   }
+  */
 }

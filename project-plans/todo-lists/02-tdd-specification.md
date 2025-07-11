@@ -1,9 +1,11 @@
 # Phase 2 - TDD Specification (todo-lists)
 
 ## Goal
+
 Add comprehensive test suites that define the expected behavior of TodoRead and TodoWrite tools.
 
 ## Deliverables
+
 - [ ] `/packages/core/src/tools/todo-read.test.ts` - TodoRead tool tests
 - [ ] `/packages/core/src/tools/todo-write.test.ts` - TodoWrite tool tests
 - [ ] `/packages/core/src/tools/todo-store.test.ts` - TodoStore tests
@@ -12,6 +14,7 @@ Add comprehensive test suites that define the expected behavior of TodoRead and 
 ## Test Specifications
 
 ### TodoRead Tests
+
 ```typescript
 describe('TodoRead', () => {
   it('should return empty array when no todos exist', async () => {
@@ -35,11 +38,12 @@ describe('TodoRead', () => {
 ```
 
 ### TodoWrite Tests
+
 ```typescript
 describe('TodoWrite', () => {
   it('should create new todos with valid schema', async () => {
     const newTodos = [
-      { id: '1', content: 'Test task', status: 'pending', priority: 'high' }
+      { id: '1', content: 'Test task', status: 'pending', priority: 'high' },
     ];
     const result = await todoWrite.execute({ todos: newTodos }, context);
     expect(result.newTodos).toEqual(newTodos);
@@ -47,8 +51,9 @@ describe('TodoWrite', () => {
 
   it('should validate todo schema and reject invalid data', async () => {
     const invalidTodos = [{ id: '1', content: '', status: 'invalid' }];
-    await expect(todoWrite.execute({ todos: invalidTodos }, context))
-      .rejects.toThrow('Validation error');
+    await expect(
+      todoWrite.execute({ todos: invalidTodos }, context),
+    ).rejects.toThrow('Validation error');
   });
 
   it('should return both old and new todos for diff tracking', async () => {
@@ -67,6 +72,7 @@ describe('TodoWrite', () => {
 ```
 
 ### TodoStore Tests
+
 ```typescript
 describe('TodoStore', () => {
   it('should persist todos to file system', async () => {
@@ -87,13 +93,14 @@ describe('TodoStore', () => {
     await store.saveTodos(todos, 'agent1');
     await store.saveTodos(differentTodos, 'agent2');
     expect(await store.loadTodos('agent1')).not.toEqual(
-      await store.loadTodos('agent2')
+      await store.loadTodos('agent2'),
     );
   });
 });
 ```
 
 ## Checklist (implementer)
+
 - [ ] All tests define expected behavior without implementation details
 - [ ] No tests expect or catch NotYetImplemented errors
 - [ ] Tests cover edge cases (empty arrays, invalid data)
@@ -103,6 +110,7 @@ describe('TodoStore', () => {
 - [ ] All tests currently fail (since implementation is stubbed)
 
 ## Self-verify
+
 ```bash
 npm run test -- todo-read.test.ts 2>&1 | grep -q "fail" || echo "❌ Tests should be failing"
 npm run test -- todo-write.test.ts 2>&1 | grep -q "fail" || echo "❌ Tests should be failing"
@@ -111,4 +119,5 @@ npm run typecheck
 ```
 
 ## Note
+
 Tests should fail in this phase as implementation is still stubbed. This is expected and correct.
