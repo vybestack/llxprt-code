@@ -551,11 +551,6 @@ export class Config {
         isEnabled = false;
       }
 
-      console.log(`[Config] Tool ${toolName} (${className}) - enabled: ${isEnabled}`);
-      if (!isEnabled) {
-        console.log(`[Config] Tool ${toolName} excluded. coreTools:`, coreTools, 'excludeTools:', excludeTools);
-      }
-      
       if (isEnabled) {
         registry.registerTool(new ToolClass(...args));
       }

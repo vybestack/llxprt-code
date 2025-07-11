@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import semver from 'semver';
-import { getPackageJson } from '../../utils/package.js';
+// import semver from 'semver';
+// import { getPackageJson } from '../../utils/package.js';
 // TODO: Fix web_fetch import - currently broken
 // import { web_fetch } from '@google/gemini-cli-core';
 
-const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/acoliver/gemini-cli/main/package.json'; // Replace with your custom URL
+// const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/acoliver/gemini-cli/main/package.json'; // Replace with your custom URL
 
 export async function checkForUpdates(): Promise<string | null> {
   // TODO: Fix web_fetch import and re-enable update check

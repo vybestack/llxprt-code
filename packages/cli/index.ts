@@ -1,4 +1,6 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --no-deprecation
+
+// Note: Using --no-deprecation in shebang to suppress deprecation warnings from dependencies
 
 /**
  * @license

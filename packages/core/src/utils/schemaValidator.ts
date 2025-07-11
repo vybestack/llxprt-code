@@ -18,33 +18,22 @@ export class SchemaValidator {
    *  is null). Otherwise, returns a string describing the error.
    */
   static validate(schema: Schema | undefined, data: unknown): string | null {
-    console.log('[SchemaValidator] Starting validation');
-    console.log('[SchemaValidator] Schema:', JSON.stringify(schema, null, 2));
-    console.log('[SchemaValidator] Data:', JSON.stringify(data, null, 2));
-    
     if (!schema) {
-      console.log('[SchemaValidator] No schema provided, returning null');
       return null;
     }
     if (typeof data !== 'object' || data === null) {
-      console.log('[SchemaValidator] Data is not an object, returning error');
       return 'Value of params must be an object';
     }
     
     const objectSchema = this.toObjectSchema(schema);
-    console.log('[SchemaValidator] Converted schema to object:', JSON.stringify(objectSchema, null, 2));
-    
     const validate = ajValidator.compile(objectSchema);
     const valid = validate(data);
     
     if (!valid && validate.errors) {
       const errorText = ajValidator.errorsText(validate.errors, { dataVar: 'params' });
-      console.log('[SchemaValidator] Validation failed:', errorText);
-      console.log('[SchemaValidator] Raw errors:', JSON.stringify(validate.errors, null, 2));
       return errorText;
     }
     
-    console.log('[SchemaValidator] Validation successful');
     return null;
   }
 

@@ -136,7 +136,6 @@ export class ToolRegistry {
    * @param tool - The tool object containing schema and execution logic.
    */
   registerTool(tool: Tool): void {
-    console.log(`[ToolRegistry] Registering tool: ${tool.name}`);
     if (this.tools.has(tool.name)) {
       // Decide on behavior: throw error, log warning, or allow overwrite
       console.warn(
