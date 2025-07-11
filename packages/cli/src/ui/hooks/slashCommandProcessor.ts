@@ -728,6 +728,15 @@ export const useSlashCommandProcessor = (
             const fromProvider = currentProvider || 'none';
             providerManager.setActiveProvider(providerName);
 
+            // Set the appropriate auth type based on provider
+            if (providerName === 'gemini') {
+              settings.setValue(SettingScope.User, 'selectedAuthType', AuthType.USE_GEMINI);
+              await config?.refreshAuth(AuthType.USE_GEMINI);
+            } else {
+              settings.setValue(SettingScope.User, 'selectedAuthType', AuthType.USE_PROVIDER);
+              await config?.refreshAuth(AuthType.USE_PROVIDER);
+            }
+
             addMessage({
               type: MessageType.INFO,
               content: `Switched from ${fromProvider} to ${providerName}`,

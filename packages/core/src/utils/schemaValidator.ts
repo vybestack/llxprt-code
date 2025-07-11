@@ -39,12 +39,28 @@ export class SchemaValidator {
    */
   private static toObjectSchema(schema: Schema): object {
     const newSchema: Record<string, unknown> = { ...schema };
+    
+    // Handle schema composition keywords
     if (newSchema.anyOf && Array.isArray(newSchema.anyOf)) {
       newSchema.anyOf = newSchema.anyOf.map((v) => this.toObjectSchema(v));
     }
-    if (newSchema.items) {
-      newSchema.items = this.toObjectSchema(newSchema.items);
+    if (newSchema.allOf && Array.isArray(newSchema.allOf)) {
+      newSchema.allOf = newSchema.allOf.map((v) => this.toObjectSchema(v));
     }
+    if (newSchema.oneOf && Array.isArray(newSchema.oneOf)) {
+      newSchema.oneOf = newSchema.oneOf.map((v) => this.toObjectSchema(v));
+    }
+    
+    // Handle items (can be a schema or array of schemas for tuples)
+    if (newSchema.items) {
+      if (Array.isArray(newSchema.items)) {
+        newSchema.items = newSchema.items.map((item) => this.toObjectSchema(item));
+      } else {
+        newSchema.items = this.toObjectSchema(newSchema.items);
+      }
+    }
+    
+    // Handle properties
     if (newSchema.properties && typeof newSchema.properties === 'object') {
       const newProperties: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(newSchema.properties)) {
@@ -52,15 +68,76 @@ export class SchemaValidator {
       }
       newSchema.properties = newProperties;
     }
+    
+    // Handle additionalProperties if it's a schema
+    if (newSchema.additionalProperties && typeof newSchema.additionalProperties === 'object') {
+      newSchema.additionalProperties = this.toObjectSchema(newSchema.additionalProperties as Schema);
+    }
+    
+    // Handle patternProperties
+    if (newSchema.patternProperties && typeof newSchema.patternProperties === 'object') {
+      const newPatternProperties: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.patternProperties)) {
+        newPatternProperties[key] = this.toObjectSchema(value as Schema);
+      }
+      newSchema.patternProperties = newPatternProperties;
+    }
+    
+    // Handle dependencies (can be array of property names or schema)
+    if (newSchema.dependencies && typeof newSchema.dependencies === 'object') {
+      const newDependencies: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.dependencies)) {
+        if (Array.isArray(value)) {
+          // Property dependencies (array of property names)
+          newDependencies[key] = value;
+        } else {
+          // Schema dependencies
+          newDependencies[key] = this.toObjectSchema(value as Schema);
+        }
+      }
+      newSchema.dependencies = newDependencies;
+    }
+    
+    // Handle if/then/else
+    if (newSchema.if) {
+      newSchema.if = this.toObjectSchema(newSchema.if as Schema);
+    }
+    if (newSchema.then) {
+      newSchema.then = this.toObjectSchema(newSchema.then as Schema);
+    }
+    if (newSchema.else) {
+      newSchema.else = this.toObjectSchema(newSchema.else as Schema);
+    }
+    
+    // Handle not
+    if (newSchema.not) {
+      newSchema.not = this.toObjectSchema(newSchema.not as Schema);
+    }
+    
+    // Convert type from UPPERCASE enum to lowercase string
     if (newSchema.type) {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
-    if (newSchema.minItems) {
-      newSchema.minItems = Number(newSchema.minItems);
+    
+    // Convert all numeric properties from strings to numbers
+    const numericProperties = [
+      'minItems',
+      'maxItems',
+      'minLength',
+      'maxLength',
+      'minimum',
+      'maximum',
+      'minProperties',
+      'maxProperties',
+      'multipleOf'
+    ];
+    
+    for (const prop of numericProperties) {
+      if (newSchema[prop] !== undefined) {
+        newSchema[prop] = Number(newSchema[prop]);
+      }
     }
-    if (newSchema.minLength) {
-      newSchema.minLength = Number(newSchema.minLength);
-    }
+    
     return newSchema;
   }
 }

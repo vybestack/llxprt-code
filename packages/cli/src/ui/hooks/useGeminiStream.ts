@@ -18,12 +18,11 @@ import {
   isNodeError,
   MessageSenderType,
   ToolCallRequestInfo,
-  logUserPrompt,
+  // TELEMETRY REMOVED: logUserPrompt and UserPromptEvent disabled
   GitService,
   EditorType,
   ThoughtSummary,
   UnauthorizedError,
-  UserPromptEvent,
   DEFAULT_GEMINI_FLASH_MODEL,
 } from '@google/gemini-cli-core';
 import { type Part, type PartListUnion } from '@google/genai';
@@ -221,10 +220,11 @@ export const useGeminiStream = (
 
       if (typeof query === 'string') {
         const trimmedQuery = query.trim();
-        logUserPrompt(
-          config,
-          new UserPromptEvent(trimmedQuery.length, prompt_id, trimmedQuery),
-        );
+        // TELEMETRY REMOVED: Disabled Google data collection
+        // logUserPrompt(
+        //   config,
+        //   new UserPromptEvent(trimmedQuery.length, prompt_id, trimmedQuery),
+        // );
         onDebugMessage(`User query: '${trimmedQuery}'`);
         await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
 

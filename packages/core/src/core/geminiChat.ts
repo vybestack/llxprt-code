@@ -206,7 +206,7 @@ export class GeminiChat {
     authType?: string,
     error?: unknown,
   ): Promise<string | null> {
-    // Only handle fallback for OAuth users
+    // Only handle fallback for OAuth users, not for providers
     if (authType !== AuthType.LOGIN_WITH_GOOGLE) {
       return null;
     }
@@ -387,9 +387,11 @@ export class GeminiChat {
     try {
       const apiCall = () => {
         const modelToUse = this.config.getModel();
+        const authType = this.config.getContentGeneratorConfig()?.authType;
 
-        // Prevent Flash model calls immediately after quota error
+        // Prevent Flash model calls immediately after quota error (only for Gemini providers)
         if (
+          authType !== AuthType.USE_PROVIDER &&
           this.config.getQuotaErrorOccurred() &&
           modelToUse === DEFAULT_GEMINI_FLASH_MODEL
         ) {

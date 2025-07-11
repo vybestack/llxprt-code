@@ -24,6 +24,42 @@ import { ITool } from '../providers/ITool.js';
 import { IMessage } from '../providers/IMessage.js';
 
 export class ToolFormatter implements IToolFormatter {
+  /**
+   * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
+   */
+  private convertGeminiSchemaToStandard(schema: unknown): unknown {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const newSchema: Record<string, unknown> = { ...schema };
+    
+    // Handle properties
+    if (newSchema.properties && typeof newSchema.properties === 'object') {
+      const newProperties: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.properties)) {
+        newProperties[key] = this.convertGeminiSchemaToStandard(value);
+      }
+      newSchema.properties = newProperties;
+    }
+    
+    // Handle items
+    if (newSchema.items) {
+      if (Array.isArray(newSchema.items)) {
+        newSchema.items = newSchema.items.map((item) => this.convertGeminiSchemaToStandard(item));
+      } else {
+        newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
+      }
+    }
+    
+    // Convert type from UPPERCASE enum to lowercase string
+    if (newSchema.type) {
+      newSchema.type = String(newSchema.type).toLowerCase();
+    }
+    
+    return newSchema;
+  }
+
   toProviderFormat(tools: ITool[], format: 'openai'): OpenAITool[];
   toProviderFormat(tools: ITool[], format: ToolFormat): unknown;
   toProviderFormat(tools: ITool[], format: ToolFormat): OpenAITool[] | unknown {
@@ -36,7 +72,7 @@ export class ToolFormatter implements IToolFormatter {
           function: {
             name: tool.function.name,
             description: tool.function.description,
-            parameters: tool.function.parameters,
+            parameters: this.convertGeminiSchemaToStandard(tool.function.parameters),
           },
         }));
       case 'anthropic':
@@ -235,7 +271,7 @@ export class ToolFormatter implements IToolFormatter {
       type: 'function' as const,
       name: tool.function.name,
       description: tool.function.description || null,
-      parameters: (tool.function.parameters as Record<string, unknown>) || null,
+      parameters: this.convertGeminiSchemaToStandard(tool.function.parameters) as Record<string, unknown> || null,
       strict: null,
     }));
   }

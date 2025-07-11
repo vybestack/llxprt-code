@@ -34,11 +34,12 @@ import {
   ShellTool,
   WriteFileTool,
   sessionId,
-  logUserPrompt,
+  // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
 } from '@google/gemini-cli-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
+import { getProviderManager } from './providers/providerManagerInstance.js';
 
 function getNodeMemoryArgs(config: Config): string[] {
   const totalMemoryMB = os.totalmem() / (1024 * 1024);
@@ -169,6 +170,14 @@ export async function main() {
     ...(await getUserStartupWarnings(workspaceRoot)),
   ];
 
+  // Check if a provider is already active on startup
+  const providerManager = getProviderManager();
+  const activeProvider = providerManager.getActiveProvider();
+  if (activeProvider && activeProvider.name !== 'gemini' && !settings.merged.selectedAuthType) {
+    // Set selectedAuthType to USE_PROVIDER if a non-Gemini provider is active
+    settings.setValue(SettingScope.User, 'selectedAuthType', AuthType.USE_PROVIDER);
+  }
+
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (process.stdin.isTTY && input?.length === 0) {
     setWindowTitle(basename(workspaceRoot), settings);
@@ -195,13 +204,14 @@ export async function main() {
   }
 
   const prompt_id = Math.random().toString(16).slice(2);
-  logUserPrompt(config, {
-    'event.name': 'user_prompt',
-    'event.timestamp': new Date().toISOString(),
-    prompt: input,
-    prompt_id,
-    prompt_length: input.length,
-  });
+  // TELEMETRY REMOVED: Disabled Google data collection
+  // logUserPrompt(config, {
+  //   'event.name': 'user_prompt',
+  //   'event.timestamp': new Date().toISOString(),
+  //   prompt: input,
+  //   prompt_id,
+  //   prompt_length: input.length,
+  // });
 
   // Non-interactive mode handled by runNonInteractive
   const nonInteractiveConfig = await loadNonInteractiveConfig(

@@ -33,6 +33,118 @@ export class GeminiCompatibleWrapper {
   }
 
   /**
+   * Converts Gemini schema format to standard JSON Schema format
+   * Handles uppercase type enums and string numeric values
+   */
+  private convertGeminiSchemaToStandard(schema: unknown): unknown {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const newSchema: Record<string, unknown> = { ...schema };
+    
+    // Handle schema composition keywords
+    if (newSchema.anyOf && Array.isArray(newSchema.anyOf)) {
+      newSchema.anyOf = newSchema.anyOf.map((v) => this.convertGeminiSchemaToStandard(v));
+    }
+    if (newSchema.allOf && Array.isArray(newSchema.allOf)) {
+      newSchema.allOf = newSchema.allOf.map((v) => this.convertGeminiSchemaToStandard(v));
+    }
+    if (newSchema.oneOf && Array.isArray(newSchema.oneOf)) {
+      newSchema.oneOf = newSchema.oneOf.map((v) => this.convertGeminiSchemaToStandard(v));
+    }
+    
+    // Handle items (can be a schema or array of schemas for tuples)
+    if (newSchema.items) {
+      if (Array.isArray(newSchema.items)) {
+        newSchema.items = newSchema.items.map((item) => this.convertGeminiSchemaToStandard(item));
+      } else {
+        newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
+      }
+    }
+    
+    // Handle properties
+    if (newSchema.properties && typeof newSchema.properties === 'object') {
+      const newProperties: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.properties)) {
+        newProperties[key] = this.convertGeminiSchemaToStandard(value);
+      }
+      newSchema.properties = newProperties;
+    }
+    
+    // Handle additionalProperties if it's a schema
+    if (newSchema.additionalProperties && typeof newSchema.additionalProperties === 'object') {
+      newSchema.additionalProperties = this.convertGeminiSchemaToStandard(newSchema.additionalProperties);
+    }
+    
+    // Handle patternProperties
+    if (newSchema.patternProperties && typeof newSchema.patternProperties === 'object') {
+      const newPatternProperties: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.patternProperties)) {
+        newPatternProperties[key] = this.convertGeminiSchemaToStandard(value);
+      }
+      newSchema.patternProperties = newPatternProperties;
+    }
+    
+    // Handle dependencies (can be array of property names or schema)
+    if (newSchema.dependencies && typeof newSchema.dependencies === 'object') {
+      const newDependencies: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.dependencies)) {
+        if (Array.isArray(value)) {
+          // Property dependencies (array of property names)
+          newDependencies[key] = value;
+        } else {
+          // Schema dependencies
+          newDependencies[key] = this.convertGeminiSchemaToStandard(value);
+        }
+      }
+      newSchema.dependencies = newDependencies;
+    }
+    
+    // Handle if/then/else
+    if (newSchema.if) {
+      newSchema.if = this.convertGeminiSchemaToStandard(newSchema.if);
+    }
+    if (newSchema.then) {
+      newSchema.then = this.convertGeminiSchemaToStandard(newSchema.then);
+    }
+    if (newSchema.else) {
+      newSchema.else = this.convertGeminiSchemaToStandard(newSchema.else);
+    }
+    
+    // Handle not
+    if (newSchema.not) {
+      newSchema.not = this.convertGeminiSchemaToStandard(newSchema.not);
+    }
+    
+    // Convert type from UPPERCASE enum to lowercase string
+    if (newSchema.type) {
+      newSchema.type = String(newSchema.type).toLowerCase();
+    }
+    
+    // Convert all numeric properties from strings to numbers
+    const numericProperties = [
+      'minItems',
+      'maxItems',
+      'minLength',
+      'maxLength',
+      'minimum',
+      'maximum',
+      'minProperties',
+      'maxProperties',
+      'multipleOf'
+    ];
+    
+    for (const prop of numericProperties) {
+      if (newSchema[prop] !== undefined) {
+        newSchema[prop] = Number(newSchema[prop]);
+      }
+    }
+    
+    return newSchema;
+  }
+
+  /**
    * Convert Gemini tools format to provider tools format
    */
   private convertGeminiToolsToProviderTools(
@@ -55,7 +167,7 @@ export class GeminiCompatibleWrapper {
             function: {
               name: func.name,
               description: func.description || '',
-              parameters: (func.parameters as Record<string, unknown>) ?? {
+              parameters: this.convertGeminiSchemaToStandard(func.parameters) as Record<string, unknown> ?? {
                 type: 'object',
                 properties: {},
                 required: [],
@@ -154,6 +266,10 @@ export class GeminiCompatibleWrapper {
         '[GeminiCompatibleWrapper] Gemini tools provided:',
         geminiTools.length,
       );
+      console.log(
+        '[GeminiCompatibleWrapper] Raw Gemini tools before conversion:',
+        JSON.stringify(geminiTools[0], null, 2),
+      );
       providerTools = this.convertGeminiToolsToProviderTools(geminiTools);
       console.log(
         '[GeminiCompatibleWrapper] Converted provider tools:',
@@ -168,6 +284,17 @@ export class GeminiCompatibleWrapper {
           '[GeminiCompatibleWrapper] First tool details:',
           JSON.stringify(providerTools[0], null, 2),
         );
+        // Check if conversion worked
+        const firstTool = providerTools[0];
+        if (firstTool.function?.parameters && 'type' in firstTool.function.parameters) {
+          const paramType = firstTool.function.parameters.type as string;
+          console.log(
+            '[GeminiCompatibleWrapper] First tool type after conversion:',
+            paramType,
+            'Is lowercase?',
+            paramType === paramType.toLowerCase()
+          );
+        }
       }
     } else {
       console.log('[GeminiCompatibleWrapper] NO TOOLS PROVIDED IN CONFIG');

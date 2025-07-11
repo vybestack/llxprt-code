@@ -32,7 +32,8 @@ import {
 } from './metrics.js';
 import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, UiEvent } from './uiTelemetry.js';
-import { ClearcutLogger } from './clearcut-logger/clearcut-logger.js';
+// TELEMETRY REMOVED: ClearcutLogger import disabled
+// import { ClearcutLogger } from './clearcut-logger/clearcut-logger.js';
 
 const shouldLogUserPrompts = (config: Config): boolean =>
   config.getTelemetryLogPromptsEnabled();
@@ -47,7 +48,8 @@ export function logCliConfiguration(
   config: Config,
   event: StartSessionEvent,
 ): void {
-  ClearcutLogger.getInstance(config)?.logStartSessionEvent(event);
+  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
+  // ClearcutLogger.getInstance(config)?.logStartSessionEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -76,7 +78,8 @@ export function logCliConfiguration(
 }
 
 export function logUserPrompt(config: Config, event: UserPromptEvent): void {
-  ClearcutLogger.getInstance(config)?.logNewPromptEvent(event);
+  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
+  // ClearcutLogger.getInstance(config)?.logNewPromptEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -105,7 +108,8 @@ export function logToolCall(config: Config, event: ToolCallEvent): void {
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  ClearcutLogger.getInstance(config)?.logToolCallEvent(event);
+  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
+  // ClearcutLogger.getInstance(config)?.logToolCallEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -138,7 +142,8 @@ export function logToolCall(config: Config, event: ToolCallEvent): void {
 }
 
 export function logApiRequest(config: Config, event: ApiRequestEvent): void {
-  ClearcutLogger.getInstance(config)?.logApiRequestEvent(event);
+  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
+  // ClearcutLogger.getInstance(config)?.logApiRequestEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -163,7 +168,8 @@ export function logApiError(config: Config, event: ApiErrorEvent): void {
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  ClearcutLogger.getInstance(config)?.logApiErrorEvent(event);
+  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
+  // ClearcutLogger.getInstance(config)?.logApiErrorEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -205,7 +211,8 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  ClearcutLogger.getInstance(config)?.logApiResponseEvent(event);
+  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
+  // ClearcutLogger.getInstance(config)?.logApiResponseEvent(event);
   if (!isTelemetrySdkInitialized()) return;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),

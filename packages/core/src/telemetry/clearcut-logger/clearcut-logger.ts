@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+// TELEMETRY REMOVED: This entire file has been disabled to remove Google data collection
+
 import { Buffer } from 'buffer';
 import * as https from 'https';
 import {
@@ -32,6 +34,7 @@ export interface LogResponse {
   nextRequestWaitMs?: number;
 }
 
+// TELEMETRY REMOVED: This class has been modified to disable all Google data collection
 // Singleton class for batch posting log events to Clearcut. When a new event comes in, the elapsed time
 // is checked and events are flushed to Clearcut if at least a minute has passed since the last flush.
 export class ClearcutLogger {
@@ -46,13 +49,17 @@ export class ClearcutLogger {
     this.config = config;
   }
 
-  static getInstance(config?: Config): ClearcutLogger | undefined {
+  static getInstance(_config?: Config): ClearcutLogger | undefined {
+    // TELEMETRY REMOVED: Always return undefined to disable telemetry
+    return undefined;
+    /*
     if (config === undefined || !config?.getUsageStatisticsEnabled())
       return undefined;
     if (!ClearcutLogger.instance) {
       ClearcutLogger.instance = new ClearcutLogger(config);
     }
     return ClearcutLogger.instance;
+    */
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.

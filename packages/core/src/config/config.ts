@@ -33,17 +33,20 @@ import { GitService } from '../services/gitService.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import { getProjectTempDir } from '../utils/paths.js';
 import {
-  initializeTelemetry,
+  // TELEMETRY REMOVED: Disabled imports for telemetry
+  // initializeTelemetry,
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
   TelemetryTarget,
-  StartSessionEvent,
+  // StartSessionEvent,
 } from '../telemetry/index.js';
 import {
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_FLASH_MODEL,
 } from './models.js';
-import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
+// TELEMETRY REMOVED: ClearcutLogger import disabled
+// import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
+import { ProviderManager } from '../providers/types.js';
 
 export enum ApprovalMode {
   DEFAULT = 'default',
@@ -141,6 +144,7 @@ export interface ConfigParameters {
   extensionContextFilePaths?: string[];
   listExtensions?: boolean;
   activeExtensions?: ActiveExtension[];
+  providerManager?: ProviderManager;
 }
 
 export class Config {
@@ -184,6 +188,7 @@ export class Config {
   private readonly _activeExtensions: ActiveExtension[];
   flashFallbackHandler?: FlashFallbackHandler;
   private quotaErrorOccurred: boolean = false;
+  private readonly providerManager?: ProviderManager;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -227,11 +232,14 @@ export class Config {
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
     this.listExtensions = params.listExtensions ?? false;
     this._activeExtensions = params.activeExtensions ?? [];
+    this.providerManager = params.providerManager;
 
     if (params.contextFileName) {
       setGeminiMdFilename(params.contextFileName);
     }
 
+    // TELEMETRY REMOVED: Disabled telemetry initialization to prevent Google data collection
+    /*
     if (this.telemetrySettings.enabled) {
       initializeTelemetry(this);
     }
@@ -243,6 +251,8 @@ export class Config {
     } else {
       console.log('Data collection is disabled.');
     }
+    */
+    console.log('Data collection is disabled.');
   }
 
   async initialize(): Promise<void> {
@@ -263,6 +273,11 @@ export class Config {
       this.model,
       authMethod,
     );
+    
+    // Add provider manager to the config if available
+    if (this.providerManager) {
+      this.contentGeneratorConfig.providerManager = this.providerManager;
+    }
 
     this.geminiClient = new GeminiClient(this);
     await this.geminiClient.initialize(this.contentGeneratorConfig);

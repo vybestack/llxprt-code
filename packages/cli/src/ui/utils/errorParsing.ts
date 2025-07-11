@@ -106,6 +106,17 @@ export function parseAndFormatApiError(
   currentModel?: string,
   fallbackModel?: string,
 ): string {
+  // For provider auth type, don't add Gemini-specific rate limit messages
+  if (authType === AuthType.USE_PROVIDER) {
+    if (isStructuredError(error)) {
+      let text = `[API Error: ${error.message}]`;
+      if (error.status === 429) {
+        text += '\nRate limit exceeded. Please wait and try again later.';
+      }
+      return text;
+    }
+  }
+  
   if (isStructuredError(error)) {
     let text = `[API Error: ${error.message}]`;
     if (error.status === 429) {
@@ -144,13 +155,18 @@ export function parseAndFormatApiError(
         }
         let text = `[API Error: ${finalMessage} (Status: ${parsedError.error.status})]`;
         if (parsedError.error.code === 429) {
-          text += getRateLimitMessage(
-            authType,
-            parsedError,
-            userTier,
-            currentModel,
-            fallbackModel,
-          );
+          // For provider auth type, use generic rate limit message
+          if (authType === AuthType.USE_PROVIDER) {
+            text += '\nRate limit exceeded. Please wait and try again later.';
+          } else {
+            text += getRateLimitMessage(
+              authType,
+              parsedError,
+              userTier,
+              currentModel,
+              fallbackModel,
+            );
+          }
         }
         return text;
       }

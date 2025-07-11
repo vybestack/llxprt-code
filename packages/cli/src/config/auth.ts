@@ -9,6 +9,13 @@ import { loadEnvironment } from './settings.js';
 
 export const validateAuthMethod = (authMethod: string): string | null => {
   loadEnvironment();
+  
+  if (authMethod === AuthType.USE_PROVIDER) {
+    // Provider-specific auth is handled by the provider itself
+    // No validation needed at this level
+    return null;
+  }
+  
   if (
     authMethod === AuthType.LOGIN_WITH_GOOGLE ||
     authMethod === AuthType.CLOUD_SHELL

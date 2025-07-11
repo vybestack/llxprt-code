@@ -157,7 +157,7 @@ export class GeminiClient {
       fileService: this.config.getFileService(),
     });
     const context = `
-  This is the Gemini CLI. We are setting up the context for our chat.
+  This is the CLI. We are setting up the context for our chat.
   Today's date is ${today}.
   My operating system is: ${platform}
   I'm currently working in the directory: ${cwd}
@@ -250,7 +250,7 @@ export class GeminiClient {
     } catch (error) {
       await reportError(
         error,
-        'Error initializing Gemini chat session.',
+        'Error initializing chat session.',
         history,
         'startChat',
       );
@@ -583,14 +583,14 @@ export class GeminiClient {
   }
 
   /**
-   * Handles fallback to Flash model when persistent 429 errors occur for OAuth users.
+   * Handles fallback model when persistent 429 errors occur.
    * Uses a fallback handler if provided by the config, otherwise returns null.
    */
   private async handleFlashFallback(
     authType?: string,
     error?: unknown,
   ): Promise<string | null> {
-    // Only handle fallback for OAuth users
+    // Only handle fallback for OAuth users with Gemini models, not for providers
     if (authType !== AuthType.LOGIN_WITH_GOOGLE) {
       return null;
     }

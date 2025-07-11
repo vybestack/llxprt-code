@@ -24,10 +24,8 @@ import { Extension, filterActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
-// TODO: Re-enable when multi-provider support is fully integrated
-// import { getProviderManager } from '../providers/providerManagerInstance.js';
-// TODO: Re-enable when multi-provider support is fully integrated
-// import { ProviderManagerAdapter } from '../providers/ProviderManagerAdapter.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
+import { ProviderManagerAdapter } from '../providers/ProviderManagerAdapter.js';
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
@@ -272,9 +270,9 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(settings, argv);
 
-  // TODO: Create provider manager adapter when multi-provider support is fully integrated
-  // const cliProviderManager = getProviderManager();
-  // const providerManagerAdapter = new ProviderManagerAdapter(cliProviderManager);
+  // Create provider manager adapter for multi-provider support
+  const cliProviderManager = getProviderManager();
+  const providerManagerAdapter = new ProviderManagerAdapter(cliProviderManager);
 
   const config = new Config({
     sessionId,
@@ -332,6 +330,7 @@ export async function loadCliConfig(
       name: e.config.name,
       version: e.config.version,
     })),
+    providerManager: providerManagerAdapter,
   });
 
   // Enhance the config with provider support
