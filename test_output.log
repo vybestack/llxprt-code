@@ -1,1 +1,0 @@
-./verify_fix.sh: line 16: ./node_modules/.bin/ts-node: No such file or directory

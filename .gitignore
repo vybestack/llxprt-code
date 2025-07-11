@@ -36,3 +36,7 @@ packages/*/coverage/
 # Generated files
 packages/cli/src/generated/
 .integration-tests/
+
+# Added by Gemini
+reports/
+prompts/
