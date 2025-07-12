@@ -56,20 +56,3 @@ export function getInstallationId(): string {
     return '123456789';
   }
 }
-
-/**
- * Retrieves the obfuscated Google Account ID for the currently authenticated user.
- * When OAuth is available, returns the user's cached Google Account ID. Otherwise, returns the installation ID.
- * @returns A string ID for the user (Google Account ID if available, otherwise installation ID).
- */
-export function getObfuscatedGoogleAccountId(): string {
-  // TODO: Fix circular dependency issue with oauth2.js
-  // For now, just return empty string to avoid require errors in ESM
-  // The actual implementation would:
-  // 1. Import getCachedGoogleAccountId from '../code_assist/oauth2.js'
-  // 2. Return the cached Google Account ID if available
-  // 3. Fall back to empty string if not available
-
-  // Temporarily disabled due to ESM/CommonJS compatibility issues
-  return '';
-}

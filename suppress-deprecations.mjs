@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-env node */
 
 // This script demonstrates different methods to suppress deprecation warnings
 

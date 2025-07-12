@@ -208,7 +208,7 @@ export class GeminiProvider implements IProvider {
         const contentGenerator = await createCodeAssistContentGenerator(
           httpOptions,
           AuthType.LOGIN_WITH_GOOGLE,
-          this.config?.getSessionId(),
+          this.config!,
         );
 
         // Convert messages to Gemini request format

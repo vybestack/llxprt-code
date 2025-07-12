@@ -42,6 +42,7 @@ export default tseslint.config(
       'debug-*.js',
       'test-*.js',
       'test-*.mjs',
+      'suppress-deprecations.mjs',
     ],
   },
   eslint.configs.recommended,

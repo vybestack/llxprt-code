@@ -89,6 +89,9 @@ export interface Settings {
   enableTextToolCallParsing?: boolean;
   textToolCallModels?: string[];
 
+  // Setting for setting maximum number of user/model/tool turns in a session.
+  maxSessionTurns?: number;
+
   // Add other settings here.
 }
 
