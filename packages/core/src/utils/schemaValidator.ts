@@ -24,16 +24,18 @@ export class SchemaValidator {
     if (typeof data !== 'object' || data === null) {
       return 'Value of params must be an object';
     }
-    
+
     const objectSchema = this.toObjectSchema(schema);
     const validate = ajValidator.compile(objectSchema);
     const valid = validate(data);
-    
+
     if (!valid && validate.errors) {
-      const errorText = ajValidator.errorsText(validate.errors, { dataVar: 'params' });
+      const errorText = ajValidator.errorsText(validate.errors, {
+        dataVar: 'params',
+      });
       return errorText;
     }
-    
+
     return null;
   }
 

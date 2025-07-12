@@ -14,7 +14,7 @@
 export async function checkForUpdates(): Promise<string | null> {
   // TODO: Fix web_fetch import and re-enable update check
   return null;
-  
+
   /*
   try {
     const packageJson = await getPackageJson();

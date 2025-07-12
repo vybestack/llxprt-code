@@ -358,7 +358,7 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
       return;
     }
 
-    const userInfo = await response.json() as { email?: string };
+    const userInfo = (await response.json()) as { email?: string };
     if (userInfo.email) {
       await cacheGoogleAccount(userInfo.email);
     }

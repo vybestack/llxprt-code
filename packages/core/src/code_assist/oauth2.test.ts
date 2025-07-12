@@ -200,9 +200,7 @@ describe('oauth2', () => {
       generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
       on: vi.fn(),
     } as unknown as OAuth2Client;
-    vi.mocked(OAuth2Client).mockImplementation(
-      () => mockOAuth2Client,
-    );
+    vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
     const mockReadline = {
       question: vi.fn((_query, callback) => callback(mockCode)),

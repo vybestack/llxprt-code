@@ -9,7 +9,9 @@ console.log(`process.removeAllListeners('warning');`);
 console.log(`// or more selectively:`);
 console.log(`process.on('warning', (warning) => {`);
 console.log(`  if (warning.name === 'DeprecationWarning' && `);
-console.log(`      (warning.message.includes('punycode') || warning.message.includes('url.parse'))) {`);
+console.log(
+  `      (warning.message.includes('punycode') || warning.message.includes('url.parse'))) {`,
+);
 console.log(`    return; // Ignore these specific warnings`);
 console.log(`  }`);
 console.log(`  console.warn(warning); // Show other warnings`);
@@ -32,7 +34,9 @@ console.log('Add this at the beginning of your application:\n');
 console.log(`process.noDeprecation = true;\n`);
 
 console.log('=== Method 5: Creating a wrapper script ===');
-console.log('Create a wrapper that suppresses warnings before loading the main app:\n');
+console.log(
+  'Create a wrapper that suppresses warnings before loading the main app:\n',
+);
 console.log(`// suppress-warnings.js`);
 console.log(`process.removeAllListeners('warning');`);
 console.log(`require('./main-app.js');\n`);

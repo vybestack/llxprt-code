@@ -227,16 +227,16 @@ Process Group PGID: Process group started or \`(none)\``,
       }
       return commandCheck.reason;
     }
-    
+
     const schemaValidationResult = SchemaValidator.validate(
       this.parameterSchema as Record<string, unknown>,
       params,
     );
-    
+
     if (schemaValidationResult !== null) {
       return `Parameters failed schema validation.`;
     }
-    
+
     if (!params.command.trim()) {
       return 'Command cannot be empty.';
     }
@@ -255,7 +255,7 @@ Process Group PGID: Process group started or \`(none)\``,
         return 'Directory must exist.';
       }
     }
-    
+
     return null;
   }
 

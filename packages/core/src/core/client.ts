@@ -46,6 +46,22 @@ function isThinkingSupported(model: string) {
 }
 
 /**
+ * Extracts JSON from a string that might be wrapped in markdown code blocks
+ * @param text - The raw text that might contain markdown-wrapped JSON
+ * @returns The extracted JSON string or the original text if no markdown found
+ */
+function extractJsonFromMarkdown(text: string): string {
+  // Try to match ```json ... ``` or ``` ... ```
+  const markdownMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (markdownMatch && markdownMatch[1]) {
+    return markdownMatch[1].trim();
+  }
+  
+  // If no markdown found, return trimmed original text
+  return text.trim();
+}
+
+/**
  * Returns the index of the content after the fraction of the total characters in the history.
  *
  * Exported for testing purposes.
@@ -379,13 +395,17 @@ export class GeminiClient {
         throw error;
       }
       try {
-        return JSON.parse(text);
+        // Extract JSON from potential markdown wrapper
+        const cleanedText = extractJsonFromMarkdown(text);
+        return JSON.parse(cleanedText);
       } catch (parseError) {
+        // Log both the original and cleaned text for debugging
         await reportError(
           parseError,
           'Failed to parse JSON response from generateJson.',
           {
             responseTextFailedToParse: text,
+            cleanedTextFailedToParse: extractJsonFromMarkdown(text),
             originalRequestContents: contents,
           },
           'generateJson-parse',

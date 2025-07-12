@@ -251,6 +251,12 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     cancelAuthentication,
   } = useAuthCommand(settings, setAuthError, config);
 
+  const onAuthTimeout = useCallback(() => {
+    setAuthError('Authentication timed out. Please try again.');
+    cancelAuthentication();
+    openAuthDialog();
+  }, [cancelAuthentication, openAuthDialog]);
+
   useEffect(() => {
     if (settings.merged.selectedAuthType) {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
@@ -593,7 +599,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
 
   const buffer = useTextBuffer({
     initialText: '',
-    viewport: { height: 10, width: inputWidth },
+    viewport: useMemo(() => ({ height: 10, width: inputWidth }), [inputWidth]),
     stdin,
     setRawMode,
     isValidPath,
@@ -992,13 +998,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
             </Box>
           ) : isAuthenticating ? (
             <>
-              <AuthInProgress
-                onTimeout={() => {
-                  setAuthError('Authentication timed out. Please try again.');
-                  cancelAuthentication();
-                  openAuthDialog();
-                }}
-              />
+              <AuthInProgress onTimeout={onAuthTimeout} />
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
