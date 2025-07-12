@@ -7,7 +7,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
-import { loadCliConfig, parseArguments } from './config/config.js';
+import { loadCliConfig, parseArguments, CliArgs } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
@@ -27,6 +27,7 @@ import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
 import { loadExtensions, Extension } from './config/extension.js';
 import { cleanupCheckpoints } from './utils/cleanup.js';
+import { getCliVersion } from './utils/version.js';
 import {
   Config,
   EditTool,
@@ -107,6 +108,13 @@ export async function main() {
     sessionId,
     argv,
   );
+
+  if (argv.promptInteractive && !process.stdin.isTTY) {
+    console.error(
+      'Error: The --prompt-interactive flag is not supported when piping input from stdin.',
+    );
+    process.exit(1);
+  }
 
   if (config.getListExtensions()) {
     console.log('Installed extensions:');
@@ -211,8 +219,12 @@ export async function main() {
     );
   }
 
+  const shouldBeInteractive =
+    !!argv.promptInteractive || (process.stdin.isTTY && input?.length === 0);
+
   // Render UI, passing necessary config values. Check that there is no command line question.
-  if (process.stdin.isTTY && input?.length === 0) {
+  if (shouldBeInteractive) {
+    const version = await getCliVersion();
     setWindowTitle(basename(workspaceRoot), settings);
     render(
       <React.StrictMode>
@@ -220,6 +232,7 @@ export async function main() {
           config={config}
           settings={settings}
           startupWarnings={startupWarnings}
+          version={version}
         />
       </React.StrictMode>,
       { exitOnCtrlC: false },
@@ -243,7 +256,7 @@ export async function main() {
   //   'event.timestamp': new Date().toISOString(),
   //   prompt: input,
   //   prompt_id,
-  //   auth_type: config.getContentGeneratorConfig().authType!,
+  //   auth_type: config.getContentGeneratorConfig()?.authType,
   //   prompt_length: input.length,
   // });
 
@@ -293,7 +306,7 @@ async function loadNonInteractiveConfig(
   config: Config,
   extensions: Extension[],
   settings: LoadedSettings,
-  argv: Awaited<ReturnType<typeof parseArguments>>,
+  argv: CliArgs,
 ) {
   let finalConfig = config;
 
