@@ -13,6 +13,7 @@ import importPlugin from 'eslint-plugin-import';
 import globals from 'globals';
 import licenseHeader from 'eslint-plugin-license-header';
 import noRelativeCrossPackageImports from './eslint-rules/no-relative-cross-package-imports.js';
+import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import path from 'node:path'; // Use node: prefix for built-ins
 import url from 'node:url';
 
@@ -142,6 +143,19 @@ export default tseslint.config(
       'prefer-const': ['error', { destructuring: 'all' }],
       radix: 'error',
       'default-case': 'error',
+      
+      // Additional React-specific rules to prevent infinite loops
+      'react-hooks/exhaustive-deps': ['error', {
+        additionalHooks: '(useStateAndRef|useStableCallback|useStableGetter)',
+      }],
+      'react/jsx-no-bind': ['warn', {
+        ignoreDOMComponents: false,
+        ignoreRefs: true,
+        allowArrowFunctions: false,
+        allowFunctions: false,
+        allowBind: false,
+      }],
+      'react/jsx-no-constructed-context-values': 'error',
     },
   },
 
@@ -196,6 +210,7 @@ export default tseslint.config(
       custom: {
         rules: {
           'no-relative-cross-package-imports': noRelativeCrossPackageImports,
+          'react-render-safety': reactRenderSafety,
         },
       },
     },
@@ -207,6 +222,7 @@ export default tseslint.config(
           root: path.join(projectRoot, 'packages'),
         },
       ],
+      // 'custom/react-render-safety': 'error', // TODO: Fix for ESLint 9 API
     },
   },
 );

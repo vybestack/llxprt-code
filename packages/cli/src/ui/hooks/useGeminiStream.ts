@@ -101,6 +101,15 @@ export const useGeminiStream = (
   const [pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
+  // FIX: Use ref to access latest history without causing re-renders
+  // This prevents infinite loops in the useEffect that saves checkpoints
+  const historyRef = useRef<HistoryItem[]>(history);
+  
+  // Keep historyRef updated with latest history value
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+  
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const logger = useLogger();
   const gitService = useMemo(() => {
@@ -831,7 +840,7 @@ export const useGeminiStream = (
               toolCallWithSnapshotFilePath,
               JSON.stringify(
                 {
-                  history,
+                  history: historyRef.current,
                   clientHistory,
                   toolCall: {
                     name: toolCall.request.name,
@@ -855,7 +864,9 @@ export const useGeminiStream = (
       }
     };
     saveRestorableToolCalls();
-  }, [toolCalls, config, onDebugMessage, gitService, history, geminiClient]);
+    // FIX: Removed 'history' from dependencies to prevent infinite loops
+    // We use historyRef.current to access the latest history value
+  }, [toolCalls, config, onDebugMessage, gitService, geminiClient]);
 
   return {
     streamingState,

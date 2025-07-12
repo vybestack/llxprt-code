@@ -7,6 +7,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
+import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
 import { loadCliConfig, parseArguments, CliArgs } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
@@ -228,12 +229,30 @@ export async function main() {
     setWindowTitle(basename(workspaceRoot), settings);
     render(
       <React.StrictMode>
-        <AppWrapper
-          config={config}
-          settings={settings}
-          startupWarnings={startupWarnings}
-          version={version}
-        />
+        <ErrorBoundary
+          onError={(error, errorInfo) => {
+            // Log to console for debugging
+            console.error('Application Error:', error);
+            console.error('Component Stack:', errorInfo.componentStack);
+            
+            // Special handling for maximum update depth errors
+            if (error.message.includes('Maximum update depth exceeded')) {
+              console.error('\n🚨 RENDER LOOP DETECTED!');
+              console.error('This is likely caused by:');
+              console.error('- State updates during render');
+              console.error('- Incorrect useEffect dependencies');
+              console.error('- Non-memoized props causing re-renders');
+              console.error('\nCheck recent changes to React components and hooks.');
+            }
+          }}
+        >
+          <AppWrapper
+            config={config}
+            settings={settings}
+            startupWarnings={startupWarnings}
+            version={version}
+          />
+        </ErrorBoundary>
       </React.StrictMode>,
       { exitOnCtrlC: false },
     );

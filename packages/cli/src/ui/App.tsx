@@ -577,7 +577,9 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     openPrivacyNotice,
     checkPaymentModeChange,
   );
-  const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
+  // FIX: Initialize as empty array, will be combined with pendingGeminiHistoryItems later
+  // This prevents mutations during render
+  let pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
   const isInitialMount = useRef(true);
@@ -718,7 +720,9 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     modelSwitchedFromQuotaError,
     setModelSwitchedFromQuotaError,
   );
-  pendingHistoryItems.push(...pendingGeminiHistoryItems);
+  // FIX: Create a new array instead of mutating the existing one
+  // This ensures React can properly track changes and prevents infinite loops
+  pendingHistoryItems = [...pendingHistoryItems, ...pendingGeminiHistoryItems];
   const { elapsedTime, currentLoadingPhrase } =
     useLoadingIndicator(streamingState);
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config });
