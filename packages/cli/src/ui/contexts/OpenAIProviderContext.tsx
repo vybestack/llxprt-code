@@ -10,6 +10,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from 'react';
 import { Config, ProviderMessage as Message } from '@google/gemini-cli-core';
 import { useOpenAIProviderInfo } from '../hooks/useOpenAIProviderInfo.js';
@@ -77,15 +78,26 @@ export const OpenAIProviderContextProvider: React.FC<{
     }
   }, [providerInfo.provider]);
 
-  const value: OpenAIProviderContextValue = {
-    isOpenAIActive: providerInfo.provider !== null,
-    isResponsesAPI: providerInfo.isResponsesAPI,
-    currentModel: providerInfo.currentModel,
-    conversationCache: providerInfo.conversationCache,
-    remoteTokenStats,
-    updateRemoteTokenStats,
-    getCachedConversation: providerInfo.getCachedConversation,
-  };
+  const value: OpenAIProviderContextValue = useMemo(
+    () => ({
+      isOpenAIActive: providerInfo.provider !== null,
+      isResponsesAPI: providerInfo.isResponsesAPI,
+      currentModel: providerInfo.currentModel,
+      conversationCache: providerInfo.conversationCache,
+      remoteTokenStats,
+      updateRemoteTokenStats,
+      getCachedConversation: providerInfo.getCachedConversation,
+    }),
+    [
+      providerInfo.provider,
+      providerInfo.isResponsesAPI,
+      providerInfo.currentModel,
+      providerInfo.conversationCache,
+      remoteTokenStats,
+      updateRemoteTokenStats,
+      providerInfo.getCachedConversation,
+    ],
+  );
 
   return (
     <OpenAIProviderContext.Provider value={value}>
