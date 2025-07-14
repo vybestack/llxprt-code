@@ -173,7 +173,7 @@ function executeShellCommand(
 }
 
 function addShellCommandToGeminiHistory(
-  geminiClient: GeminiClient,
+  geminiClient: GeminiClient | undefined,
   rawQuery: string,
   resultText: string,
 ) {
@@ -182,11 +182,12 @@ function addShellCommandToGeminiHistory(
       ? resultText.substring(0, MAX_OUTPUT_LENGTH) + '\n... (truncated)'
       : resultText;
 
-  geminiClient.addHistory({
-    role: 'user',
-    parts: [
-      {
-        text: `I ran the following shell command:
+  if (geminiClient) {
+    geminiClient.addHistory({
+      role: 'user',
+      parts: [
+        {
+          text: `I ran the following shell command:
 \`\`\`sh
 ${rawQuery}
 \`\`\`
@@ -197,7 +198,8 @@ ${modelContent}
 \`\`\``,
       },
     ],
-  });
+    });
+  }
 }
 
 /**
@@ -212,7 +214,7 @@ export const useShellCommandProcessor = (
   onExec: (command: Promise<void>) => void,
   onDebugMessage: (message: string) => void,
   config: Config,
-  geminiClient: GeminiClient,
+  geminiClient: GeminiClient | undefined,
 ) => {
   const handleShellCommand = useCallback(
     (rawQuery: PartListUnion, abortSignal: AbortSignal): boolean => {

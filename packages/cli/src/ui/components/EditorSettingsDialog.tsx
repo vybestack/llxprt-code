@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
 import {
@@ -62,18 +62,18 @@ export function EditorSettingsDialog({
     { label: 'Workspace Settings', value: SettingScope.Workspace },
   ];
 
-  const handleEditorSelect = (editorType: EditorType | 'not_set') => {
+  const handleEditorSelect = useCallback((editorType: EditorType | 'not_set') => {
     if (editorType === 'not_set') {
       onSelect(undefined, selectedScope);
       return;
     }
     onSelect(editorType, selectedScope);
-  };
+  }, [onSelect, selectedScope]);
 
-  const handleScopeSelect = (scope: SettingScope) => {
+  const handleScopeSelect = useCallback((scope: SettingScope) => {
     setSelectedScope(scope);
     setFocusedSection('editor');
-  };
+  }, []);
 
   let otherScopeModifiedMessage = '';
   const otherScope =
