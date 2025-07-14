@@ -82,6 +82,7 @@ import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
+import { UIStateShell } from './containers/UIStateShell.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -908,8 +909,9 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   }
   
   return (
-    <StreamingContext.Provider value={streamingState}>
-      <Box flexDirection="column" marginBottom={1} width="90%">
+    <UIStateShell>
+      <StreamingContext.Provider value={streamingState}>
+        <Box flexDirection="column" marginBottom={1} width="90%">
         {/* Move UpdateNotification outside Static so it can re-render when updateMessage changes */}
         {updateMessage && <UpdateNotification message={updateMessage} />}
 
@@ -1213,5 +1215,6 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
         </Box>
       </Box>
     </StreamingContext.Provider>
+    </UIStateShell>
   );
 };
