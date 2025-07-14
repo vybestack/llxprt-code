@@ -8,7 +8,6 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Box,
   DOMElement,
-  measureElement,
   Static,
   Text,
   useStdin,
@@ -591,8 +590,9 @@ const AppInner = ({ config, settings, startupWarnings = [], version }: AppProps)
     terminalWidth,
     constrainHeight,
     availableTerminalHeight,
-    setFooterHeight,
     setConstrainHeight,
+    footerRef,
+    registerFooterDependency,
   } = useLayout();
   const isInitialMount = useRef(true);
   const { stdin, setRawMode } = useStdin();
@@ -799,15 +799,12 @@ const AppInner = ({ config, settings, startupWarnings = [], version }: AppProps)
     refreshStatic();
   }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
-  const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
 
+  // Register dependencies that affect footer height with LayoutManager
   useEffect(() => {
-    if (mainControlsRef.current) {
-      const fullFooterMeasurement = measureElement(mainControlsRef.current);
-      setFooterHeight(fullFooterMeasurement.height);
-    }
-  }, [terminalHeight, consoleMessages, showErrorDetails, setFooterHeight]);
+    registerFooterDependency();
+  }, [consoleMessages, showErrorDetails, registerFooterDependency]);
 
 
   useEffect(() => {
@@ -974,7 +971,7 @@ const AppInner = ({ config, settings, startupWarnings = [], version }: AppProps)
 
         {showHelp && <Help commands={slashCommands} />}
 
-        <Box flexDirection="column" ref={mainControlsRef}>
+        <Box flexDirection="column" ref={footerRef}>
           {(allStartupWarnings.length > 0 || transientWarnings.length > 0) && (
             <Box
               borderStyle="round"

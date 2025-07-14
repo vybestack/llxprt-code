@@ -9,7 +9,11 @@ import React, {
   useContext,
   useState,
   useMemo,
+  useEffect,
+  useRef,
+  RefObject,
 } from 'react';
+import { DOMElement, measureElement } from 'ink';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
 interface LayoutContextValue {
@@ -20,6 +24,8 @@ interface LayoutContextValue {
   availableTerminalHeight: number;
   setFooterHeight: (height: number) => void;
   setConstrainHeight: (value: boolean) => void;
+  footerRef: RefObject<DOMElement | null>;
+  registerFooterDependency: () => void;
 }
 
 const LayoutContext = createContext<LayoutContextValue | undefined>(undefined);
@@ -40,6 +46,21 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ children }) => {
   const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
   const [footerHeight, setFooterHeight] = useState<number>(0);
   const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
+  const footerRef = useRef<DOMElement>(null);
+  const [footerUpdateCounter, setFooterUpdateCounter] = useState(0);
+
+  // Register additional dependencies that might affect footer height
+  const registerFooterDependency = useRef(() => {
+    setFooterUpdateCounter((prev) => prev + 1);
+  }).current;
+
+  // Measure footer element when it changes
+  useEffect(() => {
+    if (footerRef.current) {
+      const measurement = measureElement(footerRef.current);
+      setFooterHeight(measurement.height);
+    }
+  }, [terminalHeight, footerUpdateCounter]); // Re-measure when terminal height or dependencies change
 
   // Same calculation as in App.tsx
   const staticExtraHeight = /* margins and padding */ 3;
@@ -57,6 +78,8 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ children }) => {
       availableTerminalHeight,
       setFooterHeight,
       setConstrainHeight,
+      footerRef,
+      registerFooterDependency,
     }),
     [
       terminalHeight,
@@ -64,6 +87,7 @@ export const LayoutManager: React.FC<LayoutManagerProps> = ({ children }) => {
       footerHeight,
       constrainHeight,
       availableTerminalHeight,
+      registerFooterDependency,
     ],
   );
 
