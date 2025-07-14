@@ -20,5 +20,12 @@ export default defineConfig({
     globals: true,
     reporters: ['default'],
     testTimeout: 30000, // Longer timeout for integration tests
+    poolOptions: {
+      threads: {
+        singleThread: true, // Run tests sequentially to reduce memory pressure
+        maxThreads: 2, // Limit parallelism
+      },
+    },
+    hookTimeout: 30000,
   },
 });
