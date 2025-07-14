@@ -5,16 +5,16 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { checkForUpdates } from './updateCheck.js';
+import { checkForUpdates } from './updateCheck';
 
 const getPackageJson = vi.hoisted(() => vi.fn());
 vi.mock('../../utils/package.js', () => ({
   getPackageJson,
 }));
 
-const updateNotifier = vi.hoisted(() => vi.fn());
-vi.mock('update-notifier', () => ({
-  default: updateNotifier,
+const fetchWithTimeout = vi.hoisted(() => vi.fn());
+vi.mock('@google/gemini-cli-core', () => ({
+  fetchWithTimeout,
 }));
 
 describe('checkForUpdates', () => {
@@ -33,7 +33,10 @@ describe('checkForUpdates', () => {
       name: 'test-package',
       version: '1.0.0',
     });
-    updateNotifier.mockReturnValue({ update: null });
+    fetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '1.0.0' }),
+    });
     const result = await checkForUpdates();
     expect(result).toBeNull();
   });
@@ -43,11 +46,16 @@ describe('checkForUpdates', () => {
       name: 'test-package',
       version: '1.0.0',
     });
-    updateNotifier.mockReturnValue({
-      update: { current: '1.0.0', latest: '1.1.0' },
+    fetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '1.1.0' }),
     });
     const result = await checkForUpdates();
     expect(result).toContain('1.0.0 → 1.1.0');
+    expect(fetchWithTimeout).toHaveBeenCalledWith(
+      'https://raw.githubusercontent.com/google-gemini/gemini-cli/main/package.json',
+      5000
+    );
   });
 
   it('should return null if the latest version is the same as the current version', async () => {
@@ -55,8 +63,9 @@ describe('checkForUpdates', () => {
       name: 'test-package',
       version: '1.0.0',
     });
-    updateNotifier.mockReturnValue({
-      update: { current: '1.0.0', latest: '1.0.0' },
+    fetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '1.0.0' }),
     });
     const result = await checkForUpdates();
     expect(result).toBeNull();
@@ -67,8 +76,9 @@ describe('checkForUpdates', () => {
       name: 'test-package',
       version: '1.1.0',
     });
-    updateNotifier.mockReturnValue({
-      update: { current: '1.1.0', latest: '1.0.0' },
+    fetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '1.0.0' }),
     });
     const result = await checkForUpdates();
     expect(result).toBeNull();
@@ -76,6 +86,28 @@ describe('checkForUpdates', () => {
 
   it('should handle errors gracefully', async () => {
     getPackageJson.mockRejectedValue(new Error('test error'));
+    const result = await checkForUpdates();
+    expect(result).toBeNull();
+  });
+
+  it('should return null if fetch fails', async () => {
+    getPackageJson.mockResolvedValue({
+      name: 'test-package',
+      version: '1.0.0',
+    });
+    fetchWithTimeout.mockResolvedValue({
+      ok: false,
+    });
+    const result = await checkForUpdates();
+    expect(result).toBeNull();
+  });
+
+  it('should return null if fetch throws an error', async () => {
+    getPackageJson.mockResolvedValue({
+      name: 'test-package',
+      version: '1.0.0',
+    });
+    fetchWithTimeout.mockRejectedValue(new Error('Network error'));
     const result = await checkForUpdates();
     expect(result).toBeNull();
   });
