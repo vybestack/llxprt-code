@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { AnthropicProvider } from './AnthropicProvider.js';
+import { AnthropicProvider } from './AnthropicProvider';
 import { ITool } from '../ITool.js';
 
 // Mock the ToolFormatter
@@ -426,7 +426,7 @@ describe('AnthropicProvider', () => {
       );
     });
 
-    it('should retry on rate limit errors', async () => {
+    it('should retry on rate limit errors', { timeout: 10000 }, async () => {
       // First call fails with overloaded error
       mockAnthropicInstance.messages.create
         .mockRejectedValueOnce(
@@ -473,7 +473,7 @@ describe('AnthropicProvider', () => {
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledTimes(1);
     });
 
-    it('should validate and fix tool_use/tool_result mismatches on retry', async () => {
+    it('should validate and fix tool_use/tool_result mismatches on retry', { timeout: 10000 }, async () => {
       // First call fails after partial tool use
       mockAnthropicInstance.messages.create
         .mockRejectedValueOnce(

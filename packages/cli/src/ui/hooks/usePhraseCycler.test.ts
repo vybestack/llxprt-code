@@ -10,7 +10,7 @@ import {
   usePhraseCycler,
   WITTY_LOADING_PHRASES,
   PHRASE_CHANGE_INTERVAL_MS,
-} from './usePhraseCycler.js';
+} from './usePhraseCycler';
 
 describe('usePhraseCycler', () => {
   beforeEach(() => {

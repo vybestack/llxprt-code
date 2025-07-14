@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildResponsesRequest } from './buildResponsesRequest.js';
+import { buildResponsesRequest } from './buildResponsesRequest';
 import { IMessage } from '../IMessage.js';
 
 describe('buildResponsesRequest - undefined message handling', () => {

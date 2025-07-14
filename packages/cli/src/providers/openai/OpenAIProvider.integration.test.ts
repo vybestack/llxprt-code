@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider.js';
+import { OpenAIProvider } from './OpenAIProvider';
 import { IMessage, ITool } from '../IProvider.js';
 import fs from 'fs';
 import path from 'path';

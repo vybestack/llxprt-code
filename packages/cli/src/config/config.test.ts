@@ -6,9 +6,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as os from 'os';
-import { loadCliConfig, parseArguments } from './config.js';
-import { Settings } from './settings.js';
-import { Extension } from './extension.js';
+import { loadCliConfig, parseArguments } from './config';
+import { Settings } from './settings';
+import { Extension } from './extension';
 import * as ServerConfig from '@google/gemini-cli-core';
 
 vi.mock('os', async (importOriginal) => {

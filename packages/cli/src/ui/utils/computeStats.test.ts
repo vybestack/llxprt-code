@@ -10,7 +10,7 @@ import {
   calculateCacheHitRate,
   calculateErrorRate,
   computeSessionStats,
-} from './computeStats.js';
+} from './computeStats';
 import { ModelMetrics, SessionMetrics } from '../contexts/SessionContext.js';
 
 describe('calculateErrorRate', () => {

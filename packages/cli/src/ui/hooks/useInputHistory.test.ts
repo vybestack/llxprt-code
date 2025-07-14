@@ -5,7 +5,7 @@
  */
 
 import { act, renderHook } from '@testing-library/react';
-import { useInputHistory } from './useInputHistory.js';
+import { useInputHistory } from './useInputHistory';
 
 describe('useInputHistory', () => {
   const mockOnSubmit = vi.fn();

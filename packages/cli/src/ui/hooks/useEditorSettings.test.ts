@@ -15,7 +15,7 @@ import {
 } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '@testing-library/react';
-import { useEditorSettings } from './useEditorSettings.js';
+import { useEditorSettings } from './useEditorSettings';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { MessageType, type HistoryItem } from '../types.js';
 import {

@@ -49,7 +49,7 @@ import {
   SYSTEM_SETTINGS_PATH,
   SETTINGS_DIRECTORY_NAME, // This is from the original module, but used by the mock.
   SettingScope,
-} from './settings.js';
+} from './settings';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency

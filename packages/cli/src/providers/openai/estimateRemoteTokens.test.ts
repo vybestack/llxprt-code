@@ -3,8 +3,8 @@ import {
   estimateRemoteTokens,
   estimateMessagesTokens,
   MODEL_CONTEXT_SIZE,
-} from './estimateRemoteTokens.js';
-import { ConversationCache } from './ConversationCache.js';
+} from './estimateRemoteTokens';
+import { ConversationCache } from './ConversationCache';
 import { IMessage } from '../IMessage.js';
 
 describe('estimateRemoteTokens', () => {

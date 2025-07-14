@@ -13,7 +13,7 @@ import {
   USER_AGREEMENT_RATE_MEDIUM,
   CACHE_EFFICIENCY_HIGH,
   CACHE_EFFICIENCY_MEDIUM,
-} from './displayUtils.js';
+} from './displayUtils';
 import { Colors } from '../colors.js';
 
 describe('displayUtils', () => {

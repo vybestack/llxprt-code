@@ -17,7 +17,6 @@ import {
   type Key as InkKeyType,
 } from 'ink';
 import { StreamingState, type HistoryItem, MessageType } from './types.js';
-import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
@@ -83,6 +82,7 @@ import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
 import { UIStateShell } from './containers/UIStateShell.js';
+import { useLayout } from './components/LayoutManager.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -133,7 +133,8 @@ export const AppWrapper = (props: AppProps) => (
   </SessionStatsProvider>
 );
 
-const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
+// Inner component that uses layout context
+const AppInner = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const { stdout } = useStdout();
@@ -196,7 +197,6 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   const [themeError, setThemeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [editorError, setEditorError] = useState<string | null>(null);
-  const [footerHeight, setFooterHeight] = useState<number>(0);
   const [corgiMode, setCorgiMode] = useState(false);
   const [currentModel, setCurrentModel] = useState(getDisplayModelName(config));
   const [isPaidMode, setIsPaidMode] = useState<boolean | undefined>(
@@ -221,7 +221,6 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   const ctrlCTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
   const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
     useState<boolean>(false);
@@ -587,7 +586,14 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   // This prevents mutations during render
   let pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
-  const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
+  const {
+    terminalHeight,
+    terminalWidth,
+    constrainHeight,
+    availableTerminalHeight,
+    setFooterHeight,
+    setConstrainHeight,
+  } = useLayout();
   const isInitialMount = useRef(true);
   const { stdin, setRawMode } = useStdin();
   const isValidPath = useCallback((filePath: string): boolean => {
@@ -801,13 +807,8 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
       const fullFooterMeasurement = measureElement(mainControlsRef.current);
       setFooterHeight(fullFooterMeasurement.height);
     }
-  }, [terminalHeight, consoleMessages, showErrorDetails]);
+  }, [terminalHeight, consoleMessages, showErrorDetails, setFooterHeight]);
 
-  const staticExtraHeight = /* margins and padding */ 3;
-  const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - staticExtraHeight,
-    [terminalHeight, footerHeight],
-  );
 
   useEffect(() => {
     // skip refreshing Static during first mount
@@ -909,8 +910,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   }
   
   return (
-    <UIStateShell>
-      <StreamingContext.Provider value={streamingState}>
+    <StreamingContext.Provider value={streamingState}>
         <Box flexDirection="column" marginBottom={1} width="90%">
         {/* Move UpdateNotification outside Static so it can re-render when updateMessage changes */}
         {updateMessage && <UpdateNotification message={updateMessage} />}
@@ -1009,7 +1009,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
                 settings={settings}
                 availableTerminalHeight={
                   constrainHeight
-                    ? terminalHeight - staticExtraHeight
+                    ? terminalHeight - 3 // margins and padding
                     : undefined
                 }
                 terminalWidth={mainAreaWidth}
@@ -1215,6 +1215,12 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
         </Box>
       </Box>
     </StreamingContext.Provider>
-    </UIStateShell>
   );
 };
+
+// Main App component that provides the UIStateShell wrapper
+const App = (props: AppProps) => (
+  <UIStateShell>
+    <AppInner {...props} />
+  </UIStateShell>
+);

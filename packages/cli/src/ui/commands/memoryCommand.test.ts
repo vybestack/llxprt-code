@@ -5,8 +5,8 @@
  */
 
 import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
-import { memoryCommand } from './memoryCommand.js';
-import { type CommandContext, SlashCommand } from './types.js';
+import { memoryCommand } from './memoryCommand';
+import { type CommandContext, SlashCommand } from './types';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { getErrorMessage } from '@google/gemini-cli-core';

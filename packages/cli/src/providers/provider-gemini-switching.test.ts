@@ -8,9 +8,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getProviderManager,
   resetProviderManager,
-} from './providerManagerInstance.js';
-import { IProvider, IModel } from './IProvider.js';
-import { enhanceConfigWithProviders } from './enhanceConfigWithProviders.js';
+} from './providerManagerInstance';
+import { IProvider, IModel } from './IProvider';
+import { enhanceConfigWithProviders } from './enhanceConfigWithProviders';
 import { Config } from '@google/gemini-cli-core';
 
 describe('Provider-Gemini Switching', () => {

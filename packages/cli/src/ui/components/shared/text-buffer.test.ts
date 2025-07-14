@@ -14,7 +14,7 @@ import {
   textBufferReducer,
   TextBufferState,
   TextBufferAction,
-} from './text-buffer.js';
+} from './text-buffer';
 
 const initialState: TextBufferState = {
   lines: [''],

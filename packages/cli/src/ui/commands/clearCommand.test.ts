@@ -5,8 +5,8 @@
  */
 
 import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
-import { clearCommand } from './clearCommand.js';
-import { type CommandContext } from './types.js';
+import { clearCommand } from './clearCommand';
+import { type CommandContext } from './types';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { GeminiClient } from '@google/gemini-cli-core';
 

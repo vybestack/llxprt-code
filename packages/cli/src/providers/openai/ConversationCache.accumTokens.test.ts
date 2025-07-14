@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ConversationCache } from './ConversationCache.js';
+import { ConversationCache } from './ConversationCache';
 import { IMessage } from '../IMessage.js';
 
 describe('ConversationCache.accumTokens', () => {

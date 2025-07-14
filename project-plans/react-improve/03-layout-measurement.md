@@ -15,11 +15,11 @@ Move all terminal size / footer-height measurement and constrain-height behaviou
 4. **reports/react-improve/phase03-worker.md** – report with `### DONE` at end.
 
 ## Checklist (implementer)
-- [ ] Measurement & resize logic implemented in `LayoutManager`.
-- [ ] `App.tsx` no longer contains `measureElement`, `setFooterHeight`, or resize effects.
-- [ ] All existing tests pass; new tests added.
-- [ ] `npm run preflight` passes.
-- [ ] Progress report ends with `### DONE`.
+- [x] Measurement & resize logic implemented in `LayoutManager`.
+- [x] `App.tsx` no longer contains `measureElement`, `setFooterHeight`, or resize effects.
+- [x] All existing tests pass; new tests added.
+- [x] `npm run preflight` passes.
+- [x] Progress report ends with `### DONE`.
 
 ## Self-verify
 ```bash

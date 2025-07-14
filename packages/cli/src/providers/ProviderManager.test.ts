@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { IProvider, IModel, IMessage, ITool } from './IProvider.js';
+import { IProvider, IModel, IMessage, ITool } from './IProvider';
 
 // Mock the OpenAIProvider module before importing ProviderManager
 vi.mock('./openai/OpenAIProvider.js', () => {
@@ -78,7 +78,7 @@ vi.mock('./anthropic/AnthropicProvider.js', () => {
 });
 
 // Import ProviderManager after the mock
-import { ProviderManager } from './ProviderManager.js';
+import { ProviderManager } from './ProviderManager';
 
 describe('ProviderManager', () => {
   let manager: ProviderManager;

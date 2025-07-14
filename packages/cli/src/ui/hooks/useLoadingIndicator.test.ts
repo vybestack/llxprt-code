@@ -6,12 +6,12 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useLoadingIndicator } from './useLoadingIndicator.js';
+import { useLoadingIndicator } from './useLoadingIndicator';
 import { StreamingState } from '../types.js';
 import {
   WITTY_LOADING_PHRASES,
   PHRASE_CHANGE_INTERVAL_MS,
-} from './usePhraseCycler.js';
+} from './usePhraseCycler';
 
 describe('useLoadingIndicator', () => {
   beforeEach(() => {
