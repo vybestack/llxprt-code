@@ -77,7 +77,7 @@ enum StreamProcessingStatus {
  * API interaction, and tool call lifecycle.
  */
 export const useGeminiStream = (
-  geminiClient: GeminiClient | undefined,
+  geminiClient: GeminiClient,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   setShowHelp: React.Dispatch<React.SetStateAction<boolean>>,
@@ -570,9 +570,6 @@ export const useGeminiStream = (
       setInitError(null);
 
       try {
-        if (!geminiClient) {
-          throw new Error('Gemini client not initialized');
-        }
         const stream = geminiClient.sendMessageStream(
           queryToSend,
           abortSignal,
@@ -874,7 +871,7 @@ export const useGeminiStream = (
   return {
     streamingState,
     submitQuery,
-    initError: !geminiClient ? 'Gemini client not initialized' : initError,
+    initError,
     pendingHistoryItems,
     thought,
   };
