@@ -23,14 +23,17 @@ export const CloudFreePrivacyNotice = ({
 }: CloudFreePrivacyNoticeProps) => {
   const { privacyState, updateDataCollectionOptIn } =
     usePrivacySettings(config);
-    
-  const handleSelect = useCallback((value: boolean) => {
-    updateDataCollectionOptIn(value);
-    // Only exit if there was no error.
-    if (!privacyState.error) {
-      onExit();
-    }
-  }, [updateDataCollectionOptIn, privacyState.error, onExit]);
+
+  const handleSelect = useCallback(
+    (value: boolean) => {
+      updateDataCollectionOptIn(value);
+      // Only exit if there was no error.
+      if (!privacyState.error) {
+        onExit();
+      }
+    },
+    [updateDataCollectionOptIn, privacyState.error, onExit],
+  );
 
   useInput((input, key) => {
     if (privacyState.error && key.escape) {

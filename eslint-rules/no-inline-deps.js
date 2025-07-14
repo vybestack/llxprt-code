@@ -17,7 +17,8 @@ export default {
       recommended: true,
     },
     messages: {
-      inlineDeps: 'Dependency arrays should be extracted to a variable for better readability. Consider using a descriptive variable name.',
+      inlineDeps:
+        'Dependency arrays should be extracted to a variable for better readability. Consider using a descriptive variable name.',
     },
     fixable: null,
     schema: [],
@@ -32,7 +33,7 @@ export default {
         // - useMemo
         // - useLayoutEffect
         // - useImperativeHandle
-        // 
+        //
         // The rule should identify when the dependency array is defined inline
         // and suggest extracting it to a variable with a descriptive name.
       },

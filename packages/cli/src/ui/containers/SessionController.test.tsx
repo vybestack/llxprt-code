@@ -7,7 +7,11 @@
 import React from 'react';
 import { render, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { SessionController, SessionContext, type SessionContextType } from './SessionController.js';
+import {
+  SessionController,
+  SessionContext,
+  type SessionContextType,
+} from './SessionController.js';
 import { MessageType } from '../types.js';
 
 // Mock dependencies
@@ -23,10 +27,12 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
 }));
 
 vi.mock('../../config/config.js', () => ({
-  loadHierarchicalGeminiMemory: vi.fn(() => Promise.resolve({
-    memoryContent: 'test memory content',
-    fileCount: 1,
-  })),
+  loadHierarchicalGeminiMemory: vi.fn(() =>
+    Promise.resolve({
+      memoryContent: 'test memory content',
+      fileCount: 1,
+    }),
+  ),
 }));
 
 describe('SessionController', () => {
@@ -60,7 +66,7 @@ describe('SessionController', () => {
 
   it('should provide history management functions', () => {
     let contextValue: SessionContextType | undefined;
-    
+
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
@@ -69,7 +75,7 @@ describe('SessionController', () => {
     render(
       <SessionController config={mockConfig}>
         <TestComponent />
-      </SessionController>
+      </SessionController>,
     );
 
     expect(contextValue).toBeDefined();
@@ -81,7 +87,7 @@ describe('SessionController', () => {
 
   it('should add items to history', () => {
     let contextValue: SessionContextType | undefined;
-    
+
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
@@ -90,13 +96,13 @@ describe('SessionController', () => {
     render(
       <SessionController config={mockConfig}>
         <TestComponent />
-      </SessionController>
+      </SessionController>,
     );
 
     act(() => {
       contextValue!.addItem(
         { type: MessageType.USER, text: 'Test message' },
-        Date.now()
+        Date.now(),
       );
     });
 
@@ -107,7 +113,7 @@ describe('SessionController', () => {
 
   it('should clear history items', () => {
     let contextValue: SessionContextType | undefined;
-    
+
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
@@ -116,13 +122,13 @@ describe('SessionController', () => {
     render(
       <SessionController config={mockConfig}>
         <TestComponent />
-      </SessionController>
+      </SessionController>,
     );
 
     act(() => {
       contextValue!.addItem(
         { type: MessageType.USER, text: 'Test message' },
-        Date.now()
+        Date.now(),
       );
       contextValue!.clearItems();
     });
@@ -131,9 +137,11 @@ describe('SessionController', () => {
   });
 
   it('should trigger payment mode banner on provider switch', async () => {
-    const providerModule = await import('../../providers/providerManagerInstance.js');
+    const providerModule = await import(
+      '../../providers/providerManagerInstance.js'
+    );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
-    
+
     // Start with gemini provider in free mode
     mockGetProviderManager.mockReturnValue({
       hasActiveProvider: () => true,
@@ -145,7 +153,7 @@ describe('SessionController', () => {
     } as ReturnType<typeof providerModule.getProviderManager>);
 
     let contextValue: SessionContextType | undefined;
-    
+
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
@@ -154,20 +162,22 @@ describe('SessionController', () => {
     render(
       <SessionController config={mockConfig}>
         <TestComponent />
-      </SessionController>
+      </SessionController>,
     );
 
     // Add a history item to simulate non-startup state
     act(() => {
       contextValue!.addItem(
         { type: MessageType.USER, text: 'Test' },
-        Date.now()
+        Date.now(),
       );
     });
 
     // Switch to paid provider
     const mockProviderManager = mockGetProviderManager();
-    (mockProviderManager.getActiveProvider as ReturnType<typeof vi.fn>).mockReturnValue({
+    (
+      mockProviderManager.getActiveProvider as ReturnType<typeof vi.fn>
+    ).mockReturnValue({
       name: 'anthropic',
       getCurrentModel: () => 'claude-model',
       isPaidMode: () => true,
@@ -179,14 +189,18 @@ describe('SessionController', () => {
 
     await waitFor(() => {
       expect(contextValue!.sessionState.transientWarnings).toHaveLength(1);
-      expect(contextValue!.sessionState.transientWarnings[0]).toContain('PAID MODE');
-      expect(contextValue!.sessionState.transientWarnings[0]).toContain('anthropic');
+      expect(contextValue!.sessionState.transientWarnings[0]).toContain(
+        'PAID MODE',
+      );
+      expect(contextValue!.sessionState.transientWarnings[0]).toContain(
+        'anthropic',
+      );
     });
   });
 
   it('should handle memory refresh', async () => {
     let contextValue: SessionContextType | undefined;
-    
+
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
       return null;
@@ -195,18 +209,22 @@ describe('SessionController', () => {
     render(
       <SessionController config={mockConfig}>
         <TestComponent />
-      </SessionController>
+      </SessionController>,
     );
 
     await act(async () => {
       await contextValue!.performMemoryRefresh();
     });
 
-    expect(mockConfig.setUserMemory).toHaveBeenCalledWith('test memory content');
+    expect(mockConfig.setUserMemory).toHaveBeenCalledWith(
+      'test memory content',
+    );
     expect(mockConfig.setGeminiMdFileCount).toHaveBeenCalledWith(1);
-    
+
     // Check that info messages were added to history
-    const infoMessages = contextValue!.history.filter((item) => item.type === MessageType.INFO);
+    const infoMessages = contextValue!.history.filter(
+      (item) => item.type === MessageType.INFO,
+    );
     expect(infoMessages).toHaveLength(2);
     expect(infoMessages[0].text).toContain('Refreshing hierarchical memory');
     expect(infoMessages[1].text).toContain('Memory refreshed successfully');

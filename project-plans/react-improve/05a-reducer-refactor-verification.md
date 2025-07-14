@@ -1,6 +1,7 @@
 # Phase 05a – Verification of Reducer Refactor (react-improve)
 
 ## Verification Steps
+
 1. Run full build & tests:
    ```bash
    npm ci
@@ -21,4 +22,5 @@
 5. Ensure progress report `reports/react-improve/phase05-worker.md` ends with `### DONE` and all checklist boxes in `05-reducer-refactor.md` are ticked.
 
 ## Outcome
+
 Emit `✅` if all steps succeed, otherwise list each failed step prefixed with `❌`.

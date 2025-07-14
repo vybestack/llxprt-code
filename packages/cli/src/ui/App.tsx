@@ -103,7 +103,13 @@ export const AppWrapper = (props: AppProps) => (
 );
 
 // Inner component that uses layout context
-const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthenticating }: AppInnerProps) => {
+const AppInner = ({
+  config,
+  settings,
+  startupWarnings = [],
+  version,
+  setIsAuthenticating,
+}: AppInnerProps) => {
   useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const { stdout } = useStdout();
@@ -113,15 +119,15 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
     checkForUpdates().then(setUpdateMessage);
   }, []);
 
-  const { 
-    history, 
-    addItem, 
-    clearItems, 
-    loadHistory, 
-    sessionState, 
+  const {
+    history,
+    addItem,
+    clearItems,
+    loadHistory,
+    sessionState,
     dispatch: sessionDispatch,
     checkPaymentModeChange,
-    performMemoryRefresh 
+    performMemoryRefresh,
   } = useSession();
   const {
     consoleMessages,
@@ -129,9 +135,14 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   const { stats: sessionStats } = useSessionStats();
-  
+
   // These are now managed by SessionController
-  const { currentModel, isPaidMode, transientWarnings: sessionTransientWarnings, modelSwitchedFromQuotaError } = sessionState;
+  const {
+    currentModel,
+    isPaidMode,
+    transientWarnings: sessionTransientWarnings,
+    modelSwitchedFromQuotaError,
+  } = sessionState;
 
   // Add payment mode warning to startup warnings only at startup
   const allStartupWarnings = useMemo(() => {
@@ -197,11 +208,11 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
   }, []);
-  
+
   const closePrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(false);
   }, []);
-  
+
   const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
@@ -223,7 +234,7 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
     isAuthenticating: authIsAuthenticating,
     cancelAuthentication,
   } = useAuthCommand(settings, setAuthError, config);
-  
+
   // Sync auth state with parent
   useEffect(() => {
     setIsAuthenticating(authIsAuthenticating);
@@ -443,7 +454,7 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
   }, [openAuthDialog, setAuthError]);
 
   const geminiClientForStream = config.getGeminiClient();
-  
+
   const {
     streamingState,
     submitQuery,
@@ -463,15 +474,24 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
     onAuthError,
     performMemoryRefresh,
     modelSwitchedFromQuotaError,
-    useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-      if (typeof value === 'function') {
-        // Handle function form of setState
-        const currentValue = modelSwitchedFromQuotaError;
-        sessionDispatch({ type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR', payload: value(currentValue) });
-      } else {
-        sessionDispatch({ type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR', payload: value });
-      }
-    }, [modelSwitchedFromQuotaError, sessionDispatch]) as React.Dispatch<React.SetStateAction<boolean>>,
+    useCallback(
+      (value: boolean | ((prev: boolean) => boolean)) => {
+        if (typeof value === 'function') {
+          // Handle function form of setState
+          const currentValue = modelSwitchedFromQuotaError;
+          sessionDispatch({
+            type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR',
+            payload: value(currentValue),
+          });
+        } else {
+          sessionDispatch({
+            type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR',
+            payload: value,
+          });
+        }
+      },
+      [modelSwitchedFromQuotaError, sessionDispatch],
+    ) as React.Dispatch<React.SetStateAction<boolean>>,
   );
   // FIX: Create a new array instead of mutating the existing one
   // This ensures React can properly track changes and prevents infinite loops
@@ -544,7 +564,6 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
   useEffect(() => {
     registerFooterDependency();
   }, [consoleMessages, showErrorDetails, registerFooterDependency]);
-
 
   useEffect(() => {
     // skip refreshing Static during first mount
@@ -639,15 +658,15 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
   // Arbitrary threshold to ensure that items in the static area are large
   // enough but not too large to make the terminal hard to use.
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
-  
+
   // Show loading state if geminiClient is not initialized
   if (!geminiClientForStream) {
     return <Text>Initializing Gemini client...</Text>;
   }
-  
+
   return (
     <StreamingContext.Provider value={streamingState}>
-        <Box flexDirection="column" marginBottom={1} width="90%">
+      <Box flexDirection="column" marginBottom={1} width="90%">
         {/* Move UpdateNotification outside Static so it can re-render when updateMessage changes */}
         {updateMessage && <UpdateNotification message={updateMessage} />}
 
@@ -809,10 +828,7 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
               />
             </Box>
           ) : showPrivacyNotice ? (
-            <PrivacyNotice
-              onExit={closePrivacyNotice}
-              config={config}
-            />
+            <PrivacyNotice onExit={closePrivacyNotice} config={config} />
           ) : (
             <>
               <LoadingIndicator
@@ -957,10 +973,17 @@ const AppInner = ({ config, settings, startupWarnings = [], version, setIsAuthen
 // Intermediate component to pass isAuthenticating to SessionController
 const AppWithAuth = (props: AppProps) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
-  
+
   return (
-    <SessionController config={props.config} isAuthenticating={isAuthenticating}>
-      <AppInner {...props} isAuthenticating={isAuthenticating} setIsAuthenticating={setIsAuthenticating} />
+    <SessionController
+      config={props.config}
+      isAuthenticating={isAuthenticating}
+    >
+      <AppInner
+        {...props}
+        isAuthenticating={isAuthenticating}
+        setIsAuthenticating={setIsAuthenticating}
+      />
     </SessionController>
   );
 };

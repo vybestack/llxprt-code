@@ -12,17 +12,24 @@ export default {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Detect React patterns that can cause infinite loops or performance issues',
+      description:
+        'Detect React patterns that can cause infinite loops or performance issues',
       category: 'Best Practices',
       recommended: true,
     },
     messages: {
-      arrayMutation: 'Do not mutate arrays during render. Use spread operator or other immutable operations.',
-      renderTimeSetState: 'Do not call setState during render. Move this to useEffect or event handler.',
-      inlineObjectProp: 'Inline object as prop will cause unnecessary re-renders. Use useMemo or move outside component.',
-      inlineArrayProp: 'Inline array as prop will cause unnecessary re-renders. Use useMemo or move outside component.',
-      inlineFunctionProp: 'Inline function as prop will cause unnecessary re-renders. Use useCallback or move outside component.',
-      unstableDependency: 'Object or array in useEffect dependencies should be memoized to prevent infinite loops.',
+      arrayMutation:
+        'Do not mutate arrays during render. Use spread operator or other immutable operations.',
+      renderTimeSetState:
+        'Do not call setState during render. Move this to useEffect or event handler.',
+      inlineObjectProp:
+        'Inline object as prop will cause unnecessary re-renders. Use useMemo or move outside component.',
+      inlineArrayProp:
+        'Inline array as prop will cause unnecessary re-renders. Use useMemo or move outside component.',
+      inlineFunctionProp:
+        'Inline function as prop will cause unnecessary re-renders. Use useCallback or move outside component.',
+      unstableDependency:
+        'Object or array in useEffect dependencies should be memoized to prevent infinite loops.',
     },
     fixable: null,
     schema: [],
@@ -35,9 +42,18 @@ export default {
 
     function isReactComponent(node) {
       // Simple heuristic: function starting with capital letter or using hooks
-      if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+      if (
+        node.type === 'FunctionDeclaration' ||
+        node.type === 'FunctionExpression' ||
+        node.type === 'ArrowFunctionExpression'
+      ) {
         const parent = node.parent;
-        if (parent && parent.type === 'VariableDeclarator' && parent.id && parent.id.name) {
+        if (
+          parent &&
+          parent.type === 'VariableDeclarator' &&
+          parent.id &&
+          parent.id.name
+        ) {
           return /^[A-Z]/.test(parent.id.name);
         }
         if (node.id && node.id.name) {
@@ -49,7 +65,19 @@ export default {
 
     function checkArrayMutation(node) {
       if (inComponentBody && !inUseEffect && !inUseCallback && !inUseMemo) {
-        if (node.callee && node.callee.property && ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse'].includes(node.callee.property.name)) {
+        if (
+          node.callee &&
+          node.callee.property &&
+          [
+            'push',
+            'pop',
+            'shift',
+            'unshift',
+            'splice',
+            'sort',
+            'reverse',
+          ].includes(node.callee.property.name)
+        ) {
           context.report({
             node,
             messageId: 'arrayMutation',
@@ -60,12 +88,19 @@ export default {
 
     function checkRenderTimeSetState(node) {
       if (inComponentBody && !inUseEffect && !inUseCallback && !inUseMemo) {
-        if (node.callee && node.callee.name && /^set[A-Z]/.test(node.callee.name)) {
+        if (
+          node.callee &&
+          node.callee.name &&
+          /^set[A-Z]/.test(node.callee.name)
+        ) {
           // Check if it's not inside a function (event handler)
           let parent = node.parent;
           let insideFunction = false;
           while (parent && parent !== context.getScope().block) {
-            if (parent.type === 'ArrowFunctionExpression' || parent.type === 'FunctionExpression') {
+            if (
+              parent.type === 'ArrowFunctionExpression' ||
+              parent.type === 'FunctionExpression'
+            ) {
               insideFunction = true;
               break;
             }
@@ -82,13 +117,20 @@ export default {
     }
 
     function checkInlineProps(node) {
-      if (node.type === 'JSXElement' && node.openingElement && node.openingElement.attributes) {
-        node.openingElement.attributes.forEach(attr => {
+      if (
+        node.type === 'JSXElement' &&
+        node.openingElement &&
+        node.openingElement.attributes
+      ) {
+        node.openingElement.attributes.forEach((attr) => {
           if (attr.type === 'JSXAttribute' && attr.value) {
             // Check for inline objects
-            if (attr.value.type === 'JSXExpressionContainer' && attr.value.expression) {
+            if (
+              attr.value.type === 'JSXExpressionContainer' &&
+              attr.value.expression
+            ) {
               const expr = attr.value.expression;
-              
+
               // Inline object literal
               if (expr.type === 'ObjectExpression') {
                 context.report({
@@ -96,7 +138,7 @@ export default {
                   messageId: 'inlineObjectProp',
                 });
               }
-              
+
               // Inline array literal
               if (expr.type === 'ArrayExpression') {
                 context.report({
@@ -104,9 +146,14 @@ export default {
                   messageId: 'inlineArrayProp',
                 });
               }
-              
+
               // Inline arrow function (not from hooks)
-              if (expr.type === 'ArrowFunctionExpression' && attr.name && attr.name.name && attr.name.name.startsWith('on')) {
+              if (
+                expr.type === 'ArrowFunctionExpression' &&
+                attr.name &&
+                attr.name.name &&
+                attr.name.name.startsWith('on')
+              ) {
                 context.report({
                   node: expr,
                   messageId: 'inlineFunctionProp',
@@ -165,7 +212,7 @@ export default {
 
         // Check for array mutations
         checkArrayMutation(node);
-        
+
         // Check for setState during render
         checkRenderTimeSetState(node);
       },

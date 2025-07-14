@@ -17,7 +17,7 @@ export interface SessionState {
 }
 
 // Action types
-export type SessionAction = 
+export type SessionAction =
   | { type: 'SET_CURRENT_MODEL'; payload: string }
   | { type: 'SET_PAID_MODE'; payload: boolean | undefined }
   | { type: 'SET_LAST_PROVIDER'; payload: string | undefined }
@@ -27,7 +27,10 @@ export type SessionAction =
   | { type: 'CLEAR_TRANSIENT_WARNINGS' };
 
 // Session reducer with exhaustive switch
-export const sessionReducer = (state: SessionState, action: SessionAction): SessionState => {
+export const sessionReducer = (
+  state: SessionState,
+  action: SessionAction,
+): SessionState => {
   switch (action.type) {
     case 'SET_CURRENT_MODEL':
       return { ...state, currentModel: action.payload };

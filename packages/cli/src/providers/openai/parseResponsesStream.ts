@@ -207,7 +207,7 @@ export function parseErrorResponse(status: number, body: string): Error {
     const errorData = JSON.parse(body);
     const message =
       errorData.error?.message || errorData.message || 'Unknown error';
-    
+
     // Format error message based on status code
     let errorPrefix: string;
     if (status === 409) {
@@ -222,17 +222,19 @@ export function parseErrorResponse(status: number, body: string): Error {
       // For unknown status codes, just return the message without prefix
       const error = new Error(message);
       (error as { status?: number }).status = status;
-      (error as { code?: string }).code = errorData.error?.code || errorData.code;
+      (error as { code?: string }).code =
+        errorData.error?.code || errorData.code;
       return error;
     }
-    
+
     const error = new Error(`${errorPrefix}: ${message}`);
     (error as { status?: number }).status = status;
     (error as { code?: string }).code = errorData.error?.code || errorData.code;
     return error;
   } catch {
     // For invalid JSON, use a consistent format
-    const errorPrefix = status >= 500 && status < 600 ? 'Server error' : 'API Error';
+    const errorPrefix =
+      status >= 500 && status < 600 ? 'Server error' : 'API Error';
     const error = new Error(`${errorPrefix}: Responses API error: ${status}`);
     (error as { status?: number }).status = status;
     return error;

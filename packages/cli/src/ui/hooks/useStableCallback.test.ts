@@ -12,20 +12,20 @@ describe('useStableCallback', () => {
     let count = 0;
     const { result, rerender } = renderHook(
       () => useStableCallback(() => count),
-      { initialProps: {} }
+      { initialProps: {} },
     );
 
     const firstCallback = result.current;
-    
+
     // Change the external variable
     count = 1;
     rerender();
-    
+
     const secondCallback = result.current;
-    
+
     // Callback reference should be stable
     expect(firstCallback).toBe(secondCallback);
-    
+
     // But it should use the latest value
     expect(secondCallback()).toBe(1);
   });
@@ -33,7 +33,7 @@ describe('useStableCallback', () => {
   it('should always call the latest callback version', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useStableCallback(() => value),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     expect(result.current()).toBe('initial');
@@ -44,7 +44,7 @@ describe('useStableCallback', () => {
 
   it('should pass arguments correctly', () => {
     const { result } = renderHook(() =>
-      useStableCallback((a: number, b: number) => a + b)
+      useStableCallback((a: number, b: number) => a + b),
     );
 
     expect(result.current(2, 3)).toBe(5);
@@ -55,18 +55,18 @@ describe('useStableGetter', () => {
   it('should maintain a stable getter reference', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useStableGetter(value),
-      { initialProps: { value: 0 } }
+      { initialProps: { value: 0 } },
     );
 
     const firstGetter = result.current;
-    
+
     rerender({ value: 1 });
-    
+
     const secondGetter = result.current;
-    
+
     // Getter reference should be stable
     expect(firstGetter).toBe(secondGetter);
-    
+
     // But it should return the latest value
     expect(secondGetter()).toBe(1);
   });
@@ -74,7 +74,7 @@ describe('useStableGetter', () => {
   it('should always return the latest value', () => {
     const { result, rerender } = renderHook(
       ({ value }) => useStableGetter(value),
-      { initialProps: { value: 'initial' } }
+      { initialProps: { value: 'initial' } },
     );
 
     expect(result.current()).toBe('initial');

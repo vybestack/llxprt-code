@@ -1,11 +1,26 @@
-import React, { createContext, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, {
+  createContext,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from 'react';
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { Config, isProQuotaExceededError, isGenericQuotaExceededError, UserTierId, getErrorMessage } from '@google/gemini-cli-core';
+import {
+  Config,
+  isProQuotaExceededError,
+  isGenericQuotaExceededError,
+  UserTierId,
+  getErrorMessage,
+} from '@google/gemini-cli-core';
 import { loadHierarchicalGeminiMemory } from '../../config/config.js';
 import process from 'node:process';
-import { SessionStateProvider, useSessionState } from '../contexts/SessionStateContext.js';
+import {
+  SessionStateProvider,
+  useSessionState,
+} from '../contexts/SessionStateContext.js';
 import { SessionState, SessionAction } from '../reducers/sessionReducer.js';
 
 // Helper functions
@@ -41,21 +56,28 @@ export interface SessionContextType {
   // History management
   history: HistoryItem[];
   addItem: (itemData: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
-  updateItem: (id: number, updates: Partial<Omit<HistoryItem, 'id'>> | ((prevItem: HistoryItem) => Partial<Omit<HistoryItem, 'id'>>)) => void;
+  updateItem: (
+    id: number,
+    updates:
+      | Partial<Omit<HistoryItem, 'id'>>
+      | ((prevItem: HistoryItem) => Partial<Omit<HistoryItem, 'id'>>),
+  ) => void;
   clearItems: () => void;
   loadHistory: (newHistory: HistoryItem[]) => void;
-  
+
   // Session state
   sessionState: SessionState;
   dispatch: React.Dispatch<SessionAction>;
-  
+
   // Helper functions
   checkPaymentModeChange: (forcePreviousProvider?: string) => void;
   performMemoryRefresh: () => Promise<void>;
 }
 
 // Create context
-export const SessionContext = createContext<SessionContextType | undefined>(undefined);
+export const SessionContext = createContext<SessionContextType | undefined>(
+  undefined,
+);
 
 // Provider component props
 interface SessionControllerProps {
@@ -64,10 +86,10 @@ interface SessionControllerProps {
   isAuthenticating?: boolean;
 }
 
-export const SessionController: React.FC<SessionControllerProps> = ({ 
-  children, 
+export const SessionController: React.FC<SessionControllerProps> = ({
+  children,
   config,
-  isAuthenticating = false
+  isAuthenticating = false,
 }) => {
   // Initialize state with current values
   const getInitialProvider = () => {
@@ -86,7 +108,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     lastProvider: getInitialProvider(),
     modelSwitchedFromQuotaError: false,
     userTier: undefined,
-    transientWarnings: []
+    transientWarnings: [],
   };
 
   return (
@@ -97,15 +119,16 @@ export const SessionController: React.FC<SessionControllerProps> = ({
 };
 
 // Inner component that uses the session state
-const SessionControllerInner: React.FC<SessionControllerProps> = ({ 
-  children, 
+const SessionControllerInner: React.FC<SessionControllerProps> = ({
+  children,
   config,
-  isAuthenticating = false
+  isAuthenticating = false,
 }) => {
   const [sessionState, dispatch] = useSessionState();
 
   // Use the history hook
-  const { history, addItem, updateItem, clearItems, loadHistory } = useHistory();
+  const { history, addItem, updateItem, clearItems, loadHistory } =
+    useHistory();
 
   // Transient warning timer ref
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -124,11 +147,18 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         // ignore
       }
 
-      const previousProvider = forcePreviousProvider || sessionState.lastProvider;
-      const providerChanged = currentProviderName && currentProviderName !== previousProvider;
-      const paymentModeChanged = newPaymentMode !== sessionState.isPaidMode && newPaymentMode !== undefined;
+      const previousProvider =
+        forcePreviousProvider || sessionState.lastProvider;
+      const providerChanged =
+        currentProviderName && currentProviderName !== previousProvider;
+      const paymentModeChanged =
+        newPaymentMode !== sessionState.isPaidMode &&
+        newPaymentMode !== undefined;
 
-      if ((paymentModeChanged || providerChanged) && (providerChanged || history.length > 0)) {
+      if (
+        (paymentModeChanged || providerChanged) &&
+        (providerChanged || history.length > 0)
+      ) {
         dispatch({ type: 'SET_PAID_MODE', payload: newPaymentMode });
         dispatch({ type: 'SET_LAST_PROVIDER', payload: currentProviderName });
 
@@ -137,14 +167,18 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           const provider = providerManager.getActiveProvider();
 
           if (newPaymentMode === true) {
-            dispatch({ 
-              type: 'SET_TRANSIENT_WARNINGS', 
-              payload: [`⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`]
+            dispatch({
+              type: 'SET_TRANSIENT_WARNINGS',
+              payload: [
+                `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+              ],
             });
           } else if (newPaymentMode === false && provider.name === 'gemini') {
-            dispatch({ 
-              type: 'SET_TRANSIENT_WARNINGS', 
-              payload: [`✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`]
+            dispatch({
+              type: 'SET_TRANSIENT_WARNINGS',
+              payload: [
+                `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+              ],
             });
           }
 
@@ -163,7 +197,12 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         }
       }
     },
-    [sessionState.isPaidMode, sessionState.lastProvider, history.length, dispatch]
+    [
+      sessionState.isPaidMode,
+      sessionState.lastProvider,
+      history.length,
+      dispatch,
+    ],
   );
 
   // Memory refresh function
@@ -173,15 +212,15 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         type: MessageType.INFO,
         text: 'Refreshing hierarchical memory (GEMINI.md or other context files)...',
       },
-      Date.now()
+      Date.now(),
     );
-    
+
     try {
       const { memoryContent, fileCount } = await loadHierarchicalGeminiMemory(
         process.cwd(),
         config.getDebugMode(),
         config.getFileService(),
-        config.getExtensionContextFilePaths()
+        config.getExtensionContextFilePaths(),
       );
       config.setUserMemory(memoryContent);
       config.setGeminiMdFileCount(fileCount);
@@ -191,12 +230,12 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           type: MessageType.INFO,
           text: `Memory refreshed successfully. ${memoryContent.length > 0 ? `Loaded ${memoryContent.length} characters from ${fileCount} file(s).` : 'No memory content found.'}`,
         },
-        Date.now()
+        Date.now(),
       );
-      
+
       if (config.getDebugMode()) {
         console.log(
-          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`
+          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
         );
       }
     } catch (error) {
@@ -206,7 +245,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           type: MessageType.ERROR,
           text: `Error refreshing memory: ${errorMessage}`,
         },
-        Date.now()
+        Date.now(),
       );
       console.error('Error refreshing memory:', error);
     }
@@ -224,20 +263,28 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       if (paymentMode !== sessionState.isPaidMode) {
         dispatch({ type: 'SET_PAID_MODE', payload: paymentMode });
 
-        if (paymentMode !== undefined && sessionState.isPaidMode !== undefined && history.length > 0) {
+        if (
+          paymentMode !== undefined &&
+          sessionState.isPaidMode !== undefined &&
+          history.length > 0
+        ) {
           try {
             const providerManager = getProviderManager();
             const provider = providerManager.getActiveProvider();
 
             if (paymentMode === true) {
-              dispatch({ 
-                type: 'SET_TRANSIENT_WARNINGS', 
-                payload: [`⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`]
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+                ],
               });
             } else if (paymentMode === false && provider.name === 'gemini') {
-              dispatch({ 
-                type: 'SET_TRANSIENT_WARNINGS', 
-                payload: [`✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`]
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                ],
               });
             }
 
@@ -267,7 +314,13 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         clearTimeout(warningTimerRef.current);
       }
     };
-  }, [config, sessionState.currentModel, sessionState.isPaidMode, history.length, dispatch]);
+  }, [
+    config,
+    sessionState.currentModel,
+    sessionState.isPaidMode,
+    history.length,
+    dispatch,
+  ]);
 
   // Sync user tier
   useEffect(() => {
@@ -295,11 +348,13 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     const flashFallbackHandler = async (
       currentModel: string,
       fallbackModel: string,
-      error?: unknown
+      error?: unknown,
     ): Promise<boolean> => {
       let message: string;
 
-      const isPaidTier = sessionState.userTier === UserTierId.LEGACY || sessionState.userTier === UserTierId.STANDARD;
+      const isPaidTier =
+        sessionState.userTier === UserTierId.LEGACY ||
+        sessionState.userTier === UserTierId.STANDARD;
 
       if (error && isProQuotaExceededError(error)) {
         if (isPaidTier) {
@@ -344,7 +399,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           type: MessageType.INFO,
           text: message,
         },
-        Date.now()
+        Date.now(),
       );
 
       dispatch({ type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR', payload: true });
@@ -368,7 +423,17 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       checkPaymentModeChange,
       performMemoryRefresh,
     }),
-    [history, addItem, updateItem, clearItems, loadHistory, sessionState, dispatch, checkPaymentModeChange, performMemoryRefresh]
+    [
+      history,
+      addItem,
+      updateItem,
+      clearItems,
+      loadHistory,
+      sessionState,
+      dispatch,
+      checkPaymentModeChange,
+      performMemoryRefresh,
+    ],
   );
 
   return (

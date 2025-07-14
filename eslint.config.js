@@ -144,18 +144,24 @@ export default tseslint.config(
       'prefer-const': ['error', { destructuring: 'all' }],
       radix: 'error',
       'default-case': 'error',
-      
+
       // Additional React-specific rules to prevent infinite loops
-      'react-hooks/exhaustive-deps': ['error', {
-        additionalHooks: '(useStateAndRef|useStableCallback|useStableGetter)',
-      }],
-      'react/jsx-no-bind': ['warn', {
-        ignoreDOMComponents: false,
-        ignoreRefs: true,
-        allowArrowFunctions: false,
-        allowFunctions: false,
-        allowBind: false,
-      }],
+      'react-hooks/exhaustive-deps': [
+        'error',
+        {
+          additionalHooks: '(useStateAndRef|useStableCallback|useStableGetter)',
+        },
+      ],
+      'react/jsx-no-bind': [
+        'warn',
+        {
+          ignoreDOMComponents: false,
+          ignoreRefs: true,
+          allowArrowFunctions: false,
+          allowFunctions: false,
+          allowBind: false,
+        },
+      ],
       'react/jsx-no-constructed-context-values': 'error',
     },
   },

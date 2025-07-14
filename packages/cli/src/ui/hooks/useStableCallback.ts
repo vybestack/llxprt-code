@@ -9,17 +9,17 @@ import { useCallback, useRef, useEffect } from 'react';
 /**
  * Custom hook that provides a stable callback reference while always calling the latest function.
  * This prevents unnecessary re-renders in components that depend on callbacks.
- * 
+ *
  * @param callback The callback function that may change between renders
  * @returns A stable callback that always invokes the latest version
- * 
+ *
  * @example
  * ```typescript
  * // Instead of:
  * const handleClick = useCallback(() => {
  *   console.log(count); // This creates new callback when count changes
  * }, [count]);
- * 
+ *
  * // Use:
  * const handleClick = useStableCallback(() => {
  *   console.log(count); // Stable reference, but always uses latest count
@@ -27,7 +27,7 @@ import { useCallback, useRef, useEffect } from 'react';
  * ```
  */
 export function useStableCallback<T extends (...args: unknown[]) => unknown>(
-  callback: T
+  callback: T,
 ): T {
   // Store the latest callback in a ref
   const callbackRef = useRef<T>(callback);
@@ -40,7 +40,7 @@ export function useStableCallback<T extends (...args: unknown[]) => unknown>(
   // Return a stable callback that always calls the latest version
   const stableCallback = useCallback(
     (...args: Parameters<T>) => callbackRef.current(...args),
-    [] // Empty deps = stable reference
+    [], // Empty deps = stable reference
   ) as T;
 
   return stableCallback;
@@ -49,10 +49,10 @@ export function useStableCallback<T extends (...args: unknown[]) => unknown>(
 /**
  * Hook that provides a stable getter function for a value.
  * Useful for creating stable getters that always return the latest value.
- * 
+ *
  * @param value The value to create a getter for
  * @returns A stable getter function
- * 
+ *
  * @example
  * ```typescript
  * const getCount = useStableGetter(count);

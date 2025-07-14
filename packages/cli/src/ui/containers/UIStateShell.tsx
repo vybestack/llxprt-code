@@ -1,10 +1,10 @@
-import React from 'react'
-import { LayoutManager } from '../components/LayoutManager.js'
+import React from 'react';
+import { LayoutManager } from '../components/LayoutManager.js';
 
 interface UIStateShellProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export const UIStateShell: React.FC<UIStateShellProps> = ({ children }) => (
   <LayoutManager>{children}</LayoutManager>
-)
+);

@@ -3,9 +3,11 @@
 ## Code Quality Rules
 
 ### TypeScript
+
 - **Don't use `any`** - Always specify proper types. Use `unknown` if the type is truly unknown and add proper type guards.
 
 ## Linting
+
 - Always run `npm run lint` before considering work complete
 - Fix all linting errors, including warnings about `any` types
 - Run `npm run typecheck` to ensure type safety
@@ -13,6 +15,7 @@
 ## Working Methodology - CRITICAL
 
 ### NEVER do work yourself
+
 - **ALWAYS delegate to Claude workers** using `claude --dangerously-skip-permissions -p`
 - You are a manager/orchestrator, not a worker
 - Your job is to:
@@ -25,7 +28,9 @@
 ### Launching Workers
 
 #### Synchronous Workers (when you need results immediately)
+
 Use for:
+
 - Quick fixes that block other work
 - Critical path tasks
 - When you need to verify results before proceeding
@@ -35,7 +40,9 @@ claude --dangerously-skip-permissions -p --model opus < prompt_file.txt
 ```
 
 #### Asynchronous Workers (for parallel tasks)
+
 Use for:
+
 - Independent tasks that can run in parallel
 - Research/investigation tasks
 - Non-blocking work
@@ -49,6 +56,7 @@ echo "...your prompt... Write a summary report to /tmp/worker-report-taskname.tx
 ```
 
 ### Worker Prompt Guidelines
+
 1. Be extremely specific about the task
 2. Include all necessary context and file paths
 3. Specify exact changes needed
@@ -59,6 +67,7 @@ echo "...your prompt... Write a summary report to /tmp/worker-report-taskname.tx
 ### Example Worker Prompts
 
 #### Investigation Worker
+
 ```
 Investigate why tool calls are failing in the gemini-cli project.
 Check:
@@ -71,6 +80,7 @@ Include: root cause, affected files, and recommended fixes
 ```
 
 #### Fix Implementation Worker
+
 ```
 Fix the require is not defined error in user_id.js:
 - File: packages/core/src/utils/user_id.js line 59
@@ -81,18 +91,21 @@ Report completion status to /tmp/require-fix-status.txt
 ```
 
 ### DO NOT
+
 - Run commands directly (except to launch workers or check their status)
 - Edit files yourself
 - Test things yourself
 - Do "quick checks" - have a worker do it
 
 ### Context Management
+
 - Keep your context clean by delegating work
 - Read worker reports instead of full outputs
 - Use TodoWrite to track worker tasks
 - Summarize findings instead of storing full details
 
 # important-instruction-reminders
+
 - NEVER edit files directly - launch a worker
 - NEVER test directly - launch a worker to test
 - NEVER investigate directly - launch a worker to investigate

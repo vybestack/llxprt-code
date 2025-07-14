@@ -5,7 +5,10 @@
  */
 
 import { useContext } from 'react';
-import { SessionContext, type SessionContextType } from '../containers/SessionController.js';
+import {
+  SessionContext,
+  type SessionContextType,
+} from '../containers/SessionController.js';
 
 /**
  * Convenience hook for consuming SessionContext

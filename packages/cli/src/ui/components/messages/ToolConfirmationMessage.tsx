@@ -47,7 +47,10 @@ export const ToolConfirmationMessage: React.FC<
     }
   });
 
-  const handleSelect = useCallback((item: ToolConfirmationOutcome) => onConfirm(item), [onConfirm]);
+  const handleSelect = useCallback(
+    (item: ToolConfirmationOutcome) => onConfirm(item),
+    [onConfirm],
+  );
 
   let bodyContent: React.ReactNode | null = null; // Removed contextDisplay here
   let question: string;

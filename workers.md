@@ -86,7 +86,7 @@ Include file paths, line numbers, and specific recommendations."
 ### Example Report Prompt
 
 ```
-"Create a report at ./reports/test-fixes.md immediately. Log all your actions and findings as you work. 
+"Create a report at ./reports/test-fixes.md immediately. Log all your actions and findings as you work.
 At the start, write:
 - Task description
 - Start time

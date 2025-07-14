@@ -35,7 +35,7 @@ describe('useGitBranchName', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers(); // Use fake timers for async operations
-    
+
     // Mock fsPromises.access to always succeed
     vi.mocked(fsPromises.access).mockResolvedValue(undefined);
   });
@@ -126,14 +126,14 @@ describe('useGitBranchName', () => {
     const mockWatcher = {
       close: vi.fn(),
     };
-    
+
     let watchCallback: ((eventType: string) => void) | null = null;
-    
+
     vi.mocked(fs.watch).mockImplementation((path, callback) => {
       watchCallback = callback as (eventType: string) => void;
       return mockWatcher as unknown as fs.FSWatcher;
     });
-    
+
     let callCount = 0;
     // Mock exec to return different values on each call
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
@@ -165,7 +165,10 @@ describe('useGitBranchName', () => {
     });
 
     expect(result.current).toBe('develop');
-    expect(fs.watch).toHaveBeenCalledWith(GIT_LOGS_HEAD_PATH, expect.any(Function));
+    expect(fs.watch).toHaveBeenCalledWith(
+      GIT_LOGS_HEAD_PATH,
+      expect.any(Function),
+    );
   });
 
   it('should handle watcher setup error silently', async () => {
@@ -187,7 +190,7 @@ describe('useGitBranchName', () => {
     });
 
     expect(result.current).toBe('main'); // Branch name should still be fetched initially
-    
+
     // Verify that fs.watch was never called since access check failed
     expect(fs.watch).not.toHaveBeenCalled();
   });
@@ -199,7 +202,7 @@ describe('useGitBranchName', () => {
       close: closeMock,
       ...watcherEmitter,
     };
-    
+
     vi.mocked(fs.watch).mockReturnValue(mockWatcher as unknown as fs.FSWatcher);
 
     (mockExec as MockedFunction<typeof mockExec>).mockImplementation(
@@ -217,8 +220,11 @@ describe('useGitBranchName', () => {
     });
 
     // Verify watcher was set up
-    expect(fs.watch).toHaveBeenCalledWith(GIT_LOGS_HEAD_PATH, expect.any(Function));
-    
+    expect(fs.watch).toHaveBeenCalledWith(
+      GIT_LOGS_HEAD_PATH,
+      expect.any(Function),
+    );
+
     // Unmount and verify cleanup
     unmount();
     expect(closeMock).toHaveBeenCalled();

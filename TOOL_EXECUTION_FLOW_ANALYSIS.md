@@ -104,6 +104,7 @@ Tools can be invoked through multiple entry points:
 ### 4. Critical State Update Points
 
 #### A. Tool Scheduling (`CoreToolScheduler.schedule()`)
+
 ```typescript
 // Line 444 in coreToolScheduler.ts
 this.toolCalls = this.toolCalls.concat(newToolCalls);
@@ -111,14 +112,18 @@ this.notifyToolCallsUpdate(); // Triggers React state update
 ```
 
 #### B. Status Changes (`setStatusInternal()`)
+
 ```typescript
 // Line 387-389 in coreToolScheduler.ts
-this.toolCalls = this.toolCalls.map((currentCall) => { /* ... */ });
+this.toolCalls = this.toolCalls.map((currentCall) => {
+  /* ... */
+});
 this.notifyToolCallsUpdate(); // Triggers React state update
 this.checkAndNotifyCompletion(); // May trigger completion handler
 ```
 
 #### C. Live Output Updates
+
 ```typescript
 // Line 640-650 in coreToolScheduler.ts
 const liveOutputCallback = (outputChunk: string) => {
@@ -129,6 +134,7 @@ const liveOutputCallback = (outputChunk: string) => {
 ```
 
 #### D. Tool Completion Handler
+
 ```typescript
 // Line 732-737 in coreToolScheduler.ts
 if (this.onAllToolCallsComplete) {
@@ -168,11 +174,12 @@ if (this.onAllToolCallsComplete) {
 **Issue**: When tools complete, `handleCompletedTools` is called, which can trigger `submitQuery` for continuation. This creates a potential loop:
 
 ```
-Tool completes → handleCompletedTools → submitQuery → 
+Tool completes → handleCompletedTools → submitQuery →
 New stream → More tool requests → Tool completes (loop)
 ```
 
 **Mitigation**: The code has guards:
+
 - `if (isResponding) return;` (line 634)
 - `modelSwitchedFromQuotaError` check (line 742)
 - Client-initiated vs Gemini-initiated tool distinction
@@ -185,7 +192,8 @@ New stream → More tool requests → Tool completes (loop)
 
 ```typescript
 const pendingToolCallGroupDisplay = useMemo(
-  () => toolCalls.length ? mapTrackedToolCallsToDisplay(toolCalls) : undefined,
+  () =>
+    toolCalls.length ? mapTrackedToolCallsToDisplay(toolCalls) : undefined,
   [toolCalls],
 );
 ```
@@ -220,14 +228,15 @@ useEffect(() => {
 
 ```typescript
 // Example from setStatusInternal
-this.toolCalls = this.toolCalls.map(/* ... */);  // State update 1
-this.notifyToolCallsUpdate();                      // Triggers React setState
-this.checkAndNotifyCompletion();                   // May trigger another setState
+this.toolCalls = this.toolCalls.map(/* ... */); // State update 1
+this.notifyToolCallsUpdate(); // Triggers React setState
+this.checkAndNotifyCompletion(); // May trigger another setState
 ```
 
 ## Potential Infinite Loop Scenarios
 
 ### Scenario 1: Tool Error Recovery Loop
+
 ```
 1. Tool execution fails
 2. Error handler schedules retry tool
@@ -238,6 +247,7 @@ this.checkAndNotifyCompletion();                   // May trigger another setSta
 **Prevention**: No automatic retry logic exists in the current implementation.
 
 ### Scenario 2: Memory Tool Refresh Loop
+
 ```
 1. save_memory tool completes
 2. performMemoryRefresh() called (line 678)
@@ -248,6 +258,7 @@ this.checkAndNotifyCompletion();                   // May trigger another setSta
 **Prevention**: `processedMemoryToolsRef` tracks processed memory saves to prevent re-processing.
 
 ### Scenario 3: Stream Continuation Loop
+
 ```
 1. Tools complete
 2. handleCompletedTools submits responses
@@ -255,7 +266,8 @@ this.checkAndNotifyCompletion();                   // May trigger another setSta
 4. Loop continues indefinitely
 ```
 
-**Prevention**: 
+**Prevention**:
+
 - Server-side turn limits
 - User can cancel with ESC key
 - `modelSwitchedFromQuotaError` prevents continuation after quota errors
@@ -263,6 +275,7 @@ this.checkAndNotifyCompletion();                   // May trigger another setSta
 ## Recommendations
 
 ### 1. **Batch State Updates**
+
 Combine multiple state updates into single operations to reduce re-renders:
 
 ```typescript
@@ -276,15 +289,19 @@ this.updateToolCallsAndNotify(newToolCalls, checkCompletion);
 ```
 
 ### 2. **Use React 18 Automatic Batching**
+
 Ensure React 18's automatic batching is leveraged for setState calls.
 
 ### 3. **Implement Tool Call Limits**
+
 Add configurable limits for:
+
 - Maximum tools per turn
 - Maximum tool recursion depth
 - Maximum continuations per conversation
 
 ### 4. **Add Circuit Breaker Pattern**
+
 Implement circuit breaker for tool execution to prevent runaway loops:
 
 ```typescript
@@ -296,12 +313,13 @@ interface CircuitBreaker {
 ```
 
 ### 5. **Optimize Re-render Performance**
+
 - Use React.memo for tool display components
 - Implement virtualization for long tool lists
 - Use useCallback for stable function references
 
 ## Conclusion
 
-The tool execution flow in Gemini CLI is complex but well-structured. The main circular dependency risk comes from the tool completion → stream continuation cycle. The recent fix to use `historyRef` instead of direct history dependency resolved one major infinite loop issue. 
+The tool execution flow in Gemini CLI is complex but well-structured. The main circular dependency risk comes from the tool completion → stream continuation cycle. The recent fix to use `historyRef` instead of direct history dependency resolved one major infinite loop issue.
 
 The system has several built-in safeguards against infinite loops, but adding explicit limits and circuit breakers would provide additional safety. The multiple state update points could be optimized to reduce re-renders and improve performance.

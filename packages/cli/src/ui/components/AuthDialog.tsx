@@ -61,15 +61,18 @@ export function AuthDialog({
 
     return item.value === AuthType.LOGIN_WITH_GOOGLE;
   });
-  const handleAuthSelect = useCallback((authMethod: AuthType) => {
-    const error = validateAuthMethod(authMethod);
-    if (error) {
-      setErrorMessage(error);
-    } else {
-      setErrorMessage(null);
-      onSelect(authMethod, SettingScope.User);
-    }
-  }, [onSelect]);
+  const handleAuthSelect = useCallback(
+    (authMethod: AuthType) => {
+      const error = validateAuthMethod(authMethod);
+      if (error) {
+        setErrorMessage(error);
+      } else {
+        setErrorMessage(null);
+        onSelect(authMethod, SettingScope.User);
+      }
+    },
+    [onSelect],
+  );
 
   useInput((_input, key) => {
     if (key.escape) {

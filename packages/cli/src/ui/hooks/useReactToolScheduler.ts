@@ -200,7 +200,7 @@ function mapCoreStatusToDisplayStatus(coreStatus: CoreStatus): ToolCallStatus {
   if (mappedStatus !== undefined) {
     return mappedStatus;
   }
-  
+
   // This should be unreachable if CoreStatus is exhaustive
   console.warn(`Unknown core status encountered: ${coreStatus}`);
   return ToolCallStatus.Error;

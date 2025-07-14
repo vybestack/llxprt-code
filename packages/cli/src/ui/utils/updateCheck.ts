@@ -7,7 +7,8 @@
 import semver from 'semver';
 import { getPackageJson } from '../../utils/package.js';
 
-const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/google-gemini/gemini-cli/main/package.json';
+const UPDATE_CHECK_URL =
+  'https://raw.githubusercontent.com/google-gemini/gemini-cli/main/package.json';
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
 
 async function fetchWithTimeout(
@@ -37,7 +38,10 @@ export async function checkForUpdates(): Promise<string | null> {
       return null;
     }
 
-    const response = await fetchWithTimeout(UPDATE_CHECK_URL, UPDATE_CHECK_TIMEOUT_MS);
+    const response = await fetchWithTimeout(
+      UPDATE_CHECK_URL,
+      UPDATE_CHECK_TIMEOUT_MS,
+    );
     if (!response.ok) {
       return null;
     }

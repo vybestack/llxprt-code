@@ -196,8 +196,8 @@ This produced the following result:
 \`\`\`
 ${modelContent}
 \`\`\``,
-      },
-    ],
+        },
+      ],
     });
   }
 }

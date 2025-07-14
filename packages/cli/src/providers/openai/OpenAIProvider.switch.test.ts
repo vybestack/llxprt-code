@@ -67,12 +67,12 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
     // This test expects responses API to be used for gpt-4o, but the current
     // implementation appears to always use the legacy OpenAI client.
     // This needs to be fixed in the implementation.
-    
+
     // Ensure OPENAI_RESPONSES_DISABLE is not set
     delete process.env.OPENAI_RESPONSES_DISABLE;
-    
+
     provider.setModel('gpt-4o');
-    
+
     // Spy on the legacy API to ensure it's NOT called
     const mockOpenAI = vi.mocked(OpenAI);
     const instance = mockOpenAI.mock.results[0].value;
@@ -120,10 +120,11 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
     for await (const message of generator) {
       results.push(message);
     }
-    
+
     // Check if legacy API was called
-    const legacyApiCalled = instance.chat.completions.create.mock.calls.length > 0;
-    
+    const legacyApiCalled =
+      instance.chat.completions.create.mock.calls.length > 0;
+
     // If legacy API was called, it means responses API is not being used
     if (legacyApiCalled) {
       // This means the switch logic is not working as expected

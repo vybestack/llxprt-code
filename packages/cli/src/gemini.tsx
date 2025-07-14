@@ -222,12 +222,12 @@ export async function main() {
 
   const shouldBeInteractive =
     !!argv.promptInteractive || (process.stdin.isTTY && input?.length === 0);
-    
+
   function handleError(error: Error, errorInfo: ErrorInfo) {
     // Log to console for debugging
     console.error('Application Error:', error);
     console.error('Component Stack:', errorInfo.componentStack);
-    
+
     // Special handling for maximum update depth errors
     if (error.message.includes('Maximum update depth exceeded')) {
       console.error('\n🚨 RENDER LOOP DETECTED!');
@@ -243,7 +243,7 @@ export async function main() {
   if (shouldBeInteractive) {
     const version = await getCliVersion();
     setWindowTitle(basename(workspaceRoot), settings);
-    
+
     // Initialize authentication before rendering to ensure geminiClient is available
     if (settings.merged.selectedAuthType) {
       try {
@@ -258,7 +258,7 @@ export async function main() {
         process.exit(1);
       }
     }
-    
+
     render(
       <React.StrictMode>
         <ErrorBoundary

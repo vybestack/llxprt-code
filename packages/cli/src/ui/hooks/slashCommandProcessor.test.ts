@@ -169,7 +169,9 @@ describe('useSlashCommandProcessor', () => {
       getSessionId: vi.fn(() => 'test-session-id'),
       getUserMemory: vi.fn(() => ''),
       getGeminiMdFileCount: vi.fn(() => 0),
-      refreshMemory: vi.fn().mockResolvedValue({ memoryContent: '', fileCount: 0 }),
+      refreshMemory: vi
+        .fn()
+        .mockResolvedValue({ memoryContent: '', fileCount: 0 }),
     } as unknown as Config;
     mockCorgiMode = vi.fn();
     mockOpenPrivacyNotice = vi.fn();
@@ -231,15 +233,19 @@ describe('useSlashCommandProcessor', () => {
   describe('/memory add', () => {
     beforeEach(async () => {
       // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = await vi.importActual(
-        '../../services/CommandService.js'
-      ) as { CommandService: typeof import('../../services/CommandService.js').CommandService };
-      const { memoryCommand } = await vi.importActual(
-        '../commands/memoryCommand.js'
-      ) as { memoryCommand: SlashCommand };
-      
+      const { CommandService: ActualCommandService } = (await vi.importActual(
+        '../../services/CommandService.js',
+      )) as {
+        CommandService: typeof import('../../services/CommandService.js').CommandService;
+      };
+      const { memoryCommand } = (await vi.importActual(
+        '../commands/memoryCommand.js',
+      )) as { memoryCommand: SlashCommand };
+
       // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [memoryCommand]);
+      const commandServiceInstance = new ActualCommandService(async () => [
+        memoryCommand,
+      ]);
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance as CommandService,
       );
@@ -247,16 +253,20 @@ describe('useSlashCommandProcessor', () => {
 
     it('should return tool scheduling info on valid input', async () => {
       const { result } = getProcessorHook();
-      
+
       // Wait for commands to be loaded
       await vi.waitFor(() => {
-        expect(result.current.slashCommands.some((c) => c.name === 'memory')).toBe(true);
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'memory'),
+        ).toBe(true);
       });
-      
+
       const fact = 'Remember this fact';
       let commandResult: SlashCommandProcessorResult | false = false;
       await act(async () => {
-        commandResult = await result.current.handleSlashCommand(`/memory add ${fact}`);
+        commandResult = await result.current.handleSlashCommand(
+          `/memory add ${fact}`,
+        );
       });
 
       expect(mockAddItem).toHaveBeenNthCalledWith(
@@ -288,12 +298,14 @@ describe('useSlashCommandProcessor', () => {
 
     it('should show usage error and return true if no text is provided', async () => {
       const { result } = getProcessorHook();
-      
+
       // Wait for commands to be loaded
       await vi.waitFor(() => {
-        expect(result.current.slashCommands.some((c) => c.name === 'memory')).toBe(true);
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'memory'),
+        ).toBe(true);
       });
-      
+
       let commandResult: SlashCommandProcessorResult | false = false;
       await act(async () => {
         commandResult = await result.current.handleSlashCommand('/memory add ');
@@ -314,15 +326,19 @@ describe('useSlashCommandProcessor', () => {
   describe('/memory show', () => {
     beforeEach(async () => {
       // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = await vi.importActual(
-        '../../services/CommandService.js'
-      ) as { CommandService: typeof import('../../services/CommandService.js').CommandService };
-      const { memoryCommand } = await vi.importActual(
-        '../commands/memoryCommand.js'
-      ) as { memoryCommand: SlashCommand };
-      
+      const { CommandService: ActualCommandService } = (await vi.importActual(
+        '../../services/CommandService.js',
+      )) as {
+        CommandService: typeof import('../../services/CommandService.js').CommandService;
+      };
+      const { memoryCommand } = (await vi.importActual(
+        '../commands/memoryCommand.js',
+      )) as { memoryCommand: SlashCommand };
+
       // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [memoryCommand]);
+      const commandServiceInstance = new ActualCommandService(async () => [
+        memoryCommand,
+      ]);
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance as CommandService,
       );
@@ -330,25 +346,31 @@ describe('useSlashCommandProcessor', () => {
 
     it('should call the showMemoryAction and return true', async () => {
       // Mock the getUserMemory and getGeminiMdFileCount methods
-      vi.mocked(mockConfig.getUserMemory).mockReturnValue('Test memory content');
+      vi.mocked(mockConfig.getUserMemory).mockReturnValue(
+        'Test memory content',
+      );
       vi.mocked(mockConfig.getGeminiMdFileCount).mockReturnValue(3);
-      
+
       const { result } = getProcessorHook();
-      
+
       // Wait for commands to be loaded
       await vi.waitFor(() => {
-        expect(result.current.slashCommands.some((c) => c.name === 'memory')).toBe(true);
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'memory'),
+        ).toBe(true);
       });
-      
+
       let commandResult: SlashCommandProcessorResult | false = false;
       await act(async () => {
         commandResult = await result.current.handleSlashCommand('/memory show');
       });
-      
+
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: expect.stringContaining('Current memory content from 3 file(s)'),
+          text: expect.stringContaining(
+            'Current memory content from 3 file(s)',
+          ),
         }),
         expect.any(Number),
       );
@@ -359,15 +381,19 @@ describe('useSlashCommandProcessor', () => {
   describe('/memory refresh', () => {
     beforeEach(async () => {
       // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = await vi.importActual(
-        '../../services/CommandService.js'
-      ) as { CommandService: typeof import('../../services/CommandService.js').CommandService };
-      const { memoryCommand } = await vi.importActual(
-        '../commands/memoryCommand.js'
-      ) as { memoryCommand: SlashCommand };
-      
+      const { CommandService: ActualCommandService } = (await vi.importActual(
+        '../../services/CommandService.js',
+      )) as {
+        CommandService: typeof import('../../services/CommandService.js').CommandService;
+      };
+      const { memoryCommand } = (await vi.importActual(
+        '../commands/memoryCommand.js',
+      )) as { memoryCommand: SlashCommand };
+
       // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [memoryCommand]);
+      const commandServiceInstance = new ActualCommandService(async () => [
+        memoryCommand,
+      ]);
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance as CommandService,
       );
@@ -377,22 +403,25 @@ describe('useSlashCommandProcessor', () => {
       // Mock the refreshMemory method
       const mockRefreshMemory = vi.fn().mockResolvedValue({
         memoryContent: 'Refreshed content',
-        fileCount: 2
+        fileCount: 2,
       });
       vi.mocked(mockConfig.refreshMemory).mockImplementation(mockRefreshMemory);
-      
+
       const { result } = getProcessorHook();
-      
+
       // Wait for commands to be loaded
       await vi.waitFor(() => {
-        expect(result.current.slashCommands.some((c) => c.name === 'memory')).toBe(true);
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'memory'),
+        ).toBe(true);
       });
-      
+
       let commandResult: SlashCommandProcessorResult | false = false;
       await act(async () => {
-        commandResult = await result.current.handleSlashCommand('/memory refresh');
+        commandResult =
+          await result.current.handleSlashCommand('/memory refresh');
       });
-      
+
       // Check that the initial message was shown
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -401,7 +430,7 @@ describe('useSlashCommandProcessor', () => {
         }),
         expect.any(Number),
       );
-      
+
       // Check that the success message was shown
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -410,7 +439,7 @@ describe('useSlashCommandProcessor', () => {
         }),
         expect.any(Number),
       );
-      
+
       expect(mockRefreshMemory).toHaveBeenCalledTimes(1);
       expect(commandResult).toEqual({ type: 'handled' });
     });
@@ -419,15 +448,19 @@ describe('useSlashCommandProcessor', () => {
   describe('Unknown /memory subcommand', () => {
     beforeEach(async () => {
       // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = await vi.importActual(
-        '../../services/CommandService.js'
-      ) as { CommandService: typeof import('../../services/CommandService.js').CommandService };
-      const { memoryCommand } = await vi.importActual(
-        '../commands/memoryCommand.js'
-      ) as { memoryCommand: SlashCommand };
-      
+      const { CommandService: ActualCommandService } = (await vi.importActual(
+        '../../services/CommandService.js',
+      )) as {
+        CommandService: typeof import('../../services/CommandService.js').CommandService;
+      };
+      const { memoryCommand } = (await vi.importActual(
+        '../commands/memoryCommand.js',
+      )) as { memoryCommand: SlashCommand };
+
       // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [memoryCommand]);
+      const commandServiceInstance = new ActualCommandService(async () => [
+        memoryCommand,
+      ]);
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance as CommandService,
       );
@@ -435,20 +468,25 @@ describe('useSlashCommandProcessor', () => {
 
     it('should show an error for unknown /memory subcommand and return handled', async () => {
       const { result } = getProcessorHook();
-      
+
       // Wait for commands to be loaded
       await vi.waitFor(() => {
-        expect(result.current.slashCommands.some((c) => c.name === 'memory')).toBe(true);
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'memory'),
+        ).toBe(true);
       });
-      
+
       let commandResult: SlashCommandProcessorResult | false = false;
       await act(async () => {
-        commandResult = await result.current.handleSlashCommand('/memory foobar');
+        commandResult =
+          await result.current.handleSlashCommand('/memory foobar');
       });
       expect(mockAddItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: expect.stringContaining("Command '/memory' requires a subcommand. Available:"),
+          text: expect.stringContaining(
+            "Command '/memory' requires a subcommand. Available:",
+          ),
         }),
         expect.any(Number),
       );
@@ -850,12 +888,14 @@ describe('useSlashCommandProcessor', () => {
 
     it('/model should open model dialog and return handled', async () => {
       const { result } = getProcessorHook();
-      
+
       // Wait for commands to be loaded
       await vi.waitFor(() => {
-        expect(result.current.slashCommands.some((c) => c.name === 'model')).toBe(true);
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'model'),
+        ).toBe(true);
       });
-      
+
       let commandResult: SlashCommandProcessorResult | false = false;
       await act(async () => {
         commandResult = await result.current.handleSlashCommand('/model');
@@ -1049,12 +1089,16 @@ describe('useSlashCommandProcessor', () => {
       'should handle %s, set quitting messages, and exit the process',
       async (command) => {
         const { result } = getProcessorHook();
-        
+
         // Wait for commands to be loaded
         await vi.waitFor(() => {
-          expect(result.current.slashCommands.some((c) => c.name === 'quit' || c.name === 'exit')).toBe(true);
+          expect(
+            result.current.slashCommands.some(
+              (c) => c.name === 'quit' || c.name === 'exit',
+            ),
+          ).toBe(true);
         });
-        
+
         const mockDate = new Date('2025-01-01T01:02:03.000Z');
         vi.setSystemTime(mockDate);
 

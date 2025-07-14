@@ -1,6 +1,7 @@
 # Phase 02a – Verification of Component Split Stubs (react-improve)
 
 ## Verification Steps
+
 1. Run `npm ci` (should install without errors).
 2. Run `npm run build` (must compile successfully).
 3. Verify new files exist:
@@ -13,4 +14,5 @@
 7. Confirm report `reports/react-improve/phase02-worker.md` exists and ends with the literal line `### DONE`.
 
 ## Outcome
+
 Emit `✅` if every step passes, otherwise list each failed step prefixed with `❌`.

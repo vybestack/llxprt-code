@@ -104,12 +104,12 @@ export const useGeminiStream = (
   // FIX: Use ref to access latest history without causing re-renders
   // This prevents infinite loops in the useEffect that saves checkpoints
   const historyRef = useRef<HistoryItem[]>(history);
-  
+
   // Keep historyRef updated with latest history value
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
-  
+
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const logger = useLogger();
   const gitService = useMemo(() => {

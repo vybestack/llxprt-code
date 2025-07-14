@@ -62,13 +62,16 @@ export function EditorSettingsDialog({
     { label: 'Workspace Settings', value: SettingScope.Workspace },
   ];
 
-  const handleEditorSelect = useCallback((editorType: EditorType | 'not_set') => {
-    if (editorType === 'not_set') {
-      onSelect(undefined, selectedScope);
-      return;
-    }
-    onSelect(editorType, selectedScope);
-  }, [onSelect, selectedScope]);
+  const handleEditorSelect = useCallback(
+    (editorType: EditorType | 'not_set') => {
+      if (editorType === 'not_set') {
+        onSelect(undefined, selectedScope);
+        return;
+      }
+      onSelect(editorType, selectedScope);
+    },
+    [onSelect, selectedScope],
+  );
 
   const handleScopeSelect = useCallback((scope: SettingScope) => {
     setSelectedScope(scope);

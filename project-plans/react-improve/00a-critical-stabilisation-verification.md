@@ -6,20 +6,24 @@ The worker must append its findings to `reports/react-improve/phase00-verify.md`
 ## Verification Steps
 
 1. **Install deps & build:**
+
    ```bash
    npm ci
    npm run build
    ```
+
    Both commands must exit with code 0.
 
 2. **Lint check:**
+
    ```bash
    npm run lint
    ```
+
    Must exit 0 with **no** ESLint errors or warnings.
 
 3. **Search for infinite-loop patterns fixed in Phase 00**
-   - There must be **no** `useEffect(` calls **without** a dependency array.  
+   - There must be **no** `useEffect(` calls **without** a dependency array.
      ```bash
      grep -R "useEffect(\\s*=>" packages/cli/src | wc -l
      ```
@@ -31,12 +35,14 @@ The worker must append its findings to `reports/react-improve/phase00-verify.md`
    ```bash
    npm run test -- --run "render-loop-regression"
    ```
-   The vitest labelled *render-loop-regression* (added in Phase 00) must pass.
+   The vitest labelled _render-loop-regression_ (added in Phase 00) must pass.
 
 ## Outcome
+
 After executing all steps, write a short markdown snippet to `reports/react-improve/phase00-verify.md`:
 
-*Example PASS section*
+_Example PASS section_
+
 ```
 ### PASS
 - build ✓
@@ -45,7 +51,8 @@ After executing all steps, write a short markdown snippet to `reports/react-impr
 - render-loop regression test ✓
 ```
 
-*Example FAIL section*
+_Example FAIL section_
+
 ```
 ### FAIL
 - lint produced 14 warnings (see log)
