@@ -17,12 +17,12 @@ Port history management, provider/quota switching, and memory-refresh logic from
 4. **reports/react-improve/phase04-worker.md** – progress report created at startup, appended per action; ends with `### DONE`.
 
 ## Checklist (implementer)
-- [ ] `SessionController` now owns history and provider state.
-- [ ] `App.tsx` no longer imports `useHistory` directly.
-- [ ] All moved code passes existing unit tests.
-- [ ] New unit tests written and green.
-- [ ] `npm run test` & `npm run build` succeed.
-- [ ] Progress report ends with `### DONE`.
+- [x] `SessionController` now owns history and provider state.
+- [x] `App.tsx` no longer imports `useHistory` directly.
+- [x] All moved code passes existing unit tests.
+- [x] New unit tests written and green.
+- [x] `npm run test` & `npm run build` succeed.
+- [x] Progress report ends with `### DONE`.
 
 ## Self-verify
 ```bash
