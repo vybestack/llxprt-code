@@ -46,9 +46,10 @@ describe('AuthDialog', () => {
       [],
     );
 
+    const mockOnSelect = vi.fn();
     const { lastFrame } = render(
       <AuthDialog
-        onSelect={() => {}}
+        onSelect={mockOnSelect}
         settings={settings}
         initialErrorMessage="GEMINI_API_KEY  environment variable not found"
       />,
@@ -76,8 +77,9 @@ describe('AuthDialog', () => {
       [],
     );
 
+    const mockOnSelect = vi.fn();
     const { lastFrame } = render(
-      <AuthDialog onSelect={() => {}} settings={settings} />,
+      <AuthDialog onSelect={mockOnSelect} settings={settings} />,
     );
 
     expect(lastFrame()).toContain('Existing API key detected (GEMINI_API_KEY)');
