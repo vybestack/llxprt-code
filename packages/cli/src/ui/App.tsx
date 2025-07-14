@@ -229,6 +229,11 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
   }, []);
+  
+  const closePrivacyNotice = useCallback(() => {
+    setShowPrivacyNotice(false);
+  }, []);
+  
   const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
@@ -699,6 +704,8 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     openAuthDialog();
   }, [openAuthDialog, setAuthError]);
 
+  const geminiClientForStream = config.getGeminiClient();
+  
   const {
     streamingState,
     submitQuery,
@@ -706,7 +713,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
   } = useGeminiStream(
-    config.getGeminiClient(),
+    geminiClientForStream,
     history,
     addItem,
     setShowHelp,
@@ -894,6 +901,12 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   // Arbitrary threshold to ensure that items in the static area are large
   // enough but not too large to make the terminal hard to use.
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
+  
+  // Show loading state if geminiClient is not initialized
+  if (!geminiClientForStream) {
+    return <Text>Initializing Gemini client...</Text>;
+  }
+  
   return (
     <StreamingContext.Provider value={streamingState}>
       <Box flexDirection="column" marginBottom={1} width="90%">
@@ -1059,7 +1072,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
             </Box>
           ) : showPrivacyNotice ? (
             <PrivacyNotice
-              onExit={() => setShowPrivacyNotice(false)}
+              onExit={closePrivacyNotice}
               config={config}
             />
           ) : (
