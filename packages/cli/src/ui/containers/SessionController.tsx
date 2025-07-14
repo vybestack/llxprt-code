@@ -1,52 +1,12 @@
-import React, { createContext, useReducer, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useMemo, useCallback, useEffect, useRef } from 'react';
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { Config, isProQuotaExceededError, isGenericQuotaExceededError, UserTierId, getErrorMessage } from '@google/gemini-cli-core';
 import { loadHierarchicalGeminiMemory } from '../../config/config.js';
 import process from 'node:process';
-
-// Session state interface
-interface SessionState {
-  currentModel: string;
-  isPaidMode: boolean | undefined;
-  lastProvider: string | undefined;
-  modelSwitchedFromQuotaError: boolean;
-  userTier: UserTierId | undefined;
-  transientWarnings: string[];
-}
-
-// Action types
-type SessionAction = 
-  | { type: 'SET_CURRENT_MODEL'; payload: string }
-  | { type: 'SET_PAID_MODE'; payload: boolean | undefined }
-  | { type: 'SET_LAST_PROVIDER'; payload: string | undefined }
-  | { type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR'; payload: boolean }
-  | { type: 'SET_USER_TIER'; payload: UserTierId | undefined }
-  | { type: 'SET_TRANSIENT_WARNINGS'; payload: string[] }
-  | { type: 'CLEAR_TRANSIENT_WARNINGS' };
-
-// Session reducer
-const sessionReducer = (state: SessionState, action: SessionAction): SessionState => {
-  switch (action.type) {
-    case 'SET_CURRENT_MODEL':
-      return { ...state, currentModel: action.payload };
-    case 'SET_PAID_MODE':
-      return { ...state, isPaidMode: action.payload };
-    case 'SET_LAST_PROVIDER':
-      return { ...state, lastProvider: action.payload };
-    case 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR':
-      return { ...state, modelSwitchedFromQuotaError: action.payload };
-    case 'SET_USER_TIER':
-      return { ...state, userTier: action.payload };
-    case 'SET_TRANSIENT_WARNINGS':
-      return { ...state, transientWarnings: action.payload };
-    case 'CLEAR_TRANSIENT_WARNINGS':
-      return { ...state, transientWarnings: [] };
-    default:
-      return state;
-  }
-};
+import { SessionStateProvider, useSessionState } from '../contexts/SessionStateContext.js';
+import { SessionState, SessionAction } from '../reducers/sessionReducer.js';
 
 // Helper functions
 function getDisplayModelName(config: Config): string {
@@ -119,14 +79,30 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     }
   };
 
-  const [sessionState, dispatch] = useReducer(sessionReducer, {
+  // Get initial state for the provider
+  const initialState: SessionState = {
     currentModel: getDisplayModelName(config),
     isPaidMode: getProviderPaymentMode(),
     lastProvider: getInitialProvider(),
     modelSwitchedFromQuotaError: false,
     userTier: undefined,
     transientWarnings: []
-  });
+  };
+
+  return (
+    <SessionStateProvider initialState={initialState}>
+      <SessionControllerInner {...{ children, config, isAuthenticating }} />
+    </SessionStateProvider>
+  );
+};
+
+// Inner component that uses the session state
+const SessionControllerInner: React.FC<SessionControllerProps> = ({ 
+  children, 
+  config,
+  isAuthenticating = false
+}) => {
+  const [sessionState, dispatch] = useSessionState();
 
   // Use the history hook
   const { history, addItem, updateItem, clearItems, loadHistory } = useHistory();
@@ -187,7 +163,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
         }
       }
     },
-    [sessionState.isPaidMode, sessionState.lastProvider, history.length]
+    [sessionState.isPaidMode, sessionState.lastProvider, history.length, dispatch]
   );
 
   // Memory refresh function
@@ -291,7 +267,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
         clearTimeout(warningTimerRef.current);
       }
     };
-  }, [config, sessionState.currentModel, sessionState.isPaidMode, history.length]);
+  }, [config, sessionState.currentModel, sessionState.isPaidMode, history.length, dispatch]);
 
   // Sync user tier
   useEffect(() => {
@@ -312,7 +288,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     if (!isAuthenticating) {
       syncUserTier();
     }
-  }, [config, sessionState.userTier, isAuthenticating]);
+  }, [config, sessionState.userTier, isAuthenticating, dispatch]);
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -378,7 +354,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     };
 
     config.setFlashFallbackHandler(flashFallbackHandler);
-  }, [config, addItem, sessionState.userTier]);
+  }, [config, addItem, sessionState.userTier, dispatch]);
 
   const contextValue = useMemo(
     () => ({
@@ -401,3 +377,5 @@ export const SessionController: React.FC<SessionControllerProps> = ({
     </SessionContext.Provider>
   );
 };
+
+// Re-export the outer SessionController as default

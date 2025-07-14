@@ -12,10 +12,10 @@ Replace scattered `useState` in `SessionController` with a single reducer + cont
 4. **reports/react-improve/phase05-worker.md** – progress report written/updated by worker ending with `### DONE`.
 
 ## Checklist (implementer)
-- [ ] Added reducer and context files with exhaustive `switch` on action.types.
-- [ ] Replaced old `useState` in `SessionController` with reducer logic.
-- [ ] All unit tests compile; `npm run test` passes current suite.
-- [ ] Progress report exists and ends with `### DONE`.
+- [x] Added reducer and context files with exhaustive `switch` on action.types.
+- [x] Replaced old `useState` in `SessionController` with reducer logic.
+- [x] All unit tests compile; `npm run test` passes current suite.
+- [x] Progress report exists and ends with `### DONE`.
 
 ## Self-verify
 ```bash
