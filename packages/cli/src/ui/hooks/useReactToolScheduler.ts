@@ -128,9 +128,13 @@ export function useReactToolScheduler(
         }),
       );
     },
-    [setToolCallsForDisplay],
+    [], // No dependencies needed since we're using the functional update pattern
   );
 
+  // The scheduler MUST be recreated when config changes because:
+  // 1. config.getToolRegistry() returns different instances during initialization
+  // 2. config.getApprovalMode() can change based on user settings
+  // 3. The Gemini client initialization depends on having the latest config
   const scheduler = useMemo(
     () =>
       new CoreToolScheduler({
@@ -179,29 +183,27 @@ export function useReactToolScheduler(
 
 /**
  * Maps a CoreToolScheduler status to the UI's ToolCallStatus enum.
+ * Memoized as a constant map for better performance.
  */
+const STATUS_MAP: Record<CoreStatus, ToolCallStatus> = {
+  validating: ToolCallStatus.Executing,
+  awaiting_approval: ToolCallStatus.Confirming,
+  executing: ToolCallStatus.Executing,
+  success: ToolCallStatus.Success,
+  cancelled: ToolCallStatus.Canceled,
+  error: ToolCallStatus.Error,
+  scheduled: ToolCallStatus.Pending,
+};
+
 function mapCoreStatusToDisplayStatus(coreStatus: CoreStatus): ToolCallStatus {
-  switch (coreStatus) {
-    case 'validating':
-      return ToolCallStatus.Executing;
-    case 'awaiting_approval':
-      return ToolCallStatus.Confirming;
-    case 'executing':
-      return ToolCallStatus.Executing;
-    case 'success':
-      return ToolCallStatus.Success;
-    case 'cancelled':
-      return ToolCallStatus.Canceled;
-    case 'error':
-      return ToolCallStatus.Error;
-    case 'scheduled':
-      return ToolCallStatus.Pending;
-    default: {
-      const exhaustiveCheck: never = coreStatus;
-      console.warn(`Unknown core status encountered: ${exhaustiveCheck}`);
-      return ToolCallStatus.Error;
-    }
+  const mappedStatus = STATUS_MAP[coreStatus];
+  if (mappedStatus !== undefined) {
+    return mappedStatus;
   }
+  
+  // This should be unreachable if CoreStatus is exhaustive
+  console.warn(`Unknown core status encountered: ${coreStatus}`);
+  return ToolCallStatus.Error;
 }
 
 /**
