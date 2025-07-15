@@ -79,6 +79,7 @@ export interface Settings {
   // UI setting. Does not display the ANSI-controlled terminal title.
   hideWindowTitle?: boolean;
   hideTips?: boolean;
+  hideBanner?: boolean;
 
   // Provider configuration settings
   providerApiKeys?: Record<string, string>;
@@ -93,6 +94,7 @@ export interface Settings {
   maxSessionTurns?: number;
 
   // Add other settings here.
+  ideMode?: boolean;
 }
 
 export interface SettingsError {

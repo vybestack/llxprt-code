@@ -149,6 +149,8 @@ export const useGeminiStream = (
     [toolCalls],
   );
 
+  const loopDetectedRef = useRef(false);
+
   const onExec = useCallback(async (done: Promise<void>) => {
     setIsResponding(true);
     await done;
@@ -459,6 +461,16 @@ export const useGeminiStream = (
     [addItem, config],
   );
 
+  const handleLoopDetectedEvent = useCallback(() => {
+    addItem(
+      {
+        type: 'info',
+        text: `A potential loop was detected. This can happen due to repetitive tool calls or other model behavior. The request has been halted.`,
+      },
+      Date.now(),
+    );
+  }, [addItem]);
+
   const processGeminiStreamEvents = useCallback(
     async (
       stream: AsyncIterable<GeminiEvent>,
@@ -498,6 +510,11 @@ export const useGeminiStream = (
             break;
           case ServerGeminiEventType.MaxSessionTurns:
             handleMaxSessionTurnsEvent();
+            break;
+          case ServerGeminiEventType.LoopDetected:
+            // handle later because we want to move pending history to history
+            // before we add loop detected message to history
+            loopDetectedRef.current = true;
             break;
           default: {
             // enforces exhaustive switch-case
@@ -589,6 +606,10 @@ export const useGeminiStream = (
           addItem(pendingHistoryItemRef.current, userMessageTimestamp);
           setPendingHistoryItem(null);
         }
+        if (loopDetectedRef.current) {
+          loopDetectedRef.current = false;
+          handleLoopDetectedEvent();
+        }
       } catch (error: unknown) {
         if (error instanceof UnauthorizedError) {
           onAuthError();
@@ -626,6 +647,7 @@ export const useGeminiStream = (
       config,
       startNewPrompt,
       getPromptCount,
+      handleLoopDetectedEvent,
     ],
   );
 

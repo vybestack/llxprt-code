@@ -14,6 +14,7 @@ import {
 } from '@google/gemini-cli-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
+import { runExitCleanup } from '../../utils/cleanup.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
@@ -66,11 +67,22 @@ export const useAuthCommand = (
       if (authType) {
         await clearCachedCredentialFile();
         settings.setValue(scope, 'selectedAuthType', authType);
+        if (authType === AuthType.LOGIN_WITH_GOOGLE && config.getNoBrowser()) {
+          runExitCleanup();
+          console.log(
+            `
+----------------------------------------------------------------
+Logging in with Google... Please restart Gemini CLI to continue.
+----------------------------------------------------------------
+            `,
+          );
+          process.exit(0);
+        }
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
       appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
     },
-    [settings, appDispatch],
+    [settings, appDispatch, config],
   );
 
   const cancelAuthentication = useCallback(() => {

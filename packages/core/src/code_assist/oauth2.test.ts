@@ -210,9 +210,7 @@ describe('oauth2', () => {
       mockReadline as unknown as readline.Interface,
     );
 
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const client = await getOauthClient(
       AuthType.LOGIN_WITH_GOOGLE,
@@ -224,7 +222,7 @@ describe('oauth2', () => {
     // Verify the auth flow
     expect(mockGenerateCodeVerifierAsync).toHaveBeenCalled();
     expect(mockGenerateAuthUrl).toHaveBeenCalled();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
+    expect(consoleLogSpy).toHaveBeenCalledWith(
       expect.stringContaining(mockAuthUrl),
     );
     expect(mockReadline.question).toHaveBeenCalledWith(
@@ -238,7 +236,7 @@ describe('oauth2', () => {
     });
     expect(mockSetCredentials).toHaveBeenCalledWith(mockTokens);
 
-    consoleErrorSpy.mockRestore();
+    consoleLogSpy.mockRestore();
   });
 
   describe('in Cloud Shell', () => {
