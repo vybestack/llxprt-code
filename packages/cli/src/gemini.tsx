@@ -185,7 +185,7 @@ export async function main() {
   if (configProvider) {
     try {
       await providerManager.setActiveProvider(configProvider);
-      
+
       // Set the model from command line args after activating provider
       const configModel = config.getModel();
       const activeProvider = providerManager.getActiveProvider();

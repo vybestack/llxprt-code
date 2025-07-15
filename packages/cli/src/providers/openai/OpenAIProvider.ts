@@ -57,7 +57,7 @@ export class OpenAIProvider implements IProvider {
     this.settings = settings;
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
-    
+
     if (process.env.DEBUG || process.env.VERBOSE) {
       console.log('[OpenAIProvider] Constructor called with:', {
         hasApiKey: !!apiKey,
@@ -65,16 +65,19 @@ export class OpenAIProvider implements IProvider {
         settingsProvided: !!settings,
       });
     }
-    
+
     this.openai = new OpenAI({
       apiKey,
       baseURL,
       // Allow browser environment for tests
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
     });
-    
+
     if (process.env.DEBUG || process.env.VERBOSE) {
-      console.log('[OpenAIProvider] OpenAI client created with baseURL:', this.openai.baseURL);
+      console.log(
+        '[OpenAIProvider] OpenAI client created with baseURL:',
+        this.openai.baseURL,
+      );
     }
   }
 
@@ -206,11 +209,11 @@ export class OpenAIProvider implements IProvider {
     // Make the API call
     const baseURL = this.baseURL || 'https://api.openai.com/v1';
     const responsesURL = `${baseURL}/responses`;
-    
+
     if (process.env.DEBUG || process.env.VERBOSE) {
       console.log('[OpenAIProvider] Making request to:', responsesURL);
     }
-    
+
     const response = await fetch(responsesURL, {
       method: 'POST',
       headers: {
@@ -251,17 +254,14 @@ export class OpenAIProvider implements IProvider {
           tool_choice: options?.tool_choice,
         });
 
-        const retryResponse = await fetch(
-          responsesURL,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${this.apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(retryRequest),
+        const retryResponse = await fetch(responsesURL, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
           },
-        );
+          body: JSON.stringify(retryRequest),
+        });
 
         if (!retryResponse.ok) {
           const retryErrorBody = await retryResponse.text();
@@ -454,10 +454,13 @@ export class OpenAIProvider implements IProvider {
     console.debug('[OpenAIProvider] generateChatCompletion called');
     console.debug('[OpenAIProvider] Model:', this.currentModel);
     console.debug('[OpenAIProvider] Number of messages:', messages.length);
-    
+
     if (process.env.DEBUG || process.env.VERBOSE) {
       console.log('[OpenAIProvider] Current baseURL:', this.baseURL);
-      console.log('[OpenAIProvider] OpenAI client baseURL:', this.openai.baseURL);
+      console.log(
+        '[OpenAIProvider] OpenAI client baseURL:',
+        this.openai.baseURL,
+      );
     }
 
     // Log message roles to understand conversation flow
