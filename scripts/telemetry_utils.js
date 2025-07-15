@@ -24,17 +24,17 @@ const projectHash = crypto
   .digest('hex');
 
 // User-level .gemini directory in home
-const USER_GEMINI_DIR = path.join(os.homedir(), '.gemini');
+const USER_LLXPRT_DIR = path.join(os.homedir(), '.gemini');
 // Project-level .gemini directory in the workspace
-const WORKSPACE_GEMINI_DIR = path.join(projectRoot, '.gemini');
+const WORKSPACE_LLXPRT_DIR = path.join(projectRoot, '.gemini');
 
 // Telemetry artifacts are stored in a hashed directory under the user's ~/.gemini/tmp
-export const OTEL_DIR = path.join(USER_GEMINI_DIR, 'tmp', projectHash, 'otel');
+export const OTEL_DIR = path.join(USER_LLXPRT_DIR, 'tmp', projectHash, 'otel');
 export const BIN_DIR = path.join(OTEL_DIR, 'bin');
 
 // Workspace settings remain in the project's .gemini directory
 export const WORKSPACE_SETTINGS_FILE = path.join(
-  WORKSPACE_GEMINI_DIR,
+  WORKSPACE_LLXPRT_DIR,
   'settings.json',
 );
 

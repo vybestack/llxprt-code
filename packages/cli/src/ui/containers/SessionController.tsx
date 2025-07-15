@@ -223,7 +223,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     addItem(
       {
         type: MessageType.INFO,
-        text: 'Refreshing hierarchical memory (GEMINI.md or other context files)...',
+        text: 'Refreshing hierarchical memory (LLXPRT.md or other context files)...',
       },
       Date.now(),
     );

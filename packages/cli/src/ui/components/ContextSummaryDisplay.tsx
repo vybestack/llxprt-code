@@ -10,32 +10,32 @@ import { Colors } from '../colors.js';
 import { type MCPServerConfig } from '@vybestack/llxprt-code-core';
 
 interface ContextSummaryDisplayProps {
-  geminiMdFileCount: number;
+  llxprtMdFileCount: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   showToolDescriptions?: boolean;
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
-  geminiMdFileCount,
+  llxprtMdFileCount,
   contextFileNames,
   mcpServers,
   showToolDescriptions,
 }) => {
   const mcpServerCount = Object.keys(mcpServers || {}).length;
 
-  if (geminiMdFileCount === 0 && mcpServerCount === 0) {
+  if (llxprtMdFileCount === 0 && mcpServerCount === 0) {
     return <Text> </Text>; // Render an empty space to reserve height
   }
 
   const geminiMdText = (() => {
-    if (geminiMdFileCount === 0) {
+    if (llxprtMdFileCount === 0) {
       return '';
     }
     const allNamesTheSame = new Set(contextFileNames).size < 2;
     const name = allNamesTheSame ? contextFileNames[0] : 'context';
-    return `${geminiMdFileCount} ${name} file${
-      geminiMdFileCount > 1 ? 's' : ''
+    return `${llxprtMdFileCount} ${name} file${
+      llxprtMdFileCount > 1 ? 's' : ''
     }`;
   })();
 

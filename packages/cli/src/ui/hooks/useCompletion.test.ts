@@ -46,7 +46,7 @@ describe('useCompletion', () => {
       getGeminiIgnorePatterns: vi.fn(),
       projectRoot: '',
       gitIgnoreFilter: null,
-      geminiIgnoreFilter: null,
+      llxprtIgnoreFilter: null,
     } as unknown as Mocked<FileDiscoveryService>;
 
     mockConfig = {

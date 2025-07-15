@@ -1,10 +1,10 @@
 # Memory Import Processor
 
-The Memory Import Processor is a feature that allows you to modularize your GEMINI.md files by importing content from other markdown files using the `@file.md` syntax.
+The Memory Import Processor is a feature that allows you to modularize your LLXPRT.md files by importing content from other markdown files using the `@file.md` syntax.
 
 ## Overview
 
-This feature enables you to break down large GEMINI.md files into smaller, more manageable components that can be reused across different contexts. The import processor supports both relative and absolute paths, with built-in safety features to prevent circular imports and ensure file access security.
+This feature enables you to break down large LLXPRT.md files into smaller, more manageable components that can be reused across different contexts. The import processor supports both relative and absolute paths, with built-in safety features to prevent circular imports and ensure file access security.
 
 ## Important Limitations
 
@@ -15,7 +15,7 @@ This feature enables you to break down large GEMINI.md files into smaller, more 
 Use the `@` symbol followed by the path to the markdown file you want to import:
 
 ```markdown
-# Main GEMINI.md file
+# Main LLXPRT.md file
 
 This is the main content.
 
@@ -43,7 +43,7 @@ More content here.
 ### Basic Import
 
 ```markdown
-# My GEMINI.md
+# My LLXPRT.md
 
 Welcome to my project!
 
@@ -126,7 +126,7 @@ Permission issues or other file system errors are handled gracefully with approp
 
 ### `processImports(content, basePath, debugMode?, importState?)`
 
-Processes import statements in GEMINI.md content.
+Processes import statements in LLXPRT.md content.
 
 **Parameters:**
 

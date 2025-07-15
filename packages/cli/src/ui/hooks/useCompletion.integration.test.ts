@@ -111,7 +111,7 @@ describe('useCompletion git-aware filtering integration', () => {
       getGeminiIgnorePatterns: vi.fn(),
       projectRoot: '',
       gitIgnoreFilter: null,
-      geminiIgnoreFilter: null,
+      llxprtIgnoreFilter: null,
     } as unknown as Mocked<FileDiscoveryService>;
 
     mockConfig = {

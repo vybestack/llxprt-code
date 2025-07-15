@@ -41,7 +41,7 @@ async function debugRequest() {
       },
       {
         role: 'user',
-        content: 'Using 2 GEMINI.md files',
+        content: 'Using 2 LLXPRT.md files',
       },
     ],
     tools: [

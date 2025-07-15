@@ -10,8 +10,8 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { bfsFileSearch } from './bfsFileSearch.js';
 import {
-  GEMINI_CONFIG_DIR,
-  getAllGeminiMdFilenames,
+  LLXPRT_CONFIG_DIR,
+  getAllLlxprtMdFilenames,
 } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
@@ -87,14 +87,14 @@ async function getGeminiMdFilePathsInternal(
   extensionContextFilePaths: string[] = [],
 ): Promise<string[]> {
   const allPaths = new Set<string>();
-  const geminiMdFilenames = getAllGeminiMdFilenames();
+  const geminiMdFilenames = getAllLlxprtMdFilenames();
 
   for (const geminiMdFilename of geminiMdFilenames) {
     const resolvedCwd = path.resolve(currentWorkingDirectory);
     const resolvedHome = path.resolve(userHomePath);
     const globalMemoryPath = path.join(
       resolvedHome,
-      GEMINI_CONFIG_DIR,
+      LLXPRT_CONFIG_DIR,
       geminiMdFilename,
     );
 
@@ -139,7 +139,7 @@ async function getGeminiMdFilePathsInternal(
 
       // Skip the global .gemini directory itself during upward scan from CWD,
       // as global is handled separately and explicitly first.
-      if (currentDir === path.join(resolvedHome, GEMINI_CONFIG_DIR)) {
+      if (currentDir === path.join(resolvedHome, LLXPRT_CONFIG_DIR)) {
         if (debugMode) {
           logger.debug(
             `Upward scan reached global config dir path, stopping upward search here: ${currentDir}`,
@@ -209,7 +209,7 @@ async function getGeminiMdFilePathsInternal(
 
   if (debugMode)
     logger.debug(
-      `Final ordered ${getAllGeminiMdFilenames()} paths to read: ${JSON.stringify(
+      `Final ordered ${getAllLlxprtMdFilenames()} paths to read: ${JSON.stringify(
         finalPaths,
       )}`,
     );
@@ -242,7 +242,7 @@ async function readGeminiMdFiles(
       if (!isTestEnv) {
         const message = error instanceof Error ? error.message : String(error);
         logger.warn(
-          `Warning: Could not read ${getAllGeminiMdFilenames()} file at ${filePath}. Error: ${message}`,
+          `Warning: Could not read ${getAllLlxprtMdFilenames()} file at ${filePath}. Error: ${message}`,
         );
       }
       results.push({ filePath, content: null }); // Still include it with null content
@@ -274,7 +274,7 @@ function concatenateInstructions(
 }
 
 /**
- * Loads hierarchical GEMINI.md files and concatenates their content.
+ * Loads hierarchical LLXPRT.md files and concatenates their content.
  * This function is intended for use by the server.
  */
 export async function loadServerHierarchicalMemory(
@@ -298,7 +298,7 @@ export async function loadServerHierarchicalMemory(
     extensionContextFilePaths,
   );
   if (filePaths.length === 0) {
-    if (debugMode) logger.debug('No GEMINI.md files found in hierarchy.');
+    if (debugMode) logger.debug('No LLXPRT.md files found in hierarchy.');
     return { memoryContent: '', fileCount: 0 };
   }
   const contentsWithPaths = await readGeminiMdFiles(filePaths, debugMode);

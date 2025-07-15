@@ -8,7 +8,7 @@ import { GitIgnoreParser, GitIgnoreFilter } from '../utils/gitIgnoreParser.js';
 import { isGitRepository } from '../utils/gitUtils.js';
 import * as path from 'path';
 
-const GEMINI_IGNORE_FILE_NAME = '.geminiignore';
+const LLXPRT_IGNORE_FILE_NAME = '.llxprtignore';
 
 export interface FilterFilesOptions {
   respectGitIgnore?: boolean;
@@ -17,7 +17,7 @@ export interface FilterFilesOptions {
 
 export class FileDiscoveryService {
   private gitIgnoreFilter: GitIgnoreFilter | null = null;
-  private geminiIgnoreFilter: GitIgnoreFilter | null = null;
+  private llxprtIgnoreFilter: GitIgnoreFilter | null = null;
   private projectRoot: string;
 
   constructor(projectRoot: string) {
@@ -33,11 +33,11 @@ export class FileDiscoveryService {
     }
     const gParser = new GitIgnoreParser(this.projectRoot);
     try {
-      gParser.loadPatterns(GEMINI_IGNORE_FILE_NAME);
+      gParser.loadPatterns(LLXPRT_IGNORE_FILE_NAME);
     } catch (_error) {
       // ignore file not found
     }
-    this.geminiIgnoreFilter = gParser;
+    this.llxprtIgnoreFilter = gParser;
   }
 
   /**
@@ -78,8 +78,8 @@ export class FileDiscoveryService {
    * Checks if a single file should be gemini-ignored
    */
   shouldGeminiIgnoreFile(filePath: string): boolean {
-    if (this.geminiIgnoreFilter) {
-      return this.geminiIgnoreFilter.isIgnored(filePath);
+    if (this.llxprtIgnoreFilter) {
+      return this.llxprtIgnoreFilter.isIgnored(filePath);
     }
     return false;
   }
@@ -103,9 +103,9 @@ export class FileDiscoveryService {
   }
 
   /**
-   * Returns loaded patterns from .geminiignore
+   * Returns loaded patterns from .llxprtignore
    */
   getGeminiIgnorePatterns(): string[] {
-    return this.geminiIgnoreFilter?.getPatterns() ?? [];
+    return this.llxprtIgnoreFilter?.getPatterns() ?? [];
   }
 }

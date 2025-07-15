@@ -199,7 +199,7 @@ describe('useSlashCommandProcessor', () => {
   const getProcessorHook = (showToolDescriptions: boolean = false) => {
     const settings = {
       merged: {
-        contextFileName: 'GEMINI.md',
+        contextFileName: 'LLXPRT.md',
       },
     } as unknown as LoadedSettings;
     return renderHook(() =>
@@ -575,7 +575,7 @@ describe('useSlashCommandProcessor', () => {
       const settings = {
         merged: {
           selectedAuthType: 'test-auth-type',
-          contextFileName: 'GEMINI.md',
+          contextFileName: 'LLXPRT.md',
         },
       } as LoadedSettings;
 

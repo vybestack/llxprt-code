@@ -21,29 +21,29 @@ import { Content } from '@google/genai';
 import crypto from 'node:crypto';
 import os from 'node:os';
 
-const GEMINI_DIR_NAME = '.gemini';
+const LLXPRT_DIR_NAME = '.gemini';
 const TMP_DIR_NAME = 'tmp';
 const LOG_FILE_NAME = 'logs.json';
 const CHECKPOINT_FILE_NAME = 'checkpoint.json';
 
 const projectDir = process.cwd();
 const hash = crypto.createHash('sha256').update(projectDir).digest('hex');
-const TEST_GEMINI_DIR = path.join(
+const TEST_LLXPRT_DIR = path.join(
   os.homedir(),
-  GEMINI_DIR_NAME,
+  LLXPRT_DIR_NAME,
   TMP_DIR_NAME,
   hash,
 );
 
-const TEST_LOG_FILE_PATH = path.join(TEST_GEMINI_DIR, LOG_FILE_NAME);
+const TEST_LOG_FILE_PATH = path.join(TEST_LLXPRT_DIR, LOG_FILE_NAME);
 const TEST_CHECKPOINT_FILE_PATH = path.join(
-  TEST_GEMINI_DIR,
+  TEST_LLXPRT_DIR,
   CHECKPOINT_FILE_NAME,
 );
 
 async function cleanupLogAndCheckpointFiles() {
   try {
-    await fs.rm(TEST_GEMINI_DIR, { recursive: true, force: true });
+    await fs.rm(TEST_LLXPRT_DIR, { recursive: true, force: true });
   } catch (_error) {
     // Ignore errors, as the directory may not exist, which is fine.
   }
@@ -76,7 +76,7 @@ describe('Logger', () => {
     // Clean up before the test
     await cleanupLogAndCheckpointFiles();
     // Ensure the directory exists for the test
-    await fs.mkdir(TEST_GEMINI_DIR, { recursive: true });
+    await fs.mkdir(TEST_LLXPRT_DIR, { recursive: true });
     logger = new Logger(testSessionId);
     await logger.initialize();
   });
@@ -99,7 +99,7 @@ describe('Logger', () => {
   describe('initialize', () => {
     it('should create .gemini directory and an empty log file if none exist', async () => {
       const dirExists = await fs
-        .access(TEST_GEMINI_DIR)
+        .access(TEST_LLXPRT_DIR)
         .then(() => true)
         .catch(() => false);
       expect(dirExists).toBe(true);
@@ -199,7 +199,7 @@ describe('Logger', () => {
       );
       const logContent = await readLogFile();
       expect(logContent).toEqual([]);
-      const dirContents = await fs.readdir(TEST_GEMINI_DIR);
+      const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
       expect(
         dirContents.some(
           (f) =>
@@ -226,7 +226,7 @@ describe('Logger', () => {
       );
       const logContent = await readLogFile();
       expect(logContent).toEqual([]);
-      const dirContents = await fs.readdir(TEST_GEMINI_DIR);
+      const dirContents = await fs.readdir(TEST_LLXPRT_DIR);
       expect(
         dirContents.some(
           (f) =>
@@ -397,7 +397,7 @@ describe('Logger', () => {
       const tag = 'my-test-tag';
       await logger.saveCheckpoint(conversation, tag);
       const taggedFilePath = path.join(
-        TEST_GEMINI_DIR,
+        TEST_LLXPRT_DIR,
         `${CHECKPOINT_FILE_NAME.replace('.json', '')}-${tag}.json`,
       );
       const fileContent = await fs.readFile(taggedFilePath, 'utf-8');
@@ -440,7 +440,7 @@ describe('Logger', () => {
         { role: 'user', parts: [{ text: 'Another message' }] },
       ];
       const taggedFilePath = path.join(
-        TEST_GEMINI_DIR,
+        TEST_LLXPRT_DIR,
         `${CHECKPOINT_FILE_NAME.replace('.json', '')}-${tag}.json`,
       );
       await fs.writeFile(

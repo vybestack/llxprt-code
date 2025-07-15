@@ -52,7 +52,7 @@ import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
 import process from 'node:process';
 import {
   type Config,
-  getAllGeminiMdFilenames,
+  getAllLlxprtMdFilenames,
   ApprovalMode,
   isEditorAvailable,
   EditorType,
@@ -197,7 +197,7 @@ const AppInner = ({
     setStaticKey((prev) => prev + 1);
   }, [setStaticKey, stdout]);
 
-  const [geminiMdFileCount, setGeminiMdFileCount] = useState<number>(0);
+  const [llxprtMdFileCount, setGeminiMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [corgiMode, setCorgiMode] = useState(false);
@@ -631,7 +631,7 @@ const AppInner = ({
     if (fromSettings) {
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     }
-    return getAllGeminiMdFilenames();
+    return getAllLlxprtMdFilenames();
   }, [settings.merged.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
@@ -894,7 +894,7 @@ const AppInner = ({
                     </Text>
                   ) : (
                     <ContextSummaryDisplay
-                      geminiMdFileCount={geminiMdFileCount}
+                      llxprtMdFileCount={llxprtMdFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
                       showToolDescriptions={showToolDescriptions}

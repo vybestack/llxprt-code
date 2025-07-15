@@ -76,15 +76,15 @@ The LLxprt Code requires you to authenticate with Google's AI services. On initi
 
 ### Persisting Environment Variables with `.env` Files
 
-You can create a **`.gemini/.env`** file in your project directory or in your home directory. Creating a plain **`.env`** file also works, but `.gemini/.env` is recommended to keep Gemini variables isolated from other tools.
+You can create a **`.llxprt/.env`** file in your project directory or in your home directory. Creating a plain **`.env`** file also works, but `.llxprt/.env` is recommended to keep Gemini variables isolated from other tools.
 
 LLxprt Code automatically loads environment variables from the **first** `.env` file it finds, using the following search order:
 
 1. Starting in the **current directory** and moving upward toward `/`, for each directory it checks:
-   1. `.gemini/.env`
+   1. `.llxprt/.env`
    2. `.env`
 2. If no file is found, it falls back to your **home directory**:
-   - `~/.gemini/.env`
+   - `~/.llxprt/.env`
    - `~/.env`
 
 > **Important:** The search stops at the **first** file encountered—variables are **not merged** across multiple files.
@@ -94,15 +94,15 @@ LLxprt Code automatically loads environment variables from the **first** `.env` 
 **Project-specific overrides** (take precedence when you are inside the project):
 
 ```bash
-mkdir -p .gemini
-echo 'GOOGLE_CLOUD_PROJECT="your-project-id"' >> .gemini/.env
+mkdir -p .llxprt
+echo 'GOOGLE_CLOUD_PROJECT="your-project-id"' >> .llxprt/.env
 ```
 
 **User-wide settings** (available in every directory):
 
 ```bash
-mkdir -p ~/.gemini
-cat >> ~/.gemini/.env <<'EOF'
+mkdir -p ~/.llxprt
+cat >> ~/.llxprt/.env <<'EOF'
 GOOGLE_CLOUD_PROJECT="your-project-id"
 GEMINI_API_KEY="your-gemini-api-key"
 EOF

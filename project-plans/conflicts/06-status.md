@@ -17,7 +17,7 @@ Task: packages/cli/src/config/config.ts
   3. Lines 359-418: Exclude tools merging and environment loading
 - Need to add missing imports for multi-provider branch
 - Added missing imports: dotenv, path, fs, os
-- Added GEMINI_DIR constant
+- Added LLXPRT_DIR constant
 - Resolved all conflicts:
   - Kept allowed MCP server names filtering from HEAD
   - Merged extension handling from HEAD with provider manager from multi-provider
