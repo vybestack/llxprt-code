@@ -54,7 +54,7 @@ jobs:
           # Use OpenRouter as a cost-effective alternative to Google's API
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
-          LLXPRT_DEFAULT_MODEL: google/gemini-flash-1.5-8b
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
           LLXPRT_DEFAULT_PROVIDER: openai
           # Also provide Gemini API key if available
           GOOGLE_GENAI_API_KEY: ${{ secrets.GOOGLE_GENAI_API_KEY }}
