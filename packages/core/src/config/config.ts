@@ -421,11 +421,11 @@ export class Config {
     this.userMemory = newUserMemory;
   }
 
-  getGeminiMdFileCount(): number {
+  getLlxprtMdFileCount(): number {
     return this.llxprtMdFileCount;
   }
 
-  setGeminiMdFileCount(count: number): void {
+  setLlxprtMdFileCount(count: number): void {
     this.llxprtMdFileCount = count;
   }
 
@@ -555,7 +555,7 @@ export class Config {
     );
 
     this.setUserMemory(memoryContent);
-    this.setGeminiMdFileCount(fileCount);
+    this.setLlxprtMdFileCount(fileCount);
 
     return { memoryContent, fileCount };
   }

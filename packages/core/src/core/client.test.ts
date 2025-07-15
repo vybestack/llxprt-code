@@ -1043,7 +1043,7 @@ describe('Gemini Client (client.ts)', () => {
         getWorkingDir: vi.fn().mockReturnValue('/test'),
         getFullContext: vi.fn().mockReturnValue(false),
         getUserMemory: vi.fn().mockReturnValue(''),
-        getGeminiMdFileCount: vi.fn().mockReturnValue(0),
+        getLlxprtMdFileCount: vi.fn().mockReturnValue(0),
         getFileService: vi.fn().mockReturnValue(null),
         getCheckpointingEnabled: vi.fn().mockReturnValue(false),
         getToolRegistry: vi.fn().mockResolvedValue({

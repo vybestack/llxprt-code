@@ -61,8 +61,8 @@ interface MockServerConfig {
   getUserAgent: Mock<() => string>;
   getUserMemory: Mock<() => string>;
   setUserMemory: Mock<(newUserMemory: string) => void>;
-  getGeminiMdFileCount: Mock<() => number>;
-  setGeminiMdFileCount: Mock<(count: number) => void>;
+  getLlxprtMdFileCount: Mock<() => number>;
+  setLlxprtMdFileCount: Mock<(count: number) => void>;
   getApprovalMode: Mock<() => ApprovalMode>;
   setApprovalMode: Mock<(skip: ApprovalMode) => void>;
   getVertexAI: Mock<() => boolean | undefined>;
@@ -120,8 +120,8 @@ vi.mock('llxprt-code-core', async (importOriginal) => {
         getUserAgent: vi.fn(() => opts.userAgent || 'test-agent'),
         getUserMemory: vi.fn(() => opts.userMemory || ''),
         setUserMemory: vi.fn(),
-        getGeminiMdFileCount: vi.fn(() => opts.llxprtMdFileCount || 0),
-        setGeminiMdFileCount: vi.fn(),
+        getLlxprtMdFileCount: vi.fn(() => opts.llxprtMdFileCount || 0),
+        setLlxprtMdFileCount: vi.fn(),
         getApprovalMode: vi.fn(() => opts.approvalMode ?? ApprovalMode.DEFAULT),
         setApprovalMode: vi.fn(),
         getVertexAI: vi.fn(() => opts.vertexai),
@@ -176,7 +176,7 @@ vi.mock('../config/config.js', async (importOriginal) => {
   return {
     // @ts-expect-error - this is fine
     ...actual,
-    loadHierarchicalGeminiMemory: vi
+    loadHierarchicalLlxprtMemory: vi
       .fn()
       .mockResolvedValue({ memoryContent: '', fileCount: 0 }),
   };
@@ -258,7 +258,7 @@ describe('App UI', () => {
   });
 
   it('should display default "LLXPRT.md" in footer when contextFileName is not set and count is 1', async () => {
-    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
     // For this test, ensure showMemoryUsage is false or debugMode is false if it relies on that
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
@@ -276,7 +276,7 @@ describe('App UI', () => {
   });
 
   it('should display default "LLXPRT.md" with plural when contextFileName is not set and count is > 1', async () => {
-    mockConfig.getGeminiMdFileCount.mockReturnValue(2);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
@@ -296,7 +296,7 @@ describe('App UI', () => {
     mockSettings = createMockSettings({
       workspace: { contextFileName: 'AGENTS.md', theme: 'Default' },
     });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
@@ -319,7 +319,7 @@ describe('App UI', () => {
         theme: 'Default',
       },
     });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(2);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
@@ -339,7 +339,7 @@ describe('App UI', () => {
     mockSettings = createMockSettings({
       workspace: { contextFileName: 'MY_NOTES.TXT', theme: 'Default' },
     });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(3);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(3);
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
@@ -359,7 +359,7 @@ describe('App UI', () => {
     mockSettings = createMockSettings({
       workspace: { contextFileName: 'ANY_FILE.MD', theme: 'Default' },
     });
-    mockConfig.getGeminiMdFileCount.mockReturnValue(0);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(0);
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
@@ -376,7 +376,7 @@ describe('App UI', () => {
   });
 
   it('should display LLXPRT.md and MCP server count when both are present', async () => {
-    mockConfig.getGeminiMdFileCount.mockReturnValue(2);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
     mockConfig.getMcpServers.mockReturnValue({
       server1: {} as MCPServerConfig,
     });
@@ -396,7 +396,7 @@ describe('App UI', () => {
   });
 
   it('should display only MCP server count when LLXPRT.md count is 0', async () => {
-    mockConfig.getGeminiMdFileCount.mockReturnValue(0);
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(0);
     mockConfig.getMcpServers.mockReturnValue({
       server1: {} as MCPServerConfig,
       server2: {} as MCPServerConfig,

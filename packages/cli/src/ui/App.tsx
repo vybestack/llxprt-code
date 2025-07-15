@@ -40,7 +40,7 @@ import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
-// loadHierarchicalGeminiMemory is now imported in SessionController
+// loadHierarchicalLlxprtMemory is now imported in SessionController
 import { LoadedSettings } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
@@ -197,7 +197,7 @@ const AppInner = ({
     setStaticKey((prev) => prev + 1);
   }, [setStaticKey, stdout]);
 
-  const [llxprtMdFileCount, setGeminiMdFileCount] = useState<number>(0);
+  const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [corgiMode, setCorgiMode] = useState(false);
@@ -461,7 +461,7 @@ const AppInner = ({
 
   useEffect(() => {
     if (config) {
-      setGeminiMdFileCount(config.getGeminiMdFileCount());
+      setLlxprtMdFileCount(config.getLlxprtMdFileCount());
     }
   }, [config]);
 

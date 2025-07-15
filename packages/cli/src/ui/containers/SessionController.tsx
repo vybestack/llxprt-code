@@ -16,7 +16,7 @@ import {
   UserTierId,
   getErrorMessage,
 } from '@vybestack/llxprt-code-core';
-import { loadHierarchicalGeminiMemory } from '../../config/config.js';
+import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import process from 'node:process';
 import {
   SessionStateProvider,
@@ -229,14 +229,14 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     );
 
     try {
-      const { memoryContent, fileCount } = await loadHierarchicalGeminiMemory(
+      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
         process.cwd(),
         config.getDebugMode(),
         config.getFileService(),
         config.getExtensionContextFilePaths(),
       );
       config.setUserMemory(memoryContent);
-      config.setGeminiMdFileCount(fileCount);
+      config.setLlxprtMdFileCount(fileCount);
 
       addItem(
         {

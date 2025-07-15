@@ -36,7 +36,7 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
 }));
 
 vi.mock('../../config/config.js', () => ({
-  loadHierarchicalGeminiMemory: vi.fn(() =>
+  loadHierarchicalLlxprtMemory: vi.fn(() =>
     Promise.resolve({
       memoryContent: 'test memory content',
       fileCount: 1,
@@ -78,7 +78,7 @@ describe('SessionController', () => {
       getFileService: vi.fn(),
       getExtensionContextFilePaths: vi.fn(() => []),
       setUserMemory: vi.fn(),
-      setGeminiMdFileCount: vi.fn(),
+      setLlxprtMdFileCount: vi.fn(),
       setFlashFallbackHandler: vi.fn(),
       setQuotaErrorOccurred: vi.fn(),
       setModel: vi.fn(),
@@ -257,7 +257,7 @@ describe('SessionController', () => {
     expect(mockConfig.setUserMemory).toHaveBeenCalledWith(
       'test memory content',
     );
-    expect(mockConfig.setGeminiMdFileCount).toHaveBeenCalledWith(1);
+    expect(mockConfig.setLlxprtMdFileCount).toHaveBeenCalledWith(1);
 
     // Check that info messages were added
     expect(mockAddItem).toHaveBeenCalledTimes(2);
@@ -279,7 +279,7 @@ describe('SessionController', () => {
 
   it('should handle memory refresh errors', async () => {
     const configModule = await import('../../config/config.js');
-    vi.mocked(configModule.loadHierarchicalGeminiMemory).mockRejectedValueOnce(
+    vi.mocked(configModule.loadHierarchicalLlxprtMemory).mockRejectedValueOnce(
       new Error('Memory load failed'),
     );
 

@@ -14,7 +14,7 @@ interface TipsProps {
 }
 
 export const Tips: React.FC<TipsProps> = ({ config }) => {
-  const llxprtMdFileCount = config.getGeminiMdFileCount();
+  const llxprtMdFileCount = config.getLlxprtMdFileCount();
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Text color={Colors.Foreground}>Tips for getting started:</Text>

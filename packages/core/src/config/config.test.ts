@@ -336,7 +336,7 @@ describe('Server Config (config.ts)', () => {
       );
 
       expect(config.getUserMemory()).toBe(mockMemoryData.memoryContent);
-      expect(config.getGeminiMdFileCount()).toBe(mockMemoryData.fileCount);
+      expect(config.getLlxprtMdFileCount()).toBe(mockMemoryData.fileCount);
       expect(result).toEqual(mockMemoryData);
     });
 

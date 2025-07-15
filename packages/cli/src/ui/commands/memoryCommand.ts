@@ -17,7 +17,7 @@ export const memoryCommand: SlashCommand = {
       description: 'Show the current memory contents.',
       action: async (context) => {
         const memoryContent = context.services.config?.getUserMemory() || '';
-        const fileCount = context.services.config?.getGeminiMdFileCount() || 0;
+        const fileCount = context.services.config?.getLlxprtMdFileCount() || 0;
 
         const messageContent =
           memoryContent.length > 0

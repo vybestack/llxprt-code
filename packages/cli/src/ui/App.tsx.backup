@@ -42,7 +42,7 @@ import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
-import { loadHierarchicalGeminiMemory } from '../config/config.js';
+import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import { LoadedSettings } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { useConsolePatcher } from './components/ConsolePatcher.js';
@@ -190,7 +190,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     setStaticKey((prev) => prev + 1);
   }, [setStaticKey, stdout]);
 
-  const [geminiMdFileCount, setGeminiMdFileCount] = useState<number>(0);
+  const [geminiMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [themeError, setThemeError] = useState<string | null>(null);
@@ -390,15 +390,15 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
       Date.now(),
     );
     try {
-      const { memoryContent, fileCount } = await loadHierarchicalGeminiMemory(
+      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
         process.cwd(),
         config.getDebugMode(),
         config.getFileService(),
         config.getExtensionContextFilePaths(),
       );
       config.setUserMemory(memoryContent);
-      config.setGeminiMdFileCount(fileCount);
-      setGeminiMdFileCount(fileCount);
+      config.setLlxprtMdFileCount(fileCount);
+      setLlxprtMdFileCount(fileCount);
 
       addItem(
         {
@@ -686,7 +686,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
 
   useEffect(() => {
     if (config) {
-      setGeminiMdFileCount(config.getGeminiMdFileCount());
+      setLlxprtMdFileCount(config.getLlxprtMdFileCount());
     }
   }, [config]);
 

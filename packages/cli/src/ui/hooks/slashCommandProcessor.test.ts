@@ -167,7 +167,7 @@ describe('useSlashCommandProcessor', () => {
       getBugCommand: vi.fn(() => undefined),
       getSessionId: vi.fn(() => 'test-session-id'),
       getUserMemory: vi.fn(() => ''),
-      getGeminiMdFileCount: vi.fn(() => 0),
+      getLlxprtMdFileCount: vi.fn(() => 0),
       refreshMemory: vi
         .fn()
         .mockResolvedValue({ memoryContent: '', fileCount: 0 }),
@@ -344,11 +344,11 @@ describe('useSlashCommandProcessor', () => {
     });
 
     it('should call the showMemoryAction and return true', async () => {
-      // Mock the getUserMemory and getGeminiMdFileCount methods
+      // Mock the getUserMemory and getLlxprtMdFileCount methods
       vi.mocked(mockConfig.getUserMemory).mockReturnValue(
         'Test memory content',
       );
-      vi.mocked(mockConfig.getGeminiMdFileCount).mockReturnValue(3);
+      vi.mocked(mockConfig.getLlxprtMdFileCount).mockReturnValue(3);
 
       const { result } = getProcessorHook();
 

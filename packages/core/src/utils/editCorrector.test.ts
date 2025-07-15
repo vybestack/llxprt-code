@@ -204,8 +204,8 @@ describe('editCorrector', () => {
         setUserMemory: vi.fn((mem: string) => {
           configParams.userMemory = mem;
         }),
-        getGeminiMdFileCount: vi.fn(() => configParams.llxprtMdFileCount),
-        setGeminiMdFileCount: vi.fn((count: number) => {
+        getLlxprtMdFileCount: vi.fn(() => configParams.llxprtMdFileCount),
+        setLlxprtMdFileCount: vi.fn((count: number) => {
           configParams.llxprtMdFileCount = count;
         }),
         getAlwaysSkipModificationConfirmation: vi.fn(
@@ -646,8 +646,8 @@ describe('editCorrector', () => {
         setUserMemory: vi.fn((mem: string) => {
           configParams.userMemory = mem;
         }),
-        getGeminiMdFileCount: vi.fn(() => configParams.llxprtMdFileCount),
-        setGeminiMdFileCount: vi.fn((count: number) => {
+        getLlxprtMdFileCount: vi.fn(() => configParams.llxprtMdFileCount),
+        setLlxprtMdFileCount: vi.fn((count: number) => {
           configParams.llxprtMdFileCount = count;
         }),
         getAlwaysSkipModificationConfirmation: vi.fn(
