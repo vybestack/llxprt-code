@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
@@ -61,15 +61,18 @@ export function AuthDialog({
 
     return item.value === AuthType.LOGIN_WITH_GOOGLE;
   });
-  const handleAuthSelect = (authMethod: AuthType) => {
-    const error = validateAuthMethod(authMethod);
-    if (error) {
-      setErrorMessage(error);
-    } else {
-      setErrorMessage(null);
-      onSelect(authMethod, SettingScope.User);
-    }
-  };
+  const handleAuthSelect = useCallback(
+    (authMethod: AuthType) => {
+      const error = validateAuthMethod(authMethod);
+      if (error) {
+        setErrorMessage(error);
+      } else {
+        setErrorMessage(null);
+        onSelect(authMethod, SettingScope.User);
+      }
+    },
+    [onSelect],
+  );
 
   useInput((_input, key) => {
     if (key.escape) {

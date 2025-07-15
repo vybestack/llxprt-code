@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { ErrorInfo } from 'react';
 import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
@@ -223,28 +223,47 @@ export async function main() {
   const shouldBeInteractive =
     !!argv.promptInteractive || (process.stdin.isTTY && input?.length === 0);
 
+  function handleError(error: Error, errorInfo: ErrorInfo) {
+    // Log to console for debugging
+    console.error('Application Error:', error);
+    console.error('Component Stack:', errorInfo.componentStack);
+
+    // Special handling for maximum update depth errors
+    if (error.message.includes('Maximum update depth exceeded')) {
+      console.error('\n🚨 RENDER LOOP DETECTED!');
+      console.error('This is likely caused by:');
+      console.error('- State updates during render');
+      console.error('- Incorrect useEffect dependencies');
+      console.error('- Non-memoized props causing re-renders');
+      console.error('\nCheck recent changes to React components and hooks.');
+    }
+  }
+
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (shouldBeInteractive) {
     const version = await getCliVersion();
     setWindowTitle(basename(workspaceRoot), settings);
+
+    // Initialize authentication before rendering to ensure geminiClient is available
+    if (settings.merged.selectedAuthType) {
+      try {
+        const err = validateAuthMethod(settings.merged.selectedAuthType);
+        if (err) {
+          console.error('Error validating authentication method:', err);
+          process.exit(1);
+        }
+        await config.refreshAuth(settings.merged.selectedAuthType);
+      } catch (err) {
+        console.error('Error authenticating:', err);
+        process.exit(1);
+      }
+    }
+
     render(
       <React.StrictMode>
         <ErrorBoundary
-          onError={(error, errorInfo) => {
-            // Log to console for debugging
-            console.error('Application Error:', error);
-            console.error('Component Stack:', errorInfo.componentStack);
-            
-            // Special handling for maximum update depth errors
-            if (error.message.includes('Maximum update depth exceeded')) {
-              console.error('\n🚨 RENDER LOOP DETECTED!');
-              console.error('This is likely caused by:');
-              console.error('- State updates during render');
-              console.error('- Incorrect useEffect dependencies');
-              console.error('- Non-memoized props causing re-renders');
-              console.error('\nCheck recent changes to React components and hooks.');
-            }
-          }}
+          // eslint-disable-next-line react/jsx-no-bind
+          onError={handleError}
         >
           <AppWrapper
             config={config}

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildResponsesRequest,
   ResponsesRequestParams,
-} from './buildResponsesRequest.js';
+} from './buildResponsesRequest';
 import { ContentGeneratorRole } from '../types.js';
 
 describe('buildResponsesRequest', () => {

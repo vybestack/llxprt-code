@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { type HistoryItem, MessageType } from '../types.js';
 import {
@@ -12,6 +12,8 @@ import {
   checkHasEditorType,
   EditorType,
 } from '@google/gemini-cli-core';
+import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import { AppState } from '../reducers/appReducer.js';
 
 interface UseEditorSettingsReturn {
   isEditorDialogOpen: boolean;
@@ -25,14 +27,15 @@ interface UseEditorSettingsReturn {
 
 export const useEditorSettings = (
   loadedSettings: LoadedSettings,
-  setEditorError: (error: string | null) => void,
+  appState: AppState,
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
 ): UseEditorSettingsReturn => {
-  const [isEditorDialogOpen, setIsEditorDialogOpen] = useState(false);
+  const appDispatch = useAppDispatch();
+  const isEditorDialogOpen = appState.openDialogs.editor;
 
   const openEditorDialog = useCallback(() => {
-    setIsEditorDialogOpen(true);
-  }, []);
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'editor' });
+  }, [appDispatch]);
 
   const handleEditorSelect = useCallback(
     (editorType: EditorType | undefined, scope: SettingScope) => {
@@ -53,18 +56,21 @@ export const useEditorSettings = (
           },
           Date.now(),
         );
-        setEditorError(null);
-        setIsEditorDialogOpen(false);
+        appDispatch({ type: 'SET_EDITOR_ERROR', payload: null });
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'editor' });
       } catch (error) {
-        setEditorError(`Failed to set editor preference: ${error}`);
+        appDispatch({
+          type: 'SET_EDITOR_ERROR',
+          payload: `Failed to set editor preference: ${error}`,
+        });
       }
     },
-    [loadedSettings, setEditorError, addItem],
+    [loadedSettings, appDispatch, addItem],
   );
 
   const exitEditorDialog = useCallback(() => {
-    setIsEditorDialogOpen(false);
-  }, []);
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'editor' });
+  }, [appDispatch]);
 
   return {
     isEditorDialogOpen,

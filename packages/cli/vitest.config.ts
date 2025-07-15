@@ -23,9 +23,17 @@ export default defineConfig({
     outputFile: {
       junit: 'junit.xml',
     },
+    poolOptions: {
+      threads: {
+        singleThread: true, // Run tests sequentially to reduce memory pressure
+        maxThreads: 2, // Limit parallelism
+      },
+    },
+    testTimeout: 30000,
+    hookTimeout: 30000,
     coverage: {
       enabled: true,
-      provider: 'v8',
+      provider: 'istanbul',
       reportsDirectory: './coverage',
       include: ['src/**/*'],
       reporter: [

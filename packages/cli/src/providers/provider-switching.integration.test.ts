@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getProviderManager,
   resetProviderManager,
-} from './providerManagerInstance.js';
-import { IProvider } from './IProvider.js';
+} from './providerManagerInstance';
+import { IProvider } from './IProvider';
 
 describe('Provider Switching Integration', () => {
   beforeEach(() => {

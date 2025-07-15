@@ -108,12 +108,12 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
   // FIX: Use a ref to provide stable callback that always returns latest value
   // This prevents components from re-rendering when promptCount changes
   const promptCountRef = useRef(stats.promptCount);
-  
+
   // Keep ref updated with latest value
   useEffect(() => {
     promptCountRef.current = stats.promptCount;
   }, [stats.promptCount]);
-  
+
   const getPromptCount = useCallback(
     () => promptCountRef.current,
     [], // Empty dependencies = stable callback

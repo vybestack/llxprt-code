@@ -7,6 +7,8 @@
 import { useCallback, useState } from 'react';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
+import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import { AppState } from '../reducers/appReducer.js';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
@@ -15,13 +17,16 @@ interface UseProviderDialogParams {
     timestamp: Date;
   }) => void;
   onProviderChange?: () => void;
+  appState: AppState;
 }
 
 export const useProviderDialog = ({
   addMessage,
   onProviderChange,
+  appState,
 }: UseProviderDialogParams) => {
-  const [showDialog, setShowDialog] = useState(false);
+  const appDispatch = useAppDispatch();
+  const showDialog = appState.openDialogs.provider;
   const [providers, setProviders] = useState<string[]>([]);
   const [currentProvider, setCurrentProvider] = useState<string>('');
 
@@ -30,7 +35,7 @@ export const useProviderDialog = ({
       const providerManager = getProviderManager();
       setProviders(providerManager.listProviders());
       setCurrentProvider(providerManager.getActiveProviderName());
-      setShowDialog(true);
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'provider' });
     } catch (e) {
       addMessage({
         type: MessageType.ERROR,
@@ -38,9 +43,12 @@ export const useProviderDialog = ({
         timestamp: new Date(),
       });
     }
-  }, [addMessage]);
+  }, [addMessage, appDispatch]);
 
-  const closeDialog = useCallback(() => setShowDialog(false), []);
+  const closeDialog = useCallback(
+    () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' }),
+    [appDispatch],
+  );
 
   const handleSelect = useCallback(
     (providerName: string) => {
@@ -61,9 +69,9 @@ export const useProviderDialog = ({
           timestamp: new Date(),
         });
       }
-      setShowDialog(false);
+      appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' });
     },
-    [addMessage, onProviderChange],
+    [addMessage, onProviderChange, appDispatch],
   );
 
   return {

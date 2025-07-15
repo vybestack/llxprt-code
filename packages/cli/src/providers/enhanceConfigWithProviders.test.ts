@@ -5,15 +5,15 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { enhanceConfigWithProviders } from './enhanceConfigWithProviders.js';
+import { enhanceConfigWithProviders } from './enhanceConfigWithProviders';
 import {
   Config,
   ContentGenerator,
   GeminiClient,
 } from '@google/gemini-cli-core';
-import { ProviderManager } from './ProviderManager.js';
-import { IProvider } from './IProvider.js';
-import * as providerManagerInstance from './providerManagerInstance.js';
+import { ProviderManager } from './ProviderManager';
+import { IProvider } from './IProvider';
+import * as providerManagerInstance from './providerManagerInstance';
 
 // Mock the provider manager
 vi.mock('./providerManagerInstance.js');

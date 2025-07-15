@@ -56,7 +56,7 @@ function extractJsonFromMarkdown(text: string): string {
   if (markdownMatch && markdownMatch[1]) {
     return markdownMatch[1].trim();
   }
-  
+
   // If no markdown found, return trimmed original text
   return text.trim();
 }

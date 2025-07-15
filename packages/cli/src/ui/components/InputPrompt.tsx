@@ -58,6 +58,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   setShellModeActive,
 }) => {
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
+  const [pasteMessage, setPasteMessage] = useState<string | null>(null);
   const completion = useCompletion(
     buffer.text,
     config.getTargetDir(),
@@ -372,6 +373,24 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
+      // Check for multi-line paste
+      if (key.paste && key.sequence) {
+        const lines = key.sequence.split('\n');
+        if (lines.length > 1) {
+          setPasteMessage(`[${lines.length} lines pasted]`);
+          // Clear the message after 2 seconds
+          setTimeout(() => setPasteMessage(null), 2000);
+        }
+        
+        // Set the entire paste content at once and submit
+        buffer.setText(key.sequence);
+        // Submit the entire pasted content
+        if (buffer.text.trim()) {
+          handleSubmitAndClear(buffer.text);
+        }
+        return;
+      }
+
       // Fallback to the text buffer's default input handling for all other keys
       buffer.handleInput(key);
     },
@@ -474,6 +493,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             scrollOffset={completion.visibleStartIndex}
             userInput={buffer.text}
           />
+        </Box>
+      )}
+      {pasteMessage && (
+        <Box marginTop={1}>
+          <Text color={Colors.Comment}>{pasteMessage}</Text>
         </Box>
       )}
     </>

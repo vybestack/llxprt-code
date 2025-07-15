@@ -153,7 +153,6 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
     WITTY_LOADING_PHRASES[0],
   );
   const phraseIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const prevPhraseRef = useRef<string>(WITTY_LOADING_PHRASES[0]);
 
   useEffect(() => {
     if (isWaiting) {
@@ -203,8 +202,7 @@ export const usePhraseCycler = (isActive: boolean, isWaiting: boolean) => {
         phraseIntervalRef.current = null;
       }
     };
-    prevPhraseRef.current = currentLoadingPhrase;
-  }, [isActive, isWaiting, currentLoadingPhrase]);
+  }, [isActive, isWaiting]);
 
   return currentLoadingPhrase;
 };

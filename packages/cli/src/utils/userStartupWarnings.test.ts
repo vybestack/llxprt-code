@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getUserStartupWarnings } from './userStartupWarnings.js';
+import { getUserStartupWarnings } from './userStartupWarnings';
 import * as os from 'os';
 import fs from 'fs/promises';
 

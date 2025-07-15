@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { CommandService } from './CommandService.js';
+import { CommandService } from './CommandService';
 import { type SlashCommand } from '../ui/commands/types.js';
 import { memoryCommand } from '../ui/commands/memoryCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';

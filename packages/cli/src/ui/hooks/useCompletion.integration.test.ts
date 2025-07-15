@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import type { Mocked } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useCompletion } from './useCompletion.js';
+import { useCompletion } from './useCompletion';
 import * as fs from 'fs/promises';
 import { glob } from 'glob';
 import { CommandContext, SlashCommand } from '../commands/types.js';

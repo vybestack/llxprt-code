@@ -21,10 +21,10 @@ const RAPID_TIME_WINDOW = 100; // Within 100ms
 /**
  * Hook to detect potential render loops in development.
  * Logs warnings when components render too frequently.
- * 
+ *
  * @param componentName Name of the component for debugging
  * @param props Optional props to log when loop detected
- * 
+ *
  * @example
  * ```typescript
  * function MyComponent({ value }: Props) {
@@ -35,7 +35,7 @@ const RAPID_TIME_WINDOW = 100; // Within 100ms
  */
 export function useRenderLoopDetector(
   componentName: string,
-  props?: Record<string, unknown>
+  props?: Record<string, unknown>,
 ) {
   const renderCountRef = useRef(0);
   const renderTimesRef = useRef<number[]>([]);
@@ -55,39 +55,43 @@ export function useRenderLoopDetector(
       lastRenderTime: now,
       renderTimes: [],
     };
-    
+
     info.count += 1;
     info.lastRenderTime = now;
     info.renderTimes.push(now);
-    
+
     // Keep only recent render times
     const cutoffTime = now - TIME_WINDOW;
-    info.renderTimes = info.renderTimes.filter(time => time > cutoffTime);
-    
+    info.renderTimes = info.renderTimes.filter((time) => time > cutoffTime);
+
     renderCounts.set(componentName, info);
 
     // Check for render loops
     const recentRenders = info.renderTimes.length;
     const rapidRenders = info.renderTimes.filter(
-      time => time > now - RAPID_TIME_WINDOW
+      (time) => time > now - RAPID_TIME_WINDOW,
     ).length;
 
     if (rapidRenders > RAPID_RENDER_THRESHOLD) {
       console.error(
         `🚨 RENDER LOOP DETECTED: ${componentName} rendered ${rapidRenders} times in ${RAPID_TIME_WINDOW}ms!`,
-        '\nProps:', props,
-        '\nTotal renders:', info.count,
+        '\nProps:',
+        props,
+        '\nTotal renders:',
+        info.count,
         '\nConsider checking:',
         '\n- useEffect dependencies',
         '\n- State updates during render',
         '\n- Unmemoized props/callbacks',
-        '\n- Inline object/array creation'
+        '\n- Inline object/array creation',
       );
     } else if (recentRenders > RENDER_THRESHOLD) {
       console.warn(
         `⚠️ High render count: ${componentName} rendered ${recentRenders} times in ${TIME_WINDOW}ms`,
-        '\nProps:', props,
-        '\nTotal renders:', info.count
+        '\nProps:',
+        props,
+        '\nTotal renders:',
+        info.count,
       );
     }
 
@@ -106,10 +110,10 @@ export function useRenderLoopDetector(
 /**
  * Hook to track which props are causing re-renders.
  * Logs when props change between renders.
- * 
+ *
  * @param componentName Name of the component
  * @param props Props to track
- * 
+ *
  * @example
  * ```typescript
  * function MyComponent({ value, onChange }: Props) {
@@ -120,7 +124,7 @@ export function useRenderLoopDetector(
  */
 export function useWhyDidYouRender(
   componentName: string,
-  props: Record<string, unknown>
+  props: Record<string, unknown>,
 ) {
   const previousProps = useRef<Record<string, unknown>>({});
 
@@ -134,13 +138,13 @@ export function useWhyDidYouRender(
         ...Object.keys(previousProps.current),
         ...Object.keys(props),
       ]);
-      
+
       const changedProps: Record<string, { from: unknown; to: unknown }> = {};
-      
+
       for (const key of allKeys) {
         const prevValue = previousProps.current[key];
         const currentValue = props[key];
-        
+
         if (!Object.is(prevValue, currentValue)) {
           changedProps[key] = {
             from: prevValue,
@@ -148,15 +152,15 @@ export function useWhyDidYouRender(
           };
         }
       }
-      
+
       if (Object.keys(changedProps).length > 0) {
         console.log(
           `🔍 ${componentName} re-rendered due to prop changes:`,
-          changedProps
+          changedProps,
         );
       }
     }
-    
+
     previousProps.current = props;
   });
 }
@@ -164,24 +168,27 @@ export function useWhyDidYouRender(
 /**
  * Get render statistics for all tracked components.
  * Useful for debugging performance issues.
- * 
+ *
  * @returns Object with render counts by component
  */
-export function getRenderStats(): Record<string, { count: number; recentCount: number }> {
+export function getRenderStats(): Record<
+  string,
+  { count: number; recentCount: number }
+> {
   const stats: Record<string, { count: number; recentCount: number }> = {};
   const now = Date.now();
-  
+
   for (const [name, info] of renderCounts.entries()) {
     const recentCount = info.renderTimes.filter(
-      time => time > now - TIME_WINDOW
+      (time) => time > now - TIME_WINDOW,
     ).length;
-    
+
     stats[name] = {
       count: info.count,
       recentCount,
     };
   }
-  
+
   return stats;
 }
 

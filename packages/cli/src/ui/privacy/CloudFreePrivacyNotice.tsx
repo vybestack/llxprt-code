@@ -5,6 +5,7 @@
  */
 
 import { Box, Newline, Text, useInput } from 'ink';
+import { useCallback } from 'react';
 import { RadioButtonSelect } from '../components/shared/RadioButtonSelect.js';
 import { usePrivacySettings } from '../hooks/usePrivacySettings.js';
 import { CloudPaidPrivacyNotice } from './CloudPaidPrivacyNotice.js';
@@ -22,6 +23,17 @@ export const CloudFreePrivacyNotice = ({
 }: CloudFreePrivacyNoticeProps) => {
   const { privacyState, updateDataCollectionOptIn } =
     usePrivacySettings(config);
+
+  const handleSelect = useCallback(
+    (value: boolean) => {
+      updateDataCollectionOptIn(value);
+      // Only exit if there was no error.
+      if (!privacyState.error) {
+        onExit();
+      }
+    },
+    [updateDataCollectionOptIn, privacyState.error, onExit],
+  );
 
   useInput((input, key) => {
     if (privacyState.error && key.escape) {
@@ -92,13 +104,7 @@ export const CloudFreePrivacyNotice = ({
         <RadioButtonSelect
           items={items}
           initialIndex={privacyState.dataCollectionOptIn ? 0 : 1}
-          onSelect={(value) => {
-            updateDataCollectionOptIn(value);
-            // Only exit if there was no error.
-            if (!privacyState.error) {
-              onExit();
-            }
-          }}
+          onSelect={handleSelect}
         />
       </Box>
       <Newline />

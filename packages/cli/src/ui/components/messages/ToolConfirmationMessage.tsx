@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { Colors } from '../../colors.js';
@@ -47,7 +47,10 @@ export const ToolConfirmationMessage: React.FC<
     }
   });
 
-  const handleSelect = (item: ToolConfirmationOutcome) => onConfirm(item);
+  const handleSelect = useCallback(
+    (item: ToolConfirmationOutcome) => onConfirm(item),
+    [onConfirm],
+  );
 
   let bodyContent: React.ReactNode | null = null; // Removed contextDisplay here
   let question: string;

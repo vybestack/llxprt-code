@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ProviderManager } from './ProviderManager.js';
-import { IProvider } from './IProvider.js';
+import { ProviderManager } from './ProviderManager';
+import { IProvider } from './IProvider';
 
 describe('ProviderManager - Gemini switching', () => {
   let manager: ProviderManager;

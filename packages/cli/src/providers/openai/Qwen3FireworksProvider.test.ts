@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Qwen3FireworksProvider } from './Qwen3FireworksProvider.js';
+import { Qwen3FireworksProvider } from './Qwen3FireworksProvider';
 import { ContentGeneratorRole } from '../types.js';
 
 describe('Qwen3FireworksProvider', () => {

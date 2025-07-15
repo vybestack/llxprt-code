@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getStartupWarnings } from './startupWarnings.js';
+import { getStartupWarnings } from './startupWarnings';
 import * as fs from 'fs/promises';
 import { getErrorMessage } from '@google/gemini-cli-core';
 
@@ -18,7 +18,12 @@ vi.mock('@google/gemini-cli-core', async (importOriginal) => {
   };
 });
 
-describe.skip('startupWarnings', () => {
+/**
+ * Tests for startup warnings functionality.
+ * These tests verify the behavior of reading and deleting temporary warning files
+ * that may be created during CLI startup to communicate issues to the user.
+ */
+describe('startupWarnings', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });

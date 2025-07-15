@@ -5,7 +5,7 @@
  */
 
 import { act, renderHook } from '@testing-library/react';
-import { useConsoleMessages } from './useConsoleMessages.js';
+import { useConsoleMessages } from './useConsoleMessages';
 import { ConsoleMessageItem } from '../types.js';
 
 // Mock setTimeout and clearTimeout

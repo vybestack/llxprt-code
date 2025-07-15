@@ -8,7 +8,6 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Box,
   DOMElement,
-  measureElement,
   Static,
   Text,
   useStdin,
@@ -17,7 +16,6 @@ import {
   type Key as InkKeyType,
 } from 'ink';
 import { StreamingState, type HistoryItem, MessageType } from './types.js';
-import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
@@ -42,17 +40,16 @@ import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
-import { loadHierarchicalGeminiMemory } from '../config/config.js';
+// loadHierarchicalGeminiMemory is now imported in SessionController
 import { LoadedSettings } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { useConsolePatcher } from './components/ConsolePatcher.js';
 import { DetailedMessagesDisplay } from './components/DetailedMessagesDisplay.js';
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
-import { useHistory } from './hooks/useHistoryManager.js';
+// useHistory is now managed by SessionController
 import process from 'node:process';
 import {
-  getErrorMessage,
   type Config,
   getAllGeminiMdFilenames,
   ApprovalMode,
@@ -71,53 +68,21 @@ import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 import * as fs from 'fs';
 import { UpdateNotification } from './components/UpdateNotification.js';
-import {
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-  UserTierId,
-} from '@google/gemini-cli-core';
+// Quota error functions moved to SessionController
 import { checkForUpdates } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
+import { UIStateShell } from './containers/UIStateShell.js';
+import { useLayout } from './components/LayoutManager.js';
+import { SessionController } from './containers/SessionController.js';
+import { useSession } from './hooks/useSession.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
-/**
- * Get the display model name
- */
-function getDisplayModelName(config: Config): string {
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      const model = provider.getCurrentModel?.() || 'unknown';
-      return `${provider.name}:${model}`;
-    }
-  } catch (_e) {
-    // Fall back to config model if provider manager fails
-  }
-  // The config.getModel() is now enhanced to include provider prefix
-  return config.getModel();
-}
-
-/**
- * Get the payment mode status from the current provider
- */
-function getProviderPaymentMode(): boolean | undefined {
-  try {
-    const providerManager = getProviderManager();
-    if (providerManager.hasActiveProvider()) {
-      const provider = providerManager.getActiveProvider();
-      return provider.isPaidMode?.();
-    }
-  } catch (_e) {
-    // Return undefined if we can't determine payment mode
-  }
-  return undefined;
-}
+// Helper functions moved to SessionController
 
 interface AppProps {
   config: Config;
@@ -126,13 +91,25 @@ interface AppProps {
   version: string;
 }
 
+interface AppInnerProps extends AppProps {
+  isAuthenticating: boolean;
+  setIsAuthenticating: (value: boolean) => void;
+}
+
 export const AppWrapper = (props: AppProps) => (
   <SessionStatsProvider>
     <App {...props} />
   </SessionStatsProvider>
 );
 
-const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
+// Inner component that uses layout context
+const AppInner = ({
+  config,
+  settings,
+  startupWarnings = [],
+  version,
+  setIsAuthenticating,
+}: AppInnerProps) => {
   useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const { stdout } = useStdout();
@@ -142,13 +119,32 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     checkForUpdates().then(setUpdateMessage);
   }, []);
 
-  const { history, addItem, clearItems, loadHistory } = useHistory();
+  const {
+    history,
+    addItem,
+    clearItems,
+    loadHistory,
+    sessionState,
+    dispatch: sessionDispatch,
+    appState,
+    appDispatch,
+    checkPaymentModeChange,
+    performMemoryRefresh,
+  } = useSession();
   const {
     consoleMessages,
     handleNewMessage,
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
   const { stats: sessionStats } = useSessionStats();
+
+  // These are now managed by SessionController
+  const {
+    currentModel,
+    isPaidMode,
+    transientWarnings: sessionTransientWarnings,
+    modelSwitchedFromQuotaError,
+  } = sessionState;
 
   // Add payment mode warning to startup warnings only at startup
   const allStartupWarnings = useMemo(() => {
@@ -181,7 +177,8 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
 
     return warnings;
   }, [startupWarnings, history]);
-  const [transientWarnings, setTransientWarnings] = useState<string[]>([]);
+  // Use transient warnings from session state
+  const transientWarnings = sessionTransientWarnings;
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -192,23 +189,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   const [geminiMdFileCount, setGeminiMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
-  const [themeError, setThemeError] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [editorError, setEditorError] = useState<string | null>(null);
-  const [footerHeight, setFooterHeight] = useState<number>(0);
   const [corgiMode, setCorgiMode] = useState(false);
-  const [currentModel, setCurrentModel] = useState(getDisplayModelName(config));
-  const [isPaidMode, setIsPaidMode] = useState<boolean | undefined>(
-    getProviderPaymentMode(),
-  );
-  const [lastProvider, setLastProvider] = useState<string | undefined>(() => {
-    try {
-      const providerManager = getProviderManager();
-      return providerManager.getActiveProvider().name;
-    } catch (_e) {
-      return undefined;
-    }
-  });
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -220,15 +201,17 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   const ctrlCTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
-  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
-  const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
-    useState<boolean>(false);
-  const [userTier, setUserTier] = useState<UserTierId | undefined>(undefined);
+  const showPrivacyNotice = appState.openDialogs.privacy;
+  // modelSwitchedFromQuotaError and userTier are now in sessionState
 
   const openPrivacyNotice = useCallback(() => {
-    setShowPrivacyNotice(true);
-  }, []);
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'privacy' });
+  }, [appDispatch]);
+
+  const closePrivacyNotice = useCallback(() => {
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'privacy' });
+  }, [appDispatch]);
+
   const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
@@ -236,319 +219,103 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     [consoleMessages],
   );
 
+  // Create dispatch-based wrapper for addItem
+  const addItemViaDispatch = useCallback(
+    (itemData: Omit<HistoryItem, 'id'>, baseTimestamp: number) => {
+      appDispatch({
+        type: 'ADD_ITEM',
+        payload: { itemData, baseTimestamp },
+      });
+    },
+    [appDispatch],
+  );
+
   const {
     isThemeDialogOpen,
     openThemeDialog,
     handleThemeSelect,
     handleThemeHighlight,
-  } = useThemeCommand(settings, setThemeError, addItem);
+  } = useThemeCommand(settings, appState, addItemViaDispatch);
 
   const {
     isAuthDialogOpen,
     openAuthDialog,
     handleAuthSelect,
-    isAuthenticating,
+    isAuthenticating: authIsAuthenticating,
     cancelAuthentication,
-  } = useAuthCommand(settings, setAuthError, config);
+  } = useAuthCommand(settings, appState, config);
+
+  // Sync auth state with parent
+  useEffect(() => {
+    setIsAuthenticating(authIsAuthenticating);
+  }, [authIsAuthenticating, setIsAuthenticating]);
 
   const onAuthTimeout = useCallback(() => {
-    setAuthError('Authentication timed out. Please try again.');
+    appDispatch({
+      type: 'SET_AUTH_ERROR',
+      payload: 'Authentication timed out. Please try again.',
+    });
     cancelAuthentication();
     openAuthDialog();
-  }, [cancelAuthentication, openAuthDialog]);
+  }, [cancelAuthentication, openAuthDialog, appDispatch]);
 
   useEffect(() => {
     if (settings.merged.selectedAuthType) {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
       if (error) {
-        setAuthError(error);
+        appDispatch({ type: 'SET_AUTH_ERROR', payload: error });
         openAuthDialog();
       }
     }
-  }, [settings.merged.selectedAuthType, openAuthDialog, setAuthError]);
+  }, [settings.merged.selectedAuthType, openAuthDialog, appDispatch]);
 
-  // Sync user tier from config when authentication changes
-  useEffect(() => {
-    const syncUserTier = async () => {
-      try {
-        const configUserTier = await config.getUserTier();
-        if (configUserTier !== userTier) {
-          setUserTier(configUserTier);
-        }
-      } catch (error) {
-        // Silently fail - this is not critical functionality
-        // Only log in debug mode to avoid cluttering the console
-        if (config.getDebugMode()) {
-          console.debug('Failed to sync user tier:', error);
-        }
-      }
-    };
-
-    // Only sync when not currently authenticating
-    if (!isAuthenticating) {
-      syncUserTier();
-    }
-  }, [config, userTier, isAuthenticating]);
+  // User tier sync is now handled by SessionController
 
   const {
     isEditorDialogOpen,
     openEditorDialog,
     handleEditorSelect,
     exitEditorDialog,
-  } = useEditorSettings(settings, setEditorError, addItem);
+  } = useEditorSettings(settings, appState, addItemViaDispatch);
 
   const providerModelDialog = useProviderModelDialog({
     addMessage: (m) =>
-      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
-    onModelChange: () => setCurrentModel(getDisplayModelName(config)),
+      addItemViaDispatch(
+        { type: m.type, text: m.content },
+        m.timestamp.getTime(),
+      ),
+    onModelChange: () => {
+      // Model change detection is handled by SessionController's useEffect
+      // No need to manually update here
+    },
+    appState,
   });
 
   // Provider selection dialog
   const providerDialog = useProviderDialog({
     addMessage: (m: { type: MessageType; content: string; timestamp: Date }) =>
-      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+      addItemViaDispatch(
+        { type: m.type, text: m.content },
+        m.timestamp.getTime(),
+      ),
     onProviderChange: () => {
-      // Refresh model display and payment banner when provider changes
-      setCurrentModel(getDisplayModelName(config));
+      // Provider change will be detected by SessionController's useEffect
       checkPaymentModeChange?.();
     },
+    appState,
   });
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
 
-  // Function to manually check and show payment mode change
-  const checkPaymentModeChange = useCallback(
-    (forcePreviousProvider?: string) => {
-      const newPaymentMode = getProviderPaymentMode();
-      let currentProviderName: string | undefined;
+  // checkPaymentModeChange is now provided by SessionController
 
-      try {
-        const providerManager = getProviderManager();
-        const provider = providerManager.getActiveProvider();
-        currentProviderName = provider.name;
-      } catch (_e) {
-        // ignore
-      }
+  // performMemoryRefresh is now provided by SessionController
 
-      // Use forced previous provider if provided, otherwise use state
-      const previousProvider = forcePreviousProvider || lastProvider;
+  // Model watching is now handled by SessionController
 
-      // Check for both payment mode changes and provider changes
-      const providerChanged =
-        currentProviderName && currentProviderName !== previousProvider;
-      const paymentModeChanged =
-        newPaymentMode !== isPaidMode && newPaymentMode !== undefined;
-
-      // For provider changes, always show banner. For other changes, only after startup
-      if (
-        (paymentModeChanged || providerChanged) &&
-        (providerChanged || history.length > 0)
-      ) {
-        setIsPaidMode(newPaymentMode);
-        setLastProvider(currentProviderName);
-
-        try {
-          const providerManager = getProviderManager();
-          const provider = providerManager.getActiveProvider();
-
-          if (newPaymentMode === true) {
-            // Switching to paid mode (or paid provider)
-            setTransientWarnings([
-              `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
-            ]);
-          } else if (newPaymentMode === false && provider.name === 'gemini') {
-            // Switching to free mode (only for Gemini)
-            setTransientWarnings([
-              `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-            ]);
-          }
-
-          // Clear the warning after 10 seconds
-          setTimeout(() => setTransientWarnings([]), 10000);
-        } catch (_e) {
-          // ignore
-        }
-      }
-    },
-    [isPaidMode, lastProvider, history.length],
-  );
-
-  const performMemoryRefresh = useCallback(async () => {
-    addItem(
-      {
-        type: MessageType.INFO,
-        text: 'Refreshing hierarchical memory (GEMINI.md or other context files)...',
-      },
-      Date.now(),
-    );
-    try {
-      const { memoryContent, fileCount } = await loadHierarchicalGeminiMemory(
-        process.cwd(),
-        config.getDebugMode(),
-        config.getFileService(),
-        config.getExtensionContextFilePaths(),
-      );
-      config.setUserMemory(memoryContent);
-      config.setGeminiMdFileCount(fileCount);
-      setGeminiMdFileCount(fileCount);
-
-      addItem(
-        {
-          type: MessageType.INFO,
-          text: `Memory refreshed successfully. ${memoryContent.length > 0 ? `Loaded ${memoryContent.length} characters from ${fileCount} file(s).` : 'No memory content found.'}`,
-        },
-        Date.now(),
-      );
-      if (config.getDebugMode()) {
-        console.log(
-          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
-        );
-      }
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Error refreshing memory: ${errorMessage}`,
-        },
-        Date.now(),
-      );
-      console.error('Error refreshing memory:', error);
-    }
-  }, [config, addItem]);
-
-  // Watch for model changes (e.g., from Flash fallback)
-  useEffect(() => {
-    const checkModelChange = () => {
-      const displayModel = getDisplayModelName(config);
-      if (displayModel !== currentModel) {
-        setCurrentModel(displayModel);
-      }
-
-      // Also update payment mode
-      const paymentMode = getProviderPaymentMode();
-      if (paymentMode !== isPaidMode) {
-        setIsPaidMode(paymentMode);
-
-        // Show banner on any payment mode change (not at startup)
-        if (
-          paymentMode !== undefined &&
-          isPaidMode !== undefined &&
-          history.length > 0
-        ) {
-          try {
-            const providerManager = getProviderManager();
-            const provider = providerManager.getActiveProvider();
-
-            if (paymentMode === true) {
-              // Switching to paid mode
-              setTransientWarnings([
-                `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
-              ]);
-            } else if (paymentMode === false && provider.name === 'gemini') {
-              // Switching to free mode (only for Gemini)
-              setTransientWarnings([
-                `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-              ]);
-            }
-
-            // Clear the warning after 10 seconds
-            setTimeout(() => setTransientWarnings([]), 10000);
-          } catch (_e) {
-            // ignore
-          }
-        }
-      }
-    };
-
-    // Check immediately and then periodically
-    checkModelChange();
-    const interval = setInterval(checkModelChange, 1000); // Check every second
-
-    return () => clearInterval(interval);
-  }, [config, currentModel, isPaidMode, history.length]);
-
-  // Set up Flash fallback handler
-  useEffect(() => {
-    const flashFallbackHandler = async (
-      currentModel: string,
-      fallbackModel: string,
-      error?: unknown,
-    ): Promise<boolean> => {
-      let message: string;
-
-      // Use actual user tier if available, otherwise default to FREE tier behavior (safe default)
-      const isPaidTier =
-        userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
-
-      // Check if this is a Pro quota exceeded error
-      if (error && isProQuotaExceededError(error)) {
-        if (isPaidTier) {
-          message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
-        } else {
-          message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
-        }
-      } else if (error && isGenericQuotaExceededError(error)) {
-        if (isPaidTier) {
-          message = `⚡ You have reached your daily quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
-        } else {
-          message = `⚡ You have reached your daily quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
-        }
-      } else {
-        if (isPaidTier) {
-          // Default fallback message for other cases (like consecutive 429s)
-          message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
-        } else {
-          // Default fallback message for other cases (like consecutive 429s)
-          message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
-        }
-      }
-
-      // Add message to UI history
-      addItem(
-        {
-          type: MessageType.INFO,
-          text: message,
-        },
-        Date.now(),
-      );
-
-      // Set the flag to prevent tool continuation
-      setModelSwitchedFromQuotaError(true);
-      // Set global quota error flag to prevent Flash model calls
-      config.setQuotaErrorOccurred(true);
-      // Switch model for future use but return false to stop current retry
-      config.setModel(fallbackModel);
-      // TELEMETRY REMOVED: logFlashFallback disabled
-      // logFlashFallback(
-      //   config,
-      //   new FlashFallbackEvent(config.getContentGeneratorConfig().authType!),
-      // );
-      return false; // Don't continue with current prompt
-    };
-
-    config.setFlashFallbackHandler(flashFallbackHandler);
-  }, [config, addItem, userTier]);
+  // Flash fallback handler is now set up by SessionController
 
   const {
     handleSlashCommand,
@@ -581,7 +348,15 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   // This prevents mutations during render
   let pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
-  const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
+  const {
+    terminalHeight,
+    terminalWidth,
+    constrainHeight,
+    availableTerminalHeight,
+    setConstrainHeight,
+    footerRef,
+    registerFooterDependency,
+  } = useLayout();
   const isInitialMount = useRef(true);
   const { stdin, setRawMode } = useStdin();
   const isValidPath = useCallback((filePath: string): boolean => {
@@ -695,9 +470,11 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   }, [settings, openEditorDialog]);
 
   const onAuthError = useCallback(() => {
-    setAuthError('reauth required');
+    appDispatch({ type: 'SET_AUTH_ERROR', payload: 'reauth required' });
     openAuthDialog();
-  }, [openAuthDialog, setAuthError]);
+  }, [openAuthDialog, appDispatch]);
+
+  const geminiClientForStream = config.getGeminiClient();
 
   const {
     streamingState,
@@ -706,7 +483,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
   } = useGeminiStream(
-    config.getGeminiClient(),
+    geminiClientForStream,
     history,
     addItem,
     setShowHelp,
@@ -718,7 +495,24 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     onAuthError,
     performMemoryRefresh,
     modelSwitchedFromQuotaError,
-    setModelSwitchedFromQuotaError,
+    useCallback(
+      (value: boolean | ((prev: boolean) => boolean)) => {
+        if (typeof value === 'function') {
+          // Handle function form of setState
+          const currentValue = modelSwitchedFromQuotaError;
+          sessionDispatch({
+            type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR',
+            payload: value(currentValue),
+          });
+        } else {
+          sessionDispatch({
+            type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR',
+            payload: value,
+          });
+        }
+      },
+      [modelSwitchedFromQuotaError, sessionDispatch],
+    ) as React.Dispatch<React.SetStateAction<boolean>>,
   );
   // FIX: Create a new array instead of mutating the existing one
   // This ensures React can properly track changes and prevents infinite loops
@@ -785,21 +579,12 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     refreshStatic();
   }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
-  const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
 
+  // Register dependencies that affect footer height with LayoutManager
   useEffect(() => {
-    if (mainControlsRef.current) {
-      const fullFooterMeasurement = measureElement(mainControlsRef.current);
-      setFooterHeight(fullFooterMeasurement.height);
-    }
-  }, [terminalHeight, consoleMessages, showErrorDetails]);
-
-  const staticExtraHeight = /* margins and padding */ 3;
-  const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - staticExtraHeight,
-    [terminalHeight, footerHeight],
-  );
+    registerFooterDependency();
+  }, [consoleMessages, showErrorDetails, registerFooterDependency]);
 
   useEffect(() => {
     // skip refreshing Static during first mount
@@ -850,7 +635,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     if (
       initialPrompt &&
       !initialPromptSubmitted.current &&
-      !isAuthenticating &&
+      !authIsAuthenticating &&
       !isAuthDialogOpen &&
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
@@ -863,7 +648,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   }, [
     initialPrompt,
     submitQuery,
-    isAuthenticating,
+    authIsAuthenticating,
     isAuthDialogOpen,
     isThemeDialogOpen,
     isEditorDialogOpen,
@@ -894,6 +679,12 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   // Arbitrary threshold to ensure that items in the static area are large
   // enough but not too large to make the terminal hard to use.
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
+
+  // Show loading state if geminiClient is not initialized
+  if (!geminiClientForStream) {
+    return <Text>Initializing Gemini client...</Text>;
+  }
+
   return (
     <StreamingContext.Provider value={streamingState}>
       <Box flexDirection="column" marginBottom={1} width="90%">
@@ -959,7 +750,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
 
         {showHelp && <Help commands={slashCommands} />}
 
-        <Box flexDirection="column" ref={mainControlsRef}>
+        <Box flexDirection="column" ref={footerRef}>
           {(allStartupWarnings.length > 0 || transientWarnings.length > 0) && (
             <Box
               borderStyle="round"
@@ -983,9 +774,9 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
 
           {isThemeDialogOpen ? (
             <Box flexDirection="column">
-              {themeError && (
+              {appState.errors.theme && (
                 <Box marginBottom={1}>
-                  <Text color={Colors.AccentRed}>{themeError}</Text>
+                  <Text color={Colors.AccentRed}>{appState.errors.theme}</Text>
                 </Box>
               )}
               <ThemeDialog
@@ -994,13 +785,13 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
                 settings={settings}
                 availableTerminalHeight={
                   constrainHeight
-                    ? terminalHeight - staticExtraHeight
+                    ? terminalHeight - 3 // margins and padding
                     : undefined
                 }
                 terminalWidth={mainAreaWidth}
               />
             </Box>
-          ) : isAuthenticating ? (
+          ) : authIsAuthenticating ? (
             <>
               <AuthInProgress onTimeout={onAuthTimeout} />
               {showErrorDetails && (
@@ -1023,14 +814,14 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
               <AuthDialog
                 onSelect={handleAuthSelect}
                 settings={settings}
-                initialErrorMessage={authError}
+                initialErrorMessage={appState.errors.auth}
               />
             </Box>
           ) : isEditorDialogOpen ? (
             <Box flexDirection="column">
-              {editorError && (
+              {appState.errors.editor && (
                 <Box marginBottom={1}>
-                  <Text color={Colors.AccentRed}>{editorError}</Text>
+                  <Text color={Colors.AccentRed}>{appState.errors.editor}</Text>
                 </Box>
               )}
               <EditorSettingsDialog
@@ -1058,10 +849,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
               />
             </Box>
           ) : showPrivacyNotice ? (
-            <PrivacyNotice
-              onExit={() => setShowPrivacyNotice(false)}
-              config={config}
-            />
+            <PrivacyNotice onExit={closePrivacyNotice} config={config} />
           ) : (
             <>
               <LoadingIndicator
@@ -1202,3 +990,28 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     </StreamingContext.Provider>
   );
 };
+
+// Intermediate component to pass isAuthenticating to SessionController
+const AppWithAuth = (props: AppProps) => {
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+
+  return (
+    <SessionController
+      config={props.config}
+      isAuthenticating={isAuthenticating}
+    >
+      <AppInner
+        {...props}
+        isAuthenticating={isAuthenticating}
+        setIsAuthenticating={setIsAuthenticating}
+      />
+    </SessionController>
+  );
+};
+
+// Main App component that provides the UIStateShell wrapper
+const App = (props: AppProps) => (
+  <UIStateShell>
+    <AppWithAuth {...props} />
+  </UIStateShell>
+);

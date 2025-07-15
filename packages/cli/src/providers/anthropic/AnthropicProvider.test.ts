@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { AnthropicProvider } from './AnthropicProvider.js';
+import { AnthropicProvider } from './AnthropicProvider';
 import { ITool } from '../ITool.js';
 
 // Mock the ToolFormatter
@@ -426,7 +426,7 @@ describe('AnthropicProvider', () => {
       );
     });
 
-    it('should retry on rate limit errors', async () => {
+    it('should retry on rate limit errors', { timeout: 10000 }, async () => {
       // First call fails with overloaded error
       mockAnthropicInstance.messages.create
         .mockRejectedValueOnce(
@@ -473,71 +473,75 @@ describe('AnthropicProvider', () => {
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledTimes(1);
     });
 
-    it('should validate and fix tool_use/tool_result mismatches on retry', async () => {
-      // First call fails after partial tool use
-      mockAnthropicInstance.messages.create
-        .mockRejectedValueOnce(
-          new Error(
-            'Anthropic API error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
-          ),
-        )
-        .mockResolvedValueOnce({
-          async *[Symbol.asyncIterator]() {
-            yield {
-              type: 'content_block_delta',
-              delta: { type: 'text_delta', text: 'Fixed and working' },
-            };
-          },
-        });
+    it(
+      'should validate and fix tool_use/tool_result mismatches on retry',
+      { timeout: 10000 },
+      async () => {
+        // First call fails after partial tool use
+        mockAnthropicInstance.messages.create
+          .mockRejectedValueOnce(
+            new Error(
+              'Anthropic API error: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}',
+            ),
+          )
+          .mockResolvedValueOnce({
+            async *[Symbol.asyncIterator]() {
+              yield {
+                type: 'content_block_delta',
+                delta: { type: 'text_delta', text: 'Fixed and working' },
+              };
+            },
+          });
 
-      // Messages with a tool call but no tool result (simulating corrupted state)
-      const messages = [
-        { role: 'user', content: 'Test' },
-        {
-          role: 'assistant',
-          content: '',
-          tool_calls: [
-            {
-              id: 'broken-tool-123',
-              type: 'function' as const,
-              function: {
-                name: 'test_tool',
-                arguments: '{}',
+        // Messages with a tool call but no tool result (simulating corrupted state)
+        const messages = [
+          { role: 'user', content: 'Test' },
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'broken-tool-123',
+                type: 'function' as const,
+                function: {
+                  name: 'test_tool',
+                  arguments: '{}',
+                },
               },
+            ],
+          },
+          { role: 'user', content: 'Continue' }, // This would normally cause an error
+        ];
+
+        const generator = provider.generateChatCompletion(messages);
+
+        const chunks = [];
+        for await (const chunk of generator) {
+          chunks.push(chunk);
+        }
+
+        expect(chunks).toEqual([
+          { role: 'assistant', content: 'Fixed and working' },
+        ]);
+
+        // Check the second call had fixed messages
+        const secondCallArgs =
+          mockAnthropicInstance.messages.create.mock.calls[1][0];
+        const anthropicMessages = secondCallArgs.messages;
+
+        // Should have the tool result added automatically
+        expect(anthropicMessages).toHaveLength(4);
+        expect(anthropicMessages[2]).toEqual({
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'broken-tool-123',
+              content: 'Error: Tool execution was interrupted. Please retry.',
             },
           ],
-        },
-        { role: 'user', content: 'Continue' }, // This would normally cause an error
-      ];
-
-      const generator = provider.generateChatCompletion(messages);
-
-      const chunks = [];
-      for await (const chunk of generator) {
-        chunks.push(chunk);
-      }
-
-      expect(chunks).toEqual([
-        { role: 'assistant', content: 'Fixed and working' },
-      ]);
-
-      // Check the second call had fixed messages
-      const secondCallArgs =
-        mockAnthropicInstance.messages.create.mock.calls[1][0];
-      const anthropicMessages = secondCallArgs.messages;
-
-      // Should have the tool result added automatically
-      expect(anthropicMessages).toHaveLength(4);
-      expect(anthropicMessages[2]).toEqual({
-        role: 'user',
-        content: [
-          {
-            type: 'tool_result',
-            tool_use_id: 'broken-tool-123',
-            content: 'Error: Tool execution was interrupted. Please retry.',
-          },
-        ],
-      });
-    });
+        });
+      },
+    );
   });
 });

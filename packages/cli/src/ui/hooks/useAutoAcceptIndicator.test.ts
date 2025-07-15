@@ -14,7 +14,7 @@ import {
   type Mock,
 } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useAutoAcceptIndicator } from './useAutoAcceptIndicator.js';
+import { useAutoAcceptIndicator } from './useAutoAcceptIndicator';
 
 import {
   Config,

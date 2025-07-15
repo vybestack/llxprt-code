@@ -6,10 +6,10 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import type { Mocked } from 'vitest';
-import { handleAtCommand } from './atCommandProcessor.js';
+import { handleAtCommand } from './atCommandProcessor';
 import { Config, FileDiscoveryService } from '@google/gemini-cli-core';
 import { ToolCallStatus } from '../types.js';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
+import { UseHistoryManagerReturn } from './useHistoryManager';
 import * as fsPromises from 'fs/promises';
 import type { Stats } from 'fs';
 

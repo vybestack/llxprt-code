@@ -350,14 +350,17 @@ describe('ShellTool', () => {
     expect(result.allowed).toBe(true);
   });
 
-  it('should allow a command with command substitution using backticks', async () => {
+  it('should block a command with command substitution using backticks', async () => {
     const config = {
       getCoreTools: () => ['run_shell_command(echo)'],
       getExcludeTools: () => [],
     } as unknown as Config;
     const shellTool = new ShellTool(config);
     const result = shellTool.isCommandAllowed('echo `rm -rf /`');
-    expect(result.allowed).toBe(true);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe(
+      'Command substitution using $() or backticks is not allowed for security reasons',
+    );
   });
 
   it('should block a command with command substitution using $()', async () => {
@@ -369,7 +372,7 @@ describe('ShellTool', () => {
     const result = shellTool.isCommandAllowed('echo $(rm -rf /)');
     expect(result.allowed).toBe(false);
     expect(result.reason).toBe(
-      'Command substitution using $() is not allowed for security reasons',
+      'Command substitution using $() or backticks is not allowed for security reasons',
     );
   });
 

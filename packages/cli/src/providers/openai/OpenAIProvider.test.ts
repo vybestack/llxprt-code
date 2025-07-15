@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider.js';
+import { OpenAIProvider } from './OpenAIProvider';
 import { ContentGeneratorRole } from '../types.js';
 
 // Mock OpenAI module

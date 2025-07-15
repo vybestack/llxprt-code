@@ -6,7 +6,7 @@
 
 import { AuthType } from '@google/gemini-cli-core';
 import { vi } from 'vitest';
-import { validateAuthMethod } from './auth.js';
+import { validateAuthMethod } from './auth';
 
 vi.mock('./settings.js', () => ({
   loadEnvironment: vi.fn(),

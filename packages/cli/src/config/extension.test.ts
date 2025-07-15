@@ -13,7 +13,7 @@ import {
   EXTENSIONS_DIRECTORY_NAME,
   filterActiveExtensions,
   loadExtensions,
-} from './extension.js';
+} from './extension';
 
 vi.mock('os', async (importOriginal) => {
   const os = await importOriginal<typeof import('os')>();

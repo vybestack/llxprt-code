@@ -8,6 +8,8 @@ import { useCallback, useState } from 'react';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { IModel } from '../../providers/IModel.js';
 import { MessageType } from '../types.js';
+import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import { AppState } from '../reducers/appReducer.js';
 
 interface UseProviderModelDialogParams {
   addMessage: (msg: {
@@ -16,13 +18,16 @@ interface UseProviderModelDialogParams {
     timestamp: Date;
   }) => void;
   onModelChange?: () => void;
+  appState: AppState;
 }
 
 export const useProviderModelDialog = ({
   addMessage,
   onModelChange,
+  appState,
 }: UseProviderModelDialogParams) => {
-  const [showDialog, setShowDialog] = useState(false);
+  const appDispatch = useAppDispatch();
+  const showDialog = appState.openDialogs.providerModel;
   const [models, setModels] = useState<IModel[]>([]);
   const [currentModel, setCurrentModel] = useState<string>('');
 
@@ -32,7 +37,7 @@ export const useProviderModelDialog = ({
       const list = await provider.getModels();
       setModels(list);
       setCurrentModel(provider.getCurrentModel?.() ?? '');
-      setShowDialog(true);
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'providerModel' });
     } catch (e) {
       addMessage({
         type: MessageType.ERROR,
@@ -40,9 +45,12 @@ export const useProviderModelDialog = ({
         timestamp: new Date(),
       });
     }
-  }, [addMessage]);
+  }, [addMessage, appDispatch]);
 
-  const closeDialog = useCallback(() => setShowDialog(false), []);
+  const closeDialog = useCallback(
+    () => appDispatch({ type: 'CLOSE_DIALOG', payload: 'providerModel' }),
+    [appDispatch],
+  );
 
   const handleSelect = useCallback(
     (modelId: string) => {
@@ -63,9 +71,9 @@ export const useProviderModelDialog = ({
           timestamp: new Date(),
         });
       }
-      setShowDialog(false);
+      appDispatch({ type: 'CLOSE_DIALOG', payload: 'providerModel' });
     },
-    [addMessage, onModelChange],
+    [addMessage, onModelChange, appDispatch],
   );
 
   return {

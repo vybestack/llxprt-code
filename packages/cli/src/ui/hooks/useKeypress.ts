@@ -124,7 +124,12 @@ export function useKeypress(
 
         const nextData = data.slice(pos, nextMarkerPos);
         if (nextData.length > 0) {
-          keypressStream.write(nextData);
+          if (isPaste) {
+            // Accumulate raw bytes into the paste buffer while inside a bracketed paste.
+            pasteBuffer = Buffer.concat([pasteBuffer, nextData]);
+          } else {
+            keypressStream.write(nextData);
+          }
         }
         const createPasteKeyEvent = (
           name: 'paste-start' | 'paste-end',

@@ -49,28 +49,32 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const now = Date.now();
     this.errorTimestamps.push(now);
-    
+
     // Clean up old timestamps
     this.errorTimestamps = this.errorTimestamps.filter(
-      timestamp => timestamp > now - this.ERROR_TIME_WINDOW
+      (timestamp) => timestamp > now - this.ERROR_TIME_WINDOW,
     );
 
     // Check if we're in an error loop
     const isErrorLoop = this.errorTimestamps.length > this.MAX_ERRORS_IN_WINDOW;
 
     // Special handling for Maximum update depth exceeded
-    const isMaxUpdateDepthError = error.message.includes('Maximum update depth exceeded');
-    
+    const isMaxUpdateDepthError = error.message.includes(
+      'Maximum update depth exceeded',
+    );
+
     if (isMaxUpdateDepthError || isErrorLoop) {
       console.error('🚨 CRITICAL: Render loop detected!');
       console.error('Error:', error.message);
       console.error('Component Stack:', errorInfo.componentStack);
-      
+
       if (isMaxUpdateDepthError) {
         console.error('\nThis error typically occurs when:');
         console.error('1. setState is called inside render()');
         console.error('2. useEffect has missing or incorrect dependencies');
-        console.error('3. Props are recreated on every render (objects, arrays, functions)');
+        console.error(
+          '3. Props are recreated on every render (objects, arrays, functions)',
+        );
         console.error('\nCheck recent changes to hooks and state updates.');
       }
     }
@@ -86,7 +90,7 @@ export class ErrorBoundary extends Component<Props, State> {
     }
 
     // Update state with error info
-    this.setState(prevState => ({
+    this.setState((prevState) => ({
       errorInfo,
       errorCount: prevState.errorCount + 1,
     }));
@@ -115,26 +119,32 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       // Default error UI
-      const isMaxUpdateDepthError = this.state.error.message.includes('Maximum update depth exceeded');
-      
+      const isMaxUpdateDepthError = this.state.error.message.includes(
+        'Maximum update depth exceeded',
+      );
+
       return (
         <Box flexDirection="column" padding={1}>
           <Text color="red" bold>
-            {isMaxUpdateDepthError ? '🚨 Render Loop Error' : '❌ An error occurred'}
+            {isMaxUpdateDepthError
+              ? '🚨 Render Loop Error'
+              : '❌ An error occurred'}
           </Text>
           <Text color="red">{this.state.error.message}</Text>
           {this.state.errorCount > 1 && (
-            <Text color="yellow">
-              Error count: {this.state.errorCount}
-            </Text>
+            <Text color="yellow">Error count: {this.state.errorCount}</Text>
           )}
           {isMaxUpdateDepthError && (
             <Box flexDirection="column" marginTop={1}>
-              <Text color="yellow">This error indicates an infinite render loop.</Text>
+              <Text color="yellow">
+                This error indicates an infinite render loop.
+              </Text>
               <Text color="yellow">Common causes:</Text>
               <Text color="yellow">• State updates during render</Text>
               <Text color="yellow">• Incorrect useEffect dependencies</Text>
-              <Text color="yellow">• Non-memoized props causing re-renders</Text>
+              <Text color="yellow">
+                • Non-memoized props causing re-renders
+              </Text>
             </Box>
           )}
           <Box marginTop={1}>
@@ -150,7 +160,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
 /**
  * Hook to wrap a component with an error boundary.
- * 
+ *
  * @example
  * ```typescript
  * function MyApp() {
@@ -164,7 +174,7 @@ export class ErrorBoundary extends Component<Props, State> {
  */
 export function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
-  errorBoundaryProps?: Omit<Props, 'children'>
+  errorBoundaryProps?: Omit<Props, 'children'>,
 ): React.ComponentType<P> {
   const WrappedComponent = (props: P) => (
     <ErrorBoundary {...errorBoundaryProps}>

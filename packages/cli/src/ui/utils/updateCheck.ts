@@ -4,26 +4,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// import semver from 'semver';
-// import { getPackageJson } from '../../utils/package.js';
-// TODO: Fix web_fetch import - currently broken
-// import { web_fetch } from '@google/gemini-cli-core';
+import semver from 'semver';
+import { getPackageJson } from '../../utils/package.js';
 
-// const UPDATE_CHECK_URL = 'https://raw.githubusercontent.com/acoliver/gemini-cli/main/package.json'; // Replace with your custom URL
+const UPDATE_CHECK_URL =
+  'https://raw.githubusercontent.com/google-gemini/gemini-cli/main/package.json';
+const UPDATE_CHECK_TIMEOUT_MS = 5000;
+
+async function fetchWithTimeout(
+  url: string,
+  timeout: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeout}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 export async function checkForUpdates(): Promise<string | null> {
-  // TODO: Fix web_fetch import and re-enable update check
-  return null;
-
-  /*
   try {
     const packageJson = await getPackageJson();
     if (!packageJson || !packageJson.name || !packageJson.version) {
       return null;
     }
 
-    const response = await web_fetch(`Fetch latest package.json from ${UPDATE_CHECK_URL}`);
-    const latestPackageJson = JSON.parse(response.content);
+    const response = await fetchWithTimeout(
+      UPDATE_CHECK_URL,
+      UPDATE_CHECK_TIMEOUT_MS,
+    );
+    if (!response.ok) {
+      return null;
+    }
+
+    const latestPackageJson = await response.json();
 
     if (
       latestPackageJson &&
@@ -38,5 +61,4 @@ export async function checkForUpdates(): Promise<string | null> {
     console.warn('Failed to check for updates: ' + e);
     return null;
   }
-  */
 }
