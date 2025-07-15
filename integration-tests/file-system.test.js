@@ -31,7 +31,7 @@ test('writes a file', (t) => {
 
   const output = rig.run(`edit test.txt to have a hello world message`);
   console.log('CLI output:', output);
-  
+
   // Check if any files were created in the test directory
   const files = readdirSync(rig.testDir);
   console.log('Files in test directory:', files);
