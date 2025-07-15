@@ -23,10 +23,22 @@ test('writes a file', (t) => {
   rig.setup(t.name);
   rig.createFile('test.txt', '');
 
-  rig.run(
-    `use the write_file tool to write the exact text "Hello World!" to the file test.txt`,
-  );
+  // Debug: log the test directory
+  console.log('Test directory:', rig.testDir);
+  console.log('Working directory:', process.cwd());
+
+  rig.run(`write "Hello World!" to test.txt`);
+
+  // Debug: check if file exists and what's in it
+  const fs = require('fs');
+  const path = require('path');
+  const expectedPath = path.join(rig.testDir, 'test.txt');
+  console.log('Expected file path:', expectedPath);
+  console.log('File exists:', fs.existsSync(expectedPath));
 
   const fileContent = rig.readFile('test.txt');
+  console.log('File content:', JSON.stringify(fileContent));
+  console.log('File length:', fileContent.length);
+
   assert.ok(fileContent.toLowerCase().includes('hello'));
 });
