@@ -4,93 +4,149 @@
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
-This repository contains LLxprt Code, a command-line AI workflow tool that connects to your
-tools, understands your code and accelerates your workflows.
+LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/google-gemini/gemini-cli), enhanced with multi-provider support and improved theming. We thank Google for their excellent foundation and will continue to track and merge upstream changes as long as practical.
+
+## Key Features
+
+- **Multi-Provider Support**: Use any LLM provider including Google Gemini, OpenAI, Anthropic, OpenRouter, Fireworks, or local models
+- **Enhanced Theme Support**: Beautiful themes applied consistently across the entire tool
+- **Full Gemini CLI Compatibility**: All original features work seamlessly, including Google authentication via `/auth`
+- **Local Model Support**: Run models locally with LM Studio, llama.cpp, or any OpenAI-compatible server
+- **Flexible Configuration**: Switch providers, models, and API keys on the fly
 
 With LLxprt Code you can:
 
-- Query and edit large codebases in and beyond Gemini's 1M token context window.
-- Generate new apps from PDFs or sketches, using Gemini's multimodal capabilities.
-- Automate operational tasks, like querying pull requests or handling complex rebases.
-- Use tools and MCP servers to connect new capabilities, including [media generation with Imagen,
-  Veo or Lyria](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio/tree/main/experiments/mcp-genmedia)
-- Ground your queries with the [Google Search](https://ai.google.dev/gemini-api/docs/grounding)
-  tool, built in to Gemini.
+- Query and edit large codebases with any LLM provider
+- Use local models for privacy-sensitive work
+- Switch between providers seamlessly within a session
+- Leverage all the powerful tools and MCP servers from Gemini CLI
+- Enjoy a beautifully themed interface across all commands
 
 ## Quickstart
 
 1. **Prerequisites:** Ensure you have [Node.js version 20](https://nodejs.org/en/download) or higher installed.
-2. **Run the CLI:** Execute the following command in your terminal:
-
-   ```bash
-   npx https://github.com/acoliver/llxprt-code
-   ```
-
-   Or install it with:
+2. **Install LLxprt Code:**
 
    ```bash
    npm install -g @vybestack/llxprt-code
    ```
 
-   Then, run the CLI from anywhere:
+   Or run directly with npx:
+
+   ```bash
+   npx https://github.com/acoliver/llxprt-code
+   ```
+
+3. **Run and configure:**
 
    ```bash
    llxprt
    ```
 
-3. **Pick a color theme**
-4. **Authenticate:** When prompted, sign in with your personal Google account. This will grant you up to 60 model requests per minute and 1,000 model requests per day using Gemini.
+   - Pick a beautiful theme
+   - Choose your provider with `/provider` (defaults to Gemini)
+   - Set up authentication as needed
 
-You are now ready to use LLxprt Code!
+## Provider Configuration
 
-### Use a Gemini API key:
+### Using Local Models
 
-The Gemini API provides a free tier with [100 requests per day](https://ai.google.dev/gemini-api/docs/rate-limits#free-tier) using Gemini 2.5 Pro, control over which model you use, and access to higher rate limits (with a paid plan):
+Run models locally for complete privacy and control. LLxprt Code works with any OpenAI-compatible server.
 
-1. Generate a key from [Google AI Studio](https://aistudio.google.com/apikey).
-2. Set it as an environment variable in your terminal. Replace `YOUR_API_KEY` with your generated key.
+**Example with LM Studio:**
+1. Start LM Studio and load a model (e.g., Gemma 3B)
+2. In LLxprt Code:
+   ```
+   /provider openai
+   /baseurl http://127.0.0.1:1234/v1/
+   /model gemma-3b-it
+   ```
 
+**Example with llama.cpp:**
+1. Start llama.cpp server: `./server -m model.gguf -c 2048`
+2. In LLxprt Code:
+   ```
+   /provider openai
+   /baseurl http://localhost:8080/v1/
+   /model local-model
+   ```
+
+**List available models:**
+```
+/model
+```
+This shows all models available from your current provider.
+
+### Using OpenRouter
+
+Access 100+ models through OpenRouter:
+
+1. Get your API key from [OpenRouter](https://openrouter.ai/keys)
+2. Configure LLxprt Code:
+   ```
+   /provider openai
+   /baseurl https://openrouter.ai/api/v1/
+   /key sk-or-v1-your-key-here
+   /model anthropic/claude-3.5-sonnet
+   ```
+
+### Using Fireworks
+
+For fast inference with popular open models:
+
+1. Get your API key from [Fireworks](https://app.fireworks.ai/api-keys)
+2. Configure:
+   ```
+   /provider openai
+   /baseurl https://api.fireworks.ai/inference/v1/
+   /key fw_your-key-here
+   /model accounts/fireworks/models/llama-v3p3-70b-instruct
+   ```
+
+### Using Google Gemini
+
+You can still use Google's services:
+
+1. **With Google Account:** Use `/auth` to sign in
+2. **With API Key:** 
    ```bash
    export GEMINI_API_KEY="YOUR_API_KEY"
    ```
+   Or use `/key YOUR_API_KEY` after selecting the gemini provider
 
-3. (Optionally) Upgrade your Gemini API project to a paid plan on the API key page (will automatically unlock [Tier 1 rate limits](https://ai.google.dev/gemini-api/docs/rate-limits#tier-1))
+### Managing API Keys
 
-### Use a Vertex AI API key:
-
-The Vertex AI API provides a [free tier](https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview) using express mode for Gemini 2.5 Pro, control over which model you use, and access to higher rate limits with a billing account:
-
-1. Generate a key from [Google Cloud](https://cloud.google.com/vertex-ai/generative-ai/docs/start/api-keys).
-2. Set it as an environment variable in your terminal. Replace `YOUR_API_KEY` with your generated key and set GOOGLE_GENAI_USE_VERTEXAI to true
-
-   ```bash
-   export GOOGLE_API_KEY="YOUR_API_KEY"
-   export GOOGLE_GENAI_USE_VERTEXAI=true
-   ```
-
-3. (Optionally) Add a billing account on your project to get access to [higher usage limits](https://cloud.google.com/vertex-ai/generative-ai/docs/quotas)
-
-For other authentication methods, including Google Workspace accounts, see the [authentication](./docs/cli/authentication.md) guide.
+- **Set key for current session:** `/key your-api-key`
+- **Load key from file:** `/keyfile ~/.keys/openai.txt`
+- **Environment variables:** Still supported for all providers
 
 ## Examples
 
-Once the CLI is running, you can start interacting with Gemini from your shell.
-
-You can start a project from a new directory:
+Start a new project:
 
 ```sh
 cd new-project/
 llxprt
-> Write me a Gemini Discord bot that answers questions using a FAQ.md file I will provide
+> Create a Discord bot that answers questions using a FAQ.md file I will provide
 ```
 
-Or work with an existing project:
+Work with existing code:
 
 ```sh
 git clone https://github.com/acoliver/llxprt-code
 cd llxprt-code
 llxprt
-> Give me a summary of all of the changes that went in yesterday
+> Give me a summary of all the changes that went in yesterday
+```
+
+Use a local model for sensitive code:
+
+```sh
+llxprt
+/provider openai
+/baseurl http://localhost:1234/v1/
+/model codellama-7b
+> Review this code for security vulnerabilities
 ```
 
 ### Next steps
@@ -102,30 +158,18 @@ llxprt
 - Take a look at some [popular tasks](#popular-tasks) for more inspiration.
 - Check out our **[Official Roadmap](./ROADMAP.md)**
 
-### Text-Based Tool Support
+### Provider Commands Reference
 
-LLxprt Code automatically detects and parses tool calls from models that output them as text rather than structured JSON. This includes models like:
-
-- **Gemma models** (gemma-3-12b-it, gemma-2-27b-it)
-- **Hermes models** (using `<tool_call>` XML tags)
-- **DeepSeek models** (with special Unicode tokens)
-- **Llama models** (pythonic or function tag formats)
-
-To configure text-based tool parsing:
-
-```json
-{
-  "enableTextToolCallParsing": true,
-  "textToolCallModels": ["my-custom-model", "another-text-model"]
-}
-```
-
-For more details on supported formats and troubleshooting, see the [tool parsing documentation](./docs/tool-parsing.md).
+- `/provider` - List available providers or switch provider
+- `/model` - List available models or switch model  
+- `/baseurl` - Set custom API endpoint
+- `/key` - Set API key for current session
+- `/keyfile` - Load API key from file
+- `/auth` - Authenticate with Google (for Gemini provider)
 
 ### Troubleshooting
 
-Head over to the [troubleshooting guide](docs/troubleshooting.md) if you're
-having issues.
+See the [troubleshooting guide](docs/troubleshooting.md) if you encounter issues.
 
 ## Popular tasks
 
@@ -177,6 +221,8 @@ Use MCP servers to integrate your local system tools with your enterprise collab
 
 Head over to the [Uninstall](docs/Uninstall.md) guide for uninstallation instructions.
 
-## Terms of Service and Privacy Notice
+## Privacy and Terms
 
-For details on the terms of service and privacy notice applicable to your use of LLxprt Code, see the [Terms of Service and Privacy Notice](./docs/tos-privacy.md).
+**LLxprt Code does not collect telemetry by default.** Your privacy is important to us.
+
+When using Google's services through LLxprt Code, you are bound by [Google's Terms of Service and Privacy Notice](./docs/tos-privacy.md). Other providers have their own terms that apply when using their services.
