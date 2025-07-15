@@ -1,6 +1,6 @@
 # .github/workflows/ci.yml
 
-name: Gemini CLI CI
+name: LLxprt Code CI
 
 on:
   push:
