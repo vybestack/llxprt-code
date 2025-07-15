@@ -57,7 +57,7 @@ export class TodoStore {
 
   private getFilePath(): string {
     const homeDir = process.env.HOME || os.homedir();
-    const todosDir = path.join(homeDir, '.gemini', 'todos');
+    const todosDir = path.join(homeDir, '.llxprt', 'todos');
 
     const fileName = this.agentId
       ? `${this.sessionId}-agent-${this.agentId}.json`

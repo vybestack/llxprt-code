@@ -53,7 +53,7 @@ const SIGN_IN_SUCCESS_URL =
 const SIGN_IN_FAILURE_URL =
   'https://developers.google.com/gemini-code-assist/auth_failure_gemini';
 
-const LLXPRT_DIR = '.gemini';
+const LLXPRT_DIR = '.llxprt';
 const CREDENTIAL_FILENAME = 'oauth_creds.json';
 
 /**

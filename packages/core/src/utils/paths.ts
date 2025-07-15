@@ -8,7 +8,7 @@ import path from 'node:path';
 import os from 'os';
 import * as crypto from 'crypto';
 
-export const LLXPRT_DIR = '.gemini';
+export const LLXPRT_DIR = '.llxprt';
 export const GOOGLE_ACCOUNTS_FILENAME = 'google_accounts.json';
 const TMP_DIR_NAME = 'tmp';
 

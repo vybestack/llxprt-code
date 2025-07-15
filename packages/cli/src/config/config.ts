@@ -33,7 +33,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 
-const LLXPRT_DIR = '.gemini';
+const LLXPRT_DIR = '.llxprt';
 
 // Simple console logger for now - replace with actual logger if available
 const logger = {
