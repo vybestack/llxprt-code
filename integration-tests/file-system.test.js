@@ -29,7 +29,7 @@ test('writes a file', (t) => {
   console.log('Test directory:', rig.testDir);
   console.log('Working directory:', process.cwd());
 
-  const output = rig.run(`write "Hello World!" to test.txt`);
+  const output = rig.run(`edit test.txt to have a hello world message`);
   console.log('CLI output:', output);
   
   // Check if any files were created in the test directory
