@@ -77,23 +77,23 @@ if (!argv.s) {
   execSync('npm run build --workspaces', { stdio: 'inherit' });
 }
 
-console.log('packing @google/gemini-cli ...');
+console.log('packing @vybestack/llxprt-code ...');
 const cliPackageDir = join('packages', 'cli');
-rmSync(join(cliPackageDir, 'dist', 'google-gemini-cli-*.tgz'), { force: true });
+rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), { force: true });
 execSync(
-  `npm pack -w @google/gemini-cli --pack-destination ./packages/cli/dist`,
+  `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
   {
     stdio: 'ignore',
   },
 );
 
-console.log('packing @google/gemini-cli-core ...');
+console.log('packing @vybestack/llxprt-code-core ...');
 const corePackageDir = join('packages', 'core');
-rmSync(join(corePackageDir, 'dist', 'google-gemini-cli-core-*.tgz'), {
+rmSync(join(corePackageDir, 'dist', 'vybestack-llxprt-code-core-*.tgz'), {
   force: true,
 });
 execSync(
-  `npm pack -w @google/gemini-cli-core --pack-destination ./packages/core/dist`,
+  `npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist`,
   { stdio: 'ignore' },
 );
 
@@ -102,11 +102,11 @@ const packageVersion = JSON.parse(
 ).version;
 
 chmodSync(
-  join(cliPackageDir, 'dist', `google-gemini-cli-${packageVersion}.tgz`),
+  join(cliPackageDir, 'dist', `vybestack-llxprt-code-${packageVersion}.tgz`),
   0o755,
 );
 chmodSync(
-  join(corePackageDir, 'dist', `google-gemini-cli-core-${packageVersion}.tgz`),
+  join(corePackageDir, 'dist', `vybestack-llxprt-code-core-${packageVersion}.tgz`),
   0o755,
 );
 
