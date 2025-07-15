@@ -1,63 +1,75 @@
-# Gemini CLI Roadmap
+# LLxprt Code Roadmap
 
-The [Official Gemini CLI Roadmap](https://github.com/orgs/google-gemini/projects/11/)
+LLxprt Code is a community-driven, multi-provider AI coding assistant that brings the power of multiple LLMs directly into your terminal. As a fork of Google's excellent [Gemini CLI](https://github.com/google-gemini/gemini-cli), we plan to continue tracking their updates for as long as practical while expanding to support the broader AI ecosystem.
 
-Gemini CLI is an open-source AI agent that brings the power of Gemini directly into your terminal. It provides lightweight access to Gemini, giving you the most direct path from your prompt to our model.
+For Google's original roadmap and vision, see the [Official Gemini CLI Roadmap](https://github.com/orgs/google-gemini/projects/11/).
 
-This document outlines our approach to the Gemini CLI roadmap. Here, you'll find our guiding principles and a breakdown of the key areas we are
-focused on for development. Our roadmap is not a static list but a dynamic set of priorities that are tracked live in our GitHub Issues.
+## Our Vision
 
-As an [Apache 2.0 open source project](https://github.com/acoliver/llxprt-code?tab=Apache-2.0-1-ov-file#readme), we appreciate and welcome [public contributions](https://github.com/acoliver/llxprt-code/blob/main/CONTRIBUTING.md), and will give first priority to those contributions aligned with our roadmap. If you want to propose a new feature or change to our roadmap, please start by [opening an issue for discussion](https://github.com/acoliver/llxprt-code/issues/new/choose).
-
-## Disclaimer
-
-This roadmap represents our current thinking and is for informational purposes only. It is not a commitment or a guarantee of future delivery. The development, release, and timing of any features are subject to change, and we may update the roadmap based on community discussions as well as when our priorities evolve.
+Unlike the Gemini CLI project, LLxprt Code is designed from the ground up to be **community-driven**. We believe in the power of open source collaboration and welcome contributions from developers, designers, and enthusiasts worldwide. Our goal is to create the fastest, most powerful CLI coding tool that supports as many providers and local models as possible.
 
 ## Guiding Principles
 
-Our development is guided by the following principles:
+- **Multi-Provider First:** Support for OpenAI, Anthropic, Google, local models, and more - because choice matters
+- **Community-Driven:** Your contributions shape the project's future. We're not just open source in license, but in spirit
+- **Clean & Modular:** We aim for maintainable, well-tested code that's easy to extend
+- **Performance & Power:** Be the fastest, most capable AI coding assistant available
+- **Inclusive Development:** We want your contributions and will work with you to get them merged
 
-- **Power & Simplicity:** Deliver access to state-of-the-art Gemini models with an intuitive and easy-to-use lightweight command-line interface.
-- **Extensibility:** An adaptable agent to help you with a variety of use cases and environments along with the ability to run these agents anywhere.
-- **Intelligent:** Gemini CLI should be reliably ranked among the best agentic tools as measured by benchmarks like SWE Bench, Terminal Bench, and CSAT.
-- **Free and Open Source:** Foster a thriving open source community where cost isn’t a barrier to personal use, and PRs get merged quickly. This means resolving and closing issues, pull requests, and discussion posts quickly.
+## Contributing to LLxprt Code
 
-## How the Roadmap Works
+We **actively want your contributions**! To maximize the chance your PR is accepted:
 
-Our roadmap is managed directly through Github Issues. See our entry point Roadmap Issue [here](https://github.com/acoliver/llxprt-code/issues/4191). This approach allows for transparency and gives you a direct way to learn more or get involved with any specific initiative. All our roadmap items will be tagged as Type:`Feature` and Label:`maintainer` for features we are actively working on, or Type:`Task` and Label:`maintainer` for a more detailed list of tasks.
+1. **Open an Issue First:** Before starting work, [open an issue](https://github.com/acoliver/llxprt-code/issues/new) to discuss your idea. This ensures alignment with project goals and prevents duplicate effort.
 
-Issues are organized to provide key information at a glance:
+2. **Quality Standards:**
+   - All code must pass lint checks (`npm run lint`)
+   - Existing tests must pass
+   - New features require tests
+   - Follow the existing code style and patterns
 
-- **Target Quarter:** `Milestone` denotes the anticipated delivery timeline.
-- **Feature Area:** Labels such as `area/model` or `area/tooling` categorizes the work.
-- **Issue Type:** _Workstream_ => _Epics_ => _Features_ => _Tasks|Bugs_
-
-To see what we're working on, you can filter our issues by these dimensions. See all our items [here](https://github.com/orgs/google-gemini/projects/11/views/19)
+3. **What We're Looking For:**
+   - Support for new AI providers
+   - Local model integrations  
+   - Performance improvements
+   - Tool and capability expansions
+   - Documentation improvements
+   - Bug fixes
 
 ## Focus Areas
 
-To better organize our efforts, we categorize our work into several key feature areas. These labels are used on our GitHub Issues to help you filter and
-find initiatives that interest you.
+Our development priorities include:
 
-- **Authentication:** Secure user access via API keys, Gemini Code Assist login etc.
-- **Model:** Support new Gemini models, multi-modality, local execution, and performance tuning.
-- **User Experience:** Improve the CLI's usability, performance, interactive features, and documentation.
-- **Tooling:** Built-in tools and the MCP ecosystem.
-- **Core:** Core functionality of the CLI
-- **Extensibility:** Bringing Gemini CLI to other surfaces e.g. GitHub.
-- **Contribution:** Improve the contribution process via test automation and CI/CD pipeline enhancements.
-- **Platform:** Manage installation, OS support, and the underlying CLI framework.
-- **Quality:** Focus on testing, reliability, performance, and overall product quality.
-- **Background Agents:** Enable long-running, autonomous tasks and proactive assistance.
-- **Security and Privacy:** For all things related to security and privacy
+- **Provider Ecosystem:** Continuously add support for new AI providers and models
+- **Local Model Support:** First-class support for privacy-conscious users running local LLMs
+- **Tool Capabilities:** Expand the tools available to AI agents
+- **Performance:** Optimize for speed and efficiency across all providers
+- **Developer Experience:** Make the tool delightful to use daily
+- **Community Features:** Features requested and built by the community
 
-## How to Contribute
+## Maintainership
 
-LLxprt Code is an open-source project, and we welcome contributions from the community! Whether you're a developer, a designer, or just an enthusiastic user you can find our [Community Guidelines here](https://github.com/acoliver/llxprt-code/blob/main/CONTRIBUTING.md) to learn how to get started. There are many ways to get involved:
+We're actively looking for **proven maintainers** to help guide the project. If you're passionate about AI tooling and have a track record of open source contributions, please reach out.
 
-- **Roadmap:** Please review and find areas in our [roadmap](https://github.com/acoliver/llxprt-code/issues/4191) that you would like to contribute to. Contributions based on this will be easiest to integrate with.
-- **Report Bugs:** If you find an issue, please create a bug(https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml) with as much detail as possible. If you believe it is a critical breaking issue preventing direct CLI usage, please tag it as `priorty/p0`.
-- **Suggest Features:** Have a great idea? We'd love to hear it! Open a [feature request](https://github.com/acoliver/llxprt-code/issues/new?template=feature_request.yml).
-- **Contribute Code:** Check out our [CONTRIBUTING.md](https://github.com/acoliver/llxprt-code/blob/main/CONTRIBUTING.md) file for guidelines on how to submit pull requests. We have a list of "good first issues" for new contributors.
-- **Write Documentation:** Help us improve our documentation, tutorials, and examples.
-  We are excited about the future of Gemini CLI and look forward to building it with you!
+## Tracking Upstream
+
+We deeply appreciate Google's work on Gemini CLI and plan to:
+- Continue merging beneficial changes from upstream
+- Maintain compatibility where it makes sense
+- Contribute improvements back when possible
+
+However, LLxprt Code will evolve independently based on community needs, especially in areas like multi-provider support that may not align with Google's vision.
+
+## Get Involved
+
+This is a project built on **peace, love, and open source**. Whether you're fixing a typo or adding support for a new provider, every contribution matters. 
+
+- **Discord/Community:** [Coming soon - help us build it!]
+- **Issues:** [Browse or create](https://github.com/acoliver/llxprt-code/issues)
+- **Discussions:** [Join the conversation](https://github.com/acoliver/llxprt-code/discussions)
+
+Together, we're building the future of AI-assisted development - one PR at a time.
+
+---
+
+*LLxprt Code is an [Apache 2.0 open source project](https://github.com/acoliver/llxprt-code?tab=Apache-2.0-1-ov-file#readme). We welcome contributions aligned with our vision of multi-provider, community-driven development.*
