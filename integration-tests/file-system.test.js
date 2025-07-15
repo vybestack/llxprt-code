@@ -7,6 +7,8 @@
 import { strict as assert } from 'assert';
 import { test } from 'node:test';
 import { TestRig } from './test-helper.js';
+import { existsSync } from 'fs';
+import { join } from 'path';
 
 test('reads a file', (t) => {
   const rig = new TestRig();
@@ -30,11 +32,9 @@ test('writes a file', (t) => {
   rig.run(`write "Hello World!" to test.txt`);
 
   // Debug: check if file exists and what's in it
-  const fs = require('fs');
-  const path = require('path');
-  const expectedPath = path.join(rig.testDir, 'test.txt');
+  const expectedPath = join(rig.testDir, 'test.txt');
   console.log('Expected file path:', expectedPath);
-  console.log('File exists:', fs.existsSync(expectedPath));
+  console.log('File exists:', existsSync(expectedPath));
 
   const fileContent = rig.readFile('test.txt');
   console.log('File content:', JSON.stringify(fileContent));
