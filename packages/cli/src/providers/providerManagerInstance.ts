@@ -63,7 +63,8 @@ export function getProviderManager(): ProviderManager {
       }
 
       if (openaiApiKey) {
-        const openaiProvider = new OpenAIProvider(openaiApiKey);
+        const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+        const openaiProvider = new OpenAIProvider(openaiApiKey, openaiBaseUrl, userSettings);
         providerManagerInstance.registerProvider(openaiProvider);
         // OpenAI provider registered
       }
@@ -86,7 +87,8 @@ export function getProviderManager(): ProviderManager {
       }
 
       if (anthropicApiKey) {
-        const anthropicProvider = new AnthropicProvider(anthropicApiKey);
+        const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
+        const anthropicProvider = new AnthropicProvider(anthropicApiKey, anthropicBaseUrl);
         providerManagerInstance.registerProvider(anthropicProvider);
         // Anthropic provider registered
       }
