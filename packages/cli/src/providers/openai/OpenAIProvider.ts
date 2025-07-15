@@ -57,12 +57,25 @@ export class OpenAIProvider implements IProvider {
     this.settings = settings;
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
+    
+    if (process.env.DEBUG || process.env.VERBOSE) {
+      console.log('[OpenAIProvider] Constructor called with:', {
+        hasApiKey: !!apiKey,
+        baseURL: baseURL || 'undefined (will use OpenAI default)',
+        settingsProvided: !!settings,
+      });
+    }
+    
     this.openai = new OpenAI({
       apiKey,
       baseURL,
       // Allow browser environment for tests
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
     });
+    
+    if (process.env.DEBUG || process.env.VERBOSE) {
+      console.log('[OpenAIProvider] OpenAI client created with baseURL:', this.openai.baseURL);
+    }
   }
 
   private requiresTextToolCallParsing(): boolean {
