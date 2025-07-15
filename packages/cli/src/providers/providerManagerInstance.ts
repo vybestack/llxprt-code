@@ -70,7 +70,11 @@ export function getProviderManager(): ProviderManager {
             baseUrl: openaiBaseUrl || 'default',
           });
         }
-        const openaiProvider = new OpenAIProvider(openaiApiKey, openaiBaseUrl, userSettings);
+        const openaiProvider = new OpenAIProvider(
+          openaiApiKey,
+          openaiBaseUrl,
+          userSettings,
+        );
         providerManagerInstance.registerProvider(openaiProvider);
         // OpenAI provider registered
       }
@@ -94,7 +98,10 @@ export function getProviderManager(): ProviderManager {
 
       if (anthropicApiKey) {
         const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
-        const anthropicProvider = new AnthropicProvider(anthropicApiKey, anthropicBaseUrl);
+        const anthropicProvider = new AnthropicProvider(
+          anthropicApiKey,
+          anthropicBaseUrl,
+        );
         providerManagerInstance.registerProvider(anthropicProvider);
         // Anthropic provider registered
       }
