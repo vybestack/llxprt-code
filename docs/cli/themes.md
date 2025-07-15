@@ -13,6 +13,7 @@ LLxprt Code comes with a selection of pre-defined themes, which you can list usi
   - `Default`
   - `Dracula`
   - `GitHub`
+  - `Green Screen` - Classic retro terminal look with green phosphor aesthetics
 - **Light Themes:**
   - `ANSI Light`
   - `Ayu Light`

@@ -1,8 +1,10 @@
-# LLxprt Code Observability Guide
+# LLxprt Code Observability Guide (Local Use Only)
 
-Telemetry provides data about LLxprt Code's performance, health, and usage. By enabling it, you can monitor operations, debug issues, and optimize tool usage through traces, metrics, and structured logs.
+**Important:** LLxprt Code does not collect or send telemetry data anywhere by default. The telemetry system described here is for your own local monitoring and debugging purposes only.
 
-LLxprt Code's telemetry system is built on the **[OpenTelemetry] (OTEL)** standard, allowing you to send data to any compatible backend.
+When enabled, telemetry provides data about LLxprt Code's performance, health, and usage on your local machine. You can monitor operations, debug issues, and optimize tool usage through traces, metrics, and structured logs.
+
+LLxprt Code's telemetry system is built on the **[OpenTelemetry] (OTEL)** standard, allowing you to send data to any compatible backend that you control.
 
 [OpenTelemetry]: https://opentelemetry.io/
 

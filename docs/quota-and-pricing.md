@@ -1,70 +1,73 @@
 # LLxprt Code: Quotas and Pricing
 
-Your LLxprt Code quotas and pricing depend on the type of account you use to authenticate with Google. Additionally, both quotas and pricing may be calculated differently based on the model version, requests, and tokens used. A summary of model usage is available through the `/stats` command and presented on exit at the end of a session. See [privacy and terms](./tos-privacy.md) for details on Privacy policy and Terms of Service. Note: published prices are list price; additional negotiated commercial discounting may apply.
+LLxprt Code supports multiple AI providers, each with their own pricing and quota structures. A summary of model usage is available through the `/stats` command and presented on exit at the end of a session.
 
-This article outlines the specific quotas and pricing applicable to the LLxprt Code when using different authentication methods.
+**Important:** LLxprt Code displays a "Paid Mode" indicator in the lower right corner when it detects you're using a paid service. However, this is a heuristic to help you avoid unexpected costs - always verify with your provider's documentation.
 
-## 1. Log in with Google (Gemini Code Assist Free Tier)
+## Provider-Specific Pricing
 
-For users who authenticate by using their Google account to access Gemini Code Assist for individuals:
+### Google Gemini
+For detailed information about Google's quotas and pricing options, including:
+- Free tier with Google account login (/auth)
+- API key options (paid and unpaid)
+- Vertex AI pricing
+- Workspace and enterprise options
 
-- **Quota:**
-  - 60 requests per minute
-  - 1000 requests per day
-  - Token usage is not applicable
-- **Cost:** Free
-- **Details:** [Gemini Code Assist Quotas](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
-- **Notes:** A specific quota for different models is not specified; model fallback may occur to preserve shared experience quality.
+Please see [Google's original documentation](https://github.com/google-gemini/gemini-cli/blob/main/docs/quota-and-pricing.md) for comprehensive details.
 
-## 2. Gemini API Key (Unpaid)
+### Other Providers
 
-If you are using a Gemini API key for the free tier:
+Each provider has their own pricing structure:
 
-- **Quota:**
-  - Flash model only
-  - 10 requests per minute
-  - 250 requests per day
-- **Cost:** Free
-- **Details:** [Gemini API Rate Limits](https://ai.google.dev/gemini-api/docs/rate-limits)
+#### OpenAI
+- **Pricing:** Pay-per-token model
+- **Models:** o3, o1, GPT-4.1, GPT-4o, and others
+- **Details:** [OpenAI Pricing](https://openai.com/pricing)
+- **Note:** All OpenAI usage requires an API key and is paid
 
-## 3. Gemini API Key (Paid)
+#### Anthropic
+- **Pricing:** Pay-per-token model
+- **Models:** Claude Opus 4, Claude Sonnet 4, and others
+- **Details:** [Anthropic Pricing](https://www.anthropic.com/pricing)
+- **Note:** All Anthropic usage requires an API key and is paid
 
-If you are using a Gemini API key with a paid plan:
+#### Local Models
+- **Cost:** Free (you provide the compute)
+- **Requirements:** Local hardware capable of running the model
+- **Options:** LM Studio, llama.cpp, or any OpenAI-compatible server
 
-- **Quota:** Varies by pricing tier.
-- **Cost:** Varies by pricing tier and model/token usage.
-- **Details:** [Gemini API Rate Limits](https://ai.google.dev/gemini-api/docs/rate-limits), [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
+#### OpenRouter
+- **Pricing:** Varies by model (aggregates multiple providers)
+- **Details:** [OpenRouter Pricing](https://openrouter.ai/models)
+- **Note:** Provides access to 100+ models with unified billing
 
-## 4. Login with Google (for Workspace or Licensed Code Assist users)
+#### Fireworks
+- **Pricing:** Competitive rates for fast inference
+- **Details:** [Fireworks Pricing](https://fireworks.ai/pricing)
+- **Note:** Optimized for speed and cost-efficiency
 
-For users of Standard or Enterprise editions of Gemini Code Assist, quotas and pricing are based on a fixed price subscription with assigned license seats:
+## Free vs Paid Mode Detection
 
-- **Standard Tier:**
-  - **Quota:** 120 requests per minute, 1500 per day
-- **Enterprise Tier:**
-  - **Quota:** 120 requests per minute, 2000 per day
-- **Cost:** Fixed price included with your Gemini for Google Workspace or Gemini Code Assist subscription.
-- **Details:** [Gemini Code Assist Quotas](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli), [Gemini Code Assist Pricing](https://cloud.google.com/products/gemini/pricing)
-- **Notes:**
-  - Specific quota for different models is not specified; model fallback may occur to preserve shared experience quality.
-  - Members of the Google Developer Program may have Gemini Code Assist licenses through their membership.
+LLxprt Code attempts to detect when you're in "free" vs "paid" mode:
 
-## 5. Vertex AI (Express Mode)
+- **Free Mode:** 
+  - Google account login with Gemini (limited daily requests)
+  - Local models
+  
+- **Paid Mode:**
+  - Any API key usage (except Google's free tier)
+  - All OpenAI and Anthropic usage
+  - Most third-party providers
 
-If you are using Vertex AI in Express Mode:
+The mode indicator helps you track potential costs, but always verify actual charges with your provider.
 
-- **Quota:** Quotas are variable and specific to your account. See the source for more details.
-- **Cost:** After your Express Mode usage is consumed and you enable billing for your project, cost is based on standard [Vertex AI Pricing](https://cloud.google.com/vertex-ai/pricing).
-- **Details:** [Vertex AI Express Mode Quotas](https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview#quotas)
+## Managing Costs
 
-## 6. Vertex AI (Regular Mode)
+1. **Monitor Usage:** Use `/stats` regularly to track token usage
+2. **Choose Models Wisely:** Smaller models are often cheaper but less capable
+3. **Use Local Models:** For development and testing when possible
+4. **Set Budgets:** Most providers offer spending limits in their dashboards
 
-If you are using the standard Vertex AI service:
+## Privacy and Terms
 
-- **Quota:** Governed by a dynamic shared quota system or pre-purchased provisioned throughput.
-- **Cost:** Based on model and token usage. See [Vertex AI Pricing](https://cloud.google.com/vertex-ai/pricing).
-- **Details:** [Vertex AI Dynamic Shared Quota](https://cloud.google.com/vertex-ai/generative-ai/docs/resources/dynamic-shared-quota)
-
-## 7. Google One and Ultra plans, Gemini for Workspace plans
-
-These plans currently apply only to the use of Gemini web-based products provided by Google-based experiences (for example, the Gemini web app or the Flow video editor). These plans do not apply to the API usage which powers the LLxprt Code. Supporting these plans is under active consideration for future support.
+See [privacy and terms](./tos-privacy.md) for details on privacy policies and terms of service for each provider.

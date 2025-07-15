@@ -1,6 +1,6 @@
 # LLxprt Code Core
 
-LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Code, handling communication with the Gemini API, managing tools, and processing requests sent from `packages/cli`. For a general overview of LLxprt Code, see the [main documentation page](../index.md).
+LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Code, handling communication with multiple AI providers (Google Gemini, OpenAI, Anthropic, and others), managing tools, and processing requests sent from `packages/cli`. For a general overview of LLxprt Code, see the [main documentation page](../index.md).
 
 ## Navigating this section
 
@@ -11,36 +11,41 @@ LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Co
 
 While the `packages/cli` portion of LLxprt Code provides the user interface, `packages/core` is responsible for:
 
-- **Gemini API interaction:** Securely communicating with the Google Gemini API, sending user prompts, and receiving model responses.
-- **Prompt engineering:** Constructing effective prompts for the Gemini model, potentially incorporating conversation history, tool definitions, and instructional context from `LLXPRT.md` files.
+- **AI Provider interaction:** Securely communicating with various AI providers (Google Gemini, OpenAI, Anthropic, etc.), sending user prompts, and receiving model responses.
+- **Prompt engineering:** Constructing effective prompts for different AI models, potentially incorporating conversation history, tool definitions, and instructional context from `LLXPRT.md` files.
 - **Tool management & orchestration:**
   - Registering available tools (e.g., file system tools, shell command execution).
-  - Interpreting tool use requests from the Gemini model.
+  - Interpreting tool use requests from the AI model.
   - Executing the requested tools with the provided arguments.
-  - Returning tool execution results to the Gemini model for further processing.
+  - Returning tool execution results to the AI model for further processing.
 - **Session and state management:** Keeping track of the conversation state, including history and any relevant context required for coherent interactions.
-- **Configuration:** Managing core-specific configurations, such as API key access, model selection, and tool settings.
+- **Configuration:** Managing core-specific configurations, such as API key access, model selection, provider settings, and tool settings.
 
 ## Security considerations
 
 The core plays a vital role in security:
 
-- **API key management:** It handles the `GEMINI_API_KEY` and ensures it's used securely when communicating with the Gemini API.
+- **API key management:** It handles various API keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) and ensures they're used securely when communicating with their respective providers.
 - **Tool execution:** When tools interact with the local system (e.g., `run_shell_command`), the core (and its underlying tool implementations) must do so with appropriate caution, often involving sandboxing mechanisms to prevent unintended modifications.
 
 ## Chat history compression
 
-To ensure that long conversations don't exceed the token limits of the Gemini model, the core includes a chat history compression feature.
+To ensure that long conversations don't exceed the token limits of the AI model, the core includes a chat history compression feature.
 
 When a conversation approaches the token limit for the configured model, the core automatically compresses the conversation history before sending it to the model. This compression is designed to be lossless in terms of the information conveyed, but it reduces the overall number of tokens used.
 
-You can find the token limits for each model in the [Google AI documentation](https://ai.google.dev/gemini-api/docs/models).
+Token limits vary by provider and model:
+- **Google Gemini:** See the [Google AI documentation](https://ai.google.dev/gemini-api/docs/models)
+- **OpenAI:** Models like GPT-4.1 and o3 have different context windows
+- **Anthropic:** Claude models offer various context window sizes
 
 ## Model fallback
 
-LLxprt Code includes a model fallback mechanism to ensure that you can continue to use the CLI even if the default "pro" model is rate-limited.
+LLxprt Code includes a model fallback mechanism for the Google Gemini provider to ensure that you can continue to use the CLI even if the default "pro" model is rate-limited.
 
-If you are using the default "pro" model and the CLI detects that you are being rate-limited, it automatically switches to the "flash" model for the current session. This allows you to continue working without interruption.
+When using Gemini, if the CLI detects that you are being rate-limited on the "pro" model, it automatically switches to the "flash" model for the current session. This allows you to continue working without interruption.
+
+Other providers may have their own rate limiting behaviors - consult their documentation for details.
 
 ## File discovery service
 
