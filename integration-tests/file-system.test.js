@@ -7,7 +7,7 @@
 import { strict as assert } from 'assert';
 import { test } from 'node:test';
 import { TestRig } from './test-helper.js';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 test('reads a file', (t) => {
@@ -29,7 +29,16 @@ test('writes a file', (t) => {
   console.log('Test directory:', rig.testDir);
   console.log('Working directory:', process.cwd());
 
-  rig.run(`write "Hello World!" to test.txt`);
+  const output = rig.run(`write "Hello World!" to test.txt`);
+  console.log('CLI output:', output);
+  
+  // Check if any files were created in the test directory
+  const files = readdirSync(rig.testDir);
+  console.log('Files in test directory:', files);
+  for (const file of files) {
+    const content = readFileSync(join(rig.testDir, file), 'utf-8');
+    console.log(`File ${file} content:`, JSON.stringify(content));
+  }
 
   // Debug: check if file exists and what's in it
   const expectedPath = join(rig.testDir, 'test.txt');

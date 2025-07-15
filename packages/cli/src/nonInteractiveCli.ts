@@ -62,7 +62,9 @@ export async function runNonInteractive(
   const chat = await geminiClient.getChat();
 
   const abortController = new AbortController();
-  let currentMessages: Content[] = [{ role: 'user', parts: [{ text: input }] }];
+  // Add context about current working directory
+  const contextMessage = `The current working directory is: ${process.cwd()}`;
+  let currentMessages: Content[] = [{ role: 'user', parts: [{ text: `${contextMessage}\n\n${input}` }] }];
   let turnCount = 0;
   try {
     while (true) {
