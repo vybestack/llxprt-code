@@ -204,7 +204,14 @@ export class OpenAIProvider implements IProvider {
     // console.log('[OpenAI] Sending request to Responses API:', JSON.stringify(request, null, 2));
 
     // Make the API call
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const baseURL = this.baseURL || 'https://api.openai.com/v1';
+    const responsesURL = `${baseURL}/responses`;
+    
+    if (process.env.DEBUG || process.env.VERBOSE) {
+      console.log('[OpenAIProvider] Making request to:', responsesURL);
+    }
+    
+    const response = await fetch(responsesURL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
@@ -245,7 +252,7 @@ export class OpenAIProvider implements IProvider {
         });
 
         const retryResponse = await fetch(
-          'https://api.openai.com/v1/responses',
+          responsesURL,
           {
             method: 'POST',
             headers: {
@@ -447,6 +454,11 @@ export class OpenAIProvider implements IProvider {
     console.debug('[OpenAIProvider] generateChatCompletion called');
     console.debug('[OpenAIProvider] Model:', this.currentModel);
     console.debug('[OpenAIProvider] Number of messages:', messages.length);
+    
+    if (process.env.DEBUG || process.env.VERBOSE) {
+      console.log('[OpenAIProvider] Current baseURL:', this.baseURL);
+      console.log('[OpenAIProvider] OpenAI client baseURL:', this.openai.baseURL);
+    }
 
     // Log message roles to understand conversation flow
     const messageRoles = messages.map((m) => m.role);
