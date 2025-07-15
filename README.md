@@ -8,7 +8,7 @@ LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/googl
 
 ## Key Features
 
-- **Multi-Provider Support**: Use any LLM provider including Google Gemini, OpenAI, Anthropic, OpenRouter, Fireworks, or local models
+- **Multi-Provider Support**: Direct access to OpenAI (GPT-4), Anthropic (Claude), Google Gemini, plus OpenRouter, Fireworks, and local models
 - **Enhanced Theme Support**: Beautiful themes applied consistently across the entire tool
 - **Full Gemini CLI Compatibility**: All original features work seamlessly, including Google authentication via `/auth`
 - **Local Model Support**: Run models locally with LM Studio, llama.cpp, or any OpenAI-compatible server
@@ -48,6 +48,30 @@ With LLxprt Code you can:
    - Set up authentication as needed
 
 ## Provider Configuration
+
+### Using OpenAI
+
+Direct access to GPT-4, GPT-3.5, and other OpenAI models:
+
+1. Get your API key from [OpenAI](https://platform.openai.com/api-keys)
+2. Configure LLxprt Code:
+   ```
+   /provider openai
+   /key sk-your-openai-key-here
+   /model gpt-4-turbo-preview
+   ```
+
+### Using Anthropic
+
+Access Claude 3.5 Sonnet, Claude 3 Opus, and other Anthropic models:
+
+1. Get your API key from [Anthropic](https://console.anthropic.com/account/keys)
+2. Configure:
+   ```
+   /provider anthropic
+   /key sk-ant-your-key-here
+   /model claude-3-5-sonnet-20241022
+   ```
 
 ### Using Local Models
 
