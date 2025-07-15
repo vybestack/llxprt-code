@@ -63,6 +63,10 @@ export interface BugCommandSettings {
   urlTemplate: string;
 }
 
+export interface SummarizeToolOutputSettings {
+  tokenBudget?: number;
+}
+
 export interface TelemetrySettings {
   enabled?: boolean;
   target?: TelemetryTarget;
@@ -149,6 +153,7 @@ export interface ConfigParameters {
   providerManager?: ProviderManager;
   provider?: string;
   noBrowser?: boolean;
+  summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
   ideMode?: boolean;
 }
 
@@ -198,6 +203,9 @@ export class Config {
   private quotaErrorOccurred: boolean = false;
   private readonly providerManager?: ProviderManager;
   private readonly provider?: string;
+  private readonly summarizeToolOutput:
+    | Record<string, SummarizeToolOutputSettings>
+    | undefined;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -245,6 +253,7 @@ export class Config {
     this.providerManager = params.providerManager;
     this.provider = params.provider;
     this.noBrowser = params.noBrowser ?? false;
+    this.summarizeToolOutput = params.summarizeToolOutput;
     this.ideMode = params.ideMode ?? false;
 
     if (params.contextFileName) {
@@ -517,6 +526,12 @@ export class Config {
 
   getNoBrowser(): boolean {
     return this.noBrowser;
+  }
+
+  getSummarizeToolOutputConfig():
+    | Record<string, SummarizeToolOutputSettings>
+    | undefined {
+    return this.summarizeToolOutput;
   }
 
   getIdeMode(): boolean {

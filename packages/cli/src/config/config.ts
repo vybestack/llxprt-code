@@ -18,6 +18,7 @@ import {
   FileDiscoveryService,
   TelemetryTarget,
   MCPServerConfig,
+  IDE_SERVER_NAME,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -300,7 +301,7 @@ export async function loadCliConfig(
   }
 
   if (ideMode) {
-    mcpServers['_ide_server'] = new MCPServerConfig(
+    mcpServers[IDE_SERVER_NAME] = new MCPServerConfig(
       undefined, // command
       undefined, // args
       undefined, // env
@@ -383,6 +384,7 @@ export async function loadCliConfig(
     providerManager: providerManagerAdapter,
     provider: argv.provider,
     noBrowser: !!process.env.NO_BROWSER,
+    summarizeToolOutput: settings.summarizeToolOutput,
     ideMode,
   });
 

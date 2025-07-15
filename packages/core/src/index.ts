@@ -38,6 +38,7 @@ export * from './utils/retry.js';
 // Export services
 export * from './services/fileDiscoveryService.js';
 export * from './services/gitService.js';
+export * from './services/ideContext.js';
 
 // Export base tool definitions
 export * from './tools/tools.js';
