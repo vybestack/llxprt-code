@@ -1,3 +1,0 @@
-/provider openai
-/model gpt-4o-mini
-List the files in the current directory and also search for the term 'OpenAIProvider' in the codebase
