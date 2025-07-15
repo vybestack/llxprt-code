@@ -76,14 +76,6 @@ export function getProviderManager(): ProviderManager {
           userSettings,
         );
         providerManagerInstance.registerProvider(openaiProvider);
-        
-        // Apply saved baseURL if available (takes precedence over env var)
-        if (userSettings?.providerBaseUrls?.openai) {
-          openaiProvider.setBaseUrl(userSettings.providerBaseUrls.openai);
-          if (process.env.DEBUG || process.env.VERBOSE) {
-            console.log('[ProviderManager] Applied saved OpenAI baseURL:', userSettings.providerBaseUrls.openai);
-          }
-        }
         // OpenAI provider registered
       }
 
@@ -111,14 +103,6 @@ export function getProviderManager(): ProviderManager {
           anthropicBaseUrl,
         );
         providerManagerInstance.registerProvider(anthropicProvider);
-        
-        // Apply saved baseURL if available (takes precedence over env var)
-        if (userSettings?.providerBaseUrls?.anthropic) {
-          anthropicProvider.setBaseUrl(userSettings.providerBaseUrls.anthropic);
-          if (process.env.DEBUG || process.env.VERBOSE) {
-            console.log('[ProviderManager] Applied saved Anthropic baseURL:', userSettings.providerBaseUrls.anthropic);
-          }
-        }
         // Anthropic provider registered
       }
 
