@@ -7,8 +7,8 @@ LLxprt Code supports multiple AI providers, allowing you to switch between diffe
 LLxprt Code currently supports the following providers:
 
 - **Google Gemini** (default) - Google's AI models
-- **OpenAI** - GPT-4, GPT-3.5, and other OpenAI models
-- **Anthropic** - Claude models
+- **OpenAI** - o3, o1, GPT-4.1, GPT-4o, and other OpenAI models
+- **Anthropic** - Claude Opus 4, Claude Sonnet 4, and other Anthropic models
 
 ## Switching Providers
 
@@ -46,16 +46,20 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export GOOGLE_API_KEY=...
 ```
 
-### Using the /auth Command
+### Using the /key Command
 
-You can also authenticate directly within the CLI:
+You can set API keys directly within the CLI:
 
 ```bash
-# Authenticate with OpenAI
-/auth openai sk-...
+# Set OpenAI API key
+/key sk-...
 
-# Authenticate with Anthropic
-/auth anthropic sk-ant-...
+# Set Anthropic API key (after switching provider)
+/provider anthropic
+/key sk-ant-...
+
+# Or load from a file
+/keyfile ~/.keys/openai.txt
 ```
 
 ### Configuration File
@@ -71,21 +75,22 @@ Each provider offers different models. You can select a specific model using the
 /model
 
 # Select a specific model
-/model gpt-4
-/model claude-3-opus
+/model gpt-4.1
+/model o3
+/model claude-opus-4
 ```
 
 ## Provider-Specific Features
 
 ### OpenAI
 
-- Supports GPT-4, GPT-3.5-turbo, and other OpenAI models
+- Supports o3 (including o3-pro which REQUIRES Responses API), o1, GPT-4.1, GPT-4o, and other OpenAI models
 - Tool calling support with JSON format
-- Responses API support for certain models (o1-preview, o1-mini)
+- Responses API support for advanced models (o3, o1, gpt-4.1)
 
 ### Anthropic
 
-- Supports Claude 3 family models (Opus, Sonnet, Haiku)
+- Supports Claude 4 family models (Opus 4, Sonnet 4) and other Anthropic models
 - Native tool calling support
 - Higher context windows for certain models
 
@@ -135,20 +140,20 @@ The CLI automatically handles format conversion between providers.
 
 ```bash
 # Start with default Gemini provider
-gemini
+llxprt
 
 # Switch to OpenAI
 /provider openai
 
-# Select GPT-4
-/model gpt-4
+# Select GPT-4.1
+/model gpt-4.1
 
 # Have a conversation
 Hello! Can you help me with Python?
 
 # Switch to Anthropic for a different perspective
 /provider anthropic
-/model claude-3-opus
+/model claude-opus-4
 
 What's the best way to handle async operations in Python?
 ```
@@ -162,14 +167,14 @@ You can switch between providers within a single session to leverage different m
 /provider gemini
 Explain quantum computing
 
-# Switch to GPT-4 for coding
+# Switch to o3 for advanced reasoning
 /provider openai
-/model gpt-4
+/model o3
 Write a Python implementation of Shor's algorithm
 
-# Use Claude for detailed analysis
+# Use Claude Opus 4 for detailed analysis
 /provider anthropic
-/model claude-3-opus
+/model claude-opus-4
 Analyze the computational complexity of this implementation
 ```
 

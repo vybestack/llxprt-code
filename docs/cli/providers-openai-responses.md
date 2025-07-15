@@ -15,13 +15,19 @@ The Responses API (`/v1/responses`) is automatically used for compatible models,
 
 The following models automatically use the Responses API:
 
+- `o3-pro` (REQUIRES Responses API - will not work with legacy endpoint)
+- `o3`
+- `o3-mini`
+- `o1`
+- `o1-mini`
+- `gpt-4.1`
 - `gpt-4o`
 - `gpt-4o-mini`
 - `gpt-4o-realtime`
 - `gpt-4-turbo`
 - `gpt-4-turbo-preview`
 
-All other models (including `gpt-3.5-turbo` and custom models) continue to use the legacy completions endpoint.
+All other models and custom models continue to use the legacy completions endpoint.
 
 ## Configuration
 
@@ -42,10 +48,13 @@ The provider automatically selects the appropriate endpoint based on the model:
 
 ```typescript
 // Example: Automatic selection
-const provider = new OpenAIProvider({ model: 'gpt-4o' });
+const provider = new OpenAIProvider({ model: 'gpt-4.1' });
 // Uses: https://api.openai.com/v1/responses
 
-const provider = new OpenAIProvider({ model: 'gpt-3.5-turbo' });
+const provider = new OpenAIProvider({ model: 'o3' });
+// Uses: https://api.openai.com/v1/responses
+
+const provider = new OpenAIProvider({ model: 'custom-model' });
 // Uses: https://api.openai.com/v1/chat/completions
 ```
 
@@ -63,7 +72,7 @@ The Responses API uses a different request format than the legacy completions en
       "content": "Hello"
     }
   ],
-  "model": "gpt-4o",
+  "model": "gpt-4.1",
   "stream": true
 }
 ```
@@ -78,7 +87,7 @@ The Responses API uses a different request format than the legacy completions en
       "content": "What's the weather in San Francisco?"
     }
   ],
-  "model": "gpt-4o",
+  "model": "o3",
   "tools": [
     {
       "type": "function",
@@ -137,10 +146,10 @@ data: {"type":"content_delta","delta":{"text":"</tool_call>"}}
 ### Basic Usage
 
 ```typescript
-import { OpenAIProvider } from '@gemini/cli';
+import { OpenAIProvider } from '@vybestack/llxprt-code';
 
 const provider = new OpenAIProvider({
-  model: 'gpt-4o',
+  model: 'gpt-4.1',
   apiKey: process.env.OPENAI_API_KEY,
 });
 
@@ -180,9 +189,9 @@ for await (const chunk of response) {
 // Option 1: Environment variable
 process.env.OPENAI_RESPONSES_DISABLE = 'true';
 
-// Option 2: Use a legacy model
+// Option 2: Use a custom model (not in the Responses API list)
 const provider = new OpenAIProvider({
-  model: 'gpt-3.5-turbo', // Automatically uses legacy endpoint
+  model: 'my-custom-model', // Automatically uses legacy endpoint
 });
 ```
 
@@ -244,14 +253,17 @@ npm run test:integration -- --grep "Responses API"
 ### Manual Testing
 
 ```bash
-# Test with gpt-4o (uses Responses API)
-gemini chat --model gpt-4o "Hello"
+# Test with gpt-4.1 (uses Responses API)
+llxprt --provider openai --model gpt-4.1 "Hello"
 
-# Test with legacy model
-gemini chat --model gpt-3.5-turbo "Hello"
+# Test with o3 (uses Responses API)
+llxprt --provider openai --model o3 "Hello"
 
-# Force legacy endpoint for gpt-4o
-OPENAI_RESPONSES_DISABLE=true gemini chat --model gpt-4o "Hello"
+# Test with custom model (uses legacy endpoint)
+llxprt --provider openai --model my-custom-model "Hello"
+
+# Force legacy endpoint for gpt-4.1
+OPENAI_RESPONSES_DISABLE=true llxprt --provider openai --model gpt-4.1 "Hello"
 ```
 
 ## Performance Considerations
@@ -292,7 +304,7 @@ const response = await provider.generateChatCompletion({
 1. **Responses API not being used**
    - Check if `OPENAI_RESPONSES_DISABLE` is set
    - Verify the model is in the supported list
-   - Check debug logs: `DEBUG=gemini:* gemini chat ...`
+   - Check debug logs: `DEBUG=llxprt:* llxprt --provider openai ...`
 
 2. **Tool calls not working**
    - Ensure tools are properly formatted for Responses API
@@ -310,10 +322,10 @@ Enable detailed logging to troubleshoot issues:
 
 ```bash
 # Show all provider operations
-DEBUG=gemini:provider:* gemini chat --model gpt-4o "Test"
+DEBUG=llxprt:provider:* llxprt --provider openai --model gpt-4.1 "Test"
 
 # Show only Responses API operations
-DEBUG=gemini:provider:openai:responses gemini chat --model gpt-4o "Test"
+DEBUG=llxprt:provider:openai:responses llxprt --provider openai --model o3 "Test"
 ```
 
 ## See Also
