@@ -1,7 +1,7 @@
 {
-  "name": "@google/gemini-cli",
+  "name": "llxprt-code",
   "version": "0.1.12",
-  "description": "Gemini CLI",
+  "description": "LLxprt Code",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google-gemini/gemini-cli.git"
@@ -38,7 +38,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
-    "@google/gemini-cli-core": "file:../core",
+    "llxprt-code-core": "file:../core",
     "@types/update-notifier": "^6.0.8",
     "chalk": "^5.3.0",
     "command-exists": "^1.2.9",

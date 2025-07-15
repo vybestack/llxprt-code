@@ -67,7 +67,7 @@ import {
   getMCPDiscoveryState,
   getMCPServerStatus,
   GeminiClient,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { LoadedSettings } from '../../config/settings.js';
 import * as ShowMemoryCommandModule from './useShowMemoryCommand';
@@ -91,9 +91,9 @@ vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+vi.mock('llxprt-code-core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@google/gemini-cli-core')>();
+    await importOriginal<typeof import('llxprt-code-core')>();
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),

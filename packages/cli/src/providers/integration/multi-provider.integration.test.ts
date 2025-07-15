@@ -11,7 +11,7 @@ import {
 } from '../providerManagerInstance.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { enhanceConfigWithProviders } from '../enhanceConfigWithProviders.js';
-import { Config } from '@google/gemini-cli-core';
+import { Config } from 'llxprt-code-core';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';

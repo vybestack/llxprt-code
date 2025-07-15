@@ -33,7 +33,7 @@ vi.mock('string-width', () => ({
 }));
 
 // Mock the clipboard module
-vi.mock('@google/gemini-cli-core', () => ({
+vi.mock('llxprt-code-core', () => ({
   unescapePath: (path: string) => path,
 }));
 
@@ -97,11 +97,11 @@ vi.mock('../hooks/useProviderModelDialog.js', () => ({
 }));
 
 // Variable to store the keypress handler
-let keypressHandler: ((ch: string | undefined, key: any) => void) | null = null;
+let keypressHandler: ((ch: string | undefined, key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
 vi.mock('../hooks/useKeypress.js', () => ({
-  useKeypress: (handler: (ch: string | undefined, key: any) => void) => {
+  useKeypress: (handler: (ch: string | undefined, key: Record<string, unknown>) => void) => {
     keypressHandler = handler;
   },
 }));

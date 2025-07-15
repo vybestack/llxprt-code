@@ -7,7 +7,7 @@
 import {
   ToolCallConfirmationDetails,
   ToolResultDisplay,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 
 // Only defining the state enum needed by the UI
 export enum StreamingState {

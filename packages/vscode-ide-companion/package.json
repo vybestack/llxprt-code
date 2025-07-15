@@ -1,6 +1,6 @@
 {
-  "name": "gemini-cli-vscode-ide-companion",
-  "displayName": "Gemini CLI VSCode IDE Companion",
+  "name": "llxprt-code-vscode-ide-companion",
+  "displayName": "LLxprt Code VSCode IDE Companion",
   "description": "",
   "version": "0.0.1",
   "engines": {

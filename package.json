@@ -1,5 +1,5 @@
 {
-  "name": "@google/gemini-cli",
+  "name": "llxprt-code",
   "version": "0.1.12",
   "engines": {
     "node": ">=20"

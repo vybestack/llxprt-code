@@ -8,7 +8,7 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthDialog } from './AuthDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { AuthType } from '@google/gemini-cli-core';
+import { AuthType } from 'llxprt-code-core';
 
 describe('AuthDialog', () => {
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -108,7 +108,7 @@ describe('AuthDialog', () => {
       );
 
       const { lastFrame } = render(
-        <AuthDialog onSelect={() => {}} settings={settings} />,
+        <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
       expect(lastFrame()).not.toContain(
@@ -135,7 +135,7 @@ describe('AuthDialog', () => {
       );
 
       const { lastFrame } = render(
-        <AuthDialog onSelect={() => {}} settings={settings} />,
+        <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
       expect(lastFrame()).toContain(
@@ -163,7 +163,7 @@ describe('AuthDialog', () => {
       );
 
       const { lastFrame } = render(
-        <AuthDialog onSelect={() => {}} settings={settings} />,
+        <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
       // This is a bit brittle, but it's the best way to check which item is selected.
@@ -186,7 +186,7 @@ describe('AuthDialog', () => {
       );
 
       const { lastFrame } = render(
-        <AuthDialog onSelect={() => {}} settings={settings} />,
+        <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
       // Default is LOGIN_WITH_GOOGLE
@@ -211,7 +211,7 @@ describe('AuthDialog', () => {
       );
 
       const { lastFrame } = render(
-        <AuthDialog onSelect={() => {}} settings={settings} />,
+        <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
       expect(lastFrame()).toContain(

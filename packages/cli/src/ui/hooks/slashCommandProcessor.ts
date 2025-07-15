@@ -20,7 +20,7 @@ import {
   getMCPDiscoveryState,
   getMCPServerStatus,
   AuthType,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
   Message,

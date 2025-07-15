@@ -20,7 +20,7 @@ import { StatsDisplay } from './StatsDisplay.js';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
-import { Config } from '@google/gemini-cli-core';
+import { Config } from 'llxprt-code-core';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;

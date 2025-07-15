@@ -18,7 +18,7 @@ import {
   uiTelemetryService,
   SessionMetrics,
   ModelMetrics,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 
 // --- Interface Definitions ---
 

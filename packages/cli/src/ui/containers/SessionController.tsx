@@ -15,7 +15,7 @@ import {
   isGenericQuotaExceededError,
   UserTierId,
   getErrorMessage,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 import { loadHierarchicalGeminiMemory } from '../../config/config.js';
 import process from 'node:process';
 import {

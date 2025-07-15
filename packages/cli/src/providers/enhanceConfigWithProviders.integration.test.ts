@@ -14,7 +14,7 @@ import { OpenAIProvider } from './openai/OpenAIProvider';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { Config } from '@google/gemini-cli-core';
+import type { Config } from 'llxprt-code-core';
 
 describe('enhanceConfigWithProviders Integration Test', () => {
   let apiKey: string | null = null;

@@ -9,7 +9,7 @@ import { useCallback } from 'react';
 import { RadioButtonSelect } from '../components/shared/RadioButtonSelect.js';
 import { usePrivacySettings } from '../hooks/usePrivacySettings.js';
 import { CloudPaidPrivacyNotice } from './CloudPaidPrivacyNotice.js';
-import { Config } from '@google/gemini-cli-core';
+import { Config } from 'llxprt-code-core';
 import { Colors } from '../colors.js';
 
 interface CloudFreePrivacyNoticeProps {

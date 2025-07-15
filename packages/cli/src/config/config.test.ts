@@ -9,7 +9,7 @@ import * as os from 'os';
 import { loadCliConfig, parseArguments } from './config';
 import { Settings } from './settings';
 import { Extension } from './extension';
-import * as ServerConfig from '@google/gemini-cli-core';
+import * as ServerConfig from 'llxprt-code-core';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -29,9 +29,9 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
-vi.mock('@google/gemini-cli-core', async () => {
+vi.mock('llxprt-code-core', async () => {
   const actualServer = await vi.importActual<typeof ServerConfig>(
-    '@google/gemini-cli-core',
+    'llxprt-code-core',
   );
   return {
     ...actualServer,

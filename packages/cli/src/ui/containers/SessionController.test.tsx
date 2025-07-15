@@ -19,7 +19,7 @@ import {
   isProQuotaExceededError,
   isGenericQuotaExceededError,
   Config,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 import { IProvider } from '../../providers/IProvider.js';
 import { AppAction } from '../reducers/appReducer.js';
 
@@ -44,8 +44,8 @@ vi.mock('../../config/config.js', () => ({
   ),
 }));
 
-vi.mock('@google/gemini-cli-core', async () => {
-  const actual = await vi.importActual('@google/gemini-cli-core');
+vi.mock('llxprt-code-core', async () => {
+  const actual = await vi.importActual('llxprt-code-core');
   return {
     ...actual,
     isProQuotaExceededError: vi.fn(() => false),

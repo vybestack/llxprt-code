@@ -7,7 +7,7 @@
 import {
   ContentGenerator,
   ContentGeneratorConfig,
-} from '@google/gemini-cli-core';
+} from 'llxprt-code-core';
 
 /**
  * Creates a ContentGenerator using the active provider if available

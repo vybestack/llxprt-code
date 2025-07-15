@@ -302,7 +302,8 @@ export function logLoopDetected(
   config: Config,
   event: LoopDetectedEvent,
 ): void {
-  ClearcutLogger.getInstance(config)?.logLoopDetectedEvent(event);
+  // TELEMETRY REMOVED: ClearcutLogger disabled
+  // ClearcutLogger.getInstance(config)?.logLoopDetectedEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {

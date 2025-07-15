@@ -1,7 +1,7 @@
 {
-  "name": "@google/gemini-cli-core",
+  "name": "llxprt-code-core",
   "version": "0.1.12",
-  "description": "Gemini CLI Core",
+  "description": "LLxprt Code Core",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/google-gemini/gemini-cli.git"

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { UserTierId } from '@google/gemini-cli-core';
+import { UserTierId } from 'llxprt-code-core';
 
 // Session state interface
 export interface SessionState {
