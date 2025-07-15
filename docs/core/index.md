@@ -1,6 +1,6 @@
-# Gemini CLI Core
+# LLxprt Code Core
 
-Gemini CLI's core package (`packages/core`) is the backend portion of Gemini CLI, handling communication with the Gemini API, managing tools, and processing requests sent from `packages/cli`. For a general overview of Gemini CLI, see the [main documentation page](../index.md).
+LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Code, handling communication with the Gemini API, managing tools, and processing requests sent from `packages/cli`. For a general overview of LLxprt Code, see the [main documentation page](../index.md).
 
 ## Navigating this section
 
@@ -9,7 +9,7 @@ Gemini CLI's core package (`packages/core`) is the backend portion of Gemini CLI
 
 ## Role of the core
 
-While the `packages/cli` portion of Gemini CLI provides the user interface, `packages/core` is responsible for:
+While the `packages/cli` portion of LLxprt Code provides the user interface, `packages/core` is responsible for:
 
 - **Gemini API interaction:** Securely communicating with the Google Gemini API, sending user prompts, and receiving model responses.
 - **Prompt engineering:** Constructing effective prompts for the Gemini model, potentially incorporating conversation history, tool definitions, and instructional context from `GEMINI.md` files.
@@ -38,7 +38,7 @@ You can find the token limits for each model in the [Google AI documentation](ht
 
 ## Model fallback
 
-Gemini CLI includes a model fallback mechanism to ensure that you can continue to use the CLI even if the default "pro" model is rate-limited.
+LLxprt Code includes a model fallback mechanism to ensure that you can continue to use the CLI even if the default "pro" model is rate-limited.
 
 If you are using the default "pro" model and the CLI detects that you are being rate-limited, it automatically switches to the "flash" model for the current session. This allows you to continue working without interruption.
 

@@ -1,13 +1,13 @@
-# Gemini CLI Architecture Overview
+# LLxprt Code Architecture Overview
 
-This document provides a high-level overview of the Gemini CLI's architecture.
+This document provides a high-level overview of the LLxprt Code's architecture.
 
 ## Core components
 
-The Gemini CLI is primarily composed of two main packages, along with a suite of tools that can be used by the system in the course of handling command-line input:
+The LLxprt Code is primarily composed of two main packages, along with a suite of tools that can be used by the system in the course of handling command-line input:
 
 1.  **CLI package (`packages/cli`):**
-    - **Purpose:** This contains the user-facing portion of the Gemini CLI, such as handling the initial user input, presenting the final output, and managing the overall user experience.
+    - **Purpose:** This contains the user-facing portion of the LLxprt Code, such as handling the initial user input, presenting the final output, and managing the overall user experience.
     - **Key functions contained in the package:**
       - [Input processing](./cli/commands.md)
       - History management
@@ -16,7 +16,7 @@ The Gemini CLI is primarily composed of two main packages, along with a suite of
       - [CLI configuration settings](./cli/configuration.md)
 
 2.  **Core package (`packages/core`):**
-    - **Purpose:** This acts as the backend for the Gemini CLI. It receives requests sent from `packages/cli`, orchestrates interactions with the Gemini API, and manages the execution of available tools.
+    - **Purpose:** This acts as the backend for the LLxprt Code. It receives requests sent from `packages/cli`, orchestrates interactions with the Gemini API, and manages the execution of available tools.
     - **Key functions contained in the package:**
       - API client for communicating with the Google Gemini API
       - Prompt construction and management
@@ -30,7 +30,7 @@ The Gemini CLI is primarily composed of two main packages, along with a suite of
 
 ## Interaction Flow
 
-A typical interaction with the Gemini CLI follows this flow:
+A typical interaction with the LLxprt Code follows this flow:
 
 1.  **User input:** The user types a prompt or command into the terminal, which is managed by `packages/cli`.
 2.  **Request to core:** `packages/cli` sends the user's input to `packages/core`.

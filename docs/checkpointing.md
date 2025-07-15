@@ -1,6 +1,6 @@
 # Checkpointing
 
-The Gemini CLI includes a Checkpointing feature that automatically saves a snapshot of your project's state before any file modifications are made by AI-powered tools. This allows you to safely experiment with and apply code changes, knowing you can instantly revert back to the state before the tool was run.
+The LLxprt Code includes a Checkpointing feature that automatically saves a snapshot of your project's state before any file modifications are made by AI-powered tools. This allows you to safely experiment with and apply code changes, knowing you can instantly revert back to the state before the tool was run.
 
 ## How It Works
 
@@ -24,7 +24,7 @@ The Checkpointing feature is disabled by default. To enable it, you can either u
 
 ### Using the Command-Line Flag
 
-You can enable checkpointing for the current session by using the `--checkpointing` flag when starting the Gemini CLI:
+You can enable checkpointing for the current session by using the `--checkpointing` flag when starting the LLxprt Code:
 
 ```bash
 gemini --checkpointing

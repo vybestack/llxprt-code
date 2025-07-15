@@ -1,10 +1,10 @@
 # Multi-Provider Support
 
-Gemini CLI supports multiple AI providers, allowing you to switch between different AI models and services seamlessly.
+LLxprt Code supports multiple AI providers, allowing you to switch between different AI models and services seamlessly.
 
 ## Available Providers
 
-Gemini CLI currently supports the following providers:
+LLxprt Code currently supports the following providers:
 
 - **Google Gemini** (default) - Google's AI models
 - **OpenAI** - GPT-4, GPT-3.5, and other OpenAI models

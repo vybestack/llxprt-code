@@ -1,8 +1,8 @@
-# Gemini CLI: Quotas and Pricing
+# LLxprt Code: Quotas and Pricing
 
-Your Gemini CLI quotas and pricing depend on the type of account you use to authenticate with Google. Additionally, both quotas and pricing may be calculated differently based on the model version, requests, and tokens used. A summary of model usage is available through the `/stats` command and presented on exit at the end of a session. See [privacy and terms](./tos-privacy.md) for details on Privacy policy and Terms of Service. Note: published prices are list price; additional negotiated commercial discounting may apply.
+Your LLxprt Code quotas and pricing depend on the type of account you use to authenticate with Google. Additionally, both quotas and pricing may be calculated differently based on the model version, requests, and tokens used. A summary of model usage is available through the `/stats` command and presented on exit at the end of a session. See [privacy and terms](./tos-privacy.md) for details on Privacy policy and Terms of Service. Note: published prices are list price; additional negotiated commercial discounting may apply.
 
-This article outlines the specific quotas and pricing applicable to the Gemini CLI when using different authentication methods.
+This article outlines the specific quotas and pricing applicable to the LLxprt Code when using different authentication methods.
 
 ## 1. Log in with Google (Gemini Code Assist Free Tier)
 
@@ -67,4 +67,4 @@ If you are using the standard Vertex AI service:
 
 ## 7. Google One and Ultra plans, Gemini for Workspace plans
 
-These plans currently apply only to the use of Gemini web-based products provided by Google-based experiences (for example, the Gemini web app or the Flow video editor). These plans do not apply to the API usage which powers the Gemini CLI. Supporting these plans is under active consideration for future support.
+These plans currently apply only to the use of Gemini web-based products provided by Google-based experiences (for example, the Gemini web app or the Flow video editor). These plans do not apply to the API usage which powers the LLxprt Code. Supporting these plans is under active consideration for future support.

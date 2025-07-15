@@ -4,7 +4,7 @@ This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybesta
 
 ## `@vybestack/llxprt-code`
 
-This is the main package for the Gemini CLI. It is responsible for the user interface, command parsing, and all other user-facing functionality.
+This is the main package for the LLxprt Code. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
 When this package is published, it is bundled into a single executable file. This bundle includes all of the package's dependencies, including `@vybestack/llxprt-code-core`. This means that whether a user installs the package with `npm install -g @vybestack/llxprt-code` or runs it directly with `npx @vybestack/llxprt-code`, they are using this single, self-contained executable.
 

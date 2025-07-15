@@ -1,12 +1,12 @@
-# Gemini CLI: Terms of Service and Privacy Notice
+# LLxprt Code: Terms of Service and Privacy Notice
 
-Gemini CLI is an open-source tool that lets you interact with Google's powerful language models directly from your command-line interface. The Terms of Service and Privacy Notices that apply to your usage of the Gemini CLI depend on the type of account you use to authenticate with Google.
+LLxprt Code is an open-source tool that lets you interact with Google's powerful language models directly from your command-line interface. The Terms of Service and Privacy Notices that apply to your usage of the LLxprt Code depend on the type of account you use to authenticate with Google.
 
-This article outlines the specific terms and privacy policies applicable for different account types and authentication methods. Note: See [quotas and pricing](./quota-and-pricing.md) for the quota and pricing details that apply to your usage of the Gemini CLI.
+This article outlines the specific terms and privacy policies applicable for different account types and authentication methods. Note: See [quotas and pricing](./quota-and-pricing.md) for the quota and pricing details that apply to your usage of the LLxprt Code.
 
 ## How to determine your authentication method
 
-Your authentication method refers to the method you use to log into and access the Gemini CLI. There are four ways to authenticate:
+Your authentication method refers to the method you use to log into and access the LLxprt Code. There are four ways to authenticate:
 
 - Logging in with your Google account to Gemini Code Assist for Individuals
 - Logging in with your Google account to Gemini Code Assist for Workspace, Standard, or Enterprise Users
@@ -27,21 +27,21 @@ For each of these four methods of authentication, different Terms of Service and
 
 For users who use their Google account to access [Gemini Code Assist for Individuals](https://developers.google.com/gemini-code-assist/docs/overview#supported-features-gca), these Terms of Service and Privacy Notice documents apply:
 
-- **Terms of Service:** Your use of the Gemini CLI is governed by the [Google Terms of Service](https://policies.google.com/terms?hl=en-US).
+- **Terms of Service:** Your use of the LLxprt Code is governed by the [Google Terms of Service](https://policies.google.com/terms?hl=en-US).
 - **Privacy Notice:** The collection and use of your data is described in the [Gemini Code Assist Privacy Notice for Individuals](https://developers.google.com/gemini-code-assist/resources/privacy-notice-gemini-code-assist-individuals).
 
 ## 2. If you have logged in with your Google account to Gemini Code Assist for Workspace, Standard, or Enterprise Users
 
 For users who use their Google account to access the [Standard or Enterprise edition](https://cloud.google.com/gemini/docs/codeassist/overview#editions-overview) of Gemini Code Assist, these Terms of Service and Privacy Notice documents apply:
 
-- **Terms of Service:** Your use of the Gemini CLI is governed by the [Google Cloud Platform Terms of Service](https://cloud.google.com/terms).
+- **Terms of Service:** Your use of the LLxprt Code is governed by the [Google Cloud Platform Terms of Service](https://cloud.google.com/terms).
 - **Privacy Notice:** The collection and use of your data is described in the [Gemini Code Assist Privacy Notices for Standard and Enterprise Users](https://cloud.google.com/gemini/docs/codeassist/security-privacy-compliance#standard_and_enterprise_data_protection_and_privacy).
 
 ## 3. If you have logged in with a Gemini API key to the Gemini Developer API
 
 If you are using a Gemini API key for authentication with the [Gemini Developer API](https://ai.google.dev/gemini-api/docs), these Terms of Service and Privacy Notice documents apply:
 
-- **Terms of Service:** Your use of the Gemini CLI is governed by the [Gemini API Terms of Service](https://ai.google.dev/gemini-api/terms). These terms may differ depending on whether you are using an unpaid or paid service:
+- **Terms of Service:** Your use of the LLxprt Code is governed by the [Gemini API Terms of Service](https://ai.google.dev/gemini-api/terms). These terms may differ depending on whether you are using an unpaid or paid service:
   - For unpaid services, refer to the [Gemini API Terms of Service - Unpaid Services](https://ai.google.dev/gemini-api/terms#unpaid-services).
   - For paid services, refer to the [Gemini API Terms of Service - Paid Services](https://ai.google.dev/gemini-api/terms#paid-services).
 - **Privacy Notice:** The collection and use of your data is described in the [Google Privacy Policy](https://policies.google.com/privacy).
@@ -50,14 +50,14 @@ If you are using a Gemini API key for authentication with the [Gemini Developer 
 
 If you are using a Gemini API key for authentication with a [Vertex AI GenAI API](https://cloud.google.com/vertex-ai/generative-ai/docs/reference/rest) backend, these Terms of Service and Privacy Notice documents apply:
 
-- **Terms of Service:** Your use of the Gemini CLI is governed by the [Google Cloud Platform Service Terms](https://cloud.google.com/terms/service-terms/).
+- **Terms of Service:** Your use of the LLxprt Code is governed by the [Google Cloud Platform Service Terms](https://cloud.google.com/terms/service-terms/).
 - **Privacy Notice:** The collection and use of your data is described in the [Google Cloud Privacy Notice](https://cloud.google.com/terms/cloud-privacy-notice).
 
 ### Usage Statistics Opt-Out
 
 You may opt-out from sending Usage Statistics to Google by following the instructions available here: [Usage Statistics Configuration](./cli/configuration.md#usage-statistics).
 
-## Frequently Asked Questions (FAQ) for the Gemini CLI
+## Frequently Asked Questions (FAQ) for the LLxprt Code
 
 ### 1. Is my code, including prompts and answers, used to train Google's models?
 
@@ -73,7 +73,7 @@ Whether your code, including prompts and answers, is used to train Google's mode
 
 ### 2. What are Usage Statistics and what does the opt-out control?
 
-The **Usage Statistics** setting is the single control for all optional data collection in the Gemini CLI.
+The **Usage Statistics** setting is the single control for all optional data collection in the LLxprt Code.
 
 The data it collects depends on your account and authentication type:
 

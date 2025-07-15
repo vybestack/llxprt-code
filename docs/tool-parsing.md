@@ -1,10 +1,10 @@
 # Text-Based Tool Call Parsing
 
-This document describes the text-based tool call parsing system in the Gemini CLI, which enables support for models that output tool calls as formatted text rather than structured JSON.
+This document describes the text-based tool call parsing system in the LLxprt Code, which enables support for models that output tool calls as formatted text rather than structured JSON.
 
 ## Overview
 
-Many open-source and specialized models don't support OpenAI's structured tool calling format. Instead, they output tool calls as specially formatted text within their responses. The Gemini CLI automatically detects and parses these formats, converting them to the standard internal format for execution.
+Many open-source and specialized models don't support OpenAI's structured tool calling format. Instead, they output tool calls as specially formatted text within their responses. The LLxprt Code automatically detects and parses these formats, converting them to the standard internal format for execution.
 
 ## Architecture
 

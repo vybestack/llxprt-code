@@ -1,6 +1,6 @@
 # OpenAI Responses API
 
-The OpenAI Responses API is a new endpoint that provides enhanced capabilities for certain models. This document describes how the Gemini CLI integrates with the Responses API, including automatic model detection, streaming support, and tool calling.
+The OpenAI Responses API is a new endpoint that provides enhanced capabilities for certain models. This document describes how the LLxprt Code integrates with the Responses API, including automatic model detection, streaming support, and tool calling.
 
 ## Overview
 

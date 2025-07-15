@@ -1,10 +1,10 @@
-# Sandboxing in the Gemini CLI
+# Sandboxing in the LLxprt Code
 
-This document provides a guide to sandboxing in the Gemini CLI, including prerequisites, quickstart, and configuration.
+This document provides a guide to sandboxing in the LLxprt Code, including prerequisites, quickstart, and configuration.
 
 ## Prerequisites
 
-Before using sandboxing, you need to install and set up the Gemini CLI:
+Before using sandboxing, you need to install and set up the LLxprt Code:
 
 ```bash
 npm install -g @vybestack/llxprt-code

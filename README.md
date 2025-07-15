@@ -51,7 +51,7 @@ With LLxprt Code you can:
 
 ### Using OpenAI
 
-Direct access to o3, o1, GPT-4o, and other OpenAI models:
+Direct access to o3, o1, GPT-4.1, and other OpenAI models:
 
 1. Get your API key from [OpenAI](https://platform.openai.com/api-keys)
 2. Configure LLxprt Code:
