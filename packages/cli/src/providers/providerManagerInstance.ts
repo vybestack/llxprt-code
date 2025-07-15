@@ -64,6 +64,12 @@ export function getProviderManager(): ProviderManager {
 
       if (openaiApiKey) {
         const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+        if (process.env.DEBUG || process.env.VERBOSE) {
+          console.log('[ProviderManager] Initializing OpenAI provider with:', {
+            hasApiKey: !!openaiApiKey,
+            baseUrl: openaiBaseUrl || 'default',
+          });
+        }
         const openaiProvider = new OpenAIProvider(openaiApiKey, openaiBaseUrl, userSettings);
         providerManagerInstance.registerProvider(openaiProvider);
         // OpenAI provider registered
