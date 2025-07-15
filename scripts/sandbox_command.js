@@ -32,7 +32,7 @@ const argv = yargs(hideBin(process.argv)).option('q', {
   default: false,
 }).argv;
 
-let geminiSandbox = process.env.GEMINI_SANDBOX;
+let geminiSandbox = process.env.LLXPRT_SANDBOX;
 
 if (!geminiSandbox) {
   const userSettingsFile = join(os.homedir(), '.gemini', 'settings.json');
@@ -64,7 +64,7 @@ if (!geminiSandbox) {
     }
     currentDir = parentDir;
   }
-  geminiSandbox = process.env.GEMINI_SANDBOX;
+  geminiSandbox = process.env.LLXPRT_SANDBOX;
 }
 
 geminiSandbox = (geminiSandbox || '').toLowerCase();
@@ -95,7 +95,7 @@ if (['1', 'true'].includes(geminiSandbox)) {
     command = 'podman';
   } else {
     console.error(
-      'ERROR: install docker or podman or specify command in GEMINI_SANDBOX',
+      'ERROR: install docker or podman or specify command in LLXPRT_SANDBOX',
     );
     process.exit(1);
   }
@@ -104,7 +104,7 @@ if (['1', 'true'].includes(geminiSandbox)) {
     command = geminiSandbox;
   } else {
     console.error(
-      `ERROR: missing sandbox command '${geminiSandbox}' (from GEMINI_SANDBOX)`,
+      `ERROR: missing sandbox command '${geminiSandbox}' (from LLXPRT_SANDBOX)`,
     );
     process.exit(1);
   }

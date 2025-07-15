@@ -15,7 +15,7 @@ async function main() {
   const rootDir = join(__dirname, '..');
   const integrationTestsDir = join(rootDir, '.integration-tests');
 
-  if (process.env.GEMINI_SANDBOX === 'docker' && !process.env.IS_DOCKER) {
+  if (process.env.LLXPRT_SANDBOX === 'docker' && !process.env.IS_DOCKER) {
     console.log('Building sandbox for Docker...');
     const buildResult = spawnSync('npm', ['run', 'build:all'], {
       stdio: 'inherit',

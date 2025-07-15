@@ -8,7 +8,7 @@ import semver from 'semver';
 import { getPackageJson } from '../../utils/package.js';
 
 const UPDATE_CHECK_URL =
-  'https://raw.githubusercontent.com/google-gemini/gemini-cli/main/package.json';
+  'https://raw.githubusercontent.com/acoliver/llxprt-code/main/package.json';
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
 
 async function fetchWithTimeout(
@@ -53,7 +53,7 @@ export async function checkForUpdates(): Promise<string | null> {
       latestPackageJson.version &&
       semver.gt(latestPackageJson.version, packageJson.version)
     ) {
-      return `Gemini CLI update available! ${packageJson.version} → ${latestPackageJson.version}\nRun npm install -g ${packageJson.name} to update`;
+      return `LLxprt Code update available! ${packageJson.version} → ${latestPackageJson.version}\nRun npm install -g ${packageJson.name} to update`;
     }
 
     return null;

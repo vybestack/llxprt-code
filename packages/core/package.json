@@ -4,7 +4,7 @@
   "description": "LLxprt Code Core",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/google-gemini/gemini-cli.git"
+    "url": "git+https://github.com/acoliver/llxprt-code.git"
   },
   "type": "module",
   "main": "dist/index.js",

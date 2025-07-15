@@ -44,7 +44,7 @@ In addition to a project settings file, a project's `.gemini` directory can cont
 
 - **`bugCommand`** (object):
   - **Description:** Overrides the default URL for the `/bug` command.
-  - **Default:** `"urlTemplate": "https://github.com/google-gemini/gemini-cli/issues/new?template=bug_report.yml&title={title}&info={info}"`
+  - **Default:** `"urlTemplate": "https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml&title={title}&info={info}"`
   - **Properties:**
     - **`urlTemplate`** (string): A URL that can contain `{title}` and `{info}` placeholders.
   - **Example:**
@@ -299,7 +299,7 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
   - Your Google Cloud Project Location (e.g., us-central1).
   - Required for using Vertex AI in non express mode.
   - Example: `export GOOGLE_CLOUD_LOCATION="YOUR_PROJECT_LOCATION"`.
-- **`GEMINI_SANDBOX`**:
+- **`LLXPRT_SANDBOX`**:
   - Alternative to the `sandbox` setting in `settings.json`.
   - Accepts `true`, `false`, `docker`, `podman`, or a custom command string.
 - **`SEATBELT_PROFILE`** (macOS specific):
@@ -425,7 +425,7 @@ The Gemini CLI can execute potentially unsafe operations (like shell commands an
 Sandboxing is disabled by default, but you can enable it in a few ways:
 
 - Using `--sandbox` or `-s` flag.
-- Setting `GEMINI_SANDBOX` environment variable.
+- Setting `LLXPRT_SANDBOX` environment variable.
 - Sandbox is enabled in `--yolo` mode by default.
 
 By default, it uses a pre-built `gemini-cli-sandbox` Docker image.

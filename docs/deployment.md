@@ -80,7 +80,7 @@ You can run the most recently committed version of Gemini CLI directly from the 
 
 ```bash
 # Execute the CLI directly from the main branch on GitHub
-npx https://github.com/google-gemini/gemini-cli
+npx https://github.com/acoliver/llxprt-code
 ```
 
 ## Deployment architecture

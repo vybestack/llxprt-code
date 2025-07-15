@@ -1,8 +1,8 @@
-# Gemini CLI
+# LLxprt Code
 
-[![Gemini CLI CI](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/google-gemini/gemini-cli/actions/workflows/ci.yml)
+[![LLxprt Code CI](https://github.com/acoliver/llxprt-code/actions/workflows/ci.yml/badge.svg)](https://github.com/acoliver/llxprt-code/actions/workflows/ci.yml)
 
-![Gemini CLI Screenshot](./docs/assets/gemini-screenshot.png)
+![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
 This repository contains the Gemini CLI, a command-line AI workflow tool that connects to your
 tools, understands your code and accelerates your workflows.
@@ -23,7 +23,7 @@ With the Gemini CLI you can:
 2. **Run the CLI:** Execute the following command in your terminal:
 
    ```bash
-   npx https://github.com/google-gemini/gemini-cli
+   npx https://github.com/acoliver/llxprt-code
    ```
 
    Or install it with:
@@ -87,8 +87,8 @@ llxprt
 Or work with an existing project:
 
 ```sh
-git clone https://github.com/google-gemini/gemini-cli
-cd gemini-cli
+git clone https://github.com/acoliver/llxprt-code
+cd llxprt-code
 llxprt
 > Give me a summary of all of the changes that went in yesterday
 ```

@@ -20,7 +20,7 @@ This project follows a structured release process to ensure that all packages ar
 
 ## How To Release
 
-Releases are managed through the [release.yml](https://github.com/google-gemini/gemini-cli/actions/workflows/release.yml) GitHub Actions workflow. To perform a manual release for a patch or hotfix:
+Releases are managed through the [release.yml](https://github.com/acoliver/llxprt-code/actions/workflows/release.yml) GitHub Actions workflow. To perform a manual release for a patch or hotfix:
 
 1.  Navigate to the **Actions** tab of the repository.
 2.  Select the **Release** workflow from the list.
@@ -37,7 +37,7 @@ In addition to manual releases, this project has an automated nightly release pr
 
 ### Process
 
-Every night at midnight UTC, the [Release workflow](https://github.com/google-gemini/gemini-cli/actions/workflows/release.yml) runs automatically on a schedule. It performs the following steps:
+Every night at midnight UTC, the [Release workflow](https://github.com/acoliver/llxprt-code/actions/workflows/release.yml) runs automatically on a schedule. It performs the following steps:
 
 1.  Checks out the latest code from the `main` branch.
 2.  Installs all dependencies.
@@ -62,9 +62,9 @@ We also run a Google cloud build called [release-docker.yml](../.gcp/release-doc
 
 ### After the Release
 
-After the workflow has successfully completed, you can monitor its progress in the [GitHub Actions tab](https://github.com/google-gemini/gemini-cli/actions/workflows/release.yml). Once complete, you should:
+After the workflow has successfully completed, you can monitor its progress in the [GitHub Actions tab](https://github.com/acoliver/llxprt-code/actions/workflows/release.yml). Once complete, you should:
 
-1.  Go to the [pull requests page](https://github.com/google-gemini/gemini-cli/pulls) of the repository.
+1.  Go to the [pull requests page](https://github.com/acoliver/llxprt-code/pulls) of the repository.
 2.  Create a new pull request from the `release/vX.Y.Z` branch to `main`.
 3.  Review the pull request (it should only contain version updates in `package.json` files) and merge it. This keeps the version in `main` up-to-date.
 
@@ -126,7 +126,7 @@ You typically do not merge release branches for pre-releases back into `main`.
 
 If you need to test the release process without actually publishing to NPM or creating a public GitHub release, you can trigger the workflow manually from the GitHub UI.
 
-1.  Go to the [Actions tab](https://github.com/google-gemini/gemini-cli/actions/workflows/release.yml) of the repository.
+1.  Go to the [Actions tab](https://github.com/acoliver/llxprt-code/actions/workflows/release.yml) of the repository.
 2.  Click on the "Run workflow" dropdown.
 3.  Leave the `dry_run` option checked (`true`).
 4.  Click the "Run workflow" button.
