@@ -80,7 +80,7 @@ export async function parseArguments(): Promise<CliArgs> {
       alias: 'm',
       type: 'string',
       description: `Model`,
-      default: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      default: process.env.LLXPRT_DEFAULT_MODEL || process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
     })
     .option('prompt', {
       alias: 'p',
@@ -191,7 +191,7 @@ export async function parseArguments(): Promise<CliArgs> {
     .option('provider', {
       type: 'string',
       description: 'The provider to use.',
-      default: 'gemini',
+      default: process.env.LLXPRT_DEFAULT_PROVIDER || 'gemini',
     })
     .option('ide-mode', {
       type: 'boolean',

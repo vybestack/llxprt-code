@@ -44,6 +44,9 @@ jobs:
 
       - name: Run E2E tests
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: meta-llama/llama-3.2-3b-instruct:free
+          LLXPRT_DEFAULT_PROVIDER: openai
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
         run: npm run test:integration:${{ matrix.sandbox }} -- --verbose --keep-output
