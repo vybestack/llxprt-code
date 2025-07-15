@@ -81,7 +81,7 @@ When output is kept, the test runner will print the path to the unique directory
 
 ### Verbose output
 
-For more detailed debugging, the `--verbose` flag streams the real-time output from the `gemini` command to the console.
+For more detailed debugging, the `--verbose` flag streams the real-time output from the `llxprt` command to the console.
 
 ```bash
 npm run test:integration:sandbox:none -- --verbose

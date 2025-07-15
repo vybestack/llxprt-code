@@ -35,7 +35,7 @@ With the Gemini CLI you can:
    Then, run the CLI from anywhere:
 
    ```bash
-   gemini
+   llxprt
    ```
 
 3. **Pick a color theme**
@@ -80,7 +80,7 @@ You can start a project from a new directory:
 
 ```sh
 cd new-project/
-gemini
+llxprt
 > Write me a Gemini Discord bot that answers questions using a FAQ.md file I will provide
 ```
 
@@ -89,7 +89,7 @@ Or work with an existing project:
 ```sh
 git clone https://github.com/google-gemini/gemini-cli
 cd gemini-cli
-gemini
+llxprt
 > Give me a summary of all of the changes that went in yesterday
 ```
 

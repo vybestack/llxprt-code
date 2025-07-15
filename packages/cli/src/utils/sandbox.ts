@@ -172,8 +172,8 @@ function entrypoint(workdir: string): string[] {
         ? 'npm run debug --'
         : 'npm rebuild && npm run start --'
       : process.env.DEBUG
-        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT || '9229'} $(which gemini)`
-        : 'gemini';
+        ? `node --inspect-brk=0.0.0.0:${process.env.DEBUG_PORT || '9229'} $(which llxprt)`
+        : 'llxprt';
 
   const args = [...shellCmds, cliCmd, ...cliArgs];
 

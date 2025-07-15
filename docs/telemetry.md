@@ -14,7 +14,7 @@ You can enable telemetry in multiple ways. Configuration is primarily managed vi
 
 The following lists the precedence for applying telemetry settings, with items listed higher having greater precedence:
 
-1.  **CLI flags (for `gemini` command):**
+1.  **CLI flags (for `llxprt` command):**
     - `--telemetry` / `--no-telemetry`: Overrides `telemetry.enabled`.
     - `--telemetry-target <local|gcp>`: Overrides `telemetry.target`.
     - `--telemetry-otlp-endpoint <URL>`: Overrides `telemetry.otlpEndpoint`.

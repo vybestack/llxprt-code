@@ -352,8 +352,8 @@ Arguments passed directly when running the CLI can override other configurations
   - Enables [checkpointing](./commands.md#checkpointing-commands).
 - **`--extensions <extension_name ...>`** (**`-e <extension_name ...>`**):
   - Specifies a list of extensions to use for the session. If not provided, all available extensions are used.
-  - Use the special term `gemini -e none` to disable all extensions.
-  - Example: `gemini -e my-extension -e my-other-extension`
+  - Use the special term `llxprt -e none` to disable all extensions.
+  - Example: `llxprt -e my-extension -e my-other-extension`
 - **`--list-extensions`** (**`-l`**):
   - Lists all available extensions and exits.
 - **`--version`**:

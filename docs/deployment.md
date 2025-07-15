@@ -21,7 +21,7 @@ This is the recommended way for end-users to install Gemini CLI. It involves dow
   Then, run the CLI from anywhere:
 
   ```bash
-  gemini
+  llxprt
   ```
 
 - **NPX execution:**
@@ -46,7 +46,7 @@ For security and isolation, Gemini CLI can be run inside a container. This is th
 - **Using the `--sandbox` flag:**
   If you have Gemini CLI installed locally (using the standard installation described above), you can instruct it to run inside the sandbox container.
   ```bash
-  gemini --sandbox -y -p "your prompt here"
+  llxprt --sandbox -y -p "your prompt here"
   ```
 
 ---
@@ -68,8 +68,8 @@ Contributors to the project will want to run the CLI directly from the source co
   # Link the local cli package to your global node_modules
   npm link packages/cli
 
-  # Now you can run your local version using the `gemini` command
-  gemini
+  # Now you can run your local version using the `llxprt` command
+  llxprt
   ```
 
 ---
