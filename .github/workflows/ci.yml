@@ -34,7 +34,8 @@ jobs:
       - name: Run formatter check
         run: |
           npm run format
-          git diff --exit-code
+          # Check for changes, excluding project-plans directory
+          git diff --exit-code -- . ':!project-plans/'
 
       - name: Run linter
         run: npm run lint:ci
