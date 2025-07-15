@@ -11,7 +11,7 @@ import { useCompletion } from './useCompletion';
 import * as fs from 'fs/promises';
 import { glob } from 'glob';
 import { CommandContext, SlashCommand } from '../commands/types.js';
-import { Config, FileDiscoveryService } from 'llxprt-code-core';
+import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 
 interface MockConfig {
   getFileFilteringRespectGitIgnore: () => boolean;

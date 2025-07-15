@@ -7,7 +7,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runNonInteractive } from './nonInteractiveCli';
-import { Config, GeminiClient, ToolRegistry } from 'llxprt-code-core';
+import { Config, GeminiClient, ToolRegistry } from '@vybestack/llxprt-code-core';
 import { GenerateContentResponse, Part, FunctionCall } from '@google/genai';
 
 // Mock dependencies

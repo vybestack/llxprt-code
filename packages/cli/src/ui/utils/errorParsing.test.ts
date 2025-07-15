@@ -11,7 +11,7 @@ import {
   UserTierId,
   DEFAULT_GEMINI_FLASH_MODEL,
   isProQuotaExceededError,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 
 describe('parseAndFormatApiError', () => {
   const _enterpriseMessage =

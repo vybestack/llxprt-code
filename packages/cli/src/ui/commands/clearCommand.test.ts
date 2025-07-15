@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
 import { clearCommand } from './clearCommand';
 import { type CommandContext } from './types';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { GeminiClient } from 'llxprt-code-core';
+import { GeminiClient } from '@vybestack/llxprt-code-core';
 
 describe('clearCommand', () => {
   let mockContext: CommandContext;

@@ -16,7 +16,7 @@ import {
   TrackedExecutingToolCall,
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
-import { Config, EditorType, AuthType } from 'llxprt-code-core';
+import { Config, EditorType, AuthType } from '@vybestack/llxprt-code-core';
 import { Part, PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {

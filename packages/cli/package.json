@@ -1,5 +1,5 @@
 {
-  "name": "llxprt-code",
+  "name": "@vybestack/llxprt-code",
   "version": "0.1.12",
   "description": "LLxprt Code",
   "repository": {
@@ -38,7 +38,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
-    "llxprt-code-core": "file:../core",
+    "@vybestack/llxprt-code-core": "file:../core",
     "@types/update-notifier": "^6.0.8",
     "chalk": "^5.3.0",
     "command-exists": "^1.2.9",

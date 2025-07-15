@@ -13,7 +13,7 @@ import {
   isGenericQuotaExceededError,
   isApiError,
   isStructuredError,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 
 // Free Tier message functions
 const getRateLimitErrorMessageGoogleFree = (

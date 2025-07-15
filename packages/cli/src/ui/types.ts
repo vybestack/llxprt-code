@@ -7,7 +7,7 @@
 import {
   ToolCallConfirmationDetails,
   ToolResultDisplay,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 
 // Only defining the state enum needed by the UI
 export enum StreamingState {

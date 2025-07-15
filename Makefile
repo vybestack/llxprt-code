@@ -1,9 +1,9 @@
-# Makefile for gemini-cli
+# Makefile for llxprt-code
 
 .PHONY: help install build build-sandbox build-all test lint format preflight clean start debug release run-npx create-alias
 
 help:
-	@echo "Makefile for gemini-cli"
+	@echo "Makefile for llxprt-code"
 	@echo ""
 	@echo "Usage:"
 	@echo "  make install          - Install npm dependencies"

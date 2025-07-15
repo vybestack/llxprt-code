@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getStartupWarnings } from './startupWarnings';
 import * as fs from 'fs/promises';
-import { getErrorMessage } from 'llxprt-code-core';
+import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
 vi.mock('fs/promises');
 vi.mock('llxprt-code-core', async (importOriginal) => {

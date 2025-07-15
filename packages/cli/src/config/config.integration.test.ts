@@ -12,7 +12,7 @@ import {
   Config,
   ConfigParameters,
   ContentGeneratorConfig,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 
 const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
   apiKey: 'test-key',

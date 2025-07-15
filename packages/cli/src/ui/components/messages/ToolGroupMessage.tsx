@@ -10,7 +10,7 @@ import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { Colors } from '../../colors.js';
-import { Config } from 'llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 
 interface ToolGroupMessageProps {
   groupId: number;

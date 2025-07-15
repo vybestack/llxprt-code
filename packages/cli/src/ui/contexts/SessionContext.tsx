@@ -18,7 +18,7 @@ import {
   uiTelemetryService,
   SessionMetrics,
   ModelMetrics,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 
 // --- Interface Definitions ---
 

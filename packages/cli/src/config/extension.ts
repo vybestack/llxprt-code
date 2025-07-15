@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MCPServerConfig } from 'llxprt-code-core';
+import { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

@@ -24,7 +24,7 @@ import {
   ToolCall, // Import from core
   Status as ToolCallStatusType,
   ApprovalMode, // Import from core
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import {
   HistoryItemWithoutId,
   ToolCallStatus,

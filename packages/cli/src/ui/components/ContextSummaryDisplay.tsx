@@ -7,7 +7,7 @@
 import React from 'react';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
-import { type MCPServerConfig } from 'llxprt-code-core';
+import { type MCPServerConfig } from '@vybestack/llxprt-code-core';
 
 interface ContextSummaryDisplayProps {
   geminiMdFileCount: number;

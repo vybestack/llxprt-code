@@ -15,7 +15,7 @@ import {
   isGenericQuotaExceededError,
   UserTierId,
   getErrorMessage,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { loadHierarchicalGeminiMemory } from '../../config/config.js';
 import process from 'node:process';
 import {

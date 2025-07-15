@@ -20,7 +20,7 @@ import {
   Config,
   Config as ActualConfigType,
   ApprovalMode,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { useInput, type Key as InkKey } from 'ink';
 
 vi.mock('ink');

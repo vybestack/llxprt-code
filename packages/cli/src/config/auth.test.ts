@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType } from 'llxprt-code-core';
+import { AuthType } from '@vybestack/llxprt-code-core';
 import { vi } from 'vitest';
 import { validateAuthMethod } from './auth';
 

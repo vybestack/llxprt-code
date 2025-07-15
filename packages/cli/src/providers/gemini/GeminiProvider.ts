@@ -5,7 +5,7 @@
  */
 
 import { IProvider, IModel, IMessage, ITool } from '../IProvider.js';
-import { Config, AuthType } from 'llxprt-code-core';
+import { Config, AuthType } from '@vybestack/llxprt-code-core';
 import { ContentGeneratorRole } from '../types.js';
 import type { Part, FunctionCall, Schema } from '@google/genai';
 
@@ -203,7 +203,7 @@ export class GeminiProvider implements IProvider {
       case 'oauth': {
         // For OAuth, we need to use the code assist server
         const { createCodeAssistContentGenerator } = await import(
-          'llxprt-code-core'
+          '@vybestack/llxprt-code-core'
         );
         const contentGenerator = await createCodeAssistContentGenerator(
           httpOptions,

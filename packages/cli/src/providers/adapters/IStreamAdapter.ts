@@ -5,7 +5,7 @@
  */
 
 import { IMessage } from '../IMessage.js';
-import { ServerGeminiStreamEvent } from 'llxprt-code-core';
+import { ServerGeminiStreamEvent } from '@vybestack/llxprt-code-core';
 
 /**
  * Interface for adapting provider-specific streams to Gemini event format

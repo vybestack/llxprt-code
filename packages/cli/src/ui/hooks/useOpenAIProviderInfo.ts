@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Config, ProviderMessage as Message } from 'llxprt-code-core';
+import { Config, ProviderMessage as Message } from '@vybestack/llxprt-code-core';
 import {
   getOpenAIProviderInfo,
   OpenAIProviderInfo,

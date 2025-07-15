@@ -22,7 +22,7 @@ import {
   type EditorType,
   checkHasEditorType,
   allowEditorTypeInSandbox,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 
 vi.mock('llxprt-code-core', async () => {
   const actual = await vi.importActual('llxprt-code-core');

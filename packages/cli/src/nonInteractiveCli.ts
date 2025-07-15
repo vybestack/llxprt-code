@@ -11,7 +11,7 @@ import {
   ToolRegistry,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import {
   Content,
   Part,

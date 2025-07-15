@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from 'llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import { ConversationCache } from './ConversationCache.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';

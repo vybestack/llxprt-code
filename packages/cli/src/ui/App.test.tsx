@@ -15,7 +15,7 @@ import {
   AccessibilitySettings,
   SandboxConfig,
   GeminiClient,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/useGeminiStream.js';

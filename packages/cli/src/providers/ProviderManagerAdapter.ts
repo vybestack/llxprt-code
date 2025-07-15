@@ -9,7 +9,7 @@ import {
   ProviderManager as CoreProviderManager,
   ProviderMessage,
   ProviderTool,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { ProviderManager } from './ProviderManager.js';
 import { IProvider } from './IProvider.js';
 import { IMessage } from './IMessage.js';

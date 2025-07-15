@@ -24,7 +24,7 @@ import {
   ThoughtSummary,
   UnauthorizedError,
   DEFAULT_GEMINI_FLASH_MODEL,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion } from '@google/genai';
 import {
   StreamingState,

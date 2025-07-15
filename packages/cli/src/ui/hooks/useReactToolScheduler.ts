@@ -21,7 +21,7 @@ import {
   ToolCall,
   Status as CoreStatus,
   EditorType,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo } from 'react';
 import {
   HistoryItemToolGroup,

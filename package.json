@@ -1,5 +1,5 @@
 {
-  "name": "llxprt-code",
+  "name": "@vybestack/llxprt-code",
   "version": "0.1.12",
   "engines": {
     "node": ">=20"
@@ -49,7 +49,7 @@
     "clean": "node scripts/clean.js"
   },
   "bin": {
-    "gemini": "bundle/gemini.js"
+    "llxprt": "bundle/llxprt.js"
   },
   "files": [
     "bundle/",

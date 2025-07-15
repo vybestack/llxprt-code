@@ -38,7 +38,7 @@ import {
   // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
   getOauthClient,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';

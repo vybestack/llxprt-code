@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import type { Mocked } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor';
-import { Config, FileDiscoveryService } from 'llxprt-code-core';
+import { Config, FileDiscoveryService } from '@vybestack/llxprt-code-core';
 import { ToolCallStatus } from '../types.js';
 import { UseHistoryManagerReturn } from './useHistoryManager';
 import * as fsPromises from 'fs/promises';

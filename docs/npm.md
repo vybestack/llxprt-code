@@ -1,14 +1,14 @@
 # Package Overview
 
-This monorepo contains two main packages: `@google/gemini-cli` and `@google/gemini-cli-core`.
+This monorepo contains two main packages: `@vybestack/llxprt-code` and `@vybestack/llxprt-code-core`.
 
-## `@google/gemini-cli`
+## `@vybestack/llxprt-code`
 
 This is the main package for the Gemini CLI. It is responsible for the user interface, command parsing, and all other user-facing functionality.
 
-When this package is published, it is bundled into a single executable file. This bundle includes all of the package's dependencies, including `@google/gemini-cli-core`. This means that whether a user installs the package with `npm install -g @google/gemini-cli` or runs it directly with `npx @google/gemini-cli`, they are using this single, self-contained executable.
+When this package is published, it is bundled into a single executable file. This bundle includes all of the package's dependencies, including `@vybestack/llxprt-code-core`. This means that whether a user installs the package with `npm install -g @vybestack/llxprt-code` or runs it directly with `npx @vybestack/llxprt-code`, they are using this single, self-contained executable.
 
-## `@google/gemini-cli-core`
+## `@vybestack/llxprt-code-core`
 
 This package contains the core logic for interacting with the Gemini API. It is responsible for making API requests, handling authentication, and managing the local cache.
 
@@ -55,7 +55,7 @@ If any step in the nightly workflow fails, it will automatically create a new is
 To install the latest nightly build, use the `@nightly` tag:
 
 ```bash
-npm install -g @google/gemini-cli@nightly
+npm install -g @vybestack/llxprt-code@nightly
 ```
 
 We also run a Google cloud build called [release-docker.yml](../.gcp/release-docker.yaml). Which publishes the sandbox docker to match your release. This will also be moved to GH and combined with the main release file once service account permissions are sorted out.
@@ -72,9 +72,9 @@ After the workflow has successfully completed, you can monitor its progress in t
 
 After pushing a new release smoke testing should be performed to ensure that the packages are working as expected. This can be done by installing the packages locally and running a set of tests to ensure that they are functioning correctly.
 
-- `npx -y @google/gemini-cli@latest --version` to validate the push worked as expected if you were not doing a rc or dev tag
-- `npx -y @google/gemini-cli@<release tag> --version` to validate the tag pushed appropriately
-- _This is destructive locally_ `npm uninstall @google/gemini-cli && npm uninstall -g @google/gemini-cli && npm cache clean --force &&  npm install @google/gemini-cli@<version>`
+- `npx -y @vybestack/llxprt-code@latest --version` to validate the push worked as expected if you were not doing a rc or dev tag
+- `npx -y @vybestack/llxprt-code@<release tag> --version` to validate the tag pushed appropriately
+- _This is destructive locally_ `npm uninstall @vybestack/llxprt-code && npm uninstall -g @vybestack/llxprt-code && npm cache clean --force &&  npm install @vybestack/llxprt-code@<version>`
 - Smoke testing a basic run through of exercising a few llm commands and tools is recommended to ensure that the packages are working as expected. We'll codify this more in the future.
 
 ## When to merge the version change, or not?
@@ -277,4 +277,4 @@ This tells NPM that any folder inside the `packages` directory is a separate pac
 
 - **Simplified Dependency Management**: Running `npm install` from the root of the project will install all dependencies for all packages in the workspace and link them together. This means you don't need to run `npm install` in each package's directory.
 - **Automatic Linking**: Packages within the workspace can depend on each other. When you run `npm install`, NPM will automatically create symlinks between the packages. This means that when you make changes to one package, the changes are immediately available to other packages that depend on it.
-- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `npm run build --workspace @google/gemini-cli`.
+- **Simplified Script Execution**: You can run scripts in any package from the root of the project using the `--workspace` flag. For example, to run the `build` script in the `cli` package, you can run `npm run build --workspace @vybestack/llxprt-code`.

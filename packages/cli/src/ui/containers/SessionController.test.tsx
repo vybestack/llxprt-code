@@ -19,7 +19,7 @@ import {
   isProQuotaExceededError,
   isGenericQuotaExceededError,
   Config,
-} from 'llxprt-code-core';
+} from '@vybestack/llxprt-code-core';
 import { IProvider } from '../../providers/IProvider.js';
 import { AppAction } from '../reducers/appReducer.js';
 

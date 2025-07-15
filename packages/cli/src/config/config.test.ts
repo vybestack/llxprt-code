@@ -9,7 +9,7 @@ import * as os from 'os';
 import { loadCliConfig, parseArguments } from './config';
 import { Settings } from './settings';
 import { Extension } from './extension';
-import * as ServerConfig from 'llxprt-code-core';
+import * as ServerConfig from '@vybestack/llxprt-code-core';
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
