@@ -23,7 +23,9 @@ test('writes a file', (t) => {
   rig.setup(t.name);
   rig.createFile('test.txt', '');
 
-  rig.run(`write "Hello World!" to test.txt`);
+  rig.run(
+    `use the write_file tool to write the exact text "Hello World!" to the file test.txt`,
+  );
 
   const fileContent = rig.readFile('test.txt');
   assert.ok(fileContent.toLowerCase().includes('hello'));

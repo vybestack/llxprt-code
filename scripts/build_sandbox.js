@@ -79,7 +79,9 @@ if (!argv.s) {
 
 console.log('packing @vybestack/llxprt-code ...');
 const cliPackageDir = join('packages', 'cli');
-rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), { force: true });
+rmSync(join(cliPackageDir, 'dist', 'vybestack-llxprt-code-*.tgz'), {
+  force: true,
+});
 execSync(
   `npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist`,
   {
@@ -106,7 +108,11 @@ chmodSync(
   0o755,
 );
 chmodSync(
-  join(corePackageDir, 'dist', `vybestack-llxprt-code-core-${packageVersion}.tgz`),
+  join(
+    corePackageDir,
+    'dist',
+    `vybestack-llxprt-code-core-${packageVersion}.tgz`,
+  ),
   0o755,
 );
 
