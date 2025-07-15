@@ -389,7 +389,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           // Clear the message after 2 seconds
           setTimeout(() => setPasteMessage(null), 2000);
         }
-        
+
         // Set the entire paste content at once and submit
         buffer.setText(key.sequence);
         // Submit the entire pasted content

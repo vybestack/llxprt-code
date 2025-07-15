@@ -92,8 +92,7 @@ vi.mock('open', () => ({
 }));
 
 vi.mock('llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('llxprt-code-core')>();
+  const actual = await importOriginal<typeof import('llxprt-code-core')>();
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),

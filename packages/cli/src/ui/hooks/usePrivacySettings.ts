@@ -6,7 +6,11 @@
 
 import { GaxiosError } from 'gaxios';
 import { useState, useEffect, useCallback } from 'react';
-import { Config, CodeAssistServer, UserTierId } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  CodeAssistServer,
+  UserTierId,
+} from '@vybestack/llxprt-code-core';
 
 export interface PrivacyState {
   isLoading: boolean;

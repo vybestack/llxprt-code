@@ -12,8 +12,7 @@ import { MessageType } from '../types.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
 vi.mock('llxprt-code-core', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('llxprt-code-core')>();
+  const original = await importOriginal<typeof import('llxprt-code-core')>();
   return {
     ...original,
     getErrorMessage: vi.fn((error: unknown) => {

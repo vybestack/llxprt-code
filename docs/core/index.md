@@ -35,6 +35,7 @@ To ensure that long conversations don't exceed the token limits of the AI model,
 When a conversation approaches the token limit for the configured model, the core automatically compresses the conversation history before sending it to the model. This compression is designed to be lossless in terms of the information conveyed, but it reduces the overall number of tokens used.
 
 Token limits vary by provider and model:
+
 - **Google Gemini:** See the [Google AI documentation](https://ai.google.dev/gemini-api/docs/models)
 - **OpenAI:** Models like GPT-4.1 and o3 have different context windows
 - **Anthropic:** Claude models offer various context window sizes

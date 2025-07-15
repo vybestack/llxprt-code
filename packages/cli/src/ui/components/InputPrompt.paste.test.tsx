@@ -97,11 +97,15 @@ vi.mock('../hooks/useProviderModelDialog.js', () => ({
 }));
 
 // Variable to store the keypress handler
-let keypressHandler: ((ch: string | undefined, key: Record<string, unknown>) => void) | null = null;
+let keypressHandler:
+  | ((ch: string | undefined, key: Record<string, unknown>) => void)
+  | null = null;
 
 // Mock useKeypress hook to capture the handler
 vi.mock('../hooks/useKeypress.js', () => ({
-  useKeypress: (handler: (ch: string | undefined, key: Record<string, unknown>) => void) => {
+  useKeypress: (
+    handler: (ch: string | undefined, key: Record<string, unknown>) => void,
+  ) => {
     keypressHandler = handler;
   },
 }));
@@ -120,7 +124,6 @@ const mockConfig = {
   getTargetDir: () => '/tmp/test',
 } as unknown;
 
-
 describe('InputPrompt paste functionality', () => {
   let mockBuffer: TextBuffer;
   let mockOnSubmit: ReturnType<typeof vi.fn>;
@@ -130,7 +133,7 @@ describe('InputPrompt paste functionality', () => {
   beforeEach(() => {
     // Reset the keypress handler
     keypressHandler = null;
-    
+
     // Create a mock TextBuffer
     mockBuffer = {
       lines: [''],
@@ -174,9 +177,9 @@ describe('InputPrompt paste functionality', () => {
 
   it('should handle multi-line paste as a single message', async () => {
     const mockDispatch = vi.fn();
-    
+
     const multiLineContent = 'Line 1\nLine 2\nLine 3';
-    
+
     render(
       <AppDispatchProvider value={mockDispatch}>
         <InputPrompt
@@ -194,16 +197,16 @@ describe('InputPrompt paste functionality', () => {
           shellModeActive={false}
           setShellModeActive={mockSetShellModeActive}
         />
-      </AppDispatchProvider>
+      </AppDispatchProvider>,
     );
 
     // Wait a bit for component to mount and capture the handler
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
     mockBuffer.setText.mockClear();
-    
+
     // Call the handler directly instead of emitting stdin events
     keypressHandler?.(undefined, {
       name: '',
@@ -213,13 +216,13 @@ describe('InputPrompt paste functionality', () => {
       paste: true,
       sequence: multiLineContent,
     });
-    
+
     // Wait for the event to be processed and React to update
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     // The buffer should have been updated with the paste content
     expect(mockBuffer.setText).toHaveBeenCalledWith(multiLineContent);
-    
+
     // Check that submit was called exactly once with the full content
     expect(mockOnSubmit).toHaveBeenCalledTimes(1);
     expect(mockOnSubmit).toHaveBeenCalledWith(multiLineContent);
@@ -229,9 +232,9 @@ describe('InputPrompt paste functionality', () => {
     // This test is skipped due to rendering issues with ink-testing-library
     // The paste functionality is tested in the other tests
     const mockDispatch = vi.fn();
-    
+
     const multiLineContent = 'Line 1\nLine 2\nLine 3\nLine 4';
-    
+
     const { lastFrame } = render(
       <AppDispatchProvider value={mockDispatch}>
         <InputPrompt
@@ -249,12 +252,12 @@ describe('InputPrompt paste functionality', () => {
           shellModeActive={false}
           setShellModeActive={mockSetShellModeActive}
         />
-      </AppDispatchProvider>
+      </AppDispatchProvider>,
     );
 
     // Wait a bit for component to mount and capture the handler
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     // Call the handler directly instead of emitting stdin events
     keypressHandler?.(undefined, {
       name: '',
@@ -264,22 +267,22 @@ describe('InputPrompt paste functionality', () => {
       paste: true,
       sequence: multiLineContent,
     });
-    
+
     // Wait a bit for React to update the component
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     // Re-render to get the updated output
     const output = lastFrame();
-    
+
     // Check that the paste message is shown
     expect(output).toContain('[4 lines pasted]');
   });
 
   it('should handle single-line paste without special indicator', async () => {
     const mockDispatch = vi.fn();
-    
+
     const singleLineContent = 'This is a single line';
-    
+
     const { lastFrame } = render(
       <AppDispatchProvider value={mockDispatch}>
         <InputPrompt
@@ -297,16 +300,16 @@ describe('InputPrompt paste functionality', () => {
           shellModeActive={false}
           setShellModeActive={mockSetShellModeActive}
         />
-      </AppDispatchProvider>
+      </AppDispatchProvider>,
     );
 
     // Wait a bit for component to mount and capture the handler
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
     mockBuffer.setText.mockClear();
-    
+
     // Call the handler directly instead of emitting stdin events
     keypressHandler?.(undefined, {
       name: '',
@@ -316,17 +319,17 @@ describe('InputPrompt paste functionality', () => {
       paste: true,
       sequence: singleLineContent,
     });
-    
+
     // Wait for the event to be processed
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     // The buffer should have been updated with the paste content
     expect(mockBuffer.setText).toHaveBeenCalledWith(singleLineContent);
-    
+
     // Check that submit was called exactly once with the content
     expect(mockOnSubmit).toHaveBeenCalledTimes(1);
     expect(mockOnSubmit).toHaveBeenCalledWith(singleLineContent);
-    
+
     // Check that no paste indicator is shown for single line
     const output = lastFrame();
     expect(output).not.toContain('lines pasted');

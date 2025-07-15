@@ -479,6 +479,7 @@ BUILD_SANDBOX=1 llxprt -s
 **LLxprt Code does not collect any telemetry or usage statistics by default.** Your privacy is our priority.
 
 All telemetry features have been disabled in LLxprt Code. We do not collect:
+
 - Tool usage statistics
 - API request information
 - Session data

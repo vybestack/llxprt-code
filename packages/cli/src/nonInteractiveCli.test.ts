@@ -7,14 +7,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runNonInteractive } from './nonInteractiveCli';
-import { Config, GeminiClient, ToolRegistry } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  GeminiClient,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-core';
 import { GenerateContentResponse, Part, FunctionCall } from '@google/genai';
 
 // Mock dependencies
 vi.mock('llxprt-code-core', async () => {
-  const actualCore = await vi.importActual<
-    typeof import('llxprt-code-core')
-  >('llxprt-code-core');
+  const actualCore =
+    await vi.importActual<typeof import('llxprt-code-core')>(
+      'llxprt-code-core',
+    );
   return {
     ...actualCore,
     GeminiClient: vi.fn(),

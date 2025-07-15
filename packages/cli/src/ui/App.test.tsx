@@ -76,8 +76,7 @@ interface MockServerConfig {
 
 // Mock llxprt-code-core and its Config class
 vi.mock('llxprt-code-core', async (importOriginal) => {
-  const actualCore =
-    await importOriginal<typeof import('llxprt-code-core')>();
+  const actualCore = await importOriginal<typeof import('llxprt-code-core')>();
   const ConfigClassMock = vi
     .fn()
     .mockImplementation((optionsPassedToConstructor) => {

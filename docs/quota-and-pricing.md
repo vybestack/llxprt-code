@@ -7,7 +7,9 @@ LLxprt Code supports multiple AI providers, each with their own pricing and quot
 ## Provider-Specific Pricing
 
 ### Google Gemini
+
 For detailed information about Google's quotas and pricing options, including:
+
 - Free tier with Google account login (/auth)
 - API key options (paid and unpaid)
 - Vertex AI pricing
@@ -20,28 +22,33 @@ Please see [Google's original documentation](https://github.com/google-gemini/ge
 Each provider has their own pricing structure:
 
 #### OpenAI
+
 - **Pricing:** Pay-per-token model
 - **Models:** o3, o1, GPT-4.1, GPT-4o, and others
 - **Details:** [OpenAI Pricing](https://openai.com/pricing)
 - **Note:** All OpenAI usage requires an API key and is paid
 
 #### Anthropic
+
 - **Pricing:** Pay-per-token model
 - **Models:** Claude Opus 4, Claude Sonnet 4, and others
 - **Details:** [Anthropic Pricing](https://www.anthropic.com/pricing)
 - **Note:** All Anthropic usage requires an API key and is paid
 
 #### Local Models
+
 - **Cost:** Free (you provide the compute)
 - **Requirements:** Local hardware capable of running the model
 - **Options:** LM Studio, llama.cpp, or any OpenAI-compatible server
 
 #### OpenRouter
+
 - **Pricing:** Varies by model (aggregates multiple providers)
 - **Details:** [OpenRouter Pricing](https://openrouter.ai/models)
 - **Note:** Provides access to 100+ models with unified billing
 
 #### Fireworks
+
 - **Pricing:** Competitive rates for fast inference
 - **Details:** [Fireworks Pricing](https://fireworks.ai/pricing)
 - **Note:** Optimized for speed and cost-efficiency
@@ -50,10 +57,9 @@ Each provider has their own pricing structure:
 
 LLxprt Code attempts to detect when you're in "free" vs "paid" mode:
 
-- **Free Mode:** 
+- **Free Mode:**
   - Google account login with Gemini (limited daily requests)
   - Local models
-  
 - **Paid Mode:**
   - Any API key usage (except Google's free tier)
   - All OpenAI and Anthropic usage

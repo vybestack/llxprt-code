@@ -119,21 +119,25 @@ EOF
 LLxprt Code supports multiple providers without requiring Google authentication:
 
 #### OpenAI
+
 - Set up using `/provider openai` and `/key sk-your-openai-key`
 - Or set `OPENAI_API_KEY` environment variable
 - No additional authentication required
 
 #### Anthropic
+
 - Set up using `/provider anthropic` and `/key sk-ant-your-key`
 - Or set `ANTHROPIC_API_KEY` environment variable
 - No additional authentication required
 
 #### Local Models
+
 - Set up using `/provider openai` and `/baseurl http://localhost:1234/v1/`
 - No authentication required for local models
 - Works with LM Studio, llama.cpp, and other OpenAI-compatible servers
 
 #### OpenRouter/Fireworks
+
 - Use `/provider openai` with appropriate `/baseurl` and `/key`
 - Authentication via API key only
 

@@ -30,7 +30,7 @@ We **actively want your contributions**! To maximize the chance your PR is accep
 
 3. **What We're Looking For:**
    - Support for new AI providers
-   - Local model integrations  
+   - Local model integrations
    - Performance improvements
    - Tool and capability expansions
    - Documentation improvements
@@ -54,6 +54,7 @@ We're actively looking for **proven maintainers** to help guide the project. If 
 ## Tracking Upstream
 
 We deeply appreciate Google's work on Gemini CLI and plan to:
+
 - Continue merging beneficial changes from upstream
 - Maintain compatibility where it makes sense
 - Contribute improvements back when possible
@@ -62,7 +63,7 @@ However, LLxprt Code will evolve independently based on community needs, especia
 
 ## Get Involved
 
-This is a project built on **peace, love, and open source**. Whether you're fixing a typo or adding support for a new provider, every contribution matters. 
+This is a project built on **peace, love, and open source**. Whether you're fixing a typo or adding support for a new provider, every contribution matters.
 
 - **Discord/Community:** [Coming soon - help us build it!]
 - **Issues:** [Browse or create](https://github.com/acoliver/llxprt-code/issues)
@@ -72,4 +73,4 @@ Together, we're building the future of AI-assisted development - one PR at a tim
 
 ---
 
-*LLxprt Code is an [Apache 2.0 open source project](https://github.com/acoliver/llxprt-code?tab=Apache-2.0-1-ov-file#readme). We welcome contributions aligned with our vision of multi-provider, community-driven development.*
+_LLxprt Code is an [Apache 2.0 open source project](https://github.com/acoliver/llxprt-code?tab=Apache-2.0-1-ov-file#readme). We welcome contributions aligned with our vision of multi-provider, community-driven development._

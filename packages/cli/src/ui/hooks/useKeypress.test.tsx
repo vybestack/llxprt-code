@@ -40,7 +40,7 @@ describe('useKeypress', () => {
         ({ onKeypress, isActive }) => useKeypress(onKeypress, { isActive }),
         {
           initialProps: { onKeypress, isActive: true },
-        }
+        },
       );
 
       // Simulate paste-start event
@@ -120,7 +120,7 @@ describe('useKeypress', () => {
         ({ onKeypress, isActive }) => useKeypress(onKeypress, { isActive }),
         {
           initialProps: { onKeypress, isActive: true },
-        }
+        },
       );
 
       // Simulate bracketed paste with raw data
@@ -155,7 +155,7 @@ describe('useKeypress', () => {
         ({ onKeypress, isActive }) => useKeypress(onKeypress, { isActive }),
         {
           initialProps: { onKeypress, isActive: true },
-        }
+        },
       );
 
       // Start a paste but don't end it

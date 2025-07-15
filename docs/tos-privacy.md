@@ -11,6 +11,7 @@ LLxprt Code is an open-source tool that connects you with multiple AI providers.
 For detailed information about Google's terms, privacy policies, and data usage, see [Google's documentation](https://github.com/google-gemini/gemini-cli/blob/main/docs/tos-privacy.md).
 
 Key points:
+
 - Different terms apply for OAuth login vs API key usage
 - Free tier (OAuth) may use data for training
 - Paid API keys have stricter privacy protections
@@ -22,6 +23,7 @@ Key points:
 - **API Data Usage:** [OpenAI API Data Usage Policies](https://openai.com/policies/api-data-usage-policies)
 
 Key points:
+
 - API data is not used for training by default
 - 30-day data retention for abuse monitoring
 - Enterprise agreements available for zero retention
@@ -33,6 +35,7 @@ Key points:
 - **API Terms:** [Anthropic API Terms](https://www.anthropic.com/legal/api-terms)
 
 Key points:
+
 - API data is not used for training
 - Data retention for safety and legal compliance only
 - Strong privacy commitments
@@ -43,6 +46,7 @@ Key points:
 - **Privacy Policy:** [Fireworks Privacy Policy](https://fireworks.ai/privacy-policy)
 
 Key points:
+
 - Focus on fast, efficient inference
 - Data used only for service provision
 - No model training on customer data
@@ -53,6 +57,7 @@ Key points:
 - **Privacy Policy:** [OpenRouter Privacy Policy](https://openrouter.ai/privacy)
 
 Key points:
+
 - Acts as a proxy to multiple model providers
 - Each underlying model may have additional terms
 - Transparent about data routing
@@ -60,6 +65,7 @@ Key points:
 ## Local Models
 
 When using local models (via LM Studio, llama.cpp, etc.):
+
 - No data leaves your machine
 - No external terms of service apply
 - You control all data and privacy

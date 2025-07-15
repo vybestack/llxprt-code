@@ -213,11 +213,12 @@ describe('SessionController', () => {
     // Switch to paid mode
     mockGetProviderManager.mockReturnValue({
       hasActiveProvider: () => true,
-      getActiveProvider: () => ({
-        name: 'anthropic',
-        getCurrentModel: () => 'claude-model',
-        isPaidMode: () => true,
-      }) as Partial<IProvider> as IProvider,
+      getActiveProvider: () =>
+        ({
+          name: 'anthropic',
+          getCurrentModel: () => 'claude-model',
+          isPaidMode: () => true,
+        }) as Partial<IProvider> as IProvider,
     } as ReturnType<typeof providerModule.getProviderManager>);
 
     act(() => {
@@ -351,7 +352,7 @@ describe('SessionController', () => {
       fallbackModel: string,
       error: Error,
     ) => Promise<void>;
-    
+
     let flashFallbackHandler: FlashFallbackHandler | null = null;
     mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
       flashFallbackHandler = handler;
@@ -433,11 +434,12 @@ describe('SessionController', () => {
     mockConfig.getModel?.mockReturnValue('new-model');
     mockGetProviderManager.mockReturnValue({
       hasActiveProvider: () => true,
-      getActiveProvider: () => ({
-        name: 'new-provider',
-        getCurrentModel: () => 'new-model',
-        isPaidMode: () => false,
-      }) as Partial<IProvider> as IProvider,
+      getActiveProvider: () =>
+        ({
+          name: 'new-provider',
+          getCurrentModel: () => 'new-model',
+          isPaidMode: () => false,
+        }) as Partial<IProvider> as IProvider,
     } as ReturnType<typeof providerModule.getProviderManager>);
 
     // Advance timer to trigger the interval
@@ -489,7 +491,7 @@ describe('SessionController', () => {
       fallbackModel: string,
       error: Error,
     ) => Promise<void>;
-    
+
     let flashFallbackHandler: FlashFallbackHandler | null = null;
     mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
       flashFallbackHandler = handler;
@@ -665,7 +667,7 @@ describe('SessionController', () => {
       fallbackModel: string,
       error: Error,
     ) => Promise<void>;
-    
+
     let flashFallbackHandler: FlashFallbackHandler | null = null;
     mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
       flashFallbackHandler = handler;
@@ -706,9 +708,7 @@ describe('SessionController', () => {
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageType.INFO,
-        text: expect.stringContaining(
-          'You have reached your free usage limit',
-        ),
+        text: expect.stringContaining('You have reached your free usage limit'),
       }),
       expect.any(Number),
     );

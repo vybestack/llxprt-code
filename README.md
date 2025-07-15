@@ -42,7 +42,6 @@ With LLxprt Code you can:
    ```bash
    llxprt
    ```
-
    - Pick a beautiful theme
    - Choose your provider with `/provider` (defaults to Gemini)
    - Set up authentication as needed
@@ -78,6 +77,7 @@ Access Claude Sonnet 4, Claude Opus 4, and other Anthropic models:
 Run models locally for complete privacy and control. LLxprt Code works with any OpenAI-compatible server.
 
 **Example with LM Studio:**
+
 1. Start LM Studio and load a model (e.g., Gemma 3B)
 2. In LLxprt Code:
    ```
@@ -87,6 +87,7 @@ Run models locally for complete privacy and control. LLxprt Code works with any 
    ```
 
 **Example with llama.cpp:**
+
 1. Start llama.cpp server: `./server -m model.gguf -c 2048`
 2. In LLxprt Code:
    ```
@@ -96,9 +97,11 @@ Run models locally for complete privacy and control. LLxprt Code works with any 
    ```
 
 **List available models:**
+
 ```
 /model
 ```
+
 This shows all models available from your current provider.
 
 ### Using OpenRouter
@@ -132,7 +135,7 @@ For fast inference with popular open models:
 You can still use Google's services:
 
 1. **With Google Account:** Use `/auth` to sign in
-2. **With API Key:** 
+2. **With API Key:**
    ```bash
    export GEMINI_API_KEY="YOUR_API_KEY"
    ```
@@ -185,7 +188,7 @@ llxprt
 ### Provider Commands Reference
 
 - `/provider` - List available providers or switch provider
-- `/model` - List available models or switch model  
+- `/model` - List available models or switch model
 - `/baseurl` - Set custom API endpoint
 - `/key` - Set API key for current session
 - `/keyfile` - Load API key from file
