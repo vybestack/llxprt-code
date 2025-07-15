@@ -6,6 +6,8 @@ LLxprt Code supports several built-in commands to help you manage your session, 
 
 Slash commands provide meta-level control over the CLI itself.
 
+### General Commands
+
 - **`/bug`**
   - **Description:** File an issue about LLxprt Code. By default, the issue is filed within the GitHub repository for LLxprt Code. The string you enter after `/bug` will become the headline for the bug being filed. The default `/bug` behavior can be modified using the `bugCommand` setting in your `.gemini/settings.json` files.
 
@@ -72,6 +74,42 @@ Slash commands provide meta-level control over the CLI itself.
 
 - **`/auth`**
   - **Description:** Open a dialog that lets you change the authentication method.
+
+### Provider Management Commands (LLxprt-specific)
+
+These commands are unique to LLxprt Code and enable multi-provider support:
+
+- **`/provider`**
+  - **Description:** List available providers or switch to a different LLM provider.
+  - **Usage:** `/provider` (lists providers) or `/provider <provider_name>` (switches provider)
+  - **Available providers:** gemini, openai, anthropic, and others
+  - **Example:** `/provider openai` switches to OpenAI provider
+
+- **`/model`**
+  - **Description:** List available models for the current provider or switch to a different model.
+  - **Usage:** `/model` (lists models) or `/model <model_name>` (switches model)
+  - **Note:** Available models depend on your current provider
+  - **Example:** `/model o3-mini` switches to OpenAI's o3-mini model
+
+- **`/baseurl`**
+  - **Description:** Set a custom API endpoint for the current provider. Useful for local models or alternative API endpoints.
+  - **Usage:** `/baseurl <url>`
+  - **Examples:**
+    - `/baseurl http://localhost:1234/v1/` for local LM Studio
+    - `/baseurl https://openrouter.ai/api/v1/` for OpenRouter
+    - `/baseurl https://api.fireworks.ai/inference/v1/` for Fireworks
+
+- **`/key`**
+  - **Description:** Set the API key for the current provider session.
+  - **Usage:** `/key <your-api-key>`
+  - **Note:** The key is only stored for the current session
+  - **Example:** `/key sk-your-openai-key-here`
+
+- **`/keyfile`**
+  - **Description:** Load an API key from a file for the current provider.
+  - **Usage:** `/keyfile <path_to_key_file>`
+  - **Example:** `/keyfile ~/.keys/openai.txt`
+  - **Note:** The file should contain only the API key as plain text
 
 - **`/about`**
   - **Description:** Show version info. Please share this information when filing issues.
