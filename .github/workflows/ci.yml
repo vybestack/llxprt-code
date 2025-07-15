@@ -94,6 +94,12 @@ jobs:
       - name: Install dependencies for testing
         run: npm ci # Install fresh dependencies using the downloaded package-lock.json
 
+      - name: Fix rollup platform dependency
+        run: |
+          # Explicitly install the platform-specific rollup package
+          # This is a workaround for https://github.com/npm/cli/issues/4828
+          npm install @rollup/rollup-linux-x64-gnu --no-save || true
+
       - name: Run tests and generate reports
         run: NO_COLOR=true npm run test:ci
 
