@@ -45,4 +45,5 @@ jobs:
       - name: Run E2E tests
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
         run: npm run test:integration:${{ matrix.sandbox }} -- --verbose --keep-output
