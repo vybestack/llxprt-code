@@ -1,6 +1,12 @@
 # Authentication Setup
 
-The LLxprt Code requires you to authenticate with Google's AI services. On initial startup you'll need to configure **one** of the following authentication methods:
+LLxprt Code allows you to authenticate to Google's AI services at your option. You can also use other providers like OpenAI, Anthropic, or local models without any Google authentication.
+
+## Provider Authentication Options
+
+### For Google Services (Optional)
+
+If you want to use Google's Gemini models, including their free tier offerings, you can authenticate using **one** of the following methods:
 
 1.  **Login with Google (Gemini Code Assist):**
     - Use this option to log in with your google account.
@@ -107,3 +113,28 @@ GOOGLE_CLOUD_PROJECT="your-project-id"
 GEMINI_API_KEY="your-gemini-api-key"
 EOF
 ```
+
+### For Other Providers
+
+LLxprt Code supports multiple providers without requiring Google authentication:
+
+#### OpenAI
+- Set up using `/provider openai` and `/key sk-your-openai-key`
+- Or set `OPENAI_API_KEY` environment variable
+- No additional authentication required
+
+#### Anthropic
+- Set up using `/provider anthropic` and `/key sk-ant-your-key`
+- Or set `ANTHROPIC_API_KEY` environment variable
+- No additional authentication required
+
+#### Local Models
+- Set up using `/provider openai` and `/baseurl http://localhost:1234/v1/`
+- No authentication required for local models
+- Works with LM Studio, llama.cpp, and other OpenAI-compatible servers
+
+#### OpenRouter/Fireworks
+- Use `/provider openai` with appropriate `/baseurl` and `/key`
+- Authentication via API key only
+
+See the [Provider Configuration](../README.md#provider-configuration) section for detailed setup instructions.

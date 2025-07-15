@@ -4,24 +4,13 @@ We would love to accept your patches and contributions to this project.
 
 ## Before you begin
 
-### Sign our Contributor License Agreement
+### License Agreement
 
-Contributions to this project must be accompanied by a
-[Contributor License Agreement](https://cla.developers.google.com/about) (CLA).
-You (or your employer) retain the copyright to your contribution; this simply
-gives us permission to use and redistribute your contributions as part of the
-project.
+By contributing to this project, you agree to provide a non-revocable [Apache Software License 2.0](LICENSE) to Vybestack and the general community. You (or your employer) retain the copyright to your contribution while granting permission to use and redistribute your contributions as part of the project under the Apache License 2.0.
 
-If you or your current employer have already signed the Google CLA (even if it
-was for a different project), you probably don't need to do it again.
+### Community Guidelines
 
-Visit <https://cla.developers.google.com/> to see your current agreements or to
-sign a new one.
-
-### Review our Community Guidelines
-
-This project follows [Google's Open Source Community
-Guidelines](https://opensource.google/conduct/).
+This project values respectful and constructive collaboration. We expect all contributors to maintain professional conduct and focus on improving the project for the benefit of all users.
 
 ## Contribution Process
 
@@ -231,7 +220,7 @@ For more detailed architecture, see `docs/architecture.md`.
     ```bash
     npm run debug
     ```
-    This command runs `node --inspect-brk dist/gemini.js` within the `packages/cli` directory, pausing execution until a debugger attaches. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
+    This command runs `node --inspect-brk dist/llxprt.js` within the `packages/cli` directory, pausing execution until a debugger attaches. You can then open `chrome://inspect` in your Chrome browser to connect to the debugger.
 2.  In VS Code, use the "Attach" launch configuration (found in `.vscode/launch.json`).
 
 Alternatively, you can use the "Launch Program" configuration in VS Code if you prefer to launch the currently open file directly, but 'F5' is generally recommended.
@@ -239,14 +228,14 @@ Alternatively, you can use the "Launch Program" configuration in VS Code if you 
 To hit a breakpoint inside the sandbox container run:
 
 ```bash
-DEBUG=1 gemini
+DEBUG=1 llxprt
 ```
 
 ### React DevTools
 
 To debug the CLI's React-based UI, you can use React DevTools. Ink, the library used for the CLI's interface, is compatible with React DevTools version 4.x.
 
-1.  **Start the Gemini CLI in development mode:**
+1.  **Start LLxprt Code in development mode:**
 
     ```bash
     DEV=true npm start

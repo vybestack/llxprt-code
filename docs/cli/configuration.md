@@ -24,7 +24,7 @@ LLxprt Code uses `settings.json` files for persistent configuration. There are t
   - **Location:** `.llxprt/settings.json` within your project's root directory.
   - **Scope:** Applies only when running LLxprt Code from that specific project. Project settings override user settings.
 - **System settings file:**
-  - **Location:** `/etc/gemini-cli/settings.json` (Linux), `C:\ProgramData\gemini-cli\settings.json` (Windows) or `/Library/Application Support/GeminiCli/settings.json` (macOS).
+  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LLxprtCode/settings.json` (macOS).
   - **Scope:** Applies to all LLxprt Code sessions on the system, for all users. System settings override user and project settings. May be useful for system administrators at enterprises to have controls over users' LLxprt Code setups.
 
 **Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"apiKey": "$MY_API_TOKEN"`.
@@ -270,10 +270,11 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
 2.  If not found, it searches upwards in parent directories until it finds an `.env` file or reaches the project root (identified by a `.git` folder) or the home directory.
 3.  If still not found, it looks for `~/.env` (in the user's home directory).
 
-- **`GEMINI_API_KEY`** (Required):
+- **`GEMINI_API_KEY`** (Optional):
   - Your API key for the Gemini API.
-  - **Crucial for operation.** The CLI will not function without it.
+  - **Only required if using Google's Gemini provider.** LLxprt Code supports multiple providers.
   - Set this in your shell profile (e.g., `~/.bashrc`, `~/.zshrc`) or an `.env` file.
+  - Alternatively, use `/key` command or other provider's API keys.
 - **`GEMINI_MODEL`**:
   - Specifies the default Gemini model to use.
   - Overrides the hardcoded default
@@ -316,6 +317,14 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
 - **`CODE_ASSIST_ENDPOINT`**:
   - Specifies the endpoint for the code assist server.
   - This is useful for development and testing.
+- **`OPENAI_API_KEY`**:
+  - Your API key for OpenAI services.
+  - Used when provider is set to openai.
+  - Example: `export OPENAI_API_KEY="sk-..."`
+- **`ANTHROPIC_API_KEY`**:
+  - Your API key for Anthropic services.
+  - Used when provider is set to anthropic.
+  - Example: `export ANTHROPIC_API_KEY="sk-ant-..."`
 
 ## Command-Line Arguments
 
@@ -444,31 +453,18 @@ FROM gemini-cli-sandbox
 When `.llxprt/sandbox.Dockerfile` exists, you can use `BUILD_SANDBOX` environment variable when running LLxprt Code to automatically build the custom sandbox image:
 
 ```bash
-BUILD_SANDBOX=1 gemini -s
+BUILD_SANDBOX=1 llxprt -s
 ```
 
-## Usage Statistics
+## Privacy and Telemetry
 
-To help us improve the LLxprt Code, we collect anonymized usage statistics. This data helps us understand how the CLI is used, identify common issues, and prioritize new features.
+**LLxprt Code does not collect any telemetry or usage statistics by default.** Your privacy is our priority.
 
-**What we collect:**
+All telemetry features have been disabled in LLxprt Code. We do not collect:
+- Tool usage statistics
+- API request information
+- Session data
+- File content
+- Personal information
 
-- **Tool Calls:** We log the names of the tools that are called, whether they succeed or fail, and how long they take to execute. We do not collect the arguments passed to the tools or any data returned by them.
-- **API Requests:** We log the Gemini model used for each request, the duration of the request, and whether it was successful. We do not collect the content of the prompts or responses.
-- **Session Information:** We collect information about the configuration of the CLI, such as the enabled tools and the approval mode.
-
-**What we DON'T collect:**
-
-- **Personally Identifiable Information (PII):** We do not collect any personal information, such as your name, email address, or API keys.
-- **Prompt and Response Content:** We do not log the content of your prompts or the responses from the Gemini model.
-- **File Content:** We do not log the content of any files that are read or written by the CLI.
-
-**How to opt out:**
-
-You can opt out of usage statistics collection at any time by setting the `usageStatisticsEnabled` property to `false` in your `settings.json` file:
-
-```json
-{
-  "usageStatisticsEnabled": false
-}
-```
+**Note about providers:** When using external providers like Google, OpenAI, or Anthropic, those services may collect data according to their own privacy policies. LLxprt Code itself does not send any telemetry data.
