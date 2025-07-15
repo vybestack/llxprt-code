@@ -26,9 +26,16 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        
+      - name: Fix rollup platform dependency
+        run: |
+          # Explicitly install the platform-specific rollup package
+          # This is a workaround for https://github.com/npm/cli/issues/4828
+          npm install @rollup/rollup-linux-x64-gnu --no-save || true
 
       - name: Build project
         run: npm run build
+
 
       - name: Set up Docker
         if: matrix.sandbox == 'sandbox:docker'
@@ -44,10 +51,13 @@ jobs:
 
       - name: Run E2E tests
         env:
+          # Use OpenRouter as a cost-effective alternative to Google's API
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
           LLXPRT_DEFAULT_MODEL: meta-llama/llama-3.2-3b-instruct:free
           LLXPRT_DEFAULT_PROVIDER: openai
+          # Also provide Gemini API key if available
+          GOOGLE_GENAI_API_KEY: ${{ secrets.GOOGLE_GENAI_API_KEY }}
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
           VERBOSE: true
           DEBUG: true
