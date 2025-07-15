@@ -49,4 +49,6 @@ jobs:
           LLXPRT_DEFAULT_MODEL: meta-llama/llama-3.2-3b-instruct:free
           LLXPRT_DEFAULT_PROVIDER: openai
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
+          VERBOSE: true
+          DEBUG: true
         run: npm run test:integration:${{ matrix.sandbox }} -- --verbose --keep-output
