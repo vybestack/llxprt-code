@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+bundle/
+coverage/
+.integration-tests/
+
+# IDE
+.vscode/
+.idea/
+
+# Project planning documents
+project-plans/
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+
+# Generated files
+package-lock.json
+tsconfig.tsbuildinfo
