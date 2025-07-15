@@ -87,7 +87,7 @@ describe('MemoryTool', () => {
   describe('performAddMemoryEntry (static method)', () => {
     const testFilePath = path.join(
       '/mock/home',
-      '.gemini',
+      '.llxprt',
       DEFAULT_CONTEXT_FILENAME, // Use the default for basic tests
     );
 

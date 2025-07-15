@@ -50,7 +50,7 @@ vi.mock('../tools/memoryTool', () => ({
   setLlxprtMdFilename: vi.fn(),
   getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'), // Mock the original filename
   DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
-  LLXPRT_CONFIG_DIR: '.gemini',
+  LLXPRT_CONFIG_DIR: '.llxprt',
 }));
 
 vi.mock('../core/contentGenerator.js', async (importOriginal) => {

@@ -392,7 +392,7 @@ describe('loadServerHierarchicalMemory', () => {
     mockFs.stat.mockImplementation(async (p) => {
       if (p === path.join(PROJECT_ROOT, '.git')) {
         return { isDirectory: () => true } as Stats;
-      } else if (p === path.join(PROJECT_ROOT, '.gemini')) {
+      } else if (p === path.join(PROJECT_ROOT, '.llxprt')) {
         return { isDirectory: () => true } as Stats;
       }
       throw new Error('File not found');

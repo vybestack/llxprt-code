@@ -109,7 +109,7 @@ describe('gemini.tsx main function', () => {
       settings: {},
     };
     const workspaceSettingsFile: SettingsFile = {
-      path: '/workspace/.gemini/settings.json',
+      path: '/workspace/.llxprt/settings.json',
       settings: {},
     };
     const systemSettingsFile: SettingsFile = {

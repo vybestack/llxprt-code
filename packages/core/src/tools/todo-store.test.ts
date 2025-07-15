@@ -72,7 +72,7 @@ describe('TodoStore', () => {
       // Ensure file doesn't exist
       const filePath = path.join(
         tempDir,
-        '.gemini',
+        '.llxprt',
         'todos',
         `${sessionId}-agent-${agentId}.json`,
       );
@@ -91,7 +91,7 @@ describe('TodoStore', () => {
 
       const filePath = path.join(
         tempDir,
-        '.gemini',
+        '.llxprt',
         'todos',
         `${sessionId}-agent-${agentId}.json`,
       );
@@ -102,7 +102,7 @@ describe('TodoStore', () => {
     });
 
     it('should create todos directory if not exists', async () => {
-      const todosDir = path.join(tempDir, '.gemini', 'todos');
+      const todosDir = path.join(tempDir, '.llxprt', 'todos');
       if (fs.existsSync(todosDir)) {
         fs.rmSync(todosDir, { recursive: true });
       }
@@ -157,7 +157,7 @@ describe('TodoStore', () => {
       // Ensure file doesn't exist
       const filePath = path.join(
         tempDir,
-        '.gemini',
+        '.llxprt',
         'todos',
         `${sessionId}-agent-${agentId}.json`,
       );
@@ -188,7 +188,7 @@ describe('TodoStore', () => {
 
       const filePath = path.join(
         tempDir,
-        '.gemini',
+        '.llxprt',
         'todos',
         `${sessionId}.json`,
       );
@@ -229,7 +229,7 @@ describe('TodoStore', () => {
 
       const expectedPath = path.join(
         tempDir,
-        '.gemini',
+        '.llxprt',
         'todos',
         `${sessionId}-agent-${agentId}.json`,
       );
