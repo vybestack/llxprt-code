@@ -207,7 +207,7 @@ describe('MemoryTool', () => {
       // Use getCurrentLlxprtMdFilename for the default expectation before any setLlxprtMdFilename calls in a test
       const expectedFilePath = path.join(
         '/mock/home',
-        '.gemini',
+        '.llxprt',
         getCurrentLlxprtMdFilename(), // This will be DEFAULT_CONTEXT_FILENAME unless changed by a test
       );
 
