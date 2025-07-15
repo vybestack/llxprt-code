@@ -9,6 +9,11 @@ import { EventEmitter } from 'events';
 import { Key, useKeypress } from './useKeypress.js';
 import { vi } from 'vitest';
 
+// Mock ink module at the top level
+vi.mock('ink', () => ({
+  useStdin: vi.fn(),
+}));
+
 describe('useKeypress', () => {
   let stdin: EventEmitter & {
     isTTY: boolean;
@@ -17,7 +22,7 @@ describe('useKeypress', () => {
   let setRawMode: (mode: boolean) => void;
   let onKeypress: (key: Key) => void;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     stdin = Object.assign(new EventEmitter(), {
       isTTY: true,
       setRawMode: vi.fn(),
@@ -25,9 +30,9 @@ describe('useKeypress', () => {
     setRawMode = vi.fn();
     onKeypress = vi.fn();
 
-    vi.mock('ink', () => ({
-      useStdin: () => ({ stdin, setRawMode }),
-    }));
+    // Update the mock implementation for this test
+    const { useStdin } = await import('ink');
+    vi.mocked(useStdin).mockReturnValue({ stdin, setRawMode });
   });
 
   afterEach(() => {

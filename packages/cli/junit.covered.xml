@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="39" failures="0" errors="0" time="0.022114958">
+    <testsuite name="src/ui/contexts/SessionContext.test.tsx" timestamp="2025-07-15T22:32:41.173Z" hostname="Andrews-MacBook-Pro-2.local" tests="3" failures="0" errors="0" skipped="0" time="0.017400958">
+        <testcase classname="src/ui/contexts/SessionContext.test.tsx" name="SessionStatsContext &gt; should provide the correct initial state" time="0.007865583">
+            <system-err>
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SessionStatsProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/ui/contexts/SessionContext.test.tsx" name="SessionStatsContext &gt; should update metrics when the uiTelemetryService emits an update" time="0.001452458">
+            <system-err>
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SessionStatsProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() =&gt; {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you&apos;re testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+`ReactDOMTestUtils.act` is deprecated in favor of `React.act`. Import `act` from `react` instead of `react-dom/test-utils`. See https://react.dev/warnings/react-dom-test-utils for more info.
+
+            </system-err>
+        </testcase>
+        <testcase classname="src/ui/contexts/SessionContext.test.tsx" name="SessionStatsContext &gt; should throw an error when useSessionStats is used outside of a provider" time="0.00745925">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/ui/reducers/appReducer.test.ts" timestamp="2025-07-15T22:32:41.174Z" hostname="Andrews-MacBook-Pro-2.local" tests="36" failures="0" errors="0" skipped="0" time="0.004714">
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; initial state &gt; should have correct initial state" time="0.000868083">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; initial state &gt; should return state unchanged for unknown action" time="0.000164584">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; ADD_ITEM action &gt; should store the ADD_ITEM action payload in lastAddItemAction" time="0.000140625">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; ADD_ITEM action &gt; should replace previous lastAddItemAction" time="0.000075">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should open theme dialog" time="0.000133625">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should open auth dialog" time="0.000096792">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should open editor dialog" time="0.00010375">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should open providerModel dialog" time="0.000087334">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should open provider dialog" time="0.00008">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should open privacy dialog" time="0.000079583">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should maintain immutability when opening dialog" time="0.000211666">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; OPEN_DIALOG action &gt; should allow multiple dialogs to be open" time="0.000088917">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLOSE_DIALOG action &gt; should close an open dialog" time="0.00003575">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLOSE_DIALOG action &gt; should handle closing already closed dialog" time="0.000030875">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLOSE_DIALOG action &gt; should maintain immutability when closing dialog" time="0.000176208">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLOSE_DIALOG action &gt; should only close the specified dialog" time="0.000136625">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_WARNING action &gt; should add a new warning" time="0.000068208">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_WARNING action &gt; should overwrite existing warning with same key" time="0.000051833">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_WARNING action &gt; should maintain multiple warnings" time="0.000080833">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_WARNING action &gt; should create a new Map instance (immutability)" time="0.000077291">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLEAR_WARNING action &gt; should remove an existing warning" time="0.00004975">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLEAR_WARNING action &gt; should handle clearing non-existent warning" time="0.000030167">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLEAR_WARNING action &gt; should only clear specified warning" time="0.000063916">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; CLEAR_WARNING action &gt; should create a new Map instance (immutability)" time="0.000061">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_THEME_ERROR action &gt; should set theme error message" time="0.000060667">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_THEME_ERROR action &gt; should clear theme error when payload is null" time="0.000035291">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_THEME_ERROR action &gt; should maintain immutability" time="0.000096458">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_AUTH_ERROR action &gt; should set auth error message" time="0.000052042">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_AUTH_ERROR action &gt; should clear auth error when payload is null" time="0.000032875">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_AUTH_ERROR action &gt; should maintain immutability" time="0.000085667">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_EDITOR_ERROR action &gt; should set editor error message" time="0.00005725">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_EDITOR_ERROR action &gt; should clear editor error when payload is null" time="0.00003275">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; SET_EDITOR_ERROR action &gt; should maintain immutability" time="0.000093583">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; multiple error types &gt; should handle multiple errors independently" time="0.000088958">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; complex state changes &gt; should handle multiple state changes correctly" time="0.000179125">
+        </testcase>
+        <testcase classname="src/ui/reducers/appReducer.test.ts" name="appReducer &gt; state immutability &gt; should never mutate the original state" time="0.000099667">
+        </testcase>
+    </testsuite>
+</testsuites>
