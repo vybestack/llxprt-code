@@ -12,19 +12,27 @@ import {
   clearCachedCredentialFile,
   getErrorMessage,
 } from '@google/gemini-cli-core';
+import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import { AppState } from '../reducers/appReducer.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
-  setAuthError: (error: string | null) => void,
+  appState: AppState,
   config: Config,
 ) => {
-  const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(
-    settings.merged.selectedAuthType === undefined,
-  );
+  const appDispatch = useAppDispatch();
+  const isAuthDialogOpen = appState.openDialogs.auth;
+
+  // Set initial dialog state based on auth availability
+  useEffect(() => {
+    if (settings.merged.selectedAuthType === undefined) {
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+    }
+  }, [settings.merged.selectedAuthType, appDispatch]); // Run only on mount
 
   const openAuthDialog = useCallback(() => {
-    setIsAuthDialogOpen(true);
-  }, []);
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+  }, [appDispatch]);
 
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
@@ -40,7 +48,10 @@ export const useAuthCommand = (
         await config.refreshAuth(authType);
         console.log(`Authenticated via "${authType}".`);
       } catch (e) {
-        setAuthError(`Failed to login. Message: ${getErrorMessage(e)}`);
+        appDispatch({
+          type: 'SET_AUTH_ERROR',
+          payload: `Failed to login. Message: ${getErrorMessage(e)}`,
+        });
         openAuthDialog();
       } finally {
         setIsAuthenticating(false);
@@ -48,7 +59,7 @@ export const useAuthCommand = (
     };
 
     void authFlow();
-  }, [isAuthDialogOpen, settings, config, setAuthError, openAuthDialog]);
+  }, [isAuthDialogOpen, settings, config, appDispatch, openAuthDialog]);
 
   const handleAuthSelect = useCallback(
     async (authType: AuthType | undefined, scope: SettingScope) => {
@@ -56,10 +67,10 @@ export const useAuthCommand = (
         await clearCachedCredentialFile();
         settings.setValue(scope, 'selectedAuthType', authType);
       }
-      setIsAuthDialogOpen(false);
-      setAuthError(null);
+      appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
+      appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
     },
-    [settings, setAuthError],
+    [settings, appDispatch],
   );
 
   const cancelAuthentication = useCallback(() => {

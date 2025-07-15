@@ -4,6 +4,7 @@ import React, {
   useCallback,
   useEffect,
   useRef,
+  useReducer,
 } from 'react';
 import { HistoryItem, MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
@@ -22,6 +23,13 @@ import {
   useSessionState,
 } from '../contexts/SessionStateContext.js';
 import { SessionState, SessionAction } from '../reducers/sessionReducer.js';
+import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
+import {
+  appReducer,
+  initialAppState,
+  AppAction,
+  AppState,
+} from '../reducers/appReducer.js';
 
 // Helper functions
 function getDisplayModelName(config: Config): string {
@@ -68,6 +76,10 @@ export interface SessionContextType {
   // Session state
   sessionState: SessionState;
   dispatch: React.Dispatch<SessionAction>;
+
+  // App state and dispatch
+  appState: AppState;
+  appDispatch: React.Dispatch<AppAction>;
 
   // Helper functions
   checkPaymentModeChange: (forcePreviousProvider?: string) => void;
@@ -125,6 +137,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   isAuthenticating = false,
 }) => {
   const [sessionState, dispatch] = useSessionState();
+  const [appState, appDispatch] = useReducer(appReducer, initialAppState);
 
   // Use the history hook
   const { history, addItem, updateItem, clearItems, loadHistory } =
@@ -411,6 +424,14 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     config.setFlashFallbackHandler(flashFallbackHandler);
   }, [config, addItem, sessionState.userTier, dispatch]);
 
+  // Handle ADD_ITEM actions
+  useEffect(() => {
+    if (appState.lastAddItemAction) {
+      const { itemData, baseTimestamp } = appState.lastAddItemAction;
+      addItem(itemData, baseTimestamp);
+    }
+  }, [appState.lastAddItemAction, addItem]);
+
   const contextValue = useMemo(
     () => ({
       history,
@@ -420,6 +441,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       loadHistory,
       sessionState,
       dispatch,
+      appState,
+      appDispatch,
       checkPaymentModeChange,
       performMemoryRefresh,
     }),
@@ -431,6 +454,8 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       loadHistory,
       sessionState,
       dispatch,
+      appState,
+      appDispatch,
       checkPaymentModeChange,
       performMemoryRefresh,
     ],
@@ -438,7 +463,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
 
   return (
     <SessionContext.Provider value={contextValue}>
-      {children}
+      <AppDispatchProvider value={appDispatch}>{children}</AppDispatchProvider>
     </SessionContext.Provider>
   );
 };

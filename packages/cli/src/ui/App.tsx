@@ -126,6 +126,8 @@ const AppInner = ({
     loadHistory,
     sessionState,
     dispatch: sessionDispatch,
+    appState,
+    appDispatch,
     checkPaymentModeChange,
     performMemoryRefresh,
   } = useSession();
@@ -187,9 +189,6 @@ const AppInner = ({
   const [geminiMdFileCount, setGeminiMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
-  const [themeError, setThemeError] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [editorError, setEditorError] = useState<string | null>(null);
   const [corgiMode, setCorgiMode] = useState(false);
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
@@ -202,16 +201,16 @@ const AppInner = ({
   const ctrlCTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
+  const showPrivacyNotice = appState.openDialogs.privacy;
   // modelSwitchedFromQuotaError and userTier are now in sessionState
 
   const openPrivacyNotice = useCallback(() => {
-    setShowPrivacyNotice(true);
-  }, []);
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'privacy' });
+  }, [appDispatch]);
 
   const closePrivacyNotice = useCallback(() => {
-    setShowPrivacyNotice(false);
-  }, []);
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'privacy' });
+  }, [appDispatch]);
 
   const initialPromptSubmitted = useRef(false);
 
@@ -220,12 +219,23 @@ const AppInner = ({
     [consoleMessages],
   );
 
+  // Create dispatch-based wrapper for addItem
+  const addItemViaDispatch = useCallback(
+    (itemData: Omit<HistoryItem, 'id'>, baseTimestamp: number) => {
+      appDispatch({
+        type: 'ADD_ITEM',
+        payload: { itemData, baseTimestamp },
+      });
+    },
+    [appDispatch],
+  );
+
   const {
     isThemeDialogOpen,
     openThemeDialog,
     handleThemeSelect,
     handleThemeHighlight,
-  } = useThemeCommand(settings, setThemeError, addItem);
+  } = useThemeCommand(settings, appState, addItemViaDispatch);
 
   const {
     isAuthDialogOpen,
@@ -233,7 +243,7 @@ const AppInner = ({
     handleAuthSelect,
     isAuthenticating: authIsAuthenticating,
     cancelAuthentication,
-  } = useAuthCommand(settings, setAuthError, config);
+  } = useAuthCommand(settings, appState, config);
 
   // Sync auth state with parent
   useEffect(() => {
@@ -241,20 +251,23 @@ const AppInner = ({
   }, [authIsAuthenticating, setIsAuthenticating]);
 
   const onAuthTimeout = useCallback(() => {
-    setAuthError('Authentication timed out. Please try again.');
+    appDispatch({
+      type: 'SET_AUTH_ERROR',
+      payload: 'Authentication timed out. Please try again.',
+    });
     cancelAuthentication();
     openAuthDialog();
-  }, [cancelAuthentication, openAuthDialog]);
+  }, [cancelAuthentication, openAuthDialog, appDispatch]);
 
   useEffect(() => {
     if (settings.merged.selectedAuthType) {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
       if (error) {
-        setAuthError(error);
+        appDispatch({ type: 'SET_AUTH_ERROR', payload: error });
         openAuthDialog();
       }
     }
-  }, [settings.merged.selectedAuthType, openAuthDialog, setAuthError]);
+  }, [settings.merged.selectedAuthType, openAuthDialog, appDispatch]);
 
   // User tier sync is now handled by SessionController
 
@@ -263,25 +276,33 @@ const AppInner = ({
     openEditorDialog,
     handleEditorSelect,
     exitEditorDialog,
-  } = useEditorSettings(settings, setEditorError, addItem);
+  } = useEditorSettings(settings, appState, addItemViaDispatch);
 
   const providerModelDialog = useProviderModelDialog({
     addMessage: (m) =>
-      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+      addItemViaDispatch(
+        { type: m.type, text: m.content },
+        m.timestamp.getTime(),
+      ),
     onModelChange: () => {
       // Model change detection is handled by SessionController's useEffect
       // No need to manually update here
     },
+    appState,
   });
 
   // Provider selection dialog
   const providerDialog = useProviderDialog({
     addMessage: (m: { type: MessageType; content: string; timestamp: Date }) =>
-      addItem({ type: m.type, text: m.content }, m.timestamp.getTime()),
+      addItemViaDispatch(
+        { type: m.type, text: m.content },
+        m.timestamp.getTime(),
+      ),
     onProviderChange: () => {
       // Provider change will be detected by SessionController's useEffect
       checkPaymentModeChange?.();
     },
+    appState,
   });
 
   const toggleCorgiMode = useCallback(() => {
@@ -449,9 +470,9 @@ const AppInner = ({
   }, [settings, openEditorDialog]);
 
   const onAuthError = useCallback(() => {
-    setAuthError('reauth required');
+    appDispatch({ type: 'SET_AUTH_ERROR', payload: 'reauth required' });
     openAuthDialog();
-  }, [openAuthDialog, setAuthError]);
+  }, [openAuthDialog, appDispatch]);
 
   const geminiClientForStream = config.getGeminiClient();
 
@@ -753,9 +774,9 @@ const AppInner = ({
 
           {isThemeDialogOpen ? (
             <Box flexDirection="column">
-              {themeError && (
+              {appState.errors.theme && (
                 <Box marginBottom={1}>
-                  <Text color={Colors.AccentRed}>{themeError}</Text>
+                  <Text color={Colors.AccentRed}>{appState.errors.theme}</Text>
                 </Box>
               )}
               <ThemeDialog
@@ -793,14 +814,14 @@ const AppInner = ({
               <AuthDialog
                 onSelect={handleAuthSelect}
                 settings={settings}
-                initialErrorMessage={authError}
+                initialErrorMessage={appState.errors.auth}
               />
             </Box>
           ) : isEditorDialogOpen ? (
             <Box flexDirection="column">
-              {editorError && (
+              {appState.errors.editor && (
                 <Box marginBottom={1}>
-                  <Text color={Colors.AccentRed}>{editorError}</Text>
+                  <Text color={Colors.AccentRed}>{appState.errors.editor}</Text>
                 </Box>
               )}
               <EditorSettingsDialog

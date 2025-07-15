@@ -478,17 +478,25 @@ export function textBufferReducer(
       const after = cpSlice(lineContent, newCursorCol);
 
       if (parts.length > 1) {
+        // First line: existing content before cursor + first part of paste
         newLines[newCursorRow] = before + parts[0];
-        const remainingParts = parts.slice(1);
-        const lastPartOriginal = remainingParts.pop() ?? '';
-        newLines.splice(newCursorRow + 1, 0, ...remainingParts);
+
+        // Middle lines (if any) – everything except first & last part
+        const middleParts = parts.slice(1, -1);
+        if (middleParts.length > 0) {
+          newLines.splice(newCursorRow + 1, 0, ...middleParts);
+        }
+
+        // Last line: last part of paste + existing content after cursor
+        const lastPart = parts[parts.length - 1];
         newLines.splice(
-          newCursorRow + parts.length - 1,
+          newCursorRow + middleParts.length + 1,
           0,
-          lastPartOriginal + after,
+          lastPart + after,
         );
+
         newCursorRow = newCursorRow + parts.length - 1;
-        newCursorCol = cpLen(lastPartOriginal);
+        newCursorCol = cpLen(lastPart);
       } else {
         newLines[newCursorRow] = before + parts[0] + after;
         newCursorCol = cpLen(before) + cpLen(parts[0]);
@@ -1164,6 +1172,13 @@ export function useTextBuffer({
       sequence: string;
     }): void => {
       const { sequence: input } = key;
+
+      // Handle paste content atomically
+      if (key.paste && input) {
+        // For paste, insert the entire content at once, preserving newlines
+        insert(input);
+        return;
+      }
 
       if (
         key.name === 'return' ||

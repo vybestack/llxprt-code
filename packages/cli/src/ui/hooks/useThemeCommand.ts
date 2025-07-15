@@ -4,11 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { themeManager } from '../themes/theme-manager.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js'; // Import LoadedSettings, AppSettings, MergedSetting
 import { type HistoryItem, MessageType } from '../types.js';
 import process from 'node:process';
+import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import { AppState } from '../reducers/appReducer.js';
 
 interface UseThemeCommandReturn {
   isThemeDialogOpen: boolean;
@@ -22,18 +24,20 @@ interface UseThemeCommandReturn {
 
 export const useThemeCommand = (
   loadedSettings: LoadedSettings,
-  setThemeError: (error: string | null) => void,
+  appState: AppState,
   addItem: (item: Omit<HistoryItem, 'id'>, timestamp: number) => void,
 ): UseThemeCommandReturn => {
   // Determine the effective theme
   const effectiveTheme = loadedSettings.merged.theme;
+  const appDispatch = useAppDispatch();
+  const isThemeDialogOpen = appState.openDialogs.theme;
 
-  // Initial state: Open dialog if no theme is set in either user or workspace settings
-  const [isThemeDialogOpen, setIsThemeDialogOpen] = useState(
-    effectiveTheme === undefined && !process.env.NO_COLOR,
-  );
-  // TODO: refactor how theme's are accessed to avoid requiring a forced render.
-  const [, setForceRender] = useState(0);
+  // Set initial dialog state based on theme availability
+  useEffect(() => {
+    if (effectiveTheme === undefined && !process.env.NO_COLOR) {
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
+    }
+  }, [effectiveTheme, appDispatch]); // Run only on mount
 
   // Apply initial theme on component mount
   useEffect(() => {
@@ -52,12 +56,15 @@ export const useThemeCommand = (
     }
 
     if (!themeManager.setActiveTheme(effectiveTheme)) {
-      setIsThemeDialogOpen(true);
-      setThemeError(`Theme "${effectiveTheme}" not found.`);
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
+      appDispatch({
+        type: 'SET_THEME_ERROR',
+        payload: `Theme "${effectiveTheme}" not found.`,
+      });
     } else {
-      setThemeError(null);
+      appDispatch({ type: 'SET_THEME_ERROR', payload: null });
     }
-  }, [effectiveTheme, setThemeError, addItem]); // Re-run if effectiveTheme or setThemeError changes
+  }, [effectiveTheme, appDispatch, addItem]); // Re-run if effectiveTheme or appDispatch changes
 
   const openThemeDialog = useCallback(() => {
     if (process.env.NO_COLOR) {
@@ -70,21 +77,29 @@ export const useThemeCommand = (
       );
       return;
     }
-    setIsThemeDialogOpen(true);
-  }, [addItem]);
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
+  }, [addItem, appDispatch]);
 
   const applyTheme = useCallback(
     (themeName: string | undefined) => {
       if (!themeManager.setActiveTheme(themeName)) {
         // If theme is not found, open the theme selection dialog and set error message
-        setIsThemeDialogOpen(true);
-        setThemeError(`Theme "${themeName}" not found.`);
+        appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
+        appDispatch({
+          type: 'SET_THEME_ERROR',
+          payload: `Theme "${themeName}" not found.`,
+        });
       } else {
-        setForceRender((v) => v + 1); // Trigger potential re-render
-        setThemeError(null); // Clear any previous theme error on success
+        // Force re-render by updating a dummy warning
+        appDispatch({
+          type: 'SET_WARNING',
+          payload: { key: 'theme-render', message: '' },
+        });
+        appDispatch({ type: 'CLEAR_WARNING', payload: 'theme-render' });
+        appDispatch({ type: 'SET_THEME_ERROR', payload: null }); // Clear any previous theme error on success
       }
     },
-    [setForceRender, setThemeError],
+    [appDispatch],
   );
 
   const handleThemeHighlight = useCallback(
@@ -101,10 +116,10 @@ export const useThemeCommand = (
         loadedSettings.setValue(scope, 'theme', themeName); // Update the merged settings
         applyTheme(loadedSettings.merged.theme); // Apply the current theme
       } finally {
-        setIsThemeDialogOpen(false); // Close the dialog
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' }); // Close the dialog
       }
     },
-    [applyTheme, loadedSettings],
+    [applyTheme, loadedSettings, appDispatch],
   );
 
   return {

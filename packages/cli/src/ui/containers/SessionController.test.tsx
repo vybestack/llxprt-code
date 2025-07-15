@@ -6,13 +6,22 @@
 
 import React from 'react';
 import { render, act, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   SessionController,
   SessionContext,
   type SessionContextType,
 } from './SessionController.js';
 import { MessageType } from '../types.js';
+import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import {
+  UserTierId,
+  isProQuotaExceededError,
+  isGenericQuotaExceededError,
+  Config,
+} from '@google/gemini-cli-core';
+import { IProvider } from '../../providers/IProvider.js';
+import { AppAction } from '../reducers/appReducer.js';
 
 // Mock dependencies
 vi.mock('../../providers/providerManagerInstance.js', () => ({
@@ -35,19 +44,32 @@ vi.mock('../../config/config.js', () => ({
   ),
 }));
 
-describe('SessionController', () => {
-  let mockConfig: {
-    getModel: ReturnType<typeof vi.fn>;
-    getDebugMode: ReturnType<typeof vi.fn>;
-    getFileService: ReturnType<typeof vi.fn>;
-    getExtensionContextFilePaths: ReturnType<typeof vi.fn>;
-    setUserMemory: ReturnType<typeof vi.fn>;
-    setGeminiMdFileCount: ReturnType<typeof vi.fn>;
-    setFlashFallbackHandler: ReturnType<typeof vi.fn>;
-    setQuotaErrorOccurred: ReturnType<typeof vi.fn>;
-    setModel: ReturnType<typeof vi.fn>;
-    getUserTier: ReturnType<typeof vi.fn>;
+vi.mock('@google/gemini-cli-core', async () => {
+  const actual = await vi.importActual('@google/gemini-cli-core');
+  return {
+    ...actual,
+    isProQuotaExceededError: vi.fn(() => false),
+    isGenericQuotaExceededError: vi.fn(() => false),
   };
+});
+
+const mockAddItem = vi.fn();
+const mockUpdateItem = vi.fn();
+const mockClearItems = vi.fn();
+const mockLoadHistory = vi.fn();
+
+vi.mock('../hooks/useHistoryManager.js', () => ({
+  useHistory: () => ({
+    history: [],
+    addItem: mockAddItem,
+    updateItem: mockUpdateItem,
+    clearItems: mockClearItems,
+    loadHistory: mockLoadHistory,
+  }),
+}));
+
+describe('SessionController', () => {
+  let mockConfig: Partial<Config>;
 
   beforeEach(() => {
     mockConfig = {
@@ -62,9 +84,20 @@ describe('SessionController', () => {
       setModel: vi.fn(),
       getUserTier: vi.fn(() => Promise.resolve(undefined)),
     };
+
+    // Reset mocks
+    mockAddItem.mockReset();
+    mockUpdateItem.mockReset();
+    mockClearItems.mockReset();
+    mockLoadHistory.mockReset();
+    vi.clearAllTimers();
   });
 
-  it('should provide history management functions', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+  });
+
+  it('should provide session context properly', () => {
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -73,7 +106,7 @@ describe('SessionController', () => {
     };
 
     render(
-      <SessionController config={mockConfig}>
+      <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
@@ -81,77 +114,66 @@ describe('SessionController', () => {
     expect(contextValue).toBeDefined();
     expect(contextValue!.history).toEqual([]);
     expect(typeof contextValue!.addItem).toBe('function');
+    expect(typeof contextValue!.updateItem).toBe('function');
     expect(typeof contextValue!.clearItems).toBe('function');
     expect(typeof contextValue!.loadHistory).toBe('function');
+    expect(typeof contextValue!.checkPaymentModeChange).toBe('function');
+    expect(typeof contextValue!.performMemoryRefresh).toBe('function');
+    expect(contextValue!.sessionState).toBeDefined();
+    expect(contextValue!.dispatch).toBeDefined();
+    expect(contextValue!.appState).toBeDefined();
+    expect(contextValue!.appDispatch).toBeDefined();
   });
 
-  it('should add items to history', () => {
-    let contextValue: SessionContextType | undefined;
-
+  it('should integrate appReducer and provide dispatch context', () => {
     const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
+      const dispatch = useAppDispatch();
+      return <div>{dispatch ? 'Dispatch available' : 'No dispatch'}</div>;
     };
 
-    render(
-      <SessionController config={mockConfig}>
+    const { lastFrame } = render(
+      <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
-    act(() => {
-      contextValue!.addItem(
-        { type: MessageType.USER, text: 'Test message' },
-        Date.now(),
-      );
-    });
-
-    expect(contextValue!.history).toHaveLength(1);
-    expect(contextValue!.history[0].type).toBe(MessageType.USER);
-    expect(contextValue!.history[0].text).toBe('Test message');
+    expect(lastFrame()).toContain('Dispatch available');
   });
 
-  it('should clear history items', () => {
-    let contextValue: SessionContextType | undefined;
+  it('should handle ADD_ITEM actions and call addItem on the session', async () => {
+    mockAddItem.mockReturnValue(1);
+
+    let appDispatch: React.Dispatch<AppAction> | null = null;
 
     const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
+      appDispatch = useAppDispatch();
       return null;
     };
 
     render(
-      <SessionController config={mockConfig}>
+      <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
+    const itemData = { type: MessageType.USER, text: 'Test message' };
+    const baseTimestamp = Date.now();
+
     act(() => {
-      contextValue!.addItem(
-        { type: MessageType.USER, text: 'Test message' },
-        Date.now(),
-      );
-      contextValue!.clearItems();
+      appDispatch?.({ type: 'ADD_ITEM', payload: { itemData, baseTimestamp } });
     });
 
-    expect(contextValue!.history).toHaveLength(0);
+    await waitFor(() => {
+      expect(mockAddItem).toHaveBeenCalledWith(itemData, baseTimestamp);
+    });
   });
 
-  it('should trigger payment mode banner on provider switch', async () => {
+  it('should handle payment mode changes properly', async () => {
     const providerModule = await import(
       '../../providers/providerManagerInstance.js'
     );
     const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
 
-    // Start with gemini provider in free mode
-    mockGetProviderManager.mockReturnValue({
-      hasActiveProvider: () => true,
-      getActiveProvider: vi.fn(() => ({
-        name: 'gemini',
-        getCurrentModel: () => 'gemini-model',
-        isPaidMode: () => false,
-      })),
-    } as ReturnType<typeof providerModule.getProviderManager>);
-
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -160,28 +182,43 @@ describe('SessionController', () => {
     };
 
     render(
-      <SessionController config={mockConfig}>
+      <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
-    // Add a history item to simulate non-startup state
-    act(() => {
-      contextValue!.addItem(
-        { type: MessageType.USER, text: 'Test' },
-        Date.now(),
-      );
+    // Start with free mode
+    expect(contextValue!.sessionState.isPaidMode).toBe(false);
+    expect(contextValue!.sessionState.transientWarnings).toHaveLength(0);
+
+    // Add history item to simulate non-startup state
+    vi.mocked(providerModule.getProviderManager)().hasActiveProvider = () =>
+      true;
+    vi.mocked(providerModule.getProviderManager)().getActiveProvider = () => ({
+      name: 'test-provider',
+      getCurrentModel: () => 'test-model',
+      isPaidMode: () => false,
     });
 
-    // Switch to paid provider
-    const mockProviderManager = mockGetProviderManager();
-    (
-      mockProviderManager.getActiveProvider as ReturnType<typeof vi.fn>
-    ).mockReturnValue({
-      name: 'anthropic',
-      getCurrentModel: () => 'claude-model',
-      isPaidMode: () => true,
+    // Mock useHistory to return a non-empty history
+    const historyModule = await import('../hooks/useHistoryManager.js');
+    vi.mocked(historyModule.useHistory).mockReturnValue({
+      history: [{ id: 1, type: MessageType.USER, text: 'Test' }],
+      addItem: mockAddItem,
+      updateItem: mockUpdateItem,
+      clearItems: mockClearItems,
+      loadHistory: mockLoadHistory,
     });
+
+    // Switch to paid mode
+    mockGetProviderManager.mockReturnValue({
+      hasActiveProvider: () => true,
+      getActiveProvider: () => ({
+        name: 'anthropic',
+        getCurrentModel: () => 'claude-model',
+        isPaidMode: () => true,
+      }) as Partial<IProvider> as IProvider,
+    } as ReturnType<typeof providerModule.getProviderManager>);
 
     act(() => {
       contextValue!.checkPaymentModeChange();
@@ -198,7 +235,7 @@ describe('SessionController', () => {
     });
   });
 
-  it('should handle memory refresh', async () => {
+  it('should handle memory refresh successfully', async () => {
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -207,7 +244,7 @@ describe('SessionController', () => {
     };
 
     render(
-      <SessionController config={mockConfig}>
+      <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
@@ -221,12 +258,461 @@ describe('SessionController', () => {
     );
     expect(mockConfig.setGeminiMdFileCount).toHaveBeenCalledWith(1);
 
-    // Check that info messages were added to history
-    const infoMessages = contextValue!.history.filter(
-      (item) => item.type === MessageType.INFO,
+    // Check that info messages were added
+    expect(mockAddItem).toHaveBeenCalledTimes(2);
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('Refreshing hierarchical memory'),
+      }),
+      expect.any(Number),
     );
-    expect(infoMessages).toHaveLength(2);
-    expect(infoMessages[0].text).toContain('Refreshing hierarchical memory');
-    expect(infoMessages[1].text).toContain('Memory refreshed successfully');
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('Memory refreshed successfully'),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('should handle memory refresh errors', async () => {
+    const configModule = await import('../../config/config.js');
+    vi.mocked(configModule.loadHierarchicalGeminiMemory).mockRejectedValueOnce(
+      new Error('Memory load failed'),
+    );
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    await act(async () => {
+      await contextValue!.performMemoryRefresh();
+    });
+
+    // Check that error message was added
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.ERROR,
+        text: expect.stringContaining(
+          'Error refreshing memory: Memory load failed',
+        ),
+      }),
+      expect.any(Number),
+    );
+  });
+
+  it('should sync user tier when not authenticating', async () => {
+    mockConfig.getUserTier?.mockResolvedValue(UserTierId.STANDARD);
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config} isAuthenticating={false}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    await waitFor(() => {
+      expect(mockConfig.getUserTier).toHaveBeenCalled();
+      expect(contextValue!.sessionState.userTier).toBe(UserTierId.STANDARD);
+    });
+  });
+
+  it('should not sync user tier when authenticating', async () => {
+    render(
+      <SessionController config={mockConfig as Config} isAuthenticating={true}>
+        <div>Test</div>
+      </SessionController>,
+    );
+
+    await waitFor(() => {
+      expect(mockConfig.getUserTier).not.toHaveBeenCalled();
+    });
+  });
+
+  it('should set up flash fallback handler for quota errors', async () => {
+    type FlashFallbackHandler = (
+      originalModel: string,
+      fallbackModel: string,
+      error: Error,
+    ) => Promise<void>;
+    
+    let flashFallbackHandler: FlashFallbackHandler | null = null;
+    mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
+      flashFallbackHandler = handler;
+    });
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    expect(mockConfig.setFlashFallbackHandler).toHaveBeenCalled();
+
+    // Test pro quota error handling with paid tier
+    act(() => {
+      contextValue!.dispatch({
+        type: 'SET_USER_TIER',
+        payload: UserTierId.STANDARD,
+      });
+    });
+
+    const mockError = new Error('Quota exceeded');
+    vi.mocked(isProQuotaExceededError).mockReturnValue(true);
+
+    await act(async () => {
+      await flashFallbackHandler?.(
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        mockError,
+      );
+    });
+
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining(
+          'You have reached your daily gemini-2.5-pro quota limit',
+        ),
+      }),
+      expect.any(Number),
+    );
+    expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
+    expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+  });
+
+  it('should handle model changes via polling', async () => {
+    vi.useFakeTimers();
+
+    const providerModule = await import(
+      '../../providers/providerManagerInstance.js'
+    );
+    const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    expect(contextValue!.sessionState.currentModel).toBe(
+      'test-provider:test-model',
+    );
+
+    // Change the model
+    mockConfig.getModel?.mockReturnValue('new-model');
+    mockGetProviderManager.mockReturnValue({
+      hasActiveProvider: () => true,
+      getActiveProvider: () => ({
+        name: 'new-provider',
+        getCurrentModel: () => 'new-model',
+        isPaidMode: () => false,
+      }) as Partial<IProvider> as IProvider,
+    } as ReturnType<typeof providerModule.getProviderManager>);
+
+    // Advance timer to trigger the interval
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.sessionState.currentModel).toBe(
+        'new-provider:new-model',
+      );
+    });
+
+    vi.useRealTimers();
+  });
+
+  it('should handle UPDATE_ITEM action', async () => {
+    let appDispatch: React.Dispatch<AppAction> | null = null;
+
+    const TestComponent = () => {
+      appDispatch = useAppDispatch();
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    const updatedItem = { id: 1, type: MessageType.USER, text: 'Updated' };
+
+    act(() => {
+      appDispatch?.({ type: 'UPDATE_ITEM', payload: updatedItem });
+    });
+
+    const historyModule = await import('../hooks/useHistoryManager.js');
+    const historyReturn = vi.mocked(historyModule.useHistory).mock.results[0]
+      ?.value as ReturnType<typeof historyModule.useHistory>;
+
+    await waitFor(() => {
+      expect(historyReturn.updateItem).toHaveBeenCalledWith(updatedItem);
+    });
+  });
+
+  it('should handle generic quota errors correctly', async () => {
+    type FlashFallbackHandler = (
+      originalModel: string,
+      fallbackModel: string,
+      error: Error,
+    ) => Promise<void>;
+    
+    let flashFallbackHandler: FlashFallbackHandler | null = null;
+    mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
+      flashFallbackHandler = handler;
+    });
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <div>Test</div>
+      </SessionController>,
+    );
+
+    const mockError = new Error('Generic quota error');
+    vi.mocked(isProQuotaExceededError).mockReturnValue(false);
+    vi.mocked(isGenericQuotaExceededError).mockReturnValue(true);
+
+    const historyModule = await import('../hooks/useHistoryManager.js');
+    vi.mocked(historyModule.useHistory).mockReturnValue({
+      history: [],
+      addItem: mockAddItem,
+      updateItem: mockUpdateItem,
+      clearItems: mockClearItems,
+      loadHistory: mockLoadHistory,
+    });
+
+    await act(async () => {
+      await flashFallbackHandler?.(
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        mockError,
+      );
+    });
+
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining('quota limit'),
+      }),
+      expect.any(Number),
+    );
+    expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
+    expect(mockConfig.setModel).not.toHaveBeenCalled();
+  });
+
+  it('should handle warnings from appReducer', async () => {
+    let contextValue: SessionContextType | undefined;
+    let appDispatch: React.Dispatch<AppAction> | null = null;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      appDispatch = useAppDispatch();
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    const warningKey = 'test-warning';
+    const warningMessage = 'This is a test warning';
+
+    act(() => {
+      appDispatch?.({
+        type: 'SET_WARNING',
+        payload: { key: warningKey, message: warningMessage },
+      });
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.appState.warnings.get(warningKey)).toBe(
+        warningMessage,
+      );
+    });
+
+    act(() => {
+      appDispatch?.({
+        type: 'CLEAR_WARNING',
+        payload: warningKey,
+      });
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.appState.warnings.has(warningKey)).toBe(false);
+    });
+  });
+
+  it('should handle dialog actions from appReducer', async () => {
+    let contextValue: SessionContextType | undefined;
+    let appDispatch: React.Dispatch<AppAction> | null = null;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      appDispatch = useAppDispatch();
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    // Open dialog
+    act(() => {
+      appDispatch?.({
+        type: 'OPEN_DIALOG',
+        payload: 'theme',
+      });
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.appState.openDialogs.theme).toBe(true);
+    });
+
+    // Close dialog
+    act(() => {
+      appDispatch?.({
+        type: 'CLOSE_DIALOG',
+        payload: 'theme',
+      });
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.appState.openDialogs.theme).toBe(false);
+    });
+  });
+
+  it('should handle error actions from appReducer', async () => {
+    let contextValue: SessionContextType | undefined;
+    let appDispatch: React.Dispatch<AppAction> | null = null;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      appDispatch = useAppDispatch();
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    const errorMessage = 'Test error message';
+
+    act(() => {
+      appDispatch?.({
+        type: 'SET_AUTH_ERROR',
+        payload: errorMessage,
+      });
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.appState.errors.auth).toBe(errorMessage);
+    });
+
+    act(() => {
+      appDispatch?.({
+        type: 'SET_AUTH_ERROR',
+        payload: null,
+      });
+    });
+
+    await waitFor(() => {
+      expect(contextValue!.appState.errors.auth).toBe(null);
+    });
+  });
+
+  it('should handle free mode quota errors', async () => {
+    type FlashFallbackHandler = (
+      originalModel: string,
+      fallbackModel: string,
+      error: Error,
+    ) => Promise<void>;
+    
+    let flashFallbackHandler: FlashFallbackHandler | null = null;
+    mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
+      flashFallbackHandler = handler;
+    });
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    // Ensure we're in free tier
+    act(() => {
+      contextValue!.dispatch({
+        type: 'SET_USER_TIER',
+        payload: UserTierId.FREE,
+      });
+    });
+
+    const mockError = new Error('Quota exceeded');
+    vi.mocked(isProQuotaExceededError).mockReturnValue(true);
+
+    await act(async () => {
+      await flashFallbackHandler?.(
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        mockError,
+      );
+    });
+
+    expect(mockAddItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.INFO,
+        text: expect.stringContaining(
+          'You have reached your free usage limit',
+        ),
+      }),
+      expect.any(Number),
+    );
+    expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
+    expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
   });
 });
