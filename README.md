@@ -4,10 +4,10 @@
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
-This repository contains the Gemini CLI, a command-line AI workflow tool that connects to your
+This repository contains LLxprt Code, a command-line AI workflow tool that connects to your
 tools, understands your code and accelerates your workflows.
 
-With the Gemini CLI you can:
+With LLxprt Code you can:
 
 - Query and edit large codebases in and beyond Gemini's 1M token context window.
 - Generate new apps from PDFs or sketches, using Gemini's multimodal capabilities.
@@ -41,7 +41,7 @@ With the Gemini CLI you can:
 3. **Pick a color theme**
 4. **Authenticate:** When prompted, sign in with your personal Google account. This will grant you up to 60 model requests per minute and 1,000 model requests per day using Gemini.
 
-You are now ready to use the Gemini CLI!
+You are now ready to use LLxprt Code!
 
 ### Use a Gemini API key:
 
@@ -104,7 +104,7 @@ llxprt
 
 ### Text-Based Tool Support
 
-The Gemini CLI automatically detects and parses tool calls from models that output them as text rather than structured JSON. This includes models like:
+LLxprt Code automatically detects and parses tool calls from models that output them as text rather than structured JSON. This includes models like:
 
 - **Gemma models** (gemma-3-12b-it, gemma-2-27b-it)
 - **Hermes models** (using `<tool_call>` XML tags)
@@ -131,7 +131,7 @@ having issues.
 
 ### Explore a new codebase
 
-Start by `cd`ing into an existing or newly-cloned repository and running `gemini`.
+Start by `cd`ing into an existing or newly-cloned repository and running `llxprt`.
 
 ```text
 > Describe the main pieces of this system's architecture.
@@ -179,4 +179,4 @@ Head over to the [Uninstall](docs/Uninstall.md) guide for uninstallation instruc
 
 ## Terms of Service and Privacy Notice
 
-For details on the terms of service and privacy notice applicable to your use of Gemini CLI, see the [Terms of Service and Privacy Notice](./docs/tos-privacy.md).
+For details on the terms of service and privacy notice applicable to your use of LLxprt Code, see the [Terms of Service and Privacy Notice](./docs/tos-privacy.md).
