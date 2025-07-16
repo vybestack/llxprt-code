@@ -76,7 +76,8 @@ interface MockServerConfig {
 
 // Mock llxprt-code-core and its Config class
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actualCore = await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  const actualCore =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   const ConfigClassMock = vi
     .fn()
     .mockImplementation((optionsPassedToConstructor) => {
@@ -241,7 +242,10 @@ describe('App UI', () => {
 
     // The mock constructor already sets up getShowMemoryUsage to return false by default
     // But we need to ensure it's accessible as a mock function for tests that check mockReturnValue
-    if (mockConfig.getShowMemoryUsage && !mockConfig.getShowMemoryUsage.mockReturnValue) {
+    if (
+      mockConfig.getShowMemoryUsage &&
+      !mockConfig.getShowMemoryUsage.mockReturnValue
+    ) {
       // The mock is already set up correctly by the factory
     }
 
