@@ -11,8 +11,9 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { MessageType } from '../types.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
 
-vi.mock('llxprt-code-core', async (importOriginal) => {
-  const original = await importOriginal<typeof import('llxprt-code-core')>();
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...original,
     getErrorMessage: vi.fn((error: unknown) => {

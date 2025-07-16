@@ -22,7 +22,7 @@ vi.mock('os', () => ({
   platform: () => 'linux',
   tmpdir: () => '/tmp',
 }));
-vi.mock('llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core');
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: vi.fn(),
 }));

@@ -1,0 +1,1386 @@
+un NO_COLOR=true npm run test:ci
+  NO_COLOR=true npm run test:ci
+  shell: /usr/bin/bash -e {0}
+
+> @vybestack/llxprt-code@0.1.12 test:ci
+> cross-env NODE_OPTIONS=--max-old-space-size=6144 npm run test:ci --workspaces --if-present && npm run test:scripts
+
+
+> @vybestack/llxprt-code@0.1.12 test:ci
+> npm run test:ci:covered && npm run test:ci:fast
+
+
+> @vybestack/llxprt-code@0.1.12 test:ci:covered
+> vitest run -c vitest.ci.covered.config.ts
+
+
+ RUN  v3.2.4 /home/runner/work/llxprt-code/llxprt-code/packages/cli
+      Coverage enabled with istanbul
+
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 12ms
+ ✓ src/ui/contexts/SessionContext.test.tsx (3 tests) 32ms
+
+ Test Files  2 passed (2)
+      Tests  39 passed (39)
+   Start at  00:27:39
+   Duration  2.23s (transform 539ms, setup 0ms, collect 1.40s, tests 44ms, environment 761ms, prepare 163ms)
+
+JUNIT report written to /home/runner/work/llxprt-code/llxprt-code/packages/cli/junit.covered.xml
+ % Coverage report from istanbul
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   30.89 |     28.2 |   23.52 |   30.83 |                   
+ contexts          |   23.71 |     9.09 |   21.87 |    23.4 |                   
+  ...chContext.tsx |       0 |        0 |       0 |       0 | 10-28             
+  ...erContext.tsx |       0 |        0 |       0 |       0 | 42-119            
+  ...owContext.tsx |       0 |        0 |       0 |       0 | 24-80             
+  ...onContext.tsx |   85.18 |      100 |   63.63 |      88 | 97,102,118        
+  ...teContext.tsx |       0 |        0 |       0 |       0 | 24-60             
+  ...ngContext.tsx |       0 |        0 |       0 |       0 | 10-21             
+ reducers          |   57.69 |    52.94 |      50 |   57.69 |                   
+  appReducer.ts    |     100 |      100 |     100 |     100 |                   
+  ...ionReducer.ts |       0 |        0 |       0 |       0 | 30-52             
+-------------------|---------|----------|---------|---------|-------------------
+
+> @vybestack/llxprt-code@0.1.12 test:ci:fast
+> vitest run -c vitest.ci.fast.config.ts
+
+
+ RUN  v3.2.4 /home/runner/work/llxprt-code/llxprt-code/packages/cli
+
+ ✓ src/ui/hooks/useGeminiStream.test.tsx (22 tests) 144ms
+ ✓ src/ui/components/shared/text-buffer.test.ts (73 tests) 162ms
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts (41 tests | 8 failed) 800ms
+   ✓ useSlashCommandProcessor > /memory add > should return tool scheduling info on valid input 80ms
+   ✓ useSlashCommandProcessor > /memory add > should show usage error and return true if no text is provided 55ms
+   ✓ useSlashCommandProcessor > /memory show > should call the showMemoryAction and return true 59ms
+   ✓ useSlashCommandProcessor > /memory refresh > should call performMemoryRefresh and return true 61ms
+   ✓ useSlashCommandProcessor > Unknown /memory subcommand > should show an error for unknown /memory subcommand and return handled 57ms
+   ✓ useSlashCommandProcessor > /stats command > should show detailed session statistics 5ms
+   ✓ useSlashCommandProcessor > /stats command > should show model-specific statistics when using /stats model 15ms
+   ✓ useSlashCommandProcessor > /stats command > should show tool-specific statistics when using /stats tools 4ms
+   × useSlashCommandProcessor > /about command > should show the about box with all details including auth and project 16ms
+     → expected 2nd "spy" call to have been called with [ ObjectContaining{…}, Any<Number> ]
+   × useSlashCommandProcessor > /about command > should show sandbox-exec profile when applicable 13ms
+     → expected 2nd "spy" call to have been called with [ ObjectContaining{…}, Any<Number> ]
+   ✓ useSlashCommandProcessor > Other commands > /editor should open editor dialog and return handled 2ms
+   ✓ useSlashCommandProcessor > New command registry > should execute a command from the new registry 53ms
+   ✓ useSlashCommandProcessor > New command registry > should return "schedule_tool" when a new command returns a tool action 55ms
+   ✓ useSlashCommandProcessor > New command registry > should return "handled" when a new command returns a message action 53ms
+   ✓ useSlashCommandProcessor > New command registry > should return "handled" when a new command returns a dialog action 53ms
+   × useSlashCommandProcessor > New command registry > should open the auth dialog when a new command returns an auth dialog action 3ms
+     → expected "spy" to be called 1 times, but got 0 times
+   ✓ useSlashCommandProcessor > New command registry > should open the theme dialog when a new command returns a theme dialog action 52ms
+   ✓ useSlashCommandProcessor > New command registry > should show help for a parent command with no action 54ms
+   ✓ useSlashCommandProcessor > /model command > /model should open model dialog and return handled 4ms
+   ✓ useSlashCommandProcessor > /model command > /model with model name should switch models directly 2ms
+   ✓ useSlashCommandProcessor > /model command > /model with same model name should show already using message 2ms
+   ✓ useSlashCommandProcessor > /model command > /model should handle error when switching models 2ms
+   ✓ useSlashCommandProcessor > /bug command > should call open with the correct GitHub issue URL and return true 4ms
+   ✓ useSlashCommandProcessor > /bug command > should use the custom bug command URL from config if available 6ms
+   ✓ useSlashCommandProcessor > /quit and /exit commands > should handle /quit, set quitting messages, and exit the process 6ms
+   ✓ useSlashCommandProcessor > /quit and /exit commands > should handle /exit, set quitting messages, and exit the process 3ms
+   ✓ useSlashCommandProcessor > Unknown command > should show an error and return handled for a general unknown command 2ms
+   ✓ useSlashCommandProcessor > /tools command > should show an error if tool registry is not available 2ms
+   ✓ useSlashCommandProcessor > /tools command > should show an error if getAllTools returns undefined 2ms
+   ✓ useSlashCommandProcessor > /tools command > should display only Gemini CLI tools (filtering out MCP tools) 3ms
+   ✓ useSlashCommandProcessor > /tools command > should display a message when no Gemini CLI tools are available 2ms
+   ✓ useSlashCommandProcessor > /tools command > should display tool descriptions when /tools desc is used 2ms
+   ✓ useSlashCommandProcessor > /mcp command > should show an error if tool registry is not available 18ms
+   ✓ useSlashCommandProcessor > /mcp command > should display a message with a URL when no MCP servers are configured in a sandbox 6ms
+   ✓ useSlashCommandProcessor > /mcp command > should display a message and open a URL when no MCP servers are configured outside a sandbox 6ms
+   × useSlashCommandProcessor > /mcp command > should display configured MCP servers with status indicators and their tools 6ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useSlashCommandProcessor > /mcp command > should display tool descriptions when showToolDescriptions is true 5ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useSlashCommandProcessor > /mcp command > should indicate when a server has no tools 2ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useSlashCommandProcessor > /mcp command > should show startup indicator when servers are connecting 7ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useSlashCommandProcessor > /mcp schema > should display tool schemas and descriptions 3ms
+     → vi.mocked(...).mockImplementation is not a function
+   ✓ useSlashCommandProcessor > /compress command > should call tryCompressChat(true) 4ms
+ ✓ src/ui/hooks/useToolScheduler.test.ts (21 tests | 4 skipped) 73ms
+ ✓ src/config/settings.test.ts (25 tests) 28ms
+ ❯ src/ui/hooks/atCommandProcessor.test.ts (17 tests | 17 failed) 18ms
+   × handleAtCommand > should pass through query if no @ command is present 7ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should pass through original query if only a lone @ symbol is present 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should process a valid text file path 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should process a valid directory path and convert to glob 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should process a valid image file path (as text content for now) 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should handle query with text before and after @command 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should correctly unescape paths with escaped spaces 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should handle multiple @file references 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should handle multiple @file references with interleaved text 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should handle a mix of valid, invalid, and lone @ references 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should return original query if all @paths are invalid or lone @ 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > should process a file path case-insensitively 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > git-aware filtering > should skip git-ignored files in @ commands 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > git-aware filtering > should process non-git-ignored files normally 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > git-aware filtering > should handle mixed git-ignored and valid files 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > git-aware filtering > should always ignore .git directory files 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × handleAtCommand > when recursive file search is disabled > should not use glob search for a nonexistent file 0ms
+     → vi.mocked(...).mockImplementation is not a function
+ ❯ src/config/config.test.ts (52 tests | 1 failed) 1714ms
+   ✓ parseArguments > should throw an error when both --prompt and --prompt-interactive are used together 56ms
+   ✓ parseArguments > should throw an error when using short flags -p and -i together 25ms
+   ✓ parseArguments > should allow --prompt without --prompt-interactive 10ms
+   ✓ parseArguments > should allow --prompt-interactive without --prompt 5ms
+   ✓ parseArguments > should allow -i flag as alias for --prompt-interactive 6ms
+   ✓ loadCliConfig > should set showMemoryUsage to true when --show-memory-usage flag is present 47ms
+   ✓ loadCliConfig > should set showMemoryUsage to false when --memory flag is not present 35ms
+   ✓ loadCliConfig > should set showMemoryUsage to false by default from settings if CLI flag is not present 51ms
+   ✓ loadCliConfig > should prioritize CLI flag over settings for showMemoryUsage (CLI true, settings false) 42ms
+   ✓ loadCliConfig telemetry > should set telemetry to false by default when no flag or setting is present 45ms
+   ✓ loadCliConfig telemetry > should set telemetry to true when --telemetry flag is present 37ms
+   ✓ loadCliConfig telemetry > should set telemetry to false when --no-telemetry flag is present 43ms
+   ✓ loadCliConfig telemetry > should use telemetry value from settings if CLI flag is not present (settings true) 47ms
+   ✓ loadCliConfig telemetry > should use telemetry value from settings if CLI flag is not present (settings false) 34ms
+   ✓ loadCliConfig telemetry > should prioritize --telemetry CLI flag (true) over settings (false) 36ms
+   ✓ loadCliConfig telemetry > should prioritize --no-telemetry CLI flag (false) over settings (true) 30ms
+   ✓ loadCliConfig telemetry > should use telemetry OTLP endpoint from settings if CLI flag is not present 32ms
+   ✓ loadCliConfig telemetry > should prioritize --telemetry-otlp-endpoint CLI flag over settings 36ms
+   ✓ loadCliConfig telemetry > should use default endpoint if no OTLP endpoint is provided via CLI or settings 33ms
+   ✓ loadCliConfig telemetry > should use telemetry target from settings if CLI flag is not present 35ms
+   ✓ loadCliConfig telemetry > should prioritize --telemetry-target CLI flag over settings 31ms
+   ✓ loadCliConfig telemetry > should use default target if no target is provided via CLI or settings 31ms
+   ✓ loadCliConfig telemetry > should use telemetry log prompts from settings if CLI flag is not present 23ms
+   ✓ loadCliConfig telemetry > should prioritize --telemetry-log-prompts CLI flag (true) over settings (false) 28ms
+   ✓ loadCliConfig telemetry > should prioritize --no-telemetry-log-prompts CLI flag (false) over settings (true) 33ms
+   ✓ loadCliConfig telemetry > should use default log prompts (true) if no value is provided via CLI or settings 27ms
+   × Hierarchical Memory Loading (config.ts) - Placeholder Suite > should pass extension context file paths to loadServerHierarchicalMemory 30ms
+     → [AsyncFunction loadServerHierarchicalMemory] is not a spy or a call to a spy!
+   ✓ mergeMcpServers > should not modify the original settings object 39ms
+   ✓ mergeExcludeTools > should merge excludeTools from settings and extensions 35ms
+   ✓ mergeExcludeTools > should handle overlapping excludeTools between settings and extensions 33ms
+   ✓ mergeExcludeTools > should handle overlapping excludeTools between extensions 32ms
+   ✓ mergeExcludeTools > should return an empty array when no excludeTools are specified 32ms
+   ✓ mergeExcludeTools > should handle settings with excludeTools but no extensions 35ms
+   ✓ mergeExcludeTools > should handle extensions with excludeTools but no settings 33ms
+   ✓ mergeExcludeTools > should not modify the original settings object 34ms
+   ✓ loadCliConfig with allowed-mcp-server-names > should allow all MCP servers if the flag is not provided 36ms
+   ✓ loadCliConfig with allowed-mcp-server-names > should allow only the specified MCP server 33ms
+   ✓ loadCliConfig with allowed-mcp-server-names > should allow multiple specified MCP servers 26ms
+   ✓ loadCliConfig with allowed-mcp-server-names > should handle server names that do not exist 36ms
+   ✓ loadCliConfig with allowed-mcp-server-names > should allow no MCP servers if the flag is provided but empty 34ms
+   ✓ loadCliConfig extensions > should not filter extensions if --extensions flag is not used 36ms
+   ✓ loadCliConfig extensions > should filter extensions if --extensions flag is used 35ms
+   ✓ loadCliConfig ideMode > should be false by default 32ms
+   ✓ loadCliConfig ideMode > should be false if --ide-mode is true but TERM_PROGRAM is not vscode 30ms
+   ✓ loadCliConfig ideMode > should be false if settings.ideMode is true but TERM_PROGRAM is not vscode 31ms
+   ✓ loadCliConfig ideMode > should be true when --ide-mode is set and TERM_PROGRAM is vscode 27ms
+   ✓ loadCliConfig ideMode > should be true when settings.ideMode is true and TERM_PROGRAM is vscode 38ms
+   ✓ loadCliConfig ideMode > should prioritize --ide-mode (true) over settings (false) when TERM_PROGRAM is vscode 30ms
+   ✓ loadCliConfig ideMode > should prioritize --no-ide-mode (false) over settings (true) even when TERM_PROGRAM is vscode 31ms
+   ✓ loadCliConfig ideMode > should be false when --ide-mode is true, TERM_PROGRAM is vscode, but SANDBOX is set 32ms
+   ✓ loadCliConfig ideMode > should be false when settings.ideMode is true, TERM_PROGRAM is vscode, but SANDBOX is set 30ms
+   ✓ loadCliConfig ideMode > should add _ide_server when ideMode is true 31ms
+ ❯ src/ui/hooks/useCompletion.integration.test.ts (21 tests | 21 failed) 18ms
+   × useCompletion git-aware filtering integration > should filter git-ignored entries from @ completions 6ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should filter git-ignored directories from @ completions 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should handle recursive search with git-aware filtering 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should not perform recursive search when disabled in config 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should work without config (fallback behavior) 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should handle git discovery service initialization failure gracefully 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should handle directory-specific completions with git filtering 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should use glob for top-level @ completions when available 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should include dotfiles in glob search when input starts with a dot 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should suggest top-level command names based on partial input 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should suggest commands based on altName 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should suggest sub-command names for a parent command 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should suggest all sub-commands when the query ends with the parent command and a space 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should call the command.completion function for argument suggestions 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should not provide suggestions for a fully typed command that has no sub-commands or argument completion 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should not provide suggestions for an unknown command 1ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should suggest sub-commands for a fully typed parent command without a trailing space 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should NOT provide suggestions for a perfectly typed command that is a leaf node 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should call command.completion with an empty string when args start with a space 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should suggest all top-level commands for the root slash 0ms
+     → vi.mocked(...).mockImplementation is not a function
+   × useCompletion git-aware filtering integration > should provide no suggestions for an invalid sub-command 0ms
+     → vi.mocked(...).mockImplementation is not a function
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 10ms
+ ✓ src/ui/hooks/useCompletion.test.ts (34 tests) 2072ms
+rc/ui/App.test.tsx (16 tests) 376ms
+ ✓ src/ui/components/InputPrompt.test.tsx (20 tests) 2222ms
+ ✓ src/ui/utils/errorParsing.test.ts (21 tests) 7ms
+ ✓ src/providers/openai/buildResponsesRequest.test.ts (21 tests) 13ms
+ ✓ src/tools/ToolFormatter.test.ts (18 tests) 10ms
+ ❯ src/providers/integration/multi-provider.integration.test.ts (12 tests | 10 failed) 13ms
+   × Multi-Provider Integration Tests > Provider Management > should initialize and register OpenAI provider 6ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Provider Management > should switch between providers and Gemini 0ms
+     → OpenAI API key is required
+   ✓ Multi-Provider Integration Tests > Provider Management > should handle errors for invalid provider 1ms
+   × Multi-Provider Integration Tests > Model Management > should list available models from OpenAI 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Model Management > should switch between models within provider 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Chat Completion with Real API > should generate chat completion with gpt-3.5-turbo 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Chat Completion with Real API > should handle streaming correctly 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Chat Completion with Real API > should work with GPT-4 model 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Chat Completion with Real API > should handle tool calls 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Integration with Config and ContentGenerator > should work through enhanced Config 0ms
+     → OpenAI API key is required
+   × Multi-Provider Integration Tests > Error Handling > should handle invalid model gracefully 0ms
+     → OpenAI API key is required
+   ✓ Multi-Provider Integration Tests > Error Handling > should handle missing API key 0ms
+ ✓ src/providers/openai/parseResponsesStream.responsesToolCalls.test.ts (7 tests) 12ms
+ ✓ src/ui/components/messages/DiffRenderer.test.tsx (13 tests) 198ms
+ ❯ src/ui/hooks/useAutoAcceptIndicator.test.ts (6 tests | 6 failed) 8ms
+   × useAutoAcceptIndicator > should initialize with ApprovalMode.AUTO_EDIT if config.getApprovalMode returns ApprovalMode.AUTO_EDIT 4ms
+     → Config.mockImplementation is not a function
+   × useAutoAcceptIndicator > should initialize with ApprovalMode.DEFAULT if config.getApprovalMode returns ApprovalMode.DEFAULT 0ms
+     → Config.mockImplementation is not a function
+   × useAutoAcceptIndicator > should initialize with ApprovalMode.YOLO if config.getApprovalMode returns ApprovalMode.YOLO 0ms
+     → Config.mockImplementation is not a function
+   × useAutoAcceptIndicator > should toggle the indicator and update config when Shift+Tab or Ctrl+Y is pressed 0ms
+     → Config.mockImplementation is not a function
+   × useAutoAcceptIndicator > should not toggle if only one key or other keys combinations are pressed 0ms
+     → Config.mockImplementation is not a function
+   × useAutoAcceptIndicator > should update indicator when config value changes externally (useEffect dependency) 0ms
+     → Config.mockImplementation is not a function
+ ❯ src/ui/components/InputPrompt.paste.test.tsx (3 tests | 2 failed | 1 skipped) 103ms
+   × InputPrompt paste functionality > should handle multi-line paste as a single message 72ms
+     → Cannot read properties of undefined (reading 'sequence')
+   ↓ InputPrompt paste functionality > should show paste indicator for multi-line paste
+   × InputPrompt paste functionality > should handle single-line paste without special indicator 29ms
+     → Cannot read properties of undefined (reading 'sequence')
+ ✓ src/ui/components/shared/MaxSizedBox.test.tsx (16 tests) 55ms
+ ✓ src/providers/anthropic/AnthropicProvider.test.ts (11 tests) 10256ms
+   ✓ AnthropicProvider > generateChatCompletion > should retry on rate limit errors  4998ms
+   ✓ AnthropicProvider > generateChatCompletion > should validate and fix tool_use/tool_result mismatches on retry  5241ms
+ ❯ src/providers/openai/ResponsesContextTrim.integration.test.ts (4 tests | 3 failed) 28ms
+   × ResponsesContextTrim Integration > should warn when approaching context limit 17ms
+     → expected "spy" to be called with arguments: [ StringContaining{…} ]
+
+Number of calls: 0
+
+   × ResponsesContextTrim Integration > should handle 422 context_length_exceeded error and retry 7ms
+     → expected 1st "spy" call to have been called with [ …(2) ]
+   ✓ ResponsesContextTrim Integration > should not retry on non-422 errors 2ms
+   × ResponsesContextTrim Integration > should track token accumulation across multiple calls 2ms
+     → expected 0 to be greater than 0
+ ✓ src/providers/openai/OpenAIProvider.switch.test.ts (5 tests | 2 skipped) 13ms
+ ↓ src/providers/openai/OpenAIProvider.responsesIntegration.test.ts (6 tests | 6 skipped)
+ ✓ src/ui/components/StatsDisplay.test.tsx (10 tests) 92ms
+ ✓ src/providers/parsers/TextToolCallParser.test.ts (15 tests) 20ms
+ ✓ src/providers/ProviderManager.test.ts (10 tests) 11ms
+ ✓ src/providers/openai/OpenAIProvider.callResponses.stateless.test.ts (5 tests | 2 skipped) 17ms
+ ❯ src/ui/hooks/useEditorSettings.test.ts (10 tests | 10 failed) 10ms
+   × useEditorSettings > should initialize with dialog closed 5ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should open editor dialog when openEditorDialog is called 1ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should close editor dialog when exitEditorDialog is called 1ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should handle editor selection successfully 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should handle clearing editor preference (undefined editor) 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should handle different editor types 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should handle different setting scopes 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should not set preference for unavailable editors 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should not set preference for editors not allowed in sandbox 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+   × useEditorSettings > should handle errors during editor selection 0ms
+     → mockCheckHasEditorType.mockReturnValue is not a function
+ ✓ src/ui/components/AuthDialog.test.tsx (10 tests) 398ms
+ ✓ src/ui/hooks/useInputHistory.test.ts (11 tests) 31ms
+ ✓ src/config/config.integration.test.ts (11 tests) 8ms
+ ✓ src/ui/hooks/useKeypress.test.ts (14 tests) 43ms
+ ❯ src/ui/commands/memoryCommand.test.ts (8 tests | 1 failed) 18ms
+   ✓ memoryCommand > /memory show > should display a message if memory is empty 5ms
+   ✓ memoryCommand > /memory show > should display the memory content and file count if it exists 1ms
+   ✓ memoryCommand > /memory add > should return an error message if no arguments are provided 1ms
+   ✓ memoryCommand > /memory add > should return a tool action and add an info message when arguments are provided 1ms
+   ✓ memoryCommand > /memory refresh > should display success message when memory is refreshed with content 1ms
+   ✓ memoryCommand > /memory refresh > should display success message when memory is refreshed with no content 1ms
+   × memoryCommand > /memory refresh > should display an error message if refreshing fails 6ms
+     → [Function getErrorMessage] is not a spy or a call to a spy!
+   ✓ memoryCommand > /memory refresh > should not throw if config service is unavailable 1ms
+ ✓ src/providers/openai/OpenAIProvider.test.ts (7 tests) 13ms
+ ✓ src/tools/ToolFormatter.toResponsesTool.test.ts (6 tests) 6ms
+ ✓ src/providers/openai/parseResponsesStream.test.ts (11 tests | 5 skipped) 5ms
+ ✓ src/ui/components/LoadingIndicator.test.tsx (11 tests) 44ms
+ ✓ src/ui/hooks/useGitBranchName.test.ts (7 tests) 42ms
+ ✓ src/ui/hooks/useShellHistory.test.ts (7 tests) 553ms
+ ✓ src/ui/hooks/useHistoryManager.test.ts (8 tests) 30ms
+ ✓ src/providers/openai/Qwen3FireworksProvider.test.ts (10 tests) 8ms
+ ✓ src/ui/components/ModelStatsDisplay.test.tsx (6 tests) 85ms
+ ✓ src/ui/components/messages/ToolMessage.test.tsx (11 tests) 61ms
+ ✓ src/ui/utils/computeStats.test.ts (11 tests) 6ms
+ ✓ src/ui/hooks/useConsoleMessages.test.ts (9 tests) 40ms
+ ❯ src/ui/components/ContextIndicator.ui.test.tsx (6 tests | 2 failed) 56ms
+   ✓ ContextIndicator UI > should display context percentage without remote tokens 26ms
+   × ContextIndicator UI > should display remote token indicator when using OpenAI with context 15ms
+     → expected '\n/test/dir                     no sa…' to contain '59% context left [50k remote]'
+   × ContextIndicator UI > should handle high remote token usage 4ms
+     → expected '\n/test/dir                     no sa…' to contain '6% context left [115k remote]'
+   ✓ ContextIndicator UI > should fallback to local calculation on error 2ms
+   ✓ ContextIndicator UI > should handle non-OpenAI providers 3ms
+   ✓ ContextIndicator UI > should handle missing conversation context 5ms
+ ❯ src/providers/enhanceConfigWithProviders.test.ts (6 tests | 1 failed) 13ms
+   ✓ Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should enhance Config with provider support 2ms
+   ✓ Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should not modify refreshAuth 2ms
+   ✓ Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should not modify contentGenerator in GeminiClient 0ms
+   ✓ Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should handle case when no providers are available 1ms
+   × Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should log debug message when enhancing config 6ms
+     → expected "debug" to be called with arguments: [ Array(1) ]
+
+Number of calls: 0
+
+   ✓ Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should be a no-op function for backward compatibility 1ms
+ ✓ src/services/CommandService.test.ts (5 tests) 8ms
+ ✓ src/ui/hooks/usePhraseCycler.test.ts (7 tests) 38ms
+ ✓ src/providers/openai/ConversationCache.test.ts (9 tests) 8ms
+ ❯ src/ui/hooks/useKeypress.test.tsx (3 tests | 2 failed) 33ms
+   × useKeypress > paste functionality > should handle multi-line paste with bracketed paste mode 22ms
+     → input.resume is not a function
+   ✓ useKeypress > paste functionality > should handle raw data paste with escape sequences 7ms
+   × useKeypress > paste functionality > should handle paste cleanup on unmount 2ms
+     → input.resume is not a function
+ ✓ src/providers/openai/estimateRemoteTokens.test.ts (10 tests) 7ms
+ ✓ src/ui/components/ToolStatsDisplay.test.tsx (5 tests) 54ms
+ ✓ src/ui/hooks/shellCommandProcessor.test.ts (3 tests) 27ms
+ ✓ src/config/extension.test.ts (7 tests) 11ms
+ ✓ src/ui/components/__tests__/LayoutManager.test.tsx (5 tests) 65ms
+ ✓ src/providers/provider-gemini-switching.test.ts (3 tests) 6ms
+ ❯ src/gemini.test.tsx (1 test | 1 failed) 12ms
+   × gemini.tsx main function > should call process.exit(1) if settings have errors 11ms
+     → expected Error: [vitest] No "parseArguments" expor… { codeFrame: '…' } to be an instance of MockProcessExitError
+ ✓ src/ui/hooks/useLoadingIndicator.test.ts (5 tests) 37ms
+ ↓ src/providers/openai/OpenAIProvider.integration.test.ts (3 tests | 3 skipped)
+ ✓ src/providers/openai/ConversationCache.accumTokens.test.ts (9 tests) 7ms
+ ✓ src/ui/hooks/useTimer.test.ts (8 tests) 30ms
+ ✓ src/ui/utils/MarkdownDisplay.test.tsx (14 tests) 211ms
+ ✓ src/utils/userStartupWarnings.test.ts (7 tests) 7ms
+ ✓ src/providers/openai/OpenAIProvider.shouldUseResponses.test.ts (10 tests) 9ms
+ ✓ src/ui/contexts/SessionContext.test.tsx (3 tests) 38ms
+ ✓ src/ui/commands/aboutCommand.test.ts (4 tests) 8ms
+ ✓ src/providers/enhanceConfigWithProviders.integration.test.ts (2 tests) 4ms
+ ✓ src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts (3 tests) 6ms
+ ✓ src/ui/utils/updateCheck.test.ts (8 tests) 6ms
+ ✓ src/providers/provider-switching.integration.test.ts (2 tests) 4ms
+ ❯ src/ui/components/HistoryItemDisplay.test.tsx (6 tests | 1 failed) 58ms
+   ✓ <HistoryItemDisplay /> > renders UserMessage for "user" type 19ms
+   ✓ <HistoryItemDisplay /> > renders StatsDisplay for "stats" type 8ms
+   × <HistoryItemDisplay /> > renders AboutBox for "about" type 20ms
+     → expected '\n╭──────────────────────────────────…' to contain 'About Gemini CLI'
+   ✓ <HistoryItemDisplay /> > renders ModelStatsDisplay for "model_stats" type 3ms
+   ✓ <HistoryItemDisplay /> > renders ToolStatsDisplay for "tool_stats" type 2ms
+   ✓ <HistoryItemDisplay /> > renders SessionSummaryDisplay for "quit" type 4ms
+ ❯ src/utils/startupWarnings.test.ts (4 tests | 4 failed) 16ms
+   × startupWarnings > should return warnings from the file and delete it 9ms
+     → expected "access" to be called at least once
+   × startupWarnings > should return an empty array if the file does not exist 5ms
+     → expected [ Array(1) ] to deeply equal []
+   × startupWarnings > should return an error message if reading the file fails 1ms
+     → vi.mocked(...).mockReturnValue is not a function
+   × startupWarnings > should return a warning if deleting the file fails 1ms
+     → expected [ Array(1) ] to deeply equal [ 'Warning 1', …(1) ]
+ ✓ src/config/auth.test.ts (8 tests) 7ms
+ ✓ src/ui/commands/clearCommand.test.ts (2 tests) 6ms
+ ✓ src/ui/hooks/useStableCallback.test.ts (5 tests) 22ms
+ ✓ src/ui/utils/clipboardUtils.test.ts (6 tests) 5ms
+ ✓ src/ui/utils/markdownUtilities.test.ts (7 tests) 3ms
+ ✓ src/ui/utils/formatters.test.ts (14 tests) 5ms
+ ✓ src/test-utils/mockCommandContext.test.ts (3 tests) 6ms
+ ✓ src/ui/components/SessionSummaryDisplay.test.tsx (1 test) 44ms
+ ✓ src/providers/ProviderManager.gemini-switch.test.ts (3 tests) 4ms
+ ✓ src/ui/utils/displayUtils.test.ts (5 tests) 3ms
+ ✓ src/providers/openai/buildResponsesRequest.undefined.test.ts (3 tests) 4ms
+ ✓ src/ui/components/messages/ToolConfirmationMessage.test.tsx (2 tests) 45ms
+ ✓ src/ui/commands/helpCommand.test.ts (2 tests) 5ms
+ ✓ src/ui/utils/textUtils.test.ts (5 tests) 3ms
+ ✓ src/ui/commands/privacyCommand.test.ts (2 tests) 5ms
+ ✓ src/ui/commands/themeCommand.test.ts (2 tests) 5ms
+ ✓ src/ui/commands/authCommand.test.ts (2 tests) 4ms
+ ❯ src/ui/containers/SessionController.test.tsx (16 tests | 10 failed) 120160ms
+   ✓ SessionController > should provide session context properly 18ms
+   × SessionController > should integrate appReducer and provide dispatch context 9ms
+     → lastFrame is not a function
+   ✓ SessionController > should handle ADD_ITEM actions and call addItem on the session 9ms
+   × SessionController > should handle payment mode changes properly 4ms
+     → vi.mocked(...).mockReturnValue is not a function
+   ✓ SessionController > should handle memory refresh successfully 5ms
+   ✓ SessionController > should handle memory refresh errors 4ms
+   ✓ SessionController > should sync user tier when not authenticating 54ms
+   ✓ SessionController > should not sync user tier when authenticating 5ms
+   × SessionController > should set up flash fallback handler for quota errors 3ms
+     → vi.mocked(...).mockReturnValue is not a function
+   × SessionController > should handle model changes via polling 30004ms
+     → Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × SessionController > should handle UPDATE_ITEM action 3ms
+     → Cannot read properties of undefined (reading 'results')
+   × SessionController > should handle generic quota errors correctly 3ms
+     → vi.mocked(...).mockReturnValue is not a function
+   × SessionController > should handle warnings from appReducer 30002ms
+     → Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × SessionController > should handle dialog actions from appReducer 30031ms
+     → Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × SessionController > should handle error actions from appReducer 30001ms
+     → Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+   × SessionController > should handle free mode quota errors 2ms
+     → vi.mocked(...).mockReturnValue is not a function
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/nonInteractiveCli.test.ts [ src/nonInteractiveCli.test.ts ]
+Error: Failed to resolve import "llxprt-code-core" from "src/nonInteractiveCli.test.ts". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /home/runner/work/llxprt-code/llxprt-code/packages/cli/src/nonInteractiveCli.test.ts:122:6
+  94 |        }
+  95 |      };
+  96 |      const { executeToolCall: mockCoreExecuteToolCall } = await import("llxprt-code-core");
+     |                                                                        ^
+  97 |      vi.mocked(mockCoreExecuteToolCall).mockResolvedValue({
+  98 |        callId: "fc1",
+ ❯ TransformPluginContext._formatLog ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:31446:43
+ ❯ TransformPluginContext.error ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:31443:14
+ ❯ normalizeUrl ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:29992:18
+ ❯ ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:30050:32
+ ❯ TransformPluginContext.transform ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:30018:4
+ ❯ EnvironmentPluginContainer.transform ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:31260:14
+ ❯ loadAndTransform ../../node_modules/vite/dist/node/chunks/dep-Bsx9IwL8.js:26434:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/101]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 100 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/gemini.test.tsx > gemini.tsx main function > should call process.exit(1) if settings have errors
+AssertionError: expected Error: [vitest] No "parseArguments" expor… { codeFrame: '…' } to be an instance of MockProcessExitError
+ ❯ src/gemini.test.tsx:133:21
+    131|       expect.fail('main function did not exit as expected');
+    132|     } catch (error) {
+    133|       expect(error).toBeInstanceOf(MockProcessExitError);
+       |                     ^
+    134|       if (error instanceof MockProcessExitError) {
+    135|         expect(error.code).toBe(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/101]⎯
+
+ FAIL  src/config/config.test.ts > Hierarchical Memory Loading (config.ts) - Placeholder Suite > should pass extension context file paths to loadServerHierarchicalMemory
+TypeError: [AsyncFunction loadServerHierarchicalMemory] is not a spy or a call to a spy!
+ ❯ src/config/config.test.ts:405:55
+    403|     const argv = await parseArguments();
+    404|     await loadCliConfig(settings, extensions, 'session-id', argv);
+    405|     expect(ServerConfig.loadServerHierarchicalMemory).toHaveBeenCalled…
+       |                                                       ^
+    406|       expect.any(String),
+    407|       false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/101]⎯
+
+ FAIL  src/providers/enhanceConfigWithProviders.test.ts > Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator > should log debug message when enhancing config
+AssertionError: expected "debug" to be called with arguments: [ Array(1) ]
+
+Number of calls: 0
+
+ ❯ src/providers/enhanceConfigWithProviders.test.ts:137:24
+    135| 
+    136|     // Should log that it's enhancing config
+    137|     expect(consoleSpy).toHaveBeenCalledWith(
+       |                        ^
+    138|       '[enhanceConfigWithProviders] Enhancing config with provider sup…
+    139|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/101]⎯
+
+ FAIL  src/utils/startupWarnings.test.ts > startupWarnings > should return warnings from the file and delete it
+AssertionError: expected "access" to be called at least once
+ ❯ src/utils/startupWarnings.test.ts:39:23
+     37|     const warnings = await getStartupWarnings();
+     38| 
+     39|     expect(fs.access).toHaveBeenCalled();
+       |                       ^
+     40|     expect(fs.readFile).toHaveBeenCalled();
+     41|     expect(fs.unlink).toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/101]⎯
+
+ FAIL  src/utils/startupWarnings.test.ts > startupWarnings > should return an empty array if the file does not exist
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "Error checking/reading warnings file: Cannot read properties of undefined (reading 'split')",
++ ]
+
+ ❯ src/utils/startupWarnings.test.ts:52:22
+     50|     const warnings = await getStartupWarnings();
+     51| 
+     52|     expect(warnings).toEqual([]);
+       |                      ^
+     53|   });
+     54| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/101]⎯
+
+ FAIL  src/utils/startupWarnings.test.ts > startupWarnings > should return an error message if reading the file fails
+TypeError: vi.mocked(...).mockReturnValue is not a function
+ ❯ src/utils/startupWarnings.test.ts:58:32
+     56|     const error = new Error('Permission denied');
+     57|     vi.spyOn(fs, 'access').mockRejectedValue(error);
+     58|     vi.mocked(getErrorMessage).mockReturnValue('Permission denied');
+       |                                ^
+     59| 
+     60|     const warnings = await getStartupWarnings();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/101]⎯
+
+ FAIL  src/utils/startupWarnings.test.ts > startupWarnings > should return a warning if deleting the file fails
+AssertionError: expected [ Array(1) ] to deeply equal [ 'Warning 1', …(1) ]
+
+- Expected
++ Received
+
+  [
+-   "Warning 1",
+-   "Warning: Could not delete temporary warnings file.",
++   "Error checking/reading warnings file: Cannot read properties of undefined (reading 'split')",
+  ]
+
+ ❯ src/utils/startupWarnings.test.ts:75:22
+     73|     const warnings = await getStartupWarnings();
+     74| 
+     75|     expect(warnings).toEqual([
+       |                      ^
+     76|       'Warning 1',
+     77|       'Warning: Could not delete temporary warnings file.',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Provider Management > should initialize and register OpenAI provider
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:68:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Provider Management > should switch between providers and Gemini
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:86:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Model Management > should list available models from OpenAI
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:118:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Model Management > should switch between models within provider
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:139:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Chat Completion with Real API > should generate chat completion with gpt-3.5-turbo
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:160:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Chat Completion with Real API > should handle streaming correctly
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:192:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Chat Completion with Real API > should work with GPT-4 model
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:228:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Chat Completion with Real API > should handle tool calls
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:254:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Integration with Config and ContentGenerator > should work through enhanced Config
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:305:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/101]⎯
+
+ FAIL  src/providers/integration/multi-provider.integration.test.ts > Multi-Provider Integration Tests > Error Handling > should handle invalid model gracefully
+Error: OpenAI API key is required
+ ❯ new OpenAIProvider src/providers/openai/OpenAIProvider.ts:52:13
+     50|   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+     51|     if (!apiKey || apiKey.trim() === '') {
+     52|       throw new Error('OpenAI API key is required');
+       |             ^
+     53|     }
+     54| 
+ ❯ src/providers/integration/multi-provider.integration.test.ts:335:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/101]⎯
+
+ FAIL  src/providers/openai/ResponsesContextTrim.integration.test.ts > ResponsesContextTrim Integration > should warn when approaching context limit
+AssertionError: expected "spy" to be called with arguments: [ StringContaining{…} ]
+
+Number of calls: 0
+
+ ❯ src/providers/openai/ResponsesContextTrim.integration.test.ts:76:29
+     74| 
+     75|     // Should have warned about low context
+     76|     expect(consoleWarnMock).toHaveBeenCalledWith(
+       |                             ^
+     77|       expect.stringContaining('[OpenAI] Warning: Only'),
+     78|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/101]⎯
+
+ FAIL  src/providers/openai/ResponsesContextTrim.integration.test.ts > ResponsesContextTrim Integration > should handle 422 context_length_exceeded error and retry
+AssertionError: expected 1st "spy" call to have been called with [ …(2) ]
+
+- Expected
++ Received
+
+  [
+    "https://api.openai.com/v1/responses",
+-   ObjectContaining {
+-     "body": StringContaining "\"conversation_id\":\"conv-123\"",
++   {
++     "body": "{\"model\":\"gpt-4o\",\"stream\":true,\"input\":[{\"role\":\"user\",\"content\":\"This will exceed the context limit\"}]}",
++     "headers": {
++       "Authorization": "***",
++       "Content-Type": "application/json",
++     },
++     "method": "POST",
+    },
+  ]
+
+ ❯ src/providers/openai/ResponsesContextTrim.integration.test.ts:138:26
+    136| 
+    137|     // First call should include conversation context
+    138|     expect(global.fetch).toHaveBeenNthCalledWith(
+       |                          ^
+    139|       1,
+    140|       'https://api.openai.com/v1/responses',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/101]⎯
+
+ FAIL  src/providers/openai/ResponsesContextTrim.integration.test.ts > ResponsesContextTrim Integration > should track token accumulation across multiple calls
+AssertionError: expected 0 to be greater than 0
+ ❯ src/providers/openai/ResponsesContextTrim.integration.test.ts:227:21
+    225|     // Check initial accumulation
+    226|     const tokens1 = cache.getAccumulatedTokens(conversationId, parentI…
+    227|     expect(tokens1).toBeGreaterThan(0);
+       |                     ^
+    228| 
+    229|     // Second call
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/101]⎯
+
+ FAIL  src/ui/commands/memoryCommand.test.ts > memoryCommand > /memory refresh > should display an error message if refreshing fails
+TypeError: [Function getErrorMessage] is not a spy or a call to a spy!
+ ❯ src/ui/commands/memoryCommand.test.ts:223:31
+    221|       );
+    222| 
+    223|       expect(getErrorMessage).toHaveBeenCalledWith(error);
+       |                               ^
+    224|     });
+    225| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should integrate appReducer and provide dispatch context
+TypeError: lastFrame is not a function
+ ❯ src/ui/containers/SessionController.test.tsx:140:12
+    138|     );
+    139| 
+    140|     expect(lastFrame()).toContain('Dispatch available');
+       |            ^
+    141|   });
+    142| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle payment mode changes properly
+TypeError: vi.mocked(...).mockReturnValue is not a function
+ ❯ src/ui/containers/SessionController.test.tsx:205:41
+    203|     // Mock useHistory to return a non-empty history
+    204|     const historyModule = await import('../hooks/useHistoryManager.js'…
+    205|     vi.mocked(historyModule.useHistory).mockReturnValue({
+       |                                         ^
+    206|       history: [{ id: 1, type: MessageType.USER, text: 'Test' }],
+    207|       addItem: mockAddItem,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should set up flash fallback handler for quota errors
+TypeError: vi.mocked(...).mockReturnValue is not a function
+ ❯ src/ui/containers/SessionController.test.tsx:385:40
+    383| 
+    384|     const mockError = new Error('Quota exceeded');
+    385|     vi.mocked(isProQuotaExceededError).mockReturnValue(true);
+       |                                        ^
+    386| 
+    387|     await act(async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle model changes via polling
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/ui/containers/SessionController.test.tsx:408:3
+    406|   });
+    407| 
+    408|   it('should handle model changes via polling', async () => {
+       |   ^
+    409|     vi.useFakeTimers();
+    410| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle UPDATE_ITEM action
+TypeError: Cannot read properties of undefined (reading 'results')
+ ❯ src/ui/containers/SessionController.test.tsx:480:63
+    478| 
+    479|     const historyModule = await import('../hooks/useHistoryManager.js'…
+    480|     const historyReturn = vi.mocked(historyModule.useHistory).mock.res…
+       |                                                               ^
+    481|       ?.value as ReturnType<typeof historyModule.useHistory>;
+    482| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[27/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle generic quota errors correctly
+TypeError: vi.mocked(...).mockReturnValue is not a function
+ ❯ src/ui/containers/SessionController.test.tsx:507:40
+    505| 
+    506|     const mockError = new Error('Generic quota error');
+    507|     vi.mocked(isProQuotaExceededError).mockReturnValue(false);
+       |                                        ^
+    508|     vi.mocked(isGenericQuotaExceededError).mockReturnValue(true);
+    509| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[28/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle warnings from appReducer
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/ui/containers/SessionController.test.tsx:538:3
+    536|   });
+    537| 
+    538|   it('should handle warnings from appReducer', async () => {
+       |   ^
+    539|     let contextValue: SessionContextType | undefined;
+    540|     let appDispatch: React.Dispatch<AppAction> | null = null;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[29/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle dialog actions from appReducer
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/ui/containers/SessionController.test.tsx:582:3
+    580|   });
+    581| 
+    582|   it('should handle dialog actions from appReducer', async () => {
+       |   ^
+    583|     let contextValue: SessionContextType | undefined;
+    584|     let appDispatch: React.Dispatch<AppAction> | null = null;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[30/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle error actions from appReducer
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/ui/containers/SessionController.test.tsx:623:3
+    621|   });
+    622| 
+    623|   it('should handle error actions from appReducer', async () => {
+       |   ^
+    624|     let contextValue: SessionContextType | undefined;
+    625|     let appDispatch: React.Dispatch<AppAction> | null = null;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[31/101]⎯
+
+ FAIL  src/ui/containers/SessionController.test.tsx > SessionController > should handle free mode quota errors
+TypeError: vi.mocked(...).mockReturnValue is not a function
+ ❯ src/ui/containers/SessionController.test.tsx:698:40
+    696| 
+    697|     const mockError = new Error('Quota exceeded');
+    698|     vi.mocked(isProQuotaExceededError).mockReturnValue(true);
+       |                                        ^
+    699| 
+    700|     await act(async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[32/101]⎯
+
+ FAIL  src/ui/components/ContextIndicator.ui.test.tsx > ContextIndicator UI > should display remote token indicator when using OpenAI with context
+AssertionError: expected '\n/test/dir                     no sa…' to contain '59% context left [50k remote]'
+
+- Expected
++ Received
+
+- 59% context left [50k remote]
++
++ /test/dir                     no sandbox (see /docs)                       gpt-4o (99% context left)
+
+ ❯ src/ui/components/ContextIndicator.ui.test.tsx:89:25
+     87| 
+     88|     // Should show remote-aware percentage and remote token count
+     89|     expect(lastFrame()).toContain('59% context left [50k remote]');
+       |                         ^
+     90|   });
+     91| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[33/101]⎯
+
+ FAIL  src/ui/components/ContextIndicator.ui.test.tsx > ContextIndicator UI > should handle high remote token usage
+AssertionError: expected '\n/test/dir                     no sa…' to contain '6% context left [115k remote]'
+
+- Expected
++ Received
+
+- 6% context left [115k remote]
++
++ /test/dir                     no sandbox (see /docs)                       gpt-4o (99% context left)
+
+ ❯ src/ui/components/ContextIndicator.ui.test.tsx:117:25
+    115| 
+    116|     // Should show low percentage remaining with high remote usage
+    117|     expect(lastFrame()).toContain('6% context left [115k remote]');
+       |                         ^
+    118|   });
+    119| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[34/101]⎯
+
+ FAIL  src/ui/components/HistoryItemDisplay.test.tsx > <HistoryItemDisplay /> > renders AboutBox for "about" type
+AssertionError: expected '\n╭──────────────────────────────────…' to contain 'About Gemini CLI'
+
+- Expected
++ Received
+
+- About Gemini CLI
++
++ ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
++ │                                                                                                  │
++ │ About LLxprt Code                                                                                │
++ │                                                                                                  │
++ │ CLI Version                       1.0.0                                                          │
++ │ Git Commit                        d56d9d6                                                        │
++ │ Model                             test-model                                                     │
++ │ Sandbox                           test-env                                                       │
++ │ OS                                test-os                                                        │
++ │ Auth Method                       test-auth                                                      │
++ │ GCP Project                       test-project                                                   │
++ │                                                                                                  │
++ ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
++
+
+ ❯ src/ui/components/HistoryItemDisplay.test.tsx:66:25
+     64|       <HistoryItemDisplay {...baseItem} item={item} />,
+     65|     );
+     66|     expect(lastFrame()).toContain('About Gemini CLI');
+       |                         ^
+     67|   });
+     68| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[35/101]⎯
+
+ FAIL  src/ui/components/InputPrompt.paste.test.tsx > InputPrompt paste functionality > should handle multi-line paste as a single message
+TypeError: Cannot read properties of undefined (reading 'sequence')
+ ❯ src/ui/components/InputPrompt.tsx:242:13
+    240| 
+    241|       if (
+    242|         key.sequence === '!' &&
+       |             ^
+    243|         buffer.text === '' &&
+    244|         !completion.showSuggestions
+ ❯ src/ui/components/InputPrompt.paste.test.tsx:211:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[36/101]⎯
+
+ FAIL  src/ui/components/InputPrompt.paste.test.tsx > InputPrompt paste functionality > should handle single-line paste without special indicator
+TypeError: Cannot read properties of undefined (reading 'sequence')
+ ❯ src/ui/components/InputPrompt.tsx:242:13
+    240| 
+    241|       if (
+    242|         key.sequence === '!' &&
+       |             ^
+    243|         buffer.text === '' &&
+    244|         !completion.showSuggestions
+ ❯ src/ui/components/InputPrompt.paste.test.tsx:314:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[37/101]⎯
+
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should pass through query if no @ command is present
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should pass through original query if only a lone @ symbol is present
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should process a valid text file path
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should process a valid directory path and convert to glob
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should process a valid image file path (as text content for now)
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should handle query with text before and after @command
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should correctly unescape paths with escaped spaces
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should handle multiple @file references
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should handle multiple @file references with interleaved text
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should handle a mix of valid, invalid, and lone @ references
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should return original query if all @paths are invalid or lone @
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should process a file path case-insensitively
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/atCommandProcessor.test.ts:98:37
+     96|       isGitRepository: vi.fn(() => true),
+     97|     };
+     98|     vi.mocked(FileDiscoveryService).mockImplementation(
+       |                                     ^
+     99|       () => mockFileDiscoveryService,
+    100|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[38/101]⎯
+
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > git-aware filtering > should skip git-ignored files in @ commands
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > git-aware filtering > should process non-git-ignored files normally
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > git-aware filtering > should handle mixed git-ignored and valid files
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > git-aware filtering > should always ignore .git directory files
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > when recursive file search is disabled > should not use glob search for a nonexistent file
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/atCommandProcessor.test.ts:98:37
+     96|       isGitRepository: vi.fn(() => true),
+     97|     };
+     98|     vi.mocked(FileDiscoveryService).mockImplementation(
+       |                                     ^
+     99|       () => mockFileDiscoveryService,
+    100|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[39/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /about command > should show the about box with all details including auth and project
+AssertionError: expected 2nd "spy" call to have been called with [ ObjectContaining{…}, Any<Number> ]
+
+- Expected
++ Received
+
+  [
+-   ObjectContaining {
+-     "cliVersion": "test-version",
+-     "gcpProject": "test-gcp-project",
+-     "modelVersion": "test-model-from-config",
+-     "osVersion": "test-platform",
+-     "sandboxEnv": "gemini-sandbox",
+-     "selectedAuthType": "test-auth-type",
+-     "type": "about",
++   {
++     "text": "Unknown command: /about",
++     "type": "error",
+    },
+    Any<Number>,
+  ]
+
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:612:27
+    610|       // Assert
+    611|       expect(mockAddItem).toHaveBeenCalledTimes(2); // user message + …
+    612|       expect(mockAddItem).toHaveBeenNthCalledWith(
+       |                           ^
+    613|         2,
+    614|         expect.objectContaining({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[40/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /about command > should show sandbox-exec profile when applicable
+AssertionError: expected 2nd "spy" call to have been called with [ ObjectContaining{…}, Any<Number> ]
+
+- Expected
++ Received
+
+  [
+-   ObjectContaining {
+-     "sandboxEnv": "sandbox-exec (test-profile)",
++   {
++     "text": "Unknown command: /about",
++     "type": "error",
+    },
+    Any<Number>,
+  ]
+
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:642:27
+    640| 
+    641|       // Assert
+    642|       expect(mockAddItem).toHaveBeenNthCalledWith(
+       |                           ^
+    643|         2,
+    644|         expect.objectContaining({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[41/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > New command registry > should open the auth dialog when a new command returns an auth dialog action
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:821:26
+    819|       const commandResult = await result.current.handleSlashCommand('/…
+    820| 
+    821|       expect(mockAction).toHaveBeenCalledTimes(1);
+       |                          ^
+    822|       expect(mockOpenAuthDialog).toHaveBeenCalledWith();
+    823|       expect(commandResult).toEqual({ type: 'handled' });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[42/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /mcp command > should display configured MCP servers with status indicators and their tools
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:1401:37
+    1399| 
+    1400|       // Setup getMCPServerStatus mock implementation - use all CONNEC…
+    1401|       vi.mocked(getMCPServerStatus).mockImplementation((serverName) =>…
+       |                                     ^
+    1402|         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+    1403|         if (serverName === 'server2') return MCPServerStatus.CONNECTED;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[43/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /mcp command > should display tool descriptions when showToolDescriptions is true
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:1481:37
+    1479| 
+    1480|       // Setup getMCPServerStatus mock implementation
+    1481|       vi.mocked(getMCPServerStatus).mockImplementation((serverName) =>…
+       |                                     ^
+    1482|         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+    1483|         return MCPServerStatus.DISCONNECTED;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[44/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /mcp command > should indicate when a server has no tools
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:1541:37
+    1539| 
+    1540|       // Setup getMCPServerStatus mock implementation
+    1541|       vi.mocked(getMCPServerStatus).mockImplementation((serverName) =>…
+       |                                     ^
+    1542|         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+    1543|         if (serverName === 'server2') return MCPServerStatus.DISCONNEC…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[45/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /mcp command > should show startup indicator when servers are connecting
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:1605:37
+    1603| 
+    1604|       // Setup getMCPServerStatus mock implementation with one server …
+    1605|       vi.mocked(getMCPServerStatus).mockImplementation((serverName) =>…
+       |                                     ^
+    1606|         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+    1607|         if (serverName === 'server2') return MCPServerStatus.CONNECTIN…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[46/101]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > /mcp schema > should display tool schemas and descriptions
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:1671:37
+    1669| 
+    1670|       // Setup getMCPServerStatus mock implementation
+    1671|       vi.mocked(getMCPServerStatus).mockImplementation((serverName) =>…
+       |                                     ^
+    1672|         if (serverName === 'server1') return MCPServerStatus.CONNECTED;
+    1673|         return MCPServerStatus.DISCONNECTED;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[47/101]⎯
+
+ FAIL  src/ui/hooks/useAutoAcceptIndicator.test.ts > useAutoAcceptIndicator > should initialize with ApprovalMode.AUTO_EDIT if config.getApprovalMode returns ApprovalMode.AUTO_EDIT
+ FAIL  src/ui/hooks/useAutoAcceptIndicator.test.ts > useAutoAcceptIndicator > should initialize with ApprovalMode.DEFAULT if config.getApprovalMode returns ApprovalMode.DEFAULT
+ FAIL  src/ui/hooks/useAutoAcceptIndicator.test.ts > useAutoAcceptIndicator > should initialize with ApprovalMode.YOLO if config.getApprovalMode returns ApprovalMode.YOLO
+ FAIL  src/ui/hooks/useAutoAcceptIndicator.test.ts > useAutoAcceptIndicator > should toggle the indicator and update config when Shift+Tab or Ctrl+Y is pressed
+ FAIL  src/ui/hooks/useAutoAcceptIndicator.test.ts > useAutoAcceptIndicator > should not toggle if only one key or other keys combinations are pressed
+ FAIL  src/ui/hooks/useAutoAcceptIndicator.test.ts > useAutoAcceptIndicator > should update indicator when config value changes externally (useEffect dependency)
+TypeError: Config.mockImplementation is not a function
+ ❯ src/ui/hooks/useAutoAcceptIndicator.test.ts:69:7
+     67|     (
+     68|       Config as unknown as MockedFunction<() => MockConfigInstanceShap…
+     69|     ).mockImplementation(() => {
+       |       ^
+     70|       const instanceGetApprovalModeMock = vi.fn();
+     71|       const instanceSetApprovalModeMock = vi.fn();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[48/101]⎯
+
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should filter git-ignored entries from @ completions
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should filter git-ignored directories from @ completions
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should handle recursive search with git-aware filtering
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should not perform recursive search when disabled in config
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should work without config (fallback behavior)
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should handle git discovery service initialization failure gracefully
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should handle directory-specific completions with git filtering
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should use glob for top-level @ completions when available
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should include dotfiles in glob search when input starts with a dot
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should suggest top-level command names based on partial input
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should suggest commands based on altName
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should suggest sub-command names for a parent command
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should suggest all sub-commands when the query ends with the parent command and a space
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should call the command.completion function for argument suggestions
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should not provide suggestions for a fully typed command that has no sub-commands or argument completion
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should not provide suggestions for an unknown command
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should suggest sub-commands for a fully typed parent command without a trailing space
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should NOT provide suggestions for a perfectly typed command that is a leaf node
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should call command.completion with an empty string when args start with a space
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should suggest all top-level commands for the root slash
+ FAIL  src/ui/hooks/useCompletion.integration.test.ts > useCompletion git-aware filtering integration > should provide no suggestions for an invalid sub-command
+TypeError: vi.mocked(...).mockImplementation is not a function
+ ❯ src/ui/hooks/useCompletion.integration.test.ts:123:37
+    121|     };
+    122| 
+    123|     vi.mocked(FileDiscoveryService).mockImplementation(
+       |                                     ^
+    124|       () => mockFileDiscoveryService,
+    125|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[49/101]⎯
+
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should initialize with dialog closed
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should open editor dialog when openEditorDialog is called
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should close editor dialog when exitEditorDialog is called
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should handle editor selection successfully
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should handle clearing editor preference (undefined editor)
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should handle different editor types
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should handle different setting scopes
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should not set preference for unavailable editors
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should not set preference for editors not allowed in sandbox
+ FAIL  src/ui/hooks/useEditorSettings.test.ts > useEditorSettings > should handle errors during editor selection
+TypeError: mockCheckHasEditorType.mockReturnValue is not a function
+ ❯ src/ui/hooks/useEditorSettings.test.ts:57:28
+     55| 
+     56|     // Reset mock implementations to default
+     57|     mockCheckHasEditorType.mockReturnValue(true);
+       |                            ^
+     58|     mockAllowEditorTypeInSandbox.mockReturnValue(true);
+     59|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[50/101]⎯
+
+ FAIL  src/ui/hooks/useKeypress.test.tsx > useKeypress > paste functionality > should handle multi-line paste with bracketed paste mode
+ FAIL  src/ui/hooks/useKeypress.test.tsx > useKeypress > paste functionality > should handle paste cleanup on unmount
+TypeError: input.resume is not a function
+ ❯ src/ui/hooks/useKeypress.ts:160:21
+    158|       stdin.on('data', handleRawKeypress);
+    159|     } else {
+    160|       rl = readline.createInterface({ input: stdin });
+       |                     ^
+    161|       readline.emitKeypressEvents(stdin, rl);
+    162|       stdin.on('keypress', handleKeypress);
+ ❯ Object.react-stack-bottom-frame ../../node_modules/react-dom/cjs/react-dom-client.development.js:23949:20
+ ❯ runWithFiberInDEV ../../node_modules/react-dom/cjs/react-dom-client.development.js:1522:13
+ ❯ commitHookEffectListMount ../../node_modules/react-dom/cjs/react-dom-client.development.js:11905:29
+ ❯ commitHookPassiveMountEffects ../../node_modules/react-dom/cjs/react-dom-client.development.js:12028:11
+ ❯ commitPassiveMountOnFiber ../../node_modules/react-dom/cjs/react-dom-client.development.js:13841:13
+ ❯ recursivelyTraversePassiveMountEffects ../../node_modules/react-dom/cjs/react-dom-client.development.js:13815:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[51/101]⎯
+
+
+ Test Files  18 failed | 74 passed | 2 skipped (94)
+      Tests  100 failed | 852 passed | 23 skipped (975)
+   Start at  00:27:42
+   Duration  127.34s (transform 2.67s, setup 0ms, collect 32.11s, tests 141.00s, environment 36.97s, prepare 6.29s)
+
+JUNIT report written to /home/runner/work/llxprt-code/llxprt-code/packages/cli/junit.fast.xml
+npm error Lifecycle script `test:ci:fast` failed with error:
+npm error code 1
+npm error path /home/runner/work/llxprt-code/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.1.12
+npm error location /home/runner/work/llxprt-code/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c vitest run -c vitest.ci.fast.config.ts
+npm error Lifecycle script `test:ci` failed with error:
+npm error code 1
+npm error path /home/runner/work/llxprt-code/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.1.12
+npm error location /home/runner/work/llxprt-code/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c npm run test:ci:covered && npm run test:ci:fast
+
+
+> @vybestack/llxprt-code-core@0.1.12 test:ci
+> vitest run --coverage
+
+
+ RUN  v3.2.4 /home/runner/work/llxprt-code/llxprt-code/packages/core
+      Coverage enabled with v8
+
+ ✓ src/utils/editCorrector.test.ts (40 tests) 45ms
+ ✓ src/tools/edit.test.ts (29 tests) 99ms
+ ✓ src/core/client.test.ts (36 tests | 5 skipped) 91ms
+ ✓ src/utils/memoryDiscovery.test.ts (11 tests) 22ms
+ ✓ src/tools/write-file.test.ts (21 tests) 97ms
+ ✓ src/telemetry/loggers.test.ts (13 tests) 28ms
+ ✓ src/tools/shell.test.ts (36 tests) 154ms
+ ✓ src/core/logger.test.ts (22 tests) 115ms
+ ✓ src/core/geminiChat.test.ts (21 tests) 25ms
+ ✓ src/utils/fileUtils.test.ts (36 tests) 85ms
+ ✓ src/tools/read-many-files.test.ts (22 tests) 240ms
+ ✓ src/tools/tool-registry.test.ts (17 tests) 22ms
+ ✓ src/telemetry/uiTelemetry.test.ts (13 tests) 13ms
+ ✓ src/utils/retry.test.ts (13 tests) 34ms
+ ✓ src/tools/glob.test.ts (27 tests) 1242ms
+ ✓ src/utils/editor.test.ts (83 tests) 31ms
+ ✓ src/core/coreToolScheduler.test.ts (15 tests) 17ms
+ ✓ src/utils/generateContentResponseUtilities.test.ts (36 tests) 28ms
+ ✓ src/utils/getFolderStructure.test.ts (13 tests) 34ms
+ ✓ src/config/config.test.ts (23 tests) 20ms
+ ✓ src/tools/modifiable-tool.test.ts (11 tests) 27ms
+ ✓ src/services/loopDetectionService.test.ts (19 tests) 17ms
+ ✓ src/code_assist/oauth2.test.ts (7 tests) 47ms
+ ✓ src/tools/memoryTool.test.ts (14 tests) 28ms
+ ✓ src/core/turn.test.ts (7 tests) 16ms
+ ✓ src/tools/mcp-tool.test.ts (12 tests) 15ms
+ ✓ src/tools/grep.test.ts (20 tests) 183ms
+ ✓ src/tools/mcp-client.test.ts (26 tests) 22ms
+ ✓ src/services/gitService.test.ts (13 tests) 17ms
+ ✓ src/utils/memoryImportProcessor.test.ts (14 tests) 19ms
+ ✓ src/tools/todo-write.test.ts (18 tests) 33ms
+ ✓ src/tools/read-file.test.ts (15 tests) 96ms
+ ✓ src/code_assist/converter.test.ts (11 tests) 8ms
+ ✓ src/utils/user_account.test.ts (16 tests) 21ms
+ ✓ src/utils/nextSpeakerChecker.test.ts (10 tests) 39ms
+ ✓ src/tools/todo-read.test.ts (13 tests) 22ms
+ ✓ src/utils/errorReporting.test.ts (6 tests) 15ms
+ ✓ src/core/nonInteractiveToolExecutor.test.ts (5 tests) 16ms
+ ✓ src/utils/summarizer.test.ts (8 tests) 33ms
+ ✓ src/telemetry/metrics.test.ts (8 tests) 41ms
+ ✓ src/tools/todo-store.test.ts (14 tests) 30ms
+ ✓ src/tools/todo-schemas.test.ts (13 tests) 29ms
+ ✓ src/utils/gitIgnoreParser.test.ts (15 tests) 22ms
+ ✓ src/providers/adapters/GeminiCompatibleWrapper.test.ts (2 tests) 9ms
+ ✓ src/utils/bfsFileSearch.test.ts (5 tests) 29ms
+ ✓ src/utils/schemaValidator.test.ts (7 tests) 68ms
+ ✓ src/config/flashFallback.test.ts (10 tests) 10ms
+ ✓ src/code_assist/server.test.ts (7 tests) 19ms
+ ✓ src/services/fileDiscoveryService.test.ts (9 tests) 15ms
+ ✓ src/core/prompts.test.ts (9 tests) 17ms
+ ✓ src/utils/flashFallback.integration.test.ts (4 tests) 176ms
+ ✓ src/services/ideContext.test.ts (7 tests) 10ms
+ ✓ src/core/geminiRequest.test.ts (12 tests) 7ms
+ ✓ src/core/contentGenerator.test.ts (7 tests) 322ms
+   ✓ createContentGeneratorConfig > should configure for Gemini using GEMINI_API_KEY when set  307ms
+ ✓ src/utils/safeJsonStringify.test.ts (8 tests) 7ms
+ ✓ src/core/tokenLimits.test.ts (15 tests) 7ms
+ ✓ src/tools/web-fetch.test.ts (4 tests) 57ms
+ ✓ src/code_assist/setup.test.ts (3 tests) 30ms
+ ✓ src/utils/user_id.test.ts (1 test) 6ms
+ ✓ src/index.test.ts (1 test) 4ms
+ ✓ src/telemetry/telemetry.test.ts (2 tests) 8ms
+
+ Test Files  61 passed (61)
+      Tests  930 passed | 5 skipped (935)
+   Start at  00:29:50
+   Duration  14.68s (transform 1.69s, setup 188ms, collect 16.30s, tests 4.04s, environment 16ms, prepare 5.58s)
+
+JUNIT report written to /home/runner/work/llxprt-code/llxprt-code/packages/core/junit.xml
+ % Coverage report from v8
+Error: Process completed with exit code 1.
+

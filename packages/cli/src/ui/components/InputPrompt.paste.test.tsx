@@ -33,7 +33,7 @@ vi.mock('string-width', () => ({
 }));
 
 // Mock the clipboard module
-vi.mock('llxprt-code-core', () => ({
+vi.mock('@vybestack/llxprt-code-core', () => ({
   unescapePath: (path: string) => path,
 }));
 

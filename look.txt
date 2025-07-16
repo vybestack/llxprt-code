@@ -1,0 +1,60 @@
+@vybestack/llxprt-code@0.1.12 test:integration:sandbox:none
+> LLXPRT_SANDBOX=false node integration-tests/run-tests.js --verbose --keep-output
+
+Keeping output for test run in: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632
+	Found test file: write_file.test.js
+	Found test file: simple-mcp-server.test.js
+	Found test file: save_memory.test.js
+	Found test file: run_shell_command.test.js
+	Found test file: replace.test.js
+	Found test file: read_many_files.test.js
+	Found test file: list_directory.test.js
+	Found test file: google_web_search.test.js
+	Found test file: file-system.test.js
+------------- Running test file: write_file.test.js ------------------------------
+Output for write_file.test.js written to: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/output.log
+--- TEST: write_file:should-be-able-to-write-a-file ---
+[DEBUG] CLI: Delegating hierarchical memory load to server for CWD: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/should-be-able-to-write-a-file
+[DEBUG] [MemoryDiscovery] Loading server hierarchical memory for CWD: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/should-be-able-to-write-a-file
+[DEBUG] [MemoryDiscovery] Searching for LLXPRT.md starting from CWD: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/should-be-able-to-write-a-file
+[DEBUG] [MemoryDiscovery] User home directory: /home/runner
+[DEBUG] [MemoryDiscovery] Global LLXPRT.md not found or not readable: /home/runner/.llxprt/LLXPRT.md
+[DEBUG] [MemoryDiscovery] Determined project root: /home/runner/work/llxprt-code/llxprt-code
+[DEBUG] [MemoryDiscovery] Checking for LLXPRT.md in (upward scan): /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/should-be-able-to-write-a-file
+[DEBUG] [MemoryDiscovery] Upward LLXPRT.md not found or not readable in: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/should-be-able-to-write-a-file
+[DEBUG] [MemoryDiscovery] Checking for LLXPRT.md in (upward scan): /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js
+[DEBUG] [MemoryDiscovery] Upward LLXPRT.md not found or not readable in: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js
+[DEBUG] [MemoryDiscovery] Checking for LLXPRT.md in (upward scan): /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632
+[DEBUG] [MemoryDiscovery] Upward LLXPRT.md not found or not readable in: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632
+[DEBUG] [MemoryDiscovery] Checking for LLXPRT.md in (upward scan): /home/runner/work/llxprt-code/llxprt-code/.integration-tests
+[DEBUG] [MemoryDiscovery] Upward LLXPRT.md not found or not readable in: /home/runner/work/llxprt-code/llxprt-code/.integration-tests
+[DEBUG] [MemoryDiscovery] Checking for LLXPRT.md in (upward scan): /home/runner/work/llxprt-code/llxprt-code
+[DEBUG] [MemoryDiscovery] Found readable upward LLXPRT.md: /home/runner/work/llxprt-code/llxprt-code/LLXPRT.md
+[DEBUG] [MemoryDiscovery] Checking for LLXPRT.md in (upward scan): /home/runner/work/llxprt-code
+[DEBUG] [MemoryDiscovery] Upward LLXPRT.md not found or not readable in: /home/runner/work/llxprt-code
+[DEBUG] [MemoryDiscovery] Reached ultimate stop directory for upward scan: /home/runner/work/llxprt-code
+[DEBUG] [BfsFileSearch] Scanning [1/200]: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/write_file.test.js/should-be-able-to-write-a-file
+  }
+}
+
+
+Files in test directory: [ 'test.txt' ]
+File test.txt content: "hello world"
+Expected file path: /home/runner/work/llxprt-code/llxprt-code/.integration-tests/1752625594632/file-system.test.js/writes-a-file/test.txt
+File exists: true
+--- FILE: file-system:writes-a-file/test.txt ---
+hello world
+--- END FILE: file-system:writes-a-file/test.txt ---
+File content: "hello world"
+File length: 11
+One or more test files failed.
+✔ reads a file (2291.425494ms)
+✔ writes a file (3028.956031ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5379.603742

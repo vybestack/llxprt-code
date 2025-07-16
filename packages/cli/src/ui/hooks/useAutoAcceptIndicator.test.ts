@@ -25,9 +25,9 @@ import { useInput, type Key as InkKey } from 'ink';
 
 vi.mock('ink');
 
-vi.mock('llxprt-code-core', async () => {
+vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualServerModule = (await vi.importActual(
-    'llxprt-code-core',
+    '@vybestack/llxprt-code-core',
   )) as Record<string, unknown>;
   return {
     ...actualServerModule,

@@ -52,8 +52,8 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('llxprt-code-core', async () => {
-  const actual = await vi.importActual('llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
     FileDiscoveryService: vi.fn(),

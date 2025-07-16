@@ -29,9 +29,10 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
-vi.mock('llxprt-code-core', async () => {
-  const actualServer =
-    await vi.importActual<typeof ServerConfig>('llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actualServer = await vi.importActual<typeof ServerConfig>(
+    '@vybestack/llxprt-code-core',
+  );
   return {
     ...actualServer,
     loadEnvironment: vi.fn(),
