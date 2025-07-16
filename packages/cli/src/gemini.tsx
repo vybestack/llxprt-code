@@ -58,7 +58,7 @@ function getNodeMemoryArgs(config: Config): string[] {
     );
   }
 
-  if (process.env.GEMINI_CLI_NO_RELAUNCH) {
+  if (process.env.LLXPRT_CLI_NO_RELAUNCH) {
     return [];
   }
 
@@ -87,7 +87,16 @@ async function relaunchWithAdditionalArgs(additionalArgs: string[]) {
   process.exit(0);
 }
 
+import { existsSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
 export async function main() {
+  const llxprtDir = join(homedir(), '.llxprt');
+  if (!existsSync(llxprtDir)) {
+    mkdirSync(llxprtDir, { recursive: true });
+  }
+
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
   const argv = await parseArguments();
@@ -180,7 +189,7 @@ export async function main() {
     }
   }
 
-  const providerManager = getProviderManager();
+  const providerManager = getProviderManager(config);
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
@@ -228,7 +237,7 @@ export async function main() {
   }
 
   const shouldBeInteractive =
-    !!argv.promptInteractive || (process.stdin.isTTY && input?.length === 0);
+    !!argv.promptInteractive || (process.stdin.isTTY && !input);
 
   function handleError(error: Error, errorInfo: ErrorInfo) {
     // Log to console for debugging
@@ -396,7 +405,7 @@ async function validateNonInterActiveAuth(
   // making a special case for the cli. many headless environments might not have a settings.json set
   // so if GEMINI_API_KEY is set, we'll use that. However since the oauth things are interactive anyway, we'll
   // still expect that exists
-  if (!selectedAuthType && !process.env.GEMINI_API_KEY) {
+  if (!selectedAuthType && !process.env.LLXPRT_API_KEY) {
     console.error(
       `Please set an Auth method in your ${USER_SETTINGS_PATH} OR specify GEMINI_API_KEY env variable file before running`,
     );

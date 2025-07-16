@@ -7,10 +7,19 @@
 import path from 'node:path';
 import os from 'os';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 
 export const LLXPRT_DIR = '.llxprt';
 export const GOOGLE_ACCOUNTS_FILENAME = 'google_accounts.json';
 const TMP_DIR_NAME = 'tmp';
+
+export function ensureLlxprtDirExists() {
+  const homeDir = os.homedir();
+  const llxprtDir = path.join(homeDir, LLXPRT_DIR);
+  if (!fs.existsSync(llxprtDir)) {
+    fs.mkdirSync(llxprtDir, { recursive: true });
+  }
+}
 
 /**
  * Replaces the home directory with a tilde.

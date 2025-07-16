@@ -6,6 +6,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { HistoryItem } from '../types.js';
+import { ConversationContext } from '../../utils/ConversationContext.js';
 
 // Type for the updater function passed to updateHistoryItem
 type HistoryItemUpdater = (
@@ -99,6 +100,7 @@ export function useHistory(): UseHistoryManagerReturn {
   const clearItems = useCallback(() => {
     setHistory([]);
     messageIdCounterRef.current = 0;
+    ConversationContext.startNewConversation();
   }, []);
 
   return {

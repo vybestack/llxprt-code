@@ -8,6 +8,7 @@ import esbuild from 'esbuild';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,4 +29,5 @@ esbuild
       js: `import { createRequire as _gcliCreateRequire } from 'module'; const require = _gcliCreateRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
     },
   })
+  .then(() => fs.chmodSync('bundle/llxprt.js', 0o755))
   .catch(() => process.exit(1));

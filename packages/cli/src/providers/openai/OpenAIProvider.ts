@@ -30,6 +30,7 @@ import {
   estimateMessagesTokens,
   estimateRemoteTokens,
 } from './estimateRemoteTokens.js';
+import { ConversationContext } from '../../utils/ConversationContext.js';
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -265,7 +266,11 @@ export class OpenAIProvider implements IProvider {
 
         if (!retryResponse.ok) {
           const retryErrorBody = await retryResponse.text();
-          throw parseErrorResponse(retryResponse.status, retryErrorBody);
+          throw parseErrorResponse(
+            retryResponse.status,
+            retryErrorBody,
+            this.name,
+          );
         }
 
         // Use the retry response
@@ -278,7 +283,7 @@ export class OpenAIProvider implements IProvider {
         );
       }
 
-      throw parseErrorResponse(response.status, errorBody);
+      throw parseErrorResponse(response.status, errorBody, this.name);
     }
 
     // Handle the response
@@ -308,6 +313,11 @@ export class OpenAIProvider implements IProvider {
           // Collect messages for caching
           if (message.content || message.tool_calls) {
             collectedMessages.push(message);
+          }
+
+          // Update the parentId in the context as soon as we get a message ID
+          if (message.id) {
+            ConversationContext.setParentId(message.id);
           }
 
           yield message;
@@ -506,10 +516,16 @@ export class OpenAIProvider implements IProvider {
         '[OpenAIProvider] Using Responses API for model:',
         this.currentModel,
       );
+
+      // Get the current conversation context
+      const { conversationId, parentId } = ConversationContext.getContext();
+
       yield* await this.callResponsesEndpoint(messages, tools, {
         stream: true,
         tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
         stateful: false, // Always stateless for Phase 22-01
+        conversationId,
+        parentId,
       });
       return;
     }

@@ -30,6 +30,7 @@ import {
   AppAction,
   AppState,
 } from '../reducers/appReducer.js';
+import { ConversationContext } from '../../utils/ConversationContext.js';
 
 // Helper functions
 function getDisplayModelName(config: Config): string {

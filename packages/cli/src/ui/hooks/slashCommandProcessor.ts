@@ -44,6 +44,10 @@ import {
 } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import {
+  ConversationContext,
+  IConversationContext,
+} from '../../utils/ConversationContext.js';
 
 // This interface is for the old, inline command definitions.
 // It will be removed once all commands are migrated to the new system.
@@ -858,7 +862,11 @@ export const useSlashCommandProcessor = (
               }
               const history = chat.getHistory();
               if (history.length > 0) {
-                await logger.saveCheckpoint(chat?.getHistory() || [], tag);
+                await logger.saveCheckpoint(
+                  chat?.getHistory() || [],
+                  tag,
+                  ConversationContext.getContext(),
+                );
                 addMessage({
                   type: MessageType.INFO,
                   content: `Conversation checkpoint saved with tag: ${tag}.`,
@@ -884,7 +892,8 @@ export const useSlashCommandProcessor = (
                 });
                 return;
               }
-              const conversation = await logger.loadCheckpoint(tag);
+              const { history: conversation, context } =
+                await logger.loadCheckpoint(tag);
               if (conversation.length === 0) {
                 addMessage({
                   type: MessageType.INFO,
@@ -892,6 +901,13 @@ export const useSlashCommandProcessor = (
                   timestamp: new Date(),
                 });
                 return;
+              }
+
+              if (context) {
+                ConversationContext.setContext(context as IConversationContext);
+              } else {
+                // For old checkpoints, start a new context
+                ConversationContext.startNewConversation();
               }
 
               clearItems();
@@ -1528,7 +1544,7 @@ Supported formats:
           if (!checkpointDir) {
             addMessage({
               type: MessageType.ERROR,
-              content: 'Could not determine the .gemini directory path.',
+              content: 'Could not determine the .llxprt directory path.',
               timestamp: new Date(),
             });
             return;

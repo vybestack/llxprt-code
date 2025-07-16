@@ -117,7 +117,7 @@ export async function getOauthClient(
     }
   }
 
-  if (config.getNoBrowser()) {
+  if (true) {
     let success = false;
     const maxRetries = 2;
     for (let i = 0; !success && i < maxRetries; i++) {

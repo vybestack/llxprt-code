@@ -116,9 +116,9 @@ export function buildResponsesRequest(
     }
   }
 
-  // Handle message trimming for stateful mode
+  // Handle message trimming for stateful mode (but not for o3 models)
   let processedMessages = messages;
-  if (messages && conversationId) {
+  if (messages && conversationId && model && !model.startsWith('o3')) {
     console.warn(
       '[buildResponsesRequest] conversationId provided in stateful mode. Only the most recent messages will be sent to maintain context window.',
     );
@@ -175,12 +175,14 @@ export function buildResponsesRequest(
     ...(transformedMessages ? { input: transformedMessages } : {}), // Changed from messages to input
   };
 
-  // Map conversation fields
-  if (conversationId) {
-    request.conversation_id = conversationId;
-  }
-  if (parentId) {
-    request.parent_id = parentId;
+  // Map conversation fields, but not for o3 models
+  if (model && !model.startsWith('o3')) {
+    if (conversationId) {
+      request.conversation_id = conversationId;
+    }
+    if (parentId) {
+      request.parent_id = parentId;
+    }
   }
 
   // Add tools if provided

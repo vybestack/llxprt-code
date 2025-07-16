@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { Config } from '@vybestack/llxprt-code-core';
 import { ProviderManager } from './ProviderManager.js';
 import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { GeminiProvider } from './gemini/GeminiProvider.js';
@@ -17,7 +18,7 @@ import stripJsonComments from 'strip-json-comments';
 
 let providerManagerInstance: ProviderManager | null = null;
 
-export function getProviderManager(): ProviderManager {
+export function getProviderManager(config?: Config): ProviderManager {
   if (!providerManagerInstance) {
     providerManagerInstance = new ProviderManager();
 
@@ -38,6 +39,9 @@ export function getProviderManager(): ProviderManager {
 
       // Register GeminiProvider
       const geminiProvider = new GeminiProvider();
+      if (config) {
+        geminiProvider.setConfig(config);
+      }
       providerManagerInstance.registerProvider(geminiProvider);
 
       // If there's a saved Gemini API key, apply it

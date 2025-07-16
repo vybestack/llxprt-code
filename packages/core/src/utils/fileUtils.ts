@@ -283,7 +283,8 @@ export async function processSingleFileContent(
 
         let llmTextContent = '';
         if (contentRangeTruncated) {
-          llmTextContent += `[File content truncated: showing lines ${actualStartLine + 1}-${endLine} of ${originalLineCount} total lines. Use offset/limit parameters to view more.]\n`;
+          const nextOffset = endLine;
+          llmTextContent += `[File content truncated. Showing lines ${actualStartLine + 1}-${endLine} of ${originalLineCount}. To read the next chunk, use offset: ${nextOffset}, limit: ${effectiveLimit}.]\n`;
         } else if (linesWereTruncatedInLength) {
           llmTextContent += `[File content partially truncated: some lines exceeded maximum length of ${MAX_LINE_LENGTH_TEXT_FILE} characters.]\n`;
         }

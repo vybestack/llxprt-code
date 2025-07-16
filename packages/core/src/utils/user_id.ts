@@ -11,12 +11,12 @@ import { randomUUID } from 'crypto';
 import { LLXPRT_DIR } from './paths.js';
 
 const homeDir = os.homedir() ?? '';
-const geminiDir = path.join(homeDir, LLXPRT_DIR);
-const installationIdFile = path.join(geminiDir, 'installation_id');
+const llxprtDir = path.join(homeDir, LLXPRT_DIR);
+const installationIdFile = path.join(llxprtDir, 'installation_id');
 
-function ensureGeminiDirExists() {
-  if (!fs.existsSync(geminiDir)) {
-    fs.mkdirSync(geminiDir, { recursive: true });
+function ensureLlxprtDirExists() {
+  if (!fs.existsSync(llxprtDir)) {
+    fs.mkdirSync(llxprtDir, { recursive: true });
   }
 }
 
@@ -39,7 +39,7 @@ function writeInstallationIdToFile(installationId: string) {
  */
 export function getInstallationId(): string {
   try {
-    ensureGeminiDirExists();
+    ensureLlxprtDirExists();
     let installationId = readInstallationIdFromFile();
 
     if (!installationId) {

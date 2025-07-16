@@ -17,6 +17,7 @@
 import { ContentGeneratorRole } from './types.js';
 
 export interface IMessage {
+  id?: string; // Unique identifier for the message, provided by the API
   role: ContentGeneratorRole | 'system';
   content: string;
   tool_call_id?: string;

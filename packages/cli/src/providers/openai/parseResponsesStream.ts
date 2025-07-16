@@ -169,18 +169,22 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.completed':
-                // Extract usage data from completed response
-                if (event.response?.usage) {
-                  yield {
+                // Extract usage data and the final response ID
+                if (event.response) {
+                  const finalMessage: IMessage = {
+                    id: event.response.id,
                     role: ContentGeneratorRole.ASSISTANT,
                     content: '',
-                    usage: {
+                  };
+                  if (event.response.usage) {
+                    finalMessage.usage = {
                       prompt_tokens: event.response.usage.input_tokens || 0,
                       completion_tokens:
                         event.response.usage.output_tokens || 0,
                       total_tokens: event.response.usage.total_tokens || 0,
-                    },
-                  };
+                    };
+                  }
+                  yield finalMessage;
                 }
                 break;
 
@@ -202,7 +206,11 @@ export async function* parseResponsesStream(
   }
 }
 
-export function parseErrorResponse(status: number, body: string): Error {
+export function parseErrorResponse(
+  status: number,
+  body: string,
+  providerName: string,
+): Error {
   try {
     const errorData = JSON.parse(body);
     const message =
@@ -235,7 +243,9 @@ export function parseErrorResponse(status: number, body: string): Error {
     // For invalid JSON, use a consistent format
     const errorPrefix =
       status >= 500 && status < 600 ? 'Server error' : 'API Error';
-    const error = new Error(`${errorPrefix}: Responses API error: ${status}`);
+    const error = new Error(
+      `${errorPrefix}: ${providerName} API error: ${status}`,
+    );
     (error as { status?: number }).status = status;
     return error;
   }

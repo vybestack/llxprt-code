@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'fs';
 
 const projectRoot = join(import.meta.dirname, '..');
 
-const SETTINGS_DIRECTORY_NAME = '.gemini';
+const SETTINGS_DIRECTORY_NAME = '.llxprt';
 const USER_SETTINGS_DIR = join(
   process.env.HOME || process.env.USERPROFILE || process.env.HOMEPATH || '',
   SETTINGS_DIRECTORY_NAME,

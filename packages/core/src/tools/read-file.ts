@@ -115,7 +115,13 @@ export class ReadFileTool extends BaseTool<ReadFileToolParams, ToolResult> {
       params.absolute_path,
       this.config.getTargetDir(),
     );
-    return shortenPath(relativePath);
+    let description = shortenPath(relativePath);
+    if (params.offset !== undefined && params.limit !== undefined) {
+      description += ` (lines ${params.offset + 1}-${params.offset + params.limit})`;
+    } else if (params.limit !== undefined) {
+      description += ` (first ${params.limit} lines)`;
+    }
+    return description;
   }
 
   async execute(
