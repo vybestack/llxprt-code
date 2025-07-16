@@ -75,8 +75,8 @@ interface MockServerConfig {
 }
 
 // Mock llxprt-code-core and its Config class
-vi.mock('llxprt-code-core', async (importOriginal) => {
-  const actualCore = await importOriginal<typeof import('llxprt-code-core')>();
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actualCore = await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   const ConfigClassMock = vi
     .fn()
     .mockImplementation((optionsPassedToConstructor) => {
@@ -224,8 +224,8 @@ describe('App UI', () => {
   };
 
   beforeEach(() => {
-    const ServerConfigMocked = vi.mocked(ServerConfig, true);
-    mockConfig = new ServerConfigMocked({
+    // Use the already mocked Config from llxprt-code-core
+    mockConfig = new ServerConfig({
       embeddingModel: 'test-embedding-model',
       sandbox: undefined,
       targetDir: '/test/dir',
@@ -239,11 +239,11 @@ describe('App UI', () => {
     }) as unknown as MockServerConfig;
     mockVersion = '0.0.0-test';
 
-    // Ensure the getShowMemoryUsage mock function is specifically set up if not covered by constructor mock
-    if (!mockConfig.getShowMemoryUsage) {
-      mockConfig.getShowMemoryUsage = vi.fn(() => false);
+    // The mock constructor already sets up getShowMemoryUsage to return false by default
+    // But we need to ensure it's accessible as a mock function for tests that check mockReturnValue
+    if (mockConfig.getShowMemoryUsage && !mockConfig.getShowMemoryUsage.mockReturnValue) {
+      // The mock is already set up correctly by the factory
     }
-    mockConfig.getShowMemoryUsage.mockReturnValue(false); // Default for most tests
 
     // Ensure a theme is set so the theme dialog does not appear.
     mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
@@ -259,9 +259,6 @@ describe('App UI', () => {
 
   it('should display default "LLXPRT.md" in footer when contextFileName is not set and count is 1', async () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
-    // For this test, ensure showMemoryUsage is false or debugMode is false if it relies on that
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -277,8 +274,6 @@ describe('App UI', () => {
 
   it('should display default "LLXPRT.md" with plural when contextFileName is not set and count is > 1', async () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -297,8 +292,6 @@ describe('App UI', () => {
       workspace: { contextFileName: 'AGENTS.md', theme: 'Default' },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -320,8 +313,6 @@ describe('App UI', () => {
       },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -340,8 +331,6 @@ describe('App UI', () => {
       workspace: { contextFileName: 'MY_NOTES.TXT', theme: 'Default' },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(3);
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -360,8 +349,6 @@ describe('App UI', () => {
       workspace: { contextFileName: 'ANY_FILE.MD', theme: 'Default' },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(0);
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -380,8 +367,6 @@ describe('App UI', () => {
     mockConfig.getMcpServers.mockReturnValue({
       server1: {} as MCPServerConfig,
     });
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -401,8 +386,6 @@ describe('App UI', () => {
       server1: {} as MCPServerConfig,
       server2: {} as MCPServerConfig,
     });
-    mockConfig.getDebugMode.mockReturnValue(false);
-    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -506,8 +489,6 @@ describe('App UI', () => {
       originalNoColor = process.env.NO_COLOR;
       // Ensure no theme is set for these tests
       mockSettings = createMockSettings({});
-      mockConfig.getDebugMode.mockReturnValue(false);
-      mockConfig.getShowMemoryUsage.mockReturnValue(false);
     });
 
     afterEach(() => {
@@ -541,6 +522,10 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
+      // Wait for async updates
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
       expect(lastFrame()).toContain(
         'Theme configuration unavailable due to NO_COLOR env variable.',
       );
@@ -552,7 +537,7 @@ describe('App UI', () => {
     it('should submit the initial prompt automatically', async () => {
       const mockSubmitQuery = vi.fn();
 
-      mockConfig.getQuestion = vi.fn(() => 'hello from prompt-interactive');
+      mockConfig.getQuestion.mockReturnValue('hello from prompt-interactive');
 
       vi.mocked(useGeminiStream).mockReturnValue({
         streamingState: StreamingState.Idle,
@@ -561,10 +546,6 @@ describe('App UI', () => {
         pendingHistoryItems: [],
         thought: null,
       });
-
-      mockConfig.getGeminiClient.mockReturnValue({
-        isInitialized: vi.fn(() => true),
-      } as unknown as GeminiClient);
 
       const { unmount, rerender } = render(
         <App
