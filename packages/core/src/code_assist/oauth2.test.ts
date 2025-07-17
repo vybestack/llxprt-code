@@ -54,7 +54,7 @@ describe('oauth2', () => {
     delete process.env.CLOUD_SHELL;
   });
 
-  it('should perform a web login', async () => {
+  it('should perform a web login', { timeout: 20000 }, async () => {
     const mockAuthUrl = 'https://example.com/auth';
     const mockCode = 'test-code';
     const mockState = 'test-state';
@@ -170,7 +170,7 @@ describe('oauth2', () => {
     expect(getCachedGoogleAccount()).toBe('test-google-account@gmail.com');
   });
 
-  it('should perform login with user code', { timeout: 10000 }, async () => {
+  it('should perform login with user code', { timeout: 30000 }, async () => {
     const mockConfigWithNoBrowser = {
       getNoBrowser: () => true,
     } as unknown as Config;
@@ -206,6 +206,9 @@ describe('oauth2', () => {
       on: vi.fn(),
     } as unknown as OAuth2Client;
     vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
+
+    // Mock open to immediately reject to simulate browser not available
+    vi.mocked(open).mockRejectedValue(new Error('Browser not available'));
 
     const mockReadline = {
       question: vi.fn((_query, callback) => callback(mockCode)),

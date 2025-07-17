@@ -469,70 +469,69 @@ describe('Gemini Client (client.ts)', () => {
 
   describe('resetChat', () => {
     it('should create a new chat session, clearing the old history', async () => {
-      // Mock the startChat method to return a mock chat
-      const mockStartChat = vi.fn();
+      // Create mock chats with distinct histories
       const mockInitialChat = {
-        getHistory: vi.fn().mockReturnValue([]),
-        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([
+          { role: 'user', parts: [{ text: 'initial context' }] },
+          { role: 'model', parts: [{ text: 'acknowledged' }] },
+        ]),
+        addHistory: vi.fn().mockImplementation(function(content) {
+          // Update the history when addHistory is called
+          const currentHistory = this.getHistory();
+          this.getHistory = vi.fn().mockReturnValue([...currentHistory, content]);
+        }),
         setHistory: vi.fn(),
       } as unknown as GeminiChat;
 
       const mockNewChat = {
-        getHistory: vi.fn().mockReturnValue([]),
+        getHistory: vi.fn().mockReturnValue([
+          { role: 'user', parts: [{ text: 'fresh start' }] },
+          { role: 'model', parts: [{ text: 'ready' }] },
+        ]),
         addHistory: vi.fn(),
         setHistory: vi.fn(),
       } as unknown as GeminiChat;
 
-      // Setup startChat mock to return different chats on each call
-      mockStartChat
-        .mockResolvedValueOnce(mockInitialChat) // First call during setup
-        .mockResolvedValueOnce(mockNewChat); // Second call from resetChat
-
+      // Mock startChat to return the new chat when called
+      const mockStartChat = vi.fn().mockResolvedValue(mockNewChat);
       client['startChat'] = mockStartChat;
       client['chat'] = mockInitialChat;
 
-      // Also need to mock that client is initialized to avoid lazyInitialize being called
+      // Mock that client is initialized
       client['contentGenerator'] = {} as ContentGenerator;
       client['isInitialized'] = vi.fn().mockReturnValue(true);
 
-      // 1. Get the initial chat instance and add some history.
+      // 1. Get the initial chat instance and verify initial state
       const initialChat = client.getChat();
+      expect(initialChat).toBe(mockInitialChat);
       const initialHistory = await client.getHistory();
+      expect(initialHistory).toHaveLength(2); // initial context + acknowledged
+
+      // Add a message to the initial chat
       await client.addHistory({
         role: 'user',
         parts: [{ text: 'some old message' }],
       });
 
-      // Update mock to return history with the message
-      mockInitialChat.getHistory = vi
-        .fn()
-        .mockReturnValue([
-          { role: 'user', parts: [{ text: 'some old message' }] },
-        ]);
-
       const historyWithOldMessage = await client.getHistory();
-      expect(historyWithOldMessage.length).toBeGreaterThan(
-        initialHistory.length,
-      );
+      expect(historyWithOldMessage).toHaveLength(3);
+      expect(JSON.stringify(historyWithOldMessage)).toContain('some old message');
 
-      // 2. Call resetChat.
+      // 2. Call resetChat
       await client.resetChat();
 
-      // 3. Get the new chat instance and its history.
+      // 3. Verify the chat was replaced
       const newChat = client.getChat();
+      expect(mockStartChat).toHaveBeenCalledTimes(1);
+      expect(client['chat']).toBe(mockNewChat);
+      expect(newChat).toBe(mockNewChat);
+      expect(newChat).not.toBe(initialChat);
 
-      console.log('Initial chat === new chat?', initialChat === newChat);
-      console.log('client.chat:', client['chat']);
-      console.log('mockNewChat:', mockNewChat);
-      console.log('mockStartChat call count:', mockStartChat.mock.calls.length);
-
+      // 4. Verify the history is from the new chat
       const newHistory = await client.getHistory();
-
-      // 4. Assert that the chat instance is new and the history is reset.
-      expect(mockStartChat).toHaveBeenCalled();
-      // For now, let's check if the history was reset instead
-      expect(newHistory.length).toBe(initialHistory.length);
+      expect(newHistory).toHaveLength(2); // fresh start + ready
       expect(JSON.stringify(newHistory)).not.toContain('some old message');
+      expect(JSON.stringify(newHistory)).toContain('fresh start');
     });
   });
 
