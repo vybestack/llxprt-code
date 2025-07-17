@@ -22,7 +22,7 @@ describe('OpenAIProvider Stateful Integration', () => {
     try {
       const keyPath = path.join(os.homedir(), '.openai_key');
       apiKey = fs.readFileSync(keyPath, 'utf-8').trim();
-    } catch (error) {
+    } catch {
       console.warn(
         'Skipping stateful integration tests: API key not found at ~/.openai_key',
       );
@@ -51,9 +51,14 @@ describe('OpenAIProvider Stateful Integration', () => {
     return fullContent;
   }
 
-  it.skipIf(!apiKey)(
+  // TODO: Revert this before finishing. Forcing test to run for TDD.
+  it(
     'should maintain context across multiple turns with a stateful model (o3)',
     async () => {
+      if (!apiKey) {
+        console.warn('Skipping test: API key not found');
+        return;
+      }
       provider.setModel('o3');
 
       // Turn 1: Establish context
@@ -82,9 +87,14 @@ describe('OpenAIProvider Stateful Integration', () => {
     { timeout: 30000 }, // 30-second timeout for live API calls
   );
 
-  it.skipIf(!apiKey)(
+  // TODO: Revert this before finishing. Forcing test to run for TDD.
+  it(
     'should not break stateless models by correctly passing full message history',
     async () => {
+      if (!apiKey) {
+        console.warn('Skipping test: API key not found');
+        return;
+      }
       provider.setModel('gpt-3.5-turbo');
 
       const history: IMessage[] = [

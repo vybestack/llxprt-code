@@ -256,7 +256,7 @@ export class Logger {
     const path = this._checkpointPath(tag);
     try {
       const data = JSON.stringify(
-        { history: conversation, context: context },
+        { history: conversation, context },
         null,
         2,
       );

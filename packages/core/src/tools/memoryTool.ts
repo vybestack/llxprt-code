@@ -103,7 +103,7 @@ export class MemoryTool extends BaseTool<SaveMemoryParams, ToolResult> {
   constructor() {
     super(
       MemoryTool.Name,
-      'Save Memory',
+      'SaveMemory',
       memoryToolDescription,
       memoryToolSchemaData.parameters as Record<string, unknown>,
     );

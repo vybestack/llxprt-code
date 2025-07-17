@@ -30,7 +30,6 @@ import {
   AppAction,
   AppState,
 } from '../reducers/appReducer.js';
-import { ConversationContext } from '../../utils/ConversationContext.js';
 
 // Helper functions
 function getDisplayModelName(config: Config): string {
@@ -104,6 +103,7 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   config,
   isAuthenticating = false,
 }) => {
+  console.log('[HANG-DEBUG] SessionController: render');
   // Initialize state with current values
   const getInitialProvider = () => {
     try {
@@ -135,7 +135,6 @@ export const SessionController: React.FC<SessionControllerProps> = ({
 const SessionControllerInner: React.FC<SessionControllerProps> = ({
   children,
   config,
-  isAuthenticating = false,
 }) => {
   const [sessionState, dispatch] = useSessionState();
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
@@ -335,27 +334,6 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     history.length,
     dispatch,
   ]);
-
-  // Sync user tier
-  useEffect(() => {
-    const syncUserTier = async () => {
-      try {
-        const configUserTier = await config.getUserTier();
-        if (configUserTier !== sessionState.userTier) {
-          dispatch({ type: 'SET_USER_TIER', payload: configUserTier });
-        }
-      } catch (error) {
-        // Silently fail - this is not critical functionality
-        if (config.getDebugMode()) {
-          console.debug('Failed to sync user tier:', error);
-        }
-      }
-    };
-
-    if (!isAuthenticating) {
-      syncUserTier();
-    }
-  }, [config, sessionState.userTier, isAuthenticating, dispatch]);
 
   // Set up Flash fallback handler
   useEffect(() => {

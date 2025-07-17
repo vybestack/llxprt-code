@@ -121,6 +121,7 @@ export class GeminiClient {
   private lastPromptId?: string;
 
   constructor(private config: Config) {
+    console.log('GeminiClient: constructor');
     if (config.getProxy()) {
       setGlobalDispatcher(new ProxyAgent(config.getProxy() as string));
     }
@@ -129,13 +130,28 @@ export class GeminiClient {
     this.loopDetector = new LoopDetectionService(config);
   }
 
-  async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
+  initialize(_contentGeneratorConfig: ContentGeneratorConfig) {
+    // No-op. Initialization is now lazy.
+  }
+
+  private async lazyInitialize() {
+    if (this.isInitialized()) {
+      return;
+    }
+    console.log('GeminiClient: lazyInitialize START');
+    const contentGenConfig = this.config.getContentGeneratorConfig();
+    if (!contentGenConfig) {
+      throw new Error('Content generator config not initialized. Call config.refreshAuth() first.');
+    }
     this.contentGenerator = await createContentGenerator(
-      contentGeneratorConfig,
+      contentGenConfig,
       this.config,
       this.config.getSessionId(),
     );
+    console.log('GeminiClient: lazyInitialize - content generator created');
     this.chat = await this.startChat();
+    console.log('GeminiClient: lazyInitialize - chat started');
+    console.log('GeminiClient: lazyInitialize END');
   }
 
   getContentGenerator(): ContentGenerator {
@@ -293,6 +309,7 @@ export class GeminiClient {
     turns: number = this.MAX_TURNS,
     originalModel?: string,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+    await this.lazyInitialize();
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset();
       this.lastPromptId = prompt_id;
@@ -365,6 +382,7 @@ export class GeminiClient {
     model?: string,
     config: GenerateContentConfig = {},
   ): Promise<Record<string, unknown>> {
+    await this.lazyInitialize();
     // Use current model from config instead of hardcoded Flash model
     const modelToUse =
       model || this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
@@ -459,6 +477,7 @@ export class GeminiClient {
     abortSignal: AbortSignal,
     model?: string,
   ): Promise<GenerateContentResponse> {
+    await this.lazyInitialize();
     const modelToUse = model ?? this.config.getModel();
     const configToUse: GenerateContentConfig = {
       ...this.generateContentConfig,
@@ -509,6 +528,7 @@ export class GeminiClient {
   }
 
   async generateEmbedding(texts: string[]): Promise<number[][]> {
+    await this.lazyInitialize();
     if (!texts || texts.length === 0) {
       return [];
     }
@@ -547,6 +567,7 @@ export class GeminiClient {
     prompt_id: string,
     force: boolean = false,
   ): Promise<ChatCompressionInfo | null> {
+    await this.lazyInitialize();
     const curatedHistory = this.getChat().getHistory(true);
 
     // Regardless of `force`, don't do anything if the history is empty.

@@ -38,7 +38,7 @@ class ConversationContextManager {
   /**
    * Starts a new conversation, generating a new ID and clearing the parent ID.
    */
-  public startNewConversation(): void {
+  startNewConversation(): void {
     this.context = {
       conversationId: this.generateConversationId(),
       parentId: undefined,
@@ -54,7 +54,7 @@ class ConversationContextManager {
    * Retrieves the current conversation context.
    * If no conversation is active, it starts a new one.
    */
-  public getContext(): IConversationContext {
+  getContext(): IConversationContext {
     if (!this.context.conversationId) {
       this.startNewConversation();
     }
@@ -65,7 +65,7 @@ class ConversationContextManager {
    * Updates the parent ID for the next turn in the conversation.
    * @param newParentId The ID of the most recent message, which becomes the parent for the next message.
    */
-  public setParentId(newParentId: string): void {
+  setParentId(newParentId: string): void {
     if (this.context.conversationId) {
       this.context.parentId = newParentId;
       if (process.env.DEBUG) {
@@ -84,7 +84,7 @@ class ConversationContextManager {
    * Restores the full conversation context, e.g., when loading a session.
    * @param newContext The full context to restore.
    */
-  public setContext(newContext: IConversationContext): void {
+  setContext(newContext: IConversationContext): void {
     this.context = newContext;
     if (process.env.DEBUG) {
       console.log(
@@ -96,7 +96,7 @@ class ConversationContextManager {
   /**
    * Clears the current conversation context.
    */
-  public reset(): void {
+  reset(): void {
     this.context = {};
   }
 }

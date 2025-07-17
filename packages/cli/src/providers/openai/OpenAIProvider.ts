@@ -149,10 +149,7 @@ export class OpenAIProvider implements IProvider {
       stateful?: boolean;
     },
   ): Promise<AsyncIterableIterator<IMessage>> {
-    // For now, we only support stateless mode
-    if (options?.stateful) {
-      throw new Error('Stateful mode not yet implemented for Responses API');
-    }
+    // Remove the stateful mode error to allow O3 to work with conversation IDs
 
     // Check context usage and warn if getting close to limit
     if (options?.conversationId && options?.parentId) {
@@ -464,6 +461,9 @@ export class OpenAIProvider implements IProvider {
     console.debug('[OpenAIProvider] generateChatCompletion called');
     console.debug('[OpenAIProvider] Model:', this.currentModel);
     console.debug('[OpenAIProvider] Number of messages:', messages.length);
+    
+    // Debug: Log messages to understand their format
+    console.log('[OpenAIProvider] Messages:', JSON.stringify(messages, null, 2));
 
     if (process.env.DEBUG || process.env.VERBOSE) {
       console.log('[OpenAIProvider] Current baseURL:', this.baseURL);

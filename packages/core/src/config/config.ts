@@ -201,13 +201,18 @@ export class Config {
   private readonly _activeExtensions: ActiveExtension[];
   flashFallbackHandler?: FlashFallbackHandler;
   private quotaErrorOccurred: boolean = false;
-  private readonly providerManager?: ProviderManager;
+  private providerManager?: ProviderManager;
+
+  setProviderManager(providerManager: ProviderManager) {
+    this.providerManager = providerManager;
+  }
   private readonly provider?: string;
   private readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
 
   constructor(params: ConfigParameters) {
+    console.log('Config: constructor');
     this.sessionId = params.sessionId;
     this.embeddingModel =
       params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
@@ -278,15 +283,24 @@ export class Config {
   }
 
   async initialize(): Promise<void> {
+    console.log('Config: initialize START');
     // Initialize centralized FileDiscoveryService
     this.getFileService();
     if (this.getCheckpointingEnabled()) {
       await this.getGitService();
     }
     this.toolRegistry = await this.createToolRegistry();
+    
+    // Create GeminiClient instance immediately without authentication
+    // This ensures geminiClient is available for providers on startup
+    this.geminiClient = new GeminiClient(this);
+    console.log('Config: GeminiClient created (without auth)');
+    
+    console.log('Config: initialize END');
   }
 
   async refreshAuth(authMethod: AuthType) {
+    console.log('Config: refreshAuth START');
     this.contentGeneratorConfig = await createContentGeneratorConfig(
       this.model,
       authMethod,
@@ -297,18 +311,24 @@ export class Config {
       this.contentGeneratorConfig.providerManager = this.providerManager;
     }
 
-    this.geminiClient = new GeminiClient(this);
+    // Initialize the existing GeminiClient with the new auth config
+    // GeminiClient instance was already created in initialize()
+    if (!this.geminiClient) {
+      throw new Error('GeminiClient not initialized. Call initialize() first.');
+    }
     await this.geminiClient.initialize(this.contentGeneratorConfig);
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.modelSwitchedDuringSession = false;
+    console.log('Config: refreshAuth END');
   }
 
   getSessionId(): string {
     return this.sessionId;
   }
 
-  getContentGeneratorConfig(): ContentGeneratorConfig {
+  getContentGeneratorConfig(): ContentGeneratorConfig | undefined {
+    console.log('Config: getContentGeneratorConfig');
     return this.contentGeneratorConfig;
   }
 
@@ -462,6 +482,7 @@ export class Config {
   }
 
   getGeminiClient(): GeminiClient {
+    console.log('Config: getGeminiClient');
     return this.geminiClient;
   }
 

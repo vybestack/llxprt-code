@@ -28,7 +28,8 @@ export class GeminiProvider implements IProvider {
   private currentModel: string = 'gemini-2.5-pro';
 
   constructor() {
-    this.determineBestAuth();
+    // Do not determine auth mode on instantiation.
+    // This will be done lazily when a chat completion is requested.
   }
 
   /**
@@ -36,6 +37,13 @@ export class GeminiProvider implements IProvider {
    * and existing configuration. Follows the hierarchy: Vertex AI → Gemini API key → OAuth
    */
   private determineBestAuth(): void {
+    // Check if user explicitly selected USE_NONE via the content generator config
+    const authType = this.config?.getContentGeneratorConfig()?.authType;
+    if (authType === AuthType.USE_NONE) {
+      this.authMode = 'none';
+      return;
+    }
+    
     // Check for Vertex AI credentials first
     if (this.hasVertexAICredentials()) {
       this.authMode = 'vertex-ai';
@@ -167,6 +175,9 @@ export class GeminiProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
+    // Lazily determine the best auth method now that it's needed.
+    this.determineBestAuth();
+
     // Import the necessary modules dynamically to avoid circular dependencies
     const { GoogleGenAI } = await import('@google/genai');
 
@@ -269,6 +280,25 @@ export class GeminiProvider implements IProvider {
         }
         return;
       }
+
+      case 'none':
+        // For 'none' mode, check what credentials are available
+        if (this.hasGeminiAPIKey()) {
+          genAI = new GoogleGenAI({
+            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
+            httpOptions,
+          });
+        } else if (this.hasVertexAICredentials()) {
+          this.setupVertexAIAuth();
+          genAI = new GoogleGenAI({
+            apiKey: process.env.GOOGLE_API_KEY!,
+            vertexai: true,
+            httpOptions,
+          });
+        } else {
+          throw new Error('No authentication credentials found. Please set GEMINI_API_KEY or configure Vertex AI credentials.');
+        }
+        break;
 
       default:
         throw new Error(`Unsupported auth mode: ${this.authMode}`);

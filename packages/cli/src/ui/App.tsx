@@ -97,11 +97,14 @@ interface AppInnerProps extends AppProps {
   setIsAuthenticating: (value: boolean) => void;
 }
 
-export const AppWrapper = (props: AppProps) => (
-  <SessionStatsProvider>
-    <App {...props} />
-  </SessionStatsProvider>
-);
+export const AppWrapper = (props: AppProps) => {
+  console.log('[HANG-DEBUG] AppWrapper: render');
+  return (
+    <SessionStatsProvider>
+      <App {...props} />
+    </SessionStatsProvider>
+  );
+};
 
 // Inner component that uses layout context
 const AppInner = ({
@@ -480,7 +483,7 @@ const AppInner = ({
     openAuthDialog();
   }, [openAuthDialog, appDispatch]);
 
-  const geminiClientForStream = config.getGeminiClient();
+  const geminiClientForStream = useMemo(() => config.getGeminiClient(), [config]);
 
   const {
     streamingState,
@@ -635,7 +638,7 @@ const AppInner = ({
   }, [settings.merged.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
-  const geminiClient = config.getGeminiClient();
+  const geminiClient = useMemo(() => config.getGeminiClient(), [config]);
 
   useEffect(() => {
     if (
@@ -688,6 +691,7 @@ const AppInner = ({
 
   // Show loading state if geminiClient is not initialized
   if (!geminiClientForStream) {
+    console.log('App: geminiClientForStream is not initialized yet');
     return <Text>Initializing Gemini client...</Text>;
   }
 

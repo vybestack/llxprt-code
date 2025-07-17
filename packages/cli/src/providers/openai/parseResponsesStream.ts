@@ -69,6 +69,9 @@ export async function* parseResponsesStream(
     }
   >();
 
+  // Track accumulated text to detect reasoning JSON
+  let textAccumulator = '';
+
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -100,12 +103,76 @@ export async function* parseResponsesStream(
             // Handle different event types
             switch (event.type) {
               case 'response.output_text.delta':
-                // Yield content delta
+                // Accumulate and check for reasoning JSON
                 if (event.delta) {
-                  yield {
-                    role: ContentGeneratorRole.ASSISTANT,
-                    content: event.delta,
-                  };
+                  textAccumulator += event.delta;
+                  
+                  // Check if we have complete reasoning JSON
+                  try {
+                    const parsed = JSON.parse(textAccumulator);
+                    if (parsed.reasoning && parsed.next_speaker) {
+                      // Format reasoning nicely
+                      yield {
+                        role: ContentGeneratorRole.ASSISTANT,
+                        content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                      };
+                      // Reset accumulator for actual response
+                      textAccumulator = '';
+                      // Continue to process more deltas
+                      continue;
+                    }
+                  } catch {
+                    // Not complete JSON yet or not reasoning
+                    // Check if this looks like the start of JSON
+                    if (textAccumulator.trim().startsWith('{') && textAccumulator.includes('"reasoning"')) {
+                      // Still accumulating reasoning JSON, don't yield yet
+                      continue;
+                    }
+                    // Regular text, yield it
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: event.delta,
+                    };
+                    // Reset accumulator since we're in regular text mode
+                    textAccumulator = '';
+                  }
+                }
+                break;
+
+              case 'response.message_content.delta':
+                // Handle message content deltas (might contain reasoning)
+                if (event.delta) {
+                  textAccumulator += event.delta;
+                  
+                  // Check if we have complete reasoning JSON
+                  try {
+                    const parsed = JSON.parse(textAccumulator);
+                    if (parsed.reasoning && parsed.next_speaker) {
+                      // Format reasoning nicely
+                      yield {
+                        role: ContentGeneratorRole.ASSISTANT,
+                        content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                      };
+                      // Reset accumulator for actual response
+                      textAccumulator = '';
+                      // Continue to process more deltas
+                      continue;
+                    }
+                  } catch {
+                    // Not complete JSON yet or not reasoning
+                    // Check if this looks like the start of JSON
+                    if (textAccumulator.trim().startsWith('{') && textAccumulator.includes('"reasoning"')) {
+                      // Still accumulating reasoning JSON, don't yield yet
+                      continue;
+                    }
+                    // Regular text, yield it
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: event.delta,
+                    };
+                    // Reset accumulator since we're in regular text mode
+                    textAccumulator = '';
+                  }
                 }
                 break;
 
@@ -118,6 +185,37 @@ export async function* parseResponsesStream(
                     arguments: event.item.arguments || '',
                     output_index: event.output_index || 0,
                   });
+                } else if (event.item?.type === 'message') {
+                  // Handle message-type items that might contain reasoning
+                  // These should be handled but not stop the stream
+                  if (event.item.content?.length) {
+                    const content = event.item.content[0];
+                    if (content?.type === 'text' && content.text) {
+                      // Check if this is reasoning JSON
+                      try {
+                        const parsed = JSON.parse(content.text);
+                        if (parsed.reasoning && parsed.next_speaker) {
+                          // This is reasoning JSON - format it nicely
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                          };
+                        } else {
+                          // Valid JSON but not reasoning
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: content.text,
+                          };
+                        }
+                      } catch {
+                        // Not JSON, treat as regular text
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: content.text,
+                        };
+                      }
+                    }
+                  }
                 }
                 break;
 
@@ -134,37 +232,66 @@ export async function* parseResponsesStream(
                 break;
 
               case 'response.output_item.done':
-                // Function call is complete, yield it
-                if (
-                  event.item?.type === 'function_call' &&
-                  event.item.id &&
-                  functionCalls.has(event.item.id)
-                ) {
-                  const call = functionCalls.get(event.item.id)!;
+                // Handle completed output items
+                if (event.item?.type === 'function_call' && event.item.id) {
+                  // Function call is complete, yield it
+                  if (functionCalls.has(event.item.id)) {
+                    const call = functionCalls.get(event.item.id)!;
 
-                  // Update with final data from the done event
-                  if (event.item.arguments) {
-                    call.arguments = event.item.arguments;
-                  }
+                    // Update with final data from the done event
+                    if (event.item.arguments) {
+                      call.arguments = event.item.arguments;
+                    }
 
-                  // Convert to tool_calls array format
-                  yield {
-                    role: ContentGeneratorRole.ASSISTANT,
-                    content: '',
-                    tool_calls: [
-                      {
-                        id: call.id,
-                        type: 'function',
-                        function: {
-                          name: call.name,
-                          arguments: call.arguments,
+                    // Convert to tool_calls array format
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: '',
+                      tool_calls: [
+                        {
+                          id: call.id,
+                          type: 'function',
+                          function: {
+                            name: call.name,
+                            arguments: call.arguments,
+                          },
                         },
-                      },
-                    ],
-                  };
+                      ],
+                    };
 
-                  // Remove the completed call
-                  functionCalls.delete(event.item.id);
+                    // Remove the completed call
+                    functionCalls.delete(event.item.id);
+                  }
+                } else if (event.item?.type === 'message') {
+                  // Handle completed message items
+                  if (event.item.content?.length) {
+                    const content = event.item.content[0];
+                    if (content?.type === 'text' && content.text) {
+                      // Check if this is reasoning JSON
+                      try {
+                        const parsed = JSON.parse(content.text);
+                        if (parsed.reasoning && parsed.next_speaker) {
+                          // This is reasoning JSON - format it nicely
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                          };
+                        } else {
+                          // Valid JSON but not reasoning
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: content.text,
+                          };
+                        }
+                      } catch {
+                        // Not JSON, treat as regular text
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: content.text,
+                        };
+                      }
+                    }
+                  }
                 }
                 break;
 

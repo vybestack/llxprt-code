@@ -77,6 +77,10 @@ export function AuthDialog({
       value: AuthType.USE_GEMINI,
     },
     { label: 'Vertex AI', value: AuthType.USE_VERTEX_AI },
+    {
+      label: 'None (use environment variables or keyfile)',
+      value: AuthType.USE_NONE,
+    },
   ];
 
   const initialAuthIndex = items.findIndex((item) => {

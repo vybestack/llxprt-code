@@ -24,12 +24,13 @@ export const useAuthCommand = (
   const appDispatch = useAppDispatch();
   const isAuthDialogOpen = appState.openDialogs.auth;
 
-  // Set initial dialog state based on auth availability
-  useEffect(() => {
-    if (settings.merged.selectedAuthType === undefined) {
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
-    }
-  }, [settings.merged.selectedAuthType, appDispatch]); // Run only on mount
+  // Commented out to implement lazy authentication
+  // Auth dialog will only open when explicitly triggered
+  // useEffect(() => {
+  //   if (settings.merged.selectedAuthType === undefined) {
+  //     appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+  //   }
+  // }, [settings.merged.selectedAuthType, appDispatch]); // Run only on mount
 
   const openAuthDialog = useCallback(() => {
     appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });

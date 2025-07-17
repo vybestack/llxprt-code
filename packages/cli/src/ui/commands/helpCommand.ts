@@ -9,7 +9,7 @@ import { OpenDialogActionReturn, SlashCommand } from './types.js';
 export const helpCommand: SlashCommand = {
   name: 'help',
   altName: '?',
-  description: 'for help on gemini-cli',
+  description: 'for help on LLxprt Code',
   action: (_context, _args): OpenDialogActionReturn => {
     console.debug('Opening help UI ...');
     return {

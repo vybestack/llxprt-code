@@ -46,6 +46,7 @@ export enum AuthType {
   USE_VERTEX_AI = 'vertex-ai',
   CLOUD_SHELL = 'cloud-shell',
   USE_PROVIDER = 'provider',
+  USE_NONE = 'none',
 }
 
 export type ContentGeneratorConfig = {

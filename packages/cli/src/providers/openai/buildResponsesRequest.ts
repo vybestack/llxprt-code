@@ -27,17 +27,24 @@ export interface ResponsesRequestParams {
   user?: string;
 }
 
-// Responses API message format (without tool_calls)
-interface ResponsesMessage {
-  role: 'assistant' | 'system' | 'developer' | 'user';
-  content: string;
-  // tool_call_id is not supported, tool responses are transformed to user messages
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
-}
+// Responses API message format
+type ResponsesMessage = 
+  | {
+      role: 'assistant' | 'system' | 'developer' | 'user';
+      content: string;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+    }
+  | FunctionCallOutput;
+
+type FunctionCallOutput = {
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+};
 
 export interface ResponsesRequest {
   model: string;
@@ -45,8 +52,8 @@ export interface ResponsesRequest {
   prompt?: string;
   tools?: ResponsesTool[];
   stream?: boolean;
-  conversation_id?: string;
-  parent_id?: string;
+  previous_response_id?: string;
+  store?: boolean;
   tool_choice?: string | object;
   stateful?: boolean;
   temperature?: number;
@@ -116,9 +123,9 @@ export function buildResponsesRequest(
     }
   }
 
-  // Handle message trimming for stateful mode (but not for o3 models)
+  // Handle message trimming for stateful mode
   let processedMessages = messages;
-  if (messages && conversationId && model && !model.startsWith('o3')) {
+  if (messages && conversationId) {
     console.warn(
       '[buildResponsesRequest] conversationId provided in stateful mode. Only the most recent messages will be sent to maintain context window.',
     );
@@ -133,25 +140,34 @@ export function buildResponsesRequest(
 
   // Transform messages for Responses API format
   let transformedMessages: ResponsesMessage[] | undefined;
+  const functionCallOutputs: FunctionCallOutput[] = [];
+  
   if (processedMessages) {
+    // First, extract function call outputs from tool messages
+    processedMessages
+      .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
+      .forEach((msg) => {
+        if (msg.role === 'tool' && msg.tool_call_id && msg.content) {
+          functionCallOutputs.push({
+            type: 'function_call_output' as const,
+            call_id: msg.tool_call_id,
+            output: msg.content,
+          });
+        }
+      });
+    
+    // Then, create the regular messages array (excluding tool messages)
     transformedMessages = processedMessages
       .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
+      .filter((msg) => msg.role !== 'tool') // Exclude tool messages
       .map((msg) => {
         // Remove tool_calls field as it's not accepted by Responses API
         const {
           tool_calls: _tool_calls,
-          tool_call_id,
+          tool_call_id: _tool_call_id,
           usage,
           ...cleanMsg
         } = msg;
-
-        // Transform tool messages to user messages with special formatting
-        if (msg.role === 'tool') {
-          return {
-            role: 'user' as const,
-            content: `[Tool Response - ${tool_call_id}]\n${msg.content}`,
-          };
-        }
 
         // Ensure role is valid for Responses API
         const validRole = cleanMsg.role as
@@ -159,12 +175,14 @@ export function buildResponsesRequest(
           | 'assistant'
           | 'system'
           | 'developer';
+        
         return {
           role: validRole,
           content: cleanMsg.content,
           ...(usage ? { usage } : {}), // Preserve usage data if present
         };
-      });
+      })
+      .filter((msg): msg is NonNullable<typeof msg> => msg !== null) as ResponsesMessage[];
   }
 
   // Build the request object with conditional fields
@@ -172,16 +190,35 @@ export function buildResponsesRequest(
     model,
     ...otherParams,
     ...(prompt ? { prompt } : {}),
-    ...(transformedMessages ? { input: transformedMessages } : {}), // Changed from messages to input
   };
-
-  // Map conversation fields, but not for o3 models
-  if (model && !model.startsWith('o3')) {
-    if (conversationId) {
-      request.conversation_id = conversationId;
+  
+  // Add input array if we have messages or function call outputs
+  if (transformedMessages || functionCallOutputs.length > 0) {
+    const inputItems: ResponsesMessage[] = [];
+    
+    // Add regular messages
+    if (transformedMessages) {
+      inputItems.push(...transformedMessages);
     }
-    if (parentId) {
-      request.parent_id = parentId;
+    
+    // Add function call outputs
+    if (functionCallOutputs.length > 0) {
+      console.log('[buildResponsesRequest] Adding function_call_output items:', functionCallOutputs);
+      inputItems.push(...functionCallOutputs);
+    }
+    
+    request.input = inputItems;
+  }
+
+  // Map conversation fields
+  if (model) {
+    if (conversationId) {
+      // Note: The API uses previous_response_id, not a conversation_id.
+      // We are mapping our internal parentId to this field.
+      if (parentId) {
+        request.previous_response_id = parentId;
+        request.store = true;
+      }
     }
   }
 

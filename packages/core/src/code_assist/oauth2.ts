@@ -14,7 +14,6 @@ import * as http from 'http';
 import url from 'url';
 import crypto from 'crypto';
 import * as net from 'net';
-import open from 'open';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import * as os from 'os';
@@ -68,14 +67,22 @@ export interface OauthWebLogin {
 
 export async function getOauthClient(
   authType: AuthType,
-  config: Config,
+  _config: Config,
 ): Promise<OAuth2Client> {
+  // Handle USE_NONE auth type - skip OAuth entirely
+  if (authType === AuthType.USE_NONE) {
+    throw new Error('OAuth not required for USE_NONE auth type');
+  }
+
   const client = new OAuth2Client({
     clientId: OAUTH_CLIENT_ID,
     clientSecret: OAUTH_CLIENT_SECRET,
   });
-  client.on('tokens', async (tokens: Credentials) => {
-    await cacheCredentials(tokens);
+  client.on('tokens', (tokens: Credentials) => {
+    // Don't await - cache credentials asynchronously to avoid blocking
+    cacheCredentials(tokens).catch((error) => {
+      console.error('Error caching OAuth tokens:', error);
+    });
   });
 
   // If there are cached creds on disk, they always take precedence
@@ -117,8 +124,20 @@ export async function getOauthClient(
     }
   }
 
-  if (true) {
-    let success = false;
+  // Try web-based flow first with timeout, then fall back to manual code entry
+  let success = false;
+  
+  try {
+    // Attempt web-based authentication with 30 second timeout
+    console.log('Attempting to open browser for authentication...');
+    success = await authWithWebTimeout(client, 30000);
+  } catch (_error) {
+    console.log('\nBrowser authentication failed or timed out.');
+    console.log('Falling back to manual authentication...\n');
+  }
+  
+  // If web flow failed, try manual code entry
+  if (!success) {
     const maxRetries = 2;
     for (let i = 0; !success && i < maxRetries; i++) {
       success = await authWithUserCode(client);
@@ -132,22 +151,25 @@ export async function getOauthClient(
     if (!success) {
       process.exit(1);
     }
-  } else {
-    const webLogin = await authWithWeb(client);
-
-    // This does basically nothing, as it isn't show to the user.
-    console.log(
-      `\n\nCode Assist login required.\n` +
-        `Attempting to open authentication page in your browser.\n` +
-        `Otherwise navigate to:\n\n${webLogin.authUrl}\n\n`,
-    );
-    await open(webLogin.authUrl);
-    console.log('Waiting for authentication...');
-
-    await webLogin.loginCompletePromise;
   }
 
   return client;
+}
+
+async function authWithWebTimeout(client: OAuth2Client, timeoutMs: number): Promise<boolean> {
+  const { authUrl, loginCompletePromise } = await _authWithWeb(client);
+  
+  // Open browser
+  const open = (await import('open')).default;
+  await open(authUrl);
+  
+  // Wait for authentication with timeout
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Authentication timeout')), timeoutMs);
+  });
+  
+  await Promise.race([loginCompletePromise, timeoutPromise]);
+  return true;
 }
 
 async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
@@ -196,7 +218,7 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
   return true;
 }
 
-async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
+async function _authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   const port = await getAvailablePort();
   const redirectUri = `http://localhost:${port}/oauth2callback`;
   const state = crypto.randomBytes(32).toString('hex');
@@ -310,10 +332,32 @@ async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
 
 async function cacheCredentials(credentials: Credentials) {
   const filePath = getCachedCredentialPath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  const dir = path.dirname(filePath);
+  
+  try {
+    // Check if directory exists first to avoid unnecessary mkdir calls
+    await fs.access(dir);
+  } catch {
+    // Directory doesn't exist, create it
+    try {
+      await fs.mkdir(dir, { recursive: true });
+    } catch (error) {
+      // Handle race condition where directory was created between access and mkdir
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        console.error('Failed to create OAuth cache directory:', error);
+        // Don't throw - allow OAuth to continue without caching
+        return;
+      }
+    }
+  }
 
-  const credString = JSON.stringify(credentials, null, 2);
-  await fs.writeFile(filePath, credString);
+  try {
+    const credString = JSON.stringify(credentials, null, 2);
+    await fs.writeFile(filePath, credString);
+  } catch (error) {
+    console.error('Failed to cache OAuth credentials:', error);
+    // Don't throw - allow OAuth to continue without caching
+  }
 }
 
 function getCachedCredentialPath(): string {

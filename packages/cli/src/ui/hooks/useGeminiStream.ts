@@ -24,6 +24,7 @@ import {
   ThoughtSummary,
   UnauthorizedError,
   DEFAULT_GEMINI_FLASH_MODEL,
+  AuthType,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion } from '@google/genai';
 import {
@@ -227,6 +228,24 @@ export const useGeminiStream = (
         return { queryToSend: null, shouldProceed: false };
       }
 
+      // Lazily refresh auth if needed.
+      if (!geminiClient.isInitialized()) {
+        let authType = config.getContentGeneratorConfig()?.authType;
+        
+        // If authType is not set, determine it from environment variables
+        if (!authType) {
+          if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+            authType = AuthType.USE_VERTEX_AI;
+          } else if (process.env.GEMINI_API_KEY) {
+            authType = AuthType.USE_GEMINI;
+          } else {
+            authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth (interactive)
+          }
+        }
+        
+        await config.refreshAuth(authType);
+      }
+
       let localQueryToSendToGemini: PartListUnion | null = null;
 
       if (typeof query === 'string') {
@@ -311,6 +330,7 @@ export const useGeminiStream = (
       logger,
       shellModeActive,
       scheduleToolCalls,
+      geminiClient,
     ],
   );
 
