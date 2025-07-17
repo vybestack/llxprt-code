@@ -401,7 +401,7 @@ describe('Logger', () => {
         `${CHECKPOINT_FILE_NAME.replace('.json', '')}-${tag}.json`,
       );
       const fileContent = await fs.readFile(taggedFilePath, 'utf-8');
-      expect(JSON.parse(fileContent)).toEqual({history: conversation});
+      expect(JSON.parse(fileContent)).toEqual({ history: conversation });
     });
 
     it('should not throw if logger is not initialized', async () => {
@@ -449,18 +449,18 @@ describe('Logger', () => {
       );
 
       const loaded = await logger.loadCheckpoint(tag);
-      expect(loaded).toEqual({history: taggedConversation});
+      expect(loaded).toEqual({ history: taggedConversation });
     });
 
     it('should return an empty array if a tagged checkpoint file does not exist', async () => {
       const loaded = await logger.loadCheckpoint('non-existent-tag');
-      expect(loaded).toEqual({history: []});
+      expect(loaded).toEqual({ history: [] });
     });
 
     it('should return an empty array if the checkpoint file does not exist', async () => {
       await fs.unlink(TEST_CHECKPOINT_FILE_PATH); // Ensure it's gone
       const loaded = await logger.loadCheckpoint('missing');
-      expect(loaded).toEqual({history: []});
+      expect(loaded).toEqual({ history: [] });
     });
 
     it('should return an empty array if the file contains invalid JSON', async () => {
@@ -469,7 +469,7 @@ describe('Logger', () => {
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const loadedCheckpoint = await logger.loadCheckpoint('missing');
-      expect(loadedCheckpoint).toEqual({history: []});
+      expect(loadedCheckpoint).toEqual({ history: [] });
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to read or parse checkpoint file'),
         expect.any(Error),
@@ -483,7 +483,7 @@ describe('Logger', () => {
         .spyOn(console, 'error')
         .mockImplementation(() => {});
       const loadedCheckpoint = await uninitializedLogger.loadCheckpoint('tag');
-      expect(loadedCheckpoint).toEqual({history: []});
+      expect(loadedCheckpoint).toEqual({ history: [] });
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         'Logger not initialized or checkpoint file path not set. Cannot load checkpoint.',
       );

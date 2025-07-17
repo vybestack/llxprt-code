@@ -146,7 +146,7 @@ describe('Server Config (config.ts)', () => {
       const config = new Config(baseParams);
       // Initialize config to create GeminiClient instance
       await config.initialize();
-      
+
       const authType = AuthType.USE_GEMINI;
       const newModel = 'gemini-flash';
       const mockContentConfig = {

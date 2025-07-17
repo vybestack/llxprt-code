@@ -61,7 +61,7 @@ vi.mock('../utils/errors.js', () => ({
 const hoistedMockExistsSync = vi.hoisted(() => vi.fn());
 const hoistedMockMkdirSync = vi.hoisted(() => vi.fn());
 vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal() as typeof import('fs');
+  const actual = (await importOriginal()) as typeof import('fs');
   return {
     ...actual,
     default: actual,
@@ -72,7 +72,7 @@ vi.mock('fs', async (importOriginal) => {
 
 const hoistedMockHomedir = vi.hoisted(() => vi.fn());
 vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal() as typeof import('os');
+  const actual = (await importOriginal()) as typeof import('os');
   return {
     ...actual,
     default: actual,

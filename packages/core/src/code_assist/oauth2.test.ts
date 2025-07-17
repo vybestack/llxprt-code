@@ -192,12 +192,17 @@ describe('oauth2', () => {
     const mockGenerateCodeVerifierAsync = vi
       .fn()
       .mockResolvedValue(mockCodeVerifier);
+    const mockGetAccessToken = vi
+      .fn()
+      .mockResolvedValue({ token: 'mock-access-token-user-code' });
 
     const mockOAuth2Client = {
       generateAuthUrl: mockGenerateAuthUrl,
       getToken: mockGetToken,
       setCredentials: mockSetCredentials,
       generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
+      getAccessToken: mockGetAccessToken,
+      credentials: mockTokens,
       on: vi.fn(),
     } as unknown as OAuth2Client;
     vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
@@ -211,6 +216,12 @@ describe('oauth2', () => {
     );
 
     const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Mock the UserInfo API response
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ email: 'test-user-code@gmail.com' }),
+    } as unknown as Response);
 
     const client = await getOauthClient(
       AuthType.LOGIN_WITH_GOOGLE,
