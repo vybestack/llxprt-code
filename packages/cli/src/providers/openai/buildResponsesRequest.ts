@@ -28,7 +28,7 @@ export interface ResponsesRequestParams {
 }
 
 // Responses API message format
-type ResponsesMessage = 
+type ResponsesMessage =
   | {
       role: 'assistant' | 'system' | 'developer' | 'user';
       content: string;
@@ -129,16 +129,16 @@ export function buildResponsesRequest(
     console.warn(
       '[buildResponsesRequest] conversationId provided in stateful mode. Only the most recent messages will be sent to maintain context window.',
     );
-    
+
     // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
     if (messages.length > 2) {
       // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
       let startIndex = messages.length - 1;
-      
+
       // Work backwards to find a complete interaction
       while (startIndex > 0) {
         const msg = messages[startIndex];
-        
+
         // If we find a tool message, we need to include the assistant message with the tool call
         if (msg.role === 'tool') {
           // Find the assistant message that contains this tool call
@@ -147,7 +147,7 @@ export function buildResponsesRequest(
             if (prevMsg.role === 'assistant' && prevMsg.tool_calls) {
               // Check if this assistant message contains the tool call for our tool response
               const hasMatchingCall = prevMsg.tool_calls.some(
-                (call) => call.id === msg.tool_call_id
+                (call) => call.id === msg.tool_call_id,
               );
               if (hasMatchingCall) {
                 startIndex = i;
@@ -156,18 +156,18 @@ export function buildResponsesRequest(
             }
           }
         }
-        
+
         // If we find a user message after going through tool responses, this is a good starting point
         if (msg.role === 'user' && startIndex < messages.length - 1) {
           break;
         }
-        
+
         startIndex--;
       }
-      
+
       // Ensure we don't trim too aggressively
       startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
-      
+
       processedMessages = messages.slice(startIndex);
       console.warn(
         `[buildResponsesRequest] Trimmed messages from ${messages.length} to ${processedMessages.length} for stateful mode (preserving tool call/response pairs).`,
@@ -178,7 +178,7 @@ export function buildResponsesRequest(
   // Transform messages for Responses API format
   let transformedMessages: ResponsesMessage[] | undefined;
   const functionCallOutputs: FunctionCallOutput[] = [];
-  
+
   if (processedMessages) {
     // First, extract function call outputs from tool messages
     processedMessages
@@ -192,7 +192,7 @@ export function buildResponsesRequest(
           });
         }
       });
-    
+
     // Then, create the regular messages array (excluding tool messages)
     transformedMessages = processedMessages
       .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
@@ -212,14 +212,16 @@ export function buildResponsesRequest(
           | 'assistant'
           | 'system'
           | 'developer';
-        
+
         return {
           role: validRole,
           content: cleanMsg.content,
           ...(usage ? { usage } : {}), // Preserve usage data if present
         };
       })
-      .filter((msg): msg is NonNullable<typeof msg> => msg !== null) as ResponsesMessage[];
+      .filter(
+        (msg): msg is NonNullable<typeof msg> => msg !== null,
+      ) as ResponsesMessage[];
   }
 
   // Build the request object with conditional fields
@@ -228,23 +230,29 @@ export function buildResponsesRequest(
     ...otherParams,
     ...(prompt ? { prompt } : {}),
   };
-  
+
   // Add input array if we have messages or function call outputs
   if (transformedMessages || functionCallOutputs.length > 0) {
     const inputItems: ResponsesMessage[] = [];
-    
+
     // Add regular messages
     if (transformedMessages) {
       inputItems.push(...transformedMessages);
     }
-    
+
     // Add function call outputs
     if (functionCallOutputs.length > 0) {
-      console.log('[buildResponsesRequest] Adding function_call_output items:', JSON.stringify(functionCallOutputs, null, 2));
+      console.log(
+        '[buildResponsesRequest] Adding function_call_output items:',
+        JSON.stringify(functionCallOutputs, null, 2),
+      );
       inputItems.push(...functionCallOutputs);
     }
-    
-    console.log('[buildResponsesRequest] Final input array:', JSON.stringify(inputItems, null, 2));
+
+    console.log(
+      '[buildResponsesRequest] Final input array:',
+      JSON.stringify(inputItems, null, 2),
+    );
     request.input = inputItems;
   }
 

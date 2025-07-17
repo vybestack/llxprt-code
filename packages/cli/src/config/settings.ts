@@ -94,6 +94,9 @@ export interface Settings {
   enableTextToolCallParsing?: boolean;
   textToolCallModels?: string[];
 
+  // OpenAI Responses API settings
+  openaiResponsesEnabled?: boolean;
+
   // Setting for setting maximum number of user/model/tool turns in a session.
   maxSessionTurns?: number;
 

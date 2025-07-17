@@ -85,6 +85,6 @@
   },
   "dependencies": {
     "fast-uri": "^3.0.6",
-    "openai": "^4.73.3"
+    "openai": "^5.10.1"
   }
 }

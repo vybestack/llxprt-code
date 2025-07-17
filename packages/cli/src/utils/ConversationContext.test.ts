@@ -29,7 +29,9 @@ describe('ConversationContextManager', () => {
     const secondContext = ConversationContext.getContext();
 
     expect(secondContext.conversationId).toBeDefined();
-    expect(secondContext.conversationId).not.toEqual(firstContext.conversationId);
+    expect(secondContext.conversationId).not.toEqual(
+      firstContext.conversationId,
+    );
     expect(secondContext.parentId).toBeUndefined();
   });
 
@@ -75,7 +77,7 @@ describe('ConversationContextManager', () => {
     ConversationContext.reset();
     ConversationContext.setParentId('should_not_be_set');
     const context = ConversationContext.getContext(); // This will initialize a new context
-    
+
     expect(context.parentId).toBeUndefined();
   });
 });

@@ -231,7 +231,7 @@ export const useGeminiStream = (
       // Lazily refresh auth if needed.
       if (!geminiClient.isInitialized()) {
         let authType = config.getContentGeneratorConfig()?.authType;
-        
+
         // If authType is not set, determine it from environment variables
         if (!authType) {
           if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -242,7 +242,7 @@ export const useGeminiStream = (
             authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth (interactive)
           }
         }
-        
+
         await config.refreshAuth(authType);
       }
 

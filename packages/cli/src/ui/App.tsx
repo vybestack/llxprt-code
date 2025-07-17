@@ -97,13 +97,11 @@ interface AppInnerProps extends AppProps {
   setIsAuthenticating: (value: boolean) => void;
 }
 
-export const AppWrapper = (props: AppProps) => {
-  return (
-    <SessionStatsProvider>
-      <App {...props} />
-    </SessionStatsProvider>
-  );
-};
+export const AppWrapper = (props: AppProps) => (
+  <SessionStatsProvider>
+    <App {...props} />
+  </SessionStatsProvider>
+);
 
 // Inner component that uses layout context
 const AppInner = ({
@@ -482,7 +480,10 @@ const AppInner = ({
     openAuthDialog();
   }, [openAuthDialog, appDispatch]);
 
-  const geminiClientForStream = useMemo(() => config.getGeminiClient(), [config]);
+  const geminiClientForStream = useMemo(
+    () => config.getGeminiClient(),
+    [config],
+  );
 
   const {
     streamingState,

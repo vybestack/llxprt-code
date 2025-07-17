@@ -64,9 +64,14 @@ describe('OpenAIProvider Stateful Integration', () => {
       // Turn 1: Establish context
       ConversationContext.startNewConversation();
       const history: IMessage[] = [
-        { role: 'user', content: 'My name is Clara and my favorite color is blue.' },
+        {
+          role: 'user',
+          content: 'My name is Clara and my favorite color is blue.',
+        },
       ];
-      const response1 = await collectResponse(provider.generateChatCompletion(history));
+      const response1 = await collectResponse(
+        provider.generateChatCompletion(history),
+      );
       history.push({ role: 'assistant', content: response1 });
 
       // Assert that parentId was set after the first turn

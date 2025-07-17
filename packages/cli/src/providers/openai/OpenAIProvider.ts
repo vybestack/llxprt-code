@@ -127,12 +127,17 @@ export class OpenAIProvider implements IProvider {
   }
 
   private shouldUseResponses(model: string): boolean {
-    // Check env flag override
+    // Check env flag override (highest priority)
     if (process.env.OPENAI_RESPONSES_DISABLE === 'true') {
       return false;
     }
 
-    // Check if model starts with any of the responses API model prefixes
+    // Check settings override
+    if (this.settings?.openaiResponsesEnabled !== undefined) {
+      return this.settings.openaiResponsesEnabled;
+    }
+
+    // Default: Check if model starts with any of the responses API model prefixes
     return RESPONSES_API_MODELS.some((responsesModel) =>
       model.startsWith(responsesModel),
     );
@@ -461,9 +466,12 @@ export class OpenAIProvider implements IProvider {
     console.debug('[OpenAIProvider] generateChatCompletion called');
     console.debug('[OpenAIProvider] Model:', this.currentModel);
     console.debug('[OpenAIProvider] Number of messages:', messages.length);
-    
+
     // Debug: Log messages to understand their format
-    console.log('[OpenAIProvider] Messages:', JSON.stringify(messages, null, 2));
+    console.log(
+      '[OpenAIProvider] Messages:',
+      JSON.stringify(messages, null, 2),
+    );
 
     if (process.env.DEBUG || process.env.VERBOSE) {
       console.log('[OpenAIProvider] Current baseURL:', this.baseURL);

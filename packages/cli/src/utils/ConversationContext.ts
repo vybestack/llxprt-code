@@ -69,9 +69,7 @@ class ConversationContextManager {
     if (this.context.conversationId) {
       this.context.parentId = newParentId;
       if (process.env.DEBUG) {
-        console.log(
-          `[ConversationContext] Set parentId to: ${newParentId}`,
-        );
+        console.log(`[ConversationContext] Set parentId to: ${newParentId}`);
       }
     } else {
       console.warn(

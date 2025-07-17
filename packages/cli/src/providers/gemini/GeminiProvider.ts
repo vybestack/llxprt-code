@@ -43,7 +43,7 @@ export class GeminiProvider implements IProvider {
       this.authMode = 'none';
       return;
     }
-    
+
     // Check for Vertex AI credentials first
     if (this.hasVertexAICredentials()) {
       this.authMode = 'vertex-ai';
@@ -296,7 +296,9 @@ export class GeminiProvider implements IProvider {
             httpOptions,
           });
         } else {
-          throw new Error('No authentication credentials found. Please set GEMINI_API_KEY or configure Vertex AI credentials.');
+          throw new Error(
+            'No authentication credentials found. Please set GEMINI_API_KEY or configure Vertex AI credentials.',
+          );
         }
         break;
 

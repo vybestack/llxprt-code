@@ -39,7 +39,9 @@ export const aboutCommand: SlashCommand = {
         const currentModel = activeProvider.getCurrentModel
           ? activeProvider.getCurrentModel()
           : context.services.config?.getModel() || 'Unknown';
-        modelVersion = providerName ? `${providerName}:${currentModel}` : currentModel;
+        modelVersion = providerName
+          ? `${providerName}:${currentModel}`
+          : currentModel;
       }
     } catch {
       // Fallback to config if the provider manager cannot be resolved (e.g. in

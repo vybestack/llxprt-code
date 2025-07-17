@@ -39,6 +39,7 @@
     "html-to-text": "^9.0.5",
     "ignore": "^7.0.0",
     "micromatch": "^4.0.8",
+    "mime-types": "^2.1.35",
     "open": "^10.1.2",
     "shell-quote": "^1.8.3",
     "simple-git": "^3.28.0",
