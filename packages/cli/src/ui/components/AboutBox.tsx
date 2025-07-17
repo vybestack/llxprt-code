@@ -98,7 +98,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
         </Text>
       </Box>
       <Box>
-        <Text>
+        <Text color={Colors.Foreground}>
           {selectedAuthType.startsWith('oauth') ? 'OAuth' : selectedAuthType}
         </Text>
       </Box>

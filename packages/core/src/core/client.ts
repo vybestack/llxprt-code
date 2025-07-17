@@ -121,7 +121,6 @@ export class GeminiClient {
   private lastPromptId?: string;
 
   constructor(private config: Config) {
-    console.log('GeminiClient: constructor');
     if (config.getProxy()) {
       setGlobalDispatcher(new ProxyAgent(config.getProxy() as string));
     }
@@ -354,22 +353,29 @@ export class GeminiClient {
         return turn;
       }
 
-      const nextSpeakerCheck = await checkNextSpeaker(
-        this.getChat(),
-        this,
-        signal,
-      );
-      if (nextSpeakerCheck?.next_speaker === 'model') {
-        const nextRequest = [{ text: 'Please continue.' }];
-        // This recursive call's events will be yielded out, but the final
-        // turn object will be from the top-level call.
-        yield* this.sendMessageStream(
-          nextRequest,
+      // Only check next speaker for Gemini provider
+      const contentGenConfig = this.config.getContentGeneratorConfig();
+      const providerManager = contentGenConfig?.providerManager;
+      const providerName = providerManager?.getActiveProviderName() || 'gemini';
+      if (providerName === 'gemini') {
+        const nextSpeakerCheck = await checkNextSpeaker(
+          this.getChat(),
+          this,
           signal,
-          prompt_id,
-          boundedTurns - 1,
-          initialModel,
+          providerName,
         );
+        if (nextSpeakerCheck?.next_speaker === 'model') {
+          const nextRequest = [{ text: 'Please continue.' }];
+          // This recursive call's events will be yielded out, but the final
+          // turn object will be from the top-level call.
+          yield* this.sendMessageStream(
+            nextRequest,
+            signal,
+            prompt_id,
+            boundedTurns - 1,
+            initialModel,
+          );
+        }
       }
     }
     return turn;

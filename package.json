@@ -84,6 +84,7 @@
     "yargs": "^18.0.0"
   },
   "dependencies": {
+    "fast-uri": "^3.0.6",
     "openai": "^4.73.3"
   }
 }

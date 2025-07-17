@@ -212,7 +212,6 @@ export class Config {
     | undefined;
 
   constructor(params: ConfigParameters) {
-    console.log('Config: constructor');
     this.sessionId = params.sessionId;
     this.embeddingModel =
       params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
@@ -283,7 +282,6 @@ export class Config {
   }
 
   async initialize(): Promise<void> {
-    console.log('Config: initialize START');
     // Initialize centralized FileDiscoveryService
     this.getFileService();
     if (this.getCheckpointingEnabled()) {
@@ -294,9 +292,6 @@ export class Config {
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this);
-    console.log('Config: GeminiClient created (without auth)');
-    
-    console.log('Config: initialize END');
   }
 
   async refreshAuth(authMethod: AuthType) {
@@ -328,7 +323,6 @@ export class Config {
   }
 
   getContentGeneratorConfig(): ContentGeneratorConfig | undefined {
-    console.log('Config: getContentGeneratorConfig');
     return this.contentGeneratorConfig;
   }
 
@@ -482,7 +476,6 @@ export class Config {
   }
 
   getGeminiClient(): GeminiClient {
-    console.log('Config: getGeminiClient');
     return this.geminiClient;
   }
 

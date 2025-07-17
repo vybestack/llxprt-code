@@ -63,6 +63,7 @@ export async function checkNextSpeaker(
   chat: GeminiChat,
   geminiClient: GeminiClient,
   abortSignal: AbortSignal,
+  providerName?: string,
 ): Promise<NextSpeakerResponse | null> {
   // We need to capture the curated history because there are many moments when the model will return invalid turns
   // that when passed back up to the endpoint will break subsequent calls. An example of this is when the model decides
@@ -144,8 +145,9 @@ export async function checkNextSpeaker(
     }
     return null;
   } catch (error) {
+    const provider = providerName || 'provider';
     console.warn(
-      'Failed to talk to Gemini endpoint when seeing if conversation should continue.',
+      `Failed to talk to ${provider} endpoint when seeing if conversation should continue.`,
       error,
     );
     return null;

@@ -98,7 +98,6 @@ interface AppInnerProps extends AppProps {
 }
 
 export const AppWrapper = (props: AppProps) => {
-  console.log('[HANG-DEBUG] AppWrapper: render');
   return (
     <SessionStatsProvider>
       <App {...props} />

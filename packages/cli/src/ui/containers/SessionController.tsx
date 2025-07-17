@@ -103,7 +103,6 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   config,
   isAuthenticating = false,
 }) => {
-  console.log('[HANG-DEBUG] SessionController: render');
   // Initialize state with current values
   const getInitialProvider = () => {
     try {

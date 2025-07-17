@@ -93,16 +93,13 @@ import { homedir } from 'os';
 import { join } from 'path';
 
 export async function main() {
-  console.log('[HANG-DEBUG] main: START');
   const llxprtDir = join(homedir(), '.llxprt');
   if (!existsSync(llxprtDir)) {
     mkdirSync(llxprtDir, { recursive: true });
   }
 
   const workspaceRoot = process.cwd();
-  console.log('[HANG-DEBUG] main: loading settings');
   const settings = loadSettings(workspaceRoot);
-  console.log('[HANG-DEBUG] main: parsing arguments');
   const argv = await parseArguments();
 
   await cleanupCheckpoints();
@@ -115,16 +112,13 @@ export async function main() {
     process.exit(1);
   }
 
-  console.log('[HANG-DEBUG] main: loading extensions');
   const extensions = loadExtensions(workspaceRoot);
-  console.log('[HANG-DEBUG] main: loading cli config');
   const config = await loadCliConfig(
     settings.merged,
     extensions,
     sessionId,
     argv,
   );
-  console.log('[HANG-DEBUG] main: cli config loaded');
 
   const providerManager = getProviderManager(config);
   const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
@@ -158,9 +152,7 @@ export async function main() {
 
   setMaxSizedBoxDebugging(config.getDebugMode());
 
-  console.log('[HANG-DEBUG] main: initializing config');
   await config.initialize();
-  console.log('[HANG-DEBUG] main: config initialized');
 
   if (settings.merged.theme) {
     if (!themeManager.setActiveTheme(settings.merged.theme)) {
@@ -250,7 +242,6 @@ export async function main() {
 
   const shouldBeInteractive =
     !!argv.promptInteractive || (process.stdin.isTTY && !input);
-  console.log(`[HANG-DEBUG] main: shouldBeInteractive = ${shouldBeInteractive}`);
 
   function handleError(error: Error, errorInfo: ErrorInfo) {
     // Log to console for debugging
@@ -270,7 +261,6 @@ export async function main() {
 
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (shouldBeInteractive) {
-    console.log('[HANG-DEBUG] main: Entering interactive mode');
     const version = await getCliVersion();
     setWindowTitle(basename(workspaceRoot), settings);
 
@@ -288,7 +278,6 @@ export async function main() {
       }
     }
 
-    console.log('[HANG-DEBUG] main: Rendering AppWrapper');
     const instance = render(
       <React.StrictMode>
         <ErrorBoundary

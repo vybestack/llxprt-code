@@ -1,6 +1,8 @@
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../types.js';
 
+const MAX_ACCUMULATOR_SIZE = 10000; // Prevent unbounded accumulator growth
+
 // Response API event types
 interface ResponsesApiEvent {
   type: string;
@@ -110,6 +112,7 @@ export async function* parseResponsesStream(
                   // Check if we have complete reasoning JSON
                   try {
                     const parsed = JSON.parse(textAccumulator);
+                    console.log('[O3 DEBUG] Raw parsed JSON:', JSON.stringify(parsed, null, 2));
                     if (parsed.reasoning && parsed.next_speaker) {
                       // Format reasoning nicely
                       yield {
@@ -132,7 +135,38 @@ export async function* parseResponsesStream(
                     // Check if this looks like the start of JSON
                     if (textAccumulator.trim().startsWith('{') && textAccumulator.includes('"reasoning"')) {
                       // Still accumulating reasoning JSON, don't yield yet
+                      if (textAccumulator.length > MAX_ACCUMULATOR_SIZE) {
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: textAccumulator,
+                        };
+                        textAccumulator = '';
+                      }
                       continue;
+                    }
+                    // Check if the delta itself is complete JSON
+                    try {
+                      const parsed = JSON.parse(event.delta);
+                      console.log('[O3 DEBUG] Delta parsed JSON:', JSON.stringify(parsed, null, 2));
+                      if (parsed.reasoning !== undefined && parsed.next_speaker !== undefined) {
+                        // This is complete O3 JSON in a single delta
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                        };
+                        // Check if there's an answer/response field
+                        if (parsed.answer || parsed.response) {
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: parsed.answer || parsed.response,
+                          };
+                        }
+                        // Reset accumulator
+                        textAccumulator = '';
+                        continue;
+                      }
+                    } catch {
+                      // Not JSON, continue with regular text handling
                     }
                     // Regular text, yield it
                     yield {
@@ -153,6 +187,7 @@ export async function* parseResponsesStream(
                   // Check if we have complete reasoning JSON
                   try {
                     const parsed = JSON.parse(textAccumulator);
+                    console.log('[O3 DEBUG] Raw parsed JSON:', JSON.stringify(parsed, null, 2));
                     if (parsed.reasoning && parsed.next_speaker) {
                       // Format reasoning nicely
                       yield {
@@ -175,7 +210,38 @@ export async function* parseResponsesStream(
                     // Check if this looks like the start of JSON
                     if (textAccumulator.trim().startsWith('{') && textAccumulator.includes('"reasoning"')) {
                       // Still accumulating reasoning JSON, don't yield yet
+                      if (textAccumulator.length > MAX_ACCUMULATOR_SIZE) {
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: textAccumulator,
+                        };
+                        textAccumulator = '';
+                      }
                       continue;
+                    }
+                    // Check if the delta itself is complete JSON
+                    try {
+                      const parsed = JSON.parse(event.delta);
+                      console.log('[O3 DEBUG] Delta parsed JSON:', JSON.stringify(parsed, null, 2));
+                      if (parsed.reasoning !== undefined && parsed.next_speaker !== undefined) {
+                        // This is complete O3 JSON in a single delta
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                        };
+                        // Check if there's an answer/response field
+                        if (parsed.answer || parsed.response) {
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: parsed.answer || parsed.response,
+                          };
+                        }
+                        // Reset accumulator
+                        textAccumulator = '';
+                        continue;
+                      }
+                    } catch {
+                      // Not JSON, continue with regular text handling
                     }
                     // Regular text, yield it
                     yield {
@@ -206,6 +272,7 @@ export async function* parseResponsesStream(
                       // Check if this is reasoning JSON
                       try {
                         const parsed = JSON.parse(content.text);
+                        console.log('[O3 DEBUG] Item parsed JSON:', JSON.stringify(parsed, null, 2));
                         if (parsed.reasoning && parsed.next_speaker) {
                           // This is reasoning JSON - format it nicely
                           yield {
@@ -282,6 +349,8 @@ export async function* parseResponsesStream(
                     functionCalls.delete(event.item.id);
                   }
                 } else if (event.item?.type === 'message') {
+                  // Reset accumulator at message boundaries
+                  textAccumulator = '';
                   // Handle completed message items
                   if (event.item.content?.length) {
                     const content = event.item.content[0];
@@ -289,6 +358,7 @@ export async function* parseResponsesStream(
                       // Check if this is reasoning JSON
                       try {
                         const parsed = JSON.parse(content.text);
+                        console.log('[O3 DEBUG] Done item parsed JSON:', JSON.stringify(parsed, null, 2));
                         if (parsed.reasoning && parsed.next_speaker) {
                           // This is reasoning JSON - format it nicely
                           yield {

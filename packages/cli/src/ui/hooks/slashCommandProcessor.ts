@@ -241,7 +241,7 @@ export const useSlashCommandProcessor = (
       // `/help` and `/clear` have been migrated and REMOVED from this list.
       {
         name: 'docs',
-        description: 'open full Gemini CLI documentation in your browser',
+        description: 'open full LLxprt Code documentation in your browser',
         action: async (_mainCommand, _subCommand, _args) => {
           const docsUrl = 'https://goo.gle/gemini-cli-docs';
           if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
@@ -583,7 +583,7 @@ export const useSlashCommandProcessor = (
       },
       {
         name: 'tools',
-        description: 'list available Gemini CLI tools',
+        description: 'list available LLxprt Code tools',
         action: async (_mainCommand, _subCommand, _args) => {
           // Check if the _subCommand includes a specific flag to control description visibility
           let useShowDescriptions = showToolDescriptions;
@@ -670,6 +670,10 @@ export const useSlashCommandProcessor = (
 
             if (activeProvider.setModel) {
               activeProvider.setModel(modelName);
+              // Keep config model in sync so /about shows correct model
+              if (config) {
+                config.setModel(modelName);
+              }
               addMessage({
                 type: MessageType.INFO,
                 content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
@@ -719,6 +723,12 @@ export const useSlashCommandProcessor = (
 
             const fromProvider = currentProvider || 'none';
             providerManager.setActiveProvider(providerName);
+
+            // Update config model to provider default
+            const newActiveProvider = providerManager.getActiveProvider();
+            if (config && newActiveProvider.getCurrentModel) {
+              config.setModel(newActiveProvider.getCurrentModel());
+            }
 
             // Set the appropriate auth type based on provider
             if (providerName === 'gemini') {

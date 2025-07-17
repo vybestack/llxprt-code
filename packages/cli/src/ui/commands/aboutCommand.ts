@@ -22,7 +22,31 @@ export const aboutCommand: SlashCommand = {
         process.env.SEATBELT_PROFILE || 'unknown'
       })`;
     }
-    const modelVersion = context.services.config?.getModel() || 'Unknown';
+    // Determine the currently selected model. Prefer the active provider's
+    // model as the source of truth because it is guaranteed to be up-to-date
+    // when users switch models via the /model or /provider commands.
+    let modelVersion = 'Unknown';
+    try {
+      // Dynamically import to avoid a hard dependency for tests that mock the
+      // provider manager.
+      const { getProviderManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
+      const providerManager = getProviderManager();
+      const activeProvider = providerManager.getActiveProvider();
+      if (activeProvider) {
+        const providerName = providerManager.getActiveProviderName();
+        const currentModel = activeProvider.getCurrentModel
+          ? activeProvider.getCurrentModel()
+          : context.services.config?.getModel() || 'Unknown';
+        modelVersion = providerName ? `${providerName}:${currentModel}` : currentModel;
+      }
+    } catch {
+      // Fallback to config if the provider manager cannot be resolved (e.g. in
+      // unit tests).
+      modelVersion = context.services.config?.getModel() || 'Unknown';
+    }
+
     const cliVersion = await getCliVersion();
     const selectedAuthType =
       context.services.settings.merged.selectedAuthType || '';
