@@ -76,7 +76,7 @@ interface ResponsesApiEvent {
 /** Return true if the chunk starts with "{" or "[".  Used to decide
     whether it even makes sense to call JSON.parse on the chunk. */
 function looksLikeJSONObjectOrArray(s: string): boolean {
-  return /^[\[{]/.test(s.trim());
+  return /^[[{]/.test(s.trim());
 }
 
 export async function* parseResponsesStream(

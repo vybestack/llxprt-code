@@ -132,7 +132,7 @@ export async function main() {
   }
 
   if (config.getListExtensions()) {
-    for (const extension of extensions) {
+    for (const _extension of extensions) {
       // List extensions without console.log
     }
     process.exit(0);

@@ -8,9 +8,9 @@ import { test, describe, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { TestRig } from './test-helper.js';
 import { spawn } from 'child_process';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { writeFileSync, unlinkSync } from 'fs';
+import { writeFileSync, unlinkSync, mkdirSync } from 'fs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const serverScriptPath = join(__dirname, './temp-server.js');
@@ -64,7 +64,19 @@ describe('simple-mcp-server', () => {
 
   test('should add two numbers', () => {
     rig.setup('should add two numbers');
-    const output = rig.run('add 5 and 10');
+    // Create a settings file with MCP server configuration
+    const settingsPath = join(rig.testDir, '.llxprt', 'settings.json');
+    mkdirSync(dirname(settingsPath), { recursive: true });
+    writeFileSync(settingsPath, JSON.stringify({
+      mcpServers: {
+        'addition-server': {
+          command: 'node',
+          args: [serverScriptPath]
+        }
+      }
+    }, null, 2));
+    
+    const output = rig.run('Add 5 and 10 using the add tool.');
     assert.ok(output.includes('15'));
   });
 });

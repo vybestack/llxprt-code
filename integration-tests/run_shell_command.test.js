@@ -13,7 +13,7 @@ test('should be able to run a shell command', async (t) => {
   rig.setup(t.name);
   rig.createFile('blah.txt', 'some content');
 
-  const prompt = `Can you use ls to list the contexts of the current folder`;
+  const prompt = `List the files in this directory using ls. Run it from the current directory.`;
   const result = rig.run(prompt);
 
   assert.ok(result.includes('blah.txt'));
@@ -24,7 +24,7 @@ test('should be able to run a shell command via stdin', async (t) => {
   rig.setup(t.name);
   rig.createFile('blah.txt', 'some content');
 
-  const prompt = `Can you use ls to list the contexts of the current folder`;
+  const prompt = `List the files in this directory using ls. Run it from the current directory.`;
   const result = rig.run({ stdin: prompt });
 
   assert.ok(result.includes('blah.txt'));

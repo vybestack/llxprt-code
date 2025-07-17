@@ -94,6 +94,10 @@ export async function runNonInteractive(
           case 'loop_detected':
             console.error('\nLoop detected in conversation.');
             return;
+
+          default:
+            // Handle any unexpected event types
+            break;
         }
       }
 
