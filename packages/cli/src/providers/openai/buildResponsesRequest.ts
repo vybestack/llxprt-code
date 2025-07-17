@@ -203,10 +203,11 @@ export function buildResponsesRequest(
     
     // Add function call outputs
     if (functionCallOutputs.length > 0) {
-      console.log('[buildResponsesRequest] Adding function_call_output items:', functionCallOutputs);
+      console.log('[buildResponsesRequest] Adding function_call_output items:', JSON.stringify(functionCallOutputs, null, 2));
       inputItems.push(...functionCallOutputs);
     }
     
+    console.log('[buildResponsesRequest] Final input array:', JSON.stringify(inputItems, null, 2));
     request.input = inputItems;
   }
 

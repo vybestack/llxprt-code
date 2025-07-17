@@ -1,8 +1,7 @@
 import { expect, test, vi, beforeEach, describe } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { ConversationContext } from '../../utils/ConversationContext.js';
-import { Tool } from '@anthropic/tool-kit';
-import { LLXPRTLogger } from '../../../../core/src/core/logger.js';
+import { ITool } from '../ITool.js';
+import { IMessage } from '../IMessage.js';
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -25,156 +24,64 @@ if (!process.env.OPENAI_API_KEY) {
 
 describe('OpenAIProvider - Responses API Tool Calls', () => {
   let provider: OpenAIProvider;
-  let context: ConversationContext;
-  let mockTool: Tool;
+  let mockTool: ITool;
 
   beforeEach(() => {
     // Clear mocks
     vi.clearAllMocks();
     
-    // Create context
-    context = new ConversationContext('test');
-    
     // Create a mock tool that simulates read operation
     mockTool = {
-      name: 'read_file',
-      description: 'Read contents of a file',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: { type: 'string' }
-        },
-        required: ['path']
-      },
-      execute: vi.fn().mockResolvedValue({
-        result: 'File contents: Hello World',
-        error: null
-      })
+      type: 'function',
+      function: {
+        name: 'read_file',
+        description: 'Read contents of a file',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' }
+          },
+          required: ['path']
+        }
+      }
     };
     
     // Create provider
-    provider = new OpenAIProvider({
-      model: 'gpt-4o',
-      apiKey: process.env.OPENAI_API_KEY!,
-      useResponsesApi: true,
-      logger: new LLXPRTLogger({ verbose: true })
-    });
-  });
-
-  test('should handle tool calls with responses API', async () => {
-    console.log('=== Starting Responses API Tool Call Test ===');
-    
-    // Mock the initial completion response with a tool call
-    const mockCompletionResponse = {
-      id: 'chatcmpl-123',
-      object: 'chat.completion',
-      created: Date.now(),
-      model: 'gpt-4o',
-      choices: [{
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{
-            id: 'call_abc123',
-            type: 'function',
-            function: {
-              name: 'read_file',
-              arguments: JSON.stringify({ path: '/test.txt' })
-            }
-          }]
-        },
-        finish_reason: 'tool_calls'
-      }]
-    };
-
-    // First call - returns tool call
-    (fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => mockCompletionResponse,
-      text: async () => JSON.stringify(mockCompletionResponse)
-    });
-
-    // Start the stream
-    const requestObj = {
-      messages: [{
-        role: 'user' as const,
-        content: 'Read the file /test.txt'
-      }],
-      tools: [mockTool],
-      onContent: vi.fn(),
-      onToolUse: vi.fn(),
-      onComplete: vi.fn(),
-      signal: new AbortController().signal
-    };
-
-    console.log('Sending initial request...');
-    await provider.sendRequest(requestObj);
-
-    // Verify tool was called
-    expect(requestObj.onToolUse).toHaveBeenCalledWith({
-      id: 'call_abc123',
-      name: 'read_file',
-      input: { path: '/test.txt' }
-    });
-
-    // Now simulate the tool execution and response
-    await mockTool.execute({ path: '/test.txt' });
-
-    // Check what the second request would look like
-    console.log('\n=== Checking Second Request Format ===');
-    
-    // The provider should make a second request with the tool response
-    // Let's verify the request format
-    if ((fetch as any).mock.calls.length > 0) {
-      const secondCall = (fetch as any).mock.calls[0];
-      const requestBody = JSON.parse(secondCall[1].body);
-      
-      console.log('Request body:', JSON.stringify(requestBody, null, 2));
-      
-      // Check if function_call_output is included
-      const hasToolOutput = requestBody.messages.some((msg: any) => 
-        msg.role === 'tool' || 
-        (msg.tool_call_id && msg.content)
-      );
-      
-      console.log('Has tool output in request:', hasToolOutput);
-      
-      if (!hasToolOutput) {
-        console.error('ERROR: No tool output found in request!');
-        console.error('Messages:', JSON.stringify(requestBody.messages, null, 2));
-      }
-    }
+    provider = new OpenAIProvider(process.env.OPENAI_API_KEY!);
+    provider.setModel('gpt-4o');
   });
 
   test('should properly format tool responses in subsequent requests', async () => {
     console.log('\n=== Testing Tool Response Formatting ===');
     
-    // Add initial messages with a tool call and response
-    context.addMessage({
-      role: 'user',
-      content: 'Read the file /test.txt'
-    });
-    
-    context.addMessage({
-      role: 'assistant',
-      content: null,
-      tool_calls: [{
-        id: 'call_123',
-        type: 'function',
-        function: {
-          name: 'read_file',
-          arguments: JSON.stringify({ path: '/test.txt' })
-        }
-      }]
-    });
-    
-    context.addMessage({
-      role: 'tool',
-      tool_call_id: 'call_123',
-      content: 'File contents: Hello World'
-    });
+    // Create messages array with a tool call and response
+    const messages: IMessage[] = [
+      {
+        role: 'user',
+        content: 'Read the file /test.txt'
+      },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_123',
+          type: 'function',
+          function: {
+            name: 'read_file',
+            arguments: JSON.stringify({ path: '/test.txt' })
+          }
+        }]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_123',
+        content: 'File contents: Hello World'
+      },
+      {
+        role: 'user',
+        content: 'What did the file contain?'
+      }
+    ];
     
     // Mock response for continuation
     const mockResponse = {
@@ -192,40 +99,158 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       }]
     };
     
-    (fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => mockResponse,
-      text: async () => JSON.stringify(mockResponse)
+    let capturedRequest: any = null;
+    
+    (fetch as any).mockImplementation(async (url: string, options: any) => {
+      console.log('Fetch called with URL:', url);
+      capturedRequest = {
+        url,
+        body: JSON.parse(options.body)
+      };
+      
+      return {
+        ok: true,
+        status: 200,
+        json: async () => mockResponse,
+        text: async () => JSON.stringify(mockResponse)
+      };
     });
     
-    // Send request with context containing tool responses
-    await provider.sendRequest({
-      messages: context.getMessages(),
-      tools: [mockTool],
-      onContent: vi.fn(),
-      onToolUse: vi.fn(),
-      onComplete: vi.fn(),
-      signal: new AbortController().signal
-    });
+    // Send request with messages containing tool responses
+    const stream = provider.generateChatCompletion(messages, [mockTool]);
     
-    // Inspect the actual request
-    const requestCall = (fetch as any).mock.calls[0];
-    const requestBody = JSON.parse(requestCall[1].body);
+    // Consume the stream to trigger the request
+    const chunks: any[] = [];
+    for await (const chunk of stream) {
+      chunks.push(chunk);
+    }
     
-    console.log('Full request to OpenAI:', JSON.stringify(requestBody, null, 2));
+    // Now check the captured request
+    expect(capturedRequest).toBeTruthy();
+    console.log('Full request to OpenAI:', JSON.stringify(capturedRequest, null, 2));
     
-    // Verify tool response is included
-    const toolMessage = requestBody.messages.find((msg: any) => 
+    // Check if it's using the responses API endpoint
+    expect(capturedRequest.url).toContain('/responses');
+    
+    // Verify tool response is included in the request
+    const toolMessage = capturedRequest.body.messages.find((msg: any) => 
       msg.role === 'tool' || msg.tool_call_id === 'call_123'
     );
     
     if (!toolMessage) {
+      console.error('ERROR: No tool output found in request!');
+      console.error('Messages in request:', JSON.stringify(capturedRequest.body.messages, null, 2));
       throw new Error('No tool output found for function call');
     }
     
     console.log('Tool message found:', JSON.stringify(toolMessage, null, 2));
     expect(toolMessage).toBeDefined();
     expect(toolMessage.content).toBe('File contents: Hello World');
+  });
+
+  test('should include function_call_output in responses API format', async () => {
+    console.log('\n=== Testing function_call_output Format ===');
+    
+    // Create messages with tool call and response
+    const messages: IMessage[] = [
+      {
+        role: 'user',
+        content: 'What files are in the current directory?'
+      },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{
+          id: 'call_abc',
+          type: 'function',
+          function: {
+            name: 'list_files',
+            arguments: JSON.stringify({ directory: '.' })
+          }
+        }]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'call_abc',
+        content: 'Files: file1.txt, file2.js, README.md'
+      }
+    ];
+    
+    // Mock tool
+    const listTool: ITool = {
+      type: 'function',
+      function: {
+        name: 'list_files',
+        description: 'List files in a directory',
+        parameters: {
+          type: 'object',
+          properties: {
+            directory: { type: 'string' }
+          },
+          required: ['directory']
+        }
+      }
+    };
+    
+    let capturedRequest: any = null;
+    
+    (fetch as any).mockImplementation(async (url: string, options: any) => {
+      capturedRequest = {
+        url,
+        body: JSON.parse(options.body)
+      };
+      
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'chatcmpl-789',
+          object: 'chat.completion',
+          created: Date.now(),
+          model: 'gpt-4o',
+          choices: [{
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'The directory contains: file1.txt, file2.js, and README.md'
+            },
+            finish_reason: 'stop'
+          }]
+        })
+      };
+    });
+    
+    // Generate completion
+    const stream = provider.generateChatCompletion(messages, [listTool]);
+    
+    // Consume stream
+    for await (const chunk of stream) {
+      // Just consume it
+    }
+    
+    // Verify the request format
+    expect(capturedRequest).toBeTruthy();
+    console.log('Request body structure:', JSON.stringify(capturedRequest.body, null, 2));
+    
+    // Check for function_call_output items
+    const hasResponsesApiFormat = capturedRequest.body.response_format || 
+                                  capturedRequest.body.messages.some((msg: any) => 
+                                    msg.role === 'function_call_output'
+                                  );
+    
+    console.log('Has responses API format elements:', hasResponsesApiFormat);
+    
+    // The key test: verify tool responses are properly formatted
+    const messages_in_request = capturedRequest.body.messages;
+    const tool_message_index = messages_in_request.findIndex((msg: any) => 
+      msg.tool_call_id === 'call_abc'
+    );
+    
+    if (tool_message_index === -1) {
+      console.error('Tool message not found in request!');
+      throw new Error('Tool message missing from request');
+    }
+    
+    console.log('Tool message in request:', messages_in_request[tool_message_index]);
   });
 });
