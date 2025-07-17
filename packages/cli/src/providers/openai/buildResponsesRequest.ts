@@ -147,7 +147,7 @@ export function buildResponsesRequest(
             if (prevMsg.role === 'assistant' && prevMsg.tool_calls) {
               // Check if this assistant message contains the tool call for our tool response
               const hasMatchingCall = prevMsg.tool_calls.some(
-                (call: any) => call.id === msg.tool_call_id
+                (call) => call.id === msg.tool_call_id
               );
               if (hasMatchingCall) {
                 startIndex = i;

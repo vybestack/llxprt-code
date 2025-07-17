@@ -116,9 +116,15 @@ export async function* parseResponsesStream(
                         role: ContentGeneratorRole.ASSISTANT,
                         content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
                       };
-                      // Reset accumulator for actual response
+                      // Check if there's an answer/response field
+                      if (parsed.answer || parsed.response) {
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: parsed.answer || parsed.response,
+                        };
+                      }
+                      // Reset accumulator
                       textAccumulator = '';
-                      // Continue to process more deltas
                       continue;
                     }
                   } catch {
@@ -153,9 +159,15 @@ export async function* parseResponsesStream(
                         role: ContentGeneratorRole.ASSISTANT,
                         content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
                       };
-                      // Reset accumulator for actual response
+                      // Check if there's an answer/response field
+                      if (parsed.answer || parsed.response) {
+                        yield {
+                          role: ContentGeneratorRole.ASSISTANT,
+                          content: parsed.answer || parsed.response,
+                        };
+                      }
+                      // Reset accumulator
                       textAccumulator = '';
-                      // Continue to process more deltas
                       continue;
                     }
                   } catch {
@@ -200,6 +212,13 @@ export async function* parseResponsesStream(
                             role: ContentGeneratorRole.ASSISTANT,
                             content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
                           };
+                          // Check if there's an answer/response field
+                          if (parsed.answer || parsed.response) {
+                            yield {
+                              role: ContentGeneratorRole.ASSISTANT,
+                              content: parsed.answer || parsed.response,
+                            };
+                          }
                         } else {
                           // Valid JSON but not reasoning
                           yield {
@@ -276,6 +295,13 @@ export async function* parseResponsesStream(
                             role: ContentGeneratorRole.ASSISTANT,
                             content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
                           };
+                          // Check if there's an answer/response field
+                          if (parsed.answer || parsed.response) {
+                            yield {
+                              role: ContentGeneratorRole.ASSISTANT,
+                              content: parsed.answer || parsed.response,
+                            };
+                          }
                         } else {
                           // Valid JSON but not reasoning
                           yield {
