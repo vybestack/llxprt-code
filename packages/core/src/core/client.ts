@@ -137,20 +137,18 @@ export class GeminiClient {
     if (this.isInitialized()) {
       return;
     }
-    console.log('GeminiClient: lazyInitialize START');
     const contentGenConfig = this.config.getContentGeneratorConfig();
     if (!contentGenConfig) {
-      throw new Error('Content generator config not initialized. Call config.refreshAuth() first.');
+      throw new Error(
+        'Content generator config not initialized. Call config.refreshAuth() first.',
+      );
     }
     this.contentGenerator = await createContentGenerator(
       contentGenConfig,
       this.config,
       this.config.getSessionId(),
     );
-    console.log('GeminiClient: lazyInitialize - content generator created');
     this.chat = await this.startChat();
-    console.log('GeminiClient: lazyInitialize - chat started');
-    console.log('GeminiClient: lazyInitialize END');
   }
 
   getContentGenerator(): ContentGenerator {

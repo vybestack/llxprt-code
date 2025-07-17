@@ -126,7 +126,7 @@ export async function getOauthClient(
 
   // Try web-based flow first with timeout, then fall back to manual code entry
   let success = false;
-  
+
   try {
     // Attempt web-based authentication with 30 second timeout
     console.log('Attempting to open browser for authentication...');
@@ -135,7 +135,7 @@ export async function getOauthClient(
     console.log('\nBrowser authentication failed or timed out.');
     console.log('Falling back to manual authentication...\n');
   }
-  
+
   // If web flow failed, try manual code entry
   if (!success) {
     const maxRetries = 2;
@@ -156,18 +156,21 @@ export async function getOauthClient(
   return client;
 }
 
-async function authWithWebTimeout(client: OAuth2Client, timeoutMs: number): Promise<boolean> {
+async function authWithWebTimeout(
+  client: OAuth2Client,
+  timeoutMs: number,
+): Promise<boolean> {
   const { authUrl, loginCompletePromise } = await _authWithWeb(client);
-  
+
   // Open browser
   const open = (await import('open')).default;
   await open(authUrl);
-  
+
   // Wait for authentication with timeout
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error('Authentication timeout')), timeoutMs);
   });
-  
+
   await Promise.race([loginCompletePromise, timeoutPromise]);
   return true;
 }
@@ -333,7 +336,7 @@ async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
 async function cacheCredentials(credentials: Credentials) {
   const filePath = getCachedCredentialPath();
   const dir = path.dirname(filePath);
-  
+
   try {
     // Check if directory exists first to avoid unnecessary mkdir calls
     await fs.access(dir);

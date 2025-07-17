@@ -10,7 +10,11 @@ import * as os from 'os';
 import { isNodeError } from '../utils/errors.js';
 import { exec } from 'node:child_process';
 import { simpleGit, SimpleGit, CheckRepoActions } from 'simple-git';
-import { getProjectHash, LLXPRT_DIR, ensureLlxprtDirExists } from '../utils/paths.js';
+import {
+  getProjectHash,
+  LLXPRT_DIR,
+  ensureLlxprtDirExists,
+} from '../utils/paths.js';
 
 export class GitService {
   private projectRoot: string;

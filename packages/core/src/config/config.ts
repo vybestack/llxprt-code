@@ -288,14 +288,13 @@ export class Config {
       await this.getGitService();
     }
     this.toolRegistry = await this.createToolRegistry();
-    
+
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this);
   }
 
   async refreshAuth(authMethod: AuthType) {
-    console.log('Config: refreshAuth START');
     this.contentGeneratorConfig = await createContentGeneratorConfig(
       this.model,
       authMethod,
@@ -315,7 +314,6 @@ export class Config {
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.modelSwitchedDuringSession = false;
-    console.log('Config: refreshAuth END');
   }
 
   getSessionId(): string {

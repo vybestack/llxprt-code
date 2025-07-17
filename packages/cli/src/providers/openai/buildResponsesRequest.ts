@@ -126,10 +126,6 @@ export function buildResponsesRequest(
   // Handle message trimming for stateful mode
   let processedMessages = messages;
   if (messages && conversationId) {
-    console.warn(
-      '[buildResponsesRequest] conversationId provided in stateful mode. Only the most recent messages will be sent to maintain context window.',
-    );
-
     // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
     if (messages.length > 2) {
       // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
@@ -169,9 +165,6 @@ export function buildResponsesRequest(
       startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
 
       processedMessages = messages.slice(startIndex);
-      console.warn(
-        `[buildResponsesRequest] Trimmed messages from ${messages.length} to ${processedMessages.length} for stateful mode (preserving tool call/response pairs).`,
-      );
     }
   }
 
@@ -242,17 +235,8 @@ export function buildResponsesRequest(
 
     // Add function call outputs
     if (functionCallOutputs.length > 0) {
-      console.log(
-        '[buildResponsesRequest] Adding function_call_output items:',
-        JSON.stringify(functionCallOutputs, null, 2),
-      );
       inputItems.push(...functionCallOutputs);
     }
-
-    console.log(
-      '[buildResponsesRequest] Final input array:',
-      JSON.stringify(inputItems, null, 2),
-    );
     request.input = inputItems;
   }
 

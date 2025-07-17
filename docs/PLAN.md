@@ -51,9 +51,11 @@ Written by architect worker BEFORE any implementation planning.
 # Feature Specification: <Name>
 
 ## Purpose
+
 Clear statement of why this feature exists and what problem it solves.
 
 ## Architectural Decisions
+
 - **Pattern**: (e.g., MVC, Event-Driven, Repository)
 - **Technology Stack**: Specific versions and libraries
 - **Data Flow**: How data moves through the system
@@ -61,16 +63,18 @@ Clear statement of why this feature exists and what problem it solves.
 
 ## Project Structure
 ```
+
 src/
-  <module>/
-    types.ts       # Type definitions
-    service.ts     # Business logic
-    repository.ts  # Data access
+<module>/
+types.ts # Type definitions
+service.ts # Business logic
+repository.ts # Data access
 test/
-  <module>/
-    service.spec.ts
-    repository.spec.ts
-```
+<module>/
+service.spec.ts
+repository.spec.ts
+
+````
 
 ## Technical Environment
 - **Type**: CLI Tool | Web Service | IDE Extension | Library
@@ -100,9 +104,10 @@ const LoginRequestSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8)
 });
-```
+````
 
 ## Example Data
+
 ```json
 {
   "validLogin": {
@@ -117,16 +122,19 @@ const LoginRequestSchema = z.object({
 ```
 
 ## Constraints
+
 - No external HTTP calls in unit tests
 - All async operations must have timeouts
 - Password hashing must use bcrypt with cost 12
 - Database transactions for multi-table operations
 
 ## Performance Requirements
+
 - Login endpoint: <200ms p95 latency
 - Token validation: <10ms
 - Concurrent users: 1000
-```
+
+````
 
 ---
 
@@ -139,14 +147,15 @@ Read specification.md and create detailed domain analysis.
 Output to analysis/domain-model.md
 Include:
 - Entity relationships
-- State transitions  
+- State transitions
 - Business rules
 - Edge cases
 - Error scenarios
 " &
-```
+````
 
 ### Verification Must Check:
+
 - All REQ tags addressed
 - No implementation details
 - Complete edge case coverage
@@ -157,6 +166,7 @@ Include:
 ## Phase 2: Pseudocode Phase
 
 ### Worker Launch:
+
 ```bash
 claude --dangerously-skip-permissions -p "
 Based on specification.md and analysis/domain-model.md,
@@ -172,6 +182,7 @@ DO NOT write actual TypeScript, only pseudocode
 ```
 
 ### Verification Must Check:
+
 - Pseudocode covers all requirements
 - No actual implementation code
 - Clear algorithm documentation
@@ -188,6 +199,7 @@ Each feature follows strict 3-phase TDD cycle:
 **Goal**: Create minimal skeleton that compiles
 
 **Worker Prompt**:
+
 ```bash
 claude --dangerously-skip-permissions -p "
 Implement stub for <feature> based on:
@@ -205,16 +217,18 @@ Output status to workers/phase-03.json
 ```
 
 **Verification MUST**:
+
 - Grep for any logic beyond `throw new Error('NotYetImplemented')`
 - Verify TypeScript compiles
 - Check all exports match specification
 - Fail if any actual implementation found
 
-### B. TDD Phase  
+### B. TDD Phase
 
 **CRITICAL**: This phase determines success/failure of implementation
 
 **Worker Prompt**:
+
 ```bash
 claude --dangerously-skip-permissions -p "
 Write comprehensive BEHAVIORAL tests for <feature> based on:
@@ -256,6 +270,7 @@ Output status to workers/phase-04.json
 ```
 
 **Verification MUST**:
+
 ```bash
 # Check for mock theater (sophisticated fraud)
 grep -r "toHaveBeenCalled\|toHaveBeenCalledWith" test/ && echo "FAIL: Mock verification found"
@@ -296,6 +311,7 @@ grep -r "private\|_internal\|#private" test/ && echo "FAIL: Testing private memb
 ### C. Implementation Phase
 
 **Worker Prompt**:
+
 ```bash
 claude --dangerously-skip-permissions -p "
 Implement <feature> to make ALL tests pass.
@@ -319,6 +335,7 @@ Output status to workers/phase-05.json
 ```
 
 **Verification MUST**:
+
 ```bash
 # All tests pass
 npm test test/<feature> || exit 1
@@ -343,6 +360,7 @@ grep -r "mock\|fake\|stub\|\\[\\]\s*;\\|return\s*\[\]" src/ | \
 ## Advanced Verification Patterns
 
 ### 1. Semantic Analysis
+
 ```bash
 # Verify implementation matches pseudocode
 claude --dangerously-skip-permissions -p "
@@ -357,6 +375,7 @@ Check:
 ```
 
 ### 2. Integration Coherence
+
 ```bash
 # Verify components work together
 claude --dangerously-skip-permissions -p "
@@ -381,8 +400,8 @@ function processData(items: Item[]): Result[] {
 }
 
 // FRAUD: Test expecting stubs
-it("should throw NotYetImplemented", () => {
-  expect(() => service.method()).toThrow("NotYetImplemented");
+it('should throw NotYetImplemented', () => {
+  expect(() => service.method()).toThrow('NotYetImplemented');
 });
 ```
 
@@ -390,30 +409,30 @@ it("should throw NotYetImplemented", () => {
 
 ```typescript
 // FRAUD: Mock Theater - Test verifies mock configuration
-it("should fetch user data", async () => {
-  mockDb.getUser.mockResolvedValue({ id: "123", name: "Test" });
-  const result = await service.getUser("123");
-  expect(result.name).toBe("Test"); // Just testing the mock!
+it('should fetch user data', async () => {
+  mockDb.getUser.mockResolvedValue({ id: '123', name: 'Test' });
+  const result = await service.getUser('123');
+  expect(result.name).toBe('Test'); // Just testing the mock!
 });
 
 // FRAUD: Structure Theater - Only verifies shape, not values
-it("should return user profile", async () => {
-  const result = await service.getUserProfile("123");
-  expect(result).toHaveProperty("id");
-  expect(result).toHaveProperty("name");
-  expect(result).toHaveProperty("email");
+it('should return user profile', async () => {
+  const result = await service.getUserProfile('123');
+  expect(result).toHaveProperty('id');
+  expect(result).toHaveProperty('name');
+  expect(result).toHaveProperty('email');
   // Could return { id: null, name: null, email: null }
 });
 
 // FRAUD: No-Op Verification - Tests that don't test
-it("should handle errors gracefully", async () => {
+it('should handle errors gracefully', async () => {
   const result = await service.processData([]);
   expect(() => result).not.toThrow();
   // Empty function would pass
 });
 
 // FRAUD: Implementation Testing - Tests internals not behavior
-it("should process items correctly", () => {
+it('should process items correctly', () => {
   const spy = jest.spyOn(service, '_transformData');
   service.processItems([1, 2, 3]);
   expect(spy).toHaveBeenCalledWith([1, 2, 3]);
@@ -421,12 +440,12 @@ it("should process items correctly", () => {
 });
 
 // FRAUD: Mock-Only Integration - No real integration
-it("should integrate with payment system", async () => {
+it('should integrate with payment system', async () => {
   mockPayment.charge.mockResolvedValue({ success: true });
   mockEmail.send.mockResolvedValue({ sent: true });
-  
+
   const result = await service.processOrder(order);
-  
+
   expect(mockPayment.charge).toHaveBeenCalled();
   expect(mockEmail.send).toHaveBeenCalled();
   expect(result.success).toBe(true);
@@ -441,11 +460,12 @@ it("should integrate with payment system", async () => {
 ```typescript
 // verification/behavioral-contract.ts
 interface BehaviorProof {
-  requirement: string;        // REQ-001.1
-  scenario: string;          // "Valid user login"
+  requirement: string; // REQ-001.1
+  scenario: string; // "Valid user login"
   given: Record<string, any>; // Input data
-  when: () => Promise<any>;  // Action to execute
-  then: {                    // Expected outcomes
+  when: () => Promise<any>; // Action to execute
+  then: {
+    // Expected outcomes
     output?: any;
     stateChanges?: Record<string, any>;
     sideEffects?: string[];
@@ -454,30 +474,30 @@ interface BehaviorProof {
 
 export async function verifyBehavior(
   test: TestCase,
-  implementation: Function
+  implementation: Function,
 ): Promise<ValidationResult> {
   // Extract behavior proof from test
   const proof = extractBehaviorProof(test);
-  
+
   // Run implementation with real data
   const actualOutput = await implementation(proof.given);
-  
+
   // Verify behavior matches specification
   if (!deepEqual(actualOutput, proof.then.output)) {
-    return { 
-      valid: false, 
-      reason: `Output mismatch: expected ${proof.then.output}, got ${actualOutput}` 
+    return {
+      valid: false,
+      reason: `Output mismatch: expected ${proof.then.output}, got ${actualOutput}`,
     };
   }
-  
+
   // Verify no mocks involved
   if (detectMockUsage(test)) {
-    return { 
-      valid: false, 
-      reason: "Test relies on mocks instead of real behavior" 
+    return {
+      valid: false,
+      reason: 'Test relies on mocks instead of real behavior',
     };
   }
-  
+
   return { valid: true };
 }
 
@@ -485,13 +505,13 @@ export async function verifyBehavior(
 export function detectMockTheater(testFile: string): string[] {
   const violations: string[] = [];
   const ast = parseTypeScript(testFile);
-  
+
   // Find mock setups
   const mockSetups = findMockSetups(ast);
-  
+
   // Find assertions
   const assertions = findAssertions(ast);
-  
+
   // Detect circular dependencies
   for (const assertion of assertions) {
     const mockValue = findMockValue(assertion, mockSetups);
@@ -499,7 +519,7 @@ export function detectMockTheater(testFile: string): string[] {
       violations.push(`Mock theater: test only verifies mock return value`);
     }
   }
-  
+
   return violations;
 }
 ```
@@ -512,28 +532,28 @@ export function detectMockTheater(testFile: string): string[] {
 # verification/integration-validator.ts
 export function validateIntegrationTests(testDir: string): ValidationResult {
   const integrationTests = glob.sync(`${testDir}/integration/**/*.spec.ts`);
-  
+
   for (const testFile of integrationTests) {
     const content = fs.readFileSync(testFile, 'utf8');
-    
+
     // Fail if mocks found in integration tests
     if (content.includes('jest.mock') || content.includes('mockImplementation')) {
-      return { 
-        valid: false, 
-        reason: `Integration test ${testFile} contains mocks` 
+      return {
+        valid: false,
+        reason: `Integration test ${testFile} contains mocks`
       };
     }
-    
+
     // Verify real database/service usage
-    if (!content.includes('TEST_DATABASE_URL') && 
+    if (!content.includes('TEST_DATABASE_URL') &&
         !content.includes('TEST_SERVICE_URL')) {
-      return { 
-        valid: false, 
-        reason: `Integration test ${testFile} doesn't use real services` 
+      return {
+        valid: false,
+        reason: `Integration test ${testFile} doesn't use real services`
       };
     }
   }
-  
+
   return { valid: true };
 }
 ```
@@ -570,24 +590,25 @@ export function validatePropertyTests(testDir: string): ValidationResult {
   const allTests = glob.sync(`${testDir}/**/*.spec.ts`);
   let totalTests = 0;
   let propertyTests = 0;
-  
+
   for (const testFile of allTests) {
     const content = fs.readFileSync(testFile, 'utf8');
     const testCount = (content.match(/it\(/g) || []).length;
-    const propertyTestCount = (content.match(/fc\.assert|fc\.property/g) || []).length;
-    
+    const propertyTestCount = (content.match(/fc\.assert|fc\.property/g) || [])
+      .length;
+
     totalTests += testCount;
     propertyTests += propertyTestCount;
   }
-  
+
   const percentage = (propertyTests / totalTests) * 100;
   if (percentage < 30) {
-    return { 
-      valid: false, 
-      reason: `Only ${percentage.toFixed(1)}% property-based tests (minimum 30%)` 
+    return {
+      valid: false,
+      reason: `Only ${percentage.toFixed(1)}% property-based tests (minimum 30%)`,
     };
   }
-  
+
   return { valid: true };
 }
 ```
@@ -597,6 +618,7 @@ export function validatePropertyTests(testDir: string): ValidationResult {
 ## Worker Execution Protocol
 
 ### 1. Parallel Analysis
+
 ```bash
 # Launch analysis workers in parallel
 claude --dangerously-skip-permissions -p "Analyze domain..." &
@@ -606,6 +628,7 @@ sleep 600
 ```
 
 ### 2. Sequential Implementation
+
 ```bash
 # Each 3-phase cycle must complete before next
 ./execute-phase.sh 03 03a  # auth-stub + verification
@@ -617,6 +640,7 @@ sleep 600
 ```
 
 ### 3. Enhanced Verification Gates
+
 ```bash
 #!/bin/bash
 # execute-phase.sh
@@ -638,21 +662,21 @@ fi
 # For TDD phase, run behavioral verification
 if [[ "$PHASE" == *"-tdd"* ]]; then
   echo "Running behavioral test verification..."
-  
+
   # Check for mock theater
   npx tsx verification/mock-theater-detector.ts test/
   [ $? -eq 0 ] || { echo "Mock theater detected"; exit 1; }
-  
+
   # Validate behavioral contracts
   npx tsx verification/behavioral-contract.ts test/
   [ $? -eq 0 ] || { echo "Behavioral contracts invalid"; exit 1; }
-  
+
   # Check integration tests if applicable
   if [ -d "test/integration" ]; then
     npx tsx verification/integration-validator.ts test/
     [ $? -eq 0 ] || { echo "Integration tests invalid"; exit 1; }
   fi
-  
+
   # Run mutation testing
   npx stryker run
   MUTATION_SCORE=$(jq -r '.metrics.mutationScore' .stryker-tmp/reports/mutation-report.json)
@@ -694,6 +718,7 @@ fi
 ## Example: Authentication Feature Plan
 
 ### Phase 03-05: Login Endpoint
+
 ```
 03-auth-login-stub.md
 03a-auth-login-stub-verification.md
@@ -704,9 +729,10 @@ fi
 ```
 
 ### Phase 06-08: Token Management
+
 ```
 06-auth-token-stub.md
-06a-auth-token-stub-verification.md  
+06a-auth-token-stub-verification.md
 07-auth-token-tdd.md      # 15 tests for JWT handling
 07a-auth-token-tdd-verification.md
 08-auth-token-impl.md
@@ -714,10 +740,11 @@ fi
 ```
 
 ### Phase 09-11: Password Reset
+
 ```
 09-auth-reset-stub.md
 09a-auth-reset-stub-verification.md
-10-auth-reset-tdd.md      # 18 tests for reset flow  
+10-auth-reset-tdd.md      # 18 tests for reset flow
 10a-auth-reset-tdd-verification.md
 11-auth-reset-impl.md
 11a-auth-reset-impl-verification.md
@@ -728,6 +755,7 @@ fi
 ## Success Metrics
 
 A well-executed plan will have:
+
 1. **Zero test modifications** between TDD and implementation phases
 2. **>90% code coverage** from behavioral tests
 3. **>80% mutation score** - tests kill most code mutations
@@ -740,9 +768,10 @@ A well-executed plan will have:
 10. **Clean worker execution** with no context overflow
 
 **Red Flags of Fraudulent Implementation**:
+
 - Tests that only verify mocks were called
 - Tests that only check properties exist
-- Tests that pass with empty implementations  
+- Tests that pass with empty implementations
 - Circular mock dependencies (mock returns X, test verifies X)
 - No integration tests with real dependencies
 - Low mutation score despite high coverage

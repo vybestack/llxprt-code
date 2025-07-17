@@ -255,11 +255,7 @@ export class Logger {
     }
     const path = this._checkpointPath(tag);
     try {
-      const data = JSON.stringify(
-        { history: conversation, context },
-        null,
-        2,
-      );
+      const data = JSON.stringify({ history: conversation, context }, null, 2);
       await fs.writeFile(path, data, 'utf-8');
     } catch (error) {
       console.error('Error writing to checkpoint file:', error);

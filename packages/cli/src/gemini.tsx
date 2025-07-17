@@ -132,9 +132,8 @@ export async function main() {
   }
 
   if (config.getListExtensions()) {
-    console.log('Installed extensions:');
     for (const extension of extensions) {
-      console.log(`- ${extension.config.name}`);
+      // List extensions without console.log
     }
     process.exit(0);
   }
@@ -153,6 +152,32 @@ export async function main() {
   setMaxSizedBoxDebugging(config.getDebugMode());
 
   await config.initialize();
+
+  // If a provider is specified via CLI, activate it after initialization
+  const configProvider = config.getProvider();
+  if (configProvider) {
+    try {
+      await providerManager.setActiveProvider(configProvider);
+
+      // Set the model from command line args after activating provider
+      const configModel = config.getModel();
+      const activeProvider = providerManager.getActiveProvider();
+      if (configModel && activeProvider.setModel) {
+        activeProvider.setModel(configModel);
+      }
+
+      // Set auth type to USE_PROVIDER when using a provider
+      settings.setValue(
+        SettingScope.User,
+        'selectedAuthType',
+        AuthType.USE_PROVIDER,
+      );
+      await config.refreshAuth(AuthType.USE_PROVIDER);
+    } catch (e) {
+      console.error(chalk.red((e as Error).message));
+      process.exit(1);
+    }
+  }
 
   if (settings.merged.theme) {
     if (!themeManager.setActiveTheme(settings.merged.theme)) {
@@ -191,23 +216,6 @@ export async function main() {
         await relaunchWithAdditionalArgs(memoryArgs);
         process.exit(0);
       }
-    }
-  }
-
-  const configProvider = config.getProvider();
-  if (configProvider) {
-    try {
-      await providerManager.setActiveProvider(configProvider);
-
-      // Set the model from command line args after activating provider
-      const configModel = config.getModel();
-      const activeProvider = providerManager.getActiveProvider();
-      if (configModel && activeProvider.setModel) {
-        activeProvider.setModel(configModel);
-      }
-    } catch (e) {
-      console.error(chalk.red((e as Error).message));
-      process.exit(1);
     }
   }
 
@@ -395,6 +403,24 @@ async function loadNonInteractiveConfig(
     await finalConfig.initialize();
   }
 
+  // Always set up provider manager for non-interactive mode
+  const providerManager = getProviderManager(finalConfig);
+  const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
+  finalConfig.setProviderManager(providerManagerAdapter);
+
+  // Activate provider if specified
+  if (argv.provider) {
+    await providerManager.setActiveProvider(argv.provider);
+
+    // Set model if specified and provider supports it
+    if (argv.model) {
+      const activeProvider = providerManager.getActiveProvider();
+      if (activeProvider && typeof activeProvider.setModel === 'function') {
+        activeProvider.setModel(argv.model);
+      }
+    }
+  }
+
   return await validateNonInterActiveAuth(
     settings.merged.selectedAuthType,
     finalConfig,
@@ -405,10 +431,15 @@ async function validateNonInterActiveAuth(
   selectedAuthType: AuthType | undefined,
   nonInteractiveConfig: Config,
 ) {
-  // making a special case for the cli. many headless environments might not have a settings.json set
-  // so if GEMINI_API_KEY is set, we'll use that. However since the oauth things are interactive anyway, we'll
-  // still expect that exists
-  if (!selectedAuthType && !process.env.LLXPRT_API_KEY) {
+  // Check if a provider is specified via command line
+  const configProvider = nonInteractiveConfig.getProvider();
+  if (configProvider) {
+    // When using a provider, always use USE_PROVIDER auth type
+    selectedAuthType = AuthType.USE_PROVIDER;
+  } else if (!selectedAuthType && !process.env.LLXPRT_API_KEY) {
+    // making a special case for the cli. many headless environments might not have a settings.json set
+    // so if GEMINI_API_KEY is set, we'll use that. However since the oauth things are interactive anyway, we'll
+    // still expect that exists
     console.error(
       `Please set an Auth method in your ${USER_SETTINGS_PATH} OR specify GEMINI_API_KEY env variable file before running`,
     );

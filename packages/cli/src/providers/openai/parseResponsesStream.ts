@@ -3,6 +3,26 @@ import { ContentGeneratorRole } from '../types.js';
 
 const MAX_ACCUMULATOR_SIZE = 10000; // Prevent unbounded accumulator growth
 
+// Helper function to convert O3 model's answer/response fields to strings
+function formatArrayResponse(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    // Handle numeric arrays like [4, 1] -> "4.1"
+    if (value.every((item) => typeof item === 'number')) {
+      return value.join('.');
+    }
+
+    // Handle mixed arrays like ["gpt", 4.1] -> "gpt 4.1"
+    return value.map((item) => String(item)).join(' ');
+  }
+
+  // Handle other types by converting to string
+  return String(value);
+}
+
 // Response API event types
 interface ResponsesApiEvent {
   type: string;
@@ -53,6 +73,12 @@ interface ResponsesApiEvent {
   };
 }
 
+/** Return true if the chunk starts with "{" or "[".  Used to decide
+    whether it even makes sense to call JSON.parse on the chunk. */
+function looksLikeJSONObjectOrArray(s: string): boolean {
+  return /^[\[{]/.test(s.trim());
+}
+
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
 ): AsyncIterableIterator<IMessage> {
@@ -99,64 +125,70 @@ export async function* parseResponsesStream(
           try {
             const event: ResponsesApiEvent = JSON.parse(dataLine);
 
-            // Debug logging for responses API (commented out for production)
-            // console.log('[parseResponsesStream] Event:', currentEventType, '- Type:', event.type);
-
             // Handle different event types
             switch (event.type) {
               case 'response.output_text.delta':
                 // Accumulate and check for reasoning JSON
                 if (event.delta) {
+                  // Fast-path: If delta is just a number, yield it immediately
+                  if (/^\d+(\.\d+)?$/.test(event.delta.trim())) {
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: event.delta,
+                    };
+                    continue;
+                  }
+
                   textAccumulator += event.delta;
 
-                  // Check if we have complete reasoning JSON
-                  try {
-                    const parsed = JSON.parse(textAccumulator);
-                    console.log(
-                      '[O3 DEBUG] Raw parsed JSON:',
-                      JSON.stringify(parsed, null, 2),
-                    );
-                    if (parsed.reasoning && parsed.next_speaker) {
-                      // Format reasoning nicely
-                      yield {
-                        role: ContentGeneratorRole.ASSISTANT,
-                        content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
-                      };
-                      // Check if there's an answer/response field
-                      if (parsed.answer || parsed.response) {
+                  // Only try to parse if accumulator looks like JSON
+                  if (looksLikeJSONObjectOrArray(textAccumulator)) {
+                    // Check if we have complete reasoning JSON
+                    try {
+                      const parsed = JSON.parse(textAccumulator);
+                      if (parsed.reasoning && parsed.next_speaker) {
+                        // Format reasoning nicely
                         yield {
                           role: ContentGeneratorRole.ASSISTANT,
-                          content: parsed.answer || parsed.response,
+                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
                         };
-                      }
-                      // Reset accumulator
-                      textAccumulator = '';
-                      continue;
-                    }
-                  } catch {
-                    // Not complete JSON yet or not reasoning
-                    // Check if this looks like the start of JSON
-                    if (
-                      textAccumulator.trim().startsWith('{') &&
-                      textAccumulator.includes('"reasoning"')
-                    ) {
-                      // Still accumulating reasoning JSON, don't yield yet
-                      if (textAccumulator.length > MAX_ACCUMULATOR_SIZE) {
-                        yield {
-                          role: ContentGeneratorRole.ASSISTANT,
-                          content: textAccumulator,
-                        };
+                        // Check if there's an answer/response field
+                        if (parsed.answer || parsed.response) {
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: formatArrayResponse(
+                              parsed.answer || parsed.response,
+                            ),
+                          };
+                        }
+                        // Reset accumulator
                         textAccumulator = '';
+                        continue;
                       }
-                      continue;
+                    } catch {
+                      // Not complete JSON yet or not reasoning
+                      // Check if this looks like the start of JSON
+                      if (
+                        textAccumulator.trim().startsWith('{') &&
+                        textAccumulator.includes('"reasoning"')
+                      ) {
+                        // Still accumulating reasoning JSON, don't yield yet
+                        if (textAccumulator.length > MAX_ACCUMULATOR_SIZE) {
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: textAccumulator,
+                          };
+                          textAccumulator = '';
+                        }
+                        continue;
+                      }
                     }
-                    // Check if the delta itself is complete JSON
+                  }
+
+                  // Check if the delta itself is complete JSON (only if it looks like an object/array)
+                  if (looksLikeJSONObjectOrArray(event.delta)) {
                     try {
                       const parsed = JSON.parse(event.delta);
-                      console.log(
-                        '[O3 DEBUG] Delta parsed JSON:',
-                        JSON.stringify(parsed, null, 2),
-                      );
                       if (
                         parsed.reasoning !== undefined &&
                         parsed.next_speaker !== undefined
@@ -170,7 +202,9 @@ export async function* parseResponsesStream(
                         if (parsed.answer || parsed.response) {
                           yield {
                             role: ContentGeneratorRole.ASSISTANT,
-                            content: parsed.answer || parsed.response,
+                            content: formatArrayResponse(
+                              parsed.answer || parsed.response,
+                            ),
                           };
                         }
                         // Reset accumulator
@@ -180,70 +214,80 @@ export async function* parseResponsesStream(
                     } catch {
                       // Not JSON, continue with regular text handling
                     }
-                    // Regular text, yield it
-                    yield {
-                      role: ContentGeneratorRole.ASSISTANT,
-                      content: event.delta,
-                    };
-                    // Reset accumulator since we're in regular text mode
-                    textAccumulator = '';
                   }
+
+                  // Regular text, yield it
+                  yield {
+                    role: ContentGeneratorRole.ASSISTANT,
+                    content: event.delta,
+                  };
+                  // Reset accumulator since we're in regular text mode
+                  textAccumulator = '';
                 }
                 break;
 
               case 'response.message_content.delta':
                 // Handle message content deltas (might contain reasoning)
                 if (event.delta) {
+                  // Fast-path: If delta is just a number, yield it immediately
+                  if (/^\d+(\.\d+)?$/.test(event.delta.trim())) {
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: event.delta,
+                    };
+                    continue;
+                  }
+
                   textAccumulator += event.delta;
 
-                  // Check if we have complete reasoning JSON
-                  try {
-                    const parsed = JSON.parse(textAccumulator);
-                    console.log(
-                      '[O3 DEBUG] Raw parsed JSON:',
-                      JSON.stringify(parsed, null, 2),
-                    );
-                    if (parsed.reasoning && parsed.next_speaker) {
-                      // Format reasoning nicely
-                      yield {
-                        role: ContentGeneratorRole.ASSISTANT,
-                        content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
-                      };
-                      // Check if there's an answer/response field
-                      if (parsed.answer || parsed.response) {
+                  // Only try to parse if accumulator looks like JSON
+                  if (looksLikeJSONObjectOrArray(textAccumulator)) {
+                    // Check if we have complete reasoning JSON
+                    try {
+                      const parsed = JSON.parse(textAccumulator);
+                      if (parsed.reasoning && parsed.next_speaker) {
+                        // Format reasoning nicely
                         yield {
                           role: ContentGeneratorRole.ASSISTANT,
-                          content: parsed.answer || parsed.response,
+                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
                         };
-                      }
-                      // Reset accumulator
-                      textAccumulator = '';
-                      continue;
-                    }
-                  } catch {
-                    // Not complete JSON yet or not reasoning
-                    // Check if this looks like the start of JSON
-                    if (
-                      textAccumulator.trim().startsWith('{') &&
-                      textAccumulator.includes('"reasoning"')
-                    ) {
-                      // Still accumulating reasoning JSON, don't yield yet
-                      if (textAccumulator.length > MAX_ACCUMULATOR_SIZE) {
-                        yield {
-                          role: ContentGeneratorRole.ASSISTANT,
-                          content: textAccumulator,
-                        };
+                        // Check if there's an answer/response field
+                        if (parsed.answer || parsed.response) {
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: formatArrayResponse(
+                              parsed.answer || parsed.response,
+                            ),
+                          };
+                        }
+                        // Reset accumulator
                         textAccumulator = '';
+                        continue;
                       }
-                      continue;
+                    } catch {
+                      // Not complete JSON yet or not reasoning
+                      // Check if this looks like the start of JSON
+                      if (
+                        textAccumulator.trim().startsWith('{') &&
+                        textAccumulator.includes('"reasoning"')
+                      ) {
+                        // Still accumulating reasoning JSON, don't yield yet
+                        if (textAccumulator.length > MAX_ACCUMULATOR_SIZE) {
+                          yield {
+                            role: ContentGeneratorRole.ASSISTANT,
+                            content: textAccumulator,
+                          };
+                          textAccumulator = '';
+                        }
+                        continue;
+                      }
                     }
-                    // Check if the delta itself is complete JSON
+                  }
+
+                  // Check if the delta itself is complete JSON (only if it looks like an object/array)
+                  if (looksLikeJSONObjectOrArray(event.delta)) {
                     try {
                       const parsed = JSON.parse(event.delta);
-                      console.log(
-                        '[O3 DEBUG] Delta parsed JSON:',
-                        JSON.stringify(parsed, null, 2),
-                      );
                       if (
                         parsed.reasoning !== undefined &&
                         parsed.next_speaker !== undefined
@@ -257,7 +301,9 @@ export async function* parseResponsesStream(
                         if (parsed.answer || parsed.response) {
                           yield {
                             role: ContentGeneratorRole.ASSISTANT,
-                            content: parsed.answer || parsed.response,
+                            content: formatArrayResponse(
+                              parsed.answer || parsed.response,
+                            ),
                           };
                         }
                         // Reset accumulator
@@ -267,14 +313,15 @@ export async function* parseResponsesStream(
                     } catch {
                       // Not JSON, continue with regular text handling
                     }
-                    // Regular text, yield it
-                    yield {
-                      role: ContentGeneratorRole.ASSISTANT,
-                      content: event.delta,
-                    };
-                    // Reset accumulator since we're in regular text mode
-                    textAccumulator = '';
                   }
+
+                  // Regular text, yield it
+                  yield {
+                    role: ContentGeneratorRole.ASSISTANT,
+                    content: event.delta,
+                  };
+                  // Reset accumulator since we're in regular text mode
+                  textAccumulator = '';
                 }
                 break;
 
@@ -296,10 +343,6 @@ export async function* parseResponsesStream(
                       // Check if this is reasoning JSON
                       try {
                         const parsed = JSON.parse(content.text);
-                        console.log(
-                          '[O3 DEBUG] Item parsed JSON:',
-                          JSON.stringify(parsed, null, 2),
-                        );
                         if (parsed.reasoning && parsed.next_speaker) {
                           // This is reasoning JSON - format it nicely
                           yield {
@@ -310,7 +353,9 @@ export async function* parseResponsesStream(
                           if (parsed.answer || parsed.response) {
                             yield {
                               role: ContentGeneratorRole.ASSISTANT,
-                              content: parsed.answer || parsed.response,
+                              content: formatArrayResponse(
+                                parsed.answer || parsed.response,
+                              ),
                             };
                           }
                         } else {
@@ -330,6 +375,8 @@ export async function* parseResponsesStream(
                     }
                   }
                 }
+                // Reset accumulator after processing output_item.added
+                textAccumulator = '';
                 break;
 
               case 'response.function_call_arguments.delta':
@@ -385,10 +432,6 @@ export async function* parseResponsesStream(
                       // Check if this is reasoning JSON
                       try {
                         const parsed = JSON.parse(content.text);
-                        console.log(
-                          '[O3 DEBUG] Done item parsed JSON:',
-                          JSON.stringify(parsed, null, 2),
-                        );
                         if (parsed.reasoning && parsed.next_speaker) {
                           // This is reasoning JSON - format it nicely
                           yield {
@@ -399,7 +442,9 @@ export async function* parseResponsesStream(
                           if (parsed.answer || parsed.response) {
                             yield {
                               role: ContentGeneratorRole.ASSISTANT,
-                              content: parsed.answer || parsed.response,
+                              content: formatArrayResponse(
+                                parsed.answer || parsed.response,
+                              ),
                             };
                           }
                         } else {
@@ -419,9 +464,13 @@ export async function* parseResponsesStream(
                     }
                   }
                 }
+                // Reset textAccumulator after processing response.output_item.done
+                textAccumulator = '';
                 break;
 
               case 'response.completed':
+                // Reset accumulator when response is completed
+                textAccumulator = '';
                 // Extract usage data and the final response ID
                 if (event.response) {
                   const finalMessage: IMessage = {

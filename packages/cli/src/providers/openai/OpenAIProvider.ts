@@ -59,27 +59,12 @@ export class OpenAIProvider implements IProvider {
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
-    if (process.env.DEBUG || process.env.VERBOSE) {
-      console.log('[OpenAIProvider] Constructor called with:', {
-        hasApiKey: !!apiKey,
-        baseURL: baseURL || 'undefined (will use OpenAI default)',
-        settingsProvided: !!settings,
-      });
-    }
-
     this.openai = new OpenAI({
       apiKey,
       baseURL,
       // Allow browser environment for tests
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
     });
-
-    if (process.env.DEBUG || process.env.VERBOSE) {
-      console.log(
-        '[OpenAIProvider] OpenAI client created with baseURL:',
-        this.openai.baseURL,
-      );
-    }
   }
 
   private requiresTextToolCallParsing(): boolean {
@@ -206,16 +191,9 @@ export class OpenAIProvider implements IProvider {
       tool_choice: options?.tool_choice,
     });
 
-    // Debug log the request (commented out for production)
-    // console.log('[OpenAI] Sending request to Responses API:', JSON.stringify(request, null, 2));
-
     // Make the API call
     const baseURL = this.baseURL || 'https://api.openai.com/v1';
     const responsesURL = `${baseURL}/responses`;
-
-    if (process.env.DEBUG || process.env.VERBOSE) {
-      console.log('[OpenAIProvider] Making request to:', responsesURL);
-    }
 
     const response = await fetch(responsesURL, {
       method: 'POST',
@@ -463,68 +441,8 @@ export class OpenAIProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
-    console.debug('[OpenAIProvider] generateChatCompletion called');
-    console.debug('[OpenAIProvider] Model:', this.currentModel);
-    console.debug('[OpenAIProvider] Number of messages:', messages.length);
-
-    // Debug: Log messages to understand their format
-    console.log(
-      '[OpenAIProvider] Messages:',
-      JSON.stringify(messages, null, 2),
-    );
-
-    if (process.env.DEBUG || process.env.VERBOSE) {
-      console.log('[OpenAIProvider] Current baseURL:', this.baseURL);
-      console.log(
-        '[OpenAIProvider] OpenAI client baseURL:',
-        this.openai.baseURL,
-      );
-    }
-
-    // Log message roles to understand conversation flow
-    const messageRoles = messages.map((m) => m.role);
-    console.debug('[OpenAIProvider] Message roles:', messageRoles);
-
-    // Check for tool messages
-    const toolMessagesCount = messages.filter((m) => m.role === 'tool').length;
-    if (toolMessagesCount > 0) {
-      console.debug(
-        '[OpenAIProvider] Tool messages in conversation:',
-        toolMessagesCount,
-      );
-    }
-
-    console.debug(
-      '[OpenAIProvider] Messages:',
-      JSON.stringify(messages, null, 2),
-    );
-    console.debug('[OpenAIProvider] Tools provided:', tools ? tools.length : 0);
-    if (tools && tools.length > 0) {
-      console.debug(
-        '[OpenAIProvider] Tool details:',
-        JSON.stringify(tools, null, 2),
-      );
-      // Validate tool format
-      for (const tool of tools) {
-        if (!tool.function?.name) {
-          console.warn('[OpenAIProvider] Tool missing function.name:', tool);
-        }
-        if (!tool.function?.parameters) {
-          console.warn(
-            '[OpenAIProvider] Tool missing function.parameters:',
-            tool,
-          );
-        }
-      }
-    }
-
     // Check if we should use responses endpoint
     if (this.shouldUseResponses(this.currentModel)) {
-      console.debug(
-        '[OpenAIProvider] Using Responses API for model:',
-        this.currentModel,
-      );
-
       // Get the current conversation context
       const { conversationId, parentId } = ConversationContext.getContext();
 
@@ -552,22 +470,9 @@ export class OpenAIProvider implements IProvider {
       );
     }
 
-    if (toolMessages.length > 0) {
-      console.log(
-        `[OpenAIProvider] Processing ${toolMessages.length} tool call(s)`,
-      );
-    }
-
     const parser = this.requiresTextToolCallParsing()
       ? new GemmaToolCallParser()
       : null;
-
-    if (parser) {
-      console.log(
-        '[OpenAIProvider] Text-based tool parsing enabled for model:',
-        this.currentModel,
-      );
-    }
 
     // Get current tool format (with override support)
     const currentToolFormat = this.getToolFormat();
@@ -614,10 +519,6 @@ export class OpenAIProvider implements IProvider {
       }
 
       if (delta?.tool_calls) {
-        console.log(
-          '[OpenAIProvider] 🎯 TOOL CALL RECEIVED! Chunk:',
-          JSON.stringify(delta.tool_calls),
-        );
         for (const toolCall of delta.tool_calls) {
           this.toolFormatter.accumulateStreamingToolCall(
             toolCall,
@@ -629,10 +530,6 @@ export class OpenAIProvider implements IProvider {
 
       // Check for usage data in the chunk
       if (chunk.usage) {
-        console.log(
-          '[OpenAIProvider] 📊 USAGE DATA RECEIVED:',
-          JSON.stringify(chunk.usage, null, 2),
-        );
         usageData = {
           prompt_tokens: chunk.usage.prompt_tokens,
           completion_tokens: chunk.usage.completion_tokens,
@@ -643,15 +540,9 @@ export class OpenAIProvider implements IProvider {
 
     // After stream ends, parse text-based tool calls if needed
     if (parser && fullContent) {
-      console.log(
-        '[OpenAIProvider] Parsing content for tool calls:',
-        fullContent,
-      );
       const { cleanedContent, toolCalls } = parser.parse(fullContent);
 
       if (toolCalls.length > 0) {
-        console.log('[OpenAIProvider] Parsed tool calls:', toolCalls);
-
         // Convert to standard format
         const standardToolCalls = toolCalls.map((tc, index) => ({
           id: `call_${Date.now()}_${index}`,
@@ -679,11 +570,6 @@ export class OpenAIProvider implements IProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
-        console.log(
-          '[OpenAIProvider] 🎯 YIELDING TOOL CALLS:',
-          accumulatedToolCalls.length,
-        );
-
         yield {
           role: ContentGeneratorRole.ASSISTANT,
           content: fullContent || '',
