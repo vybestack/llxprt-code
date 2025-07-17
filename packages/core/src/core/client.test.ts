@@ -470,15 +470,16 @@ describe('Gemini Client (client.ts)', () => {
   describe('resetChat', () => {
     it('should create a new chat session, clearing the old history', async () => {
       // Create mock chats with distinct histories
+      const initialChatHistory = [
+        { role: 'user', parts: [{ text: 'initial context' }] },
+        { role: 'model', parts: [{ text: 'acknowledged' }] },
+      ];
+
       const mockInitialChat = {
-        getHistory: vi.fn().mockReturnValue([
-          { role: 'user', parts: [{ text: 'initial context' }] },
-          { role: 'model', parts: [{ text: 'acknowledged' }] },
-        ]),
-        addHistory: vi.fn().mockImplementation(function(content) {
+        getHistory: vi.fn().mockReturnValue(initialChatHistory),
+        addHistory: vi.fn().mockImplementation((content) => {
           // Update the history when addHistory is called
-          const currentHistory = this.getHistory();
-          this.getHistory = vi.fn().mockReturnValue([...currentHistory, content]);
+          initialChatHistory.push(content);
         }),
         setHistory: vi.fn(),
       } as unknown as GeminiChat;
@@ -515,7 +516,9 @@ describe('Gemini Client (client.ts)', () => {
 
       const historyWithOldMessage = await client.getHistory();
       expect(historyWithOldMessage).toHaveLength(3);
-      expect(JSON.stringify(historyWithOldMessage)).toContain('some old message');
+      expect(JSON.stringify(historyWithOldMessage)).toContain(
+        'some old message',
+      );
 
       // 2. Call resetChat
       await client.resetChat();
