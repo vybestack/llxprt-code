@@ -2,7 +2,7 @@
   "name": "@vybestack/llxprt-code",
   "version": "0.1.12",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "type": "module",
   "workspaces": [
