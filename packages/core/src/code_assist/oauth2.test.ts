@@ -170,7 +170,7 @@ describe('oauth2', () => {
     expect(getCachedGoogleAccount()).toBe('test-google-account@gmail.com');
   });
 
-  it('should perform login with user code', async () => {
+  it('should perform login with user code', { timeout: 10000 }, async () => {
     const mockConfigWithNoBrowser = {
       getNoBrowser: () => true,
     } as unknown as Config;

@@ -58,10 +58,27 @@ vi.mock('../utils/errors.js', () => ({
   isNodeError: hoistedMockIsNodeError,
 }));
 
+const hoistedMockExistsSync = vi.hoisted(() => vi.fn());
+const hoistedMockMkdirSync = vi.hoisted(() => vi.fn());
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal() as typeof import('fs');
+  return {
+    ...actual,
+    default: actual,
+    existsSync: hoistedMockExistsSync,
+    mkdirSync: hoistedMockMkdirSync,
+  };
+});
+
 const hoistedMockHomedir = vi.hoisted(() => vi.fn());
-vi.mock('os', () => ({
-  homedir: hoistedMockHomedir,
-}));
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal() as typeof import('os');
+  return {
+    ...actual,
+    default: actual,
+    homedir: hoistedMockHomedir,
+  };
+});
 
 const hoistedMockCreateHash = vi.hoisted(() => {
   const mockUpdate = vi.fn().mockReturnThis();
@@ -100,6 +117,8 @@ describe('GitService', () => {
     hoistedMockWriteFile.mockResolvedValue(undefined);
     hoistedMockIsNodeError.mockImplementation((e) => e instanceof Error);
     hoistedMockHomedir.mockReturnValue(mockHomedir);
+    hoistedMockExistsSync.mockReturnValue(false);
+    hoistedMockMkdirSync.mockReturnValue(undefined);
     hoistedMockCreateHash.mockUpdate.mockReturnThis();
     hoistedMockCreateHash.mockDigest.mockReturnValue(mockHash);
 

@@ -144,6 +144,9 @@ describe('Server Config (config.ts)', () => {
   describe('refreshAuth', () => {
     it('should refresh auth and update config', async () => {
       const config = new Config(baseParams);
+      // Initialize config to create GeminiClient instance
+      await config.initialize();
+      
       const authType = AuthType.USE_GEMINI;
       const newModel = 'gemini-flash';
       const mockContentConfig = {
