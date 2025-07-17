@@ -129,11 +129,48 @@ export function buildResponsesRequest(
     console.warn(
       '[buildResponsesRequest] conversationId provided in stateful mode. Only the most recent messages will be sent to maintain context window.',
     );
-    // For stateful mode, include only the last 2 messages (assistant+user pair)
+    
+    // For stateful mode, we need to be smarter about trimming to preserve tool call/response pairs
     if (messages.length > 2) {
-      processedMessages = messages.slice(-2);
+      // Find the last complete interaction (user message -> assistant response/tool calls -> tool responses -> user message)
+      let startIndex = messages.length - 1;
+      
+      // Work backwards to find a complete interaction
+      while (startIndex > 0) {
+        const msg = messages[startIndex];
+        
+        // If we find a tool message, we need to include the assistant message with the tool call
+        if (msg.role === 'tool') {
+          // Find the assistant message that contains this tool call
+          for (let i = startIndex - 1; i >= 0; i--) {
+            const prevMsg = messages[i];
+            if (prevMsg.role === 'assistant' && prevMsg.tool_calls) {
+              // Check if this assistant message contains the tool call for our tool response
+              const hasMatchingCall = prevMsg.tool_calls.some(
+                (call: any) => call.id === msg.tool_call_id
+              );
+              if (hasMatchingCall) {
+                startIndex = i;
+                break;
+              }
+            }
+          }
+        }
+        
+        // If we find a user message after going through tool responses, this is a good starting point
+        if (msg.role === 'user' && startIndex < messages.length - 1) {
+          break;
+        }
+        
+        startIndex--;
+      }
+      
+      // Ensure we don't trim too aggressively
+      startIndex = Math.max(0, Math.min(startIndex, messages.length - 2));
+      
+      processedMessages = messages.slice(startIndex);
       console.warn(
-        `[buildResponsesRequest] Trimmed messages from ${messages.length} to ${processedMessages.length} for stateful mode.`,
+        `[buildResponsesRequest] Trimmed messages from ${messages.length} to ${processedMessages.length} for stateful mode (preserving tool call/response pairs).`,
       );
     }
   }

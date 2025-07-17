@@ -53,6 +53,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
 
   test('should properly format tool responses in subsequent requests', async () => {
     console.log('\n=== Testing Tool Response Formatting ===');
+    console.log('Test starting with model:', provider.getCurrentModel?.());
     
     // Create messages array with a tool call and response
     const messages: IMessage[] = [
@@ -103,10 +104,21 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
     
     (fetch as any).mockImplementation(async (url: string, options: any) => {
       console.log('Fetch called with URL:', url);
-      capturedRequest = {
-        url,
-        body: JSON.parse(options.body)
-      };
+      console.log('Fetch options:', options);
+      console.log('Request body (raw):', options.body);
+      
+      try {
+        capturedRequest = {
+          url,
+          body: JSON.parse(options.body)
+        };
+      } catch (e) {
+        console.error('Failed to parse request body:', e);
+        capturedRequest = {
+          url,
+          body: options.body
+        };
+      }
       
       return {
         ok: true,
@@ -117,20 +129,38 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
     });
     
     // Send request with messages containing tool responses
+    console.log('Starting generateChatCompletion...');
     const stream = provider.generateChatCompletion(messages, [mockTool]);
     
     // Consume the stream to trigger the request
     const chunks: any[] = [];
-    for await (const chunk of stream) {
-      chunks.push(chunk);
+    try {
+      for await (const chunk of stream) {
+        console.log('Received chunk:', chunk);
+        chunks.push(chunk);
+      }
+    } catch (error) {
+      console.error('Error consuming stream:', error);
+      throw error;
     }
     
     // Now check the captured request
-    expect(capturedRequest).toBeTruthy();
+    if (!capturedRequest) {
+      console.error('No request was captured!');
+      console.error('Fetch mock calls:', (fetch as any).mock.calls.length);
+      throw new Error('No request was made to the API');
+    }
+    
     console.log('Full request to OpenAI:', JSON.stringify(capturedRequest, null, 2));
     
     // Check if it's using the responses API endpoint
     expect(capturedRequest.url).toContain('/responses');
+    
+    // Check if body exists
+    if (!capturedRequest.body || !capturedRequest.body.messages) {
+      console.error('Request body or messages missing:', capturedRequest.body);
+      throw new Error('Request body is malformed');
+    }
     
     // Verify tool response is included in the request
     const toolMessage = capturedRequest.body.messages.find((msg: any) => 
