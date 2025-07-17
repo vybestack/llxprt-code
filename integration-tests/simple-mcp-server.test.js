@@ -67,16 +67,23 @@ describe('simple-mcp-server', () => {
     // Create a settings file with MCP server configuration
     const settingsPath = join(rig.testDir, '.llxprt', 'settings.json');
     mkdirSync(dirname(settingsPath), { recursive: true });
-    writeFileSync(settingsPath, JSON.stringify({
-      mcpServers: {
-        'addition-server': {
-          command: 'node',
-          args: [serverScriptPath]
-        }
-      }
-    }, null, 2));
-    
-    const output = rig.run('Add 5 and 10 using the add tool.');
+    writeFileSync(
+      settingsPath,
+      JSON.stringify(
+        {
+          mcpServers: {
+            'addition-server': {
+              command: 'node',
+              args: [serverScriptPath],
+            },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    const output = rig.run('What is 5 + 10?');
     assert.ok(output.includes('15'));
   });
 });
