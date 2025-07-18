@@ -37,6 +37,9 @@ junit.xml
 junit.*.xml
 packages/*/coverage/
 
+# NPM package tarballs
+*.tgz
+
 # Generated files
 packages/cli/src/generated/
 .integration-tests/
