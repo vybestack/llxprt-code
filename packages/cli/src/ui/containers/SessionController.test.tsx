@@ -20,6 +20,7 @@ vi.mock('../hooks/useHistoryManager.js', () => ({
 // Don't mock AppDispatchContext - use the real implementation
 
 import React from 'react';
+import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import {
   SessionController,
@@ -165,10 +166,10 @@ describe('SessionController', () => {
 
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
-      return (
-        <div>
-          {contextValue?.appDispatch ? 'Dispatch available' : 'No dispatch'}
-        </div>
+      return React.createElement(
+        Text,
+        null,
+        contextValue?.appDispatch ? 'Dispatch available' : 'No dispatch',
       );
     };
 
