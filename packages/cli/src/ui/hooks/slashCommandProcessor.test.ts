@@ -163,6 +163,7 @@ describe('useSlashCommandProcessor', () => {
       getGeminiClient: () => mockGeminiClient,
       getSandbox: vi.fn(() => 'test-sandbox'),
       getModel: vi.fn(() => 'test-model'),
+      setModel: vi.fn(),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => true),
       getBugCommand: vi.fn(() => undefined),
@@ -565,6 +566,26 @@ describe('useSlashCommandProcessor', () => {
   });
 
   describe('/about command', () => {
+    beforeEach(async () => {
+      // Import the actual CommandService and about command
+      const { CommandService: ActualCommandService } = (await vi.importActual(
+        '../../services/CommandService.js',
+      )) as {
+        CommandService: typeof import('../../services/CommandService.js').CommandService;
+      };
+      const { aboutCommand } = (await vi.importActual(
+        '../commands/aboutCommand.js',
+      )) as { aboutCommand: SlashCommand };
+
+      // Create a command service with the about command
+      const commandServiceInstance = new ActualCommandService(async () => [
+        aboutCommand,
+      ]);
+      vi.mocked(CommandService).mockImplementation(
+        () => commandServiceInstance as CommandService,
+      );
+    });
+
     it('should show the about box with all details including auth and project', async () => {
       // Arrange
       mockGetCliVersionFn.mockResolvedValue('test-version');
@@ -603,6 +624,13 @@ describe('useSlashCommandProcessor', () => {
         ),
       );
 
+      // Wait for commands to be loaded
+      await vi.waitFor(() => {
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'about'),
+        ).toBe(true);
+      });
+
       // Act
       await act(async () => {
         await result.current.handleSlashCommand('/about');
@@ -633,6 +661,13 @@ describe('useSlashCommandProcessor', () => {
       vi.mocked(mockConfig.getModel).mockReturnValue('test-model-from-config');
 
       const { result } = getProcessorHook();
+
+      // Wait for commands to be loaded
+      await vi.waitFor(() => {
+        expect(
+          result.current.slashCommands.some((c) => c.name === 'about'),
+        ).toBe(true);
+      });
 
       // Act
       await act(async () => {
@@ -798,13 +833,12 @@ describe('useSlashCommandProcessor', () => {
     });
 
     it('should open the auth dialog when a new command returns an auth dialog action', async () => {
-      const mockAction = vi.fn().mockResolvedValue({
-        type: 'dialog',
-        dialog: 'auth',
-      });
-      const newAuthCommand: SlashCommand = { name: 'auth', action: mockAction };
+      // Import the actual auth command
+      const { authCommand } = (await vi.importActual(
+        '../commands/authCommand.js',
+      )) as { authCommand: SlashCommand };
 
-      const mockLoader = async () => [newAuthCommand];
+      const mockLoader = async () => [authCommand];
       const commandServiceInstance = new ActualCommandService(mockLoader);
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
@@ -819,7 +853,6 @@ describe('useSlashCommandProcessor', () => {
 
       const commandResult = await result.current.handleSlashCommand('/auth');
 
-      expect(mockAction).toHaveBeenCalledTimes(1);
       expect(mockOpenAuthDialog).toHaveBeenCalledWith();
       expect(commandResult).toEqual({ type: 'handled' });
     });

@@ -40,6 +40,7 @@ const MockedGeminiClientClass = vi.hoisted(() =>
     this.startChat = mockStartChat;
     this.sendMessageStream = mockSendMessageStream;
     this.addHistory = vi.fn();
+    this.isInitialized = vi.fn().mockReturnValue(true);
   }),
 );
 
@@ -257,7 +258,6 @@ describe('useGeminiStream', () => {
   let mockOnDebugMessage: Mock;
   let mockHandleSlashCommand: Mock;
   let mockScheduleToolCalls: Mock;
-  let mockCancelAllToolCalls: Mock;
   let mockMarkToolsAsSubmitted: Mock;
 
   beforeEach(() => {
@@ -323,14 +323,12 @@ describe('useGeminiStream', () => {
 
     // Mock return value for useReactToolScheduler
     mockScheduleToolCalls = vi.fn();
-    mockCancelAllToolCalls = vi.fn();
     mockMarkToolsAsSubmitted = vi.fn();
 
     // Default mock for useReactToolScheduler to prevent toolCalls being undefined initially
     mockUseReactToolScheduler.mockReturnValue([
       [], // Default to empty array for toolCalls
       mockScheduleToolCalls,
-      mockCancelAllToolCalls,
       mockMarkToolsAsSubmitted,
     ]);
 
@@ -365,7 +363,6 @@ describe('useGeminiStream', () => {
     mockUseReactToolScheduler.mockImplementation(() => [
       currentToolCalls,
       mockScheduleToolCalls,
-      mockCancelAllToolCalls,
       mockMarkToolsAsSubmitted,
     ]);
 
