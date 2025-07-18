@@ -204,11 +204,10 @@ describe('runNonInteractive', () => {
   });
 
   it('should exit with error if sendMessageStream throws initially', async () => {
-    const errorStream = (async function* () {
-      yield; // Add yield to satisfy generator function requirement
+    // Create a mock that throws immediately when accessed
+    vi.mocked(mockGeminiClient.sendMessageStream).mockImplementation(() => {
       throw new Error('API connection failed');
-    })();
-    vi.mocked(mockGeminiClient.sendMessageStream).mockReturnValue(errorStream);
+    });
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
