@@ -128,15 +128,13 @@ describe('Phase 07e: Integrate GeminiCompatibleWrapper with ContentGenerator', (
     expect(chat.contentGenerator).toBeNull();
   });
 
-  it('should log debug message when enhancing config', () => {
+  it('should not log any debug message (no-op function)', () => {
     const consoleSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     enhanceConfigWithProviders(mockConfig);
 
-    // Should log that it's enhancing config
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[enhanceConfigWithProviders] Enhancing config with provider support',
-    );
+    // Should not log anything since it's a no-op function
+    expect(consoleSpy).not.toHaveBeenCalled();
 
     consoleSpy.mockRestore();
   });

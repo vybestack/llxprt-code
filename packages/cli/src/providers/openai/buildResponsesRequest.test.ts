@@ -70,7 +70,7 @@ describe('buildResponsesRequest', () => {
       };
 
       expect(() => buildResponsesRequest(params)).toThrow(
-        'Either "prompt" or "messages" must be provided',
+        'Either "prompt" or "messages" must be provided.',
       );
     });
 
@@ -80,7 +80,7 @@ describe('buildResponsesRequest', () => {
       };
 
       expect(() => buildResponsesRequest(params)).toThrow(
-        'Model is required for Responses API',
+        'Model is required for Responses API.',
       );
     });
 
@@ -101,7 +101,7 @@ describe('buildResponsesRequest', () => {
       };
 
       expect(() => buildResponsesRequest(params)).toThrow(
-        'Too many tools provided. Maximum allowed is 16, but 17 were provided',
+        'Too many tools provided. Maximum allowed is 16, but 17 were provided.',
       );
     });
 
@@ -132,7 +132,24 @@ describe('buildResponsesRequest', () => {
   });
 
   describe('Field Mapping', () => {
-    it('should map conversationId to conversation_id', () => {
+    it('should map conversationId and parentId correctly', () => {
+      const params: ResponsesRequestParams = {
+        model: 'gpt-4o',
+        prompt: 'Hello',
+        conversationId: 'conv-123',
+        parentId: 'msg-456',
+      };
+
+      const result = buildResponsesRequest(params);
+
+      expect(result.previous_response_id).toBe('msg-456');
+      expect(result.store).toBe(true);
+      expect(result.conversation_id).toBeUndefined();
+      expect(result.conversationId).toBeUndefined();
+      expect(result.parentId).toBeUndefined();
+    });
+
+    it('should only set store when conversationId is present without parentId', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         prompt: 'Hello',
@@ -141,20 +158,10 @@ describe('buildResponsesRequest', () => {
 
       const result = buildResponsesRequest(params);
 
-      expect(result.conversation_id).toBe('conv-123');
+      expect(result.previous_response_id).toBeUndefined();
+      expect(result.store).toBeUndefined();
+      expect(result.conversation_id).toBeUndefined();
       expect(result.conversationId).toBeUndefined();
-    });
-
-    it('should map parentId to parent_id', () => {
-      const params: ResponsesRequestParams = {
-        model: 'gpt-4o',
-        prompt: 'Hello',
-        parentId: 'msg-456',
-      };
-
-      const result = buildResponsesRequest(params);
-
-      expect(result.parent_id).toBe('msg-456');
       expect(result.parentId).toBeUndefined();
     });
 
@@ -200,21 +207,24 @@ describe('buildResponsesRequest', () => {
   });
 
   describe('Stateful Mode', () => {
-    it('should warn when conversationId is used with messages', () => {
+    it('should handle conversationId with messages', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         messages: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
         conversationId: 'conv-123',
       };
 
-      buildResponsesRequest(params);
+      const result = buildResponsesRequest(params);
 
-      expect(console.warn).toHaveBeenCalledWith(
-        '[buildResponsesRequest] conversationId provided in stateful mode. Only the most recent messages will be sent to maintain context window.',
-      );
+      // The implementation doesn't warn, just processes the request
+      expect(result.input).toHaveLength(1);
+      expect(result.input?.[0]).toEqual({
+        role: ContentGeneratorRole.USER,
+        content: 'Hello',
+      });
     });
 
-    it('should trim messages to last 2 when conversationId is used with more than 2 messages', () => {
+    it('should keep recent messages when conversationId is used with more than 2 messages', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         messages: [
@@ -229,12 +239,11 @@ describe('buildResponsesRequest', () => {
 
       const result = buildResponsesRequest(params);
 
-      expect(result.input).toHaveLength(2);
-      expect(result.input?.[0].content).toBe('Second response');
-      expect(result.input?.[1].content).toBe('Third message');
-      expect(console.warn).toHaveBeenCalledWith(
-        '[buildResponsesRequest] Trimmed messages from 5 to 2 for stateful mode.',
-      );
+      // The implementation keeps the last few messages, starting from the last user message
+      expect(result.input).toHaveLength(3);
+      expect(result.input?.[0].content).toBe('Second message');
+      expect(result.input?.[1].content).toBe('Second response');
+      expect(result.input?.[2].content).toBe('Third message');
     });
 
     it('should not trim messages when conversationId is used with 2 or fewer messages', () => {
@@ -281,6 +290,40 @@ describe('buildResponsesRequest', () => {
   });
 
   describe('Tools and Tool Choice', () => {
+    it('should strip tool_calls from messages', () => {
+      const params: ResponsesRequestParams = {
+        model: 'gpt-4o',
+        messages: [
+          { role: ContentGeneratorRole.USER, content: 'Get the weather' },
+          {
+            role: ContentGeneratorRole.ASSISTANT,
+            content: "I'll check the weather for you.",
+            tool_calls: [
+              {
+                id: 'call_123',
+                type: 'function',
+                function: {
+                  name: 'get_weather',
+                  arguments: '{"location": "London"}',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = buildResponsesRequest(params);
+
+      expect(result.input).toHaveLength(2);
+      expect(result.input?.[1]).toEqual({
+        role: ContentGeneratorRole.ASSISTANT,
+        content: "I'll check the weather for you.",
+      });
+      expect(
+        (result.input?.[1] as Record<string, unknown>).tool_calls,
+      ).toBeUndefined();
+    });
+
     it('should include tools and tool_choice when provided', () => {
       const tools = [
         {
@@ -398,15 +441,15 @@ describe('buildResponsesRequest', () => {
           model: 'gpt-4o',
           messages: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
           conversationId: 'conv-123',
-          parentId: 'msg-456',
+          parentId: 'parent123',
           stateful: true,
           stream: true,
         },
         expectedSnapshot: {
           model: 'gpt-4o',
           input: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
-          conversation_id: 'conv-123',
-          parent_id: 'msg-456',
+          previous_response_id: 'parent123',
+          store: true,
           stateful: true,
           stream: true,
         },

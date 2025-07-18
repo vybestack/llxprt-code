@@ -231,13 +231,10 @@ describe('OpenAIProvider', () => {
       expect((provider as unknown as { apiKey: string }).apiKey).toBe(newKey);
     });
 
-    it('should throw error for empty API key', () => {
-      expect(() => provider.setApiKey('')).toThrow(
-        'OpenAI API key is required',
-      );
-      expect(() => provider.setApiKey('  ')).toThrow(
-        'OpenAI API key is required',
-      );
+    it('should accept empty API key', () => {
+      // Should not throw error for empty API key
+      expect(() => provider.setApiKey('')).not.toThrow();
+      expect(() => provider.setApiKey('  ')).not.toThrow();
     });
 
     it('should update base URL', () => {

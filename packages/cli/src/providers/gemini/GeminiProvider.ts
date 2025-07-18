@@ -297,7 +297,7 @@ export class GeminiProvider implements IProvider {
           });
         } else {
           throw new Error(
-            'No authentication credentials found. Please set GEMINI_API_KEY or configure Vertex AI credentials.',
+            'No authentication credentials found. Please use /auth to login with Google OAuth, set GEMINI_API_KEY, or configure Vertex AI credentials.',
           );
         }
         break;

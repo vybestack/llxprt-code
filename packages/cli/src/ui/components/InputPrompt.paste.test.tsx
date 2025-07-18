@@ -97,17 +97,14 @@ vi.mock('../hooks/useProviderModelDialog.js', () => ({
 }));
 
 // Variable to store the keypress handler
-let keypressHandler:
-  | ((ch: string | undefined, key: Record<string, unknown>) => void)
-  | null = null;
+let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
 vi.mock('../hooks/useKeypress.js', () => ({
-  useKeypress: (
-    handler: (ch: string | undefined, key: Record<string, unknown>) => void,
-  ) => {
+  useKeypress: (handler: (key: Record<string, unknown>) => void) => {
     keypressHandler = handler;
   },
+  Key: {},
 }));
 
 // Now import components after all mocks are set up
@@ -208,7 +205,7 @@ describe('InputPrompt paste functionality', () => {
     mockBuffer.setText.mockClear();
 
     // Call the handler directly instead of emitting stdin events
-    keypressHandler?.(undefined, {
+    keypressHandler?.({
       name: '',
       ctrl: false,
       meta: false,
@@ -220,12 +217,11 @@ describe('InputPrompt paste functionality', () => {
     // Wait for the event to be processed and React to update
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // The buffer should have been updated with the paste content
-    expect(mockBuffer.setText).toHaveBeenCalledWith(multiLineContent);
+    // The buffer should have been updated with the paste content using insert
+    expect(mockBuffer.insert).toHaveBeenCalledWith(multiLineContent);
 
-    // Check that submit was called exactly once with the full content
-    expect(mockOnSubmit).toHaveBeenCalledTimes(1);
-    expect(mockOnSubmit).toHaveBeenCalledWith(multiLineContent);
+    // Check that submit was NOT called automatically
+    expect(mockOnSubmit).not.toHaveBeenCalled();
   });
 
   it.skip('should show paste indicator for multi-line paste', async () => {
@@ -259,7 +255,7 @@ describe('InputPrompt paste functionality', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     // Call the handler directly instead of emitting stdin events
-    keypressHandler?.(undefined, {
+    keypressHandler?.({
       name: '',
       ctrl: false,
       meta: false,
@@ -311,7 +307,7 @@ describe('InputPrompt paste functionality', () => {
     mockBuffer.setText.mockClear();
 
     // Call the handler directly instead of emitting stdin events
-    keypressHandler?.(undefined, {
+    keypressHandler?.({
       name: '',
       ctrl: false,
       meta: false,
@@ -323,12 +319,11 @@ describe('InputPrompt paste functionality', () => {
     // Wait for the event to be processed
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // The buffer should have been updated with the paste content
-    expect(mockBuffer.setText).toHaveBeenCalledWith(singleLineContent);
+    // The buffer should have been updated with the paste content using insert
+    expect(mockBuffer.insert).toHaveBeenCalledWith(singleLineContent);
 
-    // Check that submit was called exactly once with the content
-    expect(mockOnSubmit).toHaveBeenCalledTimes(1);
-    expect(mockOnSubmit).toHaveBeenCalledWith(singleLineContent);
+    // Check that submit was NOT called automatically
+    expect(mockOnSubmit).not.toHaveBeenCalled();
 
     // Check that no paste indicator is shown for single line
     const output = lastFrame();

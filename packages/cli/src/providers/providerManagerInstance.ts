@@ -66,22 +66,20 @@ export function getProviderManager(config?: Config): ProviderManager {
         }
       }
 
-      if (openaiApiKey) {
-        const openaiBaseUrl = process.env.OPENAI_BASE_URL;
-        if (process.env.DEBUG || process.env.VERBOSE) {
-          console.log('[ProviderManager] Initializing OpenAI provider with:', {
-            hasApiKey: !!openaiApiKey,
-            baseUrl: openaiBaseUrl || 'default',
-          });
-        }
-        const openaiProvider = new OpenAIProvider(
-          openaiApiKey,
-          openaiBaseUrl,
-          userSettings,
-        );
-        providerManagerInstance.registerProvider(openaiProvider);
-        // OpenAI provider registered
+      const openaiBaseUrl = process.env.OPENAI_BASE_URL;
+      if (process.env.DEBUG || process.env.VERBOSE) {
+        console.log('[ProviderManager] Initializing OpenAI provider with:', {
+          hasApiKey: !!openaiApiKey,
+          baseUrl: openaiBaseUrl || 'default',
+        });
       }
+      const openaiProvider = new OpenAIProvider(
+        openaiApiKey || '',
+        openaiBaseUrl,
+        userSettings,
+      );
+      providerManagerInstance.registerProvider(openaiProvider);
+      // OpenAI provider registered
 
       // Initialize with Anthropic provider if API key is available
       // Priority: CLI /key (in settings) > Environment variable > keyfile
@@ -100,15 +98,13 @@ export function getProviderManager(config?: Config): ProviderManager {
         }
       }
 
-      if (anthropicApiKey) {
-        const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
-        const anthropicProvider = new AnthropicProvider(
-          anthropicApiKey,
-          anthropicBaseUrl,
-        );
-        providerManagerInstance.registerProvider(anthropicProvider);
-        // Anthropic provider registered
-      }
+      const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
+      const anthropicProvider = new AnthropicProvider(
+        anthropicApiKey || '',
+        anthropicBaseUrl,
+      );
+      providerManagerInstance.registerProvider(anthropicProvider);
+      // Anthropic provider registered
 
       // Initialize Qwen3-Fireworks provider if API key is available
       // Priority: Environment variable > OpenAI API key (since Fireworks uses OpenAI-compatible API)
@@ -123,14 +119,12 @@ export function getProviderManager(config?: Config): ProviderManager {
         fireworksApiKey = openaiApiKey;
       }
 
-      if (fireworksApiKey) {
-        const qwen3Provider = new Qwen3FireworksProvider(
-          fireworksApiKey,
-          userSettings,
-        );
-        providerManagerInstance.registerProvider(qwen3Provider);
-        // Qwen3-Fireworks provider registered
-      }
+      const qwen3Provider = new Qwen3FireworksProvider(
+        fireworksApiKey || '',
+        userSettings,
+      );
+      providerManagerInstance.registerProvider(qwen3Provider);
+      // Qwen3-Fireworks provider registered
     }
   }
 

@@ -38,7 +38,7 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
 
     // Check that input messages don't have tool_calls
     expect(request.input).toBeDefined();
-    expect(request.input?.length).toBe(2); // Tool message is removed
+    expect(request.input?.length).toBe(3); // 2 regular messages + 1 function_call_output
 
     // First message should be unchanged
     expect(request.input?.[0]).toEqual({
@@ -54,6 +54,13 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
     expect(
       (request.input?.[1] as Record<string, unknown>).tool_calls,
     ).toBeUndefined();
+
+    // Third entry should be the function_call_output
+    expect(request.input?.[2]).toEqual({
+      type: 'function_call_output',
+      call_id: 'call_123',
+      output: 'Sunny, 72°F',
+    });
   });
 
   it('should handle messages without tool_calls', () => {

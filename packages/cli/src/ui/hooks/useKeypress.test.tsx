@@ -18,6 +18,8 @@ describe('useKeypress', () => {
   let stdin: EventEmitter & {
     isTTY: boolean;
     setRawMode: (mode: boolean) => void;
+    resume: () => void;
+    pause: () => void;
   };
   let setRawMode: (mode: boolean) => void;
   let onKeypress: (key: Key) => void;
@@ -26,6 +28,8 @@ describe('useKeypress', () => {
     stdin = Object.assign(new EventEmitter(), {
       isTTY: true,
       setRawMode: vi.fn(),
+      resume: vi.fn(),
+      pause: vi.fn(),
     });
     setRawMode = vi.fn();
     onKeypress = vi.fn();

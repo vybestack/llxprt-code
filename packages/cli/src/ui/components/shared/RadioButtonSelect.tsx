@@ -56,7 +56,14 @@ export function RadioButtonSelect<T>({
   showScrollArrows = false,
   maxItemsToShow = 10,
 }: RadioButtonSelectProps<T>): React.JSX.Element {
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  // Ensure initialIndex is within bounds
+  const safeInitialIndex = Math.max(
+    0,
+    Math.min(initialIndex, items.length - 1),
+  );
+  const [activeIndex, setActiveIndex] = useState(
+    items.length > 0 ? safeInitialIndex : 0,
+  );
   const [scrollOffset, setScrollOffset] = useState(0);
 
   useEffect(() => {
@@ -76,15 +83,21 @@ export function RadioButtonSelect<T>({
       if (input === 'k' || key.upArrow) {
         const newIndex = activeIndex > 0 ? activeIndex - 1 : items.length - 1;
         setActiveIndex(newIndex);
-        onHighlight?.(items[newIndex]!.value);
+        if (items[newIndex]) {
+          onHighlight?.(items[newIndex].value);
+        }
       }
       if (input === 'j' || key.downArrow) {
         const newIndex = activeIndex < items.length - 1 ? activeIndex + 1 : 0;
         setActiveIndex(newIndex);
-        onHighlight?.(items[newIndex]!.value);
+        if (items[newIndex]) {
+          onHighlight?.(items[newIndex].value);
+        }
       }
       if (key.return) {
-        onSelect(items[activeIndex]!.value);
+        if (items[activeIndex]) {
+          onSelect(items[activeIndex].value);
+        }
       }
 
       // Enable selection directly from number keys.

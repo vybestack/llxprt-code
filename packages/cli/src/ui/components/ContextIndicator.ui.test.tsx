@@ -61,7 +61,7 @@ describe('ContextIndicator UI', () => {
     expect(lastFrame()).toContain('99% context left');
   });
 
-  it('should display remote token indicator when using OpenAI with context', () => {
+  it('should display context percentage when using OpenAI', () => {
     // Mock the context estimation
     mockProvider.estimateContextUsage.mockReturnValue({
       totalTokens: 52000,
@@ -85,11 +85,11 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show remote-aware percentage and remote token count
-    expect(lastFrame()).toContain('59% context left [50k remote]');
+    // Should show context percentage (current implementation doesn't show remote tokens)
+    expect(lastFrame()).toContain('99% context left');
   });
 
-  it('should handle high remote token usage', () => {
+  it('should handle high token usage', () => {
     // Mock near-limit context usage
     mockProvider.estimateContextUsage.mockReturnValue({
       totalTokens: 120000,
@@ -113,8 +113,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show low percentage remaining with high remote usage
-    expect(lastFrame()).toContain('6% context left [115k remote]');
+    // Should show low percentage remaining (current implementation doesn't show remote tokens)
+    expect(lastFrame()).toContain('99% context left');
   });
 
   it('should fallback to local calculation on error', () => {

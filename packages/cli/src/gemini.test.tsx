@@ -6,7 +6,7 @@
 
 import stripAnsi from 'strip-ansi';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { main } from './gemini.js';
+import { main } from './gemini.tsx';
 import {
   LoadedSettings,
   SettingsFile,
@@ -39,6 +39,12 @@ vi.mock('./config/config.js', () => ({
     modelWasSwitched: false,
     originalModelBeforeSwitch: null,
     finalModel: 'test-model',
+  }),
+  parseArguments: vi.fn().mockResolvedValue({
+    model: undefined,
+    sandbox: undefined,
+    sandboxImage: undefined,
+    debug: undefined,
   }),
 }));
 

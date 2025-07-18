@@ -45,5 +45,10 @@ export const validateAuthMethod = (authMethod: string): string | null => {
     return null;
   }
 
+  if (authMethod === AuthType.USE_NONE) {
+    // "None" is always valid - allows using environment variables or keyfiles
+    return null;
+  }
+
   return 'Invalid auth method selected.';
 };

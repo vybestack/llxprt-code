@@ -12,7 +12,7 @@ import {
   GeminiClient,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
-import { GenerateContentResponse, Part, FunctionCall } from '@google/genai';
+import { Part, FunctionCall } from '@google/genai';
 
 // Mock dependencies
 vi.mock('@vybestack/llxprt-code-core', async () => {
@@ -31,19 +31,13 @@ describe('runNonInteractive', () => {
   let mockConfig: Config;
   let mockGeminiClient: GeminiClient;
   let mockToolRegistry: ToolRegistry;
-  let mockChat: {
-    sendMessageStream: ReturnType<typeof vi.fn>;
-  };
   let mockProcessStdoutWrite: ReturnType<typeof vi.fn>;
   let mockProcessExit: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    mockChat = {
-      sendMessageStream: vi.fn(),
-    };
     mockGeminiClient = {
-      getChat: vi.fn().mockResolvedValue(mockChat),
+      sendMessageStream: vi.fn(),
     } as unknown as GeminiClient;
     mockToolRegistry = {
       getFunctionDeclarations: vi.fn().mockReturnValue([]),
@@ -77,26 +71,21 @@ describe('runNonInteractive', () => {
 
   it('should process input and write text output', async () => {
     const inputStream = (async function* () {
-      yield {
-        candidates: [{ content: { parts: [{ text: 'Hello' }] } }],
-      } as GenerateContentResponse;
-      yield {
-        candidates: [{ content: { parts: [{ text: ' World' }] } }],
-      } as GenerateContentResponse;
+      yield { type: 'content', value: 'Hello' };
+      yield { type: 'content', value: ' World' };
     })();
-    mockChat.sendMessageStream.mockResolvedValue(inputStream);
+    vi.mocked(mockGeminiClient.sendMessageStream).mockReturnValue(inputStream);
 
     await runNonInteractive(mockConfig, 'Test input', 'prompt-id-1');
 
-    expect(mockChat.sendMessageStream).toHaveBeenCalledWith(
-      {
-        message: [{ text: 'Test input' }],
-        config: {
-          abortSignal: expect.any(AbortSignal),
-          tools: [{ functionDeclarations: [] }],
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledWith(
+      [
+        {
+          text: `The current working directory is: ${process.cwd()}\n\nTest input`,
         },
-      },
-      expect.any(String),
+      ],
+      expect.any(AbortSignal),
+      'prompt-id-1',
     );
     expect(mockProcessStdoutWrite).toHaveBeenCalledWith('Hello');
     expect(mockProcessStdoutWrite).toHaveBeenCalledWith(' World');
@@ -104,7 +93,7 @@ describe('runNonInteractive', () => {
   });
 
   it('should handle a single tool call and respond', async () => {
-    const functionCall: FunctionCall = {
+    const _functionCall: FunctionCall = {
       id: 'fc1',
       name: 'testTool',
       args: { p: 'v' },
@@ -128,37 +117,37 @@ describe('runNonInteractive', () => {
     });
 
     const stream1 = (async function* () {
-      yield { functionCalls: [functionCall] } as GenerateContentResponse;
+      yield {
+        type: 'tool_call_request',
+        value: { name: 'testTool', args: { p: 'v' }, callId: 'fc1' },
+      };
     })();
     const stream2 = (async function* () {
-      yield {
-        candidates: [{ content: { parts: [{ text: 'Final answer' }] } }],
-      } as GenerateContentResponse;
+      yield { type: 'content', value: 'Final answer' };
     })();
-    mockChat.sendMessageStream
-      .mockResolvedValueOnce(stream1)
-      .mockResolvedValueOnce(stream2);
+    vi.mocked(mockGeminiClient.sendMessageStream)
+      .mockReturnValueOnce(stream1)
+      .mockReturnValueOnce(stream2);
 
     await runNonInteractive(mockConfig, 'Use a tool', 'prompt-id-2');
 
-    expect(mockChat.sendMessageStream).toHaveBeenCalledTimes(2);
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
     expect(mockCoreExecuteToolCall).toHaveBeenCalledWith(
       mockConfig,
       expect.objectContaining({ callId: 'fc1', name: 'testTool' }),
       mockToolRegistry,
       expect.any(AbortSignal),
     );
-    expect(mockChat.sendMessageStream).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: [toolResponsePart],
-      }),
-      expect.any(String),
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenLastCalledWith(
+      [toolResponsePart],
+      expect.any(AbortSignal),
+      'prompt-id-2',
     );
     expect(mockProcessStdoutWrite).toHaveBeenCalledWith('Final answer');
   });
 
   it('should handle error during tool execution', async () => {
-    const functionCall: FunctionCall = {
+    const _functionCall: FunctionCall = {
       id: 'fcError',
       name: 'errorTool',
       args: {},
@@ -182,19 +171,18 @@ describe('runNonInteractive', () => {
     });
 
     const stream1 = (async function* () {
-      yield { functionCalls: [functionCall] } as GenerateContentResponse;
+      yield {
+        type: 'tool_call_request',
+        value: { name: 'errorTool', args: {}, callId: 'fcError' },
+      };
     })();
 
     const stream2 = (async function* () {
-      yield {
-        candidates: [
-          { content: { parts: [{ text: 'Could not complete request.' }] } },
-        ],
-      } as GenerateContentResponse;
+      yield { type: 'content', value: 'Could not complete request.' };
     })();
-    mockChat.sendMessageStream
-      .mockResolvedValueOnce(stream1)
-      .mockResolvedValueOnce(stream2);
+    vi.mocked(mockGeminiClient.sendMessageStream)
+      .mockReturnValueOnce(stream1)
+      .mockReturnValueOnce(stream2);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -205,11 +193,10 @@ describe('runNonInteractive', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'Error executing tool errorTool: Tool execution failed badly',
     );
-    expect(mockChat.sendMessageStream).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: [errorResponsePart],
-      }),
-      expect.any(String),
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenLastCalledWith(
+      [errorResponsePart],
+      expect.any(AbortSignal),
+      'prompt-id-3',
     );
     expect(mockProcessStdoutWrite).toHaveBeenCalledWith(
       'Could not complete request.',
@@ -217,8 +204,11 @@ describe('runNonInteractive', () => {
   });
 
   it('should exit with error if sendMessageStream throws initially', async () => {
-    const apiError = new Error('API connection failed');
-    mockChat.sendMessageStream.mockRejectedValue(apiError);
+    const errorStream = (async function* () {
+      yield; // Add yield to satisfy generator function requirement
+      throw new Error('API connection failed');
+    })();
+    vi.mocked(mockGeminiClient.sendMessageStream).mockReturnValue(errorStream);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -228,10 +218,11 @@ describe('runNonInteractive', () => {
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       '[API Error: API connection failed]',
     );
+    expect(mockProcessExit).toHaveBeenCalledWith(1);
   });
 
   it('should not exit if a tool is not found, and should send error back to model', async () => {
-    const functionCall: FunctionCall = {
+    const _functionCall: FunctionCall = {
       id: 'fcNotFound',
       name: 'nonExistentTool',
       args: {},
@@ -255,22 +246,20 @@ describe('runNonInteractive', () => {
     });
 
     const stream1 = (async function* () {
-      yield { functionCalls: [functionCall] } as GenerateContentResponse;
+      yield {
+        type: 'tool_call_request',
+        value: { name: 'nonExistentTool', args: {}, callId: 'fcNotFound' },
+      };
     })();
     const stream2 = (async function* () {
       yield {
-        candidates: [
-          {
-            content: {
-              parts: [{ text: 'Unfortunately the tool does not exist.' }],
-            },
-          },
-        ],
-      } as GenerateContentResponse;
+        type: 'content',
+        value: 'Unfortunately the tool does not exist.',
+      };
     })();
-    mockChat.sendMessageStream
-      .mockResolvedValueOnce(stream1)
-      .mockResolvedValueOnce(stream2);
+    vi.mocked(mockGeminiClient.sendMessageStream)
+      .mockReturnValueOnce(stream1)
+      .mockReturnValueOnce(stream2);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -287,12 +276,11 @@ describe('runNonInteractive', () => {
 
     expect(mockProcessExit).not.toHaveBeenCalled();
 
-    expect(mockChat.sendMessageStream).toHaveBeenCalledTimes(2);
-    expect(mockChat.sendMessageStream).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        message: [errorResponsePart],
-      }),
-      expect.any(String),
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(2);
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenLastCalledWith(
+      [errorResponsePart],
+      expect.any(AbortSignal),
+      'prompt-id-5',
     );
 
     expect(mockProcessStdoutWrite).toHaveBeenCalledWith(
@@ -301,7 +289,7 @@ describe('runNonInteractive', () => {
   });
 
   it('should exit when max session turns are exceeded', async () => {
-    const functionCall: FunctionCall = {
+    const _functionCall: FunctionCall = {
       id: 'fcLoop',
       name: 'loopTool',
       args: {},
@@ -328,17 +316,20 @@ describe('runNonInteractive', () => {
     });
 
     const stream = (async function* () {
-      yield { functionCalls: [functionCall] } as GenerateContentResponse;
+      yield {
+        type: 'tool_call_request',
+        value: { name: 'loopTool', args: {}, callId: 'fcLoop' },
+      };
     })();
 
-    mockChat.sendMessageStream.mockResolvedValue(stream);
+    vi.mocked(mockGeminiClient.sendMessageStream).mockReturnValue(stream);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
 
     await runNonInteractive(mockConfig, 'Trigger loop');
 
-    expect(mockChat.sendMessageStream).toHaveBeenCalledTimes(1);
+    expect(mockGeminiClient.sendMessageStream).toHaveBeenCalledTimes(1);
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       `
  Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.`,

@@ -50,6 +50,10 @@ export class AnthropicProvider implements IProvider {
   }
 
   async getModels(): Promise<IModel[]> {
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      throw new Error('Anthropic API key is required to fetch models');
+    }
+
     try {
       // Fetch models from Anthropic API (beta endpoint)
       const models: IModel[] = [];
@@ -95,6 +99,12 @@ export class AnthropicProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      throw new Error(
+        'Anthropic API key is required to generate chat completions',
+      );
+    }
+
     let attemptCount = 0;
 
     const apiCall = async () => {
@@ -330,10 +340,6 @@ export class AnthropicProvider implements IProvider {
   }
 
   setApiKey(apiKey: string): void {
-    if (!apiKey || apiKey.trim() === '') {
-      throw new Error('Anthropic API key is required');
-    }
-
     this.apiKey = apiKey;
     // Create a new Anthropic client with the updated API key
     this.anthropic = new Anthropic({

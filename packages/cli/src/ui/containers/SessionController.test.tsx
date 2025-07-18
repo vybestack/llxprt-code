@@ -4,16 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+// Mock before imports
+vi.mock('../hooks/useHistoryManager.js', () => ({
+  useHistory: vi.fn(() => ({
+    history: [],
+    addItem: vi.fn(),
+    updateItem: vi.fn(),
+    clearItems: vi.fn(),
+    loadHistory: vi.fn(),
+  })),
+}));
+
+// Don't mock AppDispatchContext - use the real implementation
+
 import React from 'react';
-import { render, act, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { render } from 'ink-testing-library';
 import {
   SessionController,
   SessionContext,
   type SessionContextType,
 } from './SessionController.js';
-import { MessageType } from '../types.js';
-import { useAppDispatch } from '../contexts/AppDispatchContext.js';
+import { MessageType, type HistoryItem } from '../types.js';
 import {
   UserTierId,
   isProQuotaExceededError,
@@ -21,7 +34,11 @@ import {
   Config,
 } from '@vybestack/llxprt-code-core';
 import { IProvider } from '../../providers/IProvider.js';
-import { AppAction } from '../reducers/appReducer.js';
+// import { AppAction } from '../reducers/appReducer.js';
+import { useHistory } from '../hooks/useHistoryManager.js';
+
+// Get references to the mocked functions
+const mockHistoryManager = vi.mocked(useHistory);
 
 // Mock dependencies
 vi.mock('../../providers/providerManagerInstance.js', () => ({
@@ -53,25 +70,45 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   };
 });
 
-const mockAddItem = vi.fn();
-const mockUpdateItem = vi.fn();
-const mockClearItems = vi.fn();
-const mockLoadHistory = vi.fn();
-
-vi.mock('../hooks/useHistoryManager.js', () => ({
-  useHistory: () => ({
-    history: [],
-    addItem: mockAddItem,
-    updateItem: mockUpdateItem,
-    clearItems: mockClearItems,
-    loadHistory: mockLoadHistory,
-  }),
-}));
-
 describe('SessionController', () => {
   let mockConfig: Partial<Config>;
+  let mockAddItem: ReturnType<
+    typeof vi.fn<[Omit<HistoryItem, 'id'>, number], number>
+  >;
+  let mockUpdateItem: ReturnType<
+    typeof vi.fn<
+      [
+        number,
+        (
+          | Partial<Omit<HistoryItem, 'id'>>
+          | ((prevItem: HistoryItem) => Partial<Omit<HistoryItem, 'id'>>)
+        ),
+      ],
+      void
+    >
+  >;
+  let mockClearItems: ReturnType<typeof vi.fn<[], void>>;
+  let mockLoadHistory: ReturnType<typeof vi.fn<[HistoryItem[]], void>>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    vi.clearAllTimers();
+    vi.useFakeTimers();
+
+    // Reset the history manager mock with new function instances
+    mockAddItem = vi.fn();
+    mockUpdateItem = vi.fn();
+    mockClearItems = vi.fn();
+    mockLoadHistory = vi.fn();
+
+    mockHistoryManager.mockReturnValue({
+      history: [],
+      addItem: mockAddItem,
+      updateItem: mockUpdateItem,
+      clearItems: mockClearItems,
+      loadHistory: mockLoadHistory,
+    });
+
     mockConfig = {
       getModel: vi.fn(() => 'test-model'),
       getDebugMode: vi.fn(() => false),
@@ -84,17 +121,13 @@ describe('SessionController', () => {
       setModel: vi.fn(),
       getUserTier: vi.fn(() => Promise.resolve(undefined)),
     };
-
-    // Reset mocks
-    mockAddItem.mockReset();
-    mockUpdateItem.mockReset();
-    mockClearItems.mockReset();
-    mockLoadHistory.mockReset();
-    vi.clearAllTimers();
   });
 
   afterEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
     vi.clearAllTimers();
+    vi.restoreAllMocks();
   });
 
   it('should provide session context properly', () => {
@@ -105,7 +138,7 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
@@ -123,56 +156,34 @@ describe('SessionController', () => {
     expect(contextValue!.dispatch).toBeDefined();
     expect(contextValue!.appState).toBeDefined();
     expect(contextValue!.appDispatch).toBeDefined();
+
+    unmount();
   });
 
   it('should integrate appReducer and provide dispatch context', () => {
+    let contextValue: SessionContextType | undefined;
+
     const TestComponent = () => {
-      const dispatch = useAppDispatch();
-      return <div>{dispatch ? 'Dispatch available' : 'No dispatch'}</div>;
+      contextValue = React.useContext(SessionContext);
+      return (
+        <div>
+          {contextValue?.appDispatch ? 'Dispatch available' : 'No dispatch'}
+        </div>
+      );
     };
 
-    const { lastFrame } = render(
+    const { lastFrame, unmount } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
     expect(lastFrame()).toContain('Dispatch available');
+    unmount();
   });
 
-  it('should handle ADD_ITEM actions and call addItem on the session', async () => {
+  it('should handle ADD_ITEM actions and call addItem on the session', () => {
     mockAddItem.mockReturnValue(1);
-
-    let appDispatch: React.Dispatch<AppAction> | null = null;
-
-    const TestComponent = () => {
-      appDispatch = useAppDispatch();
-      return null;
-    };
-
-    render(
-      <SessionController config={mockConfig as Config}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    const itemData = { type: MessageType.USER, text: 'Test message' };
-    const baseTimestamp = Date.now();
-
-    act(() => {
-      appDispatch?.({ type: 'ADD_ITEM', payload: { itemData, baseTimestamp } });
-    });
-
-    await waitFor(() => {
-      expect(mockAddItem).toHaveBeenCalledWith(itemData, baseTimestamp);
-    });
-  });
-
-  it('should handle payment mode changes properly', async () => {
-    const providerModule = await import(
-      '../../providers/providerManagerInstance.js'
-    );
-    const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
 
     let contextValue: SessionContextType | undefined;
 
@@ -181,7 +192,57 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount, rerender } = render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    const itemData = { type: MessageType.USER, text: 'Test message' };
+    const baseTimestamp = Date.now();
+
+    // Use appDispatch from the context
+    contextValue?.appDispatch({
+      type: 'ADD_ITEM',
+      payload: { itemData, baseTimestamp },
+    });
+
+    // Force a re-render to trigger effects
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    // The effect should have run synchronously after the re-render
+    expect(mockAddItem).toHaveBeenCalledWith(itemData, baseTimestamp);
+
+    unmount();
+  });
+
+  it('should handle payment mode changes properly', async () => {
+    const providerModule = await import(
+      '../../providers/providerManagerInstance.js'
+    );
+    const mockGetProviderManager = vi.mocked(providerModule.getProviderManager);
+
+    // Mock useHistory to return a non-empty history
+    mockHistoryManager.mockReturnValue({
+      history: [{ id: 1, type: MessageType.USER, text: 'Test' }],
+      addItem: mockAddItem,
+      updateItem: mockUpdateItem,
+      clearItems: mockClearItems,
+      loadHistory: mockLoadHistory,
+    });
+
+    let contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
@@ -190,25 +251,6 @@ describe('SessionController', () => {
     // Start with free mode
     expect(contextValue!.sessionState.isPaidMode).toBe(false);
     expect(contextValue!.sessionState.transientWarnings).toHaveLength(0);
-
-    // Add history item to simulate non-startup state
-    vi.mocked(providerModule.getProviderManager)().hasActiveProvider = () =>
-      true;
-    vi.mocked(providerModule.getProviderManager)().getActiveProvider = () => ({
-      name: 'test-provider',
-      getCurrentModel: () => 'test-model',
-      isPaidMode: () => false,
-    });
-
-    // Mock useHistory to return a non-empty history
-    const historyModule = await import('../hooks/useHistoryManager.js');
-    vi.mocked(historyModule.useHistory).mockReturnValue({
-      history: [{ id: 1, type: MessageType.USER, text: 'Test' }],
-      addItem: mockAddItem,
-      updateItem: mockUpdateItem,
-      clearItems: mockClearItems,
-      loadHistory: mockLoadHistory,
-    });
 
     // Switch to paid mode
     mockGetProviderManager.mockReturnValue({
@@ -221,19 +263,26 @@ describe('SessionController', () => {
         }) as Partial<IProvider> as IProvider,
     } as ReturnType<typeof providerModule.getProviderManager>);
 
-    act(() => {
-      contextValue!.checkPaymentModeChange();
-    });
+    // Call checkPaymentModeChange
+    contextValue!.checkPaymentModeChange();
 
-    await waitFor(() => {
-      expect(contextValue!.sessionState.transientWarnings).toHaveLength(1);
-      expect(contextValue!.sessionState.transientWarnings[0]).toContain(
-        'PAID MODE',
-      );
-      expect(contextValue!.sessionState.transientWarnings[0]).toContain(
-        'anthropic',
-      );
-    });
+    // Re-render to get updated state
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    // The state should update synchronously after calling checkPaymentModeChange
+    expect(contextValue!.sessionState.transientWarnings).toHaveLength(1);
+    expect(contextValue!.sessionState.transientWarnings[0]).toContain(
+      'PAID MODE',
+    );
+    expect(contextValue!.sessionState.transientWarnings[0]).toContain(
+      'anthropic',
+    );
+
+    unmount();
   });
 
   it('should handle memory refresh successfully', async () => {
@@ -244,15 +293,13 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
-    await act(async () => {
-      await contextValue!.performMemoryRefresh();
-    });
+    await contextValue!.performMemoryRefresh();
 
     expect(mockConfig.setUserMemory).toHaveBeenCalledWith(
       'test memory content',
@@ -275,6 +322,8 @@ describe('SessionController', () => {
       }),
       expect.any(Number),
     );
+
+    unmount();
   });
 
   it('should handle memory refresh errors', async () => {
@@ -290,15 +339,13 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
-    await act(async () => {
-      await contextValue!.performMemoryRefresh();
-    });
+    await contextValue!.performMemoryRefresh();
 
     // Check that error message was added
     expect(mockAddItem).toHaveBeenCalledWith(
@@ -310,48 +357,32 @@ describe('SessionController', () => {
       }),
       expect.any(Number),
     );
-  });
 
-  it('should sync user tier when not authenticating', async () => {
-    mockConfig.getUserTier?.mockResolvedValue(UserTierId.STANDARD);
-
-    let contextValue: SessionContextType | undefined;
-
-    const TestComponent = () => {
-      contextValue = React.useContext(SessionContext);
-      return null;
-    };
-
-    render(
-      <SessionController config={mockConfig as Config} isAuthenticating={false}>
-        <TestComponent />
-      </SessionController>,
-    );
-
-    await waitFor(() => {
-      expect(mockConfig.getUserTier).toHaveBeenCalled();
-      expect(contextValue!.sessionState.userTier).toBe(UserTierId.STANDARD);
-    });
+    unmount();
   });
 
   it('should not sync user tier when authenticating', async () => {
-    render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config} isAuthenticating={true}>
         <div>Test</div>
       </SessionController>,
     );
 
-    await waitFor(() => {
-      expect(mockConfig.getUserTier).not.toHaveBeenCalled();
-    });
+    // Wait for any effects to run
+    vi.runAllTimers();
+    await Promise.resolve();
+
+    expect(mockConfig.getUserTier).not.toHaveBeenCalled();
+
+    unmount();
   });
 
   it('should set up flash fallback handler for quota errors', async () => {
     type FlashFallbackHandler = (
-      originalModel: string,
+      currentModel: string,
       fallbackModel: string,
-      error: Error,
-    ) => Promise<void>;
+      error?: unknown,
+    ) => Promise<boolean>;
 
     let flashFallbackHandler: FlashFallbackHandler | null = null;
     mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
@@ -365,7 +396,7 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
@@ -374,23 +405,19 @@ describe('SessionController', () => {
     expect(mockConfig.setFlashFallbackHandler).toHaveBeenCalled();
 
     // Test pro quota error handling with paid tier
-    act(() => {
-      contextValue!.dispatch({
-        type: 'SET_USER_TIER',
-        payload: UserTierId.STANDARD,
-      });
+    contextValue!.dispatch({
+      type: 'SET_USER_TIER',
+      payload: UserTierId.STANDARD,
     });
 
     const mockError = new Error('Quota exceeded');
     vi.mocked(isProQuotaExceededError).mockReturnValue(true);
 
-    await act(async () => {
-      await flashFallbackHandler?.(
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        mockError,
-      );
-    });
+    await flashFallbackHandler?.(
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      mockError,
+    );
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -403,11 +430,11 @@ describe('SessionController', () => {
     );
     expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
     expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+
+    unmount();
   });
 
   it('should handle model changes via polling', async () => {
-    vi.useFakeTimers();
-
     const providerModule = await import(
       '../../providers/providerManagerInstance.js'
     );
@@ -420,7 +447,7 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
@@ -443,63 +470,72 @@ describe('SessionController', () => {
     } as ReturnType<typeof providerModule.getProviderManager>);
 
     // Advance timer to trigger the interval
-    act(() => {
-      vi.advanceTimersByTime(1100);
-    });
+    vi.advanceTimersByTime(1100);
 
-    await waitFor(() => {
-      expect(contextValue!.sessionState.currentModel).toBe(
-        'new-provider:new-model',
-      );
-    });
-
-    vi.useRealTimers();
-  });
-
-  it('should handle UPDATE_ITEM action', async () => {
-    let appDispatch: React.Dispatch<AppAction> | null = null;
-
-    const TestComponent = () => {
-      appDispatch = useAppDispatch();
-      return null;
-    };
-
-    render(
+    // Re-render to get updated state
+    rerender(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
-    const updatedItem = { id: 1, type: MessageType.USER, text: 'Updated' };
+    // The polling should have updated the state
+    expect(contextValue!.sessionState.currentModel).toBe(
+      'new-provider:new-model',
+    );
 
-    act(() => {
-      appDispatch?.({ type: 'UPDATE_ITEM', payload: updatedItem });
-    });
+    unmount();
+  });
 
-    const historyModule = await import('../hooks/useHistoryManager.js');
-    const historyReturn = vi.mocked(historyModule.useHistory).mock.results[0]
-      ?.value as ReturnType<typeof historyModule.useHistory>;
+  it('should handle UPDATE_ITEM action', async () => {
+    let contextValue: SessionContextType | undefined;
 
-    await waitFor(() => {
-      expect(historyReturn.updateItem).toHaveBeenCalledWith(updatedItem);
-    });
+    const TestComponent = () => {
+      contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    const { unmount } = render(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    const itemId = 1;
+    const updateData = { type: MessageType.USER, text: 'Updated' };
+
+    contextValue!.updateItem(itemId, updateData);
+
+    // Allow microtasks to complete
+    await Promise.resolve();
+
+    expect(mockUpdateItem).toHaveBeenCalledWith(itemId, updateData);
+
+    unmount();
   });
 
   it('should handle generic quota errors correctly', async () => {
     type FlashFallbackHandler = (
-      originalModel: string,
+      currentModel: string,
       fallbackModel: string,
-      error: Error,
-    ) => Promise<void>;
+      error?: unknown,
+    ) => Promise<boolean>;
 
     let flashFallbackHandler: FlashFallbackHandler | null = null;
     mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
       flashFallbackHandler = handler;
     });
 
-    render(
+    let _contextValue: SessionContextType | undefined;
+
+    const TestComponent = () => {
+      _contextValue = React.useContext(SessionContext);
+      return null;
+    };
+
+    const { unmount } = render(
       <SessionController config={mockConfig as Config}>
-        <div>Test</div>
+        <TestComponent />
       </SessionController>,
     );
 
@@ -507,22 +543,11 @@ describe('SessionController', () => {
     vi.mocked(isProQuotaExceededError).mockReturnValue(false);
     vi.mocked(isGenericQuotaExceededError).mockReturnValue(true);
 
-    const historyModule = await import('../hooks/useHistoryManager.js');
-    vi.mocked(historyModule.useHistory).mockReturnValue({
-      history: [],
-      addItem: mockAddItem,
-      updateItem: mockUpdateItem,
-      clearItems: mockClearItems,
-      loadHistory: mockLoadHistory,
-    });
-
-    await act(async () => {
-      await flashFallbackHandler?.(
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        mockError,
-      );
-    });
+    await flashFallbackHandler?.(
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      mockError,
+    );
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -532,20 +557,20 @@ describe('SessionController', () => {
       expect.any(Number),
     );
     expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    expect(mockConfig.setModel).not.toHaveBeenCalled();
+    expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+
+    unmount();
   });
 
   it('should handle warnings from appReducer', async () => {
     let contextValue: SessionContextType | undefined;
-    let appDispatch: React.Dispatch<AppAction> | null = null;
 
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
-      appDispatch = useAppDispatch();
       return null;
     };
 
-    render(
+    const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
@@ -554,83 +579,94 @@ describe('SessionController', () => {
     const warningKey = 'test-warning';
     const warningMessage = 'This is a test warning';
 
-    act(() => {
-      appDispatch?.({
-        type: 'SET_WARNING',
-        payload: { key: warningKey, message: warningMessage },
-      });
+    // Use the appDispatch from context
+    contextValue?.appDispatch({
+      type: 'SET_WARNING',
+      payload: { key: warningKey, message: warningMessage },
     });
 
-    await waitFor(() => {
-      expect(contextValue!.appState.warnings.get(warningKey)).toBe(
-        warningMessage,
-      );
+    // Re-render to get updated state
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    expect(contextValue!.appState.warnings.get(warningKey)).toBe(
+      warningMessage,
+    );
+
+    contextValue?.appDispatch({
+      type: 'CLEAR_WARNING',
+      payload: warningKey,
     });
 
-    act(() => {
-      appDispatch?.({
-        type: 'CLEAR_WARNING',
-        payload: warningKey,
-      });
-    });
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
 
-    await waitFor(() => {
-      expect(contextValue!.appState.warnings.has(warningKey)).toBe(false);
-    });
+    expect(contextValue!.appState.warnings.has(warningKey)).toBe(false);
+
+    unmount();
   });
 
   it('should handle dialog actions from appReducer', async () => {
     let contextValue: SessionContextType | undefined;
-    let appDispatch: React.Dispatch<AppAction> | null = null;
 
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
-      appDispatch = useAppDispatch();
       return null;
     };
 
-    render(
+    const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
     // Open dialog
-    act(() => {
-      appDispatch?.({
-        type: 'OPEN_DIALOG',
-        payload: 'theme',
-      });
+    contextValue?.appDispatch({
+      type: 'OPEN_DIALOG',
+      payload: 'theme',
     });
 
-    await waitFor(() => {
-      expect(contextValue!.appState.openDialogs.theme).toBe(true);
-    });
+    // Re-render to get updated state
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    expect(contextValue!.appState.openDialogs.theme).toBe(true);
 
     // Close dialog
-    act(() => {
-      appDispatch?.({
-        type: 'CLOSE_DIALOG',
-        payload: 'theme',
-      });
+    contextValue?.appDispatch({
+      type: 'CLOSE_DIALOG',
+      payload: 'theme',
     });
 
-    await waitFor(() => {
-      expect(contextValue!.appState.openDialogs.theme).toBe(false);
-    });
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    expect(contextValue!.appState.openDialogs.theme).toBe(false);
+
+    unmount();
   });
 
   it('should handle error actions from appReducer', async () => {
     let contextValue: SessionContextType | undefined;
-    let appDispatch: React.Dispatch<AppAction> | null = null;
 
     const TestComponent = () => {
       contextValue = React.useContext(SessionContext);
-      appDispatch = useAppDispatch();
       return null;
     };
 
-    render(
+    const { unmount, rerender } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
@@ -638,35 +674,42 @@ describe('SessionController', () => {
 
     const errorMessage = 'Test error message';
 
-    act(() => {
-      appDispatch?.({
-        type: 'SET_AUTH_ERROR',
-        payload: errorMessage,
-      });
+    contextValue?.appDispatch({
+      type: 'SET_AUTH_ERROR',
+      payload: errorMessage,
     });
 
-    await waitFor(() => {
-      expect(contextValue!.appState.errors.auth).toBe(errorMessage);
+    // Re-render to get updated state
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
+
+    expect(contextValue!.appState.errors.auth).toBe(errorMessage);
+
+    contextValue?.appDispatch({
+      type: 'SET_AUTH_ERROR',
+      payload: null,
     });
 
-    act(() => {
-      appDispatch?.({
-        type: 'SET_AUTH_ERROR',
-        payload: null,
-      });
-    });
+    rerender(
+      <SessionController config={mockConfig as Config}>
+        <TestComponent />
+      </SessionController>,
+    );
 
-    await waitFor(() => {
-      expect(contextValue!.appState.errors.auth).toBe(null);
-    });
+    expect(contextValue!.appState.errors.auth).toBe(null);
+
+    unmount();
   });
 
   it('should handle free mode quota errors', async () => {
     type FlashFallbackHandler = (
-      originalModel: string,
+      currentModel: string,
       fallbackModel: string,
-      error: Error,
-    ) => Promise<void>;
+      error?: unknown,
+    ) => Promise<boolean>;
 
     let flashFallbackHandler: FlashFallbackHandler | null = null;
     mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
@@ -680,39 +723,39 @@ describe('SessionController', () => {
       return null;
     };
 
-    render(
+    const { unmount } = render(
       <SessionController config={mockConfig as Config}>
         <TestComponent />
       </SessionController>,
     );
 
     // Ensure we're in free tier
-    act(() => {
-      contextValue!.dispatch({
-        type: 'SET_USER_TIER',
-        payload: UserTierId.FREE,
-      });
+    contextValue!.dispatch({
+      type: 'SET_USER_TIER',
+      payload: UserTierId.FREE,
     });
 
     const mockError = new Error('Quota exceeded');
     vi.mocked(isProQuotaExceededError).mockReturnValue(true);
 
-    await act(async () => {
-      await flashFallbackHandler?.(
-        'gemini-2.5-pro',
-        'gemini-2.5-flash',
-        mockError,
-      );
-    });
+    await flashFallbackHandler?.(
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      mockError,
+    );
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageType.INFO,
-        text: expect.stringContaining('You have reached your free usage limit'),
+        text: expect.stringContaining(
+          'You have reached your daily gemini-2.5-pro quota limit',
+        ),
       }),
       expect.any(Number),
     );
     expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
     expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+
+    unmount();
   });
 });

@@ -149,6 +149,7 @@ describe('parseErrorResponse', () => {
     const error = parseErrorResponse(
       409,
       '{"error":{"message":"Conversation already exists"}}',
+      'Responses',
     );
     expect(error.message).toBe('Conflict: Conversation already exists');
   });
@@ -157,6 +158,7 @@ describe('parseErrorResponse', () => {
     const error = parseErrorResponse(
       410,
       '{"error":{"message":"Conversation expired"}}',
+      'Responses',
     );
     expect(error.message).toBe('Gone: Conversation expired');
   });
@@ -165,6 +167,7 @@ describe('parseErrorResponse', () => {
     const error = parseErrorResponse(
       429,
       '{"error":{"message":"Too many requests"}}',
+      'Responses',
     );
     expect(error.message).toBe('Rate limit exceeded: Too many requests');
   });
@@ -173,18 +176,20 @@ describe('parseErrorResponse', () => {
     const error500 = parseErrorResponse(
       500,
       '{"error":{"message":"Internal error"}}',
+      'Responses',
     );
     expect(error500.message).toBe('Server error: Internal error');
 
     const error503 = parseErrorResponse(
       503,
       '{"error":{"message":"Service unavailable"}}',
+      'Responses',
     );
     expect(error503.message).toBe('Server error: Service unavailable');
   });
 
   it('should handle invalid JSON in error response', () => {
-    const error = parseErrorResponse(500, 'Not JSON');
+    const error = parseErrorResponse(500, 'Not JSON', 'Responses');
     expect(error.message).toBe('Server error: Responses API error: 500');
   });
 
@@ -192,6 +197,7 @@ describe('parseErrorResponse', () => {
     const error = parseErrorResponse(
       418,
       '{"error":{"message":"I am a teapot"}}',
+      'Responses',
     );
     expect(error.message).toBe('I am a teapot');
   });

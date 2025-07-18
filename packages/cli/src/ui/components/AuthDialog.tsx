@@ -101,6 +101,9 @@ export function AuthDialog({
 
     return item.value === AuthType.LOGIN_WITH_GOOGLE;
   });
+
+  // Ensure we have a valid initial index (default to 0 if not found)
+  const safeInitialIndex = initialAuthIndex >= 0 ? initialAuthIndex : 0;
   const handleAuthSelect = useCallback(
     (authMethod: AuthType) => {
       const error = validateAuthMethod(authMethod);
@@ -147,7 +150,7 @@ export function AuthDialog({
       <Box marginTop={1}>
         <RadioButtonSelect
           items={items}
-          initialIndex={initialAuthIndex}
+          initialIndex={safeInitialIndex}
           onSelect={handleAuthSelect}
           isFocused={true}
         />

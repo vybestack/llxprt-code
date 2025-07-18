@@ -49,10 +49,6 @@ export class OpenAIProvider implements IProvider {
   private conversationCache: ConversationCache;
 
   constructor(apiKey: string, baseURL?: string, settings?: Settings) {
-    if (!apiKey || apiKey.trim() === '') {
-      throw new Error('OpenAI API key is required');
-    }
-
     this.apiKey = apiKey;
     this.baseURL = baseURL;
     this.settings = settings;
@@ -139,6 +135,11 @@ export class OpenAIProvider implements IProvider {
       stateful?: boolean;
     },
   ): Promise<AsyncIterableIterator<IMessage>> {
+    // Check if API key is available
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      throw new Error('OpenAI API key is required to make API calls');
+    }
+
     // Remove the stateful mode error to allow O3 to work with conversation IDs
 
     // Check context usage and warn if getting close to limit
@@ -383,6 +384,11 @@ export class OpenAIProvider implements IProvider {
   }
 
   async getModels(): Promise<IModel[]> {
+    // Check if API key is available
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      throw new Error('OpenAI API key is required to fetch models');
+    }
+
     try {
       const response = await this.openai.models.list();
       const models: IModel[] = [];
@@ -441,6 +447,11 @@ export class OpenAIProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
+    // Check if API key is available
+    if (!this.apiKey || this.apiKey.trim() === '') {
+      throw new Error('OpenAI API key is required to generate completions');
+    }
+
     // Check if we should use responses endpoint
     if (this.shouldUseResponses(this.currentModel)) {
       // Get the current conversation context
@@ -596,10 +607,6 @@ export class OpenAIProvider implements IProvider {
   }
 
   setApiKey(apiKey: string): void {
-    if (!apiKey || apiKey.trim() === '') {
-      throw new Error('OpenAI API key is required');
-    }
-
     this.apiKey = apiKey;
     // Create a new OpenAI client with the updated API key
     this.openai = new OpenAI({

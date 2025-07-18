@@ -11,7 +11,7 @@ Maintain clean context by delegating work to worker Claudes instead of doing tas
 For investigation, analysis, or long-running tasks:
 
 ```bash
-claude --dangerously-skip-permissions -p "Your detailed prompt here. Write a report to /path/to/report.txt" &
+claude --dangerously-skip-permissions -p "Your detailed prompt here. Write a report to ./reports/your-report.md" &
 ```
 
 ### Background Workers with PID Tracking
@@ -20,8 +20,8 @@ To prevent duplicate workers and monitor progress:
 
 ```bash
 # Capture PID when launching
-WORKER_PID=$(claude --dangerously-skip-permissions -p "Your task..." > /tmp/worker-$$.log 2>&1 & echo $!)
-echo "Worker PID: $WORKER_PID" >> /tmp/worker-pids.txt
+WORKER_PID=$(claude --dangerously-skip-permissions -p "Your task..." > ./reports/worker-$$.log 2>&1 & echo $!)
+echo "Worker PID: $WORKER_PID" >> ./reports/worker-pids.txt
 echo "Started worker with PID: $WORKER_PID"
 ```
 
@@ -57,7 +57,7 @@ Please:
 1. Search for all database-related files
 2. Analyze connection patterns and error handling
 3. Identify potential issues
-4. Write a detailed report to /tmp/db-investigation-report.txt
+4. Write a detailed report to ./reports/db-investigation-report.md
 Include file paths, line numbers, and specific recommendations."
 ```
 
@@ -78,10 +78,11 @@ Include file paths, line numbers, and specific recommendations."
 ## Report Writing Best Practices
 
 1. **Use markdown format** - Workers more reliably write .md files to a reports/ subdirectory
-2. **Create report immediately** - Tell workers to create the report file at startup
-3. **Log progressively** - Instruct workers to log their actions as they work, not just at the end
-4. **Avoid txt/log extensions** - These are written less reliably than .md files
-5. **Use reports subdirectory** - Create reports in `./reports/` rather than `/tmp/`
+2. **Create report immediately** - Tell workers to create the report file at the very start of their work, before doing anything else
+3. **Log progressively** - Instruct workers to update the report continuously as they work, not just at the end
+4. **Note completion** - Workers should explicitly note when they have finished their work with a completion timestamp
+5. **Avoid txt/log extensions** - These are written less reliably than .md files
+6. **Use reports subdirectory** - Create reports in `./reports/` rather than `/tmp/`
 
 ### Example Report Prompt
 
@@ -100,6 +101,7 @@ During work, log:
 At completion, add:
 - Summary of all changes
 - Final results
+- Note completion time
 - Recommendations"
 ```
 
@@ -109,13 +111,13 @@ At completion, add:
 
 ```bash
 # Launch investigator
-claude --dangerously-skip-permissions -p "Investigate X, write findings to /tmp/x-report.txt" &
+claude --dangerously-skip-permissions -p "Investigate X, write findings to ./reports/x-report.md" &
 
 # Sleep while it works
 sleep 300
 
 # Check results
-cat /tmp/x-report.txt
+cat ./reports/x-report.md
 ```
 
 ### Fix Pattern
@@ -125,7 +127,7 @@ cat /tmp/x-report.txt
 claude --dangerously-skip-permissions -p "Fix the import error in file.js"
 
 # For complex fixes, use background
-claude --dangerously-skip-permissions -p "Refactor the authentication system, write progress to /tmp/auth-refactor.log" &
+claude --dangerously-skip-permissions -p "Refactor the authentication system, write progress to ./reports/auth-refactor.md" &
 sleep 600
 ```
 
@@ -133,8 +135,8 @@ sleep 600
 
 ```bash
 # Launch multiple workers for independent tasks
-claude --dangerously-skip-permissions -p "Task 1, report to /tmp/task1.txt" &
-claude --dangerously-skip-permissions -p "Task 2, report to /tmp/task2.txt" &
+claude --dangerously-skip-permissions -p "Task 1, report to ./reports/task1.md" &
+claude --dangerously-skip-permissions -p "Task 2, report to ./reports/task2.md" &
 sleep 300
 ```
 
@@ -146,11 +148,11 @@ Track worker PIDs to prevent duplicates and monitor progress:
 
 ```bash
 # Create PID tracking file
-touch /tmp/worker-pids.txt
+touch ./reports/worker-pids.txt
 
 # Launch worker with PID capture
-WORKER1_PID=$(claude --dangerously-skip-permissions -p "Task 1..." > /tmp/worker1-$$.log 2>&1 & echo $!)
-echo "Worker 1 PID: $WORKER1_PID" >> /tmp/worker-pids.txt
+WORKER1_PID=$(claude --dangerously-skip-permissions -p "Task 1..." > ./reports/worker1-$$.log 2>&1 & echo $!)
+echo "Worker 1 PID: $WORKER1_PID" >> ./reports/worker-pids.txt
 
 # Monitor active workers
 ps aux | grep -E "PID|$WORKER1_PID" | grep -v grep
@@ -163,7 +165,7 @@ Create a monitoring script to track all workers:
 ```bash
 #!/bin/bash
 echo "=== Worker Status Monitor ==="
-if [ -f /tmp/worker-pids.txt ]; then
+if [ -f ./reports/worker-pids.txt ]; then
     while IFS= read -r line; do
         if [[ $line =~ PID:\ ([0-9]+) ]]; then
             PID="${BASH_REMATCH[1]}"
@@ -173,7 +175,7 @@ if [ -f /tmp/worker-pids.txt ]; then
                 echo "$line - COMPLETED"
             fi
         fi
-    done < /tmp/worker-pids.txt
+    done < ./reports/worker-pids.txt
 fi
 ```
 

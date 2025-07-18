@@ -33,6 +33,7 @@ bundle
 
 # Test report files
 junit.xml
+junit.*.xml
 packages/*/coverage/
 
 # Generated files
@@ -42,3 +43,6 @@ packages/cli/src/generated/
 # Added by Gemini
 reports/
 prompts/
+
+# Reference directory
+reference/

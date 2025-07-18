@@ -81,6 +81,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       buffer.setText('');
       onSubmit(submittedValue);
       resetCompletionState();
+      setPasteMessage(null);
     },
     [onSubmit, buffer, resetCompletionState, shellModeActive, shellHistory],
   );
@@ -386,16 +387,10 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         const lines = key.sequence.split('\n');
         if (lines.length > 1) {
           setPasteMessage(`[${lines.length} lines pasted]`);
-          // Clear the message after 2 seconds
-          setTimeout(() => setPasteMessage(null), 2000);
         }
 
-        // Set the entire paste content at once and submit
-        buffer.setText(key.sequence);
-        // Submit the entire pasted content
-        if (buffer.text.trim()) {
-          handleSubmitAndClear(buffer.text);
-        }
+        // Insert the paste content at cursor position
+        buffer.insert(key.sequence);
         return;
       }
 
