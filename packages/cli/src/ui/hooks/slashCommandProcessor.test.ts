@@ -43,11 +43,25 @@ vi.mock('node:process', () => ({
   })),
 }));
 
-vi.mock('node:fs/promises', () => ({
-  readFile: vi.fn(),
-  writeFile: vi.fn(),
-  mkdir: vi.fn(),
-}));
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    default: actual,
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+  };
+});
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return {
+    ...actual,
+    default: actual,
+    homedir: vi.fn(() => '/mock/home'),
+  };
+});
 
 const mockGetCliVersionFn = vi.fn(() => Promise.resolve('0.1.0'));
 vi.mock('../../utils/version.js', () => ({

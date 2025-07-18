@@ -56,6 +56,7 @@ export async function runNonInteractive(
 
       // Convert currentMessages to PartListUnion format for geminiClient
       const parts = currentMessages[0]?.parts || [];
+
       const responseStream = geminiClient.sendMessageStream(
         parts,
         abortController.signal,
@@ -134,18 +135,28 @@ export async function runNonInteractive(
           }
 
           if (toolResponse.responseParts) {
-            const parts = Array.isArray(toolResponse.responseParts)
-              ? toolResponse.responseParts
-              : [toolResponse.responseParts];
-            for (const part of parts) {
-              if (typeof part === 'string') {
-                toolResponseParts.push({ text: part });
-              } else if (part) {
-                toolResponseParts.push(part);
+            // Handle responseParts as PartListUnion (can be Part, Part[], or string)
+            const parts = toolResponse.responseParts;
+
+            if (Array.isArray(parts)) {
+              // Handle each part in the array
+              for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                if (typeof part === 'string') {
+                  toolResponseParts.push({ text: part });
+                } else {
+                  toolResponseParts.push(part as Part);
+                }
               }
+            } else if (typeof parts === 'string') {
+              toolResponseParts.push({ text: parts });
+            } else {
+              toolResponseParts.push(parts as Part);
             }
           }
         }
+
+        // Don't wrap in Content structure - send parts directly like interactive mode
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
       } else {
         process.stdout.write('\n'); // Ensure a final newline

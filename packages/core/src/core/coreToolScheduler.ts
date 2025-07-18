@@ -183,12 +183,18 @@ export function convertToFunctionResponse(
       contentToProcess.inlineData?.mimeType ||
       contentToProcess.fileData?.mimeType ||
       'unknown';
-    const functionResponse = createFunctionResponsePart(
-      callId,
-      toolName,
-      `Binary content of type ${mimeType} was processed.`,
-    );
-    return [functionResponse, contentToProcess];
+    // Return a special function response that includes the binary content
+    return {
+      functionResponse: {
+        id: callId,
+        name: toolName,
+        response: {
+          output: `Binary content of type ${mimeType} was processed.`,
+          // Include the binary content in a special field
+          binaryContent: contentToProcess,
+        },
+      },
+    };
   }
 
   if (contentToProcess.text !== undefined) {

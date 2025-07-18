@@ -186,6 +186,17 @@ export async function main() {
 
   // Process CLI-provided credentials (--key, --keyfile, --baseurl)
   if (argv.key || argv.keyfile || argv.baseurl) {
+    // If any provider-specific credential flag is used, ensure we're in USE_PROVIDER mode.
+    // This prevents falling back to Gemini auth when a user provides e.g. only --key.
+    if (settings.merged.selectedAuthType !== AuthType.USE_PROVIDER) {
+      settings.setValue(
+        SettingScope.User,
+        'selectedAuthType',
+        AuthType.USE_PROVIDER,
+      );
+      await config.refreshAuth(AuthType.USE_PROVIDER);
+    }
+
     // Handle --key
     if (argv.key) {
       const result = await setProviderApiKey(
@@ -481,6 +492,17 @@ async function loadNonInteractiveConfig(
 
   // Process CLI-provided credentials (--key, --keyfile, --baseurl)
   if (argv.key || argv.keyfile || argv.baseurl) {
+    // If any provider-specific credential flag is used, ensure we're in USE_PROVIDER mode.
+    // This prevents falling back to Gemini auth when a user provides e.g. only --key.
+    if (settings.merged.selectedAuthType !== AuthType.USE_PROVIDER) {
+      settings.setValue(
+        SettingScope.User,
+        'selectedAuthType',
+        AuthType.USE_PROVIDER,
+      );
+      await finalConfig.refreshAuth(AuthType.USE_PROVIDER);
+    }
+
     // Handle --key
     if (argv.key) {
       const result = await setProviderApiKey(

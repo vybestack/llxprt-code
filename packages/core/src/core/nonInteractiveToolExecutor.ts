@@ -45,15 +45,13 @@ export async function executeToolCall(
     // Ensure the response structure matches what the API expects for an error
     return {
       callId: toolCallRequest.callId,
-      responseParts: [
-        {
-          functionResponse: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            response: { error: error.message },
-          },
+      responseParts: {
+        functionResponse: {
+          id: toolCallRequest.callId,
+          name: toolCallRequest.name,
+          response: { error: error.message },
         },
-      ],
+      },
       resultDisplay: error.message,
       error,
     };
@@ -110,15 +108,13 @@ export async function executeToolCall(
     });
     return {
       callId: toolCallRequest.callId,
-      responseParts: [
-        {
-          functionResponse: {
-            id: toolCallRequest.callId,
-            name: toolCallRequest.name,
-            response: { error: error.message },
-          },
+      responseParts: {
+        functionResponse: {
+          id: toolCallRequest.callId,
+          name: toolCallRequest.name,
+          response: { error: error.message },
         },
-      ],
+      },
       resultDisplay: error.message,
       error,
     };

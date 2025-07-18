@@ -15,11 +15,13 @@
  */
 
 import { ContentGeneratorRole } from './types.js';
+import { Part } from '@google/genai';
 
 export interface IMessage {
   id?: string; // Unique identifier for the message, provided by the API
   role: ContentGeneratorRole | 'system';
   content: string;
+  parts?: Part[];
   tool_call_id?: string;
   tool_name?: string; // Added to track the function name for tool responses
   tool_calls?: Array<{

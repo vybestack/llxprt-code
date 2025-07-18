@@ -125,15 +125,13 @@ describe('executeToolCall', () => {
     expect(response.resultDisplay).toBe(
       'Tool "nonExistentTool" not found in registry.',
     );
-    expect(response.responseParts).toEqual([
-      {
-        functionResponse: {
-          name: 'nonExistentTool',
-          id: 'call2',
-          response: { error: 'Tool "nonExistentTool" not found in registry.' },
-        },
+    expect(response.responseParts).toEqual({
+      functionResponse: {
+        name: 'nonExistentTool',
+        id: 'call2',
+        response: { error: 'Tool "nonExistentTool" not found in registry.' },
       },
-    ]);
+    });
   });
 
   it('should return an error if tool execution fails', async () => {
@@ -158,15 +156,13 @@ describe('executeToolCall', () => {
     expect(response.callId).toBe('call3');
     expect(response.error).toBe(executionError);
     expect(response.resultDisplay).toBe('Tool execution failed');
-    expect(response.responseParts).toEqual([
-      {
-        functionResponse: {
-          name: 'testTool',
-          id: 'call3',
-          response: { error: 'Tool execution failed' },
-        },
+    expect(response.responseParts).toEqual({
+      functionResponse: {
+        name: 'testTool',
+        id: 'call3',
+        response: { error: 'Tool execution failed' },
       },
-    ]);
+    });
   });
 
   it('should handle cancellation during tool execution', async () => {
@@ -239,17 +235,15 @@ describe('executeToolCall', () => {
     );
 
     expect(response.resultDisplay).toBe('Image processed');
-    expect(response.responseParts).toEqual([
-      {
-        functionResponse: {
-          name: 'testTool',
-          id: 'call5',
-          response: {
-            output: 'Binary content of type image/png was processed.',
-          },
+    expect(response.responseParts).toEqual({
+      functionResponse: {
+        name: 'testTool',
+        id: 'call5',
+        response: {
+          output: 'Binary content of type image/png was processed.',
+          binaryContent: imageDataPart,
         },
       },
-      imageDataPart,
-    ]);
+    });
   });
 });

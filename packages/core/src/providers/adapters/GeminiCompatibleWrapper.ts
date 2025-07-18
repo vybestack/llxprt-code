@@ -390,11 +390,6 @@ export class GeminiCompatibleWrapper {
   private convertContentsToMessages(
     contents: ContentListUnion,
   ): ProviderMessage[] {
-    console.log(
-      '[PDF DEBUG] GeminiCompatibleWrapper.convertContentsToMessages - input:',
-      JSON.stringify(contents, null, 2),
-    );
-
     // Normalize ContentListUnion to Content[]
     let contentArray: Content[];
 
@@ -478,13 +473,28 @@ export class GeminiCompatibleWrapper {
       const functionResponses = (content.parts || []).filter(
         (
           part,
-        ): part is Part & {
-          functionResponse: {
-            id: string;
-            name: string;
-            response: { error?: string; llmContent?: string; output?: string };
-          };
-        } => 'functionResponse' in part,
+        ): part is
+          | (Part & {
+              functionResponse: {
+                id: string;
+                name: string;
+                response: {
+                  error?: string;
+                  llmContent?: string;
+                  output?: string;
+                };
+              };
+            })
+          | (Part & {
+              functionResponse: {
+                name: string;
+                response: {
+                  error?: string;
+                  llmContent?: string;
+                  output?: string;
+                };
+              };
+            }) => 'functionResponse' in part,
       );
 
       if (functionResponses.length > 0) {
@@ -493,12 +503,27 @@ export class GeminiCompatibleWrapper {
           (part) => !('functionResponse' in part),
         );
 
+        // Collect any binary content from function responses
+        const binaryParts: Part[] = [];
+
         // Convert each function response to a tool message
         for (const part of functionResponses) {
           const response = part.functionResponse.response;
           let content: string;
 
-          if (typeof response === 'string') {
+          // Check if response contains binary content
+          if (
+            response &&
+            typeof response === 'object' &&
+            'binaryContent' in response
+          ) {
+            // Extract the binary content
+            const binaryContent = response.binaryContent as Part;
+            if (binaryContent) {
+              binaryParts.push(binaryContent);
+            }
+            content = response.output || `Processed binary content`;
+          } else if (typeof response === 'string') {
             content = response;
           } else if (response?.error) {
             content = `Error: ${response.error}`;
@@ -510,7 +535,7 @@ export class GeminiCompatibleWrapper {
             content = JSON.stringify(response);
           }
 
-          const toolCallId = part.functionResponse.id;
+          const toolCallId = (part.functionResponse as { id?: string }).id;
           if (!toolCallId) {
             throw new Error(
               `Tool response for '${part.functionResponse.name}' is missing required tool_call_id. This ID must match the original tool call ID from the model.`,
@@ -525,16 +550,13 @@ export class GeminiCompatibleWrapper {
           } as ProviderMessage);
         }
 
-        // If there are non-functionResponse parts (like PDFs), add them as user messages
-        if (nonFunctionResponseParts.length > 0) {
-          console.log(
-            '[PDF DEBUG] GeminiCompatibleWrapper - Found non-functionResponse parts:',
-            JSON.stringify(nonFunctionResponseParts, null, 2),
-          );
+        // If there are binary parts from function responses or non-functionResponse parts, add them as user messages
+        const allBinaryParts = [...binaryParts, ...nonFunctionResponseParts];
+        if (allBinaryParts.length > 0) {
           messages.push({
             role: 'user',
             content: '',
-            parts: nonFunctionResponseParts,
+            parts: allBinaryParts,
           } as ProviderMessage);
         }
       } else {
@@ -570,24 +592,6 @@ export class GeminiCompatibleWrapper {
           parts: allParts,
         };
 
-        console.log(
-          '[PDF DEBUG] GeminiCompatibleWrapper - Creating message with parts:',
-          {
-            role,
-            hasContent: !!combinedText,
-            contentLength: combinedText.length,
-            partsCount: allParts.length,
-            partsTypes: allParts.map((p) => {
-              if ('text' in p) return 'text';
-              if ('inlineData' in p && p.inlineData)
-                return `inlineData:${p.inlineData.mimeType}`;
-              if ('functionCall' in p) return 'functionCall';
-              if ('functionResponse' in p) return 'functionResponse';
-              return 'unknown';
-            }),
-          },
-        );
-
         // If this is an assistant message with function calls, add them
         if (role === 'assistant' && functionCalls.length > 0) {
           message.tool_calls = functionCalls.map((part) => ({
@@ -606,20 +610,6 @@ export class GeminiCompatibleWrapper {
       }
     }
 
-    console.log(
-      '[PDF DEBUG] GeminiCompatibleWrapper.convertContentsToMessages - output messages count:',
-      messages.length,
-    );
-    console.log(
-      '[PDF DEBUG] GeminiCompatibleWrapper.convertContentsToMessages - output messages summary:',
-      messages.map((m) => ({
-        role: m.role,
-        hasContent: !!m.content,
-        contentLength: m.content?.length || 0,
-        hasParts: !!(m as any).parts,
-        partsCount: (m as any).parts?.length || 0,
-      })),
-    );
     return messages;
   }
 

@@ -283,18 +283,16 @@ describe('convertToFunctionResponse', () => {
       inlineData: { mimeType: 'image/png', data: 'base64...' },
     };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
-      {
-        functionResponse: {
-          name: toolName,
-          id: callId,
-          response: {
-            output: 'Binary content of type image/png was processed.',
-          },
+    expect(result).toEqual({
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response: {
+          output: 'Binary content of type image/png was processed.',
+          binaryContent: llmContent,
         },
       },
-      llmContent,
-    ]);
+    });
   });
 
   it('should handle llmContent with fileData', () => {
@@ -302,18 +300,16 @@ describe('convertToFunctionResponse', () => {
       fileData: { mimeType: 'application/pdf', fileUri: 'gs://...' },
     };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
-      {
-        functionResponse: {
-          name: toolName,
-          id: callId,
-          response: {
-            output: 'Binary content of type application/pdf was processed.',
-          },
+    expect(result).toEqual({
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response: {
+          output: 'Binary content of type application/pdf was processed.',
+          binaryContent: llmContent,
         },
       },
-      llmContent,
-    ]);
+    });
   });
 
   it('should handle llmContent as an array of multiple Parts (text and inlineData)', () => {
@@ -340,18 +336,16 @@ describe('convertToFunctionResponse', () => {
       { inlineData: { mimeType: 'image/gif', data: 'gifdata...' } },
     ];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
-      {
-        functionResponse: {
-          name: toolName,
-          id: callId,
-          response: {
-            output: 'Binary content of type image/gif was processed.',
-          },
+    expect(result).toEqual({
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response: {
+          output: 'Binary content of type image/gif was processed.',
+          binaryContent: llmContent[0],
         },
       },
-      ...llmContent,
-    ]);
+    });
   });
 
   it('should handle llmContent as a generic Part (not text, inlineData, or fileData)', () => {

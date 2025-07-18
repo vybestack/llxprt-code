@@ -84,7 +84,8 @@ class ProviderAdapter implements Provider {
         content: msg.content,
         tool_calls: msg.tool_calls,
         tool_call_id: msg.tool_call_id,
-      };
+        parts: 'parts' in msg ? (msg as { parts?: unknown }).parts : undefined, // Preserve parts field for PDFs/images
+      } as IMessage;
     });
 
     // Convert core tools to CLI tools
@@ -124,7 +125,11 @@ class ProviderAdapter implements Provider {
         content: message.content || '',
         tool_calls: message.tool_calls,
         tool_call_id: message.tool_call_id,
-      };
+        parts:
+          'parts' in message
+            ? (message as { parts?: unknown }).parts
+            : undefined, // Preserve parts field for PDFs/images
+      } as ProviderMessage;
     }
   }
 }

@@ -312,11 +312,6 @@ export class GeminiProvider implements IProvider {
     // Convert IMessage[] to Gemini format
     const contents = this.convertMessagesToGeminiFormat(messages);
 
-    console.log(
-      '[PDF DEBUG] GeminiProvider.generateChatCompletion - converted contents:',
-      JSON.stringify(contents, null, 2),
-    );
-
     // Convert ITool[] to Gemini tool format
     const geminiTools = tools
       ? this.convertToolsToGeminiFormat(tools)
@@ -419,22 +414,13 @@ export class GeminiProvider implements IProvider {
       // For non-tool messages, convert normally
       const parts: Part[] = [];
 
-      if (msg.content) {
+      // Check for parts first (for messages with PDF/image parts but no text content)
+      if (msg.parts && msg.parts.length > 0) {
+        parts.push(...(msg.parts as Part[]));
+      } else if (msg.content) {
         // Handle PartListUnion: string | Part | Part[]
         // In practice, content can be PartListUnion even though IMessage types it as string
         const content = msg.content as string | Part | Part[];
-
-        console.log(
-          '[PDF DEBUG] GeminiProvider.convertMessagesToGeminiFormat - processing content:',
-          {
-            type: typeof content,
-            isArray: Array.isArray(content),
-            content:
-              typeof content === 'string'
-                ? content.substring(0, 100) + '...'
-                : content,
-          },
-        );
 
         if (typeof content === 'string') {
           // Try to parse string in case it's a stringified Part or Part[]
