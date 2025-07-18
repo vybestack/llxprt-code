@@ -310,6 +310,22 @@ export const useGeminiStream = (
         }
       } else {
         // It's a function response (PartListUnion that isn't a string)
+        console.log('[PDF DEBUG] useGeminiStream - Non-string query:', {
+          isArray: Array.isArray(query),
+          queryType: typeof query,
+          query: Array.isArray(query)
+            ? query.map((p) => {
+                if (typeof p === 'string') return 'string';
+                if (p && typeof p === 'object') {
+                  if ('text' in p) return 'text part';
+                  if ('inlineData' in p && p.inlineData)
+                    return `inlineData: ${p.inlineData.mimeType}`;
+                  if ('functionResponse' in p) return 'functionResponse';
+                }
+                return 'unknown';
+              })
+            : query,
+        });
         localQueryToSendToGemini = query;
       }
 
@@ -512,6 +528,15 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.ToolCallRequest:
+            console.log(
+              `[PDF-DEBUG useGeminiStream.ts] ${new Date().toISOString()} - Tool call request received`,
+              {
+                toolName: event.value.name,
+                toolArgs: event.value.args,
+                callId: event.value.callId,
+                isReadFiles: event.value.name === 'read_files',
+              },
+            );
             toolCallRequests.push(event.value);
             break;
           case ServerGeminiEventType.UserCancelled:
@@ -605,6 +630,27 @@ export const useGeminiStream = (
 
       setIsResponding(true);
       setInitError(null);
+
+      console.log(
+        '[PDF DEBUG] useGeminiStream.submitQuery - Sending to geminiClient:',
+        {
+          queryType: typeof queryToSend,
+          isArray: Array.isArray(queryToSend),
+          queryToSendSummary: Array.isArray(queryToSend)
+            ? queryToSend.map((p) => {
+                if (typeof p === 'string') return `string(${p.length} chars)`;
+                if (p && typeof p === 'object') {
+                  if ('text' in p && p.text)
+                    return `text(${p.text.length} chars)`;
+                  if ('inlineData' in p && p.inlineData)
+                    return `inlineData:${p.inlineData.mimeType}`;
+                  if ('functionResponse' in p) return 'functionResponse';
+                }
+                return 'unknown';
+              })
+            : typeof queryToSend,
+        },
+      );
 
       try {
         const stream = geminiClient.sendMessageStream(

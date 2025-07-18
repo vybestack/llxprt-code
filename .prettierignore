@@ -1,3 +1,4 @@
+
 # Dependencies
 node_modules/
 
@@ -23,3 +24,4 @@ project-plans/
 # Generated files
 package-lock.json
 tsconfig.tsbuildinfo
+research/

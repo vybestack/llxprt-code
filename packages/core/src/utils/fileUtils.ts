@@ -304,11 +304,25 @@ export async function processSingleFileContent(
       case 'video': {
         const contentBuffer = await fs.promises.readFile(filePath);
         const base64Data = contentBuffer.toString('base64');
+        const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+
+        console.log(
+          '[PDF DEBUG] fileUtils.processSingleFileContent - Reading non-text file:',
+          {
+            filePath,
+            fileType,
+            mimeType,
+            bufferSize: contentBuffer.length,
+            base64Length: base64Data.length,
+            base64Preview: base64Data.substring(0, 100) + '...',
+          },
+        );
+
         return {
           llmContent: {
             inlineData: {
               data: base64Data,
-              mimeType: mime.lookup(filePath) || 'application/octet-stream',
+              mimeType: mimeType,
             },
           },
           returnDisplay: `Read ${fileType} file: ${relativePathForDisplay}`,

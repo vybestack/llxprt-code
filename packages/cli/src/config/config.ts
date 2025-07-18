@@ -65,6 +65,9 @@ export interface CliArgs {
   listExtensions: boolean | undefined;
   provider: string | undefined;
   ideMode: boolean | undefined;
+  key: string | undefined;
+  keyfile: string | undefined;
+  baseurl: string | undefined;
 }
 
 export async function parseArguments(): Promise<CliArgs> {
@@ -197,6 +200,18 @@ export async function parseArguments(): Promise<CliArgs> {
     .option('ide-mode', {
       type: 'boolean',
       description: 'Run in IDE mode?',
+    })
+    .option('key', {
+      type: 'string',
+      description: 'API key for the current provider',
+    })
+    .option('keyfile', {
+      type: 'string',
+      description: 'Path to file containing API key for the current provider',
+    })
+    .option('baseurl', {
+      type: 'string',
+      description: 'Base URL for the current provider',
     })
 
     .version(await getCliVersion()) // This will enable the --version flag based on package.json

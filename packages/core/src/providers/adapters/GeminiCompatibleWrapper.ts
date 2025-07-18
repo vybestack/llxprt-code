@@ -334,9 +334,14 @@ export class GeminiCompatibleWrapper {
     for await (const message of providerStream) {
       // Emit content event if message has content
       if (message.content) {
+        // Ensure we only pass the string content, not the entire message object
+        const contentValue =
+          typeof message.content === 'string'
+            ? message.content
+            : String(message.content);
         const contentEvent: ServerGeminiContentEvent = {
           type: GeminiEventType.Content,
-          value: message.content,
+          value: contentValue,
         };
         yield contentEvent;
       }
@@ -385,24 +390,17 @@ export class GeminiCompatibleWrapper {
   private convertContentsToMessages(
     contents: ContentListUnion,
   ): ProviderMessage[] {
+    console.log(
+      '[PDF DEBUG] GeminiCompatibleWrapper.convertContentsToMessages - input:',
+      JSON.stringify(contents, null, 2),
+    );
+
     // Normalize ContentListUnion to Content[]
     let contentArray: Content[];
 
     // Check if contents is undefined or null
     if (!contents) {
       return [];
-    }
-
-    // Debug logging for multiple tool responses
-    if (Array.isArray(contents) && contents.length > 0) {
-      const _hasFunctionResponses = contents.some(
-        (content) =>
-          typeof content === 'object' &&
-          content !== null &&
-          'parts' in content &&
-          Array.isArray(content.parts) &&
-          content.parts.some((part) => 'functionResponse' in part),
-      );
     }
 
     if (Array.isArray(contents)) {
@@ -490,6 +488,11 @@ export class GeminiCompatibleWrapper {
       );
 
       if (functionResponses.length > 0) {
+        // Check for other parts that need to be preserved (like PDFs)
+        const nonFunctionResponseParts = (content.parts || []).filter(
+          (part) => !('functionResponse' in part),
+        );
+
         // Convert each function response to a tool message
         for (const part of functionResponses) {
           const response = part.functionResponse.response;
@@ -509,26 +512,8 @@ export class GeminiCompatibleWrapper {
 
           const toolCallId = part.functionResponse.id;
           if (!toolCallId) {
-            const errorDetails = {
-              error: 'Missing tool_call_id in functionResponse',
-              functionResponse: part.functionResponse,
-              toolName: part.functionResponse.name,
-              fullPart: part,
-              context:
-                'This error occurs when a tool response is missing the required ID that links it back to the original tool call. Every tool call from the model has a unique ID, and the response MUST include this same ID.',
-              possibleCauses: [
-                'Tool execution did not preserve the callId from the original request',
-                'Tool response was manually created without including the ID',
-                'The convertToFunctionResponse function failed to add the callId',
-              ],
-            };
-
-            console.error(
-              '[GeminiCompatibleWrapper] FATAL ERROR:',
-              JSON.stringify(errorDetails, null, 2),
-            );
             throw new Error(
-              `Tool response for '${part.functionResponse.name}' is missing required tool_call_id. This ID must match the original tool call ID from the model. See console for full error details.`,
+              `Tool response for '${part.functionResponse.name}' is missing required tool_call_id. This ID must match the original tool call ID from the model.`,
             );
           }
 
@@ -537,6 +522,19 @@ export class GeminiCompatibleWrapper {
             content,
             tool_call_id: toolCallId,
             name: part.functionResponse.name,
+          } as ProviderMessage);
+        }
+
+        // If there are non-functionResponse parts (like PDFs), add them as user messages
+        if (nonFunctionResponseParts.length > 0) {
+          console.log(
+            '[PDF DEBUG] GeminiCompatibleWrapper - Found non-functionResponse parts:',
+            JSON.stringify(nonFunctionResponseParts, null, 2),
+          );
+          messages.push({
+            role: 'user',
+            content: '',
+            parts: nonFunctionResponseParts,
           } as ProviderMessage);
         }
       } else {
@@ -553,8 +551,11 @@ export class GeminiCompatibleWrapper {
           } => 'functionCall' in part,
         );
 
-        // Regular text content
-        const textParts = (content.parts || [])
+        // Get all parts
+        const allParts = content.parts || [];
+
+        // Extract text content
+        const textParts = allParts
           .filter((part): part is Part & { text: string } => 'text' in part)
           .map((part) => part.text);
         const combinedText = textParts.join('');
@@ -565,7 +566,27 @@ export class GeminiCompatibleWrapper {
         const message: ProviderMessage = {
           role: role as 'user' | 'assistant' | 'system',
           content: combinedText,
+          // Preserve all parts including non-text content (PDFs, images, etc.)
+          parts: allParts,
         };
+
+        console.log(
+          '[PDF DEBUG] GeminiCompatibleWrapper - Creating message with parts:',
+          {
+            role,
+            hasContent: !!combinedText,
+            contentLength: combinedText.length,
+            partsCount: allParts.length,
+            partsTypes: allParts.map((p) => {
+              if ('text' in p) return 'text';
+              if ('inlineData' in p && p.inlineData)
+                return `inlineData:${p.inlineData.mimeType}`;
+              if ('functionCall' in p) return 'functionCall';
+              if ('functionResponse' in p) return 'functionResponse';
+              return 'unknown';
+            }),
+          },
+        );
 
         // If this is an assistant message with function calls, add them
         if (role === 'assistant' && functionCalls.length > 0) {
@@ -585,6 +606,20 @@ export class GeminiCompatibleWrapper {
       }
     }
 
+    console.log(
+      '[PDF DEBUG] GeminiCompatibleWrapper.convertContentsToMessages - output messages count:',
+      messages.length,
+    );
+    console.log(
+      '[PDF DEBUG] GeminiCompatibleWrapper.convertContentsToMessages - output messages summary:',
+      messages.map((m) => ({
+        role: m.role,
+        hasContent: !!m.content,
+        contentLength: m.content?.length || 0,
+        hasParts: !!(m as any).parts,
+        partsCount: (m as any).parts?.length || 0,
+      })),
+    );
     return messages;
   }
 
@@ -621,6 +656,11 @@ export class GeminiCompatibleWrapper {
             },
           } as Part);
         }
+      }
+
+      // CRITICAL FIX: Preserve parts from the message (PDFs, images, etc.)
+      if (message.parts && message.parts.length > 0) {
+        parts.push(...message.parts);
       }
     }
 
@@ -668,6 +708,11 @@ export class GeminiCompatibleWrapper {
           },
         } as Part);
       }
+    }
+
+    // CRITICAL FIX: Preserve parts from the message (PDFs, images, etc.)
+    if (message.parts && message.parts.length > 0) {
+      parts.push(...message.parts);
     }
 
     const response: GenerateContentResponse = {

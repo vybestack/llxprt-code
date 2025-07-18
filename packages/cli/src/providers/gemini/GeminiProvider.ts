@@ -312,6 +312,11 @@ export class GeminiProvider implements IProvider {
     // Convert IMessage[] to Gemini format
     const contents = this.convertMessagesToGeminiFormat(messages);
 
+    console.log(
+      '[PDF DEBUG] GeminiProvider.generateChatCompletion - converted contents:',
+      JSON.stringify(contents, null, 2),
+    );
+
     // Convert ITool[] to Gemini tool format
     const geminiTools = tools
       ? this.convertToolsToGeminiFormat(tools)
@@ -331,14 +336,6 @@ export class GeminiProvider implements IProvider {
 
     // Stream the response
     for await (const response of stream) {
-      // Debug: Log the response structure
-      if (response.candidates?.[0]?.content?.parts) {
-        console.debug(
-          '[GeminiProvider] Response parts:',
-          JSON.stringify(response.candidates[0].content.parts, null, 2),
-        );
-      }
-
       // Extract text from the response
       const text =
         response.candidates?.[0]?.content?.parts
@@ -354,14 +351,6 @@ export class GeminiProvider implements IProvider {
             (part: Part) =>
               (part as { functionCall: FunctionCall }).functionCall,
           ) || [];
-
-      // Debug: Log extracted function calls
-      if (functionCalls.length > 0) {
-        console.debug(
-          '[GeminiProvider] Function calls found:',
-          JSON.stringify(functionCalls, null, 2),
-        );
-      }
 
       // Build response message
       const message: IMessage = {
@@ -418,9 +407,6 @@ export class GeminiProvider implements IProvider {
 
         if (nextIsNotTool && currentToolResponses.length > 0) {
           // Flush accumulated tool responses as a single Content
-          console.log(
-            `[GeminiProvider] Grouping ${currentToolResponses.length} tool responses into single Content`,
-          );
           contents.push({
             role: 'user',
             parts: currentToolResponses,
@@ -434,7 +420,49 @@ export class GeminiProvider implements IProvider {
       const parts: Part[] = [];
 
       if (msg.content) {
-        parts.push({ text: msg.content });
+        // Handle PartListUnion: string | Part | Part[]
+        // In practice, content can be PartListUnion even though IMessage types it as string
+        const content = msg.content as string | Part | Part[];
+
+        console.log(
+          '[PDF DEBUG] GeminiProvider.convertMessagesToGeminiFormat - processing content:',
+          {
+            type: typeof content,
+            isArray: Array.isArray(content),
+            content:
+              typeof content === 'string'
+                ? content.substring(0, 100) + '...'
+                : content,
+          },
+        );
+
+        if (typeof content === 'string') {
+          // Try to parse string in case it's a stringified Part or Part[]
+          if (
+            (content.startsWith('{') && content.endsWith('}')) ||
+            (content.startsWith('[') && content.endsWith(']'))
+          ) {
+            try {
+              const parsed = JSON.parse(content);
+              if (Array.isArray(parsed)) {
+                parts.push(...parsed);
+              } else {
+                parts.push(parsed);
+              }
+            } catch (_e) {
+              // Not valid JSON, treat as text
+              parts.push({ text: content });
+            }
+          } else {
+            parts.push({ text: content });
+          }
+        } else if (Array.isArray(content)) {
+          // Content is Part[]
+          parts.push(...content);
+        } else {
+          // Content is a single Part
+          parts.push(content);
+        }
       }
 
       // Handle tool calls

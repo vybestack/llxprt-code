@@ -188,4 +188,118 @@ describe('GeminiCompatibleWrapper', () => {
       ); // Should remain lowercase
     });
   });
+
+  describe('PDF handling in tool responses', () => {
+    it('should extract PDF content from tool responses and add as user message', () => {
+      const mockProvider: Provider = {
+        name: 'test-provider',
+        getCurrentModel: () => 'test-model',
+        setModel: vi.fn(),
+        generateChatCompletion: vi.fn(),
+      };
+
+      const wrapper = new GeminiCompatibleWrapper(mockProvider);
+
+      // Test content with both functionResponse and PDF inlineData
+      const contents = [
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                id: 'test-call-123',
+                name: 'read_file',
+                response: {
+                  output:
+                    'Binary content of type application/pdf was processed.',
+                },
+              },
+            },
+            {
+              inlineData: {
+                data: 'base64PDFDataHere',
+                mimeType: 'application/pdf',
+              },
+            },
+          ],
+        },
+      ];
+
+      // Convert to messages using the private method (we'll test through the wrapper)
+      const messages = (
+        wrapper as unknown as {
+          convertContentsToMessages: (contents: unknown) => unknown[];
+        }
+      ).convertContentsToMessages(contents);
+
+      // Should have 2 messages: one for the tool response, one for the PDF
+      expect(messages).toHaveLength(2);
+
+      // First message should be the tool response
+      expect(messages[0]).toEqual({
+        role: 'tool',
+        content: 'Binary content of type application/pdf was processed.',
+        tool_call_id: 'test-call-123',
+        name: 'read_file',
+      });
+
+      // Second message should be a user message with the PDF part
+      expect(messages[1]).toEqual({
+        role: 'user',
+        content: '',
+        parts: [
+          {
+            inlineData: {
+              data: 'base64PDFDataHere',
+              mimeType: 'application/pdf',
+            },
+          },
+        ],
+      });
+    });
+
+    it('should handle tool responses without additional parts normally', () => {
+      const mockProvider: Provider = {
+        name: 'test-provider',
+        getCurrentModel: () => 'test-model',
+        setModel: vi.fn(),
+        generateChatCompletion: vi.fn(),
+      };
+
+      const wrapper = new GeminiCompatibleWrapper(mockProvider);
+
+      // Test content with only functionResponse
+      const contents = [
+        {
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                id: 'test-call-456',
+                name: 'list_files',
+                response: {
+                  output: 'file1.txt\nfile2.txt',
+                },
+              },
+            },
+          ],
+        },
+      ];
+
+      const messages = (
+        wrapper as unknown as {
+          convertContentsToMessages: (contents: unknown) => unknown[];
+        }
+      ).convertContentsToMessages(contents);
+
+      // Should have only 1 message for the tool response
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toEqual({
+        role: 'tool',
+        content: 'file1.txt\nfile2.txt',
+        tool_call_id: 'test-call-456',
+        name: 'list_files',
+      });
+    });
+  });
 });

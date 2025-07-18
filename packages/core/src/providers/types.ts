@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Part } from '@google/genai';
+
 /**
  * Represents a message in a provider's format
  */
@@ -20,6 +22,8 @@ export interface ProviderMessage {
     completion_tokens: number;
     total_tokens: number;
   };
+  // Additional parts for non-text content (PDFs, images, etc.)
+  parts?: Part[];
 }
 
 /**

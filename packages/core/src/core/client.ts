@@ -307,6 +307,7 @@ export class GeminiClient {
     originalModel?: string,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     await this.lazyInitialize();
+
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset();
       this.lastPromptId = prompt_id;

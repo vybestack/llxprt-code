@@ -23,25 +23,12 @@ export function createShowMemoryAction(
       return;
     }
 
-    const debugMode = config.getDebugMode();
-
-    if (debugMode) {
-      console.log('[DEBUG] Show Memory command invoked.');
-    }
-
     const currentMemory = config.getUserMemory();
     const fileCount = config.getLlxprtMdFileCount();
     const contextFileName = settings.merged.contextFileName;
     const contextFileNames = Array.isArray(contextFileName)
       ? contextFileName
       : [contextFileName];
-
-    if (debugMode) {
-      console.log(
-        `[DEBUG] Showing memory. Content from config.getUserMemory() (first 200 chars): ${currentMemory.substring(0, 200)}...`,
-      );
-      console.log(`[DEBUG] Number of context files loaded: ${fileCount}`);
-    }
 
     if (fileCount > 0) {
       const allNamesTheSame = new Set(contextFileNames).size < 2;

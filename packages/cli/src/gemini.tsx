@@ -43,6 +43,11 @@ import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';
 import { ProviderManagerAdapter } from './providers/ProviderManagerAdapter.js';
+import {
+  setProviderApiKey,
+  setProviderApiKeyFromFile,
+  setProviderBaseUrl,
+} from './providers/providerConfigUtils.js';
 
 function getNodeMemoryArgs(config: Config): string[] {
   const totalMemoryMB = os.totalmem() / (1024 * 1024);
@@ -176,6 +181,59 @@ export async function main() {
     } catch (e) {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
+    }
+  }
+
+  // Process CLI-provided credentials (--key, --keyfile, --baseurl)
+  if (argv.key || argv.keyfile || argv.baseurl) {
+    // Handle --key
+    if (argv.key) {
+      const result = await setProviderApiKey(
+        providerManager,
+        settings,
+        argv.key,
+        config,
+      );
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        process.exit(1);
+      }
+      if (config.getDebugMode()) {
+        console.debug(result.message);
+      }
+    }
+
+    // Handle --keyfile
+    if (argv.keyfile) {
+      const result = await setProviderApiKeyFromFile(
+        providerManager,
+        settings,
+        argv.keyfile,
+        config,
+      );
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        process.exit(1);
+      }
+      if (config.getDebugMode()) {
+        console.debug(result.message);
+      }
+    }
+
+    // Handle --baseurl
+    if (argv.baseurl) {
+      const result = await setProviderBaseUrl(
+        providerManager,
+        settings,
+        argv.baseurl,
+      );
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        process.exit(1);
+      }
+      if (config.getDebugMode()) {
+        console.debug(result.message);
+      }
     }
   }
 
@@ -417,6 +475,59 @@ async function loadNonInteractiveConfig(
       const activeProvider = providerManager.getActiveProvider();
       if (activeProvider && typeof activeProvider.setModel === 'function') {
         activeProvider.setModel(argv.model);
+      }
+    }
+  }
+
+  // Process CLI-provided credentials (--key, --keyfile, --baseurl)
+  if (argv.key || argv.keyfile || argv.baseurl) {
+    // Handle --key
+    if (argv.key) {
+      const result = await setProviderApiKey(
+        providerManager,
+        settings,
+        argv.key,
+        finalConfig,
+      );
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        process.exit(1);
+      }
+      if (finalConfig.getDebugMode()) {
+        console.debug(result.message);
+      }
+    }
+
+    // Handle --keyfile
+    if (argv.keyfile) {
+      const result = await setProviderApiKeyFromFile(
+        providerManager,
+        settings,
+        argv.keyfile,
+        finalConfig,
+      );
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        process.exit(1);
+      }
+      if (finalConfig.getDebugMode()) {
+        console.debug(result.message);
+      }
+    }
+
+    // Handle --baseurl
+    if (argv.baseurl) {
+      const result = await setProviderBaseUrl(
+        providerManager,
+        settings,
+        argv.baseurl,
+      );
+      if (!result.success) {
+        console.error(chalk.red(result.message));
+        process.exit(1);
+      }
+      if (finalConfig.getDebugMode()) {
+        console.debug(result.message);
       }
     }
   }

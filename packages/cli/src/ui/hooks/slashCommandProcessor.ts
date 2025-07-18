@@ -48,6 +48,11 @@ import {
   ConversationContext,
   IConversationContext,
 } from '../../utils/ConversationContext.js';
+import {
+  setProviderApiKey,
+  setProviderApiKeyFromFile,
+  setProviderBaseUrl,
+} from '../../providers/providerConfigUtils.js';
 
 // This interface is for the old, inline command definitions.
 // It will be removed once all commands are migrated to the new system.
@@ -1070,109 +1075,22 @@ export const useSlashCommandProcessor = (
         action: async (_mainCommand, apiKey, _args) => {
           const providerManager = getProviderManager();
 
-          try {
-            const activeProvider = providerManager.getActiveProvider();
-            const providerName = activeProvider.name;
+          const result = await setProviderApiKey(
+            providerManager,
+            settings,
+            apiKey,
+            config ?? undefined,
+          );
 
-            // If no key provided or 'none', remove the key
-            if (
-              !apiKey ||
-              apiKey.trim() === '' ||
-              apiKey.trim().toLowerCase() === 'none'
-            ) {
-              // Clear the API key
-              if (activeProvider.setApiKey) {
-                activeProvider.setApiKey('');
+          addMessage({
+            type: result.success ? MessageType.INFO : MessageType.ERROR,
+            content: result.message,
+            timestamp: new Date(),
+          });
 
-                // Remove from settings
-                const currentKeys = settings.merged.providerApiKeys || {};
-                delete currentKeys[providerName];
-                settings.setValue(
-                  SettingScope.User,
-                  'providerApiKeys',
-                  currentKeys,
-                );
-
-                // If this is the Gemini provider, we might need to switch auth mode
-                if (providerName === 'gemini' && config) {
-                  // Switch to OAuth if no API key
-                  await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
-                }
-
-                // Check payment mode after auth refresh
-                const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-                const paymentMessage =
-                  !isPaidMode && providerName === 'gemini'
-                    ? '\n✅ You are now in FREE MODE - using OAuth authentication'
-                    : '';
-
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `API key removed for provider '${providerName}'${paymentMessage}`,
-                  timestamp: new Date(),
-                });
-
-                // Trigger payment mode check to show banner
-                if (checkPaymentModeChange) {
-                  setTimeout(checkPaymentModeChange, 100);
-                }
-              } else {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: `Provider '${providerName}' does not support API key updates`,
-                  timestamp: new Date(),
-                });
-              }
-              return;
-            }
-
-            // Update the provider's API key
-            if (activeProvider.setApiKey) {
-              activeProvider.setApiKey(apiKey);
-
-              // Save to settings
-              const currentKeys = settings.merged.providerApiKeys || {};
-              currentKeys[providerName] = apiKey;
-              settings.setValue(
-                SettingScope.User,
-                'providerApiKeys',
-                currentKeys,
-              );
-
-              // If this is the Gemini provider, we need to refresh auth to use API key mode
-              if (providerName === 'gemini' && config) {
-                await config.refreshAuth(AuthType.USE_GEMINI);
-              }
-
-              // Check if we're now in paid mode
-              const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-              const paymentWarning = isPaidMode
-                ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
-                : '';
-
-              addMessage({
-                type: MessageType.INFO,
-                content: `API key updated for provider '${providerName}'${paymentWarning}`,
-                timestamp: new Date(),
-              });
-
-              // Trigger payment mode check to show banner
-              if (checkPaymentModeChange) {
-                setTimeout(checkPaymentModeChange, 100);
-              }
-            } else {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Provider '${providerName}' does not support API key updates`,
-                timestamp: new Date(),
-              });
-            }
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to set API key: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
+          // Trigger payment mode check to show banner if needed
+          if (result.success && checkPaymentModeChange) {
+            setTimeout(checkPaymentModeChange, 100);
           }
         },
       },
@@ -1231,102 +1149,46 @@ export const useSlashCommandProcessor = (
 
             // If 'none' is specified, remove the keyfile setting
             if (filePath.trim().toLowerCase() === 'none') {
-              // Clear the API key
-              if (activeProvider.setApiKey) {
-                activeProvider.setApiKey('');
-
-                // Remove from settings
-                const currentKeys = settings.merged.providerApiKeys || {};
-                delete currentKeys[providerName];
-                settings.setValue(
-                  SettingScope.User,
-                  'providerApiKeys',
-                  currentKeys,
-                );
-
-                // If this is the Gemini provider, we might need to switch auth mode
-                if (providerName === 'gemini' && config) {
-                  // Switch to OAuth if no API key
-                  await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
-                }
-
-                // Check payment mode after auth refresh
-                const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-                const paymentMessage =
-                  !isPaidMode && providerName === 'gemini'
-                    ? '\n✅ You are now in FREE MODE - using OAuth authentication'
-                    : '';
-
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `Keyfile removed for provider '${providerName}'${paymentMessage}`,
-                  timestamp: new Date(),
-                });
-
-                // Trigger payment mode check to show banner
-                if (checkPaymentModeChange) {
-                  setTimeout(checkPaymentModeChange, 100);
-                }
-              } else {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: `Provider '${providerName}' does not support API key updates`,
-                  timestamp: new Date(),
-                });
-              }
-              return;
-            }
-
-            // Resolve ~ to home directory
-            const resolvedPath = filePath.replace(/^~/, homedir());
-
-            // Read the API key from file
-            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-
-            if (!apiKey) {
-              addMessage({
-                type: MessageType.ERROR,
-                content: 'The specified file is empty',
-                timestamp: new Date(),
-              });
-              return;
-            }
-
-            // Update the provider's API key
-            if (activeProvider.setApiKey) {
-              activeProvider.setApiKey(apiKey);
-
-              // Save to settings
-              const currentKeys = settings.merged.providerApiKeys || {};
-              currentKeys[providerName] = apiKey;
-              settings.setValue(
-                SettingScope.User,
-                'providerApiKeys',
-                currentKeys,
+              const result = await setProviderApiKey(
+                providerManager,
+                settings,
+                undefined, // Clear the API key
+                config ?? undefined,
               );
 
-              // Check if we're now in paid mode
-              const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-              const paymentWarning = isPaidMode
-                ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
-                : '';
-
               addMessage({
-                type: MessageType.INFO,
-                content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
+                type: result.success ? MessageType.INFO : MessageType.ERROR,
+                content: result.message.replace(
+                  'API key removed',
+                  'Keyfile removed',
+                ),
                 timestamp: new Date(),
               });
 
-              // Trigger payment mode check to show banner
-              if (checkPaymentModeChange) {
+              // Trigger payment mode check to show banner if needed
+              if (result.success && checkPaymentModeChange) {
                 setTimeout(checkPaymentModeChange, 100);
               }
-            } else {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Provider '${providerName}' does not support API key updates`,
-                timestamp: new Date(),
-              });
+              return;
+            }
+
+            // Load API key from file
+            const result = await setProviderApiKeyFromFile(
+              providerManager,
+              settings,
+              filePath,
+              config ?? undefined,
+            );
+
+            addMessage({
+              type: result.success ? MessageType.INFO : MessageType.ERROR,
+              content: result.message,
+              timestamp: new Date(),
+            });
+
+            // Trigger payment mode check to show banner if needed
+            if (result.success && checkPaymentModeChange) {
+              setTimeout(checkPaymentModeChange, 100);
             }
           } catch (error) {
             addMessage({
@@ -1343,79 +1205,17 @@ export const useSlashCommandProcessor = (
         action: async (_mainCommand, baseUrl, _args) => {
           const providerManager = getProviderManager();
 
-          if (!baseUrl || baseUrl.trim() === '') {
-            // Clear base URL to provider default
-            try {
-              const activeProvider = providerManager.getActiveProvider();
-              const providerName = activeProvider.name;
-              if (activeProvider.setBaseUrl) {
-                activeProvider.setBaseUrl(undefined);
-                // Remove from settings
-                const currentUrls = settings.merged.providerBaseUrls || {};
-                delete currentUrls[providerName];
-                settings.setValue(
-                  SettingScope.User,
-                  'providerBaseUrls',
-                  currentUrls,
-                );
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `Base URL cleared for provider '${providerName}' (using default).`,
-                  timestamp: new Date(),
-                });
-              } else {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: `Provider '${providerName}' does not support base URL updates`,
-                  timestamp: new Date(),
-                });
-              }
-            } catch (error) {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Failed to clear base URL: ${error instanceof Error ? error.message : String(error)}`,
-                timestamp: new Date(),
-              });
-            }
-            return;
-          }
+          const result = await setProviderBaseUrl(
+            providerManager,
+            settings,
+            baseUrl,
+          );
 
-          try {
-            const activeProvider = providerManager.getActiveProvider();
-            const providerName = activeProvider.name;
-
-            // Update the provider's base URL
-            if (activeProvider.setBaseUrl) {
-              activeProvider.setBaseUrl(baseUrl);
-
-              // Save to settings
-              const currentUrls = settings.merged.providerBaseUrls || {};
-              currentUrls[providerName] = baseUrl;
-              settings.setValue(
-                SettingScope.User,
-                'providerBaseUrls',
-                currentUrls,
-              );
-
-              addMessage({
-                type: MessageType.INFO,
-                content: `Base URL updated to '${baseUrl}' for provider '${providerName}'`,
-                timestamp: new Date(),
-              });
-            } else {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Provider '${providerName}' does not support base URL updates`,
-                timestamp: new Date(),
-              });
-            }
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to set base URL: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
-          }
+          addMessage({
+            type: result.success ? MessageType.INFO : MessageType.ERROR,
+            content: result.message,
+            timestamp: new Date(),
+          });
         },
       },
       {

@@ -1,3 +1,4 @@
+
 # API keys and secrets
 .env
 .env~
@@ -46,3 +47,4 @@ prompts/
 
 # Reference directory
 reference/
+research/
