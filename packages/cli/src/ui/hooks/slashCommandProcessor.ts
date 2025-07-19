@@ -6,7 +6,6 @@
 
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { type PartListUnion } from '@google/genai';
-import open from 'open';
 import process from 'node:process';
 import { ansi } from '../colors.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -32,7 +31,6 @@ import {
 import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
-// import { createShowMemoryAction } from './useShowMemoryCommand.js';
 import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
@@ -54,30 +52,12 @@ import {
   setProviderBaseUrl,
 } from '../../providers/providerConfigUtils.js';
 
-// This interface is for the old, inline command definitions.
-// It will be removed once all commands are migrated to the new system.
-export interface LegacySlashCommand {
-  name: string;
-  altName?: string;
-  description?: string;
-  completion?: () => Promise<string[]>;
-  action: (
-    mainCommand: string,
-    subCommand?: string,
-    args?: string,
-  ) =>
-    | void
-    | SlashCommandActionReturn
-    | Promise<void | SlashCommandActionReturn>;
-}
-
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
  */
 export const useSlashCommandProcessor = (
   config: Config | null,
   settings: LoadedSettings,
-  history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   clearItems: UseHistoryManagerReturn['clearItems'],
   loadHistory: UseHistoryManagerReturn['loadHistory'],
@@ -91,7 +71,6 @@ export const useSlashCommandProcessor = (
   openProviderModelDialog: () => void,
   performMemoryRefresh: () => Promise<void>,
   toggleCorgiMode: () => void,
-  showToolDescriptions: boolean = false,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
   checkPaymentModeChange?: (forcePreviousProvider?: string) => void,
@@ -191,7 +170,11 @@ export const useSlashCommandProcessor = (
           console.clear();
           refreshStatic();
         },
+        loadHistory,
         setDebugMessage: onDebugMessage,
+        pendingItem: pendingCompressionItemRef.current,
+        setPendingItem: setPendingCompressionItem,
+        toggleCorgiMode,
       },
       session: {
         stats: session.stats,
@@ -202,15 +185,19 @@ export const useSlashCommandProcessor = (
       settings,
       gitService,
       logger,
+      loadHistory,
       addItem,
       clearItems,
       refreshStatic,
       session.stats,
       onDebugMessage,
+      pendingCompressionItemRef,
+      setPendingCompressionItem,
+      toggleCorgiMode,
     ],
   );
 
-  const commandService = useMemo(() => new CommandService(), []);
+  const commandService = useMemo(() => new CommandService(config), [config]);
 
   useEffect(() => {
     const load = async () => {
@@ -654,131 +641,6 @@ export const useSlashCommandProcessor = (
         },
       },
       {
-        name: 'model',
-        description: 'select or switch model',
-        action: async (_mainCommand, _subCommand, _args) => {
-          const modelName = _subCommand || _args;
-          const providerManager = getProviderManager();
-
-          // Always use provider model dialog
-          if (!modelName) {
-            openProviderModelDialog();
-            return;
-          }
-
-          // Switch model in provider
-          try {
-            const activeProvider = providerManager.getActiveProvider();
-            const currentModel = activeProvider.getCurrentModel
-              ? activeProvider.getCurrentModel()
-              : 'unknown';
-
-            if (activeProvider.setModel) {
-              activeProvider.setModel(modelName);
-              // Keep config model in sync so /about shows correct model
-              if (config) {
-                config.setModel(modelName);
-              }
-              addMessage({
-                type: MessageType.INFO,
-                content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
-                timestamp: new Date(),
-              });
-            } else {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Provider '${activeProvider.name}' does not support model switching`,
-                timestamp: new Date(),
-              });
-            }
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
-          }
-        },
-      },
-      {
-        name: 'provider',
-        description:
-          'switch between different AI providers (openai, anthropic, etc.)',
-        action: async (_mainCommand, providerName, _args) => {
-          const providerManager = getProviderManager();
-
-          if (!providerName) {
-            // Open interactive provider selection dialog
-            openProviderDialog();
-            return;
-          }
-
-          try {
-            const currentProvider = providerManager.getActiveProviderName();
-
-            // Handle switching to same provider
-            if (providerName === currentProvider) {
-              addMessage({
-                type: MessageType.INFO,
-                content: `Already using provider: ${currentProvider}`,
-                timestamp: new Date(),
-              });
-              return;
-            }
-
-            const fromProvider = currentProvider || 'none';
-            providerManager.setActiveProvider(providerName);
-
-            // Update config model to provider default
-            const newActiveProvider = providerManager.getActiveProvider();
-            if (config && newActiveProvider.getCurrentModel) {
-              config.setModel(newActiveProvider.getCurrentModel());
-            }
-
-            // Set the appropriate auth type based on provider
-            if (providerName === 'gemini') {
-              settings.setValue(
-                SettingScope.User,
-                'selectedAuthType',
-                AuthType.USE_GEMINI,
-              );
-              await config?.refreshAuth(AuthType.USE_GEMINI);
-            } else {
-              settings.setValue(
-                SettingScope.User,
-                'selectedAuthType',
-                AuthType.USE_PROVIDER,
-              );
-              await config?.refreshAuth(AuthType.USE_PROVIDER);
-            }
-
-            addMessage({
-              type: MessageType.INFO,
-              content: `Switched from ${fromProvider} to ${providerName}`,
-              timestamp: new Date(),
-            });
-
-            // Trigger payment mode check to show banner when switching providers
-            // Pass the previous provider to ensure proper detection
-            if (checkPaymentModeChange) {
-              setTimeout(() => checkPaymentModeChange(fromProvider), 100);
-            }
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
-          }
-        },
-      },
-      {
-        name: 'corgi',
-        action: (_mainCommand, _subCommand, _args) => {
-          toggleCorgiMode();
-        },
-      },
-      {
         name: 'bug',
         description: 'submit a bug report',
         action: async (_mainCommand, _subCommand, args) => {
@@ -838,489 +700,6 @@ export const useSlashCommandProcessor = (
               });
             }
           })();
-        },
-      },
-      {
-        name: 'chat',
-        description:
-          'Manage conversation history. Usage: /chat <list|save|resume> <tag>',
-        action: async (_mainCommand, subCommand, args) => {
-          const tag = (args || '').trim();
-          const logger = new Logger(config?.getSessionId() || '');
-          await logger.initialize();
-          const chat = await config?.getGeminiClient()?.getChat();
-          if (!chat) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'No chat client available for conversation status.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-          if (!subCommand) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'Missing command\nUsage: /chat <list|save|resume> <tag>',
-              timestamp: new Date(),
-            });
-            return;
-          }
-          switch (subCommand) {
-            case 'save': {
-              if (!tag) {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: 'Missing tag. Usage: /chat save <tag>',
-                  timestamp: new Date(),
-                });
-                return;
-              }
-              const history = chat.getHistory();
-              if (history.length > 0) {
-                await logger.saveCheckpoint(
-                  chat?.getHistory() || [],
-                  tag,
-                  ConversationContext.getContext(),
-                );
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `Conversation checkpoint saved with tag: ${tag}.`,
-                  timestamp: new Date(),
-                });
-              } else {
-                addMessage({
-                  type: MessageType.INFO,
-                  content: 'No conversation found to save.',
-                  timestamp: new Date(),
-                });
-              }
-              return;
-            }
-            case 'resume':
-            case 'restore':
-            case 'load': {
-              if (!tag) {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: 'Missing tag. Usage: /chat resume <tag>',
-                  timestamp: new Date(),
-                });
-                return;
-              }
-              const { history: conversation, context } =
-                await logger.loadCheckpoint(tag);
-              if (conversation.length === 0) {
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `No saved checkpoint found with tag: ${tag}.`,
-                  timestamp: new Date(),
-                });
-                return;
-              }
-
-              if (context) {
-                ConversationContext.setContext(context as IConversationContext);
-              } else {
-                // For old checkpoints, start a new context
-                ConversationContext.startNewConversation();
-              }
-
-              clearItems();
-              chat.clearHistory();
-              const rolemap: { [key: string]: MessageType } = {
-                user: MessageType.USER,
-                model: MessageType.GEMINI,
-              };
-              let hasSystemPrompt = false;
-              let i = 0;
-              for (const item of conversation) {
-                i += 1;
-
-                // Add each item to history regardless of whether we display
-                // it.
-                chat.addHistory(item);
-
-                const text =
-                  item.parts
-                    ?.filter((m) => !!m.text)
-                    .map((m) => m.text)
-                    .join('') || '';
-                if (!text) {
-                  // Parsing Part[] back to various non-text output not yet implemented.
-                  continue;
-                }
-                if (i === 1 && text.match(/context for our chat/)) {
-                  hasSystemPrompt = true;
-                }
-                if (i > 2 || !hasSystemPrompt) {
-                  addItem(
-                    {
-                      type:
-                        (item.role && rolemap[item.role]) || MessageType.GEMINI,
-                      text,
-                    } as HistoryItemWithoutId,
-                    i,
-                  );
-                }
-              }
-              console.clear();
-              refreshStatic();
-              return;
-            }
-            case 'list':
-              addMessage({
-                type: MessageType.INFO,
-                content:
-                  'list of saved conversations: ' +
-                  (await savedChatTags()).join(', '),
-                timestamp: new Date(),
-              });
-              return;
-            default:
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Unknown /chat command: ${subCommand}. Available: list, save, resume`,
-                timestamp: new Date(),
-              });
-              return;
-          }
-        },
-        completion: async () =>
-          (await savedChatTags()).map((tag) => 'resume ' + tag),
-      },
-      {
-        name: 'quit',
-        altName: 'exit',
-        description: 'exit the cli',
-        action: async (mainCommand, _subCommand, _args) => {
-          const now = new Date();
-          const { sessionStartTime } = session.stats;
-          const wallDuration = now.getTime() - sessionStartTime.getTime();
-
-          setQuittingMessages([
-            {
-              type: 'user',
-              text: `/${mainCommand}`,
-              id: now.getTime() - 1,
-            },
-            {
-              type: 'quit',
-              duration: formatDuration(wallDuration),
-              id: now.getTime(),
-            },
-          ]);
-
-          setTimeout(() => {
-            process.exit(0);
-          }, 100);
-        },
-      },
-      {
-        name: 'compress',
-        altName: 'summarize',
-        description: 'Compresses the context by replacing it with a summary.',
-        action: async (_mainCommand, _subCommand, _args) => {
-          if (pendingCompressionItemRef.current !== null) {
-            addMessage({
-              type: MessageType.ERROR,
-              content:
-                'Already compressing, wait for previous request to complete',
-              timestamp: new Date(),
-            });
-            return;
-          }
-          setPendingCompressionItem({
-            type: MessageType.COMPRESSION,
-            compression: {
-              isPending: true,
-              originalTokenCount: null,
-              newTokenCount: null,
-            },
-          });
-          try {
-            const compressed = await config!
-              .getGeminiClient()!
-              // TODO: Set Prompt id for CompressChat from SlashCommandProcessor.
-              .tryCompressChat('Prompt Id not set', true);
-            if (compressed) {
-              addMessage({
-                type: MessageType.COMPRESSION,
-                compression: {
-                  isPending: false,
-                  originalTokenCount: compressed.originalTokenCount,
-                  newTokenCount: compressed.newTokenCount,
-                },
-                timestamp: new Date(),
-              });
-            } else {
-              addMessage({
-                type: MessageType.ERROR,
-                content: 'Failed to compress chat history.',
-                timestamp: new Date(),
-              });
-            }
-          } catch (e) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to compress chat history: ${e instanceof Error ? e.message : String(e)}`,
-              timestamp: new Date(),
-            });
-          }
-          setPendingCompressionItem(null);
-        },
-      },
-      {
-        name: 'key',
-        description: 'set or remove API key for the current provider',
-        action: async (_mainCommand, apiKey, _args) => {
-          const providerManager = getProviderManager();
-
-          const result = await setProviderApiKey(
-            providerManager,
-            settings,
-            apiKey,
-            config ?? undefined,
-          );
-
-          addMessage({
-            type: result.success ? MessageType.INFO : MessageType.ERROR,
-            content: result.message,
-            timestamp: new Date(),
-          });
-
-          // Trigger payment mode check to show banner if needed
-          if (result.success && checkPaymentModeChange) {
-            setTimeout(checkPaymentModeChange, 100);
-          }
-        },
-      },
-      {
-        name: 'keyfile',
-        description: 'manage API key file for the current provider',
-        action: async (_mainCommand, filePath, _args) => {
-          const providerManager = getProviderManager();
-
-          try {
-            const activeProvider = providerManager.getActiveProvider();
-            const providerName = activeProvider.name;
-
-            // If no path provided, check for existing keyfile
-            if (!filePath || filePath.trim() === '') {
-              // Check common keyfile locations
-              const keyfilePaths = [
-                path.join(homedir(), `.${providerName}_key`),
-                path.join(homedir(), `.${providerName}-key`),
-                path.join(homedir(), `.${providerName}_api_key`),
-              ];
-
-              // For specific providers, check their known keyfile locations
-              if (providerName === 'openai') {
-                keyfilePaths.unshift(path.join(homedir(), '.openai_key'));
-              } else if (providerName === 'anthropic') {
-                keyfilePaths.unshift(path.join(homedir(), '.anthropic_key'));
-              }
-
-              let foundKeyfile: string | null = null;
-              for (const keyfilePath of keyfilePaths) {
-                try {
-                  await fs.access(keyfilePath);
-                  foundKeyfile = keyfilePath;
-                  break;
-                } catch {
-                  // File doesn't exist, continue checking
-                }
-              }
-
-              if (foundKeyfile) {
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
-                  timestamp: new Date(),
-                });
-              } else {
-                addMessage({
-                  type: MessageType.INFO,
-                  content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
-                  timestamp: new Date(),
-                });
-              }
-              return;
-            }
-
-            // If 'none' is specified, remove the keyfile setting
-            if (filePath.trim().toLowerCase() === 'none') {
-              const result = await setProviderApiKey(
-                providerManager,
-                settings,
-                undefined, // Clear the API key
-                config ?? undefined,
-              );
-
-              addMessage({
-                type: result.success ? MessageType.INFO : MessageType.ERROR,
-                content: result.message.replace(
-                  'API key removed',
-                  'Keyfile removed',
-                ),
-                timestamp: new Date(),
-              });
-
-              // Trigger payment mode check to show banner if needed
-              if (result.success && checkPaymentModeChange) {
-                setTimeout(checkPaymentModeChange, 100);
-              }
-              return;
-            }
-
-            // Load API key from file
-            const result = await setProviderApiKeyFromFile(
-              providerManager,
-              settings,
-              filePath,
-              config ?? undefined,
-            );
-
-            addMessage({
-              type: result.success ? MessageType.INFO : MessageType.ERROR,
-              content: result.message,
-              timestamp: new Date(),
-            });
-
-            // Trigger payment mode check to show banner if needed
-            if (result.success && checkPaymentModeChange) {
-              setTimeout(checkPaymentModeChange, 100);
-            }
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
-          }
-        },
-      },
-      {
-        name: 'baseurl',
-        description: 'set base URL for the current provider',
-        action: async (_mainCommand, baseUrl, _args) => {
-          const providerManager = getProviderManager();
-
-          const result = await setProviderBaseUrl(
-            providerManager,
-            settings,
-            baseUrl,
-          );
-
-          addMessage({
-            type: result.success ? MessageType.INFO : MessageType.ERROR,
-            content: result.message,
-            timestamp: new Date(),
-          });
-        },
-      },
-      {
-        name: 'toolformat',
-        description: 'override the auto-detected tool calling format',
-        action: async (_mainCommand, formatName, _args) => {
-          const providerManager = getProviderManager();
-
-          const activeProvider = providerManager.getActiveProvider();
-          const providerName = activeProvider.name;
-
-          // Supported formats
-          const structuredFormats = ['openai', 'anthropic', 'deepseek', 'qwen'];
-          const textFormats = ['hermes', 'xml', 'llama', 'gemma'];
-          const allFormats = [...structuredFormats, ...textFormats];
-
-          // Show current format
-          if (!formatName) {
-            const currentFormat = activeProvider.getToolFormat
-              ? activeProvider.getToolFormat()
-              : 'unknown';
-            const isAutoDetected = !(
-              settings.merged.providerToolFormatOverrides &&
-              settings.merged.providerToolFormatOverrides[providerName]
-            );
-
-            addMessage({
-              type: MessageType.INFO,
-              content: `Current tool format: ${currentFormat} (${isAutoDetected ? 'auto-detected' : 'manual override'})
-To override: /toolformat <format>
-To return to auto: /toolformat auto
-Supported formats:
-  Structured: ${structuredFormats.join(', ')}
-  Text-based: ${textFormats.join(', ')}`,
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          // Return to auto-detection
-          if (formatName === 'auto') {
-            // Clear override in provider
-            if (activeProvider.setToolFormatOverride) {
-              activeProvider.setToolFormatOverride(null);
-            }
-
-            // Also clear from settings
-            const currentOverrides =
-              settings.merged.providerToolFormatOverrides || {};
-            delete currentOverrides[providerName];
-            settings.setValue(
-              SettingScope.User,
-              'providerToolFormatOverrides',
-              currentOverrides,
-            );
-
-            addMessage({
-              type: MessageType.INFO,
-              content: `Tool format override cleared for provider '${providerName}'. Using auto-detection.`,
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          // Validate format
-          if (!allFormats.includes(formatName)) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Invalid format '${formatName}'. Supported formats:
-  Structured: ${structuredFormats.join(', ')}
-  Text-based: ${textFormats.join(', ')}`,
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          // Set override
-          try {
-            // Update provider directly
-            if (activeProvider.setToolFormatOverride) {
-              activeProvider.setToolFormatOverride(formatName);
-            }
-
-            // Also save to settings for persistence
-            const currentOverrides =
-              settings.merged.providerToolFormatOverrides || {};
-            currentOverrides[providerName] = formatName;
-            settings.setValue(
-              SettingScope.User,
-              'providerToolFormatOverrides',
-              currentOverrides,
-            );
-
-            addMessage({
-              type: MessageType.INFO,
-              content: `Tool format override set to '${formatName}' for provider '${providerName}'`,
-              timestamp: new Date(),
-            });
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to set tool format override: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
-          }
         },
       },
     ];
@@ -1493,8 +872,6 @@ Supported formats:
       const parts = trimmed.substring(1).trim().split(/\s+/);
       const commandPath = parts.filter((p) => p); // The parts of the command, e.g., ['memory', 'add']
 
-      // --- Start of New Tree Traversal Logic ---
-
       let currentCommands = commands;
       let commandToExecute: SlashCommand | undefined;
       let pathIndex = 0;
@@ -1554,8 +931,17 @@ Supported formats:
                   case 'theme':
                     openThemeDialog();
                     return { type: 'handled' };
+                  case 'editor':
+                    openEditorDialog();
+                    return { type: 'handled' };
                   case 'privacy':
                     openPrivacyNotice();
+                    return { type: 'handled' };
+                  case 'provider':
+                    openProviderDialog();
+                    return { type: 'handled' };
+                  case 'providerModel':
+                    openProviderModelDialog();
                     return { type: 'handled' };
                   default: {
                     const unhandled: never = result.dialog;
@@ -1564,6 +950,22 @@ Supported formats:
                     );
                   }
                 }
+              case 'load_history': {
+                await config
+                  ?.getGeminiClient()
+                  ?.setHistory(result.clientHistory);
+                commandContext.ui.clear();
+                result.history.forEach((item, index) => {
+                  commandContext.ui.addItem(item, index);
+                });
+                return { type: 'handled' };
+              }
+              case 'quit':
+                setQuittingMessages(result.messages);
+                setTimeout(() => {
+                  process.exit(0);
+                }, 100);
+                return { type: 'handled' };
               default: {
                 const unhandled: never = result;
                 throw new Error(`Unhandled slash command result: ${unhandled}`);
@@ -1585,45 +987,6 @@ Supported formats:
         }
       }
 
-      // --- End of New Tree Traversal Logic ---
-
-      // --- Legacy Fallback Logic (for commands not yet migrated) ---
-
-      const mainCommand = parts[0];
-      const subCommand = parts[1];
-      const legacyArgs = parts.slice(2).join(' ');
-
-      for (const cmd of legacyCommands) {
-        if (mainCommand === cmd.name || mainCommand === cmd.altName) {
-          const actionResult = await cmd.action(
-            mainCommand,
-            subCommand,
-            legacyArgs,
-          );
-
-          if (actionResult?.type === 'tool') {
-            return {
-              type: 'schedule_tool',
-              toolName: actionResult.toolName,
-              toolArgs: actionResult.toolArgs,
-            };
-          }
-          if (actionResult?.type === 'message') {
-            addItem(
-              {
-                type:
-                  actionResult.messageType === 'error'
-                    ? MessageType.ERROR
-                    : MessageType.INFO,
-                text: actionResult.content,
-              },
-              Date.now(),
-            );
-          }
-          return { type: 'handled' };
-        }
-      }
-
       addMessage({
         type: MessageType.ERROR,
         content: `Unknown command: ${trimmed}`,
@@ -1632,50 +995,23 @@ Supported formats:
       return { type: 'handled' };
     },
     [
+      config,
       addItem,
       setShowHelp,
       openAuthDialog,
       commands,
-      legacyCommands,
       commandContext,
       addMessage,
       openThemeDialog,
       openPrivacyNotice,
+      openEditorDialog,
+      setQuittingMessages,
     ],
   );
 
-  const allCommands = useMemo(() => {
-    // Adapt legacy commands to the new SlashCommand interface
-    const adaptedLegacyCommands: SlashCommand[] = legacyCommands.map(
-      (legacyCmd) => ({
-        name: legacyCmd.name,
-        altName: legacyCmd.altName,
-        description: legacyCmd.description,
-        action: async (_context: CommandContext, args: string) => {
-          const parts = args.split(/\s+/);
-          const subCommand = parts[0] || undefined;
-          const restOfArgs = parts.slice(1).join(' ') || undefined;
-
-          return legacyCmd.action(legacyCmd.name, subCommand, restOfArgs);
-        },
-        completion: legacyCmd.completion
-          ? async (_context: CommandContext, _partialArg: string) =>
-              legacyCmd.completion!()
-          : undefined,
-      }),
-    );
-
-    const newCommandNames = new Set(commands.map((c) => c.name));
-    const filteredAdaptedLegacy = adaptedLegacyCommands.filter(
-      (c) => !newCommandNames.has(c.name),
-    );
-
-    return [...commands, ...filteredAdaptedLegacy];
-  }, [commands, legacyCommands]);
-
   return {
     handleSlashCommand,
-    slashCommands: allCommands,
+    slashCommands: commands,
     pendingHistoryItems,
     commandContext,
   };

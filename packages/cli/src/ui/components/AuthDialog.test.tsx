@@ -167,7 +167,7 @@ describe('AuthDialog', () => {
       );
 
       // This is a bit brittle, but it's the best way to check which item is selected.
-      expect(lastFrame()).toContain('● Login with Google');
+      expect(lastFrame()).toContain('● 1. Login with Google');
     });
 
     it('should fall back to default if GEMINI_DEFAULT_AUTH_TYPE is not set', () => {
@@ -190,7 +190,7 @@ describe('AuthDialog', () => {
       );
 
       // Default is LOGIN_WITH_GOOGLE
-      expect(lastFrame()).toContain('● Login with Google');
+      expect(lastFrame()).toContain('● 1. Login with Google');
     });
 
     it('should show an error and fall back to default if GEMINI_DEFAULT_AUTH_TYPE is invalid', () => {
@@ -219,7 +219,7 @@ describe('AuthDialog', () => {
       );
 
       // Default is LOGIN_WITH_GOOGLE
-      expect(lastFrame()).toContain('● Login with Google');
+      expect(lastFrame()).toContain('● 1. Login with Google');
     });
   });
 

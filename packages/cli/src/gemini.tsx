@@ -38,6 +38,7 @@ import {
   // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
   getOauthClient,
+  shouldAttemptBrowserLaunch,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
@@ -92,6 +93,7 @@ async function relaunchWithAdditionalArgs(additionalArgs: string[]) {
   await new Promise((resolve) => child.on('close', resolve));
   process.exit(0);
 }
+import { runAcpPeer } from './acp/acpPeer.js';
 
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
@@ -290,10 +292,14 @@ export async function main() {
 
   if (
     settings.merged.selectedAuthType === AuthType.LOGIN_WITH_GOOGLE &&
-    config.getNoBrowser()
+    (config.getNoBrowser() || !shouldAttemptBrowserLaunch())
   ) {
     // Do oauth before app renders to make copying the link possible.
     await getOauthClient(settings.merged.selectedAuthType, config);
+  }
+
+  if (config.getExperimentalAcp()) {
+    return runAcpPeer(config, settings);
   }
 
   let input = config.getQuestion();

@@ -11,6 +11,7 @@ import {
   Config,
   clearCachedCredentialFile,
   getErrorMessage,
+  shouldAttemptBrowserLaunch,
 } from '@vybestack/llxprt-code-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
@@ -68,7 +69,10 @@ export const useAuthCommand = (
       if (authType) {
         await clearCachedCredentialFile();
         settings.setValue(scope, 'selectedAuthType', authType);
-        if (authType === AuthType.LOGIN_WITH_GOOGLE && config.getNoBrowser()) {
+        if (
+          authType === AuthType.LOGIN_WITH_GOOGLE &&
+          (config.getNoBrowser() || !shouldAttemptBrowserLaunch())
+        ) {
           runExitCleanup();
           console.log(
             `

@@ -25,7 +25,9 @@ import {
   clearCachedGoogleAccount,
 } from '../utils/user_account.js';
 import { AuthType } from '../core/contentGenerator.js';
+import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import readline from 'node:readline';
+import open from 'open';
 
 //  OAuth Client ID used to initiate OAuth2Client class.
 const OAUTH_CLIENT_ID =
@@ -67,7 +69,7 @@ export interface OauthWebLogin {
 
 export async function getOauthClient(
   authType: AuthType,
-  _config: Config,
+  config: Config,
 ): Promise<OAuth2Client> {
   // Handle USE_NONE auth type - skip OAuth entirely
   if (authType === AuthType.USE_NONE) {
@@ -77,6 +79,9 @@ export async function getOauthClient(
   const client = new OAuth2Client({
     clientId: OAUTH_CLIENT_ID,
     clientSecret: OAUTH_CLIENT_SECRET,
+    transporterOptions: {
+      proxy: config.getProxy(),
+    },
   });
   client.on('tokens', (tokens: Credentials) => {
     // Don't await - cache credentials asynchronously to avoid blocking
@@ -124,20 +129,8 @@ export async function getOauthClient(
     }
   }
 
-  // Try web-based flow first with timeout, then fall back to manual code entry
-  let success = false;
-
-  try {
-    // Attempt web-based authentication with 30 second timeout
-    console.log('Attempting to open browser for authentication...');
-    success = await authWithWebTimeout(client, 30000);
-  } catch (_error) {
-    console.log('\nBrowser authentication failed or timed out.');
-    console.log('Falling back to manual authentication...\n');
-  }
-
-  // If web flow failed, try manual code entry
-  if (!success) {
+  if (config.getNoBrowser() || !shouldAttemptBrowserLaunch()) {
+    let success = false;
     const maxRetries = 2;
     for (let i = 0; !success && i < maxRetries; i++) {
       success = await authWithUserCode(client);
@@ -151,32 +144,49 @@ export async function getOauthClient(
     if (!success) {
       process.exit(1);
     }
+  } else {
+    const webLogin = await authWithWeb(client);
+
+    console.log(
+      `\n\nCode Assist login required.\n` +
+        `Attempting to open authentication page in your browser.\n` +
+        `Otherwise navigate to:\n\n${webLogin.authUrl}\n\n`,
+    );
+    try {
+      // Attempt to open the authentication URL in the default browser.
+      // We do not use the `wait` option here because the main script's execution
+      // is already paused by `loginCompletePromise`, which awaits the server callback.
+      const childProcess = await open(webLogin.authUrl);
+
+      // IMPORTANT: Attach an error handler to the returned child process.
+      // Without this, if `open` fails to spawn a process (e.g., `xdg-open` is not found
+      // in a minimal Docker container), it will emit an unhandled 'error' event,
+      // causing the entire Node.js process to crash.
+      childProcess.on('error', (_) => {
+        console.error(
+          'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
+        );
+        process.exit(1);
+      });
+    } catch (err) {
+      console.error(
+        'An unexpected error occurred while trying to open the browser:',
+        err,
+        '\nPlease try running again with NO_BROWSER=true set.',
+      );
+      process.exit(1);
+    }
+    console.log('Waiting for authentication...');
+
+    await webLogin.loginCompletePromise;
   }
 
   return client;
 }
 
-async function authWithWebTimeout(
-  client: OAuth2Client,
-  timeoutMs: number,
-): Promise<boolean> {
-  const { authUrl, loginCompletePromise } = await _authWithWeb(client);
-
-  // Open browser
-  const open = (await import('open')).default;
-  await open(authUrl);
-
-  // Wait for authentication with timeout
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Authentication timeout')), timeoutMs);
-  });
-
-  await Promise.race([loginCompletePromise, timeoutPromise]);
-  return true;
-}
 
 async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
-  const redirectUri = 'https://sdk.cloud.google.com/authcode_cloudcode.html';
+  const redirectUri = 'https://codeassist.google.com/authcode';
   const codeVerifier = await client.generateCodeVerifierAsync();
   const state = crypto.randomBytes(32).toString('hex');
   const authUrl: string = client.generateAuthUrl({
@@ -221,8 +231,14 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
   return true;
 }
 
-async function _authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
+async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
   const port = await getAvailablePort();
+  // The hostname used for the HTTP server binding (e.g., '0.0.0.0' in Docker).
+  const host = process.env.OAUTH_CALLBACK_HOST || 'localhost';
+  // The `redirectUri` sent to Google's authorization server MUST use a loopback IP literal
+  // (i.e., 'localhost' or '127.0.0.1'). This is a strict security policy for credentials of
+  // type 'Desktop app' or 'Web application' (when using loopback flow) to mitigate
+  // authorization code interception attacks.
   const redirectUri = `http://localhost:${port}/oauth2callback`;
   const state = crypto.randomBytes(32).toString('hex');
   const authUrl = client.generateAuthUrl({
@@ -280,7 +296,7 @@ async function _authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
         server.close();
       }
     });
-    server.listen(port);
+    server.listen(port, host);
   });
 
   return {
@@ -293,6 +309,16 @@ export function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     let port = 0;
     try {
+      const portStr = process.env.OAUTH_CALLBACK_PORT;
+      if (portStr) {
+        port = parseInt(portStr, 10);
+        if (isNaN(port) || port <= 0 || port > 65535) {
+          return reject(
+            new Error(`Invalid value for OAUTH_CALLBACK_PORT: "${portStr}"`),
+          );
+        }
+        return resolve(port);
+      }
       const server = net.createServer();
       server.listen(0, () => {
         const address = server.address()! as net.AddressInfo;

@@ -56,6 +56,9 @@ import {
   ApprovalMode,
   isEditorAvailable,
   EditorType,
+  AuthType,
+  type ActiveFile,
+  ideContext,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
@@ -65,6 +68,7 @@ import {
   useSessionStats,
 } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
+import { useFocus } from './hooks/useFocus.js';
 import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 import * as fs from 'fs';
@@ -111,6 +115,7 @@ const AppInner = ({
   version,
   setIsAuthenticating,
 }: AppInnerProps) => {
+  const isFocused = useFocus();
   useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const { stdout } = useStdout();
@@ -214,6 +219,15 @@ const AppInner = ({
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
   const showPrivacyNotice = appState.openDialogs.privacy;
   // modelSwitchedFromQuotaError and userTier are now in sessionState
+  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
+  const [activeFile, setActiveFile] = useState<ActiveFile | undefined>();
+
+  useEffect(() => {
+    const unsubscribe = ideContext.subscribeToActiveFile(setActiveFile);
+    // Set the initial value
+    setActiveFile(ideContext.getActiveFileContext());
+    return unsubscribe;
+  }, []);
 
   const openPrivacyNotice = useCallback(() => {
     appDispatch({ type: 'OPEN_DIALOG', payload: 'privacy' });
@@ -336,7 +350,6 @@ const AppInner = ({
   } = useSlashCommandProcessor(
     config,
     settings,
-    history,
     addItem,
     clearItems,
     loadHistory,
@@ -350,7 +363,6 @@ const AppInner = ({
     providerModelDialog.openDialog,
     performMemoryRefresh,
     toggleCorgiMode,
-    showToolDescriptions,
     setQuittingMessages,
     openPrivacyNotice,
     checkPaymentModeChange,
@@ -404,15 +416,8 @@ const AppInner = ({
         if (timerRef.current) {
           clearTimeout(timerRef.current);
         }
-        const quitCommand = slashCommands.find(
-          (cmd) => cmd.name === 'quit' || cmd.altName === 'exit',
-        );
-        if (quitCommand && quitCommand.action) {
-          quitCommand.action(commandContext, '');
-        } else {
-          // This is unlikely to be needed but added for an additional fallback.
-          process.exit(0);
-        }
+        // Directly invoke the central command handler.
+        handleSlashCommand('/quit');
       } else {
         setPressedOnce(true);
         timerRef.current = setTimeout(() => {
@@ -421,8 +426,7 @@ const AppInner = ({
         }, CTRL_EXIT_PROMPT_DURATION_MS);
       }
     },
-    // Add commandContext to the dependency array here!
-    [slashCommands, commandContext],
+    [handleSlashCommand],
   );
 
   useInput((input: string, key: InkKeyType) => {
@@ -898,9 +902,15 @@ const AppInner = ({
                     </Text>
                   ) : (
                     <ContextSummaryDisplay
+<<<<<<< HEAD
                       llxprtMdFileCount={llxprtMdFileCount}
+=======
+                      activeFile={activeFile}
+                      geminiMdFileCount={geminiMdFileCount}
+>>>>>>> upstream/main
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
+                      blockedMcpServers={config.getBlockedMcpServers()}
                       showToolDescriptions={showToolDescriptions}
                     />
                   )}
@@ -944,6 +954,7 @@ const AppInner = ({
                   commandContext={commandContext}
                   shellModeActive={shellModeActive}
                   setShellModeActive={setShellModeActive}
+                  focus={isFocused}
                 />
               )}
             </>

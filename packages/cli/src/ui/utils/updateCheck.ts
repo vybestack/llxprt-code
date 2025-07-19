@@ -33,6 +33,11 @@ async function fetchWithTimeout(
 
 export async function checkForUpdates(): Promise<string | null> {
   try {
+    // Skip update check when running from source (development mode)
+    if (process.env.DEV === 'true') {
+      return null;
+    }
+
     const packageJson = await getPackageJson();
     if (!packageJson || !packageJson.name || !packageJson.version) {
       return null;
