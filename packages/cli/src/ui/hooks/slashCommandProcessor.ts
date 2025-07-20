@@ -30,27 +30,14 @@ import {
 } from '../types.js';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { homedir } from 'os';
 import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
 import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
 import { getCliVersion } from '../../utils/version.js';
-import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import {
-  type CommandContext,
-  type SlashCommandActionReturn,
-  type SlashCommand,
-} from '../commands/types.js';
+import { LoadedSettings } from '../../config/settings.js';
+import { type CommandContext, type SlashCommand } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import {
-  ConversationContext,
-  IConversationContext,
-} from '../../utils/ConversationContext.js';
-import {
-  setProviderApiKey,
-  setProviderApiKeyFromFile,
-  setProviderBaseUrl,
-} from '../../providers/providerConfigUtils.js';
+import open from 'open';
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
@@ -70,10 +57,10 @@ export const useSlashCommandProcessor = (
   openProviderDialog: () => void,
   openProviderModelDialog: () => void,
   performMemoryRefresh: () => Promise<void>,
-  toggleCorgiMode: () => void,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
   checkPaymentModeChange?: (forcePreviousProvider?: string) => void,
+  showToolDescriptions?: boolean,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<SlashCommand[]>([]);
@@ -174,7 +161,6 @@ export const useSlashCommandProcessor = (
         setDebugMessage: onDebugMessage,
         pendingItem: pendingCompressionItemRef.current,
         setPendingItem: setPendingCompressionItem,
-        toggleCorgiMode,
       },
       session: {
         stats: session.stats,
@@ -193,7 +179,6 @@ export const useSlashCommandProcessor = (
       onDebugMessage,
       pendingCompressionItemRef,
       setPendingCompressionItem,
-      toggleCorgiMode,
     ],
   );
 
@@ -208,7 +193,7 @@ export const useSlashCommandProcessor = (
     load();
   }, [commandService]);
 
-  const savedChatTags = useCallback(async () => {
+  const _savedChatTags = useCallback(async () => {
     const geminiDir = config?.getProjectTempDir();
     if (!geminiDir) {
       return [];
@@ -228,13 +213,13 @@ export const useSlashCommandProcessor = (
   // Define legacy commands
   // This list contains all commands that have NOT YET been migrated to the
   // new system. As commands are migrated, they are removed from this list.
-  const legacyCommands: LegacySlashCommand[] = useMemo(() => {
-    const commands: LegacySlashCommand[] = [
+  const _legacyCommands = useMemo(() => {
+    const commands: SlashCommand[] = [
       // `/help` and `/clear` have been migrated and REMOVED from this list.
       {
         name: 'docs',
         description: 'open full LLxprt Code documentation in your browser',
-        action: async (_mainCommand, _subCommand, _args) => {
+        action: async (_context: CommandContext, _args: string) => {
           const docsUrl = 'https://goo.gle/gemini-cli-docs';
           if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
             addMessage({
@@ -255,7 +240,8 @@ export const useSlashCommandProcessor = (
       {
         name: 'auth',
         description: 'change the auth method',
-        action: async (_mainCommand, authMode, _args) => {
+        action: async (_context: CommandContext, args: string) => {
+          const authMode = args?.split(' ')[0];
           const providerManager = getProviderManager();
 
           // If no auth mode specified, open the dialog
@@ -325,13 +311,17 @@ export const useSlashCommandProcessor = (
       {
         name: 'editor',
         description: 'set external editor preference',
-        action: (_mainCommand, _subCommand, _args) => openEditorDialog(),
+        action: (_context: CommandContext, _args: string) => ({
+          type: 'dialog' as const,
+          dialog: 'editor' as const,
+        }),
       },
       {
         name: 'stats',
         altName: 'usage',
         description: 'check session stats. Usage: /stats [model|tools]',
-        action: (_mainCommand, subCommand, _args) => {
+        action: (_context: CommandContext, args: string) => {
+          const subCommand = args?.split(' ')[0];
           if (subCommand === 'model') {
             addMessage({
               type: MessageType.MODEL_STATS,
@@ -360,24 +350,32 @@ export const useSlashCommandProcessor = (
       {
         name: 'mcp',
         description: 'list configured MCP servers and tools',
-        action: async (_mainCommand, _subCommand, _args) => {
-          // Check if the _subCommand includes a specific flag to control description visibility
+        action: async (_context: CommandContext, args: string) => {
+          // Check if the args includes a specific flag to control description visibility
+          const [subCommand, ...rest] = args?.split(' ') || [];
+          const remainingArgs = rest.join(' ');
           let useShowDescriptions = showToolDescriptions;
-          if (_subCommand === 'desc' || _subCommand === 'descriptions') {
+          if (subCommand === 'desc' || subCommand === 'descriptions') {
             useShowDescriptions = true;
           } else if (
-            _subCommand === 'nodesc' ||
-            _subCommand === 'nodescriptions'
+            subCommand === 'nodesc' ||
+            subCommand === 'nodescriptions'
           ) {
             useShowDescriptions = false;
-          } else if (_args === 'desc' || _args === 'descriptions') {
+          } else if (
+            remainingArgs === 'desc' ||
+            remainingArgs === 'descriptions'
+          ) {
             useShowDescriptions = true;
-          } else if (_args === 'nodesc' || _args === 'nodescriptions') {
+          } else if (
+            remainingArgs === 'nodesc' ||
+            remainingArgs === 'nodescriptions'
+          ) {
             useShowDescriptions = false;
           }
-          // Check if the _subCommand includes a specific flag to show detailed tool schema
+          // Check if the args includes a specific flag to show detailed tool schema
           let useShowSchema = false;
-          if (_subCommand === 'schema' || _args === 'schema') {
+          if (subCommand === 'schema' || remainingArgs === 'schema') {
             useShowSchema = true;
           }
 
@@ -576,19 +574,27 @@ export const useSlashCommandProcessor = (
       {
         name: 'tools',
         description: 'list available LLxprt Code tools',
-        action: async (_mainCommand, _subCommand, _args) => {
-          // Check if the _subCommand includes a specific flag to control description visibility
+        action: async (_context: CommandContext, args: string) => {
+          // Check if the args includes a specific flag to control description visibility
+          const [subCommand, ...rest] = args?.split(' ') || [];
+          const remainingArgs = rest.join(' ');
           let useShowDescriptions = showToolDescriptions;
-          if (_subCommand === 'desc' || _subCommand === 'descriptions') {
+          if (subCommand === 'desc' || subCommand === 'descriptions') {
             useShowDescriptions = true;
           } else if (
-            _subCommand === 'nodesc' ||
-            _subCommand === 'nodescriptions'
+            subCommand === 'nodesc' ||
+            subCommand === 'nodescriptions'
           ) {
             useShowDescriptions = false;
-          } else if (_args === 'desc' || _args === 'descriptions') {
+          } else if (
+            remainingArgs === 'desc' ||
+            remainingArgs === 'descriptions'
+          ) {
             useShowDescriptions = true;
-          } else if (_args === 'nodesc' || _args === 'nodescriptions') {
+          } else if (
+            remainingArgs === 'nodesc' ||
+            remainingArgs === 'nodescriptions'
+          ) {
             useShowDescriptions = false;
           }
 
@@ -643,12 +649,8 @@ export const useSlashCommandProcessor = (
       {
         name: 'bug',
         description: 'submit a bug report',
-        action: async (_mainCommand, _subCommand, args) => {
-          let bugDescription = _subCommand || '';
-          if (args) {
-            bugDescription += ` ${args}`;
-          }
-          bugDescription = bugDescription.trim();
+        action: async (_context: CommandContext, args: string) => {
+          const bugDescription = args?.trim() || '';
 
           const osVersion = `${process.platform} ${process.version}`;
           let sandboxEnv = 'no sandbox';
@@ -725,7 +727,8 @@ export const useSlashCommandProcessor = (
             return [];
           }
         },
-        action: async (_mainCommand, subCommand, _args) => {
+        action: async (_context: CommandContext, args: string) => {
+          const subCommand = args?.split(' ')[0];
           const checkpointDir = config?.getProjectTempDir()
             ? path.join(config.getProjectTempDir(), 'checkpoints')
             : undefined;
@@ -827,25 +830,12 @@ export const useSlashCommandProcessor = (
     return commands;
   }, [
     addMessage,
-    openEditorDialog,
-    openProviderModelDialog,
-    openProviderDialog,
-    clearItems,
-    refreshStatic,
-    toggleCorgiMode,
-    savedChatTags,
+    openAuthDialog,
     config,
-    showToolDescriptions,
     session,
     gitService,
     loadHistory,
-    addItem,
-    setQuittingMessages,
-    pendingCompressionItemRef,
-    setPendingCompressionItem,
-    checkPaymentModeChange,
-    openAuthDialog,
-    settings,
+    showToolDescriptions,
   ]);
 
   const handleSlashCommand = useCallback(
@@ -1006,6 +996,8 @@ export const useSlashCommandProcessor = (
       openPrivacyNotice,
       openEditorDialog,
       setQuittingMessages,
+      openProviderDialog,
+      openProviderModelDialog,
     ],
   );
 

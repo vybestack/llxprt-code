@@ -24,7 +24,12 @@ async function readAccounts(filePath: string): Promise<UserAccounts> {
     if (!content.trim()) {
       return { active: null, old: [] };
     }
-    return JSON.parse(content) as UserAccounts;
+    const parsed = JSON.parse(content) as UserAccounts;
+    // Ensure both properties exist
+    return {
+      active: parsed.active || null,
+      old: parsed.old || [],
+    };
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
       // File doesn't exist, which is fine.

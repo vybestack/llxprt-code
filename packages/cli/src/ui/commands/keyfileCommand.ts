@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SlashCommand, CommandContext, SimpleMessageActionReturn } from './types.js';
+import { SlashCommand, CommandContext, MessageActionReturn } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { setProviderApiKeyFromFile } from '../../providers/providerConfigUtils.js';
-import { MessageType } from '../types.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
@@ -17,8 +16,8 @@ export const keyfileCommand: SlashCommand = {
   description: 'manage API key file for the current provider',
   action: async (
     context: CommandContext,
-    args: string
-  ): Promise<SimpleMessageActionReturn> => {
+    args: string,
+  ): Promise<MessageActionReturn> => {
     const providerManager = getProviderManager();
     const filePath = args?.trim();
 
@@ -56,45 +55,34 @@ export const keyfileCommand: SlashCommand = {
         if (foundKeyfile) {
           return {
             type: 'message',
-            message: {
-              type: MessageType.INFO,
-              content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
-              timestamp: new Date(),
-            },
+            messageType: 'info',
+            content: `Current keyfile for provider '${providerName}': ${foundKeyfile}\nTo remove: /keyfile none\nTo change: /keyfile <new_path>`,
           };
         } else {
           return {
             type: 'message',
-            message: {
-              type: MessageType.INFO,
-              content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
-              timestamp: new Date(),
-            },
+            messageType: 'info',
+            content: `No keyfile found for provider '${providerName}'\nTo set: /keyfile <path>`,
           };
         }
       }
 
       // Handle removal
       if (filePath === 'none') {
-        const removedPath = context.services.settings.getProviderKeyfile(providerName);
+        const removedPath =
+          context.services.settings.getProviderKeyfile(providerName);
         if (removedPath) {
           context.services.settings.removeProviderKeyfile(providerName);
           return {
             type: 'message',
-            message: {
-              type: MessageType.INFO,
-              content: `Removed keyfile path for provider '${providerName}'`,
-              timestamp: new Date(),
-            },
+            messageType: 'info',
+            content: `Removed keyfile path for provider '${providerName}'`,
           };
         } else {
           return {
             type: 'message',
-            message: {
-              type: MessageType.INFO,
-              content: `No keyfile path was set for provider '${providerName}'`,
-              timestamp: new Date(),
-            },
+            messageType: 'info',
+            content: `No keyfile path was set for provider '${providerName}'`,
           };
         }
       }
@@ -119,20 +107,14 @@ export const keyfileCommand: SlashCommand = {
 
       return {
         type: 'message',
-        message: {
-          type: result.success ? MessageType.INFO : MessageType.ERROR,
-          content: result.message,
-          timestamp: new Date(),
-        },
+        messageType: result.success ? 'info' : 'error',
+        content: result.message,
       };
     } catch (error) {
       return {
         type: 'message',
-        message: {
-          type: MessageType.ERROR,
-          content: `Failed to manage keyfile: ${error instanceof Error ? error.message : String(error)}`,
-          timestamp: new Date(),
-        },
+        messageType: 'error',
+        content: `Failed to manage keyfile: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },

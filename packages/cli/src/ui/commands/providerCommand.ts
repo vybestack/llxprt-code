@@ -4,18 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SlashCommand, CommandContext, OpenDialogActionReturn, SimpleMessageActionReturn } from './types.js';
+import {
+  SlashCommand,
+  CommandContext,
+  OpenDialogActionReturn,
+  MessageActionReturn,
+} from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 
 export const providerCommand: SlashCommand = {
   name: 'provider',
-  description: 'switch between different AI providers (openai, anthropic, etc.)',
+  description:
+    'switch between different AI providers (openai, anthropic, etc.)',
   action: async (
     context: CommandContext,
-    args: string
-  ): Promise<OpenDialogActionReturn | SimpleMessageActionReturn | void> => {
+    args: string,
+  ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
     const providerManager = getProviderManager();
     const providerName = args?.trim();
 
@@ -34,20 +40,17 @@ export const providerCommand: SlashCommand = {
       if (providerName === currentProvider) {
         return {
           type: 'message',
-          message: {
-            type: MessageType.INFO,
-            content: `Already using provider: ${currentProvider}`,
-            timestamp: new Date(),
-          },
+          messageType: 'info',
+          content: `Already using provider: ${currentProvider}`,
         };
       }
 
       const fromProvider = currentProvider || 'none';
 
       // Use conversion context to track available models
-      const conversionContextJSON = {
-        availableModels: await providerManager.getAllAvailableModels(),
-      };
+      // const conversionContextJSON = {
+      //   availableModels: await providerManager.getAllAvailableModels(),
+      // };
 
       // Switch provider
       providerManager.setActiveProvider(providerName);
@@ -55,23 +58,20 @@ export const providerCommand: SlashCommand = {
       // Update config if available
       if (context.services.config) {
         context.services.config.setModel(
-          providerManager.getActiveProvider().getCurrentModel?.() || ''
+          providerManager.getActiveProvider().getCurrentModel?.() || '',
         );
 
         // Use provider auth for non-gemini providers
         if (providerName !== 'gemini') {
-          const activeProvider = providerManager.getActiveProvider();
-          const hasValidKey = await activeProvider.isConfigured?.();
-          if (!hasValidKey) {
-            context.ui.addItem({
-              type: 'message',
-              messages: [{
-                type: MessageType.WARNING,
-                content: `No API key configured for ${providerName}. Use /key to set one.`,
-                timestamp: new Date(),
-              }],
-            });
-          }
+          // Check if provider needs configuration (this could be provider-specific)
+          // For now, just inform the user to set a key if needed
+          context.ui.addItem(
+            {
+              type: MessageType.INFO,
+              text: `Switched to ${providerName}. Use /key to set API key if needed.`,
+            },
+            Date.now(),
+          );
         }
 
         // Refresh auth if switching to/from gemini
@@ -88,25 +88,22 @@ export const providerCommand: SlashCommand = {
         checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
       };
       if (extendedContext.checkPaymentModeChange) {
-        setTimeout(() => extendedContext.checkPaymentModeChange!(fromProvider), 100);
+        setTimeout(
+          () => extendedContext.checkPaymentModeChange!(fromProvider),
+          100,
+        );
       }
 
       return {
         type: 'message',
-        message: {
-          type: MessageType.INFO,
-          content: `Switched from ${fromProvider} to ${providerName}`,
-          timestamp: new Date(),
-        },
+        messageType: 'info',
+        content: `Switched from ${fromProvider} to ${providerName}`,
       };
     } catch (error) {
       return {
         type: 'message',
-        message: {
-          type: MessageType.ERROR,
-          content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
-          timestamp: new Date(),
-        },
+        messageType: 'error',
+        content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },

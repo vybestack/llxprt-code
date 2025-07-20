@@ -116,6 +116,11 @@ export type FlashFallbackHandler = (
   error?: unknown,
 ) => Promise<boolean | string | null>;
 
+export interface ActiveExtension {
+  name: string;
+  version: string;
+}
+
 export interface ConfigParameters {
   sessionId: string;
   embeddingModel?: string;
@@ -202,6 +207,7 @@ export class Config {
   private readonly ideMode: boolean;
   private modelSwitchedDuringSession: boolean = false;
   private readonly maxSessionTurns: number;
+  private readonly _activeExtensions: ActiveExtension[];
   private readonly listExtensions: boolean;
   private readonly _extensions: GeminiCLIExtension[];
   private readonly _blockedMcpServers: Array<{
@@ -547,6 +553,10 @@ export class Config {
 
   getExtensions(): GeminiCLIExtension[] {
     return this._extensions;
+  }
+
+  getActiveExtensions(): ActiveExtension[] {
+    return this._activeExtensions;
   }
 
   getBlockedMcpServers(): Array<{ name: string; extensionName: string }> {

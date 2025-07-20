@@ -91,6 +91,7 @@ export interface Settings {
   providerApiKeys?: Record<string, string>;
   providerBaseUrls?: Record<string, string>;
   providerToolFormatOverrides?: Record<string, string>;
+  providerKeyfiles?: Record<string, string>;
 
   // Text-based tool call parsing settings
   enableTextToolCallParsing?: boolean;
@@ -178,6 +179,24 @@ export class LoadedSettings {
     settingsFile.settings[key] = value;
     this._merged = this.computeMergedSettings();
     saveSettings(settingsFile);
+  }
+
+  // Provider keyfile methods for llxprt multi-provider support
+  getProviderKeyfile(providerName: string): string | undefined {
+    const keyfiles = this.merged.providerKeyfiles || {};
+    return keyfiles[providerName];
+  }
+
+  setProviderKeyfile(providerName: string, keyfilePath: string): void {
+    const keyfiles = this.merged.providerKeyfiles || {};
+    keyfiles[providerName] = keyfilePath;
+    this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
+  }
+
+  removeProviderKeyfile(providerName: string): void {
+    const keyfiles = this.merged.providerKeyfiles || {};
+    delete keyfiles[providerName];
+    this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
   }
 }
 

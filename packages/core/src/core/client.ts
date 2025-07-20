@@ -131,7 +131,9 @@ export class GeminiClient {
   }
 
   initialize(_contentGeneratorConfig: ContentGeneratorConfig) {
-    // No-op. Initialization is now lazy.
+    // Reset the client to force reinitialization with new auth
+    this.contentGenerator = undefined;
+    this.chat = undefined;
   }
 
   private async lazyInitialize() {

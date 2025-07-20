@@ -1,13 +1,13 @@
 {
-  "name": "@vybestack/llxprt-code-vscode-ide-companion",
+  "name": "llxprt-code-vscode-ide-companion",
   "displayName": "LLxprt Code VSCode IDE Companion",
-  "description": "",
+  "description": "VS Code companion extension for LLxprt Code CLI",
   "version": "0.0.1",
-  "publisher": "google",
+  "publisher": "vybestack",
   "icon": "assets/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/google-gemini/gemini-cli.git",
+    "url": "https://github.com/acoliver/llxprt-code.git",
     "directory": "packages/vscode-ide-companion"
   },
   "engines": {

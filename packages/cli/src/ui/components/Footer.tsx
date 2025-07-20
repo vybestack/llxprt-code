@@ -11,8 +11,6 @@ import {
   shortenPath,
   tildeifyPath,
   tokenLimit,
-  ideContext,
-  ActiveFile,
 } from '@vybestack/llxprt-code-core';
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
@@ -25,7 +23,6 @@ interface FooterProps {
   branchName?: string;
   debugMode: boolean;
   debugMessage: string;
-  corgiMode: boolean;
   errorCount: number;
   showErrorDetails: boolean;
   showMemoryUsage?: boolean;
@@ -40,7 +37,6 @@ export const Footer: React.FC<FooterProps> = ({
   branchName,
   debugMode,
   debugMessage,
-  corgiMode,
   errorCount,
   showErrorDetails,
   showMemoryUsage,
@@ -114,16 +110,7 @@ export const Footer: React.FC<FooterProps> = ({
             </Text>
           </Text>
         )}
-        {corgiMode && (
-          <Text>
-            <Text color={Colors.Gray}>| </Text>
-            <Text color={Colors.AccentRed}>▼</Text>
-            <Text color={Colors.Foreground}>(´</Text>
-            <Text color={Colors.AccentRed}>ᴥ</Text>
-            <Text color={Colors.Foreground}>`)</Text>
-            <Text color={Colors.AccentRed}>▼ </Text>
-          </Text>
-        )}
+        
         {!showErrorDetails && errorCount > 0 && (
           <Box>
             <Text color={Colors.Gray}>| </Text>

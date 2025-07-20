@@ -12,6 +12,7 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
+import { AuthType } from '../core/contentGenerator.js';
 
 interface GroundingChunkWeb {
   uri?: string;
@@ -115,9 +116,39 @@ export class WebSearchTool extends BaseTool<
         returnDisplay: validationError,
       };
     }
-    const geminiClient = this.config.getGeminiClient();
-
     try {
+      // Get the Gemini client for web search
+      const geminiClient = this.config.getGeminiClient();
+      
+      // Ensure the Gemini client is initialized for web search
+      // If not initialized, try to initialize it with Google auth
+      if (!geminiClient.isInitialized()) {
+        // Check if we have Google authentication available
+        const authType = this.config.getContentGeneratorConfig()?.authType;
+        
+        // If using a provider but Google auth was previously successful, 
+        // we should still be able to use web search
+        if (!authType || authType === AuthType.LOGIN_WITH_GOOGLE) {
+          try {
+            // Try to initialize with Google auth for web search
+            await this.config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+          } catch (_authError) {
+            return {
+              llmContent: `Web search requires Google authentication. Please run 'llxprt auth' to authenticate with Google.`,
+              returnDisplay: 'Web search requires Google authentication.',
+            };
+          }
+        }
+        
+        // Check again after auth attempt
+        if (!geminiClient.isInitialized()) {
+          return {
+            llmContent: `Web search is not available. Google authentication may be required.`,
+            returnDisplay: 'Web search unavailable.',
+          };
+        }
+      }
+
       const response = await geminiClient.generateContent(
         [{ role: 'user', parts: [{ text: params.query }] }],
         { tools: [{ googleSearch: {} }] },
@@ -125,7 +156,7 @@ export class WebSearchTool extends BaseTool<
       );
 
       const responseText = getResponseText(response);
-      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      const groundingMetadata = response?.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;

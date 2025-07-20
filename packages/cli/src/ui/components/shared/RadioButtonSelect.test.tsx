@@ -17,10 +17,12 @@ const ITEMS: Array<RadioSelectItem<string>> = [
   { label: 'Option 3', value: 'three', disabled: true },
 ];
 
+const noop = () => {};
+
 describe('<RadioButtonSelect />', () => {
   it('renders a list of items and matches snapshot', () => {
     const { lastFrame } = render(
-      <RadioButtonSelect items={ITEMS} onSelect={() => {}} isFocused={true} />,
+      <RadioButtonSelect items={ITEMS} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -30,7 +32,7 @@ describe('<RadioButtonSelect />', () => {
       <RadioButtonSelect
         items={ITEMS}
         initialIndex={1}
-        onSelect={() => {}}
+        onSelect={noop}
         isFocused={true}
       />,
     );
@@ -41,7 +43,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = render(
       <RadioButtonSelect
         items={ITEMS}
-        onSelect={() => {}}
+        onSelect={noop}
         isFocused={true}
         showNumbers={false}
       />,
@@ -57,7 +59,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = render(
       <RadioButtonSelect
         items={manyItems}
-        onSelect={() => {}}
+        onSelect={noop}
         isFocused={true}
         showScrollArrows={true}
         maxItemsToShow={5}
@@ -82,11 +84,7 @@ describe('<RadioButtonSelect />', () => {
       },
     ];
     const { lastFrame } = render(
-      <RadioButtonSelect
-        items={themeItems}
-        onSelect={() => {}}
-        isFocused={true}
-      />,
+      <RadioButtonSelect items={themeItems} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -97,18 +95,14 @@ describe('<RadioButtonSelect />', () => {
       value: `item-${i + 1}`,
     }));
     const { lastFrame } = render(
-      <RadioButtonSelect
-        items={manyItems}
-        onSelect={() => {}}
-        isFocused={true}
-      />,
+      <RadioButtonSelect items={manyItems} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
 
   it('renders nothing when no items are provided', () => {
     const { lastFrame } = render(
-      <RadioButtonSelect items={[]} onSelect={() => {}} isFocused={true} />,
+      <RadioButtonSelect items={[]} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toBe('');
   });

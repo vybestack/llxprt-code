@@ -56,10 +56,19 @@ import {
 import { useSessionStats } from '../contexts/SessionContext.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
-  const resultParts: PartListUnion = [];
+  const resultParts: Part[] = [];
   for (const item of list) {
     if (Array.isArray(item)) {
-      resultParts.push(...item);
+      // Each element in the array can be a string or Part
+      for (const part of item) {
+        if (typeof part === 'string') {
+          resultParts.push({ text: part });
+        } else {
+          resultParts.push(part);
+        }
+      }
+    } else if (typeof item === 'string') {
+      resultParts.push({ text: item });
     } else {
       resultParts.push(item);
     }
@@ -787,6 +796,13 @@ export const useGeminiStream = (
       }
 
       const mergedResponse = mergePartListUnions(responsesToSend);
+      
+      // Debug logging to understand the format
+      if (process.env.DEBUG_TOOL_RESPONSES) {
+        console.log('Tool responses to send:', JSON.stringify(responsesToSend, null, 2));
+        console.log('Merged response:', JSON.stringify(mergedResponse, null, 2));
+      }
+      
       submitQuery(
         mergedResponse,
         {

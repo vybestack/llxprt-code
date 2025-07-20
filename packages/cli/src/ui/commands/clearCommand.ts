@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { uiTelemetryService } from '@google/gemini-cli-core';
+import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 import { SlashCommand } from './types.js';
 
 export const clearCommand: SlashCommand = {

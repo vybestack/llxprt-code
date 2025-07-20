@@ -21,7 +21,7 @@ import {
 } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { Content } from '@google/genai';
-import { GeminiClient } from '@google/gemini-cli-core';
+import { GeminiClient } from '@vybestack/llxprt-code-core';
 
 import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';
@@ -202,7 +202,7 @@ describe('chatCommand', () => {
     });
 
     it('should inform if checkpoint is not found', async () => {
-      mockLoadCheckpoint.mockResolvedValue([]);
+      mockLoadCheckpoint.mockResolvedValue({ history: [] });
 
       const result = await resumeCommand?.action?.(mockContext, badTag);
 
@@ -218,7 +218,7 @@ describe('chatCommand', () => {
         { role: 'user', parts: [{ text: 'hello gemini' }] },
         { role: 'model', parts: [{ text: 'hello world' }] },
       ];
-      mockLoadCheckpoint.mockResolvedValue(conversation);
+      mockLoadCheckpoint.mockResolvedValue({ history: conversation });
 
       const result = await resumeCommand?.action?.(mockContext, goodTag);
 

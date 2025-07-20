@@ -4,17 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SlashCommand, CommandContext, OpenDialogActionReturn, SimpleMessageActionReturn } from './types.js';
+import {
+  SlashCommand,
+  CommandContext,
+  OpenDialogActionReturn,
+  MessageActionReturn,
+} from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { MessageType } from '../types.js';
 
 export const modelCommand: SlashCommand = {
   name: 'model',
   description: 'select or switch model',
   action: async (
     context: CommandContext,
-    args: string
-  ): Promise<OpenDialogActionReturn | SimpleMessageActionReturn | void> => {
+    args: string,
+  ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
     const modelName = args?.trim();
     const providerManager = getProviderManager();
 
@@ -39,33 +43,24 @@ export const modelCommand: SlashCommand = {
         if (context.services.config) {
           context.services.config.setModel(modelName);
         }
-        
+
         return {
           type: 'message',
-          message: {
-            type: MessageType.INFO,
-            content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
-            timestamp: new Date(),
-          },
+          messageType: 'info',
+          content: `Switched from ${currentModel} to ${modelName} in provider '${activeProvider.name}'`,
         };
       } else {
         return {
           type: 'message',
-          message: {
-            type: MessageType.ERROR,
-            content: `Provider '${activeProvider.name}' does not support model switching`,
-            timestamp: new Date(),
-          },
+          messageType: 'error',
+          content: `Provider '${activeProvider.name}' does not support model switching`,
         };
       }
     } catch (error) {
       return {
         type: 'message',
-        message: {
-          type: MessageType.ERROR,
-          content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
-          timestamp: new Date(),
-        },
+        messageType: 'error',
+        content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },

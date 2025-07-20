@@ -8,13 +8,9 @@ import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
 import { clearCommand } from './clearCommand';
 import { type CommandContext } from './types';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-<<<<<<< HEAD
-import { GeminiClient } from '@vybestack/llxprt-code-core';
-=======
-
 // Mock the telemetry service
-vi.mock('@google/gemini-cli-core', async () => {
-  const actual = await vi.importActual('@google/gemini-cli-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
     uiTelemetryService: {
@@ -23,8 +19,7 @@ vi.mock('@google/gemini-cli-core', async () => {
   };
 });
 
-import { GeminiClient, uiTelemetryService } from '@google/gemini-cli-core';
->>>>>>> upstream/main
+import { GeminiClient, uiTelemetryService } from '@vybestack/llxprt-code-core';
 
 describe('clearCommand', () => {
   let mockContext: CommandContext;

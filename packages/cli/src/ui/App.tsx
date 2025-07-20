@@ -56,7 +56,6 @@ import {
   ApprovalMode,
   isEditorAvailable,
   EditorType,
-  AuthType,
   type ActiveFile,
   ideContext,
 } from '@vybestack/llxprt-code-core';
@@ -205,7 +204,6 @@ const AppInner = ({
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
-  const [corgiMode, setCorgiMode] = useState(false);
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -219,7 +217,6 @@ const AppInner = ({
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
   const showPrivacyNotice = appState.openDialogs.privacy;
   // modelSwitchedFromQuotaError and userTier are now in sessionState
-  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
   const [activeFile, setActiveFile] = useState<ActiveFile | undefined>();
 
   useEffect(() => {
@@ -330,9 +327,6 @@ const AppInner = ({
     appState,
   });
 
-  const toggleCorgiMode = useCallback(() => {
-    setCorgiMode((prev) => !prev);
-  }, []);
 
   // checkPaymentModeChange is now provided by SessionController
 
@@ -362,10 +356,10 @@ const AppInner = ({
     providerDialog.openDialog,
     providerModelDialog.openDialog,
     performMemoryRefresh,
-    toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
     checkPaymentModeChange,
+    showToolDescriptions,
   );
   // FIX: Initialize as empty array, will be combined with pendingGeminiHistoryItems later
   // This prevents mutations during render
@@ -902,12 +896,8 @@ const AppInner = ({
                     </Text>
                   ) : (
                     <ContextSummaryDisplay
-<<<<<<< HEAD
-                      llxprtMdFileCount={llxprtMdFileCount}
-=======
                       activeFile={activeFile}
-                      geminiMdFileCount={geminiMdFileCount}
->>>>>>> upstream/main
+                      llxprtMdFileCount={llxprtMdFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
                       blockedMcpServers={config.getBlockedMcpServers()}
@@ -998,7 +988,6 @@ const AppInner = ({
             debugMode={config.getDebugMode()}
             branchName={branchName}
             debugMessage={debugMessage}
-            corgiMode={corgiMode}
             errorCount={errorCount}
             showErrorDetails={showErrorDetails}
             showMemoryUsage={

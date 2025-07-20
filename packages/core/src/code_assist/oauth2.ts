@@ -184,7 +184,6 @@ export async function getOauthClient(
   return client;
 }
 
-
 async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
   const redirectUri = 'https://codeassist.google.com/authcode';
   const codeVerifier = await client.generateCodeVerifierAsync();

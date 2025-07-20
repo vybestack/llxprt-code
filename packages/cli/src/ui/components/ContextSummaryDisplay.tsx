@@ -7,7 +7,10 @@
 import React from 'react';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
-import { type ActiveFile, type MCPServerConfig } from '@vybestack/llxprt-code-core';
+import {
+  type ActiveFile,
+  type MCPServerConfig,
+} from '@vybestack/llxprt-code-core';
 import path from 'path';
 
 interface ContextSummaryDisplayProps {

@@ -15,7 +15,7 @@ import {
   getMCPServerStatus,
   MCPDiscoveryState,
   MCPServerStatus,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import open from 'open';
 
 const COLOR_GREEN = '\u001b[32m';

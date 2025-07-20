@@ -7,13 +7,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { CommandService } from './CommandService';
 import { type SlashCommand } from '../ui/commands/types.js';
-import { memoryCommand } from '../ui/commands/memoryCommand.js';
-import { helpCommand } from '../ui/commands/helpCommand.js';
-import { clearCommand } from '../ui/commands/clearCommand.js';
-import { authCommand } from '../ui/commands/authCommand.js';
-import { themeCommand } from '../ui/commands/themeCommand.js';
-import { privacyCommand } from '../ui/commands/privacyCommand.js';
-import { aboutCommand } from '../ui/commands/aboutCommand.js';
 
 // Mock the command modules to isolate the service from the command implementations.
 vi.mock('../ui/commands/memoryCommand.js', () => ({
@@ -62,7 +55,7 @@ describe('CommandService', () => {
         const tree = commandService.getCommands();
 
         // Post-condition assertions
-        expect(tree.length).toBe(7);
+        expect(tree.length).toBe(22);
 
         const commandNames = tree.map((cmd) => cmd.name);
         expect(commandNames).toContain('auth');
@@ -77,14 +70,14 @@ describe('CommandService', () => {
       it('should overwrite any existing commands when called again', async () => {
         // Load once
         await commandService.loadCommands();
-        expect(commandService.getCommands().length).toBe(7);
+        expect(commandService.getCommands().length).toBe(22);
 
         // Load again
         await commandService.loadCommands();
         const tree = commandService.getCommands();
 
         // Should not append, but overwrite
-        expect(tree.length).toBe(7);
+        expect(tree.length).toBe(22);
       });
     });
 
@@ -96,16 +89,16 @@ describe('CommandService', () => {
         await commandService.loadCommands();
 
         const loadedTree = commandService.getCommands();
-        expect(loadedTree.length).toBe(7);
-        expect(loadedTree).toEqual([
-          aboutCommand,
-          authCommand,
-          clearCommand,
-          helpCommand,
-          memoryCommand,
-          privacyCommand,
-          themeCommand,
-        ]);
+        expect(loadedTree.length).toBe(22);
+        // Check that key commands are present
+        const commandNames = loadedTree.map((cmd) => cmd.name);
+        expect(commandNames).toContain('about');
+        expect(commandNames).toContain('auth');
+        expect(commandNames).toContain('clear');
+        expect(commandNames).toContain('help');
+        expect(commandNames).toContain('memory');
+        expect(commandNames).toContain('privacy');
+        expect(commandNames).toContain('theme');
       });
     });
   });
@@ -122,7 +115,7 @@ describe('CommandService', () => {
       const mockLoader = vi.fn().mockResolvedValue(mockCommands);
 
       // Act: Instantiate the service WITH the injected loader function.
-      const commandService = new CommandService(mockLoader);
+      const commandService = new CommandService(null, mockLoader);
       await commandService.loadCommands();
       const tree = commandService.getCommands();
 

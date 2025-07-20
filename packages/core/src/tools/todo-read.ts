@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BaseTool, ToolResult } from './tools.js';
+import { BaseTool, ToolResult, Icon } from './tools.js';
 import { TodoStore } from './todo-store.js';
 import { Todo } from './todo-schemas.js';
 import { Type } from '@google/genai';
@@ -19,6 +19,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
       TodoRead.Name,
       'TodoRead',
       'Read the current todo list for the session. Returns all todos with their status, priority, and content.',
+      Icon.LightBulb,
       {
         type: Type.OBJECT,
         properties: {},

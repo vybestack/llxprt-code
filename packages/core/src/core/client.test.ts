@@ -201,6 +201,9 @@ describe('Gemini Client (client.ts)', () => {
         getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
         setQuotaErrorOccurred: vi.fn(),
         getNoBrowser: vi.fn().mockReturnValue(false),
+        getIdeMode: vi.fn().mockReturnValue(false),
+        getGeminiClient: vi.fn(() => client),
+        getDebugMode: vi.fn().mockReturnValue(false),
       };
       return mock as Config;
     });
@@ -210,6 +213,9 @@ describe('Gemini Client (client.ts)', () => {
     const mockConfig = new Config({} as ConfigParameters);
     client = new GeminiClient(mockConfig);
     await client.initialize(contentGeneratorConfig);
+
+    // Add missing methods to the client instance for tests
+    client.getHistory = vi.fn().mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -501,6 +507,10 @@ describe('Gemini Client (client.ts)', () => {
       // Mock that client is initialized
       client['contentGenerator'] = {} as ContentGenerator;
       client['isInitialized'] = vi.fn().mockReturnValue(true);
+
+      // Override the global getHistory mock for this test
+      const getHistoryMock = vi.mocked(client.getHistory);
+      getHistoryMock.mockImplementation(() => client.getChat().getHistory());
 
       // 1. Get the initial chat instance and verify initial state
       const initialChat = client.getChat();

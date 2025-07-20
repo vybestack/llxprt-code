@@ -48,6 +48,7 @@ export default tseslint.config(
       'suppress-deprecations.mjs',
       'reference/**',
       'research/**',
+      'tmp/**',
     ],
   },
   eslint.configs.recommended,

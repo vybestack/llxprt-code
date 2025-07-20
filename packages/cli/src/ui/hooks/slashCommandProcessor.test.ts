@@ -1,4 +1,3 @@
-/* @vitest-environment jsdom */
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -15,7 +14,7 @@ vi.mock('node:process', () => ({
     cwd: vi.fn(() => '/mock/cwd'),
     get env() {
       return process.env;
-    }, // Use a getter to ensure current process.env is used
+    },
     platform: 'test-platform',
     version: 'test-node-version',
     memoryUsage: vi.fn(() => ({
@@ -26,12 +25,11 @@ vi.mock('node:process', () => ({
       arrayBuffers: 123456,
     })),
   },
-  // Provide top-level exports as well for compatibility
   exit: mockProcessExit,
   cwd: vi.fn(() => '/mock/cwd'),
   get env() {
     return process.env;
-  }, // Use a getter here too
+  },
   platform: 'test-platform',
   version: 'test-node-version',
   memoryUsage: vi.fn(() => ({
@@ -43,23 +41,16 @@ vi.mock('node:process', () => ({
   })),
 }));
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs/promises')>();
+vi.mock('node:fs/promises', async () => {
+  const actual =
+    await vi.importActual<typeof import('node:fs/promises')>(
+      'node:fs/promises',
+    );
   return {
     ...actual,
-    default: actual,
     readFile: vi.fn(),
     writeFile: vi.fn(),
     mkdir: vi.fn(),
-  };
-});
-
-vi.mock('node:os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:os')>();
-  return {
-    ...actual,
-    default: actual,
-    homedir: vi.fn(() => '/mock/home'),
   };
 });
 
@@ -69,26 +60,16 @@ vi.mock('../../utils/version.js', () => ({
 }));
 
 import { act, renderHook } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
-import stripAnsi from 'strip-ansi';
+import { vi, describe, it, expect, beforeEach, beforeAll, Mock } from 'vitest';
 import open from 'open';
-import { useSlashCommandProcessor } from './slashCommandProcessor';
-import { MessageType, SlashCommandProcessorResult } from '../types.js';
-import {
-  Config,
-  MCPDiscoveryState,
-  MCPServerStatus,
-  getMCPDiscoveryState,
-  getMCPServerStatus,
-  GeminiClient,
-} from '@vybestack/llxprt-code-core';
+import { useSlashCommandProcessor } from './slashCommandProcessor.js';
+import { SlashCommandProcessorResult } from '../types.js';
+import { Config, GeminiClient } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { LoadedSettings } from '../../config/settings.js';
-import * as ShowMemoryCommandModule from './useShowMemoryCommand';
-import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
+import * as ShowMemoryCommandModule from './useShowMemoryCommand.js';
 import { CommandService } from '../../services/CommandService.js';
 import { SlashCommand } from '../commands/types.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(),
@@ -110,14 +91,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
-    getMCPServerStatus: vi.fn(),
-    getMCPDiscoveryState: vi.fn(),
   };
 });
-
-vi.mock('../../providers/providerManagerInstance.js', () => ({
-  getProviderManager: vi.fn(),
-}));
 
 describe('useSlashCommandProcessor', () => {
   let mockAddItem: ReturnType<typeof vi.fn>;
@@ -137,23 +112,10 @@ describe('useSlashCommandProcessor', () => {
   let mockGeminiClient: GeminiClient;
   let mockConfig: Config;
   let mockCorgiMode: ReturnType<typeof vi.fn>;
-  let mockOpenPrivacyNotice: ReturnType<typeof vi.fn>;
   const mockUseSessionStats = useSessionStats as Mock;
 
   beforeEach(() => {
-    // Reset all mocks to clear any previous state or calls.
     vi.clearAllMocks();
-
-    // Default mock setup for CommandService for all the OLD tests.
-    // This makes them pass again by simulating the original behavior where
-    // the service is constructed but doesn't do much yet.
-    vi.mocked(CommandService).mockImplementation(
-      () =>
-        ({
-          loadCommands: vi.fn().mockResolvedValue(undefined),
-          getCommands: vi.fn().mockReturnValue([]), // Return an empty array by default
-        }) as unknown as CommandService,
-    );
 
     mockAddItem = vi.fn();
     mockClearItems = vi.fn();
@@ -166,7 +128,7 @@ describe('useSlashCommandProcessor', () => {
     mockOpenEditorDialog = vi.fn();
     mockOpenProviderDialog = vi.fn();
     mockOpenProviderModelDialog = vi.fn();
-    mockPerformMemoryRefresh = vi.fn().mockResolvedValue(undefined);
+    mockPerformMemoryRefresh = vi.fn();
     mockSetQuittingMessages = vi.fn();
     mockTryCompressChat = vi.fn();
     mockGeminiClient = {
@@ -177,19 +139,13 @@ describe('useSlashCommandProcessor', () => {
       getGeminiClient: () => mockGeminiClient,
       getSandbox: vi.fn(() => 'test-sandbox'),
       getModel: vi.fn(() => 'test-model'),
-      setModel: vi.fn(),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => true),
       getBugCommand: vi.fn(() => undefined),
       getSessionId: vi.fn(() => 'test-session-id'),
-      getUserMemory: vi.fn(() => ''),
-      getLlxprtMdFileCount: vi.fn(() => 0),
-      refreshMemory: vi
-        .fn()
-        .mockResolvedValue({ memoryContent: '', fileCount: 0 }),
+      getIdeMode: vi.fn(() => false),
     } as unknown as Config;
     mockCorgiMode = vi.fn();
-    mockOpenPrivacyNotice = vi.fn();
     mockUseSessionStats.mockReturnValue({
       stats: {
         sessionStartTime: new Date('2025-01-01T00:00:00.000Z'),
@@ -211,17 +167,16 @@ describe('useSlashCommandProcessor', () => {
     process.env = { ...globalThis.process.env };
   });
 
-  const getProcessorHook = (showToolDescriptions: boolean = false) => {
+  const getProcessorHook = () => {
     const settings = {
       merged: {
-        contextFileName: 'LLXPRT.md',
+        contextFileName: 'GEMINI.md',
       },
     } as unknown as LoadedSettings;
     return renderHook(() =>
       useSlashCommandProcessor(
         mockConfig,
         settings,
-        [],
         mockAddItem,
         mockClearItems,
         mockLoadHistory,
@@ -235,483 +190,13 @@ describe('useSlashCommandProcessor', () => {
         mockOpenProviderModelDialog,
         mockPerformMemoryRefresh,
         mockCorgiMode,
-        showToolDescriptions,
         mockSetQuittingMessages,
-        mockOpenPrivacyNotice,
+        vi.fn(), // mockOpenPrivacyNotice
       ),
     );
   };
 
-  const getProcessor = (showToolDescriptions: boolean = false) =>
-    getProcessorHook(showToolDescriptions).result.current;
-
-  describe('/memory add', () => {
-    beforeEach(async () => {
-      // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = (await vi.importActual(
-        '../../services/CommandService.js',
-      )) as {
-        CommandService: typeof import('../../services/CommandService.js').CommandService;
-      };
-      const { memoryCommand } = (await vi.importActual(
-        '../commands/memoryCommand.js',
-      )) as { memoryCommand: SlashCommand };
-
-      // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [
-        memoryCommand,
-      ]);
-      vi.mocked(CommandService).mockImplementation(
-        () => commandServiceInstance as CommandService,
-      );
-    });
-
-    it('should return tool scheduling info on valid input', async () => {
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'memory'),
-        ).toBe(true);
-      });
-
-      const fact = 'Remember this fact';
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await result.current.handleSlashCommand(
-          `/memory add ${fact}`,
-        );
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        1, // User message
-        expect.objectContaining({
-          type: MessageType.USER,
-          text: `/memory add ${fact}`,
-        }),
-        expect.any(Number),
-      );
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2, // Info message about attempting to save
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: `Attempting to save to memory: "${fact}"`,
-        }),
-        expect.any(Number),
-      );
-
-      expect(commandResult).toEqual({
-        type: 'schedule_tool',
-        toolName: 'save_memory',
-        toolArgs: { fact },
-      });
-
-      // performMemoryRefresh is no longer called directly here
-      expect(mockPerformMemoryRefresh).not.toHaveBeenCalled();
-    });
-
-    it('should show usage error and return true if no text is provided', async () => {
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'memory'),
-        ).toBe(true);
-      });
-
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await result.current.handleSlashCommand('/memory add ');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2, // After user message
-        expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Usage: /memory add <text to remember>',
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' }); // Command was handled (by showing an error)
-    });
-  });
-
-  describe('/memory show', () => {
-    beforeEach(async () => {
-      // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = (await vi.importActual(
-        '../../services/CommandService.js',
-      )) as {
-        CommandService: typeof import('../../services/CommandService.js').CommandService;
-      };
-      const { memoryCommand } = (await vi.importActual(
-        '../commands/memoryCommand.js',
-      )) as { memoryCommand: SlashCommand };
-
-      // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [
-        memoryCommand,
-      ]);
-      vi.mocked(CommandService).mockImplementation(
-        () => commandServiceInstance as CommandService,
-      );
-    });
-
-    it('should call the showMemoryAction and return true', async () => {
-      // Mock the getUserMemory and getLlxprtMdFileCount methods
-      vi.mocked(mockConfig.getUserMemory).mockReturnValue(
-        'Test memory content',
-      );
-      vi.mocked(mockConfig.getLlxprtMdFileCount).mockReturnValue(3);
-
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'memory'),
-        ).toBe(true);
-      });
-
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await result.current.handleSlashCommand('/memory show');
-      });
-
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining(
-            'Current memory content from 3 file(s)',
-          ),
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/memory refresh', () => {
-    beforeEach(async () => {
-      // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = (await vi.importActual(
-        '../../services/CommandService.js',
-      )) as {
-        CommandService: typeof import('../../services/CommandService.js').CommandService;
-      };
-      const { memoryCommand } = (await vi.importActual(
-        '../commands/memoryCommand.js',
-      )) as { memoryCommand: SlashCommand };
-
-      // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [
-        memoryCommand,
-      ]);
-      vi.mocked(CommandService).mockImplementation(
-        () => commandServiceInstance as CommandService,
-      );
-    });
-
-    it('should call performMemoryRefresh and return true', async () => {
-      // Mock the refreshMemory method
-      const mockRefreshMemory = vi.fn().mockResolvedValue({
-        memoryContent: 'Refreshed content',
-        fileCount: 2,
-      });
-      vi.mocked(mockConfig.refreshMemory).mockImplementation(mockRefreshMemory);
-
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'memory'),
-        ).toBe(true);
-      });
-
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult =
-          await result.current.handleSlashCommand('/memory refresh');
-      });
-
-      // Check that the initial message was shown
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: 'Refreshing memory from source files...',
-        }),
-        expect.any(Number),
-      );
-
-      // Check that the success message was shown
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining('Memory refreshed successfully'),
-        }),
-        expect.any(Number),
-      );
-
-      expect(mockRefreshMemory).toHaveBeenCalledTimes(1);
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('Unknown /memory subcommand', () => {
-    beforeEach(async () => {
-      // Import the actual CommandService and memory command
-      const { CommandService: ActualCommandService } = (await vi.importActual(
-        '../../services/CommandService.js',
-      )) as {
-        CommandService: typeof import('../../services/CommandService.js').CommandService;
-      };
-      const { memoryCommand } = (await vi.importActual(
-        '../commands/memoryCommand.js',
-      )) as { memoryCommand: SlashCommand };
-
-      // Create a command service with the memory command
-      const commandServiceInstance = new ActualCommandService(async () => [
-        memoryCommand,
-      ]);
-      vi.mocked(CommandService).mockImplementation(
-        () => commandServiceInstance as CommandService,
-      );
-    });
-
-    it('should show an error for unknown /memory subcommand and return handled', async () => {
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'memory'),
-        ).toBe(true);
-      });
-
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult =
-          await result.current.handleSlashCommand('/memory foobar');
-      });
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining(
-            "Command '/memory' requires a subcommand. Available:",
-          ),
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/stats command', () => {
-    it('should show detailed session statistics', async () => {
-      // Arrange
-      mockUseSessionStats.mockReturnValue({
-        stats: {
-          sessionStartTime: new Date('2025-01-01T00:00:00.000Z'),
-        },
-      });
-
-      const { handleSlashCommand } = getProcessor();
-      const mockDate = new Date('2025-01-01T01:02:03.000Z'); // 1h 2m 3s duration
-      vi.setSystemTime(mockDate);
-
-      // Act
-      await act(async () => {
-        handleSlashCommand('/stats');
-      });
-
-      // Assert
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2, // Called after the user message
-        expect.objectContaining({
-          type: MessageType.STATS,
-          duration: '1h 2m 3s',
-        }),
-        expect.any(Number),
-      );
-
-      vi.useRealTimers();
-    });
-
-    it('should show model-specific statistics when using /stats model', async () => {
-      // Arrange
-      const { handleSlashCommand } = getProcessor();
-
-      // Act
-      await act(async () => {
-        handleSlashCommand('/stats model');
-      });
-
-      // Assert
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2, // Called after the user message
-        expect.objectContaining({
-          type: MessageType.MODEL_STATS,
-        }),
-        expect.any(Number),
-      );
-    });
-
-    it('should show tool-specific statistics when using /stats tools', async () => {
-      // Arrange
-      const { handleSlashCommand } = getProcessor();
-
-      // Act
-      await act(async () => {
-        handleSlashCommand('/stats tools');
-      });
-
-      // Assert
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2, // Called after the user message
-        expect.objectContaining({
-          type: MessageType.TOOL_STATS,
-        }),
-        expect.any(Number),
-      );
-    });
-  });
-
-  describe('/about command', () => {
-    beforeEach(async () => {
-      // Import the actual CommandService and about command
-      const { CommandService: ActualCommandService } = (await vi.importActual(
-        '../../services/CommandService.js',
-      )) as {
-        CommandService: typeof import('../../services/CommandService.js').CommandService;
-      };
-      const { aboutCommand } = (await vi.importActual(
-        '../commands/aboutCommand.js',
-      )) as { aboutCommand: SlashCommand };
-
-      // Create a command service with the about command
-      const commandServiceInstance = new ActualCommandService(async () => [
-        aboutCommand,
-      ]);
-      vi.mocked(CommandService).mockImplementation(
-        () => commandServiceInstance as CommandService,
-      );
-    });
-
-    it('should show the about box with all details including auth and project', async () => {
-      // Arrange
-      mockGetCliVersionFn.mockResolvedValue('test-version');
-      process.env.SANDBOX = 'gemini-sandbox';
-      process.env.GOOGLE_CLOUD_PROJECT = 'test-gcp-project';
-      vi.mocked(mockConfig.getModel).mockReturnValue('test-model-from-config');
-
-      const settings = {
-        merged: {
-          selectedAuthType: 'test-auth-type',
-          contextFileName: 'LLXPRT.md',
-        },
-      } as LoadedSettings;
-
-      const { result } = renderHook(() =>
-        useSlashCommandProcessor(
-          mockConfig,
-          settings,
-          [],
-          mockAddItem,
-          mockClearItems,
-          mockLoadHistory,
-          mockRefreshStatic,
-          mockSetShowHelp,
-          mockOnDebugMessage,
-          mockOpenThemeDialog,
-          mockOpenAuthDialog,
-          mockOpenEditorDialog,
-          mockOpenProviderDialog,
-          mockOpenProviderModelDialog,
-          mockPerformMemoryRefresh,
-          mockCorgiMode,
-          false,
-          mockSetQuittingMessages,
-          mockOpenPrivacyNotice,
-        ),
-      );
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'about'),
-        ).toBe(true);
-      });
-
-      // Act
-      await act(async () => {
-        await result.current.handleSlashCommand('/about');
-      });
-
-      // Assert
-      expect(mockAddItem).toHaveBeenCalledTimes(2); // user message + about message
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: 'about',
-          cliVersion: 'test-version',
-          osVersion: 'test-platform',
-          sandboxEnv: 'gemini-sandbox',
-          modelVersion: 'test-model-from-config',
-          selectedAuthType: 'test-auth-type',
-          gcpProject: 'test-gcp-project',
-        }),
-        expect.any(Number),
-      );
-    });
-
-    it('should show sandbox-exec profile when applicable', async () => {
-      // Arrange
-      mockGetCliVersionFn.mockResolvedValue('test-version');
-      process.env.SANDBOX = 'sandbox-exec';
-      process.env.SEATBELT_PROFILE = 'test-profile';
-      vi.mocked(mockConfig.getModel).mockReturnValue('test-model-from-config');
-
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'about'),
-        ).toBe(true);
-      });
-
-      // Act
-      await act(async () => {
-        await result.current.handleSlashCommand('/about');
-      });
-
-      // Assert
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          sandboxEnv: 'sandbox-exec (test-profile)',
-        }),
-        expect.any(Number),
-      );
-    });
-  });
-
-  describe('Other commands', () => {
-    it('/editor should open editor dialog and return handled', async () => {
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/editor');
-      });
-      expect(mockOpenEditorDialog).toHaveBeenCalled();
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('New command registry', () => {
+  describe('Command Processing', () => {
     let ActualCommandService: typeof CommandService;
 
     beforeAll(async () => {
@@ -725,13 +210,16 @@ describe('useSlashCommandProcessor', () => {
       vi.clearAllMocks();
     });
 
-    it('should execute a command from the new registry', async () => {
+    it('should execute a registered command', async () => {
       const mockAction = vi.fn();
       const newCommand: SlashCommand = { name: 'test', action: mockAction };
       const mockLoader = async () => [newCommand];
 
       // We create the instance outside the mock implementation.
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
 
       // This mock ensures the hook uses our pre-configured instance.
       vi.mocked(CommandService).mockImplementation(
@@ -757,7 +245,7 @@ describe('useSlashCommandProcessor', () => {
       expect(commandResult).toEqual({ type: 'handled' });
     });
 
-    it('should return "schedule_tool" when a new command returns a tool action', async () => {
+    it('should return "schedule_tool" for a command returning a tool action', async () => {
       const mockAction = vi.fn().mockResolvedValue({
         type: 'tool',
         toolName: 'my_tool',
@@ -765,7 +253,10 @@ describe('useSlashCommandProcessor', () => {
       });
       const newCommand: SlashCommand = { name: 'test', action: mockAction };
       const mockLoader = async () => [newCommand];
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
       );
@@ -787,7 +278,7 @@ describe('useSlashCommandProcessor', () => {
       });
     });
 
-    it('should return "handled" when a new command returns a message action', async () => {
+    it('should return "handled" for a command returning a message action', async () => {
       const mockAction = vi.fn().mockResolvedValue({
         type: 'message',
         messageType: 'info',
@@ -795,7 +286,10 @@ describe('useSlashCommandProcessor', () => {
       });
       const newCommand: SlashCommand = { name: 'test', action: mockAction };
       const mockLoader = async () => [newCommand];
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
       );
@@ -820,14 +314,17 @@ describe('useSlashCommandProcessor', () => {
       expect(commandResult).toEqual({ type: 'handled' });
     });
 
-    it('should return "handled" when a new command returns a dialog action', async () => {
+    it('should return "handled" for a command returning a dialog action', async () => {
       const mockAction = vi.fn().mockResolvedValue({
         type: 'dialog',
         dialog: 'help',
       });
       const newCommand: SlashCommand = { name: 'test', action: mockAction };
       const mockLoader = async () => [newCommand];
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
       );
@@ -846,14 +343,18 @@ describe('useSlashCommandProcessor', () => {
       expect(commandResult).toEqual({ type: 'handled' });
     });
 
-    it('should open the auth dialog when a new command returns an auth dialog action', async () => {
-      // Import the actual auth command
-      const { authCommand } = (await vi.importActual(
-        '../commands/authCommand.js',
-      )) as { authCommand: SlashCommand };
+    it('should open the auth dialog for a command returning an auth dialog action', async () => {
+      const mockAction = vi.fn().mockResolvedValue({
+        type: 'dialog',
+        dialog: 'auth',
+      });
+      const newAuthCommand: SlashCommand = { name: 'auth', action: mockAction };
 
-      const mockLoader = async () => [authCommand];
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const mockLoader = async () => [newAuthCommand];
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
       );
@@ -867,18 +368,22 @@ describe('useSlashCommandProcessor', () => {
 
       const commandResult = await result.current.handleSlashCommand('/auth');
 
+      expect(mockAction).toHaveBeenCalledTimes(1);
       expect(mockOpenAuthDialog).toHaveBeenCalledWith();
       expect(commandResult).toEqual({ type: 'handled' });
     });
 
-    it('should open the theme dialog when a new command returns a theme dialog action', async () => {
+    it('should open the theme dialog for a command returning a theme dialog action', async () => {
       const mockAction = vi.fn().mockResolvedValue({
         type: 'dialog',
         dialog: 'theme',
       });
       const newCommand: SlashCommand = { name: 'test', action: mockAction };
       const mockLoader = async () => [newCommand];
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
       );
@@ -906,7 +411,10 @@ describe('useSlashCommandProcessor', () => {
       };
 
       const mockLoader = async () => [parentCommand];
-      const commandServiceInstance = new ActualCommandService(mockLoader);
+      const commandServiceInstance = new ActualCommandService(
+        mockConfig,
+        mockLoader,
+      );
       vi.mocked(CommandService).mockImplementation(
         () => commandServiceInstance,
       );
@@ -929,890 +437,6 @@ describe('useSlashCommandProcessor', () => {
           text: expect.stringContaining(
             "Command '/parent' requires a subcommand.",
           ),
-        }),
-        expect.any(Number),
-      );
-    });
-  });
-
-  describe('/model command', () => {
-    let mockProviderManager: ReturnType<typeof vi.fn>;
-    let mockActiveProvider: {
-      name: string;
-      getCurrentModel?: () => string;
-      setModel?: (model: string) => Promise<void>;
-    };
-
-    beforeEach(() => {
-      mockActiveProvider = {
-        name: 'gemini',
-        getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
-        setModel: vi.fn(),
-      };
-
-      mockProviderManager = {
-        getActiveProvider: vi.fn().mockReturnValue(mockActiveProvider),
-        hasActiveProvider: vi.fn().mockReturnValue(true),
-      };
-
-      (getProviderManager as ReturnType<typeof vi.fn>).mockReturnValue(
-        mockProviderManager,
-      );
-    });
-
-    it('/model should open model dialog and return handled', async () => {
-      const { result } = getProcessorHook();
-
-      // Wait for commands to be loaded
-      await vi.waitFor(() => {
-        expect(
-          result.current.slashCommands.some((c) => c.name === 'model'),
-        ).toBe(true);
-      });
-
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await result.current.handleSlashCommand('/model');
-      });
-      expect(mockOpenProviderModelDialog).toHaveBeenCalled();
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('/model with model name should switch models directly', async () => {
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/model gemini-2.5-flash');
-      });
-
-      expect(mockOpenProviderModelDialog).not.toHaveBeenCalled();
-      expect(mockActiveProvider.setModel).toHaveBeenCalledWith(
-        'gemini-2.5-flash',
-      );
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: "Switched from gemini-2.5-pro to gemini-2.5-flash in provider 'gemini'",
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('/model with same model name should show already using message', async () => {
-      // The /model command now always switches even if same model
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/model gemini-2.5-pro');
-      });
-
-      expect(mockActiveProvider.setModel).toHaveBeenCalledWith(
-        'gemini-2.5-pro',
-      );
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: "Switched from gemini-2.5-pro to gemini-2.5-pro in provider 'gemini'",
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('/model should handle error when switching models', async () => {
-      mockActiveProvider.setModel = vi.fn().mockImplementation(() => {
-        throw new Error('Update failed');
-      });
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/model gemini-2.5-flash');
-      });
-
-      expect(mockAddItem).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Failed to switch model: Update failed',
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/bug command', () => {
-    const originalEnv = process.env;
-    beforeEach(() => {
-      vi.resetModules();
-      mockGetCliVersionFn.mockResolvedValue('0.1.0');
-      process.env = { ...originalEnv };
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-      process.env = originalEnv;
-    });
-
-    const getExpectedUrl = (
-      description?: string,
-      sandboxEnvVar?: string,
-      seatbeltProfileVar?: string,
-      cliVersion?: string,
-    ) => {
-      const osVersion = 'test-platform test-node-version';
-      let sandboxEnvStr = 'no sandbox';
-      if (sandboxEnvVar && sandboxEnvVar !== 'sandbox-exec') {
-        sandboxEnvStr = sandboxEnvVar.replace(/^gemini-(?:code-)?/, '');
-      } else if (sandboxEnvVar === 'sandbox-exec') {
-        sandboxEnvStr = `sandbox-exec (${seatbeltProfileVar || 'unknown'})`;
-      }
-      const modelVersion = 'test-model';
-      // Use the mocked memoryUsage value
-      const memoryUsage = '11.8 MB';
-
-      const info = `
-*   **CLI Version:** ${cliVersion}
-*   **Git Commit:** ${GIT_COMMIT_INFO}
-*   **Operating System:** ${osVersion}
-*   **Sandbox Environment:** ${sandboxEnvStr}
-*   **Model Version:** ${modelVersion}
-*   **Memory Usage:** ${memoryUsage}
-`;
-      let url =
-        'https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml';
-      if (description) {
-        url += `&title=${encodeURIComponent(description)}`;
-      }
-      url += `&info=${encodeURIComponent(info)}`;
-      return url;
-    };
-
-    it('should call open with the correct GitHub issue URL and return true', async () => {
-      mockGetCliVersionFn.mockResolvedValue('test-version');
-      process.env.SANDBOX = 'gemini-sandbox';
-      process.env.SEATBELT_PROFILE = 'test_profile';
-      const { handleSlashCommand } = getProcessor();
-      const bugDescription = 'This is a test bug';
-      const expectedUrl = getExpectedUrl(
-        bugDescription,
-        process.env.SANDBOX,
-        process.env.SEATBELT_PROFILE,
-        'test-version',
-      );
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand(`/bug ${bugDescription}`);
-      });
-
-      expect(mockAddItem).toHaveBeenCalledTimes(2);
-      expect(open).toHaveBeenCalledWith(expectedUrl);
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should use the custom bug command URL from config if available', async () => {
-      process.env.CLI_VERSION = '0.1.0';
-      process.env.SANDBOX = 'sandbox-exec';
-      process.env.SEATBELT_PROFILE = 'permissive-open';
-      const bugCommand = {
-        urlTemplate:
-          'https://custom-bug-tracker.com/new?title={title}&info={info}',
-      };
-      mockConfig = {
-        ...mockConfig,
-        getBugCommand: vi.fn(() => bugCommand),
-      } as unknown as Config;
-      process.env.CLI_VERSION = '0.1.0';
-
-      const { handleSlashCommand } = getProcessor();
-      const bugDescription = 'This is a custom bug';
-      const info = `
-*   **CLI Version:** 0.1.0
-*   **Git Commit:** ${GIT_COMMIT_INFO}
-*   **Operating System:** test-platform test-node-version
-*   **Sandbox Environment:** sandbox-exec (permissive-open)
-*   **Model Version:** test-model
-*   **Memory Usage:** 11.8 MB
-`;
-      const expectedUrl = bugCommand.urlTemplate
-        .replace('{title}', encodeURIComponent(bugDescription))
-        .replace('{info}', encodeURIComponent(info));
-
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand(`/bug ${bugDescription}`);
-      });
-
-      expect(mockAddItem).toHaveBeenCalledTimes(2);
-      expect(open).toHaveBeenCalledWith(expectedUrl);
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/quit and /exit commands', () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it.each([['/quit'], ['/exit']])(
-      'should handle %s, set quitting messages, and exit the process',
-      async (command) => {
-        const { result } = getProcessorHook();
-
-        // Wait for commands to be loaded
-        await vi.waitFor(() => {
-          expect(
-            result.current.slashCommands.some(
-              (c) => c.name === 'quit' || c.name === 'exit',
-            ),
-          ).toBe(true);
-        });
-
-        const mockDate = new Date('2025-01-01T01:02:03.000Z');
-        vi.setSystemTime(mockDate);
-
-        await act(async () => {
-          await result.current.handleSlashCommand(command);
-        });
-
-        expect(mockAddItem).not.toHaveBeenCalled();
-        expect(mockSetQuittingMessages).toHaveBeenCalledWith([
-          {
-            type: 'user',
-            text: command,
-            id: expect.any(Number),
-          },
-          {
-            type: 'quit',
-            duration: '1h 2m 3s',
-            id: expect.any(Number),
-          },
-        ]);
-
-        // Fast-forward timers to trigger process.exit
-        await act(async () => {
-          vi.advanceTimersByTime(100);
-        });
-        expect(mockProcessExit).toHaveBeenCalledWith(0);
-      },
-    );
-  });
-
-  describe('Unknown command', () => {
-    it('should show an error and return handled for a general unknown command', async () => {
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/unknowncommand');
-      });
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Unknown command: /unknowncommand',
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/tools command', () => {
-    it('should show an error if tool registry is not available', async () => {
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue(undefined),
-      } as unknown as Config;
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/tools');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Could not retrieve tools.',
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should show an error if getAllTools returns undefined', async () => {
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getAllTools: vi.fn().mockReturnValue(undefined),
-        }),
-      } as unknown as Config;
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/tools');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Could not retrieve tools.',
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should display only Gemini CLI tools (filtering out MCP tools)', async () => {
-      // Create mock tools - some with serverName property (MCP tools) and some without (Gemini CLI tools)
-      const mockTools = [
-        { name: 'tool1', displayName: 'Tool1' },
-        { name: 'tool2', displayName: 'Tool2' },
-        { name: 'mcp_tool1', serverName: 'mcp-server1' },
-        { name: 'mcp_tool2', serverName: 'mcp-server1' },
-      ];
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getAllTools: vi.fn().mockReturnValue(mockTools),
-        }),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/tools');
-      });
-
-      // Should only show tool1 and tool2, not the MCP tools
-      const message = mockAddItem.mock.calls[1][0].text;
-      expect(message).toContain('Tool1');
-      expect(message).toContain('Tool2');
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should display a message when no Gemini CLI tools are available', async () => {
-      // Only MCP tools available
-      const mockTools = [
-        { name: 'mcp_tool1', serverName: 'mcp-server1' },
-        { name: 'mcp_tool2', serverName: 'mcp-server1' },
-      ];
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getAllTools: vi.fn().mockReturnValue(mockTools),
-        }),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/tools');
-      });
-
-      const message = mockAddItem.mock.calls[1][0].text;
-      expect(message).toContain('No tools available');
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should display tool descriptions when /tools desc is used', async () => {
-      const mockTools = [
-        {
-          name: 'tool1',
-          displayName: 'Tool1',
-          description: 'Description for Tool1',
-        },
-        {
-          name: 'tool2',
-          displayName: 'Tool2',
-          description: 'Description for Tool2',
-        },
-      ];
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getAllTools: vi.fn().mockReturnValue(mockTools),
-        }),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/tools desc');
-      });
-
-      const message = mockAddItem.mock.calls[1][0].text;
-      expect(message).toContain('Tool1');
-      expect(message).toContain('Description for Tool1');
-      expect(message).toContain('Tool2');
-      expect(message).toContain('Description for Tool2');
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/mcp command', () => {
-    it('should show an error if tool registry is not available', async () => {
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue(undefined),
-      } as unknown as Config;
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Could not retrieve tool registry.',
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should display a message with a URL when no MCP servers are configured in a sandbox', async () => {
-      process.env.SANDBOX = 'sandbox';
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: vi.fn().mockReturnValue([]),
-        }),
-        getMcpServers: vi.fn().mockReturnValue({}),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: `No MCP servers configured. Please open the following URL in your browser to view documentation:\nhttps://goo.gle/gemini-cli-docs-mcp`,
-        }),
-        expect.any(Number),
-      );
-      expect(commandResult).toEqual({ type: 'handled' });
-      delete process.env.SANDBOX;
-    });
-
-    it('should display a message and open a URL when no MCP servers are configured outside a sandbox', async () => {
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: vi.fn().mockReturnValue([]),
-        }),
-        getMcpServers: vi.fn().mockReturnValue({}),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: 'No MCP servers configured. Opening documentation in your browser: https://goo.gle/gemini-cli-docs-mcp',
-        }),
-        expect.any(Number),
-      );
-      expect(open).toHaveBeenCalledWith('https://goo.gle/gemini-cli-docs-mcp');
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should display configured MCP servers with status indicators and their tools', async () => {
-      // Mock MCP servers configuration
-      const mockMcpServers = {
-        server1: { command: 'cmd1' },
-        server2: { command: 'cmd2' },
-        server3: { command: 'cmd3' },
-      };
-
-      // Setup getMCPServerStatus mock implementation - use all CONNECTED to avoid startup message in this test
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED; // Default for server3 and others
-      });
-
-      // Setup getMCPDiscoveryState mock to return completed so no startup message is shown
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.COMPLETED,
-      );
-
-      // Mock tools from each server
-      const mockServer1Tools = [
-        { name: 'server1_tool1' },
-        { name: 'server1_tool2' },
-      ];
-
-      const mockServer2Tools = [{ name: 'server2_tool1' }];
-
-      const mockServer3Tools = [{ name: 'server3_tool1' }];
-
-      const mockGetToolsByServer = vi.fn().mockImplementation((serverName) => {
-        if (serverName === 'server1') return mockServer1Tools;
-        if (serverName === 'server2') return mockServer2Tools;
-        if (serverName === 'server3') return mockServer3Tools;
-        return [];
-      });
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: mockGetToolsByServer,
-        }),
-        getMcpServers: vi.fn().mockReturnValue(mockMcpServers),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining('Configured MCP servers:'),
-        }),
-        expect.any(Number),
-      );
-
-      // Check that the message contains details about servers and their tools
-      const message = mockAddItem.mock.calls[1][0].text;
-      const plain = stripAnsi(message);
-      // Server 1 - Connected
-      expect(plain).toMatch(/server1.*Ready.*2 tools/);
-      expect(plain).toContain('server1_tool1');
-      expect(plain).toContain('server1_tool2');
-
-      // Server 2 - Connected
-      expect(plain).toContain('server2 - Ready (1 tools)');
-      expect(plain).toContain('server2_tool1');
-
-      // Server 3 - Disconnected
-      expect(plain).toContain('server3 - Disconnected (1 tools cached)');
-      expect(plain).toContain('server3_tool1');
-
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should display tool descriptions when showToolDescriptions is true', async () => {
-      // Mock MCP servers configuration with server description
-      const mockMcpServers = {
-        server1: {
-          command: 'cmd1',
-          description: 'This is a server description',
-        },
-      };
-
-      // Setup getMCPServerStatus mock implementation
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
-
-      // Setup getMCPDiscoveryState mock to return completed
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.COMPLETED,
-      );
-
-      // Mock tools from server with descriptions
-      const mockServerTools = [
-        { name: 'tool1', description: 'This is tool 1 description' },
-        { name: 'tool2', description: 'This is tool 2 description' },
-      ];
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: vi.fn().mockReturnValue(mockServerTools),
-        }),
-        getMcpServers: vi.fn().mockReturnValue(mockMcpServers),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor(true);
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining('Configured MCP servers:'),
-        }),
-        expect.any(Number),
-      );
-
-      const message = mockAddItem.mock.calls[1][0].text;
-
-      const plain = stripAnsi(message);
-      expect(plain).toContain('server1 - Ready (2 tools)');
-      expect(plain).toContain('This is a server description');
-      expect(plain).toContain('tool1');
-      expect(plain).toContain('This is tool 1 description');
-      expect(plain).toContain('tool2');
-      expect(plain).toContain('This is tool 2 description');
-
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should indicate when a server has no tools', async () => {
-      // Mock MCP servers configuration
-      const mockMcpServers = {
-        server1: { command: 'cmd1' },
-        server2: { command: 'cmd2' },
-      };
-
-      // Setup getMCPServerStatus mock implementation
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.DISCONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
-
-      // Setup getMCPDiscoveryState mock to return completed
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.COMPLETED,
-      );
-
-      // Mock tools from each server - server2 has no tools
-      const mockServer1Tools = [{ name: 'server1_tool1' }];
-
-      const mockServer2Tools: Array<{ name: string }> = [];
-
-      const mockGetToolsByServer = vi.fn().mockImplementation((serverName) => {
-        if (serverName === 'server1') return mockServer1Tools;
-        if (serverName === 'server2') return mockServer2Tools;
-        return [];
-      });
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: mockGetToolsByServer,
-        }),
-        getMcpServers: vi.fn().mockReturnValue(mockMcpServers),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining('Configured MCP servers:'),
-        }),
-        expect.any(Number),
-      );
-
-      // Check that the message contains details about both servers and their tools
-      const message = mockAddItem.mock.calls[1][0].text;
-      const plain = stripAnsi(message);
-      expect(plain).toMatch(/server1.*Ready.*1 tools/);
-      expect(plain).toContain('server1_tool1');
-      expect(plain).toContain('server2 - Disconnected (0 tools cached)');
-      expect(message).toContain('No tools available');
-
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-
-    it('should show startup indicator when servers are connecting', async () => {
-      // Mock MCP servers configuration
-      const mockMcpServers = {
-        server1: { command: 'cmd1' },
-        server2: { command: 'cmd2' },
-      };
-
-      // Setup getMCPServerStatus mock implementation with one server connecting
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        if (serverName === 'server2') return MCPServerStatus.CONNECTING;
-        return MCPServerStatus.DISCONNECTED;
-      });
-
-      // Setup getMCPDiscoveryState mock to return in progress
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.IN_PROGRESS,
-      );
-
-      // Mock tools from each server
-      const mockServer1Tools = [{ name: 'server1_tool1' }];
-      const mockServer2Tools = [{ name: 'server2_tool1' }];
-
-      const mockGetToolsByServer = vi.fn().mockImplementation((serverName) => {
-        if (serverName === 'server1') return mockServer1Tools;
-        if (serverName === 'server2') return mockServer2Tools;
-        return [];
-      });
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: mockGetToolsByServer,
-        }),
-        getMcpServers: vi.fn().mockReturnValue(mockMcpServers),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor();
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp');
-      });
-
-      const message = mockAddItem.mock.calls[1][0].text;
-
-      // Check that startup indicator is shown
-      expect(message).toContain(
-        '⏳ MCP servers are starting up (1 initializing)...',
-      );
-      expect(message).toContain(
-        'Note: First startup may take longer. Tool availability will update automatically.',
-      );
-
-      // Ready server listed
-      const plain = stripAnsi(message);
-      expect(plain).toContain('server1 - Ready (1 tools)');
-      // For servers still connecting, detailed lines may be omitted when discovery is in progress.
-      expect(plain).not.toContain('server2 - Ready');
-
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/mcp schema', () => {
-    it('should display tool schemas and descriptions', async () => {
-      // Mock MCP servers configuration with server description
-      const mockMcpServers = {
-        server1: {
-          command: 'cmd1',
-          description: 'This is a server description',
-        },
-      };
-
-      // Setup getMCPServerStatus mock implementation
-      vi.mocked(getMCPServerStatus).mockImplementation((serverName) => {
-        if (serverName === 'server1') return MCPServerStatus.CONNECTED;
-        return MCPServerStatus.DISCONNECTED;
-      });
-
-      // Setup getMCPDiscoveryState mock to return completed
-      vi.mocked(getMCPDiscoveryState).mockReturnValue(
-        MCPDiscoveryState.COMPLETED,
-      );
-
-      // Mock tools from server with descriptions
-      const mockServerTools = [
-        {
-          name: 'tool1',
-          description: 'This is tool 1 description',
-          schema: {
-            parameters: [{ name: 'param1', type: 'string' }],
-          },
-        },
-        {
-          name: 'tool2',
-          description: 'This is tool 2 description',
-          schema: {
-            parameters: [{ name: 'param2', type: 'number' }],
-          },
-        },
-      ];
-
-      mockConfig = {
-        ...mockConfig,
-        getToolRegistry: vi.fn().mockResolvedValue({
-          getToolsByServer: vi.fn().mockReturnValue(mockServerTools),
-        }),
-        getMcpServers: vi.fn().mockReturnValue(mockMcpServers),
-      } as unknown as Config;
-
-      const { handleSlashCommand } = getProcessor(true);
-      let commandResult: SlashCommandProcessorResult | false = false;
-      await act(async () => {
-        commandResult = await handleSlashCommand('/mcp schema');
-      });
-
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.INFO,
-          text: expect.stringContaining('Configured MCP servers:'),
-        }),
-        expect.any(Number),
-      );
-
-      const message = mockAddItem.mock.calls[1][0].text;
-
-      // Check that server description is included
-      expect(message).toContain('Ready (2 tools)');
-      expect(message).toContain('This is a server description');
-
-      // Check that tool schemas are included
-      expect(message).toContain('tool 1 description');
-      expect(message).toContain('param1');
-      expect(message).toContain('string');
-      expect(message).toContain('tool 2 description');
-      expect(message).toContain('param2');
-      expect(message).toContain('number');
-
-      expect(commandResult).toEqual({ type: 'handled' });
-    });
-  });
-
-  describe('/compress command', () => {
-    it('should call tryCompressChat(true)', async () => {
-      const hook = getProcessorHook();
-      mockTryCompressChat.mockResolvedValue({
-        originalTokenCount: 100,
-        newTokenCount: 50,
-      });
-
-      await act(async () => {
-        hook.result.current.handleSlashCommand('/compress');
-      });
-      await act(async () => {
-        hook.rerender();
-      });
-      expect(hook.result.current.pendingHistoryItems).toEqual([]);
-      expect(mockGeminiClient.tryCompressChat).toHaveBeenCalledWith(
-        'Prompt Id not set',
-        true,
-      );
-      expect(mockAddItem).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          type: MessageType.COMPRESSION,
-          compression: {
-            isPending: false,
-            originalTokenCount: 100,
-            newTokenCount: 50,
-          },
         }),
         expect.any(Number),
       );

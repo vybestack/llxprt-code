@@ -72,6 +72,10 @@ interface MockServerConfig {
   getAllLlxprtMdFilenames: Mock<() => string[]>;
   getGeminiClient: Mock<() => GeminiClient | undefined>;
   getUserTier: Mock<() => Promise<string | undefined>>;
+  getBlockedMcpServers: Mock<
+    () => Array<{ name: string; extensionName: string }>
+  >;
+  getProxy: Mock<() => string | undefined>;
 }
 
 // Mock llxprt-code-core and its Config class
@@ -132,9 +136,12 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getGeminiClient: vi.fn(() => ({})),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
         getAllLlxprtMdFilenames: vi.fn(() => ['LLXPRT.md']),
+        getBlockedMcpServers: vi.fn(() => opts.blockedMcpServers || []),
+        getProxy: vi.fn(() => opts.proxy),
         setFlashFallbackHandler: vi.fn(),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
+        getIdeMode: vi.fn(() => false),
       };
     });
   return {
@@ -273,7 +280,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve(); // Wait for any async updates
-    expect(lastFrame()).toContain('Using 1 LLXPRT.md file');
+    expect(lastFrame()).toContain('Using: 1 LLXPRT.md file');
   });
 
   it('should display default "LLXPRT.md" with plural when contextFileName is not set and count is > 1', async () => {
@@ -288,7 +295,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using 2 LLXPRT.md files');
+    expect(lastFrame()).toContain('Using: 2 LLXPRT.md files');
   });
 
   it('should display custom contextFileName in footer when set and count is 1', async () => {
@@ -306,7 +313,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using 1 AGENTS.md file');
+    expect(lastFrame()).toContain('Using: 1 AGENTS.md file');
   });
 
   it('should display a generic message when multiple context files with different names are provided', async () => {
@@ -327,7 +334,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using 2 context files');
+    expect(lastFrame()).toContain('Using: 2 context files');
   });
 
   it('should display custom contextFileName with plural when set and count is > 1', async () => {
@@ -345,7 +352,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using 3 MY_NOTES.TXT files');
+    expect(lastFrame()).toContain('Using: 3 MY_NOTES.TXT files');
   });
 
   it('should not display context file message if count is 0, even if contextFileName is set', async () => {
@@ -381,7 +388,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('server');
+    expect(lastFrame()).toContain('Using: 2 LLXPRT.md files | 1 MCP Server');
   });
 
   it('should display only MCP server count when LLXPRT.md count is 0', async () => {
@@ -400,7 +407,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using 2 MCP servers');
+    expect(lastFrame()).toContain('Using: 2 MCP Servers');
   });
 
   it('should display Tips component by default', async () => {

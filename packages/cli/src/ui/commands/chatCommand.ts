@@ -137,7 +137,8 @@ const resumeCommand: SlashCommand = {
 
     const { logger } = context.services;
     await logger.initialize();
-    const conversation = await logger.loadCheckpoint(tag);
+    const checkpoint = await logger.loadCheckpoint(tag);
+    const conversation = checkpoint.history;
 
     if (conversation.length === 0) {
       return {

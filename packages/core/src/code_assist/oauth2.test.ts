@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, MockInstance } from 'vitest';
 import { getOauthClient } from './oauth2.js';
 import { getCachedGoogleAccount } from '../utils/user_account.js';
 import { OAuth2Client, Compute } from 'google-auth-library';
@@ -34,6 +34,7 @@ vi.mock('node:readline');
 
 const mockConfig = {
   getNoBrowser: () => false,
+  getProxy: () => undefined,
 } as unknown as Config;
 
 // Mock fetch globally
@@ -41,8 +42,13 @@ global.fetch = vi.fn();
 
 describe('oauth2', () => {
   let tempHomeDir: string;
+  let processExitSpy: MockInstance;
 
   beforeEach(() => {
+    // Mock process.exit to prevent tests from actually exiting
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
+      throw new Error(`process.exit unexpectedly called`);
+    }) as never);
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'gemini-cli-test-home-'),
     );
@@ -52,6 +58,7 @@ describe('oauth2', () => {
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     vi.clearAllMocks();
     delete process.env.CLOUD_SHELL;
+    processExitSpy.mockRestore();
   });
 
   it('should perform a web login', { timeout: 20000 }, async () => {
@@ -80,7 +87,12 @@ describe('oauth2', () => {
     vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
     vi.spyOn(crypto, 'randomBytes').mockReturnValue(mockState as never);
-    vi.mocked(open).mockImplementation(async () => ({}) as never);
+    // Mock open to return a proper child process mock
+    const mockChildProcess = {
+      on: vi.fn(),
+      pid: 12345,
+    };
+    vi.mocked(open).mockImplementation(async () => mockChildProcess as never);
 
     // Mock the UserInfo API response
     vi.mocked(global.fetch).mockResolvedValue({
@@ -102,8 +114,12 @@ describe('oauth2', () => {
 
     let capturedPort = 0;
     const mockHttpServer = {
-      listen: vi.fn((port: number, callback?: () => void) => {
+      listen: vi.fn((port: number, host: string, callback?: () => void) => {
         capturedPort = port;
+        // The callback might be passed as second parameter when host is omitted
+        if (typeof host === 'function') {
+          callback = host;
+        }
         if (callback) {
           callback();
         }
@@ -173,6 +189,7 @@ describe('oauth2', () => {
   it('should perform login with user code', { timeout: 30000 }, async () => {
     const mockConfigWithNoBrowser = {
       getNoBrowser: () => true,
+      getProxy: () => undefined,
     } as unknown as Config;
 
     const mockCodeVerifier = {
@@ -246,7 +263,7 @@ describe('oauth2', () => {
     expect(mockGetToken).toHaveBeenCalledWith({
       code: mockCode,
       codeVerifier: mockCodeVerifier.codeVerifier,
-      redirect_uri: 'https://sdk.cloud.google.com/authcode_cloudcode.html',
+      redirect_uri: 'https://codeassist.google.com/authcode',
     });
     expect(mockSetCredentials).toHaveBeenCalledWith(mockTokens);
 
