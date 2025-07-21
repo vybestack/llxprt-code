@@ -672,4 +672,9 @@ export class OpenAIProvider implements IProvider {
   isPaidMode(): boolean {
     return true;
   }
+
+  clearState(): void {
+    // Clear the conversation cache to prevent tool call ID mismatches
+    this.conversationCache.clear();
+  }
 }

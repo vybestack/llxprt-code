@@ -116,7 +116,6 @@ export function initializeTelemetry(_config: Config): void {
 
   try {
     sdk.start();
-    console.log('OpenTelemetry SDK started successfully.');
     telemetryInitialized = true;
     initializeMetrics(config);
   } catch (error) {
@@ -138,7 +137,6 @@ export async function shutdownTelemetry(): Promise<void> {
   try {
     ClearcutLogger.getInstance()?.shutdown();
     await sdk.shutdown();
-    console.log('OpenTelemetry SDK shut down successfully.');
   } catch (error) {
     console.error('Error shutting down SDK:', error);
   } finally {

@@ -108,6 +108,9 @@ export interface Settings {
 
   // Add other settings here.
   ideMode?: boolean;
+  
+  // Default model to use when no model is specified
+  defaultModel?: string;
 }
 
 export interface SettingsError {

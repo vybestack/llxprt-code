@@ -247,7 +247,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
 
       if (config.getDebugMode()) {
         console.log(
-          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
+          `Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
         );
       }
     } catch (error) {

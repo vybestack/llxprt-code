@@ -97,6 +97,14 @@ export type HistoryItemAbout = HistoryItemBase & {
   modelVersion: string;
   selectedAuthType: string;
   gcpProject: string;
+  /**
+   * Path to the configured keyfile for the active provider. Empty string if none.
+   */
+  keyfile: string;
+  /**
+   * "active" when an API key is configured for the active provider, otherwise empty string.
+   */
+  key: string;
 };
 
 export type HistoryItemStats = HistoryItemBase & {
@@ -183,6 +191,8 @@ export type Message =
       modelVersion: string;
       selectedAuthType: string;
       gcpProject: string;
+      keyfile: string;
+      key: string;
       content?: string; // Optional content, not really used for ABOUT
     }
   | {

@@ -239,7 +239,11 @@ export const useGeminiStream = (
 
       // Lazily refresh auth if needed.
       if (!geminiClient.isInitialized()) {
+        onDebugMessage('[Auth] GeminiClient not initialized, checking auth...');
+        // First check if we already have a content generator config
+        // This would be the case if refreshAuth was already called (e.g., from /key command)
         let authType = config.getContentGeneratorConfig()?.authType;
+        onDebugMessage(`[Auth] Current authType from config: ${authType}`);
 
         // If authType is not set, determine it from environment variables
         if (!authType) {
@@ -250,9 +254,18 @@ export const useGeminiStream = (
           } else {
             authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth (interactive)
           }
+          onDebugMessage(`[Auth] Determined authType from environment: ${authType}`);
         }
 
-        await config.refreshAuth(authType);
+        // Only refresh auth if we don't have a valid content generator config
+        // or if the auth type differs from what's configured
+        const currentAuthType = config.getContentGeneratorConfig()?.authType;
+        if (!currentAuthType || currentAuthType !== authType) {
+          onDebugMessage(`[Auth] Refreshing auth with type: ${authType}`);
+          await config.refreshAuth(authType);
+        } else {
+          onDebugMessage(`[Auth] Auth type unchanged, skipping refresh`);
+        }
       }
 
       let localQueryToSendToGemini: PartListUnion | null = null;
@@ -616,6 +629,7 @@ export const useGeminiStream = (
       setInitError(null);
 
       try {
+        onDebugMessage(`[Submit] Sending message to Gemini: ${typeof queryToSend === 'string' ? queryToSend : 'non-string content'}`);
         const stream = geminiClient.sendMessageStream(
           queryToSend,
           abortSignal,
@@ -677,6 +691,7 @@ export const useGeminiStream = (
       startNewPrompt,
       getPromptCount,
       handleLoopDetectedEvent,
+      onDebugMessage,
     ],
   );
 

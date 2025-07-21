@@ -11,6 +11,7 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { SettingScope } from '../../config/settings.js';
 
 export const modelCommand: SlashCommand = {
   name: 'model',
@@ -36,12 +37,17 @@ export const modelCommand: SlashCommand = {
       const currentModel = activeProvider.getCurrentModel
         ? activeProvider.getCurrentModel()
         : 'unknown';
-
+      
       if (activeProvider.setModel) {
         activeProvider.setModel(modelName);
         // Keep config model in sync so /about shows correct model
         if (context.services.config) {
           context.services.config.setModel(modelName);
+        }
+        
+        // Persist model selection to user settings
+        if (context.services.settings) {
+          context.services.settings.setValue(SettingScope.User, 'defaultModel', modelName);
         }
 
         return {

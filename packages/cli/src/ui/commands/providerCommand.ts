@@ -11,6 +11,7 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { ProviderManagerAdapter } from '../../providers/ProviderManagerAdapter.js';
 import { MessageType } from '../types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 
@@ -52,19 +53,44 @@ export const providerCommand: SlashCommand = {
       //   availableModels: await providerManager.getAllAvailableModels(),
       // };
 
-      // Switch provider
+      // Switch provider first (this will clear state from ALL providers)
       providerManager.setActiveProvider(providerName);
 
       // Update config if available
       if (context.services.config) {
-        context.services.config.setModel(
-          providerManager.getActiveProvider().getCurrentModel?.() || '',
-        );
+        // Ensure provider manager is set on config with adapter
+        const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
+        context.services.config.setProviderManager(providerManagerAdapter);
+        
+        // Update model to match the new provider's default
+        const newModel = providerManager.getActiveProvider().getCurrentModel?.() || '';
+        context.services.config.setModel(newModel);
 
-        // Use provider auth for non-gemini providers
-        if (providerName !== 'gemini') {
-          // Check if provider needs configuration (this could be provider-specific)
-          // For now, just inform the user to set a key if needed
+        // Always refresh auth when switching providers
+        let authType: AuthType;
+        
+        if (providerName === 'gemini') {
+          // When switching TO Gemini, determine appropriate auth
+          const currentAuthType = context.services.config.getContentGeneratorConfig()?.authType;
+          
+          // If we were using provider auth, switch to appropriate Gemini auth
+          if (currentAuthType === AuthType.USE_PROVIDER || !currentAuthType) {
+            if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+              authType = AuthType.USE_VERTEX_AI;
+            } else if (process.env.GEMINI_API_KEY) {
+              authType = AuthType.USE_GEMINI;
+            } else {
+              authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth
+            }
+          } else {
+            // Keep existing Gemini auth type
+            authType = currentAuthType;
+          }
+        } else {
+          // When switching to non-Gemini provider
+          authType = AuthType.USE_PROVIDER;
+          
+          // Show info about API key if needed
           context.ui.addItem(
             {
               type: MessageType.INFO,
@@ -74,13 +100,17 @@ export const providerCommand: SlashCommand = {
           );
         }
 
-        // Refresh auth if switching to/from gemini
-        if (
-          (fromProvider === 'gemini' && providerName !== 'gemini') ||
-          (fromProvider !== 'gemini' && providerName === 'gemini')
-        ) {
-          await context.services.config.refreshAuth(AuthType.USE_PROVIDER);
+        // Refresh auth with the appropriate type
+        await context.services.config.refreshAuth(authType);
+
+        // Clear conversation history after auth refresh to ensure clean state
+        const geminiClient = context.services.config.getGeminiClient();
+        if (geminiClient && geminiClient.isInitialized()) {
+          await geminiClient.resetChat();
         }
+        
+        // Clear UI history to prevent tool call ID mismatches
+        context.ui.clear();
       }
 
       // Trigger payment mode check if available

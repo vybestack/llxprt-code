@@ -297,14 +297,11 @@ Expectation for required parameters:
     let editData: CalculatedEdit;
     try {
       editData = await this.calculateEdit(params, abortSignal);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.log(`Error preparing edit: ${errorMsg}`);
+    } catch {
       return false;
     }
 
     if (editData.error) {
-      console.log(`Error: ${editData.error.display}`);
       return false;
     }
 

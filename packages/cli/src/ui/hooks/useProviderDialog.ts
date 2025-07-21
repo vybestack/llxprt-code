@@ -9,6 +9,8 @@ import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
+import { AuthType, Config } from '@vybestack/llxprt-code-core';
+import { ProviderManagerAdapter } from '../../providers/ProviderManagerAdapter.js';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
@@ -18,12 +20,16 @@ interface UseProviderDialogParams {
   }) => void;
   onProviderChange?: () => void;
   appState: AppState;
+  config: Config;
+  onClear?: () => void;
 }
 
 export const useProviderDialog = ({
   addMessage,
   onProviderChange,
   appState,
+  config,
+  onClear,
 }: UseProviderDialogParams) => {
   const appDispatch = useAppDispatch();
   const showDialog = appState.openDialogs.provider;
@@ -51,16 +57,76 @@ export const useProviderDialog = ({
   );
 
   const handleSelect = useCallback(
-    (providerName: string) => {
+    async (providerName: string) => {
       try {
         const providerManager = getProviderManager();
         const prev = providerManager.getActiveProviderName();
+        
+        // Switch provider first
         providerManager.setActiveProvider(providerName);
+        
+        // Ensure provider manager is set on config with adapter
+        const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
+        config.setProviderManager(providerManagerAdapter);
+        
+        // Update model to match the new provider's default
+        const newModel = providerManager.getActiveProvider().getCurrentModel?.() || '';
+        config.setModel(newModel);
+
+        // Determine appropriate auth type
+          let authType: AuthType;
+          
+          if (providerName === 'gemini') {
+            // When switching TO Gemini, determine appropriate auth
+            const currentAuthType = config.getContentGeneratorConfig()?.authType;
+            
+            // If we were using provider auth, switch to appropriate Gemini auth
+            if (currentAuthType === AuthType.USE_PROVIDER || !currentAuthType) {
+              if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+                authType = AuthType.USE_VERTEX_AI;
+              } else if (process.env.GEMINI_API_KEY) {
+                authType = AuthType.USE_GEMINI;
+              } else {
+                authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth
+              }
+            } else {
+              // Keep existing Gemini auth type
+              authType = currentAuthType;
+            }
+          } else {
+            // When switching to non-Gemini provider
+            authType = AuthType.USE_PROVIDER;
+          }
+
+          // Refresh auth with the appropriate type
+          await config.refreshAuth(authType);
+
+        // Clear conversation history after auth refresh to ensure clean state
+        const geminiClient = config.getGeminiClient();
+        if (geminiClient && geminiClient.isInitialized()) {
+          await geminiClient.resetChat();
+        }
+        
+        // Clear UI history to prevent tool call ID mismatches
+        if (onClear) {
+          onClear();
+        }
+        
         addMessage({
           type: MessageType.INFO,
           content: `Switched from ${prev || 'none'} to ${providerName}`,
           timestamp: new Date(),
         });
+        
+        // Show additional info for non-Gemini providers
+        if (providerName !== 'gemini') {
+          addMessage({
+            type: MessageType.INFO,
+            content: `Use /key to set API key if needed.`,
+            timestamp: new Date(),
+          });
+        }
+        
         onProviderChange?.();
       } catch (e) {
         addMessage({
@@ -71,7 +137,7 @@ export const useProviderDialog = ({
       }
       appDispatch({ type: 'CLOSE_DIALOG', payload: 'provider' });
     },
-    [addMessage, onProviderChange, appDispatch],
+    [addMessage, onProviderChange, appDispatch, config, onClear],
   );
 
   return {

@@ -107,6 +107,8 @@ export class GeminiClient {
   };
   private sessionTurnCount = 0;
   private readonly MAX_TURNS = 100;
+  private _pendingConfig?: ContentGeneratorConfig;
+  private _previousHistory?: Content[];
   /**
    * Threshold for compression token count as a fraction of the model's token limit.
    * If the chat history exceeds this threshold, it will be compressed.
@@ -130,17 +132,27 @@ export class GeminiClient {
     this.loopDetector = new LoopDetectionService(config);
   }
 
-  initialize(_contentGeneratorConfig: ContentGeneratorConfig) {
+  async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
+    // Preserve chat history before resetting
+    const previousHistory = this.chat?.getHistory();
+    
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
     this.chat = undefined;
+    
+    // Store the new config and previous history for lazy initialization
+    // This ensures the next lazyInitialize() call uses the correct auth config
+    // and preserves conversation history across auth transitions
+    this._pendingConfig = contentGeneratorConfig;
+    this._previousHistory = previousHistory;
   }
 
   private async lazyInitialize() {
     if (this.isInitialized()) {
       return;
     }
-    const contentGenConfig = this.config.getContentGeneratorConfig();
+    // Use pending config if available (from initialize() call), otherwise fall back to current config
+    const contentGenConfig = this._pendingConfig || this.config.getContentGeneratorConfig();
     if (!contentGenConfig) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -151,7 +163,21 @@ export class GeminiClient {
       this.config,
       this.config.getSessionId(),
     );
-    this.chat = await this.startChat();
+    
+    // If we have previous history, restore it when creating the chat
+    // This preserves conversation context across auth transitions
+    if (this._previousHistory && this._previousHistory.length > 0) {
+      // Extract the conversation history after the initial environment setup
+      // The first two messages are always the environment context and acknowledgment
+      const conversationHistory = this._previousHistory.slice(2);
+      this.chat = await this.startChat(conversationHistory);
+    } else {
+      this.chat = await this.startChat();
+    }
+    
+    // Clear pending config and history after successful initialization
+    this._pendingConfig = undefined;
+    this._previousHistory = undefined;
   }
 
   getContentGenerator(): ContentGenerator {

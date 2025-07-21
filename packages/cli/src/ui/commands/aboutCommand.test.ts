@@ -77,6 +77,8 @@ describe('aboutCommand', () => {
         modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
+        keyfile: '',
+        key: '',
       },
       expect.any(Number),
     );

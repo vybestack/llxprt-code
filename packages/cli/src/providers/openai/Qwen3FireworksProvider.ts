@@ -49,32 +49,6 @@ export class Qwen3FireworksProvider extends OpenAIProvider {
     tools?: ITool[],
     toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
-    // Debug logging to see what messages Qwen3 receives
-    console.log(
-      '[Qwen3FireworksProvider] Received messages:',
-      JSON.stringify(messages, null, 2),
-    );
-    console.log(
-      '[Qwen3FireworksProvider] Number of messages:',
-      messages.length,
-    );
-
-    // Log tool messages specifically
-    const toolMessages = messages.filter((m) => m.role === 'tool');
-    if (toolMessages.length > 0) {
-      console.log(
-        '[Qwen3FireworksProvider] Tool messages found:',
-        toolMessages.length,
-      );
-      toolMessages.forEach((msg, idx) => {
-        console.log(`[Qwen3FireworksProvider] Tool message ${idx}:`, {
-          tool_call_id: msg.tool_call_id,
-          tool_name: msg.tool_name,
-          content_length: msg.content?.length || 0,
-          content_preview: msg.content?.substring(0, 100),
-        });
-      });
-    }
 
     // Clean messages before sending
     const cleanedMessages = messages.map((msg) => ({

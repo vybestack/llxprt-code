@@ -28,6 +28,14 @@ export class ProviderManager {
     if (!this.providers.has(name)) {
       throw new Error('Provider not found');
     }
+    
+    // Clear state from ALL providers before switching
+    for (const provider of this.providers.values()) {
+      if (provider.clearState) {
+        provider.clearState();
+      }
+    }
+    
     this.activeProviderName = name;
   }
 

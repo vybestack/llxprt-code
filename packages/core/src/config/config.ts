@@ -201,7 +201,8 @@ export class Config {
   private readonly proxy: string | undefined;
   private readonly cwd: string;
   private readonly bugCommand: BugCommandSettings | undefined;
-  private readonly model: string;
+  private model: string;
+  private readonly originalModel: string;
   private readonly extensionContextFilePaths: string[];
   private readonly noBrowser: boolean;
   private readonly ideMode: boolean;
@@ -266,6 +267,7 @@ export class Config {
     this.fileDiscoveryService = params.fileDiscoveryService ?? null;
     this.bugCommand = params.bugCommand;
     this.model = params.model;
+    this.originalModel = params.model;
     this.extensionContextFilePaths = params.extensionContextFilePaths ?? [];
     this.maxSessionTurns = params.maxSessionTurns ?? -1;
     this.experimentalAcp = params.experimentalAcp ?? false;
@@ -352,6 +354,8 @@ export class Config {
       this.contentGeneratorConfig.model = newModel;
       this.modelSwitchedDuringSession = true;
     }
+    // Also update the base model so it persists across refreshAuth
+    this.model = newModel;
   }
 
   isModelSwitchedDuringSession(): boolean {
@@ -360,9 +364,10 @@ export class Config {
 
   resetModelToDefault(): void {
     if (this.contentGeneratorConfig) {
-      this.contentGeneratorConfig.model = this.model; // Reset to the original default model
+      this.contentGeneratorConfig.model = this.originalModel; // Reset to the original default model
       this.modelSwitchedDuringSession = false;
     }
+    this.model = this.originalModel;
   }
 
   setFlashFallbackHandler(handler: FlashFallbackHandler): void {

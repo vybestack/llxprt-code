@@ -54,6 +54,27 @@ export const aboutCommand: SlashCommand = {
       context.services.settings.merged.selectedAuthType || '';
     const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || '';
 
+        // Determine keyfile path and key status for the active provider (if any)
+    let keyfilePath = '';
+    let keyStatus = '';
+    try {
+      const { getProviderManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
+      const providerManager = getProviderManager();
+      const providerName = providerManager.getActiveProviderName();
+      if (providerName) {
+        keyfilePath =
+          context.services.settings.getProviderKeyfile?.(providerName) || '';
+        const keys = context.services.settings.merged.providerApiKeys || {};
+        if (keys[providerName]) {
+          keyStatus = 'active';
+        }
+      }
+    } catch {
+      // Ignore errors and leave defaults
+    }
+
     const aboutItem: Omit<HistoryItemAbout, 'id'> = {
       type: MessageType.ABOUT,
       cliVersion,
@@ -62,6 +83,8 @@ export const aboutCommand: SlashCommand = {
       modelVersion,
       selectedAuthType,
       gcpProject,
+      keyfile: keyfilePath,
+      key: keyStatus,
     };
 
     context.ui.addItem(aboutItem, Date.now());

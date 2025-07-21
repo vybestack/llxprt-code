@@ -313,6 +313,13 @@ const AppInner = ({
     appState,
   });
 
+  const handleClearScreen = useCallback(() => {
+    clearItems();
+    clearConsoleMessagesState();
+    console.clear();
+    refreshStatic();
+  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
+
   // Provider selection dialog
   const providerDialog = useProviderDialog({
     addMessage: (m: { type: MessageType; content: string; timestamp: Date }) =>
@@ -325,6 +332,8 @@ const AppInner = ({
       checkPaymentModeChange?.();
     },
     appState,
+    config,
+    onClear: handleClearScreen,
   });
 
 
@@ -578,13 +587,6 @@ const AppInner = ({
   }, [history, logger]);
 
   const isInputActive = streamingState === StreamingState.Idle && !initError;
-
-  const handleClearScreen = useCallback(() => {
-    clearItems();
-    clearConsoleMessagesState();
-    console.clear();
-    refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
   const pendingHistoryItemRef = useRef<DOMElement>(null);
 

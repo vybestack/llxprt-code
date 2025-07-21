@@ -35,6 +35,8 @@ export interface IProvider {
   getToolFormat?(): string;
   setToolFormatOverride?(format: string | null): void;
   isPaidMode?(): boolean;
+  // Method to clear any provider-specific state (e.g., conversation cache, tool call tracking)
+  clearState?(): void;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 }
 
