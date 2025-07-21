@@ -65,7 +65,7 @@ However, LLxprt Code will evolve independently based on community needs, especia
 
 This is a project built on **peace, love, and open source**. Whether you're fixing a typo or adding support for a new provider, every contribution matters.
 
-- **Discord/Community:** [Coming soon - help us build it!]
+- **Community (Zulip):** https://llxprt.zulipchat.com/join/7y7fldqzfj7efxboy64ptxld/
 - **Issues:** [Browse or create](https://github.com/acoliver/llxprt-code/issues)
 - **Discussions:** [Join the conversation](https://github.com/acoliver/llxprt-code/discussions)
 
