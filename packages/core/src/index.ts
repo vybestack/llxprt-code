@@ -99,4 +99,5 @@ export * from './providers/IProviderManager.js';
 export * from './providers/ContentGeneratorRole.js';
 export * from './providers/ProviderContentGenerator.js';
 export * from './providers/adapters/GeminiCompatibleWrapper.js';
+export * from './providers/errors.js';
 export * from './utils/browser.js';

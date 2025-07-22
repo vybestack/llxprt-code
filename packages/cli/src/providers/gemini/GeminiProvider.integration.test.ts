@@ -10,7 +10,7 @@ import path from 'path';
 import { processSingleFileContent } from '@vybestack/llxprt-code-core';
 import { GeminiProvider } from './GeminiProvider.js';
 import { IMessage } from '../index.js';
-import { ContentGeneratorRole } from '../types.js';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
 
 describe('GeminiProvider Integration', () => {

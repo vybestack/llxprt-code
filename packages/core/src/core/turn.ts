@@ -182,6 +182,10 @@ export class Turn {
     req: PartListUnion,
     signal: AbortSignal,
   ): AsyncGenerator<ServerGeminiStreamEvent> {
+    console.log('DEBUG: Turn.run called');
+    console.log('DEBUG: Turn.run req:', JSON.stringify(req, null, 2));
+    console.log('DEBUG: Turn.run typeof req:', typeof req);
+    console.log('DEBUG: Turn.run Array.isArray(req):', Array.isArray(req));
     try {
       const responseStream = await this.chat.sendMessageStream(
         {

@@ -335,6 +335,10 @@ export class GeminiClient {
     turns: number = this.MAX_TURNS,
     originalModel?: string,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+    console.log('DEBUG: GeminiClient.sendMessageStream called');
+    console.log('DEBUG: GeminiClient.sendMessageStream request:', JSON.stringify(request, null, 2));
+    console.log('DEBUG: GeminiClient.sendMessageStream typeof request:', typeof request);
+    console.log('DEBUG: GeminiClient.sendMessageStream Array.isArray(request):', Array.isArray(request));
     await this.lazyInitialize();
 
     if (this.lastPromptId !== prompt_id) {

@@ -5,10 +5,9 @@
  */
 
 import { IProvider, IModel, IMessage, ITool } from '../index.js';
-import { Config, AuthType } from '@vybestack/llxprt-code-core';
-import { ContentGeneratorRole } from '../types.js';
+import { Config, AuthType, ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 import type { Part, FunctionCall, Schema } from '@google/genai';
-import { AuthenticationRequiredError } from '../errors.js';
+import { AuthenticationRequiredError } from '@vybestack/llxprt-code-core';
 
 /**
  * Represents the default Gemini provider.
@@ -234,6 +233,14 @@ export class GeminiProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
+    // Comprehensive debug logging
+    console.log('[GEMINI] generateChatCompletion called with:');
+    console.log('[GEMINI] messages:', JSON.stringify(messages, null, 2));
+    console.log('[GEMINI] messages length:', messages.length);
+    console.log('[GEMINI] first message:', messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE');
+    console.log('[GEMINI] tools:', tools ? JSON.stringify(tools.map(t => t.function.name)) : 'NO TOOLS');
+    
+    console.log('DEBUG: GeminiProvider.generateChatCompletion called with messages:', JSON.stringify(messages, null, 2));
     // Check if we need to re-determine auth
     const oauthValid = await this.isOAuthValid();
     if (!oauthValid) {

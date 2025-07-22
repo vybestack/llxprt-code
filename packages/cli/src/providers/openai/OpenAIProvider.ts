@@ -15,7 +15,7 @@
  */
 
 import { IProvider, IModel, ITool, IMessage } from '../index.js';
-import { ContentGeneratorRole } from '../types.js';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 import OpenAI from 'openai';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';
 import { Settings } from '../../config/settings.js';

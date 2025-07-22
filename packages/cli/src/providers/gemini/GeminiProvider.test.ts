@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
 import { IMessage } from '../index.js';
-import { ContentGeneratorRole } from '../types.js';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 
 describe('GeminiProvider', () => {
   let provider: GeminiProvider;

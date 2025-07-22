@@ -21,6 +21,8 @@ export async function runNonInteractive(
   input: string,
   prompt_id: string,
 ): Promise<void> {
+  console.log('DEBUG: runNonInteractive input:', input);
+  console.log('DEBUG: runNonInteractive input length:', input.length);
   await config.initialize();
   // Handle EPIPE errors when the output is piped to a command that closes early.
   process.stdout.on('error', (err: NodeJS.ErrnoException) => {
@@ -54,14 +56,22 @@ export async function runNonInteractive(
       }
       const functionCalls: FunctionCall[] = [];
 
-      // Convert currentMessages to PartListUnion format for geminiClient
+      // Extract text from parts to pass as string message
       const parts = currentMessages[0]?.parts || [];
+      const messageText = parts
+        .map((part: any) => part.text || '')
+        .join('');
+      console.log('DEBUG: currentMessages:', JSON.stringify(currentMessages, null, 2));
+      console.log('DEBUG: sendMessageStream parts:', JSON.stringify(parts, null, 2));
+      console.log('DEBUG: extracted messageText:', messageText);
 
+      console.log('DEBUG: About to call geminiClient.sendMessageStream with messageText');
       const responseStream = geminiClient.sendMessageStream(
-        parts,
+        messageText,
         abortController.signal,
         prompt_id,
       );
+      console.log('DEBUG: geminiClient.sendMessageStream called');
 
       for await (const event of responseStream) {
         if (abortController.signal.aborted) {

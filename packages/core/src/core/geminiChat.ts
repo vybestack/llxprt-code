@@ -379,9 +379,15 @@ export class GeminiChat {
     params: SendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    console.log('DEBUG: GeminiChat.sendMessageStream called');
+    console.log('DEBUG: GeminiChat.sendMessageStream params:', JSON.stringify(params, null, 2));
+    console.log('DEBUG: GeminiChat.sendMessageStream params.message type:', typeof params.message);
+    console.log('DEBUG: GeminiChat.sendMessageStream params.message:', JSON.stringify(params.message, null, 2));
     await this.sendPromise;
     const userContent = createUserContent(params.message);
+    console.log('DEBUG: GeminiChat.sendMessageStream userContent:', JSON.stringify(userContent, null, 2));
     const requestContents = this.getHistory(true).concat(userContent);
+    console.log('DEBUG: GeminiChat.sendMessageStream requestContents:', JSON.stringify(requestContents, null, 2));
     this._logApiRequest(requestContents, this.config.getModel(), prompt_id);
 
     const startTime = Date.now();
