@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 
 describe('buildResponsesRequest - undefined message handling', () => {
   it('should filter out undefined messages', () => {

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ConversationContext } from '../../utils/ConversationContext.js';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';

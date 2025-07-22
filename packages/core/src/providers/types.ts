@@ -4,31 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Part } from '@google/genai';
+// Re-export the unified interfaces with backward compatible names
+export type { IMessage as ProviderMessage } from './IMessage.js';
+export type { ITool as ProviderTool } from './ITool.js';
+export type { IProvider as Provider } from './IProvider.js';
+export type { IProviderManager as ProviderManager } from './IProviderManager.js';
 
-/**
- * Represents a message in a provider's format
- */
-export interface ProviderMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  tool_calls?: ProviderToolCall[];
-  // For tool messages (responses to tool calls)
-  tool_call_id?: string;
-  name?: string;
-  // Token usage information
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-  // Additional parts for non-text content (PDFs, images, etc.)
-  parts?: Part[];
-}
-
-/**
- * Represents a tool call from a provider
- */
+// Export the tool call type from IMessage
 export interface ProviderToolCall {
   id: string;
   type: 'function';
@@ -36,64 +18,4 @@ export interface ProviderToolCall {
     name: string;
     arguments: string;
   };
-}
-
-/**
- * Represents a tool definition for providers
- */
-export interface ProviderTool {
-  type: 'function';
-  function: {
-    name: string;
-    description?: string;
-    parameters?: Record<string, unknown>;
-  };
-}
-
-/**
- * Provider interface for external AI providers
- */
-export interface Provider {
-  name: string;
-
-  /**
-   * Generate a chat completion
-   * @param messages The conversation history
-   * @param tools Available tools for the model to use
-   * @returns An async iterator of response messages
-   */
-  generateChatCompletion(
-    messages: ProviderMessage[],
-    tools?: ProviderTool[],
-  ): AsyncIterableIterator<ProviderMessage>;
-
-  /**
-   * Get the current model being used
-   */
-  getCurrentModel(): string;
-
-  /**
-   * Set the model to use
-   */
-  setModel(modelId: string): void;
-}
-
-/**
- * Manager for handling multiple providers
- */
-export interface ProviderManager {
-  /**
-   * Check if a provider is currently active
-   */
-  hasActiveProvider(): boolean;
-
-  /**
-   * Get the currently active provider
-   */
-  getActiveProvider(): Provider | null;
-
-  /**
-   * Get the name of the active provider
-   */
-  getActiveProviderName(): string;
 }

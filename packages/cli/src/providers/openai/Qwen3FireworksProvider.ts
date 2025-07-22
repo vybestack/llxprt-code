@@ -5,7 +5,7 @@
  */
 
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage, ITool, IModel } from '../IProvider.js';
+import { IMessage, ITool, IModel } from '../index.js';
 import { Settings } from '../../config/settings.js';
 import { ContentGeneratorRole } from '../types.js';
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { ContentGeneratorRole } from './types.js';
+import { ContentGeneratorRole } from './ContentGeneratorRole.js';
 import { Part } from '@google/genai';
 
 export interface IMessage {

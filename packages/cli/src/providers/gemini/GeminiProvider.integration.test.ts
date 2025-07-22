@@ -9,7 +9,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { processSingleFileContent } from '@vybestack/llxprt-code-core';
 import { GeminiProvider } from './GeminiProvider.js';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 import { ContentGeneratorRole } from '../types.js';
 import type { Part } from '@google/genai';
 

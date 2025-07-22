@@ -18,7 +18,7 @@ import {
   Content,
   Part,
 } from '@google/genai';
-import { ProviderManager } from './types.js';
+import type { IProviderManager as ProviderManager } from './IProviderManager.js';
 import { GeminiCompatibleWrapper } from './adapters/GeminiCompatibleWrapper.js';
 
 /**

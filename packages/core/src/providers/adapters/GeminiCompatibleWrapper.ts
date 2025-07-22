@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Provider, ProviderMessage, ProviderTool } from '../types.js';
+import type { IProvider as Provider } from '../IProvider.js';
+import type { IMessage as ProviderMessage } from '../IMessage.js';
+import type { ITool as ProviderTool } from '../ITool.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import {
   Content,
   GenerateContentResponse,
@@ -583,10 +586,19 @@ export class GeminiCompatibleWrapper {
         const combinedText = textParts.join('');
 
         // Map Gemini roles to provider roles
-        const role = content.role === 'model' ? 'assistant' : content.role;
+        let role: ContentGeneratorRole | 'system';
+        if (content.role === 'model') {
+          role = ContentGeneratorRole.ASSISTANT;
+        } else if (content.role === 'user') {
+          role = ContentGeneratorRole.USER;
+        } else if (content.role === 'system') {
+          role = 'system';
+        } else {
+          role = content.role as ContentGeneratorRole | 'system';
+        }
 
         const message: ProviderMessage = {
-          role: role as 'user' | 'assistant' | 'system',
+          role,
           content: combinedText,
           // Preserve all parts including non-text content (PDFs, images, etc.)
           parts: allParts,

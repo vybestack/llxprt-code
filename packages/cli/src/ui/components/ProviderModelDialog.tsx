@@ -7,7 +7,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
-import { IModel } from '../../providers/IModel.js';
+import { IModel } from '../../providers/index.js';
 
 interface ProviderModelDialogProps {
   models: IModel[];

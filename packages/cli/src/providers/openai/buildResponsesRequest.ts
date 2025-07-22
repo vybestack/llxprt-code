@@ -1,5 +1,4 @@
-import { IMessage } from '../IMessage.js';
-import { ITool } from '../ITool.js';
+import { IMessage, ITool } from '../index.js';
 import { ResponsesTool } from '../../tools/IToolFormatter.js';
 
 export interface ResponsesRequestParams {

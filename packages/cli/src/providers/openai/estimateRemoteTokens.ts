@@ -1,4 +1,4 @@
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 import { ConversationCache } from './ConversationCache.js';
 
 // Model context size configuration

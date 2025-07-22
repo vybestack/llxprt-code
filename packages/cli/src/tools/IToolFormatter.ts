@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-import { ITool } from '../providers/ITool.js';
-import { IMessage } from '../providers/IMessage.js';
+import { ITool, IMessage } from '../providers/index.js';
 
 export type ToolFormat =
   | 'openai'

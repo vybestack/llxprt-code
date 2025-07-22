@@ -20,8 +20,7 @@ import {
   OpenAITool,
   ResponsesTool,
 } from './IToolFormatter.js';
-import { ITool } from '../providers/ITool.js';
-import { IMessage } from '../providers/IMessage.js';
+import { ITool, IMessage } from '../providers/index.js';
 
 export class ToolFormatter implements IToolFormatter {
   /**

@@ -4,11 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Core interfaces
-export * from './IProvider.js';
-export * from './IModel.js';
-export * from './IMessage.js';
-export * from './ITool.js';
+// Core interfaces - re-export from core package
+export { 
+  IProvider, 
+  IModel, 
+  IMessage, 
+  ITool,
+  IProviderManager,
+  ContentGeneratorRole 
+} from '@vybestack/llxprt-code-core';
 
 // Provider implementations
 export * from './openai/OpenAIProvider.js';

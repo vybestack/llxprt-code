@@ -6,7 +6,7 @@
 
 import { useCallback, useState } from 'react';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { IModel } from '../../providers/IModel.js';
+import { IModel } from '../../providers/index.js';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';

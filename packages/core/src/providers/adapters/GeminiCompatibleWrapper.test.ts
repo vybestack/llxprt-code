@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, Mock } from 'vitest';
 import { GeminiCompatibleWrapper } from './GeminiCompatibleWrapper.js';
-import { Provider } from '../types.js';
+import type { IProvider as Provider } from '../IProvider.js';
 import { Type, Tool } from '@google/genai';
 
 describe('GeminiCompatibleWrapper', () => {
@@ -17,6 +17,7 @@ describe('GeminiCompatibleWrapper', () => {
         name: 'test-provider',
         getCurrentModel: () => 'test-model',
         setModel: vi.fn(),
+        getModels: vi.fn().mockResolvedValue([]),
         generateChatCompletion: vi.fn().mockImplementation(async function* () {
           yield {
             role: 'assistant',
@@ -127,6 +128,7 @@ describe('GeminiCompatibleWrapper', () => {
         name: 'test-provider',
         getCurrentModel: () => 'test-model',
         setModel: vi.fn(),
+        getModels: vi.fn().mockResolvedValue([]),
         generateChatCompletion: vi.fn().mockImplementation(async function* () {
           yield {
             role: 'assistant',
@@ -195,6 +197,7 @@ describe('GeminiCompatibleWrapper', () => {
         name: 'test-provider',
         getCurrentModel: () => 'test-model',
         setModel: vi.fn(),
+        getModels: vi.fn().mockResolvedValue([]),
         generateChatCompletion: vi.fn(),
       };
 
@@ -263,6 +266,7 @@ describe('GeminiCompatibleWrapper', () => {
         name: 'test-provider',
         getCurrentModel: () => 'test-model',
         setModel: vi.fn(),
+        getModels: vi.fn().mockResolvedValue([]),
         generateChatCompletion: vi.fn(),
       };
 

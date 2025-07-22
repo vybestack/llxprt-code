@@ -66,6 +66,12 @@ export const providerCommand: SlashCommand = {
         const newModel = providerManager.getActiveProvider().getCurrentModel?.() || '';
         context.services.config.setModel(newModel);
 
+        // Clear conversation history BEFORE switching to prevent tool call ID mismatches
+        const geminiClient = context.services.config.getGeminiClient();
+        if (geminiClient && geminiClient.isInitialized()) {
+          await geminiClient.resetChat();
+        }
+        
         // Always refresh auth when switching providers
         let authType: AuthType;
         
@@ -102,12 +108,6 @@ export const providerCommand: SlashCommand = {
 
         // Refresh auth with the appropriate type
         await context.services.config.refreshAuth(authType);
-
-        // Clear conversation history after auth refresh to ensure clean state
-        const geminiClient = context.services.config.getGeminiClient();
-        if (geminiClient && geminiClient.isInitialized()) {
-          await geminiClient.resetChat();
-        }
         
         // Clear UI history to prevent tool call ID mismatches
         context.ui.clear();

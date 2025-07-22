@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 import { ContentGeneratorRole } from '../types.js';
 import OpenAI from 'openai';
 

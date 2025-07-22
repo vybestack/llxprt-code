@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider';
-import { ITool } from '../ITool.js';
+import { ITool } from '../index.js';
 
 // Mock the ToolFormatter
 vi.mock('../../tools/ToolFormatter.js', () => ({

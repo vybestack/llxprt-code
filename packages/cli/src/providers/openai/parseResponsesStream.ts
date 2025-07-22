@@ -1,4 +1,4 @@
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 import { ContentGeneratorRole } from '../types.js';
 
 const MAX_ACCUMULATOR_SIZE = 10000; // Prevent unbounded accumulator growth

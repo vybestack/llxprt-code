@@ -47,7 +47,7 @@ import {
 } from './models.js';
 // TELEMETRY REMOVED: ClearcutLogger import disabled
 // import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
-import { ProviderManager } from '../providers/types.js';
+import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 
 export enum ApprovalMode {
   DEFAULT = 'default',

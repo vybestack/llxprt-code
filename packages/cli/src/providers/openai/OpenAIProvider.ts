@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import { IProvider } from '../IProvider.js';
-import { IModel } from '../IModel.js';
-import { ITool } from '../ITool.js';
-import { IMessage } from '../IMessage.js';
+import { IProvider, IModel, ITool, IMessage } from '../index.js';
 import { ContentGeneratorRole } from '../types.js';
 import OpenAI from 'openai';
 import { GemmaToolCallParser } from '../parsers/TextToolCallParser.js';

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 import { ContentGeneratorRole } from '../types.js';
 
 describe('GeminiProvider', () => {

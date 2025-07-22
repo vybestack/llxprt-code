@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Stream } from '@anthropic-ai/sdk/streaming';
 import { RawMessageStreamEvent } from '@anthropic-ai/sdk/resources/messages.js';
-import { IProvider, IModel, ITool, IMessage } from '../IProvider.js';
+import { IProvider, IModel, ITool, IMessage } from '../index.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core';

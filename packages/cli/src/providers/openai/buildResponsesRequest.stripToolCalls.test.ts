@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 
 describe('buildResponsesRequest - tool_calls stripping', () => {
   it('should strip tool_calls from messages when building request', () => {

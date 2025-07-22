@@ -1,7 +1,6 @@
 import { expect, test, vi, beforeEach, describe } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { ITool } from '../ITool.js';
-import { IMessage } from '../IMessage.js';
+import { ITool, IMessage } from '../index.js';
 
 // Mock fetch
 global.fetch = vi.fn();

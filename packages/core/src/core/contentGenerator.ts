@@ -17,7 +17,7 @@ import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { Config } from '../config/config.js';
 import { getEffectiveModel } from './modelCheck.js';
-import { ProviderManager } from '../providers/types.js';
+import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
 import { UserTierId } from '../code_assist/types.js';
 

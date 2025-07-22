@@ -73,6 +73,12 @@ export const useProviderDialog = ({
         const newModel = providerManager.getActiveProvider().getCurrentModel?.() || '';
         config.setModel(newModel);
 
+        // Clear conversation history BEFORE switching to prevent tool call ID mismatches
+        const geminiClient = config.getGeminiClient();
+        if (geminiClient && geminiClient.isInitialized()) {
+          await geminiClient.resetChat();
+        }
+        
         // Determine appropriate auth type
           let authType: AuthType;
           
@@ -100,12 +106,6 @@ export const useProviderDialog = ({
 
           // Refresh auth with the appropriate type
           await config.refreshAuth(authType);
-
-        // Clear conversation history after auth refresh to ensure clean state
-        const geminiClient = config.getGeminiClient();
-        if (geminiClient && geminiClient.isInitialized()) {
-          await geminiClient.resetChat();
-        }
         
         // Clear UI history to prevent tool call ID mismatches
         if (onClear) {

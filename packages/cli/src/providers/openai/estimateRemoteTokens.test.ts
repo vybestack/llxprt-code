@@ -5,7 +5,7 @@ import {
   MODEL_CONTEXT_SIZE,
 } from './estimateRemoteTokens';
 import { ConversationCache } from './ConversationCache';
-import { IMessage } from '../IMessage.js';
+import { IMessage } from '../index.js';
 
 describe('estimateRemoteTokens', () => {
   let cache: ConversationCache;

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider, IModel, IMessage, ITool } from '../IProvider.js';
+import { IProvider, IModel, IMessage, ITool } from '../index.js';
 import { Config, AuthType } from '@vybestack/llxprt-code-core';
 import { ContentGeneratorRole } from '../types.js';
 import type { Part, FunctionCall, Schema } from '@google/genai';
