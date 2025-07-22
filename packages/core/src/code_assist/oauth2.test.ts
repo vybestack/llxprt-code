@@ -84,11 +84,15 @@ describe('oauth2', () => {
     const mockGetAccessToken = vi
       .fn()
       .mockResolvedValue({ token: 'mock-access-token' });
+    const mockGenerateCodeVerifierAsync = vi
+      .fn()
+      .mockResolvedValue('mock-code-verifier');
     const mockOAuth2Client = {
       generateAuthUrl: mockGenerateAuthUrl,
       getToken: mockGetToken,
       setCredentials: mockSetCredentials,
       getAccessToken: mockGetAccessToken,
+      generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
       credentials: mockTokens,
       on: vi.fn(),
     } as unknown as OAuth2Client;
