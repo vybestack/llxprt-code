@@ -54,3 +54,4 @@ research/
 
 # VSCode extension packages
 packages/vscode-ide-companion/*.vsix
+tmp/
