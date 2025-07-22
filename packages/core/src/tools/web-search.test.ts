@@ -85,7 +85,9 @@ describe('WebSearchTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toContain('Web search results for "test query"');
+      expect(result.llmContent).toContain(
+        'Web search results for "test query"',
+      );
       expect(result.llmContent).toContain('Search results'); // The citation markers are inserted
       expect(result.llmContent).toContain('about testing');
       expect(result.llmContent).toContain('Sources:');
@@ -113,7 +115,9 @@ describe('WebSearchTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toContain('No search results or information found');
+      expect(result.llmContent).toContain(
+        'No search results or information found',
+      );
       expect(result.returnDisplay).toBe('No information found.');
     });
 
@@ -127,7 +131,9 @@ describe('WebSearchTool', () => {
       );
 
       expect(result.llmContent).toContain('Error:');
-      expect(result.llmContent).toContain('API Error: Function call/response mismatch');
+      expect(result.llmContent).toContain(
+        'API Error: Function call/response mismatch',
+      );
       expect(result.returnDisplay).toBe('Error performing web search.');
     });
 
@@ -135,7 +141,7 @@ describe('WebSearchTool', () => {
       // Test validateParams directly since execute method has try-catch
       const error = webSearchTool.validateParams({ query: '' });
       expect(error).toBe("The 'query' parameter cannot be empty.");
-      
+
       // Test whitespace-only query
       const whitespaceError = webSearchTool.validateParams({ query: '   ' });
       expect(whitespaceError).toBe("The 'query' parameter cannot be empty.");
@@ -220,7 +226,6 @@ describe('WebSearchTool', () => {
       expect(result.llmContent).toContain('function response parts');
       expect(result.returnDisplay).toBe('Error performing web search.');
     });
-
   });
 
   describe('validateParams', () => {
@@ -242,7 +247,9 @@ describe('WebSearchTool', () => {
 
   describe('getDescription', () => {
     it('should return description with query', () => {
-      const description = webSearchTool.getDescription({ query: 'test search' });
+      const description = webSearchTool.getDescription({
+        query: 'test search',
+      });
       expect(description).toBe('Searching the web for: "test search"');
     });
   });
@@ -250,17 +257,19 @@ describe('WebSearchTool', () => {
   describe('authentication', () => {
     it('should handle when Gemini client is not initialized', async () => {
       // Mock isInitialized to return false
-      (mockGeminiClient.isInitialized as ReturnType<typeof vi.fn>).mockReturnValue(false);
-      
+      (
+        mockGeminiClient.isInitialized as ReturnType<typeof vi.fn>
+      ).mockReturnValue(false);
+
       // Mock getContentGeneratorConfig to return undefined (no auth)
       mockConfig.getContentGeneratorConfig = vi.fn(() => undefined);
       mockConfig.refreshAuth = vi.fn();
-      
+
       const result = await webSearchTool.execute(
         { query: 'test query' },
         mockAbortSignal,
       );
-      
+
       expect(result.llmContent).toContain('Web search is not available');
       expect(result.returnDisplay).toBe('Web search unavailable.');
     });
@@ -270,27 +279,34 @@ describe('WebSearchTool', () => {
       (mockGeminiClient.isInitialized as ReturnType<typeof vi.fn>)
         .mockReturnValueOnce(false)
         .mockReturnValueOnce(true);
-      
+
       // Mock auth configuration
-      mockConfig.getContentGeneratorConfig = vi.fn(() => ({ 
-        authType: AuthType.LOGIN_WITH_GOOGLE,
-        model: 'gemini-2.0-flash',
-      } as ContentGeneratorConfig));
+      mockConfig.getContentGeneratorConfig = vi.fn(
+        () =>
+          ({
+            authType: AuthType.LOGIN_WITH_GOOGLE,
+            model: 'gemini-2.0-flash',
+          }) as ContentGeneratorConfig,
+      );
       mockConfig.refreshAuth = vi.fn();
-      
+
       // Mock successful response after auth
       mockGenerateContent.mockResolvedValue({
-        candidates: [{
-          content: { parts: [{ text: 'Results after auth' }], role: 'model' },
-        }],
+        candidates: [
+          {
+            content: { parts: [{ text: 'Results after auth' }], role: 'model' },
+          },
+        ],
       });
-      
+
       const result = await webSearchTool.execute(
         { query: 'test query' },
         mockAbortSignal,
       );
-      
-      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(AuthType.LOGIN_WITH_GOOGLE);
+
+      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
+        AuthType.LOGIN_WITH_GOOGLE,
+      );
       expect(result.llmContent).toContain('Results after auth');
     });
   });

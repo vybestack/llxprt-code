@@ -254,7 +254,9 @@ export const useGeminiStream = (
           } else {
             authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth (interactive)
           }
-          onDebugMessage(`[Auth] Determined authType from environment: ${authType}`);
+          onDebugMessage(
+            `[Auth] Determined authType from environment: ${authType}`,
+          );
         }
 
         // Only refresh auth if we don't have a valid content generator config
@@ -629,7 +631,9 @@ export const useGeminiStream = (
       setInitError(null);
 
       try {
-        onDebugMessage(`[Submit] Sending message to Gemini: ${typeof queryToSend === 'string' ? queryToSend : 'non-string content'}`);
+        onDebugMessage(
+          `[Submit] Sending message to Gemini: ${typeof queryToSend === 'string' ? queryToSend : 'non-string content'}`,
+        );
         const stream = geminiClient.sendMessageStream(
           queryToSend,
           abortSignal,
@@ -811,13 +815,19 @@ export const useGeminiStream = (
       }
 
       const mergedResponse = mergePartListUnions(responsesToSend);
-      
+
       // Debug logging to understand the format
       if (process.env.DEBUG_TOOL_RESPONSES) {
-        console.log('Tool responses to send:', JSON.stringify(responsesToSend, null, 2));
-        console.log('Merged response:', JSON.stringify(mergedResponse, null, 2));
+        console.log(
+          'Tool responses to send:',
+          JSON.stringify(responsesToSend, null, 2),
+        );
+        console.log(
+          'Merged response:',
+          JSON.stringify(mergedResponse, null, 2),
+        );
       }
-      
+
       submitQuery(
         mergedResponse,
         {

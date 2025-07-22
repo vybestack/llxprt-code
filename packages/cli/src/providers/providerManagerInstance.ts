@@ -39,12 +39,12 @@ export function getProviderManager(config?: Config): ProviderManager {
 
       // Register GeminiProvider
       const geminiProvider = new GeminiProvider();
-      
+
       // Set initial model from settings if available
       if (userSettings?.defaultModel) {
         geminiProvider.setModel(userSettings.defaultModel);
       }
-      
+
       if (config) {
         geminiProvider.setConfig(config);
       }

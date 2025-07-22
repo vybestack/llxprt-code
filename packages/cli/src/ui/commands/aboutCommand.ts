@@ -54,7 +54,7 @@ export const aboutCommand: SlashCommand = {
       context.services.settings.merged.selectedAuthType || '';
     const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || '';
 
-        // Determine keyfile path and key status for the active provider (if any)
+    // Determine keyfile path and key status for the active provider (if any)
     let keyfilePath = '';
     let keyStatus = '';
     try {

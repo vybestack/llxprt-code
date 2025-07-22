@@ -59,20 +59,24 @@ export const providerCommand: SlashCommand = {
       // Update config if available
       if (context.services.config) {
         // Ensure provider manager is set on config with adapter
-        const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
+        const providerManagerAdapter = new ProviderManagerAdapter(
+          providerManager,
+        );
         context.services.config.setProviderManager(providerManagerAdapter);
-        
+
         // Update model to match the new provider's default
-        const newModel = providerManager.getActiveProvider().getCurrentModel?.() || '';
+        const newModel =
+          providerManager.getActiveProvider().getCurrentModel?.() || '';
         context.services.config.setModel(newModel);
 
         // Always refresh auth when switching providers
         let authType: AuthType;
-        
+
         if (providerName === 'gemini') {
           // When switching TO Gemini, determine appropriate auth
-          const currentAuthType = context.services.config.getContentGeneratorConfig()?.authType;
-          
+          const currentAuthType =
+            context.services.config.getContentGeneratorConfig()?.authType;
+
           // If we were using provider auth, switch to appropriate Gemini auth
           if (currentAuthType === AuthType.USE_PROVIDER || !currentAuthType) {
             if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
@@ -89,7 +93,7 @@ export const providerCommand: SlashCommand = {
         } else {
           // When switching to non-Gemini provider
           authType = AuthType.USE_PROVIDER;
-          
+
           // Show info about API key if needed
           context.ui.addItem(
             {
@@ -108,7 +112,7 @@ export const providerCommand: SlashCommand = {
         if (geminiClient && geminiClient.isInitialized()) {
           await geminiClient.resetChat();
         }
-        
+
         // Clear UI history to prevent tool call ID mismatches
         context.ui.clear();
       }

@@ -44,10 +44,10 @@ export class GeminiProvider implements IProvider {
     if (this.authDetermined) {
       return;
     }
-    
+
     // Mark as determined early to prevent concurrent determinations
     this.authDetermined = true;
-    
+
     // Check if user explicitly selected USE_NONE via the content generator config
     const authType = this.config?.getContentGeneratorConfig()?.authType;
     if (authType === AuthType.USE_NONE) {
@@ -110,15 +110,15 @@ export class GeminiProvider implements IProvider {
    */
   setConfig(config: Config): void {
     this.config = config;
-    
+
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
     const configModel = config.getModel();
-    
+
     if (!this.modelExplicitlySet && configModel) {
       this.currentModel = configModel;
     }
-    
+
     // Clear auth cache when config changes to allow re-determination
     this.authDetermined = false;
     // Re-determine auth after config is set
@@ -217,7 +217,7 @@ export class GeminiProvider implements IProvider {
    */
   private async isOAuthValid(): Promise<boolean> {
     if (this.authMode !== 'oauth') return true;
-    
+
     // Check if we have valid OAuth tokens
     // This would need to interact with the core auth system
     try {
@@ -239,49 +239,49 @@ export class GeminiProvider implements IProvider {
     if (!oauthValid) {
       this.authDetermined = false;
     }
-    
+
     // Lazily determine the best auth method now that it's needed.
     this.determineBestAuth();
-    
+
     // Early authentication validation - check if we have the required credentials
     // for the determined auth mode BEFORE processing messages
-    
+
     switch (this.authMode) {
       case 'gemini-api-key':
         if (!this.apiKey && !process.env.GEMINI_API_KEY) {
           throw new AuthenticationRequiredError(
             'Gemini API key required but not found. Please set GEMINI_API_KEY environment variable or use /auth to login with Google OAuth.',
             this.authMode,
-            ['GEMINI_API_KEY']
+            ['GEMINI_API_KEY'],
           );
         }
         break;
-        
+
       case 'vertex-ai':
         if (!process.env.GOOGLE_API_KEY) {
           throw new AuthenticationRequiredError(
             'Google API key required for Vertex AI. Please set GOOGLE_API_KEY environment variable or use /auth to login with Google OAuth.',
             this.authMode,
-            ['GOOGLE_API_KEY', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION']
+            ['GOOGLE_API_KEY', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'],
           );
         }
         break;
-        
+
       case 'oauth':
         // OAuth auth will be validated when creating the content generator
         break;
-        
+
       case 'none':
         // In 'none' mode, check if ANY credentials are available
         if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
           throw new AuthenticationRequiredError(
             'No authentication credentials found. Please use /auth to login with Google OAuth, set GEMINI_API_KEY, or configure Vertex AI credentials.',
             this.authMode,
-            ['GEMINI_API_KEY', 'GOOGLE_API_KEY']
+            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
           );
         }
         break;
-        
+
       default:
         // For any other auth mode, proceed without validation
         break;
@@ -333,8 +333,10 @@ export class GeminiProvider implements IProvider {
 
         // Convert messages to Gemini request format
         // Use config model in OAuth mode to ensure synchronization
-        const oauthModel = this.modelExplicitlySet ? this.currentModel : (this.config?.getModel() || this.currentModel);
-        
+        const oauthModel = this.modelExplicitlySet
+          ? this.currentModel
+          : this.config?.getModel() || this.currentModel;
+
         const request = {
           model: oauthModel,
           contents: this.convertMessagesToGeminiFormat(messages),
@@ -431,8 +433,10 @@ export class GeminiProvider implements IProvider {
 
     // Create the request - ContentGenerator expects model in the request
     // Use explicit model if set, otherwise fall back to config model
-    const modelToUse = this.modelExplicitlySet ? this.currentModel : (this.config?.getModel() || this.currentModel);
-    
+    const modelToUse = this.modelExplicitlySet
+      ? this.currentModel
+      : this.config?.getModel() || this.currentModel;
+
     const request = {
       model: modelToUse,
       contents,
@@ -493,21 +497,25 @@ export class GeminiProvider implements IProvider {
     messages: IMessage[],
   ): Array<{ role: string; parts: Part[] }> {
     const contents: Array<{ role: string; parts: Part[] }> = [];
-    
-    // Enhanced tracking with more details
-    const functionCalls = new Map<string, { 
-      name: string; 
-      contentIndex: number; 
-      partIndex: number;
-      messageIndex: number;  // Track which message this came from
-    }>();
-    const functionResponses = new Map<string, {
-      name: string;
-      contentIndex: number;
-      messageIndex: number;
-    }>();
-    
 
+    // Enhanced tracking with more details
+    const functionCalls = new Map<
+      string,
+      {
+        name: string;
+        contentIndex: number;
+        partIndex: number;
+        messageIndex: number; // Track which message this came from
+      }
+    >();
+    const functionResponses = new Map<
+      string,
+      {
+        name: string;
+        contentIndex: number;
+        messageIndex: number;
+      }
+    >();
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
@@ -515,28 +523,33 @@ export class GeminiProvider implements IProvider {
       // Handle tool responses - each in its own Content object
       if (msg.role === ContentGeneratorRole.TOOL) {
         if (!msg.tool_call_id) {
-          console.warn(`Tool response at index ${i} missing tool_call_id, skipping:`, msg);
+          console.warn(
+            `Tool response at index ${i} missing tool_call_id, skipping:`,
+            msg,
+          );
           continue;
         }
-        
+
         functionResponses.set(msg.tool_call_id, {
           name: msg.tool_name || 'unknown_function',
           contentIndex: contents.length,
-          messageIndex: i
+          messageIndex: i,
         });
-        
+
         // Add each tool response as a separate content immediately
         contents.push({
           role: 'user',
-          parts: [{
-            functionResponse: {
-              id: msg.tool_call_id,
-              name: msg.tool_name || 'unknown_function',
-              response: {
-                output: msg.content || '',
+          parts: [
+            {
+              functionResponse: {
+                id: msg.tool_call_id,
+                name: msg.tool_name || 'unknown_function',
+                response: {
+                  output: msg.content || '',
+                },
               },
             },
-          }],
+          ],
         });
         continue;
       }
@@ -595,22 +608,25 @@ export class GeminiProvider implements IProvider {
             }
           }
         }
-        
+
         for (const toolCall of msg.tool_calls) {
           // Skip if this function call was already added via parts
           if (toolCall.id && existingFunctionCallIds.has(toolCall.id)) {
             continue;
           }
-          
+
           // Ensure tool call has an ID
           if (!toolCall.id) {
-            console.warn(`Tool call at message ${i} missing ID, generating one:`, toolCall);
+            console.warn(
+              `Tool call at message ${i} missing ID, generating one:`,
+              toolCall,
+            );
             // Generate a unique ID for the function call
             toolCall.id = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           }
-          
+
           const partIndex = parts.length;
-          
+
           parts.push({
             functionCall: {
               id: toolCall.id,
@@ -618,13 +634,13 @@ export class GeminiProvider implements IProvider {
               args: JSON.parse(toolCall.function.arguments),
             },
           } as Part);
-          
+
           // Track this function call with its position
           functionCalls.set(toolCall.id, {
             name: toolCall.function.name,
             contentIndex: contents.length,
             partIndex,
-            messageIndex: i
+            messageIndex: i,
           });
         }
       }
@@ -652,32 +668,37 @@ export class GeminiProvider implements IProvider {
     for (const [callId, callInfo] of Array.from(functionCalls.entries())) {
       if (!functionResponses.has(callId)) {
         // Create a placeholder response for missing function response
-        console.warn(`Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`);
-        
+        console.warn(
+          `Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`,
+        );
+
         // Add each function response as a separate content object (same as regular tool responses)
         contents.push({
           role: 'user',
-          parts: [{
-            functionResponse: {
-              id: callId,
-              name: callInfo.name,
-              response: {
-                output: JSON.stringify({
-                  error: 'Function call was interrupted or no response received',
-                  message: `The function "${callInfo.name}" was called but did not receive a response. This may occur if the function execution was interrupted, requires authentication, or encountered an error.`,
-                  callId,
-                  functionName: callInfo.name
-                }),
+          parts: [
+            {
+              functionResponse: {
+                id: callId,
+                name: callInfo.name,
+                response: {
+                  output: JSON.stringify({
+                    error:
+                      'Function call was interrupted or no response received',
+                    message: `The function "${callInfo.name}" was called but did not receive a response. This may occur if the function execution was interrupted, requires authentication, or encountered an error.`,
+                    callId,
+                    functionName: callInfo.name,
+                  }),
+                },
               },
             },
-          }],
+          ],
         });
-        
+
         // Mark this response as added
         functionResponses.set(callId, {
           name: callInfo.name,
           contentIndex: contents.length - 1,
-          messageIndex: -1  // Placeholder response doesn't have original message index
+          messageIndex: -1, // Placeholder response doesn't have original message index
         });
       }
     }
@@ -689,8 +710,7 @@ export class GeminiProvider implements IProvider {
     const responsesDetail: string[] = [];
     const unmatchedCalls = new Set<string>();
     const unmatchedResponses = new Set<string>();
-    
-    
+
     // First pass: collect all function calls and responses with their IDs
     for (let i = 0; i < contents.length; i++) {
       const content = contents[i];
@@ -698,21 +718,25 @@ export class GeminiProvider implements IProvider {
         if ('functionCall' in part) {
           totalFunctionCalls++;
           const fc = part as { functionCall: FunctionCall };
-          callsDetail.push(`${i}: ${fc.functionCall.name} (${fc.functionCall.id})`);
+          callsDetail.push(
+            `${i}: ${fc.functionCall.name} (${fc.functionCall.id})`,
+          );
           if (fc.functionCall.id) {
             unmatchedCalls.add(fc.functionCall.id);
           }
         } else if ('functionResponse' in part) {
           totalFunctionResponses++;
           const fr = part as { functionResponse: { id: string; name: string } };
-          responsesDetail.push(`${i}: ${fr.functionResponse.name} (${fr.functionResponse.id})`);
+          responsesDetail.push(
+            `${i}: ${fr.functionResponse.name} (${fr.functionResponse.id})`,
+          );
           if (fr.functionResponse.id) {
             unmatchedResponses.add(fr.functionResponse.id);
           }
         }
       }
     }
-    
+
     // Second pass: match calls with responses
     for (const id of unmatchedCalls) {
       if (unmatchedResponses.has(id)) {
@@ -720,14 +744,16 @@ export class GeminiProvider implements IProvider {
         unmatchedResponses.delete(id);
       }
     }
-    
+
     if (totalFunctionCalls !== totalFunctionResponses) {
-      console.warn(`Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`);
+      console.warn(
+        `Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`,
+      );
       console.warn('Function calls:', callsDetail);
       console.warn('Function responses:', responsesDetail);
       console.warn('Unmatched call IDs:', Array.from(unmatchedCalls));
       console.warn('Unmatched response IDs:', Array.from(unmatchedResponses));
-      
+
       // This is now just a warning, not an error, since we've added placeholders
       // The Gemini API should handle this gracefully
     }
@@ -757,12 +783,11 @@ export class GeminiProvider implements IProvider {
     this.apiKey = apiKey;
     // Set the API key as an environment variable so it can be used by the core library
     process.env.GEMINI_API_KEY = apiKey;
-    
+
     // Clear auth cache when API key changes
     this.authDetermined = false;
     // Re-determine auth after API key is set
     this.determineBestAuth();
-    
   }
 
   /**
@@ -801,7 +826,7 @@ export class GeminiProvider implements IProvider {
   setModel(modelId: string): void {
     this.currentModel = modelId;
     this.modelExplicitlySet = true;
-    
+
     // Always update config if available, not just in OAuth mode
     // This ensures the model is properly synchronized
     if (this.config) {
@@ -829,7 +854,7 @@ export class GeminiProvider implements IProvider {
     }
     // Note: We don't clear config or apiKey as they might be needed
   }
-  
+
   /**
    * Forces re-determination of auth method
    */

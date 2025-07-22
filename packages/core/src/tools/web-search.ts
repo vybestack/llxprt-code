@@ -119,14 +119,14 @@ export class WebSearchTool extends BaseTool<
     try {
       // Get the Gemini client for web search
       const geminiClient = this.config.getGeminiClient();
-      
+
       // Ensure the Gemini client is initialized for web search
       // If not initialized, try to initialize it with Google auth
       if (!geminiClient.isInitialized()) {
         // Check if we have Google authentication available
         const authType = this.config.getContentGeneratorConfig()?.authType;
-        
-        // If using a provider but Google auth was previously successful, 
+
+        // If using a provider but Google auth was previously successful,
         // we should still be able to use web search
         if (!authType || authType === AuthType.LOGIN_WITH_GOOGLE) {
           try {
@@ -139,7 +139,7 @@ export class WebSearchTool extends BaseTool<
             };
           }
         }
-        
+
         // Check again after auth attempt
         if (!geminiClient.isInitialized()) {
           return {

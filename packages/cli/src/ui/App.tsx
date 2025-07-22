@@ -336,7 +336,6 @@ const AppInner = ({
     onClear: handleClearScreen,
   });
 
-
   // checkPaymentModeChange is now provided by SessionController
 
   // performMemoryRefresh is now provided by SessionController

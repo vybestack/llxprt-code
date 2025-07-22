@@ -135,11 +135,11 @@ export class GeminiClient {
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
     // Preserve chat history before resetting
     const previousHistory = this.chat?.getHistory();
-    
+
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
     this.chat = undefined;
-    
+
     // Store the new config and previous history for lazy initialization
     // This ensures the next lazyInitialize() call uses the correct auth config
     // and preserves conversation history across auth transitions
@@ -152,7 +152,8 @@ export class GeminiClient {
       return;
     }
     // Use pending config if available (from initialize() call), otherwise fall back to current config
-    const contentGenConfig = this._pendingConfig || this.config.getContentGeneratorConfig();
+    const contentGenConfig =
+      this._pendingConfig || this.config.getContentGeneratorConfig();
     if (!contentGenConfig) {
       throw new Error(
         'Content generator config not initialized. Call config.refreshAuth() first.',
@@ -163,7 +164,7 @@ export class GeminiClient {
       this.config,
       this.config.getSessionId(),
     );
-    
+
     // If we have previous history, restore it when creating the chat
     // This preserves conversation context across auth transitions
     if (this._previousHistory && this._previousHistory.length > 0) {
@@ -174,7 +175,7 @@ export class GeminiClient {
     } else {
       this.chat = await this.startChat();
     }
-    
+
     // Clear pending config and history after successful initialization
     this._pendingConfig = undefined;
     this._previousHistory = undefined;
