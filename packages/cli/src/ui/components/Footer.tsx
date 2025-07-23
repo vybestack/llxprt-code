@@ -110,7 +110,7 @@ export const Footer: React.FC<FooterProps> = ({
             </Text>
           </Text>
         )}
-        
+
         {!showErrorDetails && errorCount > 0 && (
           <Box>
             <Text color={Colors.Gray}>| </Text>

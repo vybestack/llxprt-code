@@ -11,11 +11,7 @@ export class AuthenticationRequiredError extends Error {
   readonly authMode: string;
   readonly requiredAuth?: string[];
 
-  constructor(
-    message: string,
-    authMode: string,
-    requiredAuth?: string[]
-  ) {
+  constructor(message: string, authMode: string, requiredAuth?: string[]) {
     super(message);
     this.name = 'AuthenticationRequiredError';
     this.authMode = authMode;

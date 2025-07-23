@@ -7,10 +7,12 @@
 import { describe, it, expect } from 'vitest';
 import { promises as fs } from 'fs';
 import path from 'path';
-import { processSingleFileContent } from '@vybestack/llxprt-code-core';
+import {
+  processSingleFileContent,
+  ContentGeneratorRole,
+} from '@vybestack/llxprt-code-core';
 import { GeminiProvider } from './GeminiProvider.js';
 import { IMessage } from '../index.js';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 import type { Part } from '@google/genai';
 
 describe('GeminiProvider Integration', () => {

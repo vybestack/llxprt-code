@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IProvider as Provider, IProviderManager as CoreProviderManager } from '@vybestack/llxprt-code-core';
+import type {
+  IProvider as Provider,
+  IProviderManager as CoreProviderManager,
+} from '@vybestack/llxprt-code-core';
 import { ProviderManager } from './ProviderManager.js';
 
 /**

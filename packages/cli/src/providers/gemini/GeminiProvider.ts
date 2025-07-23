@@ -5,9 +5,15 @@
  */
 
 import { IProvider, IModel, IMessage, ITool } from '../index.js';
-import { Config, AuthType, ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  AuthType,
+  ContentGeneratorRole,
+  AuthenticationRequiredError,
+  getCoreSystemPrompt,
+  createCodeAssistContentGenerator,
+} from '@vybestack/llxprt-code-core';
 import type { Part, FunctionCall, Schema } from '@google/genai';
-import { AuthenticationRequiredError } from '@vybestack/llxprt-code-core';
 
 /**
  * Represents the default Gemini provider.
@@ -28,13 +34,15 @@ export class GeminiProvider implements IProvider {
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
   private authDetermined: boolean = false;
-  private toolSchemas: Array<{
-    functionDeclarations: Array<{
-      name: string;
-      description?: string;
-      parameters?: Schema;
-    }>;
-  }> | undefined;
+  private toolSchemas:
+    | Array<{
+        functionDeclarations: Array<{
+          name: string;
+          description?: string;
+          parameters?: Schema;
+        }>;
+      }>
+    | undefined;
 
   constructor() {
     // Do not determine auth mode on instantiation.
@@ -50,10 +58,10 @@ export class GeminiProvider implements IProvider {
     if (this.authDetermined) {
       return;
     }
-    
+
     // Mark as determined early to prevent concurrent determinations
     this.authDetermined = true;
-    
+
     // Check if user explicitly selected USE_NONE via the content generator config
     const authType = this.config?.getContentGeneratorConfig()?.authType;
     if (authType === AuthType.USE_NONE) {
@@ -86,8 +94,6 @@ export class GeminiProvider implements IProvider {
     }
   }
 
-  private toolSchemas: any[] | undefined;
-
   /**
    * Checks if Vertex AI credentials are available
    */
@@ -118,15 +124,15 @@ export class GeminiProvider implements IProvider {
    */
   setConfig(config: Config): void {
     this.config = config;
-    
+
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
     const configModel = config.getModel();
-    
+
     if (!this.modelExplicitlySet && configModel) {
       this.currentModel = configModel;
     }
-    
+
     // Clear auth cache when config changes to allow re-determination
     this.authDetermined = false;
     // Re-determine auth after config is set
@@ -225,7 +231,7 @@ export class GeminiProvider implements IProvider {
    */
   private async isOAuthValid(): Promise<boolean> {
     if (this.authMode !== 'oauth') return true;
-    
+
     // Check if we have valid OAuth tokens
     // This would need to interact with the core auth system
     try {
@@ -247,10 +253,19 @@ export class GeminiProvider implements IProvider {
       console.log('[GEMINI] generateChatCompletion called with:');
       console.log('[GEMINI] messages:', JSON.stringify(messages, null, 2));
       console.log('[GEMINI] messages length:', messages.length);
-      console.log('[GEMINI] first message:', messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE');
-      console.log('[GEMINI] tools:', tools ? JSON.stringify(tools.map(t => t.function.name)) : 'NO TOOLS');
+      console.log(
+        '[GEMINI] first message:',
+        messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE',
+      );
+      console.log(
+        '[GEMINI] tools:',
+        tools ? JSON.stringify(tools.map((t) => t.function.name)) : 'NO TOOLS',
+      );
       if (process.env.DEBUG) {
-        console.log('DEBUG: GeminiProvider.generateChatCompletion called with messages:', JSON.stringify(messages, null, 2));
+        console.log(
+          'DEBUG: GeminiProvider.generateChatCompletion called with messages:',
+          JSON.stringify(messages, null, 2),
+        );
       }
     }
     // Check if we need to re-determine auth
@@ -258,49 +273,49 @@ export class GeminiProvider implements IProvider {
     if (!oauthValid) {
       this.authDetermined = false;
     }
-    
+
     // Lazily determine the best auth method now that it's needed.
     this.determineBestAuth();
-    
+
     // Early authentication validation - check if we have the required credentials
     // for the determined auth mode BEFORE processing messages
-    
+
     switch (this.authMode) {
       case 'gemini-api-key':
         if (!this.apiKey && !process.env.GEMINI_API_KEY) {
           throw new AuthenticationRequiredError(
             'Gemini API key required but not found. Please set GEMINI_API_KEY environment variable or use /auth to login with Google OAuth.',
             this.authMode,
-            ['GEMINI_API_KEY']
+            ['GEMINI_API_KEY'],
           );
         }
         break;
-        
+
       case 'vertex-ai':
         if (!process.env.GOOGLE_API_KEY) {
           throw new AuthenticationRequiredError(
             'Google API key required for Vertex AI. Please set GOOGLE_API_KEY environment variable or use /auth to login with Google OAuth.',
             this.authMode,
-            ['GOOGLE_API_KEY', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION']
+            ['GOOGLE_API_KEY', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'],
           );
         }
         break;
-        
+
       case 'oauth':
         // OAuth auth will be validated when creating the content generator
         break;
-        
+
       case 'none':
         // In 'none' mode, check if ANY credentials are available
         if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
           throw new AuthenticationRequiredError(
             'No authentication credentials found. Please use /auth to login with Google OAuth, set GEMINI_API_KEY, or configure Vertex AI credentials.',
             this.authMode,
-            ['GEMINI_API_KEY', 'GOOGLE_API_KEY']
+            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
           );
         }
         break;
-        
+
       default:
         // For any other auth mode, proceed without validation
         break;
@@ -341,9 +356,6 @@ export class GeminiProvider implements IProvider {
 
       case 'oauth': {
         // For OAuth, we need to use the code assist server
-        const { createCodeAssistContentGenerator } = await import(
-          '@vybestack/llxprt-code-core'
-        );
         const contentGenerator = await createCodeAssistContentGenerator(
           httpOptions,
           AuthType.LOGIN_WITH_GOOGLE,
@@ -352,28 +364,33 @@ export class GeminiProvider implements IProvider {
 
         // Convert messages to Gemini request format
         // Use config model in OAuth mode to ensure synchronization
-        const oauthModel = this.modelExplicitlySet ? this.currentModel : (this.config?.getModel() || this.currentModel);
-        
-        // Import getCoreSystemPrompt to generate systemInstruction
-        const { getCoreSystemPrompt } = await import('@vybestack/llxprt-code-core');
-        
+        const oauthModel = this.modelExplicitlySet
+          ? this.currentModel
+          : this.config?.getModel() || this.currentModel;
+
+        // Generate systemInstruction using getCoreSystemPrompt
+
         // Get user memory from config if available
-        const userMemory = this.config?.getUserMemory ? this.config.getUserMemory() : '';
+        const userMemory = this.config?.getUserMemory
+          ? this.config.getUserMemory()
+          : '';
         const systemInstruction = getCoreSystemPrompt(userMemory, oauthModel);
-        
+
         // Store tools if provided
         if (tools && tools.length > 0) {
           this.toolSchemas = this.convertToolsToGeminiFormat(tools);
         }
-        
+
         // Use provided tools or stored tools
-        let geminiTools = tools ? this.convertToolsToGeminiFormat(tools) : this.toolSchemas;
-        
+        let geminiTools = tools
+          ? this.convertToolsToGeminiFormat(tools)
+          : this.toolSchemas;
+
         // For Flash models, always include tools if available
         if (oauthModel.includes('flash') && !geminiTools && this.toolSchemas) {
           geminiTools = this.toolSchemas;
         }
-        
+
         const request = {
           model: oauthModel,
           contents: this.convertMessagesToGeminiFormat(messages),
@@ -465,29 +482,34 @@ export class GeminiProvider implements IProvider {
     if (tools && tools.length > 0) {
       this.toolSchemas = this.convertToolsToGeminiFormat(tools);
     }
-    
+
     // Convert IMessage[] to Gemini format - do this after storing tools so priming can access them
     const contents = this.convertMessagesToGeminiFormat(messages);
-    
+
     // Use provided tools or stored tools
-    let geminiTools = tools ? this.convertToolsToGeminiFormat(tools) : this.toolSchemas;
+    let geminiTools = tools
+      ? this.convertToolsToGeminiFormat(tools)
+      : this.toolSchemas;
 
     // Create the request - ContentGenerator expects model in the request
     // Use explicit model if set, otherwise fall back to config model
-    const modelToUse = this.modelExplicitlySet ? this.currentModel : (this.config?.getModel() || this.currentModel);
-    
+    const modelToUse = this.modelExplicitlySet
+      ? this.currentModel
+      : this.config?.getModel() || this.currentModel;
+
     // For Flash models, always include tools if available
     if (modelToUse.includes('flash') && !geminiTools && this.toolSchemas) {
       geminiTools = this.toolSchemas;
     }
-    
-    // Import getCoreSystemPrompt to generate systemInstruction
-    const { getCoreSystemPrompt } = await import('@vybestack/llxprt-code-core');
-    
+
+    // Generate systemInstruction using getCoreSystemPrompt
+
     // Get user memory from config if available
-    const userMemory = this.config?.getUserMemory ? this.config.getUserMemory() : '';
+    const userMemory = this.config?.getUserMemory
+      ? this.config.getUserMemory()
+      : '';
     const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
-    
+
     const request = {
       model: modelToUse,
       contents,
@@ -549,45 +571,25 @@ export class GeminiProvider implements IProvider {
     messages: IMessage[],
   ): Array<{ role: string; parts: Part[] }> {
     const contents: Array<{ role: string; parts: Part[] }> = [];
-    
-    // Enhanced tracking with more details
-    const functionCalls = new Map<string, { 
-      name: string; 
-      contentIndex: number; 
-      partIndex: number;
-      messageIndex: number;  // Track which message this came from
-    }>();
-    const functionResponses = new Map<string, {
-      name: string;
-      contentIndex: number;
-      messageIndex: number;
-    }>();
-    
-    // Check if this is a Flash model and if we need to add priming
-    const isFlashModel = this.currentModel.includes('flash');
-    const isFirstUserMessage = messages.length > 0 && messages[0].role === ContentGeneratorRole.USER;
-    
-    // Add Flash priming if needed
-    if (isFlashModel && isFirstUserMessage && this.toolSchemas && this.toolSchemas.length > 0) {
-      // Extract tool names for the priming message
-      const toolNames = this.toolSchemas[0].functionDeclarations.map(fd => fd.name);
-      
-      // Create a priming message that explicitly references tools
-      const primingText = `You have access to the following tools: ${toolNames.join(', ')}. 
-You MUST use these tools when appropriate. For example:
-- To read a file, use the read_file tool
-- To list directory contents, use the ls tool
-- To search for patterns, use the grep tool
-- To create or modify files, use the write_file or edit tools
-Always use the appropriate tool for the task instead of describing what you would do.`;
-      
-      // Prepend the priming to the first user message
-      if (messages[0].content) {
-        messages[0].content = primingText + '\n\n' + messages[0].content;
-      }
-    }
-    
 
+    // Enhanced tracking with more details
+    const functionCalls = new Map<
+      string,
+      {
+        name: string;
+        contentIndex: number;
+        partIndex: number;
+        messageIndex: number; // Track which message this came from
+      }
+    >();
+    const functionResponses = new Map<
+      string,
+      {
+        name: string;
+        contentIndex: number;
+        messageIndex: number;
+      }
+    >();
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
@@ -596,29 +598,34 @@ Always use the appropriate tool for the task instead of describing what you woul
       if (msg.role === ContentGeneratorRole.TOOL) {
         if (!msg.tool_call_id) {
           if (process.env.DEBUG) {
-            console.warn(`Tool response at index ${i} missing tool_call_id, skipping:`, msg);
+            console.warn(
+              `Tool response at index ${i} missing tool_call_id, skipping:`,
+              msg,
+            );
           }
           continue;
         }
-        
+
         functionResponses.set(msg.tool_call_id, {
           name: msg.tool_name || 'unknown_function',
           contentIndex: contents.length,
-          messageIndex: i
+          messageIndex: i,
         });
-        
+
         // Add each tool response as a separate content immediately
         contents.push({
           role: 'user',
-          parts: [{
-            functionResponse: {
-              id: msg.tool_call_id,
-              name: msg.tool_name || 'unknown_function',
-              response: {
-                output: msg.content || '',
+          parts: [
+            {
+              functionResponse: {
+                id: msg.tool_call_id,
+                name: msg.tool_name || 'unknown_function',
+                response: {
+                  output: msg.content || '',
+                },
               },
             },
-          }],
+          ],
         });
         continue;
       }
@@ -677,24 +684,27 @@ Always use the appropriate tool for the task instead of describing what you woul
             }
           }
         }
-        
+
         for (const toolCall of msg.tool_calls) {
           // Skip if this function call was already added via parts
           if (toolCall.id && existingFunctionCallIds.has(toolCall.id)) {
             continue;
           }
-          
+
           // Ensure tool call has an ID
           if (!toolCall.id) {
             if (process.env.DEBUG) {
-              console.warn(`Tool call at message ${i} missing ID, generating one:`, toolCall);
+              console.warn(
+                `Tool call at message ${i} missing ID, generating one:`,
+                toolCall,
+              );
             }
             // Generate a unique ID for the function call
             toolCall.id = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           }
-          
+
           const partIndex = parts.length;
-          
+
           parts.push({
             functionCall: {
               id: toolCall.id,
@@ -702,13 +712,13 @@ Always use the appropriate tool for the task instead of describing what you woul
               args: JSON.parse(toolCall.function.arguments),
             },
           } as Part);
-          
+
           // Track this function call with its position
           functionCalls.set(toolCall.id, {
             name: toolCall.function.name,
             contentIndex: contents.length,
             partIndex,
-            messageIndex: i
+            messageIndex: i,
           });
         }
       }
@@ -737,33 +747,38 @@ Always use the appropriate tool for the task instead of describing what you woul
       if (!functionResponses.has(callId)) {
         // Create a placeholder response for missing function response
         if (process.env.DEBUG) {
-          console.warn(`Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`);
+          console.warn(
+            `Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`,
+          );
         }
-        
+
         // Add each function response as a separate content object (same as regular tool responses)
         contents.push({
           role: 'user',
-          parts: [{
-            functionResponse: {
-              id: callId,
-              name: callInfo.name,
-              response: {
-                output: JSON.stringify({
-                  error: 'Function call was interrupted or no response received',
-                  message: `The function "${callInfo.name}" was called but did not receive a response. This may occur if the function execution was interrupted, requires authentication, or encountered an error.`,
-                  callId,
-                  functionName: callInfo.name
-                }),
+          parts: [
+            {
+              functionResponse: {
+                id: callId,
+                name: callInfo.name,
+                response: {
+                  output: JSON.stringify({
+                    error:
+                      'Function call was interrupted or no response received',
+                    message: `The function "${callInfo.name}" was called but did not receive a response. This may occur if the function execution was interrupted, requires authentication, or encountered an error.`,
+                    callId,
+                    functionName: callInfo.name,
+                  }),
+                },
               },
             },
-          }],
+          ],
         });
-        
+
         // Mark this response as added
         functionResponses.set(callId, {
           name: callInfo.name,
           contentIndex: contents.length - 1,
-          messageIndex: -1  // Placeholder response doesn't have original message index
+          messageIndex: -1, // Placeholder response doesn't have original message index
         });
       }
     }
@@ -775,8 +790,7 @@ Always use the appropriate tool for the task instead of describing what you woul
     const responsesDetail: string[] = [];
     const unmatchedCalls = new Set<string>();
     const unmatchedResponses = new Set<string>();
-    
-    
+
     // First pass: collect all function calls and responses with their IDs
     for (let i = 0; i < contents.length; i++) {
       const content = contents[i];
@@ -784,21 +798,25 @@ Always use the appropriate tool for the task instead of describing what you woul
         if ('functionCall' in part) {
           totalFunctionCalls++;
           const fc = part as { functionCall: FunctionCall };
-          callsDetail.push(`${i}: ${fc.functionCall.name} (${fc.functionCall.id})`);
+          callsDetail.push(
+            `${i}: ${fc.functionCall.name} (${fc.functionCall.id})`,
+          );
           if (fc.functionCall.id) {
             unmatchedCalls.add(fc.functionCall.id);
           }
         } else if ('functionResponse' in part) {
           totalFunctionResponses++;
           const fr = part as { functionResponse: { id: string; name: string } };
-          responsesDetail.push(`${i}: ${fr.functionResponse.name} (${fr.functionResponse.id})`);
+          responsesDetail.push(
+            `${i}: ${fr.functionResponse.name} (${fr.functionResponse.id})`,
+          );
           if (fr.functionResponse.id) {
             unmatchedResponses.add(fr.functionResponse.id);
           }
         }
       }
     }
-    
+
     // Second pass: match calls with responses
     for (const id of unmatchedCalls) {
       if (unmatchedResponses.has(id)) {
@@ -806,16 +824,18 @@ Always use the appropriate tool for the task instead of describing what you woul
         unmatchedResponses.delete(id);
       }
     }
-    
+
     if (totalFunctionCalls !== totalFunctionResponses) {
       if (process.env.DEBUG) {
-        console.warn(`Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`);
+        console.warn(
+          `Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`,
+        );
         console.warn('Function calls:', callsDetail);
         console.warn('Function responses:', responsesDetail);
         console.warn('Unmatched call IDs:', Array.from(unmatchedCalls));
         console.warn('Unmatched response IDs:', Array.from(unmatchedResponses));
       }
-      
+
       // This is now just a warning, not an error, since we've added placeholders
       // The Gemini API should handle this gracefully
     }
@@ -839,11 +859,14 @@ Always use the appropriate tool for the task instead of describing what you woul
         })),
       },
     ];
-    
+
     if (process.env.DEBUG) {
-      console.log('DEBUG [GeminiProvider]: Converted tools to Gemini format:', JSON.stringify(result, null, 2));
+      console.log(
+        'DEBUG [GeminiProvider]: Converted tools to Gemini format:',
+        JSON.stringify(result, null, 2),
+      );
     }
-    
+
     return result;
   }
 
@@ -851,12 +874,11 @@ Always use the appropriate tool for the task instead of describing what you woul
     this.apiKey = apiKey;
     // Set the API key as an environment variable so it can be used by the core library
     process.env.GEMINI_API_KEY = apiKey;
-    
+
     // Clear auth cache when API key changes
     this.authDetermined = false;
     // Re-determine auth after API key is set
     this.determineBestAuth();
-    
   }
 
   /**
@@ -895,7 +917,7 @@ Always use the appropriate tool for the task instead of describing what you woul
   setModel(modelId: string): void {
     this.currentModel = modelId;
     this.modelExplicitlySet = true;
-    
+
     // Always update config if available, not just in OAuth mode
     // This ensures the model is properly synchronized
     if (this.config) {
@@ -923,7 +945,7 @@ Always use the appropriate tool for the task instead of describing what you woul
     }
     // Note: We don't clear config or apiKey as they might be needed
   }
-  
+
   /**
    * Forces re-determination of auth method
    */

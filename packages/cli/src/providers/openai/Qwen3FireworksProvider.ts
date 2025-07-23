@@ -49,7 +49,6 @@ export class Qwen3FireworksProvider extends OpenAIProvider {
     tools?: ITool[],
     toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
-
     // Clean messages before sending
     const cleanedMessages = messages.map((msg) => ({
       ...msg,

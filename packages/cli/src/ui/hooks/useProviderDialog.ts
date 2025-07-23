@@ -61,16 +61,19 @@ export const useProviderDialog = ({
       try {
         const providerManager = getProviderManager();
         const prev = providerManager.getActiveProviderName();
-        
+
         // Switch provider first
         providerManager.setActiveProvider(providerName);
-        
+
         // Ensure provider manager is set on config with adapter
-        const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
+        const providerManagerAdapter = new ProviderManagerAdapter(
+          providerManager,
+        );
         config.setProviderManager(providerManagerAdapter);
-        
+
         // Update model to match the new provider's default
-        const newModel = providerManager.getActiveProvider().getCurrentModel?.() || '';
+        const newModel =
+          providerManager.getActiveProvider().getCurrentModel?.() || '';
         config.setModel(newModel);
 
         // Clear conversation history BEFORE switching to prevent tool call ID mismatches
@@ -78,46 +81,46 @@ export const useProviderDialog = ({
         if (geminiClient && geminiClient.isInitialized()) {
           await geminiClient.resetChat();
         }
-        
+
         // Determine appropriate auth type
-          let authType: AuthType;
-          
-          if (providerName === 'gemini') {
-            // When switching TO Gemini, determine appropriate auth
-            const currentAuthType = config.getContentGeneratorConfig()?.authType;
-            
-            // If we were using provider auth, switch to appropriate Gemini auth
-            if (currentAuthType === AuthType.USE_PROVIDER || !currentAuthType) {
-              if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-                authType = AuthType.USE_VERTEX_AI;
-              } else if (process.env.GEMINI_API_KEY) {
-                authType = AuthType.USE_GEMINI;
-              } else {
-                authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth
-              }
+        let authType: AuthType;
+
+        if (providerName === 'gemini') {
+          // When switching TO Gemini, determine appropriate auth
+          const currentAuthType = config.getContentGeneratorConfig()?.authType;
+
+          // If we were using provider auth, switch to appropriate Gemini auth
+          if (currentAuthType === AuthType.USE_PROVIDER || !currentAuthType) {
+            if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+              authType = AuthType.USE_VERTEX_AI;
+            } else if (process.env.GEMINI_API_KEY) {
+              authType = AuthType.USE_GEMINI;
             } else {
-              // Keep existing Gemini auth type
-              authType = currentAuthType;
+              authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth
             }
           } else {
-            // When switching to non-Gemini provider
-            authType = AuthType.USE_PROVIDER;
+            // Keep existing Gemini auth type
+            authType = currentAuthType;
           }
+        } else {
+          // When switching to non-Gemini provider
+          authType = AuthType.USE_PROVIDER;
+        }
 
-          // Refresh auth with the appropriate type
-          await config.refreshAuth(authType);
-        
+        // Refresh auth with the appropriate type
+        await config.refreshAuth(authType);
+
         // Clear UI history to prevent tool call ID mismatches
         if (onClear) {
           onClear();
         }
-        
+
         addMessage({
           type: MessageType.INFO,
           content: `Switched from ${prev || 'none'} to ${providerName}`,
           timestamp: new Date(),
         });
-        
+
         // Show additional info for non-Gemini providers
         if (providerName !== 'gemini') {
           addMessage({
@@ -126,7 +129,7 @@ export const useProviderDialog = ({
             timestamp: new Date(),
           });
         }
-        
+
         onProviderChange?.();
       } catch (e) {
         addMessage({
