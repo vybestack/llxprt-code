@@ -15,8 +15,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { OpenAIProvider } from './OpenAIProvider.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 // Mock OpenAI module
 vi.mock('openai', () => ({

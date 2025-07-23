@@ -15,8 +15,5 @@ export {
   ProviderManager,
 } from '@vybestack/llxprt-code-core';
 
-// Provider implementations
-export * from './openai/OpenAIProvider.js';
-
 // Provider management
 export * from './providerManagerInstance.js';

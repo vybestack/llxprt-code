@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage, ITool } from '../index.js';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { IMessage } from '../IMessage.js';
+import { ITool } from '../ITool.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -78,7 +79,7 @@ describe('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
       choices: [
         {
           message: {
-            role: 'assistant',
+            role: ContentGeneratorRole.ASSISTANT,
             content: 'Non-streaming response',
           },
           finish_reason: 'stop',

@@ -1,4 +1,4 @@
-import { IMessage } from '../index.js';
+import { IMessage } from '../IMessage.js';
 
 interface CacheEntry {
   conversationId: string;

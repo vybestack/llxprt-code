@@ -1,7 +1,8 @@
-import { expect, test, vi, beforeEach, describe } from 'vitest';
+import { expect, test, vi, beforeEach, describe, type Mock } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { ITool, IMessage } from '../index.js';
-
+import { ITool } from '../ITool.js';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 // Mock fetch
 global.fetch = vi.fn();
 
@@ -95,12 +96,12 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
     // Create messages array with a tool call and response
     const messages: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'Read the file /test.txt',
       },
       {
-        role: 'assistant',
-        content: null,
+        role: ContentGeneratorRole.ASSISTANT,
+        content: '',
         tool_calls: [
           {
             id: 'call_123',
@@ -113,12 +114,12 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
         ],
       },
       {
-        role: 'tool',
+        role: ContentGeneratorRole.TOOL,
         tool_call_id: 'call_123',
         content: 'File contents: Hello World',
       },
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'What did the file contain?',
       },
     ];
@@ -133,7 +134,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
         {
           index: 0,
           message: {
-            role: 'assistant',
+            role: ContentGeneratorRole.ASSISTANT,
             content: 'The file contains: Hello World',
           },
           finish_reason: 'stop',
@@ -143,7 +144,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
 
     let capturedRequest: CapturedRequest | null = null;
 
-    (fetch as unknown as vi.MockedFunction<typeof fetch>).mockImplementation(
+    (fetch as unknown as Mock<typeof fetch>).mockImplementation(
       async (url, options) => {
         console.log('Fetch called with URL:', url);
         console.log('Fetch options:', options);
@@ -194,7 +195,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       console.error('No request was captured!');
       console.error(
         'Fetch mock calls:',
-        (fetch as unknown as vi.MockedFunction<typeof fetch>).mock.calls.length,
+        (fetch as unknown as Mock<typeof fetch>).mock.calls.length,
       );
       throw new Error('No request was made to the API');
     }
@@ -204,17 +205,20 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       JSON.stringify(capturedRequest, null, 2),
     );
 
+    // TypeScript needs explicit assertion even after null check
+    const request = capturedRequest as CapturedRequest;
+
     // Check if it's using the responses API endpoint
-    expect(capturedRequest.url).toContain('/responses');
+    expect(request.url).toContain('/responses');
 
     // Check if body exists - Responses API uses 'input' field, not 'messages'
-    if (!capturedRequest.body || !capturedRequest.body.input) {
-      console.error('Request body or input missing:', capturedRequest.body);
+    if (!request.body || !request.body.input) {
+      console.error('Request body or input missing:', request.body);
       throw new Error('Request body is malformed');
     }
 
     // Verify tool response is included in the request as function_call_output
-    const toolMessage = capturedRequest.body.input.find(
+    const toolMessage = request.body.input.find(
       (item) =>
         item.type === 'function_call_output' && item.call_id === 'call_123',
     );
@@ -223,7 +227,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       console.error('ERROR: No tool output found in request!');
       console.error(
         'Input items in request:',
-        JSON.stringify(capturedRequest.body.input, null, 2),
+        JSON.stringify(request.body.input, null, 2),
       );
       throw new Error('No tool output found for function call');
     }
@@ -239,12 +243,12 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
     // Create messages with tool call but NO tool response
     const messages: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'What files are in the current directory?',
       },
       {
-        role: 'assistant',
-        content: null,
+        role: ContentGeneratorRole.ASSISTANT,
+        content: '',
         tool_calls: [
           {
             id: 'call_missing',
@@ -258,14 +262,14 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       },
       // NOTE: No tool response message here!
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'Please tell me what files you found',
       },
     ];
 
     let capturedRequest: CapturedRequest | null = null;
 
-    (fetch as unknown as vi.MockedFunction<typeof fetch>).mockImplementation(
+    (fetch as unknown as Mock<typeof fetch>).mockImplementation(
       async (url, options) => {
         capturedRequest = {
           url: url as string,
@@ -284,7 +288,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
               {
                 index: 0,
                 message: {
-                  role: 'assistant',
+                  role: ContentGeneratorRole.ASSISTANT,
                   content: 'I need to run the tool first to see the files.',
                 },
                 finish_reason: 'stop',
@@ -325,12 +329,12 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
     // Create messages with tool call and response
     const messages: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'What files are in the current directory?',
       },
       {
-        role: 'assistant',
-        content: null,
+        role: ContentGeneratorRole.ASSISTANT,
+        content: '',
         tool_calls: [
           {
             id: 'call_abc',
@@ -343,7 +347,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
         ],
       },
       {
-        role: 'tool',
+        role: ContentGeneratorRole.TOOL,
         tool_call_id: 'call_abc',
         content: 'Files: file1.txt, file2.js, README.md',
       },
@@ -367,7 +371,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
 
     let capturedRequest: CapturedRequest | null = null;
 
-    (fetch as unknown as vi.MockedFunction<typeof fetch>).mockImplementation(
+    (fetch as unknown as Mock<typeof fetch>).mockImplementation(
       async (url, options) => {
         capturedRequest = {
           url: url as string,
@@ -386,7 +390,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
               {
                 index: 0,
                 message: {
-                  role: 'assistant',
+                  role: ContentGeneratorRole.ASSISTANT,
                   content:
                     'The directory contains: file1.txt, file2.js, and README.md',
                 },

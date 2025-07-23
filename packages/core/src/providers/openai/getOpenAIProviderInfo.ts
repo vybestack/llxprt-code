@@ -4,14 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config, ProviderManager } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '../ProviderManager.js';
 import { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 
 // Helper types leveraging public APIs
-interface ConfigWithProviderGetter {
-  getProviderManager?: () => ProviderManager | undefined;
-}
 
 type OpenAIProviderLike = {
   name: string;
@@ -35,11 +32,13 @@ export interface OpenAIProviderInfo {
 }
 
 /**
- * Retrieves OpenAI provider information from the current Config instance
- * @param config The Config instance from the app
+ * Retrieves OpenAI provider information from the current ProviderManager instance
+ * @param providerManager The ProviderManager instance
  * @returns OpenAI provider info if available, null values otherwise
  */
-export function getOpenAIProviderInfo(config: Config): OpenAIProviderInfo {
+export function getOpenAIProviderInfo(
+  providerManager: ProviderManager | null | undefined,
+): OpenAIProviderInfo {
   const result: OpenAIProviderInfo = {
     provider: null,
     conversationCache: null,
@@ -49,10 +48,7 @@ export function getOpenAIProviderInfo(config: Config): OpenAIProviderInfo {
   };
 
   try {
-    // Access the provider manager from config via getter to avoid private property issues
-    const providerManager = (
-      config as unknown as ConfigWithProviderGetter
-    ).getProviderManager?.();
+    // Check if provider manager is available
     if (!providerManager || !providerManager.hasActiveProvider()) {
       return result;
     }
@@ -97,16 +93,18 @@ export function getOpenAIProviderInfo(config: Config): OpenAIProviderInfo {
     // Note: Remote token info would need to be tracked separately during API calls
     // This is a placeholder for where that information would be stored
   } catch (error) {
-    console.error('Error accessing OpenAI provider info:', error);
+    if (process.env.DEBUG) {
+      console.error('Error accessing OpenAI provider info:', error);
+    }
   }
 
   return result;
 }
 
 /**
- * Example usage in a React component or hook:
+ * Example usage:
  *
- * const openAIInfo = getOpenAIProviderInfo(config);
+ * const openAIInfo = getOpenAIProviderInfo(providerManager);
  * if (openAIInfo.provider && openAIInfo.conversationCache) {
  *   // Access conversation cache
  *   const cachedMessages = openAIInfo.conversationCache.get(conversationId, parentId);

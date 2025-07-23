@@ -5,8 +5,10 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider';
-import { IMessage, ITool } from '../index.js';
+import { OpenAIProvider } from './OpenAIProvider.js';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { ITool } from '../ITool.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -64,7 +66,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
   it('should generate real chat completion', async () => {
     const messages: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'Say "Hello from integration test" and nothing else.',
       },
     ];
@@ -73,25 +75,31 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     const generator = provider.generateChatCompletion(messages);
 
     for await (const message of generator) {
+      console.log('Received message:', JSON.stringify(message));
       responses.push(message);
     }
 
     // Should have received at least one response
     expect(responses.length).toBeGreaterThan(0);
 
-    // Last message should have the full content
-    const lastMessage = responses[responses.length - 1];
-    expect(lastMessage.role).toBe('assistant');
-    expect(lastMessage.content).toBeTruthy();
+    // Combine all content from messages
+    const fullContent = responses.map((m) => m.content).join('');
+
+    expect(fullContent).toBeTruthy();
+    expect(fullContent).toContain('Hello from integration test');
+
+    // Check that we have assistant messages
+    const assistantMessages = responses.filter((m) => m.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
 
     // Note: The exact content may vary based on the model's response
-    console.log('Received response:', lastMessage.content);
+    console.log('Received full response:', fullContent);
   });
 
   it('should handle tool calls', async () => {
     const messages: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content:
           'What is the weather in San Francisco? Use the get_weather tool.',
       },
@@ -119,16 +127,20 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     const generator = provider.generateChatCompletion(messages, tools);
 
     for await (const message of generator) {
+      console.log('Tool message:', JSON.stringify(message));
       responses.push(message);
     }
 
-    // Last message should have tool calls
-    const lastMessage = responses[responses.length - 1];
-    expect(lastMessage.tool_calls).toBeDefined();
-    expect(Array.isArray(lastMessage.tool_calls)).toBe(true);
+    // Find message with tool calls
+    const toolCallMessage = responses.find(
+      (m) => m.tool_calls && m.tool_calls.length > 0,
+    );
+    expect(toolCallMessage).toBeDefined();
+    expect(toolCallMessage?.tool_calls).toBeDefined();
+    expect(Array.isArray(toolCallMessage?.tool_calls)).toBe(true);
 
-    if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-      const toolCall = lastMessage.tool_calls[0];
+    if (toolCallMessage?.tool_calls && toolCallMessage.tool_calls.length > 0) {
+      const toolCall = toolCallMessage.tool_calls[0];
       expect(toolCall.function.name).toBe('get_weather');
       expect(toolCall.function.arguments).toBeTruthy();
 

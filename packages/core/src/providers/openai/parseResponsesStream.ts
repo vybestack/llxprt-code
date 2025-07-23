@@ -1,5 +1,5 @@
-import { IMessage } from '../index.js';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 const MAX_ACCUMULATOR_SIZE = 10000; // Prevent unbounded accumulator growth
 
@@ -315,13 +315,23 @@ export async function* parseResponsesStream(
                     }
                   }
 
-                  // Regular text, yield it
-                  yield {
-                    role: ContentGeneratorRole.ASSISTANT,
-                    content: event.delta,
-                  };
-                  // Reset accumulator since we're in regular text mode
-                  textAccumulator = '';
+                  // If we have accumulated text that's not JSON, yield it all
+                  if (
+                    textAccumulator &&
+                    !looksLikeJSONObjectOrArray(textAccumulator)
+                  ) {
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: textAccumulator,
+                    };
+                    textAccumulator = '';
+                  } else if (!textAccumulator) {
+                    // No accumulator, just yield the delta
+                    yield {
+                      role: ContentGeneratorRole.ASSISTANT,
+                      content: event.delta,
+                    };
+                  }
                 }
                 break;
 
@@ -495,13 +505,23 @@ export async function* parseResponsesStream(
                 break;
             }
           } catch (parseError) {
-            console.error(
-              '[parseResponsesStream] Failed to parse event:',
-              parseError,
-            );
+            if (process.env.DEBUG) {
+              console.error(
+                '[parseResponsesStream] Failed to parse event:',
+                parseError,
+              );
+            }
           }
         }
       }
+    }
+
+    // Yield any remaining accumulated text
+    if (textAccumulator) {
+      yield {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: textAccumulator,
+      };
     }
   } finally {
     reader.releaseLock();

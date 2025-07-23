@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   buildResponsesRequest,
   ResponsesRequestParams,
-} from './buildResponsesRequest';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+  ResponsesRequest,
+} from './buildResponsesRequest.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 describe('buildResponsesRequest', () => {
   beforeEach(() => {
@@ -144,9 +145,15 @@ describe('buildResponsesRequest', () => {
 
       expect(result.previous_response_id).toBe('msg-456');
       expect(result.store).toBe(true);
-      expect(result.conversation_id).toBeUndefined();
-      expect(result.conversationId).toBeUndefined();
-      expect(result.parentId).toBeUndefined();
+      // Check that these properties are not set on the result
+      const resultWithExtra = result as ResponsesRequest & {
+        conversation_id?: string;
+        conversationId?: string;
+        parentId?: string;
+      };
+      expect(resultWithExtra.conversation_id).toBeUndefined();
+      expect(resultWithExtra.conversationId).toBeUndefined();
+      expect(resultWithExtra.parentId).toBeUndefined();
     });
 
     it('should only set store when conversationId is present without parentId', () => {
@@ -160,9 +167,15 @@ describe('buildResponsesRequest', () => {
 
       expect(result.previous_response_id).toBeUndefined();
       expect(result.store).toBeUndefined();
-      expect(result.conversation_id).toBeUndefined();
-      expect(result.conversationId).toBeUndefined();
-      expect(result.parentId).toBeUndefined();
+      // Check that these properties are not set on the result
+      const resultWithExtra = result as ResponsesRequest & {
+        conversation_id?: string;
+        conversationId?: string;
+        parentId?: string;
+      };
+      expect(resultWithExtra.conversation_id).toBeUndefined();
+      expect(resultWithExtra.conversationId).toBeUndefined();
+      expect(resultWithExtra.parentId).toBeUndefined();
     });
 
     it('should include all standard OpenAI parameters', () => {
@@ -241,9 +254,19 @@ describe('buildResponsesRequest', () => {
 
       // The implementation keeps the last few messages, starting from the last user message
       expect(result.input).toHaveLength(3);
-      expect(result.input?.[0].content).toBe('Second message');
-      expect(result.input?.[1].content).toBe('Second response');
-      expect(result.input?.[2].content).toBe('Third message');
+      // Type guard to check if message has content property
+      const msg0 = result.input?.[0];
+      const msg1 = result.input?.[1];
+      const msg2 = result.input?.[2];
+      expect(msg0 && 'content' in msg0 ? msg0.content : undefined).toBe(
+        'Second message',
+      );
+      expect(msg1 && 'content' in msg1 ? msg1.content : undefined).toBe(
+        'Second response',
+      );
+      expect(msg2 && 'content' in msg2 ? msg2.content : undefined).toBe(
+        'Third message',
+      );
     });
 
     it('should not trim messages when conversationId is used with 2 or fewer messages', () => {
@@ -314,7 +337,7 @@ describe('buildResponsesRequest', () => {
 
       const result = buildResponsesRequest(params);
 
-      expect(result.input).toHaveLength(2);
+      expect(result.input).toHaveLength(3); // 2 messages + 1 function_call
       expect(result.input?.[1]).toEqual({
         role: ContentGeneratorRole.ASSISTANT,
         content: "I'll check the weather for you.",
@@ -322,6 +345,14 @@ describe('buildResponsesRequest', () => {
       expect(
         (result.input?.[1] as Record<string, unknown>).tool_calls,
       ).toBeUndefined();
+
+      // Check that function_call was extracted
+      expect(result.input?.[2]).toEqual({
+        type: 'function_call',
+        call_id: 'call_123',
+        name: 'get_weather',
+        arguments: '{"location": "London"}',
+      });
     });
 
     it('should include tools and tool_choice when provided', () => {

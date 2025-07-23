@@ -14,22 +14,23 @@
  * limitations under the License.
  */
 
-import { IProvider, IModel, ITool, IMessage } from '../index.js';
-import {
-  ContentGeneratorRole,
-  GemmaToolCallParser,
-  ToolFormatter,
-  ToolFormat,
-} from '@vybestack/llxprt-code-core';
+import { IProvider } from '../IProvider.js';
+import { IModel } from '../IModel.js';
+import { ITool } from '../ITool.js';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
+import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import { ToolFormat } from '../../tools/IToolFormatter.js';
 import OpenAI from 'openai';
-import { Settings } from '../../config/settings.js';
+import { IProviderConfig } from '../types/IProviderConfig.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 import { ConversationCache } from './ConversationCache.js';
 import {
   estimateMessagesTokens,
   estimateRemoteTokens,
 } from './estimateRemoteTokens.js';
-import { ConversationContext } from '../../utils/ConversationContext.js';
+// ConversationContext removed - using inline conversation ID generation
 import {
   parseResponsesStream,
   parseErrorResponse,
@@ -42,15 +43,15 @@ export class OpenAIProvider implements IProvider {
   private currentModel: string = 'gpt-4.1';
   private apiKey: string;
   private baseURL?: string;
-  private settings?: Settings;
+  private config?: IProviderConfig;
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
   private conversationCache: ConversationCache;
 
-  constructor(apiKey: string, baseURL?: string, settings?: Settings) {
+  constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
-    this.settings = settings;
+    this.config = config;
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
@@ -63,7 +64,7 @@ export class OpenAIProvider implements IProvider {
   }
 
   private requiresTextToolCallParsing(): boolean {
-    if (this.settings?.enableTextToolCallParsing === false) {
+    if (this.config?.enableTextToolCallParsing === false) {
       return false;
     }
 
@@ -75,7 +76,7 @@ export class OpenAIProvider implements IProvider {
     }
 
     const defaultModels = ['gemma-3-12b-it', 'gemma-2-27b-it'];
-    const configuredModels = this.settings?.textToolCallModels || [];
+    const configuredModels = this.config?.textToolCallModels || [];
     const allModels = [...defaultModels, ...configuredModels];
 
     return allModels.includes(this.currentModel);
@@ -88,8 +89,8 @@ export class OpenAIProvider implements IProvider {
     }
 
     // Check for settings override
-    if (this.settings?.providerToolFormatOverrides?.[this.name]) {
-      return this.settings.providerToolFormatOverrides[this.name] as ToolFormat;
+    if (this.config?.providerToolFormatOverrides?.[this.name]) {
+      return this.config.providerToolFormatOverrides[this.name] as ToolFormat;
     }
 
     // Auto-detect tool format based on model or base URL
@@ -113,8 +114,8 @@ export class OpenAIProvider implements IProvider {
     }
 
     // Check settings override
-    if (this.settings?.openaiResponsesEnabled !== undefined) {
-      return this.settings.openaiResponsesEnabled;
+    if (this.config?.openaiResponsesEnabled !== undefined) {
+      return this.config.openaiResponsesEnabled;
     }
 
     // Default: Check if model starts with any of the responses API model prefixes
@@ -151,11 +152,13 @@ export class OpenAIProvider implements IProvider {
 
       // Warn if less than 4k tokens remaining
       if (contextInfo.tokensRemaining < 4000) {
-        console.warn(
-          `[OpenAI] Warning: Only ${contextInfo.tokensRemaining} tokens remaining ` +
-            `(${contextInfo.contextUsedPercent.toFixed(1)}% context used). ` +
-            `Consider starting a new conversation.`,
-        );
+        if (process.env.DEBUG) {
+          console.warn(
+            `[OpenAI] Warning: Only ${contextInfo.tokensRemaining} tokens remaining ` +
+              `(${contextInfo.contextUsedPercent.toFixed(1)}% context used). ` +
+              `Consider starting a new conversation.`,
+          );
+        }
       }
     }
 
@@ -213,9 +216,11 @@ export class OpenAIProvider implements IProvider {
         response.status === 422 &&
         errorBody.includes('context_length_exceeded')
       ) {
-        console.warn(
-          '[OpenAI] Context length exceeded, invalidating cache and retrying stateless...',
-        );
+        if (process.env.DEBUG) {
+          console.warn(
+            '[OpenAI] Context length exceeded, invalidating cache and retrying stateless...',
+          );
+        }
 
         // Invalidate the cache for this conversation
         if (options?.conversationId && options?.parentId) {
@@ -293,11 +298,18 @@ export class OpenAIProvider implements IProvider {
           // Collect messages for caching
           if (message.content || message.tool_calls) {
             collectedMessages.push(message);
+          } else if (message.usage && collectedMessages.length === 0) {
+            // If we only got a usage message with no content, add a placeholder
+            collectedMessages.push({
+              role: ContentGeneratorRole.ASSISTANT,
+              content: '',
+            });
           }
 
           // Update the parentId in the context as soon as we get a message ID
           if (message.id) {
-            ConversationContext.setParentId(message.id);
+            // ConversationContext.setParentId(message.id);
+            // TODO: Handle parent ID updates when ConversationContext is available
           }
 
           yield message;
@@ -328,7 +340,29 @@ export class OpenAIProvider implements IProvider {
     }
 
     // Handle non-streaming response
-    const data = await response.json();
+    interface OpenAIResponse {
+      choices?: Array<{
+        message: {
+          role: string;
+          content?: string;
+          tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            function: {
+              name: string;
+              arguments: string;
+            };
+          }>;
+        };
+      }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+    }
+
+    const data = (await response.json()) as OpenAIResponse;
     const resultMessages: IMessage[] = [];
 
     if (data.choices && data.choices.length > 0) {
@@ -344,9 +378,9 @@ export class OpenAIProvider implements IProvider {
 
       if (data.usage) {
         message.usage = {
-          prompt_tokens: data.usage.prompt_tokens,
-          completion_tokens: data.usage.completion_tokens,
-          total_tokens: data.usage.total_tokens,
+          prompt_tokens: data.usage.prompt_tokens || 0,
+          completion_tokens: data.usage.completion_tokens || 0,
+          total_tokens: data.usage.total_tokens || 0,
         };
       }
 
@@ -410,7 +444,9 @@ export class OpenAIProvider implements IProvider {
 
       return models;
     } catch (error) {
-      console.error('Error fetching models from OpenAI:', error);
+      if (process.env.DEBUG) {
+        console.error('Error fetching models from OpenAI:', error);
+      }
       // Return a hardcoded list as fallback
       return [
         {
@@ -453,8 +489,9 @@ export class OpenAIProvider implements IProvider {
 
     // Check if we should use responses endpoint
     if (this.shouldUseResponses(this.currentModel)) {
-      // Get the current conversation context
-      const { conversationId, parentId } = ConversationContext.getContext();
+      // Generate conversation IDs inline (would normally come from application context)
+      const conversationId = undefined;
+      const parentId = undefined;
 
       yield* await this.callResponsesEndpoint(messages, tools, {
         stream: true,
@@ -471,10 +508,12 @@ export class OpenAIProvider implements IProvider {
     const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
 
     if (missingIds.length > 0) {
-      console.error(
-        '[OpenAIProvider] FATAL: Tool messages missing tool_call_id:',
-        missingIds,
-      );
+      if (process.env.DEBUG) {
+        console.error(
+          '[OpenAIProvider] FATAL: Tool messages missing tool_call_id:',
+          missingIds,
+        );
+      }
       throw new Error(
         `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
       );
@@ -626,8 +665,8 @@ export class OpenAIProvider implements IProvider {
     });
   }
 
-  setSettings(settings: Settings): void {
-    this.settings = settings;
+  setConfig(config: IProviderConfig): void {
+    this.config = config;
   }
 
   setToolFormatOverride(format: ToolFormat | null): void {

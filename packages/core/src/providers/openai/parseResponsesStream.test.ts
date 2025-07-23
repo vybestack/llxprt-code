@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   parseResponsesStream,
   parseErrorResponse,
-} from './parseResponsesStream';
+} from './parseResponsesStream.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -39,11 +40,11 @@ describe('parseResponsesStream', () => {
 
     expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual({
-      role: 'assistant',
+      role: ContentGeneratorRole.ASSISTANT,
       content: 'Hello',
     });
     expect(messages[1]).toEqual({
-      role: 'assistant',
+      role: ContentGeneratorRole.ASSISTANT,
       content: ' world',
     });
   });
@@ -66,7 +67,7 @@ describe('parseResponsesStream', () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toEqual({
-      role: 'assistant',
+      role: ContentGeneratorRole.ASSISTANT,
       content: '',
       tool_calls: [
         {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider';
+import { OpenAIProvider } from './OpenAIProvider.js';
 
 describe('OpenAIProvider.shouldUseResponses', () => {
   let provider: OpenAIProvider;

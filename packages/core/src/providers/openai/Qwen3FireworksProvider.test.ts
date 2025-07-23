@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Qwen3FireworksProvider } from './Qwen3FireworksProvider';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { Qwen3FireworksProvider } from './Qwen3FireworksProvider.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 describe('Qwen3FireworksProvider', () => {
   it('should initialize with correct name and endpoint', () => {

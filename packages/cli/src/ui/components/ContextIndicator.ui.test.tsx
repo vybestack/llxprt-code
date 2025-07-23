@@ -2,9 +2,11 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, MockedFunction } from 'vitest';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { OpenAIProvider } from '../../providers/openai/OpenAIProvider.js';
-import { ProviderManager } from '../../providers/ProviderManager.js';
-import { IProvider } from '../../providers/IProvider.js';
+import {
+  OpenAIProvider,
+  ProviderManager,
+  IProvider,
+} from '@vybestack/llxprt-code-core';
 
 // Mock the provider manager
 vi.mock('../../providers/providerManagerInstance.js', () => ({

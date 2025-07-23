@@ -5,9 +5,11 @@
  */
 
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage, ITool, IModel } from '../index.js';
-import { Settings } from '../../config/settings.js';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { IMessage } from '../IMessage.js';
+import { ITool } from '../ITool.js';
+import { IModel } from '../IModel.js';
+import { IProviderConfig } from '../types/IProviderConfig.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 /**
  * Qwen3-Fireworks provider that extends OpenAI provider with Qwen3-specific handling
@@ -19,9 +21,9 @@ export class Qwen3FireworksProvider extends OpenAIProvider {
   private streamTimeout: NodeJS.Timeout | null = null;
   private lastStreamActivity = 0;
 
-  constructor(apiKey: string, settings?: Settings) {
+  constructor(apiKey: string, config?: IProviderConfig) {
     // Initialize with Fireworks API endpoint
-    super(apiKey, 'https://api.fireworks.ai/inference/v1', settings);
+    super(apiKey, 'https://api.fireworks.ai/inference/v1', config);
 
     // Set the default model for Qwen3
     this.setModel('accounts/fireworks/models/qwen3-235b-a22b');
@@ -117,7 +119,9 @@ export class Qwen3FireworksProvider extends OpenAIProvider {
       }
     } catch (error) {
       // Log the error but don't throw - Qwen3 sometimes cuts off mid-stream
-      console.error('[Qwen3FireworksProvider] Stream error:', error);
+      if (process.env.DEBUG) {
+        console.error('[Qwen3FireworksProvider] Stream error:', error);
+      }
 
       // If we have accumulated content, try to salvage what we can
       if (accumulatedContent && lastYieldedLength < accumulatedContent.length) {

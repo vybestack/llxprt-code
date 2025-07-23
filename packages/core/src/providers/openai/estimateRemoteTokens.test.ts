@@ -3,10 +3,10 @@ import {
   estimateRemoteTokens,
   estimateMessagesTokens,
   MODEL_CONTEXT_SIZE,
-} from './estimateRemoteTokens';
-import { ConversationCache } from './ConversationCache';
-import { IMessage } from '../index.js';
-
+} from './estimateRemoteTokens.js';
+import { ConversationCache } from './ConversationCache.js';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 describe('estimateRemoteTokens', () => {
   let cache: ConversationCache;
 
@@ -118,8 +118,11 @@ describe('estimateRemoteTokens', () => {
 describe('estimateMessagesTokens', () => {
   it('should estimate tokens for simple messages', () => {
     const messages: IMessage[] = [
-      { role: 'user', content: 'Hello, how are you?' },
-      { role: 'assistant', content: 'I am doing well, thank you!' },
+      { role: ContentGeneratorRole.USER, content: 'Hello, how are you?' },
+      {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: 'I am doing well, thank you!',
+      },
     ];
 
     const tokens = estimateMessagesTokens(messages);
@@ -142,7 +145,7 @@ describe('estimateMessagesTokens', () => {
   it('should include tool calls in estimation', () => {
     const messages: IMessage[] = [
       {
-        role: 'assistant',
+        role: ContentGeneratorRole.ASSISTANT,
         content: 'Let me search for that.',
         tool_calls: [
           {
@@ -165,8 +168,8 @@ describe('estimateMessagesTokens', () => {
 
   it('should handle messages with no content', () => {
     const messages: IMessage[] = [
-      { role: 'user' }, // No content
-      { role: 'assistant', content: '' }, // Empty content
+      { role: ContentGeneratorRole.USER, content: '' }, // No content
+      { role: ContentGeneratorRole.ASSISTANT, content: '' }, // Empty content
     ];
 
     const tokens = estimateMessagesTokens(messages);
@@ -177,7 +180,9 @@ describe('estimateMessagesTokens', () => {
 
   it('should handle very long messages', () => {
     const longContent = 'a'.repeat(10000); // 10k characters
-    const messages: IMessage[] = [{ role: 'user', content: longContent }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: longContent },
+    ];
 
     const tokens = estimateMessagesTokens(messages);
 

@@ -1,5 +1,6 @@
-import { IMessage, ITool } from '../index.js';
-import { ResponsesTool } from '@vybestack/llxprt-code-core';
+import { IMessage } from '../IMessage.js';
+import { ITool } from '../ITool.js';
+import { ResponsesTool } from '../../tools/IToolFormatter.js';
 
 export interface ResponsesRequestParams {
   messages?: IMessage[];
@@ -37,12 +38,20 @@ type ResponsesMessage =
         total_tokens?: number;
       };
     }
-  | FunctionCallOutput;
+  | FunctionCallOutput
+  | FunctionCall;
 
 type FunctionCallOutput = {
   type: 'function_call_output';
   call_id: string;
   output: string;
+};
+
+type FunctionCall = {
+  type: 'function_call';
+  call_id: string;
+  name: string;
+  arguments: string;
 };
 
 export interface ResponsesRequest {
@@ -170,12 +179,28 @@ export function buildResponsesRequest(
   // Transform messages for Responses API format
   let transformedMessages: ResponsesMessage[] | undefined;
   const functionCallOutputs: FunctionCallOutput[] = [];
+  const functionCalls: FunctionCall[] = [];
 
   if (processedMessages) {
-    // First, extract function call outputs from tool messages
+    // First, extract function calls from assistant messages and function call outputs from tool messages
     processedMessages
       .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
       .forEach((msg) => {
+        // Extract function calls from assistant messages
+        if (msg.role === 'assistant' && msg.tool_calls) {
+          msg.tool_calls.forEach((toolCall) => {
+            if (toolCall.type === 'function') {
+              functionCalls.push({
+                type: 'function_call' as const,
+                call_id: toolCall.id,
+                name: toolCall.function.name,
+                arguments: toolCall.function.arguments,
+              });
+            }
+          });
+        }
+
+        // Extract function call outputs from tool messages
         if (msg.role === 'tool' && msg.tool_call_id && msg.content) {
           functionCallOutputs.push({
             type: 'function_call_output' as const,
@@ -223,13 +248,22 @@ export function buildResponsesRequest(
     ...(prompt ? { prompt } : {}),
   };
 
-  // Add input array if we have messages or function call outputs
-  if (transformedMessages || functionCallOutputs.length > 0) {
+  // Add input array if we have messages, function calls, or function call outputs
+  if (
+    transformedMessages ||
+    functionCalls.length > 0 ||
+    functionCallOutputs.length > 0
+  ) {
     const inputItems: ResponsesMessage[] = [];
 
     // Add regular messages
     if (transformedMessages) {
       inputItems.push(...transformedMessages);
+    }
+
+    // Add function calls
+    if (functionCalls.length > 0) {
+      inputItems.push(...functionCalls);
     }
 
     // Add function call outputs

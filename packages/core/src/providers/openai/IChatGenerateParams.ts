@@ -1,4 +1,5 @@
-import { IMessage, ITool } from '../index.js';
+import { IMessage } from '../IMessage.js';
+import { ITool } from '../ITool.js';
 
 export interface IChatGenerateParams {
   messages: IMessage[];

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage } from '../index.js';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import OpenAI from 'openai';
 
 // Mock fetch globally
@@ -100,7 +100,7 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
       body: stream,
       text: async () => '',
       json: async () => ({}),
-      blob: async () => new Blob(),
+      blob: async () => new Blob([]),
       arrayBuffer: async () => new ArrayBuffer(0),
       formData: async () => new FormData(),
       clone: () => ({ body: stream }),
@@ -221,7 +221,7 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
       body: stream,
       text: async () => '',
       json: async () => ({}),
-      blob: async () => new Blob(),
+      blob: async () => new Blob([]),
       arrayBuffer: async () => new ArrayBuffer(0),
       formData: async () => new FormData(),
       clone: () => ({ body: stream }),

@@ -10,7 +10,7 @@ import {
   getProviderManager,
   resetProviderManager,
 } from './providerManagerInstance';
-import { OpenAIProvider } from './openai/OpenAIProvider';
+import { OpenAIProvider } from '@vybestack/llxprt-code-core/providers/openai/OpenAIProvider.js';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';

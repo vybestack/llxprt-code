@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider';
-import { IMessage } from '../IMessage';
-import { ITool } from '../ITool';
+import { OpenAIProvider } from './OpenAIProvider.js';
+import { IMessage } from '../IMessage.js';
+import { ITool } from '../ITool.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 interface OpenAIProviderPrivate {
   callResponsesEndpoint: (
@@ -56,7 +57,9 @@ describe.skip('OpenAIProvider Responses Integration', () => {
 
     vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks));
 
-    const messages: IMessage[] = [{ role: 'user', content: 'Say hello' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Say hello' },
+    ];
 
     const result = await provider.generateChatCompletion(messages);
     const collectedMessages: IMessage[] = [];
@@ -92,7 +95,9 @@ describe.skip('OpenAIProvider Responses Integration', () => {
 
     vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks));
 
-    const messages: IMessage[] = [{ role: 'user', content: 'Test caching' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test caching' },
+    ];
 
     const options = {
       conversationId: 'test-conv',
@@ -139,7 +144,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(createSSEResponse(chunks));
 
     const messages: IMessage[] = [
-      { role: 'user', content: 'What is the weather?' },
+      { role: ContentGeneratorRole.USER, content: 'What is the weather?' },
     ];
 
     const tools: ITool[] = [
@@ -188,7 +193,9 @@ describe.skip('OpenAIProvider Responses Integration', () => {
       }),
     );
 
-    const messages: IMessage[] = [{ role: 'user', content: 'Test error' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test error' },
+    ];
 
     const generator = provider.generateChatCompletion(messages);
     await expect(async () => {
@@ -206,7 +213,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
       choices: [
         {
           message: {
-            role: 'assistant',
+            role: ContentGeneratorRole.ASSISTANT,
             content: 'Non-streaming response',
           },
           finish_reason: 'stop',
@@ -227,7 +234,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
     );
 
     const messages: IMessage[] = [
-      { role: 'user', content: 'Test non-streaming' },
+      { role: ContentGeneratorRole.USER, content: 'Test non-streaming' },
     ];
 
     // Access private method for testing
@@ -246,7 +253,7 @@ describe.skip('OpenAIProvider Responses Integration', () => {
 
     expect(collectedMessages).toHaveLength(1);
     expect(collectedMessages[0]).toEqual({
-      role: 'assistant',
+      role: ContentGeneratorRole.ASSISTANT,
       content: 'Non-streaming response',
       usage: {
         prompt_tokens: 10,
@@ -257,7 +264,9 @@ describe.skip('OpenAIProvider Responses Integration', () => {
   });
 
   it('should throw error for stateful mode', async () => {
-    const messages: IMessage[] = [{ role: 'user', content: 'Test stateful' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test stateful' },
+    ];
 
     // Access private method for testing
     const callResponsesEndpoint = (

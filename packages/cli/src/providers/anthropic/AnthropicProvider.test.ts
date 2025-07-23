@@ -2,44 +2,48 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider';
 import { ITool } from '../index.js';
 
-// Mock the ToolFormatter
-vi.mock('../../tools/ToolFormatter.js', () => ({
-  ToolFormatter: vi.fn().mockImplementation(() => ({
-    toProviderFormat: vi.fn((tools: ITool[], format: string) => {
-      if (format === 'anthropic') {
-        return tools.map((tool) => ({
-          name: tool.function.name,
-          description: tool.function.description || '',
-          input_schema: {
-            type: 'object',
-            ...tool.function.parameters,
-          },
-        }));
-      }
-      return tools;
-    }),
-    fromProviderFormat: vi.fn((rawToolCall: unknown, format: string) => {
-      if (format === 'anthropic') {
-        const toolCall = rawToolCall as {
-          id: string;
-          name: string;
-          input?: unknown;
-        };
-        return [
-          {
-            id: toolCall.id,
-            type: 'function',
-            function: {
-              name: toolCall.name,
-              arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
+// Mock the ToolFormatter from core package
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+  return {
+    ...actual,
+    ToolFormatter: vi.fn().mockImplementation(() => ({
+      toProviderFormat: vi.fn((tools: ITool[], format: string) => {
+        if (format === 'anthropic') {
+          return tools.map((tool) => ({
+            name: tool.function.name,
+            description: tool.function.description || '',
+            input_schema: {
+              type: 'object',
+              ...tool.function.parameters,
             },
-          },
-        ];
-      }
-      return [rawToolCall];
-    }),
-  })),
-}));
+          }));
+        }
+        return tools;
+      }),
+      fromProviderFormat: vi.fn((rawToolCall: unknown, format: string) => {
+        if (format === 'anthropic') {
+          const toolCall = rawToolCall as {
+            id: string;
+            name: string;
+            input?: unknown;
+          };
+          return [
+            {
+              id: toolCall.id,
+              type: 'function',
+              function: {
+                name: toolCall.name,
+                arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
+              },
+            },
+          ];
+        }
+        return [rawToolCall];
+      }),
+    })),
+  };
+});
 
 // Mock the Anthropic SDK
 vi.mock('@anthropic-ai/sdk', () => ({
@@ -416,7 +420,7 @@ describe('AnthropicProvider', () => {
 
       // Verify ToolFormatter was used
       const ToolFormatterMock = vi.mocked(
-        (await import('../../tools/ToolFormatter.js')).ToolFormatter,
+        (await import('@vybestack/llxprt-code-core')).ToolFormatter,
       );
       const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
 

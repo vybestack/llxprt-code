@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ConversationCache } from './ConversationCache';
-import { IMessage } from '../index.js';
+import { ConversationCache } from './ConversationCache.js';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 describe('ConversationCache.accumTokens', () => {
   let cache: ConversationCache;
@@ -16,7 +17,7 @@ describe('ConversationCache.accumTokens', () => {
 
   it('should store and retrieve accumulated tokens', () => {
     const messages: IMessage[] = [
-      { role: 'assistant', content: 'Hello world' },
+      { role: ContentGeneratorRole.ASSISTANT, content: 'Hello world' },
     ];
 
     cache.set('conv1', 'parent1', messages, 1500);
@@ -27,7 +28,7 @@ describe('ConversationCache.accumTokens', () => {
 
   it('should update token count incrementally', () => {
     const messages: IMessage[] = [
-      { role: 'assistant', content: 'First response' },
+      { role: ContentGeneratorRole.ASSISTANT, content: 'First response' },
     ];
 
     // First interaction
@@ -44,7 +45,9 @@ describe('ConversationCache.accumTokens', () => {
   });
 
   it('should handle different conversation/parent combinations', () => {
-    const messages: IMessage[] = [{ role: 'assistant', content: 'Response' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.ASSISTANT, content: 'Response' },
+    ];
 
     cache.set('conv1', 'parent1', messages, 1000);
     cache.set('conv1', 'parent2', messages, 2000);
@@ -62,7 +65,9 @@ describe('ConversationCache.accumTokens', () => {
   it('should return 0 for expired entries', () => {
     // Create cache with very short TTL (1ms)
     const shortCache = new ConversationCache(100, 0.000000278); // 1ms in hours
-    const messages: IMessage[] = [{ role: 'assistant', content: 'Response' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.ASSISTANT, content: 'Response' },
+    ];
 
     shortCache.set('conv1', 'parent1', messages, 1000);
 
@@ -73,7 +78,9 @@ describe('ConversationCache.accumTokens', () => {
   });
 
   it('should invalidate entries and reset token count', () => {
-    const messages: IMessage[] = [{ role: 'assistant', content: 'Response' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.ASSISTANT, content: 'Response' },
+    ];
 
     cache.set('conv1', 'parent1', messages, 5000);
     expect(cache.getAccumulatedTokens('conv1', 'parent1')).toBe(5000);
@@ -97,7 +104,9 @@ describe('ConversationCache.accumTokens', () => {
   it('should maintain token count through cache eviction', () => {
     // Create a small cache
     const smallCache = new ConversationCache(2);
-    const messages: IMessage[] = [{ role: 'assistant', content: 'Response' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.ASSISTANT, content: 'Response' },
+    ];
 
     // Fill the cache
     smallCache.set('conv1', 'parent1', messages, 1000);

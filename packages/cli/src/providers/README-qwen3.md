@@ -15,7 +15,7 @@ The Qwen3-Fireworks provider enables the Gemini CLI to use the Qwen3-235B model 
 
 ### Provider Class: `Qwen3FireworksProvider`
 
-Located at: `packages/cli/src/providers/openai/Qwen3FireworksProvider.ts`
+Located at: `packages/core/src/providers/openai/Qwen3FireworksProvider.ts`
 
 Key methods:
 

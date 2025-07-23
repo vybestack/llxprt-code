@@ -15,9 +15,9 @@ import React, {
 import {
   Config,
   ProviderMessage as Message,
+  ConversationCache,
 } from '@vybestack/llxprt-code-core';
 import { useOpenAIProviderInfo } from '../hooks/useOpenAIProviderInfo.js';
-import { ConversationCache } from '../../providers/openai/ConversationCache.js';
 
 interface RemoteTokenStats {
   promptTokenCount: number;

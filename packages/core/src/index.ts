@@ -98,6 +98,13 @@ export * from './providers/IProviderManager.js';
 export * from './providers/ContentGeneratorRole.js';
 export * from './providers/ProviderContentGenerator.js';
 export * from './providers/ProviderManager.js';
+
+// Export provider implementations
+export { OpenAIProvider } from './providers/openai/OpenAIProvider.js';
+export { Qwen3FireworksProvider } from './providers/openai/Qwen3FireworksProvider.js';
+export { ConversationCache } from './providers/openai/ConversationCache.js';
+export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
+export * from './providers/ProviderManager.js';
 export * from './providers/adapters/GeminiCompatibleWrapper.js';
 export * from './providers/errors.js';
 

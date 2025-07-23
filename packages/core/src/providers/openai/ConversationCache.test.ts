@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ConversationCache } from './ConversationCache';
-import { IMessage } from '../IMessage';
-
+import { ConversationCache } from './ConversationCache.js';
+import { IMessage } from '../IMessage.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 describe('ConversationCache', () => {
   let cache: ConversationCache;
 
@@ -15,7 +15,7 @@ describe('ConversationCache', () => {
   });
 
   const createMessage = (content: string): IMessage => ({
-    role: 'assistant',
+    role: ContentGeneratorRole.ASSISTANT,
     content,
   });
 

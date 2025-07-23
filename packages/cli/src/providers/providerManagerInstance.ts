@@ -4,11 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config, ProviderManager } from '@vybestack/llxprt-code-core';
-import { OpenAIProvider } from './openai/OpenAIProvider.js';
+import {
+  Config,
+  ProviderManager,
+  OpenAIProvider,
+  Qwen3FireworksProvider,
+} from '@vybestack/llxprt-code-core';
 import { GeminiProvider } from './gemini/GeminiProvider.js';
 import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
-import { Qwen3FireworksProvider } from './openai/Qwen3FireworksProvider.js';
 import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';

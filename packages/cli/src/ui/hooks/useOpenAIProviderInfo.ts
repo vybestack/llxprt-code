@@ -8,11 +8,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Config,
   ProviderMessage as Message,
-} from '@vybestack/llxprt-code-core';
-import {
   getOpenAIProviderInfo,
-  OpenAIProviderInfo,
-} from '../../providers/openai/getOpenAIProviderInfo.js';
+} from '@vybestack/llxprt-code-core';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
+
+// Import OpenAIProviderInfo type from the function return type
+type OpenAIProviderInfo = ReturnType<typeof getOpenAIProviderInfo>;
 
 export interface UseOpenAIProviderInfoReturn extends OpenAIProviderInfo {
   refresh: () => void;
@@ -31,17 +32,17 @@ export function useOpenAIProviderInfo(
   config: Config,
 ): UseOpenAIProviderInfoReturn {
   const [providerInfo, setProviderInfo] = useState<OpenAIProviderInfo>(() =>
-    getOpenAIProviderInfo(config),
+    getOpenAIProviderInfo(getProviderManager(config)),
   );
 
   const refresh = useCallback(() => {
-    setProviderInfo(getOpenAIProviderInfo(config));
+    setProviderInfo(getOpenAIProviderInfo(getProviderManager(config)));
   }, [config]);
 
   // Refresh when config changes or model switches
   useEffect(() => {
     const checkInterval = setInterval(() => {
-      const newInfo = getOpenAIProviderInfo(config);
+      const newInfo = getOpenAIProviderInfo(getProviderManager(config));
 
       // Only update if something changed
       if (
