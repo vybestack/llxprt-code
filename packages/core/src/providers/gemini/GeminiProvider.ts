@@ -30,7 +30,6 @@ type GeminiAuthMode = 'oauth' | 'gemini-api-key' | 'vertex-ai' | 'none';
 
 export class GeminiProvider implements IProvider {
   readonly name: string = 'gemini';
-  readonly isDefault: boolean = true;
   private apiKey?: string;
   private authMode: GeminiAuthMode = 'none';
   private config?: Config;

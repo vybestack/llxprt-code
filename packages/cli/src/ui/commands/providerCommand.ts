@@ -71,32 +71,16 @@ export const providerCommand: SlashCommand = {
           await geminiClient.resetChat();
         }
 
-        // Always refresh auth when switching providers
-        let authType: AuthType;
+        // Keep the current auth type - auth only affects GeminiProvider internally
+        const currentAuthType =
+          context.services.config.getContentGeneratorConfig()?.authType ||
+          AuthType.LOGIN_WITH_GOOGLE;
+        
+        // Refresh auth to ensure provider manager is attached
+        await context.services.config.refreshAuth(currentAuthType);
 
-        if (providerName === 'gemini') {
-          // When switching TO Gemini, determine appropriate auth
-          const currentAuthType =
-            context.services.config.getContentGeneratorConfig()?.authType;
-
-          // If we were using provider auth, switch to appropriate Gemini auth
-          if (currentAuthType === AuthType.USE_PROVIDER || !currentAuthType) {
-            if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-              authType = AuthType.USE_VERTEX_AI;
-            } else if (process.env.GEMINI_API_KEY) {
-              authType = AuthType.USE_GEMINI;
-            } else {
-              authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth
-            }
-          } else {
-            // Keep existing Gemini auth type
-            authType = currentAuthType;
-          }
-        } else {
-          // When switching to non-Gemini provider
-          authType = AuthType.USE_PROVIDER;
-
-          // Show info about API key if needed
+        // Show info about API key if needed for non-Gemini providers
+        if (providerName !== 'gemini') {
           context.ui.addItem(
             {
               type: MessageType.INFO,
@@ -105,9 +89,6 @@ export const providerCommand: SlashCommand = {
             Date.now(),
           );
         }
-
-        // Refresh auth with the appropriate type
-        await context.services.config.refreshAuth(authType);
 
         // Clear UI history to prevent tool call ID mismatches
         context.ui.clear();

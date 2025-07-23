@@ -120,13 +120,8 @@ export async function createContentGenerator(
       'User-Agent': `GeminiCLI/${version} (${process.platform}; ${process.arch})`,
     },
   };
-  // Check if we should use a provider
-  if (config.authType === AuthType.USE_PROVIDER) {
-    if (!config.providerManager) {
-      throw new Error(
-        'Provider manager is required for USE_PROVIDER auth type',
-      );
-    }
+  // Always use provider path if a provider manager exists
+  if (config.providerManager) {
     return new ProviderContentGenerator(config.providerManager, config);
   }
 
