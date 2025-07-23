@@ -15,7 +15,7 @@ import {
   getErrorMessage,
   Config,
   FileDiscoveryService,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import {
   MAX_SUGGESTIONS_TO_SHOW,
   Suggestion,

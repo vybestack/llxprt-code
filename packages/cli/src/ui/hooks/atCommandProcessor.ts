@@ -12,7 +12,7 @@ import {
   getErrorMessage,
   isNodeError,
   unescapePath,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import {
   HistoryItem,
   IndividualToolCallDisplay,

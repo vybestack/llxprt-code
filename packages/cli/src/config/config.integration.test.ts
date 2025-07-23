@@ -12,7 +12,7 @@ import {
   Config,
   ConfigParameters,
   ContentGeneratorConfig,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
   apiKey: 'test-key',
@@ -21,8 +21,8 @@ const TEST_CONTENT_GENERATOR_CONFIG: ContentGeneratorConfig = {
 };
 
 // Mock file discovery service and tool registry
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@llxprt/core', async () => {
+  const actual = await vi.importActual('@llxprt/core');
   return {
     ...actual,
     FileDiscoveryService: vi.fn().mockImplementation(() => ({

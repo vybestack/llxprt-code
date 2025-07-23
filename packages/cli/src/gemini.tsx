@@ -39,7 +39,7 @@ import {
   AuthType,
   getOauthClient,
   shouldAttemptBrowserLaunch,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';

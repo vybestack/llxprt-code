@@ -13,7 +13,7 @@ export {
   IProviderManager,
   ContentGeneratorRole,
   ProviderManager,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 // Provider implementations
 export * from './openai/OpenAIProvider.js';

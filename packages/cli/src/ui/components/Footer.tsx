@@ -11,7 +11,7 @@ import {
   shortenPath,
   tildeifyPath,
   tokenLimit,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
 import Gradient from 'ink-gradient';

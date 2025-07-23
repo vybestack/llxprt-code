@@ -21,7 +21,7 @@ import {
   getErrorMessage,
   isWithinRoot,
   getErrorStatus,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import * as acp from './acp.js';
 import { Agent } from './acp.js';
 import { Readable, Writable } from 'node:stream';

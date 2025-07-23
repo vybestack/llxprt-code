@@ -8,7 +8,7 @@ import {
   allowEditorTypeInSandbox,
   checkHasEditorType,
   type EditorType,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 export interface EditorDisplay {
   name: string;

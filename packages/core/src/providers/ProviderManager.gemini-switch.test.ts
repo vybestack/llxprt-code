@@ -5,8 +5,9 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ProviderManager } from './ProviderManager';
-import { IProvider } from './IProvider';
+import { ProviderManager } from './ProviderManager.js';
+import { IProvider } from './IProvider.js';
+import { ContentGeneratorRole } from './ContentGeneratorRole.js';
 
 describe('ProviderManager - Gemini switching', () => {
   let manager: ProviderManager;
@@ -20,7 +21,7 @@ describe('ProviderManager - Gemini switching', () => {
         return [];
       },
       async *generateChatCompletion() {
-        yield { role: 'assistant', content: 'test' };
+        yield { role: ContentGeneratorRole.ASSISTANT, content: 'test' };
       },
     };
   });

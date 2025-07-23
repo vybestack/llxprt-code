@@ -12,7 +12,7 @@ import {
   AuthenticationRequiredError,
   getCoreSystemPrompt,
   createCodeAssistContentGenerator,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import type { Part, FunctionCall, Schema } from '@google/genai';
 
 /**

@@ -15,7 +15,7 @@ import {
   AccessibilitySettings,
   SandboxConfig,
   GeminiClient,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
@@ -79,9 +79,9 @@ interface MockServerConfig {
 }
 
 // Mock llxprt-code-core and its Config class
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@llxprt/core', async (importOriginal) => {
   const actualCore =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@llxprt/core')>();
   const ConfigClassMock = vi
     .fn()
     .mockImplementation((optionsPassedToConstructor) => {

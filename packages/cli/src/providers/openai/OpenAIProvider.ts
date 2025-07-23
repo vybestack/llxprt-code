@@ -20,7 +20,7 @@ import {
   GemmaToolCallParser,
   ToolFormatter,
   ToolFormat,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import OpenAI from 'openai';
 import { Settings } from '../../config/settings.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';

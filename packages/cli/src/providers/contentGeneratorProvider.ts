@@ -7,7 +7,7 @@
 import {
   ContentGenerator,
   ContentGeneratorConfig,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 /**
  * Creates a ContentGenerator using the active provider if available

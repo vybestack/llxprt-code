@@ -33,7 +33,7 @@ import {
   isProQuotaExceededError,
   isGenericQuotaExceededError,
   Config,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { IProvider } from '../../providers/IProvider.js';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
@@ -62,8 +62,8 @@ vi.mock('../../config/config.js', () => ({
   ),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@llxprt/core', async () => {
+  const actual = await vi.importActual('@llxprt/core');
   return {
     ...actual,
     isProQuotaExceededError: vi.fn(() => false),

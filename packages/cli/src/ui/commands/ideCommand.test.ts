@@ -7,7 +7,7 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
-import { type Config } from '@vybestack/llxprt-code-core';
+import { type Config } from '@llxprt/core';
 import * as child_process from 'child_process';
 import { glob } from 'glob';
 
@@ -17,13 +17,13 @@ import {
   IDE_SERVER_NAME,
   MCPDiscoveryState,
   MCPServerStatus,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 vi.mock('child_process');
 vi.mock('glob');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@llxprt/core', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@llxprt/core')>();
   return {
     ...original,
     getMCPServerStatus: vi.fn(),

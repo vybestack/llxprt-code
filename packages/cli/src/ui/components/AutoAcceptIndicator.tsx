@@ -7,7 +7,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@llxprt/core';
 
 interface AutoAcceptIndicatorProps {
   approvalMode: ApprovalMode;

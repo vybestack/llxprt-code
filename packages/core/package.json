@@ -1,5 +1,5 @@
 {
-  "name": "@vybestack/llxprt-code-core",
+  "name": "@llxprt/core",
   "version": "0.1.12",
   "description": "LLxprt Code Core",
   "repository": {

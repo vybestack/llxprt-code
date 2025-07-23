@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { useInput } from 'ink';
-import { ApprovalMode, type Config } from '@vybestack/llxprt-code-core';
+import { ApprovalMode, type Config } from '@llxprt/core';
 
 export interface UseAutoAcceptIndicatorArgs {
   config: Config;

@@ -15,7 +15,7 @@ import {
   SETTINGS_DIRECTORY_NAME,
 } from '../config/settings.js';
 import { promisify } from 'util';
-import { SandboxConfig } from '@vybestack/llxprt-code-core';
+import { SandboxConfig } from '@llxprt/core';
 
 const execAsync = promisify(exec);
 

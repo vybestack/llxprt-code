@@ -22,12 +22,12 @@ import {
   type EditorType,
   checkHasEditorType,
   allowEditorTypeInSandbox,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import { type AppState, type AppAction } from '../reducers/appReducer.js';
 
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@llxprt/core', async () => {
+  const actual = await vi.importActual('@llxprt/core');
   return {
     ...actual,
     checkHasEditorType: vi.fn(() => true),

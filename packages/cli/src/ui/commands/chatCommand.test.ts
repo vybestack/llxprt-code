@@ -21,7 +21,7 @@ import {
 } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { Content } from '@google/genai';
-import { GeminiClient } from '@vybestack/llxprt-code-core';
+import { GeminiClient } from '@llxprt/core';
 
 import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';

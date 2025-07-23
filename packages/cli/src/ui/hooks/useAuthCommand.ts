@@ -12,7 +12,7 @@ import {
   clearCachedCredentialFile,
   getErrorMessage,
   shouldAttemptBrowserLaunch,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 import { runExitCleanup } from '../../utils/cleanup.js';

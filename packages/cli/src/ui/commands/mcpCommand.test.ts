@@ -13,7 +13,7 @@ import {
   getMCPServerStatus,
   getMCPDiscoveryState,
   DiscoveredMCPTool,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import open from 'open';
 import { MessageActionReturn } from './types.js';
 import { Type, CallableTool } from '@google/genai';
@@ -23,9 +23,9 @@ vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@llxprt/core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@llxprt/core')>();
   return {
     ...actual,
     getMCPServerStatus: vi.fn(),

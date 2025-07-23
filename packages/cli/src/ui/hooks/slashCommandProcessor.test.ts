@@ -64,7 +64,7 @@ import { vi, describe, it, expect, beforeEach, beforeAll, Mock } from 'vitest';
 import open from 'open';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
 import { SlashCommandProcessorResult } from '../types.js';
-import { Config, GeminiClient } from '@vybestack/llxprt-code-core';
+import { Config, GeminiClient } from '@llxprt/core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { LoadedSettings } from '../../config/settings.js';
 import * as ShowMemoryCommandModule from './useShowMemoryCommand.js';
@@ -86,9 +86,9 @@ vi.mock('open', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@llxprt/core', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@llxprt/core')>();
   return {
     ...actual,
   };

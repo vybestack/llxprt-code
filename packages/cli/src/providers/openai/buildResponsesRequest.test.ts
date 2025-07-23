@@ -3,7 +3,7 @@ import {
   buildResponsesRequest,
   ResponsesRequestParams,
 } from './buildResponsesRequest';
-import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { ContentGeneratorRole } from '@llxprt/core';
 
 describe('buildResponsesRequest', () => {
   beforeEach(() => {

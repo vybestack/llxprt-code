@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Config,
   ProviderMessage as Message,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import {
   getOpenAIProviderInfo,
   OpenAIProviderInfo,

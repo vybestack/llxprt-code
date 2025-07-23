@@ -10,7 +10,7 @@ import {
   Config,
   ContentGenerator,
   GeminiClient,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { ProviderManager } from './ProviderManager';
 import { IProvider } from './IProvider';
 import * as providerManagerInstance from './providerManagerInstance';

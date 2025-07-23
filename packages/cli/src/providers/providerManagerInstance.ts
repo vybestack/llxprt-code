@@ -139,3 +139,5 @@ export function getProviderManager(config?: Config): ProviderManager {
 export function resetProviderManager(): void {
   providerManagerInstance = null;
 }
+
+export { getProviderManager as providerManager };

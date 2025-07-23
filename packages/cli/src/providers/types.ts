@@ -5,4 +5,4 @@
  */
 
 // Re-export ContentGeneratorRole from core
-export { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+export { ContentGeneratorRole } from '@llxprt/core';

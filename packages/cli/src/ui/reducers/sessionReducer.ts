@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { UserTierId } from '@vybestack/llxprt-code-core';
+import { UserTierId } from '@llxprt/core';
 
 // Session state interface
 export interface SessionState {

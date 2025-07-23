@@ -12,7 +12,7 @@ import {
   ToolCallStatus,
 } from '../types.js';
 import { useCallback } from 'react';
-import { Config, GeminiClient } from '@vybestack/llxprt-code-core';
+import { Config, GeminiClient } from '@llxprt/core';
 import { type PartListUnion } from '@google/genai';
 import { formatMemoryUsage } from '../utils/formatters.js';
 import { isBinary } from '../utils/textUtils.js';

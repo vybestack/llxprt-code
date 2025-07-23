@@ -10,7 +10,7 @@ import { Colors } from '../colors.js';
 import {
   type ActiveFile,
   type MCPServerConfig,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import path from 'path';
 
 interface ContextSummaryDisplayProps {

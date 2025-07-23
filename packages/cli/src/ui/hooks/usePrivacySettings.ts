@@ -9,7 +9,7 @@ import {
   Config,
   CodeAssistServer,
   UserTierId,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 export interface PrivacyState {
   isLoading: boolean;

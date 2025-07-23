@@ -11,7 +11,7 @@ import {
   ToolRegistry,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
 
 import { parseAndFormatApiError } from './ui/utils/errorParsing.js';

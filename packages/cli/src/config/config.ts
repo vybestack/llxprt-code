@@ -19,7 +19,7 @@ import {
   TelemetryTarget,
   MCPServerConfig,
   IDE_SERVER_NAME,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 import { Settings } from './settings.js';
 
 import { Extension, annotateActiveExtensions } from './extension.js';

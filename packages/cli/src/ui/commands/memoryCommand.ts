@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getErrorMessage } from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@llxprt/core';
 import { MessageType } from '../types.js';
 import { SlashCommand, SlashCommandActionReturn } from './types.js';
 

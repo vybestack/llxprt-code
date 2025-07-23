@@ -5,7 +5,7 @@
  */
 
 import { Message, MessageType } from '../types.js';
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@llxprt/core';
 import { LoadedSettings } from '../../config/settings.js';
 
 export function createShowMemoryAction(

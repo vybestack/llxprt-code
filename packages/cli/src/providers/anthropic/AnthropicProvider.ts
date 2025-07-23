@@ -6,7 +6,7 @@ import {
   retryWithBackoff,
   ToolFormatter,
   ToolFormat,
-} from '@vybestack/llxprt-code-core';
+} from '@llxprt/core';
 
 export class AnthropicProvider implements IProvider {
   name: string = 'anthropic';

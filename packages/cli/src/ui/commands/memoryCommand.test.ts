@@ -9,11 +9,11 @@ import { memoryCommand } from './memoryCommand';
 import { type CommandContext, SlashCommand } from './types';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { getErrorMessage } from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@llxprt/core';
 
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@llxprt/core', async (importOriginal) => {
   const original =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+    await importOriginal<typeof import('@llxprt/core')>();
   return {
     ...original,
     getErrorMessage: vi.fn((error: unknown) => {

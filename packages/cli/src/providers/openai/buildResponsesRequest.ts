@@ -1,5 +1,5 @@
 import { IMessage, ITool } from '../index.js';
-import { ResponsesTool } from '@vybestack/llxprt-code-core';
+import { ResponsesTool } from '@llxprt/core';
 
 export interface ResponsesRequestParams {
   messages?: IMessage[];

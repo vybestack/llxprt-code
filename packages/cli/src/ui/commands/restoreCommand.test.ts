@@ -18,7 +18,7 @@ import * as fs from 'fs/promises';
 import { restoreCommand } from './restoreCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
-import { Config, GitService } from '@vybestack/llxprt-code-core';
+import { Config, GitService } from '@llxprt/core';
 
 vi.mock('fs/promises', () => ({
   readdir: vi.fn(),

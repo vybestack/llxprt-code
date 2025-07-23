@@ -7,10 +7,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getStartupWarnings } from './startupWarnings';
 import fs from 'fs/promises';
-import { getErrorMessage } from '@vybestack/llxprt-code-core';
+import { getErrorMessage } from '@llxprt/core';
 
 vi.mock('fs/promises');
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+vi.mock('@llxprt/core', async (importOriginal) => {
   const actual = await importOriginal();
   return {
     ...actual,

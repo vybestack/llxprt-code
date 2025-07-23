@@ -14,7 +14,7 @@ import { OpenAIProvider } from './openai/OpenAIProvider';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { Config } from '@llxprt/core';
 
 describe('enhanceConfigWithProviders Integration Test', () => {
   let apiKey: string | null = null;
