@@ -11,7 +11,6 @@ import {
   MessageActionReturn,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { ProviderManagerAdapter } from '../../providers/ProviderManagerAdapter.js';
 import { MessageType } from '../types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 
@@ -58,11 +57,8 @@ export const providerCommand: SlashCommand = {
 
       // Update config if available
       if (context.services.config) {
-        // Ensure provider manager is set on config with adapter
-        const providerManagerAdapter = new ProviderManagerAdapter(
-          providerManager,
-        );
-        context.services.config.setProviderManager(providerManagerAdapter);
+        // Ensure provider manager is set on config
+        context.services.config.setProviderManager(providerManager);
 
         // Update model to match the new provider's default
         const newModel =

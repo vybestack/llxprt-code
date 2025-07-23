@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider, IModel } from './index.js';
+import { IProvider } from './IProvider.js';
+import { IModel } from './IModel.js';
+import { IProviderManager } from './IProviderManager.js';
 
-export class ProviderManager {
+export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
   private activeProviderName: string;
 

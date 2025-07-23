@@ -5,11 +5,27 @@
  */
 
 import { IProvider } from './IProvider.js';
+import { IModel } from './IModel.js';
 
 /**
  * Manager for handling multiple providers
  */
 export interface IProviderManager {
+  /**
+   * Register a provider
+   */
+  registerProvider(provider: IProvider): void;
+
+  /**
+   * Set the active provider by name
+   */
+  setActiveProvider(name: string): void;
+
+  /**
+   * Clear the active provider
+   */
+  clearActiveProvider(): void;
+
   /**
    * Check if a provider is currently active
    */
@@ -17,11 +33,22 @@ export interface IProviderManager {
 
   /**
    * Get the currently active provider
+   * @throws Error if no active provider is set
    */
-  getActiveProvider(): IProvider | null;
+  getActiveProvider(): IProvider;
 
   /**
    * Get the name of the active provider
    */
   getActiveProviderName(): string;
+
+  /**
+   * Get available models from a provider
+   */
+  getAvailableModels(providerName?: string): Promise<IModel[]>;
+
+  /**
+   * List all registered providers
+   */
+  listProviders(): string[];
 }

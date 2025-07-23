@@ -43,7 +43,6 @@ import {
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';
-import { ProviderManagerAdapter } from './providers/ProviderManagerAdapter.js';
 import {
   setProviderApiKey,
   setProviderApiKeyFromFile,
@@ -128,8 +127,7 @@ export async function main() {
   );
 
   const providerManager = getProviderManager(config);
-  const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
-  config.setProviderManager(providerManagerAdapter);
+  config.setProviderManager(providerManager);
 
   if (argv.promptInteractive && !process.stdin.isTTY) {
     console.error(
@@ -480,8 +478,7 @@ async function loadNonInteractiveConfig(
 
   // Always set up provider manager for non-interactive mode
   const providerManager = getProviderManager(finalConfig);
-  const providerManagerAdapter = new ProviderManagerAdapter(providerManager);
-  finalConfig.setProviderManager(providerManagerAdapter);
+  finalConfig.setProviderManager(providerManager);
 
   // Activate provider if specified
   if (argv.provider) {

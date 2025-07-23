@@ -10,7 +10,6 @@ import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 import { AuthType, Config } from '@vybestack/llxprt-code-core';
-import { ProviderManagerAdapter } from '../../providers/ProviderManagerAdapter.js';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {
@@ -65,11 +64,8 @@ export const useProviderDialog = ({
         // Switch provider first
         providerManager.setActiveProvider(providerName);
 
-        // Ensure provider manager is set on config with adapter
-        const providerManagerAdapter = new ProviderManagerAdapter(
-          providerManager,
-        );
-        config.setProviderManager(providerManagerAdapter);
+        // Ensure provider manager is set on config
+        config.setProviderManager(providerManager);
 
         // Update model to match the new provider's default
         const newModel =

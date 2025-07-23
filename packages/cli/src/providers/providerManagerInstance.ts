@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from '@vybestack/llxprt-code-core';
-import { ProviderManager } from './ProviderManager.js';
+import { Config, ProviderManager } from '@llxprt/core';
 import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { GeminiProvider } from './gemini/GeminiProvider.js';
 import { AnthropicProvider } from './anthropic/AnthropicProvider.js';

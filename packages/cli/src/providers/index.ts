@@ -12,11 +12,11 @@ export {
   ITool,
   IProviderManager,
   ContentGeneratorRole,
+  ProviderManager,
 } from '@vybestack/llxprt-code-core';
 
 // Provider implementations
 export * from './openai/OpenAIProvider.js';
 
 // Provider management
-export * from './ProviderManager.js';
 export * from './providerManagerInstance.js';

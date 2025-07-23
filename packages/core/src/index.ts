@@ -85,7 +85,6 @@ export { sessionId } from './utils/session.js';
 // Export provider types and classes
 export type {
   Provider,
-  ProviderManager,
   ProviderMessage,
   ProviderTool,
   ProviderToolCall,
@@ -98,6 +97,7 @@ export * from './providers/IModel.js';
 export * from './providers/IProviderManager.js';
 export * from './providers/ContentGeneratorRole.js';
 export * from './providers/ProviderContentGenerator.js';
+export * from './providers/ProviderManager.js';
 export * from './providers/adapters/GeminiCompatibleWrapper.js';
 export * from './providers/errors.js';
 
