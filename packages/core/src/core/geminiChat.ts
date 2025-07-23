@@ -11,6 +11,7 @@ import {
   GenerateContentResponse,
   Content,
   GenerateContentConfig,
+  GenerateContentParameters,
   SendMessageParameters,
   createUserContent,
   Part,
@@ -379,15 +380,33 @@ export class GeminiChat {
     params: SendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    console.log('DEBUG: GeminiChat.sendMessageStream called');
-    console.log('DEBUG: GeminiChat.sendMessageStream params:', JSON.stringify(params, null, 2));
-    console.log('DEBUG: GeminiChat.sendMessageStream params.message type:', typeof params.message);
-    console.log('DEBUG: GeminiChat.sendMessageStream params.message:', JSON.stringify(params.message, null, 2));
+    if (process.env.DEBUG) {
+      console.log('DEBUG [geminiChat]: ===== SEND MESSAGE STREAM START =====');
+      console.log('DEBUG [geminiChat]: Model from config:', this.config.getModel());
+      console.log('DEBUG [geminiChat]: Params:', JSON.stringify(params, null, 2));
+      console.log('DEBUG [geminiChat]: Message type:', typeof params.message);
+      console.log('DEBUG [geminiChat]: Message content:', JSON.stringify(params.message, null, 2));
+    }
+    
+    if (process.env.DEBUG) {
+      console.log('DEBUG: GeminiChat.sendMessageStream called');
+      console.log('DEBUG: GeminiChat.sendMessageStream params:', JSON.stringify(params, null, 2));
+      console.log('DEBUG: GeminiChat.sendMessageStream params.message type:', typeof params.message);
+      console.log('DEBUG: GeminiChat.sendMessageStream params.message:', JSON.stringify(params.message, null, 2));
+    }
     await this.sendPromise;
     const userContent = createUserContent(params.message);
-    console.log('DEBUG: GeminiChat.sendMessageStream userContent:', JSON.stringify(userContent, null, 2));
+    if (process.env.DEBUG) {
+      console.log('DEBUG [geminiChat]: Created userContent:', JSON.stringify(userContent, null, 2));
+    }
+    
+    if (process.env.DEBUG) {
+      console.log('DEBUG: GeminiChat.sendMessageStream userContent:', JSON.stringify(userContent, null, 2));
+    }
     const requestContents = this.getHistory(true).concat(userContent);
-    console.log('DEBUG: GeminiChat.sendMessageStream requestContents:', JSON.stringify(requestContents, null, 2));
+    if (process.env.DEBUG) {
+      console.log('DEBUG: GeminiChat.sendMessageStream requestContents:', JSON.stringify(requestContents, null, 2));
+    }
     this._logApiRequest(requestContents, this.config.getModel(), prompt_id);
 
     const startTime = Date.now();
@@ -408,11 +427,42 @@ export class GeminiChat {
           );
         }
 
-        return this.contentGenerator.generateContentStream({
+        if (process.env.DEBUG) {
+          console.log('DEBUG [geminiChat]: About to call generateContentStream with:');
+          console.log('DEBUG [geminiChat]: - Model:', modelToUse);
+          console.log('DEBUG [geminiChat]: - Contents:', JSON.stringify(requestContents, null, 2));
+          console.log('DEBUG [geminiChat]: - Config:', JSON.stringify({ ...this.generationConfig, ...params.config }, null, 2));
+          console.log('DEBUG [geminiChat]: - Tools in generationConfig:', JSON.stringify(this.generationConfig.tools, null, 2));
+          console.log('DEBUG [geminiChat]: - Tools in params.config:', JSON.stringify(params.config?.tools, null, 2));
+        }
+        
+        // Check if this is a model-specific issue
+        const isFlashModel = modelToUse && modelToUse.includes('flash');
+        if (process.env.DEBUG) {
+          console.log('DEBUG [geminiChat]: - Is Flash model:', isFlashModel);
+        }
+        
+        // Extract systemInstruction from generationConfig if it exists
+        const { systemInstruction, ...restGenerationConfig } = this.generationConfig;
+        
+        // Create properly typed request parameters
+        const mergedConfig: GenerateContentConfig = {
+          ...restGenerationConfig,
+          ...params.config,
+        };
+        
+        // Add systemInstruction to the config if it exists
+        if (systemInstruction) {
+          mergedConfig.systemInstruction = systemInstruction;
+        }
+        
+        const requestParams: GenerateContentParameters = {
           model: modelToUse,
           contents: requestContents,
-          config: { ...this.generationConfig, ...params.config },
-        });
+          config: mergedConfig,
+        };
+        
+        return this.contentGenerator.generateContentStream(requestParams);
       };
 
       // Note: Retrying streams can be complex. If generateContentStream itself doesn't handle retries

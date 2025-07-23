@@ -28,6 +28,13 @@ export class GeminiProvider implements IProvider {
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
   private authDetermined: boolean = false;
+  private toolSchemas: Array<{
+    functionDeclarations: Array<{
+      name: string;
+      description?: string;
+      parameters?: Schema;
+    }>;
+  }> | undefined;
 
   constructor() {
     // Do not determine auth mode on instantiation.
@@ -78,6 +85,8 @@ export class GeminiProvider implements IProvider {
       // OAuth will be handled by the existing auth system
     }
   }
+
+  private toolSchemas: any[] | undefined;
 
   /**
    * Checks if Vertex AI credentials are available
@@ -234,13 +243,16 @@ export class GeminiProvider implements IProvider {
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
     // Comprehensive debug logging
-    console.log('[GEMINI] generateChatCompletion called with:');
-    console.log('[GEMINI] messages:', JSON.stringify(messages, null, 2));
-    console.log('[GEMINI] messages length:', messages.length);
-    console.log('[GEMINI] first message:', messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE');
-    console.log('[GEMINI] tools:', tools ? JSON.stringify(tools.map(t => t.function.name)) : 'NO TOOLS');
-    
-    console.log('DEBUG: GeminiProvider.generateChatCompletion called with messages:', JSON.stringify(messages, null, 2));
+    if (process.env.DEBUG) {
+      console.log('[GEMINI] generateChatCompletion called with:');
+      console.log('[GEMINI] messages:', JSON.stringify(messages, null, 2));
+      console.log('[GEMINI] messages length:', messages.length);
+      console.log('[GEMINI] first message:', messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE');
+      console.log('[GEMINI] tools:', tools ? JSON.stringify(tools.map(t => t.function.name)) : 'NO TOOLS');
+      if (process.env.DEBUG) {
+        console.log('DEBUG: GeminiProvider.generateChatCompletion called with messages:', JSON.stringify(messages, null, 2));
+      }
+    }
     // Check if we need to re-determine auth
     const oauthValid = await this.isOAuthValid();
     if (!oauthValid) {
@@ -342,11 +354,32 @@ export class GeminiProvider implements IProvider {
         // Use config model in OAuth mode to ensure synchronization
         const oauthModel = this.modelExplicitlySet ? this.currentModel : (this.config?.getModel() || this.currentModel);
         
+        // Import getCoreSystemPrompt to generate systemInstruction
+        const { getCoreSystemPrompt } = await import('@vybestack/llxprt-code-core');
+        
+        // Get user memory from config if available
+        const userMemory = this.config?.getUserMemory ? this.config.getUserMemory() : '';
+        const systemInstruction = getCoreSystemPrompt(userMemory, oauthModel);
+        
+        // Store tools if provided
+        if (tools && tools.length > 0) {
+          this.toolSchemas = this.convertToolsToGeminiFormat(tools);
+        }
+        
+        // Use provided tools or stored tools
+        let geminiTools = tools ? this.convertToolsToGeminiFormat(tools) : this.toolSchemas;
+        
+        // For Flash models, always include tools if available
+        if (oauthModel.includes('flash') && !geminiTools && this.toolSchemas) {
+          geminiTools = this.toolSchemas;
+        }
+        
         const request = {
           model: oauthModel,
           contents: this.convertMessagesToGeminiFormat(messages),
+          systemInstruction,
           config: {
-            tools: tools ? this.convertToolsToGeminiFormat(tools) : undefined,
+            tools: geminiTools,
           },
         };
 
@@ -428,21 +461,37 @@ export class GeminiProvider implements IProvider {
     // Get the models interface (which is a ContentGenerator)
     const contentGenerator = genAI.models;
 
-    // Convert IMessage[] to Gemini format
+    // Store tools if provided
+    if (tools && tools.length > 0) {
+      this.toolSchemas = this.convertToolsToGeminiFormat(tools);
+    }
+    
+    // Convert IMessage[] to Gemini format - do this after storing tools so priming can access them
     const contents = this.convertMessagesToGeminiFormat(messages);
-
-    // Convert ITool[] to Gemini tool format
-    const geminiTools = tools
-      ? this.convertToolsToGeminiFormat(tools)
-      : undefined;
+    
+    // Use provided tools or stored tools
+    let geminiTools = tools ? this.convertToolsToGeminiFormat(tools) : this.toolSchemas;
 
     // Create the request - ContentGenerator expects model in the request
     // Use explicit model if set, otherwise fall back to config model
     const modelToUse = this.modelExplicitlySet ? this.currentModel : (this.config?.getModel() || this.currentModel);
     
+    // For Flash models, always include tools if available
+    if (modelToUse.includes('flash') && !geminiTools && this.toolSchemas) {
+      geminiTools = this.toolSchemas;
+    }
+    
+    // Import getCoreSystemPrompt to generate systemInstruction
+    const { getCoreSystemPrompt } = await import('@vybestack/llxprt-code-core');
+    
+    // Get user memory from config if available
+    const userMemory = this.config?.getUserMemory ? this.config.getUserMemory() : '';
+    const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
+    
     const request = {
       model: modelToUse,
       contents,
+      systemInstruction,
       config: {
         tools: geminiTools,
       },
@@ -514,6 +563,30 @@ export class GeminiProvider implements IProvider {
       messageIndex: number;
     }>();
     
+    // Check if this is a Flash model and if we need to add priming
+    const isFlashModel = this.currentModel.includes('flash');
+    const isFirstUserMessage = messages.length > 0 && messages[0].role === ContentGeneratorRole.USER;
+    
+    // Add Flash priming if needed
+    if (isFlashModel && isFirstUserMessage && this.toolSchemas && this.toolSchemas.length > 0) {
+      // Extract tool names for the priming message
+      const toolNames = this.toolSchemas[0].functionDeclarations.map(fd => fd.name);
+      
+      // Create a priming message that explicitly references tools
+      const primingText = `You have access to the following tools: ${toolNames.join(', ')}. 
+You MUST use these tools when appropriate. For example:
+- To read a file, use the read_file tool
+- To list directory contents, use the ls tool
+- To search for patterns, use the grep tool
+- To create or modify files, use the write_file or edit tools
+Always use the appropriate tool for the task instead of describing what you would do.`;
+      
+      // Prepend the priming to the first user message
+      if (messages[0].content) {
+        messages[0].content = primingText + '\n\n' + messages[0].content;
+      }
+    }
+    
 
 
     for (let i = 0; i < messages.length; i++) {
@@ -522,7 +595,9 @@ export class GeminiProvider implements IProvider {
       // Handle tool responses - each in its own Content object
       if (msg.role === ContentGeneratorRole.TOOL) {
         if (!msg.tool_call_id) {
-          console.warn(`Tool response at index ${i} missing tool_call_id, skipping:`, msg);
+          if (process.env.DEBUG) {
+            console.warn(`Tool response at index ${i} missing tool_call_id, skipping:`, msg);
+          }
           continue;
         }
         
@@ -611,7 +686,9 @@ export class GeminiProvider implements IProvider {
           
           // Ensure tool call has an ID
           if (!toolCall.id) {
-            console.warn(`Tool call at message ${i} missing ID, generating one:`, toolCall);
+            if (process.env.DEBUG) {
+              console.warn(`Tool call at message ${i} missing ID, generating one:`, toolCall);
+            }
             // Generate a unique ID for the function call
             toolCall.id = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           }
@@ -659,7 +736,9 @@ export class GeminiProvider implements IProvider {
     for (const [callId, callInfo] of Array.from(functionCalls.entries())) {
       if (!functionResponses.has(callId)) {
         // Create a placeholder response for missing function response
-        console.warn(`Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`);
+        if (process.env.DEBUG) {
+          console.warn(`Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`);
+        }
         
         // Add each function response as a separate content object (same as regular tool responses)
         contents.push({
@@ -729,11 +808,13 @@ export class GeminiProvider implements IProvider {
     }
     
     if (totalFunctionCalls !== totalFunctionResponses) {
-      console.warn(`Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`);
-      console.warn('Function calls:', callsDetail);
-      console.warn('Function responses:', responsesDetail);
-      console.warn('Unmatched call IDs:', Array.from(unmatchedCalls));
-      console.warn('Unmatched response IDs:', Array.from(unmatchedResponses));
+      if (process.env.DEBUG) {
+        console.warn(`Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`);
+        console.warn('Function calls:', callsDetail);
+        console.warn('Function responses:', responsesDetail);
+        console.warn('Unmatched call IDs:', Array.from(unmatchedCalls));
+        console.warn('Unmatched response IDs:', Array.from(unmatchedResponses));
+      }
       
       // This is now just a warning, not an error, since we've added placeholders
       // The Gemini API should handle this gracefully
@@ -749,7 +830,7 @@ export class GeminiProvider implements IProvider {
       parameters?: Schema;
     }>;
   }> {
-    return [
+    const result = [
       {
         functionDeclarations: tools.map((tool) => ({
           name: tool.function.name,
@@ -758,6 +839,12 @@ export class GeminiProvider implements IProvider {
         })),
       },
     ];
+    
+    if (process.env.DEBUG) {
+      console.log('DEBUG [GeminiProvider]: Converted tools to Gemini format:', JSON.stringify(result, null, 2));
+    }
+    
+    return result;
   }
 
   setApiKey(apiKey: string): void {

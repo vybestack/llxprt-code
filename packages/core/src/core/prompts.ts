@@ -18,7 +18,7 @@ import process from 'node:process';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { MemoryTool, LLXPRT_CONFIG_DIR } from '../tools/memoryTool.js';
 
-export function getCoreSystemPrompt(userMemory?: string): string {
+export function getCoreSystemPrompt(userMemory?: string, model?: string): string {
   // if GEMINI_SYSTEM_MD is set (and not 0|false), override system prompt from file
   // default path is .gemini/system.md but can be modified via custom path in GEMINI_SYSTEM_MD
   let systemMdEnabled = false;
@@ -348,12 +348,25 @@ Your core function is efficient and safe assistance. Balance extreme conciseness
     }
   }
 
+  // Add model-specific instructions for Flash models
+  const modelSpecificPrompt = model && model.includes('flash') 
+    ? `\n\nIMPORTANT: You MUST use the provided tools when appropriate. For example:
+- When asked to list files or directories, use the '${LSTool.Name}' tool
+- When asked to read file contents, use the '${ReadFileTool.Name}' tool
+- When asked to search for patterns in files, use the '${GrepTool.Name}' tool
+- When asked to find files by name, use the '${GlobTool.Name}' tool
+- When asked to create files, use the '${WriteFileTool.Name}' tool
+- When asked to modify files, use the '${EditTool.Name}' tool
+- When asked to run commands, use the '${ShellTool.Name}' tool
+Do not describe what you would do - actually execute the tool calls.`
+    : '';
+
   const memorySuffix =
     userMemory && userMemory.trim().length > 0
       ? `\n\n---\n\n${userMemory.trim()}`
       : '';
 
-  return `${basePrompt}${memorySuffix}`;
+  return `${basePrompt}${modelSpecificPrompt}${memorySuffix}`;
 }
 
 /**
