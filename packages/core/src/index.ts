@@ -106,3 +106,13 @@ export * from './providers/tokenizers/ITokenizer.js';
 export * from './providers/tokenizers/OpenAITokenizer.js';
 export * from './providers/tokenizers/AnthropicTokenizer.js';
 export * from './utils/browser.js';
+
+// Export adapters
+export * from './adapters/IStreamAdapter.js';
+
+// Export parsers
+export * from './parsers/TextToolCallParser.js';
+
+// Export tool formatters
+export * from './tools/IToolFormatter.js';
+export * from './tools/ToolFormatter.js';

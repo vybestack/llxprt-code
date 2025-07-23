@@ -15,8 +15,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ToolFormatter } from './ToolFormatter';
-import { ITool } from '../providers/ITool';
+import { ToolFormatter } from './ToolFormatter.js';
+import { ITool } from '../providers/ITool.js';
 
 describe('ToolFormatter', () => {
   let formatter: ToolFormatter;
@@ -282,10 +282,10 @@ describe('ToolFormatter', () => {
     const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
 
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('function');
-    expect(result[0].function.name).toBe('get_stock_fundamentals');
-    expect(result[0].function.arguments).toBe('{"symbol":"AAPL"}');
-    expect(result[0].id).toMatch(/^hermes_/); // Should have generated ID
+    expect(result![0].type).toBe('function');
+    expect(result![0].function.name).toBe('get_stock_fundamentals');
+    expect(result![0].function.arguments).toBe('{"symbol":"AAPL"}');
+    expect(result![0].id).toMatch(/^hermes_/); // Should have generated ID
   });
 
   it('should handle Hermes tool calls without arguments', () => {
@@ -297,8 +297,8 @@ describe('ToolFormatter', () => {
     const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
 
     expect(result).toHaveLength(1);
-    expect(result[0].function.name).toBe('get_current_time');
-    expect(result[0].function.arguments).toBe('{}');
+    expect(result![0].function.name).toBe('get_current_time');
+    expect(result![0].function.arguments).toBe('{}');
   });
 
   it('should throw error for invalid Hermes tool call format', () => {
@@ -361,12 +361,12 @@ describe('ToolFormatter', () => {
     const result = formatter.fromProviderFormat(rawToolCall, 'xml');
 
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('function');
-    expect(result[0].function.name).toBe('weather_tool');
-    expect(result[0].function.arguments).toBe(
+    expect(result![0].type).toBe('function');
+    expect(result![0].function.name).toBe('weather_tool');
+    expect(result![0].function.arguments).toBe(
       '{"location":"Paris","units":"celsius"}',
     );
-    expect(result[0].id).toMatch(/^xml_/); // Should have generated ID
+    expect(result![0].id).toMatch(/^xml_/); // Should have generated ID
   });
 
   it('should handle XML tool calls without arguments', () => {
@@ -378,8 +378,8 @@ describe('ToolFormatter', () => {
     const result = formatter.fromProviderFormat(rawToolCall, 'xml');
 
     expect(result).toHaveLength(1);
-    expect(result[0].function.name).toBe('get_time');
-    expect(result[0].function.arguments).toBe('{}');
+    expect(result![0].function.name).toBe('get_time');
+    expect(result![0].function.arguments).toBe('{}');
   });
 
   it('should throw error for invalid XML tool call format', () => {

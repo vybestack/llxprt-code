@@ -20,6 +20,3 @@ export * from './openai/OpenAIProvider.js';
 // Provider management
 export * from './ProviderManager.js';
 export * from './providerManagerInstance.js';
-
-// Adapters
-export * from './adapters/IStreamAdapter.js';

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { ToolFormatter } from './ToolFormatter';
-import { ITool } from '../providers/ITool';
+import { ToolFormatter } from './ToolFormatter.js';
+import { ITool } from '../providers/ITool.js';
 
 describe('ToolFormatter.toResponsesTool', () => {
   const formatter = new ToolFormatter();
@@ -205,7 +205,11 @@ describe('ToolFormatter.toResponsesTool', () => {
     const result = formatter.toResponsesTool(tools);
 
     expect(result[0].parameters).toEqual(tools[0].function.parameters);
-    expect(result[0].parameters.properties['property-with-dash']).toBeDefined();
+    const params = result[0].parameters as {
+      properties: Record<string, unknown>;
+    };
+    const properties = params.properties;
+    expect(properties['property-with-dash']).toBeDefined();
   });
 
   it('should preserve all schema attributes', () => {
@@ -247,10 +251,16 @@ describe('ToolFormatter.toResponsesTool', () => {
 
     expect(params.title).toBe('Schema Title');
     expect(params.description).toBe('Schema description');
-    expect(params.properties.field.minimum).toBe(0);
-    expect(params.properties.field.maximum).toBe(100);
-    expect(params.properties.field.default).toBe(50);
-    expect(params.properties.pattern_field.pattern).toBe('^[A-Z]{3}$');
+    const properties = params.properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const field = properties.field as Record<string, unknown>;
+    const patternField = properties.pattern_field as Record<string, unknown>;
+    expect(field.minimum).toBe(0);
+    expect(field.maximum).toBe(100);
+    expect(field.default).toBe(50);
+    expect(patternField.pattern).toBe('^[A-Z]{3}$');
     expect(params.additionalProperties).toBe(false);
   });
 });

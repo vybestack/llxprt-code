@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IMessage } from '../index.js';
-import { ServerGeminiStreamEvent } from '@vybestack/llxprt-code-core';
+import { IMessage } from '../providers/IMessage.js';
+import { ServerGeminiStreamEvent } from '../core/turn.js';
 
 /**
  * Interface for adapting provider-specific streams to Gemini event format

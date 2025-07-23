@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GemmaToolCallParser } from './TextToolCallParser';
+import { GemmaToolCallParser } from './TextToolCallParser.js';
 
 const parser = new GemmaToolCallParser();
 
