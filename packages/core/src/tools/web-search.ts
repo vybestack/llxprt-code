@@ -121,30 +121,26 @@ export class WebSearchTool extends BaseTool<
       const geminiClient = this.config.getGeminiClient();
 
       // Ensure the Gemini client is initialized for web search
-      // If not initialized, try to initialize it with Google auth
+      // When using providers, the geminiClient might not be initialized
+      // but we still need it for the googleSearch tool
       if (!geminiClient.isInitialized()) {
-        // Check if we have Google authentication available
-        const authType = this.config.getContentGeneratorConfig()?.authType;
-
-        // If using a provider but Google auth was previously successful,
-        // we should still be able to use web search
-        if (!authType || authType === AuthType.LOGIN_WITH_GOOGLE) {
-          try {
-            // Try to initialize with Google auth for web search
-            await this.config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
-          } catch (_authError) {
+        try {
+          // Initialize with the current auth config
+          // This will use the existing auth type which should have Google credentials
+          const contentGenConfig = this.config.getContentGeneratorConfig();
+          if (!contentGenConfig) {
             return {
-              llmContent: `Web search requires Google authentication. Please run 'llxprt auth' to authenticate with Google.`,
-              returnDisplay: 'Web search requires Google authentication.',
+              llmContent: `Web search requires authentication. Please run 'llxprt auth' to authenticate.`,
+              returnDisplay: 'Web search requires authentication.',
             };
           }
-        }
-
-        // Check again after auth attempt
-        if (!geminiClient.isInitialized()) {
+          
+          // Initialize the Gemini client with the current config
+          await geminiClient.initialize(contentGenConfig);
+        } catch (error) {
           return {
-            llmContent: `Web search is not available. Google authentication may be required.`,
-            returnDisplay: 'Web search unavailable.',
+            llmContent: `Web search initialization failed: ${getErrorMessage(error)}. Please ensure you have authenticated with 'llxprt auth'.`,
+            returnDisplay: 'Web search initialization failed.',
           };
         }
       }
