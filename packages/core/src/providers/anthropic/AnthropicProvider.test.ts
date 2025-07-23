@@ -1,49 +1,74 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { AnthropicProvider } from './AnthropicProvider';
-import { ITool } from '../index.js';
+import { AnthropicProvider } from './AnthropicProvider.js';
+import { ITool } from '../ITool.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { IMessage } from '../IMessage.js';
 
-// Mock the ToolFormatter from core package
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
-  return {
-    ...actual,
-    ToolFormatter: vi.fn().mockImplementation(() => ({
-      toProviderFormat: vi.fn((tools: ITool[], format: string) => {
-        if (format === 'anthropic') {
-          return tools.map((tool) => ({
-            name: tool.function.name,
-            description: tool.function.description || '',
-            input_schema: {
-              type: 'object',
-              ...tool.function.parameters,
+// Mock the ToolFormatter
+vi.mock('../../tools/ToolFormatter.js', () => ({
+  ToolFormatter: vi.fn().mockImplementation(() => ({
+    toProviderFormat: vi.fn((tools: ITool[], format: string) => {
+      if (format === 'anthropic') {
+        return tools.map((tool) => ({
+          name: tool.function.name,
+          description: tool.function.description || '',
+          input_schema: {
+            type: 'object',
+            ...tool.function.parameters,
+          },
+        }));
+      }
+      return tools;
+    }),
+    fromProviderFormat: vi.fn((rawToolCall: unknown, format: string) => {
+      if (format === 'anthropic') {
+        const toolCall = rawToolCall as {
+          id: string;
+          name: string;
+          input?: unknown;
+        };
+        return [
+          {
+            id: toolCall.id,
+            type: 'function',
+            function: {
+              name: toolCall.name,
+              arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
             },
-          }));
+          },
+        ];
+      }
+      return [rawToolCall];
+    }),
+  })),
+}));
+
+// Mock the retry utility
+vi.mock('../../utils/retry.js', () => ({
+  retryWithBackoff: vi.fn(async (fn, options) => {
+    let lastError;
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        attempts++;
+        if (
+          attempts < maxAttempts &&
+          options?.shouldRetry &&
+          options.shouldRetry(error)
+        ) {
+          continue;
         }
-        return tools;
-      }),
-      fromProviderFormat: vi.fn((rawToolCall: unknown, format: string) => {
-        if (format === 'anthropic') {
-          const toolCall = rawToolCall as {
-            id: string;
-            name: string;
-            input?: unknown;
-          };
-          return [
-            {
-              id: toolCall.id,
-              type: 'function',
-              function: {
-                name: toolCall.name,
-                arguments: toolCall.input ? JSON.stringify(toolCall.input) : '',
-              },
-            },
-          ];
-        }
-        return [rawToolCall];
-      }),
-    })),
-  };
-});
+        throw error;
+      }
+    }
+    throw lastError;
+  }),
+}));
 
 // Mock the Anthropic SDK
 vi.mock('@anthropic-ai/sdk', () => ({
@@ -174,7 +199,9 @@ describe('AnthropicProvider', () => {
 
       mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
 
-      const messages = [{ role: 'user', content: 'Say hello' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'Say hello' },
+      ];
       const generator = provider.generateChatCompletion(messages);
 
       const chunks = [];
@@ -223,7 +250,9 @@ describe('AnthropicProvider', () => {
 
       mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
 
-      const messages = [{ role: 'user', content: 'What is the weather?' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'What is the weather?' },
+      ];
       const tools = [
         {
           type: 'function' as const,
@@ -280,7 +309,9 @@ describe('AnthropicProvider', () => {
         new Error('API Error'),
       );
 
-      const messages = [{ role: 'user', content: 'test' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'test' },
+      ];
       const generator = provider.generateChatCompletion(messages);
 
       await expect(generator.next()).rejects.toThrow(
@@ -317,7 +348,9 @@ describe('AnthropicProvider', () => {
 
       mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
 
-      const messages = [{ role: 'user', content: 'Say hello' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'Say hello' },
+      ];
       const generator = provider.generateChatCompletion(messages);
 
       const chunks = [];
@@ -326,25 +359,25 @@ describe('AnthropicProvider', () => {
       }
 
       // Filter out usage chunks for verification
-      const usageChunks = chunks.filter((c) => c.usage);
+      const usageChunks = chunks.filter((c) => (c as IMessage).usage);
       expect(usageChunks).toHaveLength(3);
 
       // Check first usage (from message_start)
-      expect(usageChunks[0].usage).toEqual({
+      expect((usageChunks[0] as IMessage).usage).toEqual({
         prompt_tokens: 10,
         completion_tokens: 0,
         total_tokens: 10,
       });
 
       // Check updated usage from message_delta
-      expect(usageChunks[1].usage).toEqual({
+      expect((usageChunks[1] as IMessage).usage).toEqual({
         prompt_tokens: 10,
         completion_tokens: 5,
         total_tokens: 15,
       });
 
       // Check final usage from message_stop (same as last update)
-      expect(usageChunks[2].usage).toEqual({
+      expect((usageChunks[2] as IMessage).usage).toEqual({
         prompt_tokens: 10,
         completion_tokens: 5,
         total_tokens: 15,
@@ -369,7 +402,9 @@ describe('AnthropicProvider', () => {
 
       mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
 
-      const messages = [{ role: 'user', content: 'Say hello' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'Say hello' },
+      ];
       const generator = provider.generateChatCompletion(messages);
 
       const chunks = [];
@@ -378,10 +413,10 @@ describe('AnthropicProvider', () => {
       }
 
       // Filter to only content chunks
-      const contentChunks = chunks.filter((c) => c.content);
+      const contentChunks = chunks.filter((c) => (c as IMessage).content);
       expect(contentChunks).toHaveLength(2);
-      expect(contentChunks[0].content).toBe('Hello');
-      expect(contentChunks[1].content).toBe(' world');
+      expect((contentChunks[0] as IMessage).content).toBe('Hello');
+      expect((contentChunks[1] as IMessage).content).toBe(' world');
     });
 
     it('should use ToolFormatter for tool conversion', async () => {
@@ -410,7 +445,9 @@ describe('AnthropicProvider', () => {
         },
       ];
 
-      const messages = [{ role: 'user', content: 'test' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'test' },
+      ];
       const generator = provider.generateChatCompletion(messages, tools);
 
       const chunks = [];
@@ -420,7 +457,7 @@ describe('AnthropicProvider', () => {
 
       // Verify ToolFormatter was used
       const ToolFormatterMock = vi.mocked(
-        (await import('@vybestack/llxprt-code-core')).ToolFormatter,
+        (await import('../../tools/ToolFormatter.js')).ToolFormatter,
       );
       const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
 
@@ -447,7 +484,9 @@ describe('AnthropicProvider', () => {
           },
         });
 
-      const messages = [{ role: 'user', content: 'Test retry' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'Test retry' },
+      ];
       const generator = provider.generateChatCompletion(messages);
 
       const chunks = [];
@@ -466,7 +505,9 @@ describe('AnthropicProvider', () => {
         new Error('Invalid API key'),
       );
 
-      const messages = [{ role: 'user', content: 'Test' }];
+      const messages: IMessage[] = [
+        { role: ContentGeneratorRole.USER, content: 'Test' },
+      ];
       const generator = provider.generateChatCompletion(messages);
 
       await expect(generator.next()).rejects.toThrow(
@@ -498,10 +539,10 @@ describe('AnthropicProvider', () => {
           });
 
         // Messages with a tool call but no tool result (simulating corrupted state)
-        const messages = [
-          { role: 'user', content: 'Test' },
+        const messages: IMessage[] = [
+          { role: ContentGeneratorRole.USER, content: 'Test' },
           {
-            role: 'assistant',
+            role: ContentGeneratorRole.ASSISTANT,
             content: '',
             tool_calls: [
               {
@@ -514,7 +555,7 @@ describe('AnthropicProvider', () => {
               },
             ],
           },
-          { role: 'user', content: 'Continue' }, // This would normally cause an error
+          { role: ContentGeneratorRole.USER, content: 'Continue' }, // This would normally cause an error
         ];
 
         const generator = provider.generateChatCompletion(messages);

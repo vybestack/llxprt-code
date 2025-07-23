@@ -9,9 +9,9 @@ import {
   ProviderManager,
   OpenAIProvider,
   Qwen3FireworksProvider,
+  AnthropicProvider,
 } from '@vybestack/llxprt-code-core';
 import { GeminiProvider } from './gemini/GeminiProvider.js';
-import { AnthropicProvider } from './anthropic/AnthropicProvider.js';
 import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';

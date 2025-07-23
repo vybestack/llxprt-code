@@ -1,12 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Stream } from '@anthropic-ai/sdk/streaming';
 import { RawMessageStreamEvent } from '@anthropic-ai/sdk/resources/messages.js';
-import { IProvider, IModel, ITool, IMessage } from '../index.js';
-import {
-  retryWithBackoff,
-  ToolFormatter,
-  ToolFormat,
-} from '@vybestack/llxprt-code-core';
+import { IProvider } from '../IProvider.js';
+import { IModel } from '../IModel.js';
+import { ITool } from '../ITool.js';
+import { IMessage } from '../IMessage.js';
+import { retryWithBackoff } from '../../utils/retry.js';
+import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import type { ToolFormat } from '../../tools/IToolFormatter.js';
 
 export class AnthropicProvider implements IProvider {
   name: string = 'anthropic';

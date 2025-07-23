@@ -6,11 +6,10 @@
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import {
-  getProviderManager,
-  resetProviderManager,
-} from '../providerManagerInstance.js';
-import { OpenAIProvider, Config } from '@vybestack/llxprt-code-core';
-import { enhanceConfigWithProviders } from '../enhanceConfigWithProviders.js';
+  OpenAIProvider,
+  ProviderManager,
+  ContentGeneratorRole,
+} from '../../index.js';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -18,6 +17,7 @@ import { join } from 'path';
 describe('Multi-Provider Integration Tests', () => {
   let apiKey: string | null = null;
   let skipTests = false;
+  let manager: ProviderManager;
 
   beforeAll(() => {
     // Try to load OpenAI API key
@@ -43,22 +43,18 @@ describe('Multi-Provider Integration Tests', () => {
 
   beforeEach(() => {
     if (!skipTests) {
-      resetProviderManager();
+      manager = new ProviderManager();
     }
   });
 
   afterEach(() => {
-    if (!skipTests) {
-      resetProviderManager();
-    }
+    // Clean up any state if needed
   });
 
   describe('Provider Management', () => {
     it.skipIf(skipTests)(
       'should initialize and register OpenAI provider',
       () => {
-        const manager = getProviderManager();
-
         // Initially no providers
         expect(manager.listProviders()).toEqual([]);
         expect(manager.hasActiveProvider()).toBe(false);
@@ -79,8 +75,6 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should switch between providers and Gemini', () => {
-      const manager = getProviderManager();
-
       // Register OpenAI
       const openaiProvider = new OpenAIProvider(apiKey!);
       manager.registerProvider(openaiProvider);
@@ -100,8 +94,6 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should handle errors for invalid provider', () => {
-      const manager = getProviderManager();
-
       // Try to set non-existent provider
       expect(() => manager.setActiveProvider('invalid-provider')).toThrow(
         'Provider not found',
@@ -113,7 +105,6 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should list available models from OpenAI',
       async () => {
-        const manager = getProviderManager();
         const openaiProvider = new OpenAIProvider(apiKey!);
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
@@ -155,14 +146,13 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion with gpt-3.5-turbo',
       async () => {
-        const manager = getProviderManager();
         const openaiProvider = new OpenAIProvider(apiKey!);
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
 
         const messages = [
           {
-            role: 'user' as const,
+            role: ContentGeneratorRole.USER,
             content:
               'Say "Hello from OpenAI integration test" and nothing else.',
           },
@@ -192,7 +182,7 @@ describe('Multi-Provider Integration Tests', () => {
 
       const messages = [
         {
-          role: 'user' as const,
+          role: ContentGeneratorRole.USER,
           content: 'Count from 1 to 5, one number per line.',
         },
       ];
@@ -229,7 +219,7 @@ describe('Multi-Provider Integration Tests', () => {
 
       const messages = [
         {
-          role: 'user' as const,
+          role: ContentGeneratorRole.USER,
           content: 'What is 2+2? Reply with just the number.',
         },
       ];
@@ -254,7 +244,7 @@ describe('Multi-Provider Integration Tests', () => {
 
       const messages = [
         {
-          role: 'user' as const,
+          role: ContentGeneratorRole.USER,
           content:
             'What is the weather in San Francisco? Use the get_weather function.',
         },
@@ -297,44 +287,12 @@ describe('Multi-Provider Integration Tests', () => {
     });
   });
 
-  describe('Integration with Config and ContentGenerator', () => {
-    it.skipIf(skipTests)('should work through enhanced Config', async () => {
-      // Setup provider
-      const manager = getProviderManager();
-      const openaiProvider = new OpenAIProvider(apiKey!);
-      manager.registerProvider(openaiProvider);
-      manager.setActiveProvider('openai');
-
-      // Create a minimal config
-      const mockGeminiClient = {
-        chat: { contentGenerator: null },
-      };
-
-      const config = {
-        refreshAuth: async () => {},
-        getGeminiClient: () => mockGeminiClient,
-        getModel: () => 'gpt-3.5-turbo',
-      } as unknown as Config;
-
-      // Enhance config
-      enhanceConfigWithProviders(config);
-
-      // Call refreshAuth to trigger provider integration
-      await config.refreshAuth('test-auth');
-
-      // Content generator is not set by enhanceConfigWithProviders anymore
-      // Provider integration is handled in core
-      const contentGenerator = mockGeminiClient.chat.contentGenerator;
-      expect(contentGenerator).toBeNull();
-    });
-  });
-
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
       const openaiProvider = new OpenAIProvider(apiKey!);
       openaiProvider.setModel('invalid-model-xyz');
 
-      const messages = [{ role: 'user' as const, content: 'Hello' }];
+      const messages = [{ role: ContentGeneratorRole.USER, content: 'Hello' }];
 
       try {
         const stream = openaiProvider.generateChatCompletion(messages);
@@ -353,9 +311,10 @@ describe('Multi-Provider Integration Tests', () => {
       }
     });
 
-    it('should handle missing API key', () => {
-      expect(() => new OpenAIProvider('')).toThrow(
-        'OpenAI API key is required',
+    it('should handle missing API key', async () => {
+      const provider = new OpenAIProvider('');
+      await expect(provider.getModels()).rejects.toThrow(
+        'OpenAI API key is required to fetch models',
       );
     });
   });

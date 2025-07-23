@@ -18,10 +18,10 @@
 
 ```bash
 # Run all multi-provider integration tests
-npm test -- src/providers/integration/multi-provider.integration.test.ts
+npm test -- packages/core/src/providers/integration/multi-provider.integration.test.ts
 
 # Run with verbose output
-npm test -- src/providers/integration/multi-provider.integration.test.ts --reporter=verbose
+npm test -- packages/core/src/providers/integration/multi-provider.integration.test.ts --reporter=verbose
 ```
 
 ### Expected Test Output
@@ -56,7 +56,7 @@ When successful, you should see output like:
 Run the manual test script:
 
 ```bash
-node packages/cli/test-multi-provider.js
+node packages/core/test-multi-provider.js
 ```
 
 ### Test Scenarios
