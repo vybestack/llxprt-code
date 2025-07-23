@@ -12,13 +12,13 @@ import {
   ContentGeneratorRole,
 } from '@vybestack/llxprt-code-core';
 import { GeminiProvider } from './GeminiProvider.js';
-import { IMessage } from '../index.js';
+import { IMessage } from '../IMessage.js';
 import type { Part } from '@google/genai';
 
 describe('GeminiProvider Integration', () => {
   it('should handle real PDF file content', async () => {
     const provider = new GeminiProvider();
-    const testPdfPath = path.join(__dirname, '../../../test/fixtures/test.pdf');
+    const testPdfPath = path.join(__dirname, '__fixtures__/test.pdf');
 
     // Check if test PDF exists
     try {
@@ -38,7 +38,8 @@ describe('GeminiProvider Integration', () => {
     const messages: IMessage[] = [
       {
         role: ContentGeneratorRole.USER,
-        content: [
+        content: 'Please analyze this PDF document:',
+        parts: [
           { text: 'Please analyze this PDF document:' },
           pdfResult.llmContent as Part, // This should be the inlineData object
         ],
@@ -46,7 +47,6 @@ describe('GeminiProvider Integration', () => {
     ];
 
     // Convert to Gemini format
-    // @ts-expect-error Testing private method
     const result = provider['convertMessagesToGeminiFormat'](messages);
 
     // Verify the structure
@@ -68,8 +68,9 @@ describe('GeminiProvider Integration', () => {
     );
 
     // Verify the base64 data is present and non-empty
-    expect(result[0].parts[1].inlineData.data).toBeTruthy();
-    expect(result[0].parts[1].inlineData.data.length).toBeGreaterThan(100); // PDF should have substantial base64 data
+    const inlineData = result[0].parts[1].inlineData;
+    expect(inlineData?.data).toBeTruthy();
+    expect(inlineData?.data?.length).toBeGreaterThan(100); // PDF should have substantial base64 data
   });
 
   it('should handle mixed text and image content', async () => {
@@ -79,7 +80,8 @@ describe('GeminiProvider Integration', () => {
     const messages: IMessage[] = [
       {
         role: ContentGeneratorRole.USER,
-        content: [
+        content: 'What do you see in this image? Is it red?',
+        parts: [
           { text: 'What do you see in this image?' },
           {
             inlineData: {
@@ -92,7 +94,6 @@ describe('GeminiProvider Integration', () => {
       },
     ];
 
-    // @ts-expect-error Testing private method
     const result = provider['convertMessagesToGeminiFormat'](messages);
 
     expect(result).toHaveLength(1);

@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { GeminiProvider } from './GeminiProvider.js';
-import { IMessage } from '../index.js';
+import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 
 describe('GeminiProvider', () => {
@@ -25,7 +25,6 @@ describe('GeminiProvider', () => {
         },
       ];
 
-      // @ts-expect-error Testing private method
       const result = provider['convertMessagesToGeminiFormat'](messages);
 
       expect(result).toHaveLength(1);
@@ -50,7 +49,6 @@ describe('GeminiProvider', () => {
         },
       ];
 
-      // @ts-expect-error Testing private method
       const result = provider['convertMessagesToGeminiFormat'](messages);
 
       expect(result).toHaveLength(1);
@@ -79,7 +77,6 @@ describe('GeminiProvider', () => {
         },
       ];
 
-      // @ts-expect-error Testing private method
       const result = provider['convertMessagesToGeminiFormat'](messages);
 
       expect(result).toHaveLength(1);
@@ -122,7 +119,6 @@ describe('GeminiProvider', () => {
         },
       ];
 
-      // @ts-expect-error Testing private method
       const result = provider['convertMessagesToGeminiFormat'](messages);
 
       expect(result).toHaveLength(1);
@@ -150,7 +146,6 @@ describe('GeminiProvider', () => {
         },
       ];
 
-      // @ts-expect-error Testing private method
       const result = provider['convertMessagesToGeminiFormat'](messages);
 
       expect(result).toHaveLength(1);

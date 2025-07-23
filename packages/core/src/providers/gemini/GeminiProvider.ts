@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider, IModel, IMessage, ITool } from '../index.js';
+import { IProvider } from '../IProvider.js';
+import { IModel } from '../IModel.js';
+import { IMessage } from '../IMessage.js';
+import { ITool } from '../ITool.js';
 import {
   Config,
   AuthType,
