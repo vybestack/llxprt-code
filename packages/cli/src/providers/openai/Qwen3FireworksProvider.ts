@@ -7,7 +7,7 @@
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage, ITool, IModel } from '../index.js';
 import { Settings } from '../../config/settings.js';
-import { ContentGeneratorRole } from '@llxprt/core';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 
 /**
  * Qwen3-Fireworks provider that extends OpenAI provider with Qwen3-specific handling

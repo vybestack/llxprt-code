@@ -14,7 +14,7 @@ import {
   ToolExecuteConfirmationDetails,
   ToolMcpConfirmationDetails,
   Config,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import {
   RadioButtonSelect,
   RadioSelectItem,

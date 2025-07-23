@@ -7,7 +7,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { vi } from 'vitest';
 import { useShellCommandProcessor } from './shellCommandProcessor';
-import { Config, GeminiClient } from '@llxprt/core';
+import { Config, GeminiClient } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import EventEmitter from 'events';
 import { ToolCallStatus } from '../types';
@@ -23,7 +23,7 @@ vi.mock('os', () => ({
   platform: () => 'linux',
   tmpdir: () => '/tmp',
 }));
-vi.mock('@llxprt/core');
+vi.mock('@vybestack/llxprt-code-core');
 vi.mock('../utils/textUtils.js', () => ({
   isBinary: vi.fn(),
 }));

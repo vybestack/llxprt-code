@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage, ITool } from '../index.js';
-import { ContentGeneratorRole } from '@llxprt/core';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 
 // Mock fetch globally
 global.fetch = vi.fn();

@@ -12,7 +12,7 @@ import {
   IDE_SERVER_NAME,
   MCPDiscoveryState,
   MCPServerStatus,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import {
   CommandContext,
   SlashCommand,

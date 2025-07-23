@@ -11,7 +11,7 @@ import {
   type SlashCommand,
   type SlashCommandActionReturn,
 } from './types.js';
-import { Config } from '@llxprt/core';
+import { Config } from '@vybestack/llxprt-code-core';
 
 async function restoreAction(
   context: CommandContext,

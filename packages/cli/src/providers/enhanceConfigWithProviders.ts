@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config } from '@llxprt/core';
+import { Config } from '@vybestack/llxprt-code-core';
 
 /**
  * Enhances a Config instance to support providers

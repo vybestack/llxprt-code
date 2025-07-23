@@ -9,7 +9,7 @@ import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { AuthType, Config } from '@llxprt/core';
+import { AuthType, Config } from '@vybestack/llxprt-code-core';
 
 interface UseProviderDialogParams {
   addMessage: (msg: {

@@ -11,14 +11,14 @@ import {
   Config,
   GeminiClient,
   ToolRegistry,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import { Part, FunctionCall } from '@google/genai';
 
 // Mock dependencies
-vi.mock('@llxprt/core', async () => {
+vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualCore = await vi.importActual<
-    typeof import('@llxprt/core')
-  >('@llxprt/core');
+    typeof import('@vybestack/llxprt-code-core')
+  >('@vybestack/llxprt-code-core');
   return {
     ...actualCore,
     GeminiClient: vi.fn(),
@@ -107,7 +107,7 @@ describe('runNonInteractive', () => {
     };
 
     const { executeToolCall: mockCoreExecuteToolCall } = await import(
-      '@llxprt/core'
+      '@vybestack/llxprt-code-core'
     );
     vi.mocked(mockCoreExecuteToolCall).mockResolvedValue({
       callId: 'fc1',
@@ -161,7 +161,7 @@ describe('runNonInteractive', () => {
     };
 
     const { executeToolCall: mockCoreExecuteToolCall } = await import(
-      '@llxprt/core'
+      '@vybestack/llxprt-code-core'
     );
     vi.mocked(mockCoreExecuteToolCall).mockResolvedValue({
       callId: 'fcError',
@@ -235,7 +235,7 @@ describe('runNonInteractive', () => {
     };
 
     const { executeToolCall: mockCoreExecuteToolCall } = await import(
-      '@llxprt/core'
+      '@vybestack/llxprt-code-core'
     );
     vi.mocked(mockCoreExecuteToolCall).mockResolvedValue({
       callId: 'fcNotFound',
@@ -305,7 +305,7 @@ describe('runNonInteractive', () => {
     vi.mocked(mockConfig.getMaxSessionTurns).mockReturnValue(1);
 
     const { executeToolCall: mockCoreExecuteToolCall } = await import(
-      '@llxprt/core'
+      '@vybestack/llxprt-code-core'
     );
     vi.mocked(mockCoreExecuteToolCall).mockResolvedValue({
       callId: 'fcLoop',

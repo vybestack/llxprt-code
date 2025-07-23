@@ -6,7 +6,7 @@
 
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { getProjectTempDir } from '@llxprt/core';
+import { getProjectTempDir } from '@vybestack/llxprt-code-core';
 
 const cleanupFunctions: Array<() => void> = [];
 

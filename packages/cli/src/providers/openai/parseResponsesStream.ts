@@ -1,5 +1,5 @@
 import { IMessage } from '../index.js';
-import { ContentGeneratorRole } from '@llxprt/core';
+import { ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 
 const MAX_ACCUMULATOR_SIZE = 10000; // Prevent unbounded accumulator growth
 

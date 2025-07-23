@@ -25,7 +25,7 @@ import {
   UnauthorizedError,
   DEFAULT_GEMINI_FLASH_MODEL,
   AuthType,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion } from '@google/genai';
 import {
   StreamingState,

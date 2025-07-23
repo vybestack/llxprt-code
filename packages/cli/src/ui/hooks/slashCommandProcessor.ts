@@ -19,7 +19,7 @@ import {
   getMCPDiscoveryState,
   getMCPServerStatus,
   AuthType,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
   Message,

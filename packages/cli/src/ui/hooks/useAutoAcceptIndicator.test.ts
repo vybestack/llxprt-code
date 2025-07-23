@@ -20,14 +20,14 @@ import {
   Config,
   Config as ActualConfigType,
   ApprovalMode,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import { useInput, type Key as InkKey } from 'ink';
 
 vi.mock('ink');
 
-vi.mock('@llxprt/core', async () => {
+vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualServerModule = (await vi.importActual(
-    '@llxprt/core',
+    '@vybestack/llxprt-code-core',
   )) as Record<string, unknown>;
   return {
     ...actualServerModule,

@@ -15,7 +15,7 @@ import React, {
 import {
   Config,
   ProviderMessage as Message,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import { useOpenAIProviderInfo } from '../hooks/useOpenAIProviderInfo.js';
 import { ConversationCache } from '../../providers/openai/ConversationCache.js';
 

@@ -12,7 +12,7 @@ import {
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
-import { AuthType } from '@llxprt/core';
+import { AuthType } from '@vybestack/llxprt-code-core';
 
 export const providerCommand: SlashCommand = {
   name: 'provider',

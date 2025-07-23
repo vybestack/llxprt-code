@@ -11,7 +11,7 @@ import {
 } from './providerManagerInstance';
 import { IProvider, IModel } from './IProvider';
 import { enhanceConfigWithProviders } from './enhanceConfigWithProviders';
-import { Config } from '@llxprt/core';
+import { Config } from '@vybestack/llxprt-code-core';
 
 describe('Provider-Gemini Switching', () => {
   let mockProvider: IProvider;

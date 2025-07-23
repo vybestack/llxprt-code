@@ -15,7 +15,7 @@ import {
   isGenericQuotaExceededError,
   UserTierId,
   getErrorMessage,
-} from '@llxprt/core';
+} from '@vybestack/llxprt-code-core';
 import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
 import process from 'node:process';
 import {
