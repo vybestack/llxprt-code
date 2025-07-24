@@ -154,9 +154,12 @@ export class WebSearchTool extends BaseTool<
       );
 
       // Cast response to the expected type
-      const geminiResponse = response as any;
+      const geminiResponse = response as {
+        candidates?: Array<{ groundingMetadata?: unknown }>;
+      };
       const responseText = getResponseText(geminiResponse);
-      const groundingMetadata = geminiResponse?.candidates?.[0]?.groundingMetadata;
+      const groundingMetadata =
+        geminiResponse?.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;
