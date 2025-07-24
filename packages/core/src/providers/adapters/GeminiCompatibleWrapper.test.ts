@@ -24,6 +24,10 @@ describe('GeminiCompatibleWrapper', () => {
             content: 'Test response',
           };
         }),
+        getServerTools: () => [],
+        invokeServerTool: vi
+          .fn()
+          .mockRejectedValue(new Error('Server tools not supported')),
       };
 
       const wrapper = new GeminiCompatibleWrapper(mockProvider);
@@ -135,6 +139,10 @@ describe('GeminiCompatibleWrapper', () => {
             content: 'Test response',
           };
         }),
+        getServerTools: () => [],
+        invokeServerTool: vi
+          .fn()
+          .mockRejectedValue(new Error('Server tools not supported')),
       };
 
       const wrapper = new GeminiCompatibleWrapper(mockProvider);
@@ -199,6 +207,10 @@ describe('GeminiCompatibleWrapper', () => {
         setModel: vi.fn(),
         getModels: vi.fn().mockResolvedValue([]),
         generateChatCompletion: vi.fn(),
+        getServerTools: () => [],
+        invokeServerTool: vi
+          .fn()
+          .mockRejectedValue(new Error('Server tools not supported')),
       };
 
       const wrapper = new GeminiCompatibleWrapper(mockProvider);
@@ -268,6 +280,10 @@ describe('GeminiCompatibleWrapper', () => {
         setModel: vi.fn(),
         getModels: vi.fn().mockResolvedValue([]),
         generateChatCompletion: vi.fn(),
+        getServerTools: () => [],
+        invokeServerTool: vi
+          .fn()
+          .mockRejectedValue(new Error('Server tools not supported')),
       };
 
       const wrapper = new GeminiCompatibleWrapper(mockProvider);

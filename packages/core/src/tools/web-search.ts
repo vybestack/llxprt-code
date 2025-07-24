@@ -12,7 +12,6 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
-import { AuthType } from '../core/contentGenerator.js';
 
 interface GroundingChunkWeb {
   uri?: string;
@@ -117,42 +116,47 @@ export class WebSearchTool extends BaseTool<
       };
     }
     try {
-      // Get the Gemini client for web search
-      const geminiClient = this.config.getGeminiClient();
+      // Get the content generator config to access the provider manager
+      const contentGenConfig = this.config.getContentGeneratorConfig();
 
-      // Ensure the Gemini client is initialized for web search
-      // When using providers, the geminiClient might not be initialized
-      // but we still need it for the googleSearch tool
-      if (!geminiClient.isInitialized()) {
-        try {
-          // Initialize with the current auth config
-          // This will use the existing auth type which should have Google credentials
-          const contentGenConfig = this.config.getContentGeneratorConfig();
-          if (!contentGenConfig) {
-            return {
-              llmContent: `Web search requires authentication. Please run 'llxprt auth' to authenticate.`,
-              returnDisplay: 'Web search requires authentication.',
-            };
-          }
-          
-          // Initialize the Gemini client with the current config
-          await geminiClient.initialize(contentGenConfig);
-        } catch (error) {
-          return {
-            llmContent: `Web search initialization failed: ${getErrorMessage(error)}. Please ensure you have authenticated with 'llxprt auth'.`,
-            returnDisplay: 'Web search initialization failed.',
-          };
-        }
+      // Get the active provider from the provider manager
+      if (!contentGenConfig?.providerManager) {
+        return {
+          llmContent: `Web search requires a provider. Please use --provider gemini with authentication.`,
+          returnDisplay: 'Web search requires a provider.',
+        };
       }
 
-      const response = await geminiClient.generateContent(
-        [{ role: 'user', parts: [{ text: params.query }] }],
-        { tools: [{ googleSearch: {} }] },
-        signal,
+      let activeProvider;
+      try {
+        activeProvider = contentGenConfig.providerManager.getActiveProvider();
+      } catch (_e) {
+        return {
+          llmContent: `No active provider found. Please use --provider gemini with authentication.`,
+          returnDisplay: 'No active provider found.',
+        };
+      }
+
+      // Check if the provider supports web_search
+      const serverTools = activeProvider.getServerTools();
+      if (!serverTools.includes('web_search')) {
+        return {
+          llmContent: `Web search is not supported by the ${activeProvider.name} provider. Please use --provider gemini.`,
+          returnDisplay: `Web search not supported by ${activeProvider.name} provider.`,
+        };
+      }
+
+      // Invoke the server tool
+      const response = await activeProvider.invokeServerTool(
+        'web_search',
+        { query: params.query },
+        { signal },
       );
 
-      const responseText = getResponseText(response);
-      const groundingMetadata = response?.candidates?.[0]?.groundingMetadata;
+      // Cast response to the expected type
+      const geminiResponse = response as any;
+      const responseText = getResponseText(geminiResponse);
+      const groundingMetadata = geminiResponse?.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;

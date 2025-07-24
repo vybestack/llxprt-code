@@ -75,7 +75,7 @@ export const providerCommand: SlashCommand = {
         const currentAuthType =
           context.services.config.getContentGeneratorConfig()?.authType ||
           AuthType.LOGIN_WITH_GOOGLE;
-        
+
         // Refresh auth to ensure provider manager is attached
         await context.services.config.refreshAuth(currentAuthType);
 

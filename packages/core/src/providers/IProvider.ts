@@ -37,6 +37,13 @@ export interface IProvider {
   isPaidMode?(): boolean;
   // Method to clear any provider-specific state (e.g., conversation cache, tool call tracking)
   clearState?(): void;
+  // ServerTool methods for provider-native tools
+  getServerTools(): string[];
+  invokeServerTool(
+    toolName: string,
+    params: unknown,
+    config?: unknown,
+  ): Promise<unknown>;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
 }
 

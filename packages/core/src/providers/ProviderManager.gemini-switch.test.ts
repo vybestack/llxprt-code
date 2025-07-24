@@ -23,6 +23,10 @@ describe('ProviderManager - Gemini switching', () => {
       async *generateChatCompletion() {
         yield { role: ContentGeneratorRole.ASSISTANT, content: 'test' };
       },
+      getServerTools: () => [],
+      invokeServerTool: async () => {
+        throw new Error('Server tools not supported');
+      },
     };
   });
 

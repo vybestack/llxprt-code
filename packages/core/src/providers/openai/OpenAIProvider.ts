@@ -715,4 +715,22 @@ export class OpenAIProvider implements IProvider {
     // Clear the conversation cache to prevent tool call ID mismatches
     this.conversationCache.clear();
   }
+
+  /**
+   * Get the list of server tools supported by this provider
+   */
+  getServerTools(): string[] {
+    return [];
+  }
+
+  /**
+   * Invoke a server tool (native provider tool)
+   */
+  async invokeServerTool(
+    _toolName: string,
+    _params: unknown,
+    _config?: unknown,
+  ): Promise<unknown> {
+    throw new Error('Server tools not supported by OpenAI provider');
+  }
 }

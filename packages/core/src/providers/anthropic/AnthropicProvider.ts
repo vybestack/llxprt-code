@@ -580,4 +580,22 @@ export class AnthropicProvider implements IProvider {
   isPaidMode(): boolean {
     return true;
   }
+
+  /**
+   * Get the list of server tools supported by this provider
+   */
+  getServerTools(): string[] {
+    return [];
+  }
+
+  /**
+   * Invoke a server tool (native provider tool)
+   */
+  async invokeServerTool(
+    _toolName: string,
+    _params: unknown,
+    _config?: unknown,
+  ): Promise<unknown> {
+    throw new Error('Server tools not supported by Anthropic provider');
+  }
 }

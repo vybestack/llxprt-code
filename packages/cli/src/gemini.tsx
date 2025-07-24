@@ -171,13 +171,7 @@ export async function main() {
         activeProvider.setModel(configModel);
       }
 
-      // Set auth type to USE_PROVIDER when using a provider
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.USE_PROVIDER,
-      );
-      await config.refreshAuth(AuthType.USE_PROVIDER);
+      // No need to set auth type when using a provider
     } catch (e) {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
@@ -186,16 +180,7 @@ export async function main() {
 
   // Process CLI-provided credentials (--key, --keyfile, --baseurl)
   if (argv.key || argv.keyfile || argv.baseurl) {
-    // If any provider-specific credential flag is used, ensure we're in USE_PROVIDER mode.
-    // This prevents falling back to Gemini auth when a user provides e.g. only --key.
-    if (settings.merged.selectedAuthType !== AuthType.USE_PROVIDER) {
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.USE_PROVIDER,
-      );
-      await config.refreshAuth(AuthType.USE_PROVIDER);
-    }
+    // Provider-specific credentials are now handled directly
 
     // Handle --key
     if (argv.key) {
@@ -307,19 +292,7 @@ export async function main() {
   ];
 
   // Check if a provider is already active on startup
-  const activeProvider = providerManager.getActiveProvider();
-  if (
-    activeProvider &&
-    activeProvider.name !== 'gemini' &&
-    !settings.merged.selectedAuthType
-  ) {
-    // Set selectedAuthType to USE_PROVIDER if a non-Gemini provider is active
-    settings.setValue(
-      SettingScope.User,
-      'selectedAuthType',
-      AuthType.USE_PROVIDER,
-    );
-  }
+  providerManager.getActiveProvider();
 
   const shouldBeInteractive =
     !!argv.promptInteractive || (process.stdin.isTTY && !input);
@@ -495,16 +468,7 @@ async function loadNonInteractiveConfig(
 
   // Process CLI-provided credentials (--key, --keyfile, --baseurl)
   if (argv.key || argv.keyfile || argv.baseurl) {
-    // If any provider-specific credential flag is used, ensure we're in USE_PROVIDER mode.
-    // This prevents falling back to Gemini auth when a user provides e.g. only --key.
-    if (settings.merged.selectedAuthType !== AuthType.USE_PROVIDER) {
-      settings.setValue(
-        SettingScope.User,
-        'selectedAuthType',
-        AuthType.USE_PROVIDER,
-      );
-      await finalConfig.refreshAuth(AuthType.USE_PROVIDER);
-    }
+    // Provider-specific credentials are now handled directly
 
     // Handle --key
     if (argv.key) {
@@ -569,10 +533,7 @@ async function validateNonInterActiveAuth(
 ) {
   // Check if a provider is specified via command line
   const configProvider = nonInteractiveConfig.getProvider();
-  if (configProvider) {
-    // When using a provider, always use USE_PROVIDER auth type
-    selectedAuthType = AuthType.USE_PROVIDER;
-  } else if (!selectedAuthType && !process.env.LLXPRT_API_KEY) {
+  if (!configProvider && !selectedAuthType && !process.env.LLXPRT_API_KEY) {
     // making a special case for the cli. many headless environments might not have a settings.json set
     // so if GEMINI_API_KEY is set, we'll use that. However since the oauth things are interactive anyway, we'll
     // still expect that exists

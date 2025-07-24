@@ -16,7 +16,12 @@ import {
   getCoreSystemPrompt,
   createCodeAssistContentGenerator,
 } from '@vybestack/llxprt-code-core';
-import type { Part, FunctionCall, Schema } from '@google/genai';
+import type {
+  Part,
+  FunctionCall,
+  Schema,
+  GenerateContentParameters,
+} from '@google/genai';
 
 /**
  * Represents the default Gemini provider.
@@ -955,5 +960,138 @@ export class GeminiProvider implements IProvider {
     this.authDetermined = false;
     // Don't clear the auth mode itself, just the determination flag
     // This allows for smoother transitions
+  }
+
+  /**
+   * Get the list of server tools supported by this provider
+   */
+  getServerTools(): string[] {
+    return ['web_search', 'web_fetch'];
+  }
+
+  /**
+   * Invoke a server tool (native provider tool)
+   */
+  async invokeServerTool(
+    toolName: string,
+    params: unknown,
+    _config?: unknown,
+  ): Promise<unknown> {
+    if (toolName === 'web_search') {
+      // Import the necessary modules dynamically
+      const { GoogleGenAI } = await import('@google/genai');
+
+      // Create the appropriate client based on auth mode
+      const httpOptions = {
+        headers: {
+          'User-Agent': `GeminiCLI/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        },
+      };
+
+      let genAI: InstanceType<typeof GoogleGenAI>;
+
+      switch (this.authMode) {
+        case 'gemini-api-key': {
+          if (!this.apiKey && !process.env.GEMINI_API_KEY) {
+            throw new Error('Gemini API key required for web search');
+          }
+          genAI = new GoogleGenAI({
+            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
+            httpOptions,
+          });
+
+          // Get the models interface (which is a ContentGenerator)
+          const contentGenerator = genAI.models;
+
+          const apiKeyRequest = {
+            model: this.currentModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: (params as { query: string }).query }],
+              },
+            ],
+            config: {
+              tools: [{ googleSearch: {} }],
+            },
+          };
+
+          const apiKeyResult =
+            await contentGenerator.generateContent(apiKeyRequest);
+          return apiKeyResult;
+        }
+
+        case 'vertex-ai': {
+          if (!process.env.GOOGLE_API_KEY) {
+            throw new Error('Google API key required for web search');
+          }
+          genAI = new GoogleGenAI({
+            apiKey: process.env.GOOGLE_API_KEY,
+            vertexai: true,
+            httpOptions,
+          });
+
+          // Get the models interface (which is a ContentGenerator)
+          const vertexContentGenerator = genAI.models;
+
+          const vertexRequest = {
+            model: this.currentModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: (params as { query: string }).query }],
+              },
+            ],
+            config: {
+              tools: [{ googleSearch: {} }],
+            },
+          };
+
+          const vertexResult =
+            await vertexContentGenerator.generateContent(vertexRequest);
+          return vertexResult;
+        }
+
+        case 'oauth': {
+          // For OAuth, use the code assist content generator
+          const oauthContentGenerator = await createCodeAssistContentGenerator(
+            httpOptions,
+            AuthType.LOGIN_WITH_GOOGLE,
+            this.config!,
+          );
+
+          const oauthModel = this.modelExplicitlySet
+            ? this.currentModel
+            : this.config?.getModel() || this.currentModel;
+
+          // For OAuth, we need to use the ContentGenerator interface
+          // which has a different API - it expects tools in the config
+          const oauthRequest: GenerateContentParameters = {
+            model: oauthModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: (params as { query: string }).query }],
+              },
+            ],
+            config: {
+              tools: [{ googleSearch: {} }],
+            },
+          };
+          const result =
+            await oauthContentGenerator.generateContent(oauthRequest);
+          return result;
+        }
+
+        default:
+          throw new Error(
+            `Web search not supported in auth mode: ${this.authMode}`,
+          );
+      }
+    } else if (toolName === 'web_fetch') {
+      throw new Error('web_fetch not implemented yet');
+    } else {
+      throw new Error(`Unknown server tool: ${toolName}`);
+    }
   }
 }

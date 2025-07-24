@@ -29,6 +29,16 @@ function createMockProvider(
     ): AsyncIterableIterator<IMessage> {
       yield { role: ContentGeneratorRole.ASSISTANT, content: response };
     },
+    getServerTools(): string[] {
+      return [];
+    },
+    async invokeServerTool(
+      _toolName: string,
+      _params: unknown,
+      _config?: unknown,
+    ): Promise<unknown> {
+      throw new Error('Server tools not supported by mock provider');
+    },
   };
 }
 
@@ -160,6 +170,10 @@ describe('ProviderManager', () => {
         async *generateChatCompletion() {
           yield { role: 'assistant', content: 'test' };
         },
+        getServerTools: () => [],
+        invokeServerTool: vi
+          .fn()
+          .mockRejectedValue(new Error('Server tools not supported')),
       };
 
       const provider2: IProvider = {
@@ -171,6 +185,10 @@ describe('ProviderManager', () => {
         async *generateChatCompletion() {
           yield { role: 'assistant', content: 'test' };
         },
+        getServerTools: () => [],
+        invokeServerTool: vi
+          .fn()
+          .mockRejectedValue(new Error('Server tools not supported')),
       };
 
       manager.registerProvider(provider1);
