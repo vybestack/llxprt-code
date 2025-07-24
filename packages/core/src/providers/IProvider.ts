@@ -37,6 +37,8 @@ export interface IProvider {
   isPaidMode?(): boolean;
   // Method to clear any provider-specific state (e.g., conversation cache, tool call tracking)
   clearState?(): void;
+  // Method to set the config instance (for providers that need it)
+  setConfig?(config: unknown): void;
   // ServerTool methods for provider-native tools
   getServerTools(): string[];
   invokeServerTool(

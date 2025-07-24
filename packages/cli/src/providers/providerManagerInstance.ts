@@ -52,9 +52,22 @@ export function getProviderManager(config?: Config): ProviderManager {
       }
       providerManagerInstance.registerProvider(geminiProvider);
 
-      // If there's a saved Gemini API key, apply it
+      // Configure Gemini auth with priority: keyfile > key > oauth
+      // First check for saved API key
       if (savedApiKeys.gemini) {
         geminiProvider.setApiKey(savedApiKeys.gemini);
+      }
+      // Then check for keyfile
+      else {
+        try {
+          const keyfilePath = join(homedir(), '.google_key');
+          const geminiApiKey = readFileSync(keyfilePath, 'utf-8').trim();
+          if (geminiApiKey) {
+            geminiProvider.setApiKey(geminiApiKey);
+          }
+        } catch (_error) {
+          // No Google keyfile available, that's OK - will use OAuth if available
+        }
       }
 
       // Initialize with OpenAI provider if API key is available

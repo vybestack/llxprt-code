@@ -128,6 +128,12 @@ export async function main() {
 
   const providerManager = getProviderManager(config);
   config.setProviderManager(providerManager);
+  
+  // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
+  const serverToolsProvider = providerManager.getServerToolsProvider();
+  if (serverToolsProvider && serverToolsProvider.name === 'gemini' && serverToolsProvider.setConfig) {
+    serverToolsProvider.setConfig(config);
+  }
 
   if (argv.promptInteractive && !process.stdin.isTTY) {
     console.error(
@@ -551,5 +557,15 @@ async function validateNonInterActiveAuth(
   }
 
   await nonInteractiveConfig.refreshAuth(selectedAuthType);
+  
+  // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
+  const providerManager = nonInteractiveConfig.getProviderManager();
+  if (providerManager) {
+    const serverToolsProvider = providerManager.getServerToolsProvider();
+    if (serverToolsProvider && serverToolsProvider.name === 'gemini' && serverToolsProvider.setConfig) {
+      serverToolsProvider.setConfig(nonInteractiveConfig);
+    }
+  }
+  
   return nonInteractiveConfig;
 }

@@ -119,7 +119,7 @@ export class WebSearchTool extends BaseTool<
       // Get the content generator config to access the provider manager
       const contentGenConfig = this.config.getContentGeneratorConfig();
 
-      // Get the active provider from the provider manager
+      // Get the serverToolsProvider from the provider manager
       if (!contentGenConfig?.providerManager) {
         return {
           llmContent: `Web search requires a provider. Please use --provider gemini with authentication.`,
@@ -127,36 +127,34 @@ export class WebSearchTool extends BaseTool<
         };
       }
 
-      let activeProvider;
-      try {
-        activeProvider = contentGenConfig.providerManager.getActiveProvider();
-      } catch (_e) {
+      // Use serverToolsProvider for web search
+      const serverToolsProvider = contentGenConfig.providerManager.getServerToolsProvider();
+      if (!serverToolsProvider) {
         return {
-          llmContent: `No active provider found. Please use --provider gemini with authentication.`,
-          returnDisplay: 'No active provider found.',
+          llmContent: `Web search requires Gemini provider to be configured. Please ensure Gemini is available with authentication.`,
+          returnDisplay: 'Web search requires Gemini provider.',
         };
       }
 
       // Check if the provider supports web_search
-      const serverTools = activeProvider.getServerTools();
+      const serverTools = serverToolsProvider.getServerTools();
       if (!serverTools.includes('web_search')) {
         return {
-          llmContent: `Web search is not supported by the ${activeProvider.name} provider. Please use --provider gemini.`,
-          returnDisplay: `Web search not supported by ${activeProvider.name} provider.`,
+          llmContent: `Web search is not available. The server tools provider does not support web search.`,
+          returnDisplay: `Web search not available.`,
         };
       }
 
       // Invoke the server tool
-      const response = await activeProvider.invokeServerTool(
+      const response = await serverToolsProvider.invokeServerTool(
         'web_search',
         { query: params.query },
         { signal },
       );
 
       // Cast response to the expected type
-      const geminiResponse = response as {
-        candidates?: Array<{ groundingMetadata?: unknown }>;
-      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const geminiResponse = response as any;
       const responseText = getResponseText(geminiResponse);
       const groundingMetadata =
         geminiResponse?.candidates?.[0]?.groundingMetadata;
