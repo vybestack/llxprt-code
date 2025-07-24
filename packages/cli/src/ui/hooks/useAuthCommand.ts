@@ -16,6 +16,7 @@ import {
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 import { runExitCleanup } from '../../utils/cleanup.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export const useAuthCommand = (
   settings: LoadedSettings,
@@ -49,6 +50,24 @@ export const useAuthCommand = (
       try {
         setIsAuthenticating(true);
         await config.refreshAuth(authType);
+
+        // Update serverToolsProvider after authentication
+        const providerManager = getProviderManager();
+        if (providerManager) {
+          const serverToolsProvider = providerManager.getServerToolsProvider();
+          if (
+            serverToolsProvider &&
+            serverToolsProvider.name === 'gemini' &&
+            'setConfig' in serverToolsProvider
+          ) {
+            // This will trigger determineBestAuth() with the new auth state
+            const geminiProvider = serverToolsProvider as {
+              setConfig: (config: Config) => void;
+            };
+            geminiProvider.setConfig(config);
+          }
+        }
+
         console.log(`Authenticated via "${authType}".`);
       } catch (e) {
         appDispatch({

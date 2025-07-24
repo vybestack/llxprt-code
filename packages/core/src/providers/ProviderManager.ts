@@ -43,20 +43,35 @@ export class ProviderManager implements IProviderManager {
       throw new Error('Provider not found');
     }
 
-    // Clear state from ALL providers before switching
-    for (const provider of this.providers.values()) {
-      if (provider.clearState) {
-        provider.clearState();
+    // Store reference to the current active provider before switching
+    const previousProviderName = this.activeProviderName;
+
+    // Only clear state from the provider we're switching FROM
+    // BUT never clear the serverToolsProvider's state
+    if (previousProviderName && previousProviderName !== name) {
+      const previousProvider = this.providers.get(previousProviderName);
+      if (previousProvider && previousProvider.clearState) {
+        // Don't clear state if this provider is also the serverToolsProvider
+        if (previousProvider !== this.serverToolsProvider) {
+          previousProvider.clearState();
+        }
       }
     }
 
     this.activeProviderName = name;
-    
+
     // If switching to Gemini, use it as both active and serverTools provider
+    // BUT only if we don't already have a Gemini serverToolsProvider with auth state
     if (name === 'gemini') {
-      this.serverToolsProvider = this.providers.get(name) || null;
+      // Only replace serverToolsProvider if it's not already Gemini or if it's null
+      if (
+        !this.serverToolsProvider ||
+        this.serverToolsProvider.name !== 'gemini'
+      ) {
+        this.serverToolsProvider = this.providers.get(name) || null;
+      }
     }
-    // If switching away from Gemini but serverToolsProvider is not set, 
+    // If switching away from Gemini but serverToolsProvider is not set,
     // configure a Gemini provider for serverTools if available
     else if (!this.serverToolsProvider && this.providers.has('gemini')) {
       this.serverToolsProvider = this.providers.get('gemini') || null;
@@ -113,14 +128,14 @@ export class ProviderManager implements IProviderManager {
     if (this.serverToolsProvider) {
       return this.serverToolsProvider;
     }
-    
+
     // Otherwise, try to get Gemini if available
     const geminiProvider = this.providers.get('gemini');
     if (geminiProvider) {
       this.serverToolsProvider = geminiProvider;
       return geminiProvider;
     }
-    
+
     return null;
   }
 

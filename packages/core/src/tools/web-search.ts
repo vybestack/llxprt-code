@@ -128,7 +128,8 @@ export class WebSearchTool extends BaseTool<
       }
 
       // Use serverToolsProvider for web search
-      const serverToolsProvider = contentGenConfig.providerManager.getServerToolsProvider();
+      const serverToolsProvider =
+        contentGenConfig.providerManager.getServerToolsProvider();
       if (!serverToolsProvider) {
         return {
           llmContent: `Web search requires Gemini provider to be configured. Please ensure Gemini is available with authentication.`,

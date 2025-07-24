@@ -21,7 +21,7 @@ test('should perform web search with provider-based architecture', async (t) => 
       result.toLowerCase().includes('july 2025'),
     'Should mention Grok or July 2025 in the results',
   );
-  
+
   // Should mention Hitler since that was the surname in the incident
   assert.ok(
     result.toLowerCase().includes('hitler'),
@@ -51,9 +51,15 @@ test('should perform web search with OpenAI provider', async (t) => {
 
   // Set OpenAI provider with API key
   process.env.OPENAI_API_KEY = 'test-openai-key';
-  
+
   const prompt = `do a web search for 'grok 4 heavy surname incident july 2025' and summarize what happened`;
-  const result = await rig.run(prompt, '--provider', 'openai', '--model', 'gpt-4.1');
+  const result = await rig.run(
+    prompt,
+    '--provider',
+    'openai',
+    '--model',
+    'gpt-4.1',
+  );
 
   // Should contain search results about the event
   assert.ok(
@@ -61,7 +67,7 @@ test('should perform web search with OpenAI provider', async (t) => {
       result.toLowerCase().includes('july 2025'),
     'Should mention Grok or July 2025 in the results',
   );
-  
+
   // Should mention Hitler since that was the surname in the incident
   assert.ok(
     result.toLowerCase().includes('hitler'),
@@ -91,9 +97,15 @@ test('should perform web search with Anthropic provider', async (t) => {
 
   // Set Anthropic provider with API key
   process.env.ANTHROPIC_API_KEY = 'test-anthropic-key';
-  
+
   const prompt = `do a web search for 'grok 4 heavy surname incident july 2025' and summarize what happened`;
-  const result = await rig.run(prompt, '--provider', 'anthropic', '--model', 'claude-sonnet-4-20250514');
+  const result = await rig.run(
+    prompt,
+    '--provider',
+    'anthropic',
+    '--model',
+    'claude-sonnet-4-20250514',
+  );
 
   // Should contain search results about the event
   assert.ok(
@@ -101,7 +113,7 @@ test('should perform web search with Anthropic provider', async (t) => {
       result.toLowerCase().includes('july 2025'),
     'Should mention Grok or July 2025 in the results',
   );
-  
+
   // Should mention Hitler since that was the surname in the incident
   assert.ok(
     result.toLowerCase().includes('hitler'),

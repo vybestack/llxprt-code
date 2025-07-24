@@ -222,7 +222,7 @@ export class Config {
   setProviderManager(providerManager: ProviderManager) {
     this.providerManager = providerManager;
   }
-  
+
   getProviderManager(): ProviderManager | undefined {
     return this.providerManager;
   }
