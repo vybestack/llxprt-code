@@ -1,0 +1,32 @@
+{
+  "phase": 5,
+  "task": "Create integration tests for web-fetch with different providers",
+  "status": "completed",
+  "timestamp": "2025-07-25T17:42:00Z",
+  "details": {
+    "file_created": "packages/core/src/tools/web-fetch.integration.test.ts",
+    "test_scenarios": [
+      "Web-fetch with Gemini as active provider",
+      "Web-fetch with OpenAI as active provider",
+      "Web-fetch with Anthropic as active provider",
+      "Missing Gemini authentication error handling",
+      "Fallback to direct fetch for private IPs",
+      "Additional scenarios for input validation and error handling"
+    ],
+    "test_count": 16,
+    "status_checks": {
+      "tests_passing": true,
+      "typescript_compilation": true,
+      "linting": true,
+      "type_checking": true
+    },
+    "key_features": [
+      "Proper provider mocking for different configurations",
+      "serverToolsProvider always set to Gemini",
+      "Behavioral tests verifying tool works with any active provider",
+      "Error message verification",
+      "Private IP fallback testing",
+      "No 'any' types used - full TypeScript compliance"
+    ]
+  }
+}

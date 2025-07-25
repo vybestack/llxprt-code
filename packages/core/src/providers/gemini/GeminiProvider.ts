@@ -1089,7 +1089,119 @@ export class GeminiProvider implements IProvider {
           );
       }
     } else if (toolName === 'web_fetch') {
-      throw new Error('web_fetch not implemented yet');
+      // Import the necessary modules dynamically
+      const { GoogleGenAI } = await import('@google/genai');
+
+      // Get the prompt directly without any processing
+      const prompt = (params as { prompt: string }).prompt;
+
+      // Create the appropriate client based on auth mode
+      const httpOptions = {
+        headers: {
+          'User-Agent': `GeminiCLI/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        },
+      };
+
+      let genAI: InstanceType<typeof GoogleGenAI>;
+
+      switch (this.authMode) {
+        case 'gemini-api-key': {
+          if (!this.apiKey && !process.env.GEMINI_API_KEY) {
+            throw new Error('Gemini API key required for web fetch');
+          }
+          genAI = new GoogleGenAI({
+            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
+            httpOptions,
+          });
+
+          // Get the models interface (which is a ContentGenerator)
+          const contentGenerator = genAI.models;
+
+          const apiKeyRequest = {
+            model: this.currentModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: prompt }],
+              },
+            ],
+            config: {
+              tools: [{ urlContext: {} }],
+            },
+          };
+
+          const apiKeyResult =
+            await contentGenerator.generateContent(apiKeyRequest);
+          return apiKeyResult;
+        }
+
+        case 'vertex-ai': {
+          if (!process.env.GOOGLE_API_KEY) {
+            throw new Error('Google API key required for web fetch');
+          }
+          genAI = new GoogleGenAI({
+            apiKey: process.env.GOOGLE_API_KEY,
+            vertexai: true,
+            httpOptions,
+          });
+
+          // Get the models interface (which is a ContentGenerator)
+          const vertexContentGenerator = genAI.models;
+
+          const vertexRequest = {
+            model: this.currentModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: prompt }],
+              },
+            ],
+            config: {
+              tools: [{ urlContext: {} }],
+            },
+          };
+
+          const vertexResult =
+            await vertexContentGenerator.generateContent(vertexRequest);
+          return vertexResult;
+        }
+
+        case 'oauth': {
+          // For OAuth, use the code assist content generator
+          const oauthContentGenerator = await createCodeAssistContentGenerator(
+            httpOptions,
+            AuthType.LOGIN_WITH_GOOGLE,
+            this.config!,
+          );
+
+          const oauthModel = this.modelExplicitlySet
+            ? this.currentModel
+            : this.config?.getModel() || this.currentModel;
+
+          // For OAuth, we need to use the ContentGenerator interface
+          // which has a different API - it expects tools in the config
+          const oauthRequest: GenerateContentParameters = {
+            model: oauthModel,
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: prompt }],
+              },
+            ],
+            config: {
+              tools: [{ urlContext: {} }],
+            },
+          };
+          const result =
+            await oauthContentGenerator.generateContent(oauthRequest);
+          return result;
+        }
+
+        default:
+          throw new Error(
+            `Web fetch not supported in auth mode: ${this.authMode}`,
+          );
+      }
     } else {
       throw new Error(`Unknown server tool: ${toolName}`);
     }
