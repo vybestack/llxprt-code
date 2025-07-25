@@ -125,7 +125,6 @@ export function getProviderManager(config?: Config): ProviderManager {
       );
       providerManagerInstance.registerProvider(anthropicProvider);
       // Anthropic provider registered
-
     }
   }
 

@@ -50,7 +50,6 @@ interface GroundingSupportItem {
   groundingChunkIndices?: number[];
 }
 
-
 /**
  * Parameters for the WebFetch tool
  */
@@ -270,7 +269,7 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
 
       // Extract text using utility function
       const responseText = getResponseText(response as GenerateContentResponse);
-      
+
       // Simple check - if no text, return error
       if (!responseText || !responseText.trim()) {
         return {
@@ -292,7 +291,7 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
 
       let modifiedResponseText = responseText;
       const sourceListFormatted: string[] = [];
-      
+
       if (sources && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
           const title = source.web?.title || 'Untitled';
@@ -331,7 +330,6 @@ ${sourceListFormatted.join('\n')}`;
       }
 
       const llmContent = modifiedResponseText;
-
 
       return {
         llmContent,

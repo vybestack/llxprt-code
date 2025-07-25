@@ -360,9 +360,7 @@ describe('WebFetchTool Integration Tests', () => {
       expect(result.llmContent).toContain(
         'Private/local URLs cannot be processed with AI',
       );
-      expect(result.llmContent).toContain(
-        'Content from http://localhost:3000',
-      );
+      expect(result.llmContent).toContain('Content from http://localhost:3000');
       expect(result.llmContent).toContain('Local content');
     });
 
