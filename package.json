@@ -85,6 +85,7 @@
   },
   "dependencies": {
     "fast-uri": "^3.0.6",
-    "openai": "^5.10.1"
+    "openai": "^5.10.1",
+    "path-scurry": "^2.0.0"
   }
 }
