@@ -8,7 +8,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WebSearchTool } from './web-search.js';
 import { Config } from '../config/config.js';
 import { GeminiClient } from '../core/client.js';
-import { AuthType, ContentGeneratorConfig } from '../core/contentGenerator.js';
 
 describe('WebSearchTool', () => {
   let webSearchTool: WebSearchTool;
@@ -33,6 +32,7 @@ describe('WebSearchTool', () => {
       getGeminiClient: vi.fn(() => mockGeminiClient),
       getProvider: vi.fn(() => 'gemini'), // Default to gemini provider
       getContentGeneratorConfig: vi.fn(() => ({
+        model: 'test-model',
         providerManager: {
           getServerToolsProvider: vi.fn(() => mockServerToolsProvider),
         },
@@ -287,6 +287,7 @@ describe('WebSearchTool', () => {
     it('should handle when server tools provider is not available', async () => {
       // Mock getServerToolsProvider to return null
       mockConfig.getContentGeneratorConfig = vi.fn(() => ({
+        model: 'test-model',
         providerManager: {
           getServerToolsProvider: vi.fn(() => null),
         },
@@ -297,7 +298,9 @@ describe('WebSearchTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toContain('Web search requires Gemini provider');
+      expect(result.llmContent).toContain(
+        'Web search requires Gemini provider',
+      );
       expect(result.returnDisplay).toBe('Web search requires Gemini provider.');
     });
   });
