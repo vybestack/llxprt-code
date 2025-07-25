@@ -24,9 +24,19 @@ describe('WebSearchTool', () => {
       isInitialized: vi.fn(() => true), // Mock as initialized
     } as unknown as GeminiClient;
 
+    const mockServerToolsProvider = {
+      getServerTools: vi.fn(() => ['web_search']),
+      invokeServerTool: mockGenerateContent,
+    };
+
     mockConfig = {
       getGeminiClient: vi.fn(() => mockGeminiClient),
       getProvider: vi.fn(() => 'gemini'), // Default to gemini provider
+      getContentGeneratorConfig: vi.fn(() => ({
+        providerManager: {
+          getServerToolsProvider: vi.fn(() => mockServerToolsProvider),
+        },
+      })),
     } as unknown as Config;
 
     webSearchTool = new WebSearchTool(mockConfig);
@@ -80,9 +90,9 @@ describe('WebSearchTool', () => {
       );
 
       expect(mockGenerateContent).toHaveBeenCalledWith(
-        [{ role: 'user', parts: [{ text: 'test query' }] }],
-        { tools: [{ googleSearch: {} }] },
-        mockAbortSignal,
+        'web_search',
+        { query: 'test query' },
+        { signal: mockAbortSignal },
       );
 
       expect(result.llmContent).toContain(
@@ -203,11 +213,11 @@ describe('WebSearchTool', () => {
         mockAbortSignal,
       );
 
-      // Verify the googleSearch tool is passed correctly
+      // Verify the web_search tool is passed correctly
       expect(mockGenerateContent).toHaveBeenCalledWith(
-        [{ role: 'user', parts: [{ text: 'test google search' }] }],
-        { tools: [{ googleSearch: {} }] },
-        mockAbortSignal,
+        'web_search',
+        { query: 'test google search' },
+        { signal: mockAbortSignal },
       );
     });
 
@@ -270,44 +280,25 @@ describe('WebSearchTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toContain('Web search is not available');
-      expect(result.returnDisplay).toBe('Web search unavailable.');
+      expect(result.llmContent).toContain('Web search requires a provider');
+      expect(result.returnDisplay).toBe('Web search requires a provider.');
     });
 
-    it('should attempt to authenticate with Google when not initialized', async () => {
-      // Mock isInitialized to return false initially, then true after auth
-      (mockGeminiClient.isInitialized as ReturnType<typeof vi.fn>)
-        .mockReturnValueOnce(false)
-        .mockReturnValueOnce(true);
-
-      // Mock auth configuration
-      mockConfig.getContentGeneratorConfig = vi.fn(
-        () =>
-          ({
-            authType: AuthType.LOGIN_WITH_GOOGLE,
-            model: 'gemini-2.0-flash',
-          }) as ContentGeneratorConfig,
-      );
-      mockConfig.refreshAuth = vi.fn();
-
-      // Mock successful response after auth
-      mockGenerateContent.mockResolvedValue({
-        candidates: [
-          {
-            content: { parts: [{ text: 'Results after auth' }], role: 'model' },
-          },
-        ],
-      });
+    it('should handle when server tools provider is not available', async () => {
+      // Mock getServerToolsProvider to return null
+      mockConfig.getContentGeneratorConfig = vi.fn(() => ({
+        providerManager: {
+          getServerToolsProvider: vi.fn(() => null),
+        },
+      }));
 
       const result = await webSearchTool.execute(
         { query: 'test query' },
         mockAbortSignal,
       );
 
-      expect(mockConfig.refreshAuth).toHaveBeenCalledWith(
-        AuthType.LOGIN_WITH_GOOGLE,
-      );
-      expect(result.llmContent).toContain('Results after auth');
+      expect(result.llmContent).toContain('Web search requires Gemini provider');
+      expect(result.returnDisplay).toBe('Web search requires Gemini provider.');
     });
   });
 });

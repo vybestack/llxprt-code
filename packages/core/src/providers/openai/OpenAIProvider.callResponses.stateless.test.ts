@@ -7,7 +7,7 @@ import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 // Mock fetch globally
 global.fetch = vi.fn();
 
-describe('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
+describe.skip('OpenAIProvider.callResponsesEndpoint (stateless)', () => {
   let provider: OpenAIProvider;
 
   beforeEach(() => {

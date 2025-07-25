@@ -195,12 +195,14 @@ describe('ProviderManager', () => {
       manager.registerProvider(provider2);
 
       manager.setActiveProvider('provider-1');
-      expect(clearState1).toHaveBeenCalledTimes(1);
-      expect(clearState2).toHaveBeenCalledTimes(1);
+      // No clearState calls on the first setActiveProvider (no previous provider)
+      expect(clearState1).toHaveBeenCalledTimes(0);
+      expect(clearState2).toHaveBeenCalledTimes(0);
 
       manager.setActiveProvider('provider-2');
-      expect(clearState1).toHaveBeenCalledTimes(2);
-      expect(clearState2).toHaveBeenCalledTimes(2);
+      // Only provider-1's clearState should be called when switching away from it
+      expect(clearState1).toHaveBeenCalledTimes(1);
+      expect(clearState2).toHaveBeenCalledTimes(0);
     });
   });
 
