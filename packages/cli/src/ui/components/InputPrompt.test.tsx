@@ -1121,7 +1121,6 @@ describe('InputPrompt', () => {
       unmount();
     });
   });
-
   describe('unfocused paste', () => {
     it('should handle bracketed paste when not focused', async () => {
       props.focus = false;
