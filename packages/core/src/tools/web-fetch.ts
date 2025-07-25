@@ -127,7 +127,6 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         ],
       }).substring(0, MAX_CONTENT_LENGTH);
 
-      const geminiClient = this.config.getGeminiClient();
       const fallbackPrompt = `The user requested the following: "${params.prompt}".
 
 I was unable to access the URL directly. Instead, I have fetched the raw content of the page. Please use the following content to answer the user's request. Do not attempt to access the URL again.
@@ -135,12 +134,36 @@ I was unable to access the URL directly. Instead, I have fetched the raw content
 ---
 ${textContent}
 ---`;
-      const result = await geminiClient.generateContent(
-        [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
-        {},
-        signal,
-      );
-      const resultText = getResponseText(result) || '';
+
+      // Try to use serverToolsProvider if available, otherwise fall back to geminiClient
+      const contentGenConfig = this.config.getContentGeneratorConfig();
+      const serverToolsProvider =
+        contentGenConfig?.providerManager?.getServerToolsProvider();
+
+      let resultText = '';
+      if (
+        serverToolsProvider &&
+        serverToolsProvider.getServerTools().includes('url_context')
+      ) {
+        // Use serverToolsProvider
+        const result = await serverToolsProvider.invokeServerTool(
+          'url_context',
+          { prompt: fallbackPrompt },
+          { signal },
+        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const geminiResponse = result as any;
+        resultText = getResponseText(geminiResponse) || '';
+      } else {
+        // Fall back to geminiClient
+        const geminiClient = this.config.getGeminiClient();
+        const result = await geminiClient.generateContent(
+          [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
+          {},
+          signal,
+        );
+        resultText = getResponseText(result) || '';
+      }
       return {
         llmContent: resultText,
         returnDisplay: `Content for ${url} processed using fallback fetch.`,
@@ -242,26 +265,60 @@ ${textContent}
       return this.executeFallback(params, signal);
     }
 
-    const geminiClient = this.config.getGeminiClient();
+    // Get the content generator config to access the provider manager
+    const contentGenConfig = this.config.getContentGeneratorConfig();
+
+    // Get the serverToolsProvider from the provider manager
+    if (!contentGenConfig?.providerManager) {
+      return {
+        llmContent: `URL context requires a provider. Please use --provider gemini with authentication.`,
+        returnDisplay: 'URL context requires a provider.',
+      };
+    }
+
+    // Use serverToolsProvider for URL context
+    const serverToolsProvider =
+      contentGenConfig.providerManager.getServerToolsProvider();
+    if (!serverToolsProvider) {
+      return {
+        llmContent: `URL context requires Gemini provider to be configured. Please ensure Gemini is available with authentication.`,
+        returnDisplay: 'URL context requires Gemini provider.',
+      };
+    }
+
+    // Check if the provider supports url_context
+    const serverTools = serverToolsProvider.getServerTools();
+    if (!serverTools.includes('url_context')) {
+      return {
+        llmContent: `URL context is not available. The server tools provider does not support URL context.`,
+        returnDisplay: `URL context not available.`,
+      };
+    }
 
     try {
-      const response = await geminiClient.generateContent(
-        [{ role: 'user', parts: [{ text: userPrompt }] }],
-        { tools: [{ urlContext: {} }] },
-        signal, // Pass signal
+      // Invoke the server tool
+      const response = await serverToolsProvider.invokeServerTool(
+        'url_context',
+        { prompt: userPrompt },
+        { signal },
       );
+
+      // Cast response to the expected type
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const geminiResponse = response as any;
 
       console.debug(
         `[WebFetchTool] Full response for prompt "${userPrompt.substring(
           0,
           50,
         )}...":`,
-        JSON.stringify(response, null, 2),
+        JSON.stringify(geminiResponse, null, 2),
       );
 
-      let responseText = getResponseText(response) || '';
-      const urlContextMeta = response.candidates?.[0]?.urlContextMetadata;
-      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      let responseText = getResponseText(geminiResponse) || '';
+      const urlContextMeta = geminiResponse.candidates?.[0]?.urlContextMetadata;
+      const groundingMetadata =
+        geminiResponse.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;
@@ -277,9 +334,13 @@ ${textContent}
         urlContextMeta.urlMetadata.length > 0
       ) {
         const allStatuses = urlContextMeta.urlMetadata.map(
-          (m) => m.urlRetrievalStatus,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (m: any) => m.urlRetrievalStatus,
         );
-        if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (
+          allStatuses.every((s: any) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')
+        ) {
           processingError = true;
         }
       } else if (!responseText.trim() && !sources?.length) {
