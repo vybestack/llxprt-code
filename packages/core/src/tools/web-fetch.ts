@@ -168,7 +168,6 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         ],
       }).substring(0, MAX_CONTENT_LENGTH);
 
-
       // Since we can't use Gemini client directly, return the raw content with an error message
       return {
         llmContent: `Error: Unable to process URL with AI. Raw content from ${url}:\n\n${textContent.substring(0, 5000)}${textContent.length > 5000 ? '...[truncated]' : ''}`,
@@ -325,14 +324,19 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
       const candidate = geminiResponse.candidates?.[0];
       if (candidate?.content?.parts) {
         responseText = candidate.content.parts
-          .filter((part): part is { text: string } => 
-            part !== null && part !== undefined && 'text' in part && typeof part.text === 'string'
+          .filter(
+            (part): part is { text: string } =>
+              part !== null &&
+              part !== undefined &&
+              'text' in part &&
+              typeof part.text === 'string',
           )
-          .map(part => part.text)
+          .map((part) => part.text)
           .join('');
       }
       const urlContextMeta = geminiResponse.candidates?.[0]?.urlContextMetadata;
-      const groundingMetadata = geminiResponse.candidates?.[0]?.groundingMetadata;
+      const groundingMetadata =
+        geminiResponse.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;
@@ -350,7 +354,11 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         const allStatuses = urlContextMeta.urlMetadata.map(
           (m: UrlMetadata) => m.urlRetrievalStatus,
         );
-        if (allStatuses.every((s: string | undefined) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
+        if (
+          allStatuses.every(
+            (s: string | undefined) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS',
+          )
+        ) {
           processingError = true;
         }
       } else if (!responseText.trim() && !sources?.length) {
