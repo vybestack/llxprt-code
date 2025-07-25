@@ -8,7 +8,6 @@ import {
   Config,
   ProviderManager,
   OpenAIProvider,
-  Qwen3FireworksProvider,
   AnthropicProvider,
   GeminiProvider,
 } from '@vybestack/llxprt-code-core';
@@ -127,25 +126,6 @@ export function getProviderManager(config?: Config): ProviderManager {
       providerManagerInstance.registerProvider(anthropicProvider);
       // Anthropic provider registered
 
-      // Initialize Qwen3-Fireworks provider if API key is available
-      // Priority: Environment variable > OpenAI API key (since Fireworks uses OpenAI-compatible API)
-      let fireworksApiKey: string | undefined = savedApiKeys['qwen3-fireworks'];
-
-      if (!fireworksApiKey) {
-        fireworksApiKey = process.env.FIREWORKS_API_KEY;
-      }
-
-      // If no Fireworks-specific key, try using OpenAI key as fallback
-      if (!fireworksApiKey) {
-        fireworksApiKey = openaiApiKey;
-      }
-
-      const qwen3Provider = new Qwen3FireworksProvider(
-        fireworksApiKey || '',
-        userSettings,
-      );
-      providerManagerInstance.registerProvider(qwen3Provider);
-      // Qwen3-Fireworks provider registered
     }
   }
 

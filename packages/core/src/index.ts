@@ -101,7 +101,6 @@ export * from './providers/ProviderManager.js';
 
 // Export provider implementations
 export { OpenAIProvider } from './providers/openai/OpenAIProvider.js';
-export { Qwen3FireworksProvider } from './providers/openai/Qwen3FireworksProvider.js';
 export { ConversationCache } from './providers/openai/ConversationCache.js';
 export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';

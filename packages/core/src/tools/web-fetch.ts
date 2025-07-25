@@ -12,12 +12,13 @@ import {
   ToolConfirmationOutcome,
   Icon,
 } from './tools.js';
-import { Type } from '@google/genai';
+import { Type, GenerateContentResponse } from '@google/genai';
 import { getErrorMessage } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 
 const URL_FETCH_TIMEOUT_MS = 10000;
 const MAX_CONTENT_LENGTH = 100000;
@@ -49,47 +50,6 @@ interface GroundingSupportItem {
   groundingChunkIndices?: number[];
 }
 
-// URL Context Metadata types
-interface UrlMetadata {
-  retrievedUrl?: string;
-  urlRetrievalStatus?: string;
-}
-
-interface UrlContextMetadata {
-  urlMetadata?: UrlMetadata[];
-}
-
-// Web Fetch Server Tool Response type
-interface WebFetchServerToolResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-      role?: string;
-    };
-    finishReason?: string;
-    urlContextMetadata?: UrlContextMetadata;
-    groundingMetadata?: {
-      groundingChunks?: GroundingChunkItem[];
-      groundingSupports?: GroundingSupportItem[];
-    };
-    safetyRatings?: Array<{
-      category?: string;
-      probability?: string;
-      blocked?: boolean;
-    }>;
-    index?: number;
-  }>;
-  createTime?: string;
-  responseId?: string;
-  modelVersion?: string;
-  usageMetadata?: {
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
-    totalTokenCount?: number;
-  };
-}
 
 /**
  * Parameters for the WebFetch tool
@@ -170,8 +130,8 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
 
       // Since we can't use Gemini client directly, return the raw content with an error message
       return {
-        llmContent: `Error: Unable to process URL with AI. Raw content from ${url}:\n\n${textContent.substring(0, 5000)}${textContent.length > 5000 ? '...[truncated]' : ''}`,
-        returnDisplay: `Error: Fallback fetch completed but AI processing unavailable for ${url}.`,
+        llmContent: `Private/local URLs cannot be processed with AI. Raw content provided below.\n\nContent from ${url}:\n\n${textContent.substring(0, 5000)}${textContent.length > 5000 ? '...[truncated]' : ''}`,
+        returnDisplay: `Private/local URLs cannot be processed with AI. Raw content provided below.`,
       };
     } catch (e) {
       const error = e as Error;
@@ -308,33 +268,19 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         { signal },
       );
 
-      // Cast response to the expected type
-      const geminiResponse = response as WebFetchServerToolResponse;
-
-      console.debug(
-        `[WebFetchTool] Full response for prompt "${userPrompt.substring(
-          0,
-          50,
-        )}...":`,
-        JSON.stringify(geminiResponse, null, 2),
-      );
-
-      // Extract text from response parts
-      let responseText = '';
-      const candidate = geminiResponse.candidates?.[0];
-      if (candidate?.content?.parts) {
-        responseText = candidate.content.parts
-          .filter(
-            (part): part is { text: string } =>
-              part !== null &&
-              part !== undefined &&
-              'text' in part &&
-              typeof part.text === 'string',
-          )
-          .map((part) => part.text)
-          .join('');
+      // Extract text using utility function
+      const responseText = getResponseText(response as GenerateContentResponse);
+      
+      // Simple check - if no text, return error
+      if (!responseText || !responseText.trim()) {
+        return {
+          llmContent: `No content found for the provided URL(s).`,
+          returnDisplay: 'No content found.',
+        };
       }
-      const urlContextMeta = geminiResponse.candidates?.[0]?.urlContextMetadata;
+
+      // Process grounding metadata
+      const geminiResponse = response as GenerateContentResponse;
       const groundingMetadata =
         geminiResponse.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
@@ -344,46 +290,13 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         | GroundingSupportItem[]
         | undefined;
 
-      // Error Handling
-      let processingError = false;
-
-      if (
-        urlContextMeta?.urlMetadata &&
-        urlContextMeta.urlMetadata.length > 0
-      ) {
-        const allStatuses = urlContextMeta.urlMetadata.map(
-          (m: UrlMetadata) => m.urlRetrievalStatus,
-        );
-        if (
-          allStatuses.every(
-            (s: string | undefined) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS',
-          )
-        ) {
-          processingError = true;
-        }
-      } else if (!responseText.trim() && !sources?.length) {
-        // No URL metadata and no content/sources
-        processingError = true;
-      }
-
-      if (
-        !processingError &&
-        !responseText.trim() &&
-        (!sources || sources.length === 0)
-      ) {
-        // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
-        processingError = true;
-      }
-
-      if (processingError) {
-        return this.executeFallback(params, signal);
-      }
-
+      let modifiedResponseText = responseText;
       const sourceListFormatted: string[] = [];
+      
       if (sources && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
           const title = source.web?.title || 'Untitled';
-          const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
+          const uri = source.web?.uri || 'Unknown URI';
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });
 
@@ -402,27 +315,23 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
           });
 
           insertions.sort((a, b) => b.index - a.index);
-          const responseChars = responseText.split('');
+          const responseChars = modifiedResponseText.split('');
           insertions.forEach((insertion) => {
             responseChars.splice(insertion.index, 0, insertion.marker);
           });
-          responseText = responseChars.join('');
+          modifiedResponseText = responseChars.join('');
         }
 
         if (sourceListFormatted.length > 0) {
-          responseText += `
+          modifiedResponseText += `
 
 Sources:
 ${sourceListFormatted.join('\n')}`;
         }
       }
 
-      const llmContent = responseText;
+      const llmContent = modifiedResponseText;
 
-      console.debug(
-        `[WebFetchTool] Formatted tool response for prompt "${userPrompt}:\n\n":`,
-        llmContent,
-      );
 
       return {
         llmContent,
