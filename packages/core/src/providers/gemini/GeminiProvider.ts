@@ -966,7 +966,7 @@ export class GeminiProvider implements IProvider {
    * Get the list of server tools supported by this provider
    */
   getServerTools(): string[] {
-    return ['web_search', 'url_context'];
+    return ['web_search', 'web_fetch'];
   }
 
   /**
@@ -1088,118 +1088,8 @@ export class GeminiProvider implements IProvider {
             `Web search not supported in auth mode: ${this.authMode}`,
           );
       }
-    } else if (toolName === 'url_context') {
-      // Import the necessary modules dynamically
-      const { GoogleGenAI } = await import('@google/genai');
-
-      // Create the appropriate client based on auth mode
-      const httpOptions = {
-        headers: {
-          'User-Agent': `GeminiCLI/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
-        },
-      };
-
-      let genAI: InstanceType<typeof GoogleGenAI>;
-
-      switch (this.authMode) {
-        case 'gemini-api-key': {
-          if (!this.apiKey && !process.env.GEMINI_API_KEY) {
-            throw new Error('Gemini API key required for URL context');
-          }
-          genAI = new GoogleGenAI({
-            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
-            httpOptions,
-          });
-
-          // Get the models interface (which is a ContentGenerator)
-          const contentGenerator = genAI.models;
-
-          const apiKeyRequest = {
-            model: this.currentModel,
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: (params as { prompt: string }).prompt }],
-              },
-            ],
-            config: {
-              tools: [{ urlContext: {} }],
-            },
-          };
-
-          const apiKeyResult =
-            await contentGenerator.generateContent(apiKeyRequest);
-          return apiKeyResult;
-        }
-
-        case 'vertex-ai': {
-          if (!process.env.GOOGLE_API_KEY) {
-            throw new Error('Google API key required for URL context');
-          }
-          genAI = new GoogleGenAI({
-            apiKey: process.env.GOOGLE_API_KEY,
-            vertexai: true,
-            httpOptions,
-          });
-
-          // Get the models interface (which is a ContentGenerator)
-          const vertexContentGenerator = genAI.models;
-
-          const vertexRequest = {
-            model: this.currentModel,
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: (params as { prompt: string }).prompt }],
-              },
-            ],
-            config: {
-              tools: [{ urlContext: {} }],
-            },
-          };
-
-          const vertexResult =
-            await vertexContentGenerator.generateContent(vertexRequest);
-          return vertexResult;
-        }
-
-        case 'oauth': {
-          // For OAuth, use the code assist content generator
-          const oauthContentGenerator = await createCodeAssistContentGenerator(
-            httpOptions,
-            AuthType.LOGIN_WITH_GOOGLE,
-            this.config!,
-          );
-
-          const oauthModel = this.modelExplicitlySet
-            ? this.currentModel
-            : this.config?.getModel() || this.currentModel;
-
-          // For OAuth, we need to use the ContentGenerator interface
-          // which has a different API - it expects tools in the config
-          const oauthRequest: GenerateContentParameters = {
-            model: oauthModel,
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: (params as { prompt: string }).prompt }],
-              },
-            ],
-            config: {
-              tools: [{ urlContext: {} }],
-            },
-          };
-
-          const oauthResult =
-            await oauthContentGenerator.generateContent(oauthRequest);
-          return oauthResult;
-        }
-
-        default:
-          throw new Error(
-            `URL context not supported in auth mode: ${this.authMode}`,
-          );
-      }
+    } else if (toolName === 'web_fetch') {
+      throw new Error('web_fetch not implemented yet');
     } else {
       throw new Error(`Unknown server tool: ${toolName}`);
     }

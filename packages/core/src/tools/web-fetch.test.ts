@@ -20,10 +20,7 @@ describe('WebFetchTool', () => {
     it('should return confirmation details with the correct prompt and urls', async () => {
       const tool = new WebFetchTool(mockConfig);
       const params = { prompt: 'fetch https://example.com' };
-      const confirmationDetails = await tool.shouldConfirmExecute(
-        params,
-        new AbortController().signal,
-      );
+      const confirmationDetails = await tool.shouldConfirmExecute(params);
 
       expect(confirmationDetails).toEqual({
         type: 'info',
@@ -40,10 +37,7 @@ describe('WebFetchTool', () => {
         prompt:
           'fetch https://github.com/google/gemini-react/blob/main/README.md',
       };
-      const confirmationDetails = await tool.shouldConfirmExecute(
-        params,
-        new AbortController().signal,
-      );
+      const confirmationDetails = await tool.shouldConfirmExecute(params);
 
       expect(confirmationDetails).toEqual({
         type: 'info',
@@ -63,10 +57,7 @@ describe('WebFetchTool', () => {
         getApprovalMode: () => ApprovalMode.AUTO_EDIT,
       } as unknown as Config);
       const params = { prompt: 'fetch https://example.com' };
-      const confirmationDetails = await tool.shouldConfirmExecute(
-        params,
-        new AbortController().signal,
-      );
+      const confirmationDetails = await tool.shouldConfirmExecute(params);
 
       expect(confirmationDetails).toBe(false);
     });
@@ -78,10 +69,7 @@ describe('WebFetchTool', () => {
         setApprovalMode,
       } as unknown as Config);
       const params = { prompt: 'fetch https://example.com' };
-      const confirmationDetails = await tool.shouldConfirmExecute(
-        params,
-        new AbortController().signal,
-      );
+      const confirmationDetails = await tool.shouldConfirmExecute(params);
 
       if (
         confirmationDetails &&
