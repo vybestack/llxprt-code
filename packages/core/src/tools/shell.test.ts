@@ -404,8 +404,10 @@ describe('ShellTool', () => {
         }));
 
       const abortSignal = new AbortController().signal;
+      const command =
+        os.platform() === 'win32' ? 'echo %LLXPRT_CLI%' : 'echo "$LLXPRT_CLI"';
       const result = await testShellTool.execute(
-        { command: 'echo "$LLXPRT_CLI"' },
+        { command },
         abortSignal,
       );
 
