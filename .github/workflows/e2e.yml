@@ -60,6 +60,4 @@ jobs:
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
-          VERBOSE: true
-          DEBUG: true
         run: npm run test:integration:${{ matrix.sandbox }} -- --verbose --keep-output
