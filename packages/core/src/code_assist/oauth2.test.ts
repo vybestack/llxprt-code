@@ -106,6 +106,15 @@ describe('oauth2', () => {
     };
     vi.mocked(open).mockImplementation(async () => mockChildProcess as never);
 
+    // Mock readline in case it falls back to user code
+    const mockReadline = {
+      question: vi.fn((_query, callback) => callback(mockCode)),
+      close: vi.fn(),
+    };
+    vi.mocked(readline.createInterface).mockReturnValue(
+      mockReadline as unknown as readline.Interface,
+    );
+
     // Mock the UserInfo API response
     vi.mocked(global.fetch).mockResolvedValue({
       ok: true,

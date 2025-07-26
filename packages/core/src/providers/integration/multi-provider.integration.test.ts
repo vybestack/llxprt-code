@@ -20,22 +20,29 @@ describe('Multi-Provider Integration Tests', () => {
   let manager: ProviderManager;
 
   beforeAll(() => {
-    // Try to load OpenAI API key
-    try {
-      const apiKeyPath = join(homedir(), '.openai_key');
-      if (existsSync(apiKeyPath)) {
-        apiKey = readFileSync(apiKeyPath, 'utf-8').trim();
+    // Try to load OpenAI API key from environment first
+    apiKey = process.env.OPENAI_API_KEY || null;
+
+    // If not in environment, try to load from file
+    if (!apiKey) {
+      try {
+        const apiKeyPath = join(homedir(), '.openai_key');
+        if (existsSync(apiKeyPath)) {
+          apiKey = readFileSync(apiKeyPath, 'utf-8').trim();
+        }
+      } catch (_error) {
+        // No API key available
       }
-    } catch (_error) {
-      // No API key available
     }
 
     if (!apiKey) {
       console.log(
-        '\n⚠️  Skipping Multi-Provider Integration Tests: No OpenAI API key found at ~/.openai_key',
+        '\n⚠️  Skipping Multi-Provider Integration Tests: No OpenAI API key found',
       );
       console.log(
-        '   To run these tests, create ~/.openai_key with your OpenAI API key\n',
+        '   To run these tests, either:\n' +
+          '   - Set the OPENAI_API_KEY environment variable, or\n' +
+          '   - Create ~/.openai_key with your OpenAI API key\n',
       );
       skipTests = true;
     }
@@ -55,6 +62,8 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should initialize and register OpenAI provider',
       () => {
+        if (!manager) return; // Guard for when test is skipped
+
         // Initially no providers
         expect(manager.listProviders()).toEqual([]);
         expect(manager.hasActiveProvider()).toBe(false);
@@ -75,6 +84,8 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should switch between providers and Gemini', () => {
+      if (!manager) return; // Guard for when test is skipped
+
       // Register OpenAI
       const openaiProvider = new OpenAIProvider(apiKey!);
       manager.registerProvider(openaiProvider);
@@ -94,6 +105,8 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should handle errors for invalid provider', () => {
+      if (!manager) return; // Guard for when test is skipped
+
       // Try to set non-existent provider
       expect(() => manager.setActiveProvider('invalid-provider')).toThrow(
         'Provider not found',
@@ -105,6 +118,8 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should list available models from OpenAI',
       async () => {
+        if (!manager) return; // Guard for when test is skipped
+
         const openaiProvider = new OpenAIProvider(apiKey!);
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
@@ -146,6 +161,8 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion with gpt-3.5-turbo',
       async () => {
+        if (!manager) return; // Guard for when test is skipped
+
         const openaiProvider = new OpenAIProvider(apiKey!);
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
