@@ -53,6 +53,11 @@ jobs:
       - name: Build packages
         run: npm run build
 
+      - name: Pack npm packages
+        run: |
+          npm pack -w @vybestack/llxprt-code --pack-destination ./packages/cli/dist
+          npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
