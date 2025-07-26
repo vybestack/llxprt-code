@@ -132,6 +132,7 @@ jobs:
 
       - name: Build and Prepare Packages
         run: |
+          npm run clean
           npm run build:packages
           npm run prepare:package
 
