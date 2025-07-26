@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -98,7 +98,7 @@ export class ShellExecutionService {
       detached: !isWindows, // Use process groups on non-Windows for robust killing
       env: {
         ...process.env,
-        GEMINI_CLI: '1',
+        LLXPRT_CLI: '1',
       },
     });
 
