@@ -17,18 +17,12 @@ async function main() {
 
   if (process.env.LLXPRT_SANDBOX === 'docker' && !process.env.IS_DOCKER) {
     console.log('Building sandbox for Docker...');
-    // Only build if we're not in CI or if explicitly requested
-    // In CI, preflight has already built everything
-    if (!process.env.CI || process.env.FORCE_SANDBOX_BUILD === 'true') {
-      const buildResult = spawnSync('npm', ['run', 'build:all'], {
-        stdio: 'inherit',
-      });
-      if (buildResult.status !== 0) {
-        console.error('Sandbox build failed.');
-        process.exit(1);
-      }
-    } else {
-      console.log('Skipping build in CI (already built by preflight)');
+    const buildResult = spawnSync('npm', ['run', 'build:all'], {
+      stdio: 'inherit',
+    });
+    if (buildResult.status !== 0) {
+      console.error('Sandbox build failed.');
+      process.exit(1);
     }
   }
 

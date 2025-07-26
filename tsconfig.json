@@ -15,5 +15,7 @@
     "moduleResolution": "nodenext",
     "target": "es2022",
     "types": ["node", "vitest/globals"]
-  }
+  },
+  "files": [],
+  "references": [{ "path": "./packages/cli" }, { "path": "./packages/core" }]
 }
