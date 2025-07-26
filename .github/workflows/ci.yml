@@ -101,6 +101,14 @@ jobs:
           npm install @rollup/rollup-linux-x64-gnu --no-save || true
 
       - name: Run tests and generate reports
+        env:
+          # Use OpenRouter as a cost-effective alternative for integration tests
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
+          LLXPRT_DEFAULT_PROVIDER: openai
+          # Set auth type to none since we're not using Google services in these tests
+          LLXPRT_AUTH_TYPE: none
         run: NO_COLOR=true npm run test:ci
 
       - name: Publish Test Report (for non-forks)

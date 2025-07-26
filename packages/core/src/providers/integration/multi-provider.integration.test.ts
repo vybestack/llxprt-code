@@ -16,12 +16,14 @@ import { join } from 'path';
 
 describe('Multi-Provider Integration Tests', () => {
   let apiKey: string | null = null;
+  let baseURL: string | undefined = undefined;
   let skipTests = false;
   let manager: ProviderManager;
 
   beforeAll(() => {
     // Try to load OpenAI API key from environment first
     apiKey = process.env.OPENAI_API_KEY || null;
+    baseURL = process.env.OPENAI_BASE_URL || undefined;
 
     // If not in environment, try to load from file
     if (!apiKey) {
@@ -69,7 +71,7 @@ describe('Multi-Provider Integration Tests', () => {
         expect(manager.hasActiveProvider()).toBe(false);
 
         // Register OpenAI provider
-        const openaiProvider = new OpenAIProvider(apiKey!);
+        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
         manager.registerProvider(openaiProvider);
 
         // Verify registration
@@ -87,7 +89,7 @@ describe('Multi-Provider Integration Tests', () => {
       if (!manager) return; // Guard for when test is skipped
 
       // Register OpenAI
-      const openaiProvider = new OpenAIProvider(apiKey!);
+      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
       manager.registerProvider(openaiProvider);
 
       // Start with Gemini (no active provider)
@@ -120,7 +122,7 @@ describe('Multi-Provider Integration Tests', () => {
       async () => {
         if (!manager) return; // Guard for when test is skipped
 
-        const openaiProvider = new OpenAIProvider(apiKey!);
+        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
 
@@ -129,11 +131,17 @@ describe('Multi-Provider Integration Tests', () => {
         // Should have multiple models
         expect(models.length).toBeGreaterThan(0);
 
-        // Should include common OpenAI models
+        // Check for models based on whether we're using OpenRouter or not
         const modelIds = models.map((m) => m.id);
-        expect(modelIds).toContain('gpt-3.5-turbo');
+        if (baseURL?.includes('openrouter')) {
+          // OpenRouter uses prefixed model names
+          expect(modelIds.some(id => id.includes('openai/') || id.includes('google/'))).toBe(true);
+        } else {
+          // Direct OpenAI API
+          expect(modelIds).toContain('gpt-4.1');
+        }
 
-        console.log(`\n✅ Found ${models.length} OpenAI models`);
+        console.log(`\n✅ Found ${models.length} models`);
         console.log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
       },
     );
@@ -141,29 +149,38 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should switch between models within provider',
       async () => {
-        const openaiProvider = new OpenAIProvider(apiKey!);
+        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
         // Default model
         expect(openaiProvider.getCurrentModel()).toBe('gpt-4.1');
 
-        // Switch to GPT-4
-        openaiProvider.setModel('gpt-4');
-        expect(openaiProvider.getCurrentModel()).toBe('gpt-4');
+        // Switch to different models based on provider
+        if (baseURL?.includes('openrouter')) {
+          // OpenRouter models
+          openaiProvider.setModel('openai/gpt-4o');
+          expect(openaiProvider.getCurrentModel()).toBe('openai/gpt-4o');
 
-        // Switch to another model
-        openaiProvider.setModel('gpt-3.5-turbo-16k');
-        expect(openaiProvider.getCurrentModel()).toBe('gpt-3.5-turbo-16k');
+          openaiProvider.setModel('google/gemini-2.5-flash');
+          expect(openaiProvider.getCurrentModel()).toBe('google/gemini-2.5-flash');
+        } else {
+          // Direct OpenAI models
+          openaiProvider.setModel('gpt-4');
+          expect(openaiProvider.getCurrentModel()).toBe('gpt-4');
+
+          openaiProvider.setModel('gpt-4.1');
+          expect(openaiProvider.getCurrentModel()).toBe('gpt-4.1');
+        }
       },
     );
   });
 
   describe('Chat Completion with Real API', () => {
     it.skipIf(skipTests)(
-      'should generate chat completion with gpt-3.5-turbo',
+      'should generate chat completion with default model',
       async () => {
         if (!manager) return; // Guard for when test is skipped
 
-        const openaiProvider = new OpenAIProvider(apiKey!);
+        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
         manager.registerProvider(openaiProvider);
         manager.setActiveProvider('openai');
 
@@ -186,7 +203,8 @@ describe('Multi-Provider Integration Tests', () => {
         }
 
         const fullResponse = chunks.join('');
-        console.log(`\n✅ GPT-3.5-turbo response: "${fullResponse}"`);
+        const providerName = baseURL?.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
+        console.log(`\n✅ ${providerName} response: "${fullResponse}"`);
 
         expect(fullResponse.toLowerCase()).toContain(
           'hello from openai integration test',
@@ -195,7 +213,7 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
-      const openaiProvider = new OpenAIProvider(apiKey!);
+      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
       const messages = [
         {
@@ -231,8 +249,10 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should work with GPT-4 model', async () => {
-      const openaiProvider = new OpenAIProvider(apiKey!);
-      openaiProvider.setModel('gpt-4');
+      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+      // Use appropriate model based on provider
+      const model = baseURL?.includes('openrouter') ? 'openai/gpt-4o' : 'gpt-4';
+      openaiProvider.setModel(model);
 
       const messages = [
         {
@@ -257,7 +277,7 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should handle tool calls', async () => {
-      const openaiProvider = new OpenAIProvider(apiKey!);
+      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
       const messages = [
         {
@@ -306,7 +326,7 @@ describe('Multi-Provider Integration Tests', () => {
 
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
-      const openaiProvider = new OpenAIProvider(apiKey!);
+      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
       openaiProvider.setModel('invalid-model-xyz');
 
       const messages = [{ role: ContentGeneratorRole.USER, content: 'Hello' }];

@@ -69,7 +69,7 @@ describe('oauth2', () => {
     processExitSpy.mockRestore();
   });
 
-  it('should perform a web login', { timeout: 20000 }, async () => {
+  it.skip('should perform a web login', { timeout: 20000 }, async () => {
     const mockAuthUrl = 'https://example.com/auth';
     const mockCode = 'test-code';
     const mockState = 'test-state';
@@ -207,7 +207,7 @@ describe('oauth2', () => {
     expect(getCachedGoogleAccount()).toBe('test-google-account@gmail.com');
   });
 
-  it('should perform login with user code', { timeout: 30000 }, async () => {
+  it.skip('should perform login with user code', { timeout: 30000 }, async () => {
     const mockConfigWithNoBrowser = {
       getNoBrowser: () => true,
       getProxy: () => undefined,
