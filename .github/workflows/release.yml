@@ -96,6 +96,11 @@ jobs:
           npm run test:integration:sandbox:docker
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
+          LLXPRT_DEFAULT_PROVIDER: openai
+          LLXPRT_AUTH_TYPE: none
 
       - name: Configure Git User
         run: |
