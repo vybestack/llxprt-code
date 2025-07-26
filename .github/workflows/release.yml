@@ -132,7 +132,7 @@ jobs:
 
       - name: Build and Prepare Packages
         run: |
-          npm run clean
+          rm -rf packages/*/dist
           npm run build:packages
           npm run prepare:package
 
