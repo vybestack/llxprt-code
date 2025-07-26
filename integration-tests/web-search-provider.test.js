@@ -8,44 +8,51 @@ import { test } from 'node:test';
 import { strict as assert } from 'assert';
 import { TestRig } from './test-helper.js';
 
-test('should perform web search with provider-based architecture', async (t) => {
-  const rig = new TestRig();
-  rig.setup(t.name);
+// Skip web search tests in CI when auth type is none
+const skipInCI = process.env.LLXPRT_AUTH_TYPE === 'none';
+const testFn = skipInCI ? test.skip : test;
 
-  const prompt = `do a web search for 'grok 4 heavy surname incident july 2025' and summarize what happened`;
-  const result = await rig.run(prompt);
+testFn(
+  'should perform web search with provider-based architecture',
+  async (t) => {
+    const rig = new TestRig();
+    rig.setup(t.name);
 
-  // Should contain search results about the event
-  assert.ok(
-    result.toLowerCase().includes('grok') ||
-      result.toLowerCase().includes('july 2025'),
-    'Should mention Grok or July 2025 in the results',
-  );
+    const prompt = `do a web search for 'grok 4 heavy surname incident july 2025' and summarize what happened`;
+    const result = await rig.run(prompt);
 
-  // Should mention Hitler since that was the surname in the incident
-  assert.ok(
-    result.toLowerCase().includes('hitler'),
-    'Should mention Hitler as that was the surname in the incident',
-  );
+    // Should contain search results about the event
+    assert.ok(
+      result.toLowerCase().includes('grok') ||
+        result.toLowerCase().includes('july 2025'),
+      'Should mention Grok or July 2025 in the results',
+    );
 
-  // Should have sources if web search was performed
-  assert.ok(
-    result.includes('Sources:') || result.includes('http'),
-    'Should include sources from web search',
-  );
+    // Should mention Hitler since that was the surname in the incident
+    assert.ok(
+      result.toLowerCase().includes('hitler'),
+      'Should mention Hitler as that was the surname in the incident',
+    );
 
-  // Should NOT say no results found
-  assert.ok(
-    !result.toLowerCase().includes('no results found'),
-    'Should not say no results found',
-  );
-  assert.ok(
-    !result.toLowerCase().includes("couldn't find"),
-    'Should not say could not find',
-  );
-});
+    // Should have sources if web search was performed
+    assert.ok(
+      result.includes('Sources:') || result.includes('http'),
+      'Should include sources from web search',
+    );
 
-test('should perform web search with OpenAI provider', async (t) => {
+    // Should NOT say no results found
+    assert.ok(
+      !result.toLowerCase().includes('no results found'),
+      'Should not say no results found',
+    );
+    assert.ok(
+      !result.toLowerCase().includes("couldn't find"),
+      'Should not say could not find',
+    );
+  },
+);
+
+testFn('should perform web search with OpenAI provider', async (t) => {
   const rig = new TestRig();
   rig.setup(t.name);
 
@@ -91,7 +98,7 @@ test('should perform web search with OpenAI provider', async (t) => {
   );
 });
 
-test('should perform web search with Anthropic provider', async (t) => {
+testFn('should perform web search with Anthropic provider', async (t) => {
   const rig = new TestRig();
   rig.setup(t.name);
 

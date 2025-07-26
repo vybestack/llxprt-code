@@ -8,7 +8,11 @@ import { test } from 'node:test';
 import { strict as assert } from 'assert';
 import { TestRig } from './test-helper.js';
 
-test('should be able to search the web', async (t) => {
+// Skip web search tests in CI when auth type is none
+const skipInCI = process.env.LLXPRT_AUTH_TYPE === 'none';
+const testFn = skipInCI ? test.skip : test;
+
+testFn('should be able to search the web', async (t) => {
   const rig = new TestRig();
   rig.setup(t.name);
 

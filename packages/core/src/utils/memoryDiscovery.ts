@@ -20,8 +20,11 @@ import { processImports } from './memoryImportProcessor.js';
 // TODO: Integrate with a more robust server-side logger if available/appropriate.
 const logger = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug: (...args: any[]) =>
-    console.debug('[DEBUG] [MemoryDiscovery]', ...args),
+  debug: (...args: any[]) => {
+    if (process.env.DEBUG) {
+      console.debug('[DEBUG] [MemoryDiscovery]', ...args);
+    }
+  },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   warn: (...args: any[]) => console.warn('[WARN] [MemoryDiscovery]', ...args),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

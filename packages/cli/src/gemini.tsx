@@ -161,6 +161,12 @@ export async function main() {
         'selectedAuthType',
         AuthType.CLOUD_SHELL,
       );
+    } else if (process.env.LLXPRT_AUTH_TYPE === 'none') {
+      settings.setValue(
+        SettingScope.User,
+        'selectedAuthType',
+        AuthType.USE_NONE,
+      );
     }
   }
 

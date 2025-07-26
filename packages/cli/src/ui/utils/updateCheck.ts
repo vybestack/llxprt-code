@@ -7,7 +7,8 @@
 import semver from 'semver';
 import { getPackageJson } from '../../utils/package.js';
 
-const UPDATE_CHECK_URL = 'https://registry.npmjs.org/@vybestack/llxprt-code/latest';
+const UPDATE_CHECK_URL =
+  'https://registry.npmjs.org/@vybestack/llxprt-code/latest';
 const UPDATE_CHECK_TIMEOUT_MS = 5000;
 
 async function fetchWithTimeout(

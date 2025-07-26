@@ -413,7 +413,9 @@ export function createTransport(
     if (debugMode) {
       transport.stderr!.on('data', (data) => {
         const stderrStr = data.toString().trim();
-        console.debug(`[DEBUG] [MCP STDERR (${mcpServerName})]: `, stderrStr);
+        if (process.env.DEBUG) {
+          console.debug(`[DEBUG] [MCP STDERR (${mcpServerName})]: `, stderrStr);
+        }
       });
     }
     return transport;
