@@ -401,6 +401,44 @@ Arguments passed directly when running the CLI can override other configurations
 - **`--version`**:
   - Displays the version of the CLI.
 
+## Provider API Keys
+
+The CLI will automatically detect API keys from the following sources in order of priority:
+
+1. **CLI arguments:** `--key` and `--keyfile`
+2. **Config file:** `providerApiKeys` field in `~/.gemini/settings.json`
+3. **Environment variables:** `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
+4. **Key files:** `~/.openai_key`, `~/.anthropic_key`, etc.
+
+## Provider Base URLs
+
+You can set custom base URLs for providers to use local or third-party endpoints. This is useful for:
+
+- Running local LLMs with inference servers like LM Studio or Ollama
+- Using third-party providers like OpenRouter or Fireworks
+- Testing custom proxy endpoints
+
+Note that when using a custom base URL with the OpenAI provider, some advanced features like the Responses API will be automatically disabled as they are specific to the official OpenAI API.
+
+Set base URLs using:
+
+CLI arguments:
+
+```
+/baseurl <url>
+```
+
+Config file:
+
+```json
+{
+  "providerBaseUrls": {
+    "openai": "http://localhost:1234/v1/",
+    "anthropic": "https://api.proxy.example.com/anthropic/v1/"
+  }
+}
+```
+
 ## Context Files (Hierarchical Instructional Context)
 
 While not strictly configuration for the CLI's _behavior_, context files (defaulting to `LLXPRT.md` but configurable via the `contextFileName` setting) are crucial for configuring the _instructional context_ (also referred to as "memory") provided to the Gemini model. This powerful feature allows you to give project-specific instructions, coding style guides, or any relevant background information to the AI, making its responses more tailored and accurate to your needs. The CLI includes UI elements, such as an indicator in the footer showing the number of loaded context files, to keep you informed about the active context.
