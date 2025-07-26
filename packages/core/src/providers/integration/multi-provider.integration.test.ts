@@ -232,6 +232,7 @@ describe('Multi-Provider Integration Tests', () => {
     );
 
     it.skipIf(skipTests)('should handle streaming correctly', async () => {
+      if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
       const messages = [
@@ -268,6 +269,7 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should work with GPT-4 model', async () => {
+      if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
       // Use appropriate model based on provider
       const model = baseURL?.includes('openrouter') ? 'openai/gpt-4o' : 'gpt-4';
@@ -296,6 +298,7 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it.skipIf(skipTests)('should handle tool calls', async () => {
+      if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
       const messages = [
