@@ -6,7 +6,7 @@ exports[`App UI > should render correctly with the prompt input box 1`] = `
 ╭────────────────────────────────────────────────────────────────────────────────────────╮
 │ >   Type your message or @path/to/file                                                 │
 ╰────────────────────────────────────────────────────────────────────────────────────────╯
-/test/dir              no sandbox (see /docs)               test-model (100% context left)"
+/test/dir                no sandbox (see /docs)             test-model (100% context left)"
 `;
 
 exports[`App UI > should render the initial UI correctly 1`] = `
@@ -14,5 +14,5 @@ exports[`App UI > should render the initial UI correctly 1`] = `
  The first rule of Fight Club is: you do not talk about Fight Club. (esc to cancel, 0s)
 
 
-/test/dir              no sandbox (see /docs)               test-model (100% context left)"
+/test/dir                no sandbox (see /docs)             test-model (100% context left)"
 `;
