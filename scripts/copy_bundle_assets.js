@@ -45,4 +45,13 @@ for (const file of vsixFiles) {
   copyFileSync(join(root, file), join(bundleDir, basename(file)));
 }
 
+// Copy tiktoken WASM file
+const tiktokenWasmPath = join(
+  root,
+  'node_modules/@dqbd/tiktoken/tiktoken_bg.wasm',
+);
+if (existsSync(tiktokenWasmPath)) {
+  copyFileSync(tiktokenWasmPath, join(bundleDir, 'tiktoken_bg.wasm'));
+}
+
 console.log('Assets copied to bundle/');
