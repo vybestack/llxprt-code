@@ -348,6 +348,7 @@ describe('Multi-Provider Integration Tests', () => {
 
   describe('Error Handling', () => {
     it.skipIf(skipTests)('should handle invalid model gracefully', async () => {
+      if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
       openaiProvider.setModel('invalid-model-xyz');
 
