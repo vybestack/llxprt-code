@@ -48,6 +48,17 @@ describe('Multi-Provider Integration Tests', () => {
       );
       skipTests = true;
     }
+
+    // Skip tests when using OpenRouter for now
+    if (baseURL?.includes('openrouter')) {
+      console.log(
+        '\n⚠️  Skipping Multi-Provider Integration Tests: OpenRouter detected',
+      );
+      console.log(
+        '   These tests are currently not compatible with OpenRouter\n',
+      );
+      skipTests = true;
+    }
   });
 
   beforeEach(() => {
