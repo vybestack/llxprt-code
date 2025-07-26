@@ -207,89 +207,95 @@ describe('oauth2', () => {
     expect(getCachedGoogleAccount()).toBe('test-google-account@gmail.com');
   });
 
-  it.skip('should perform login with user code', { timeout: 30000 }, async () => {
-    const mockConfigWithNoBrowser = {
-      getNoBrowser: () => true,
-      getProxy: () => undefined,
-    } as unknown as Config;
+  it.skip(
+    'should perform login with user code',
+    { timeout: 30000 },
+    async () => {
+      const mockConfigWithNoBrowser = {
+        getNoBrowser: () => true,
+        getProxy: () => undefined,
+      } as unknown as Config;
 
-    const mockCodeVerifier = {
-      codeChallenge: 'test-challenge',
-      codeVerifier: 'test-verifier',
-    };
-    const mockAuthUrl = 'https://example.com/auth-user-code';
-    const mockCode = 'test-user-code';
-    const mockTokens = {
-      access_token: 'test-access-token-user-code',
-      refresh_token: 'test-refresh-token-user-code',
-    };
+      const mockCodeVerifier = {
+        codeChallenge: 'test-challenge',
+        codeVerifier: 'test-verifier',
+      };
+      const mockAuthUrl = 'https://example.com/auth-user-code';
+      const mockCode = 'test-user-code';
+      const mockTokens = {
+        access_token: 'test-access-token-user-code',
+        refresh_token: 'test-refresh-token-user-code',
+      };
 
-    const mockGenerateAuthUrl = vi.fn().mockReturnValue(mockAuthUrl);
-    const mockGetToken = vi.fn().mockResolvedValue({ tokens: mockTokens });
-    const mockSetCredentials = vi.fn();
-    const mockGenerateCodeVerifierAsync = vi
-      .fn()
-      .mockResolvedValue(mockCodeVerifier);
-    const mockGetAccessToken = vi
-      .fn()
-      .mockResolvedValue({ token: 'mock-access-token-user-code' });
+      const mockGenerateAuthUrl = vi.fn().mockReturnValue(mockAuthUrl);
+      const mockGetToken = vi.fn().mockResolvedValue({ tokens: mockTokens });
+      const mockSetCredentials = vi.fn();
+      const mockGenerateCodeVerifierAsync = vi
+        .fn()
+        .mockResolvedValue(mockCodeVerifier);
+      const mockGetAccessToken = vi
+        .fn()
+        .mockResolvedValue({ token: 'mock-access-token-user-code' });
 
-    const mockOAuth2Client = {
-      generateAuthUrl: mockGenerateAuthUrl,
-      getToken: mockGetToken,
-      setCredentials: mockSetCredentials,
-      generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
-      getAccessToken: mockGetAccessToken,
-      credentials: mockTokens,
-      on: vi.fn(),
-    } as unknown as OAuth2Client;
-    vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
+      const mockOAuth2Client = {
+        generateAuthUrl: mockGenerateAuthUrl,
+        getToken: mockGetToken,
+        setCredentials: mockSetCredentials,
+        generateCodeVerifierAsync: mockGenerateCodeVerifierAsync,
+        getAccessToken: mockGetAccessToken,
+        credentials: mockTokens,
+        on: vi.fn(),
+      } as unknown as OAuth2Client;
+      vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
-    // Mock open to immediately reject to simulate browser not available
-    vi.mocked(open).mockRejectedValue(new Error('Browser not available'));
+      // Mock open to immediately reject to simulate browser not available
+      vi.mocked(open).mockRejectedValue(new Error('Browser not available'));
 
-    const mockReadline = {
-      question: vi.fn((_query, callback) => callback(mockCode)),
-      close: vi.fn(),
-    };
-    vi.mocked(readline.createInterface).mockReturnValue(
-      mockReadline as unknown as readline.Interface,
-    );
+      const mockReadline = {
+        question: vi.fn((_query, callback) => callback(mockCode)),
+        close: vi.fn(),
+      };
+      vi.mocked(readline.createInterface).mockReturnValue(
+        mockReadline as unknown as readline.Interface,
+      );
 
-    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleLogSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => {});
 
-    // Mock the UserInfo API response
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({ email: 'test-user-code@gmail.com' }),
-    } as unknown as Response);
+      // Mock the UserInfo API response
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ email: 'test-user-code@gmail.com' }),
+      } as unknown as Response);
 
-    const client = await getOauthClient(
-      AuthType.LOGIN_WITH_GOOGLE,
-      mockConfigWithNoBrowser,
-    );
+      const client = await getOauthClient(
+        AuthType.LOGIN_WITH_GOOGLE,
+        mockConfigWithNoBrowser,
+      );
 
-    expect(client).toBe(mockOAuth2Client);
+      expect(client).toBe(mockOAuth2Client);
 
-    // Verify the auth flow
-    expect(mockGenerateCodeVerifierAsync).toHaveBeenCalled();
-    expect(mockGenerateAuthUrl).toHaveBeenCalled();
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining(mockAuthUrl),
-    );
-    expect(mockReadline.question).toHaveBeenCalledWith(
-      'Enter the authorization code: ',
-      expect.any(Function),
-    );
-    expect(mockGetToken).toHaveBeenCalledWith({
-      code: mockCode,
-      codeVerifier: mockCodeVerifier.codeVerifier,
-      redirect_uri: 'https://codeassist.google.com/authcode',
-    });
-    expect(mockSetCredentials).toHaveBeenCalledWith(mockTokens);
+      // Verify the auth flow
+      expect(mockGenerateCodeVerifierAsync).toHaveBeenCalled();
+      expect(mockGenerateAuthUrl).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining(mockAuthUrl),
+      );
+      expect(mockReadline.question).toHaveBeenCalledWith(
+        'Enter the authorization code: ',
+        expect.any(Function),
+      );
+      expect(mockGetToken).toHaveBeenCalledWith({
+        code: mockCode,
+        codeVerifier: mockCodeVerifier.codeVerifier,
+        redirect_uri: 'https://codeassist.google.com/authcode',
+      });
+      expect(mockSetCredentials).toHaveBeenCalledWith(mockTokens);
 
-    consoleLogSpy.mockRestore();
-  });
+      consoleLogSpy.mockRestore();
+    },
+  );
 
   describe('in Cloud Shell', () => {
     const mockGetAccessToken = vi.fn();

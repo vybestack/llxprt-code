@@ -135,7 +135,11 @@ describe('Multi-Provider Integration Tests', () => {
         const modelIds = models.map((m) => m.id);
         if (baseURL?.includes('openrouter')) {
           // OpenRouter uses prefixed model names
-          expect(modelIds.some(id => id.includes('openai/') || id.includes('google/'))).toBe(true);
+          expect(
+            modelIds.some(
+              (id) => id.includes('openai/') || id.includes('google/'),
+            ),
+          ).toBe(true);
         } else {
           // Direct OpenAI API
           expect(modelIds).toContain('gpt-4.1');
@@ -161,7 +165,9 @@ describe('Multi-Provider Integration Tests', () => {
           expect(openaiProvider.getCurrentModel()).toBe('openai/gpt-4o');
 
           openaiProvider.setModel('google/gemini-2.5-flash');
-          expect(openaiProvider.getCurrentModel()).toBe('google/gemini-2.5-flash');
+          expect(openaiProvider.getCurrentModel()).toBe(
+            'google/gemini-2.5-flash',
+          );
         } else {
           // Direct OpenAI models
           openaiProvider.setModel('gpt-4');
@@ -203,7 +209,9 @@ describe('Multi-Provider Integration Tests', () => {
         }
 
         const fullResponse = chunks.join('');
-        const providerName = baseURL?.includes('openrouter') ? 'OpenRouter' : 'OpenAI';
+        const providerName = baseURL?.includes('openrouter')
+          ? 'OpenRouter'
+          : 'OpenAI';
         console.log(`\n✅ ${providerName} response: "${fullResponse}"`);
 
         expect(fullResponse.toLowerCase()).toContain(
