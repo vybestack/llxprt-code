@@ -124,7 +124,7 @@ export class GeminiClient {
   private readonly COMPRESSION_PRESERVE_THRESHOLD = 0.3;
 
   private readonly loopDetector: LoopDetectionService;
-  private lastPromptId?: string;
+  private lastPromptId: string;
 
   constructor(private config: Config) {
     if (config.getProxy()) {
@@ -133,6 +133,7 @@ export class GeminiClient {
 
     this.embeddingModel = config.getEmbeddingModel();
     this.loopDetector = new LoopDetectionService(config);
+    this.lastPromptId = this.config.getSessionId();
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -530,16 +531,19 @@ export class GeminiClient {
       };
 
       const apiCall = () =>
-        this.getContentGenerator().generateContent({
-          model: modelToUse,
-          config: {
-            ...requestConfig,
-            systemInstruction,
-            responseSchema: schema,
-            responseMimeType: 'application/json',
+        this.getContentGenerator().generateContent(
+          {
+            model: modelToUse,
+            config: {
+              ...requestConfig,
+              systemInstruction,
+              responseSchema: schema,
+              responseMimeType: 'application/json',
+            },
+            contents,
           },
-          contents,
-        });
+          this.lastPromptId,
+        );
 
       const result = await retryWithBackoff(apiCall, {
         onPersistent429: async (authType?: string, error?: unknown) =>
@@ -629,11 +633,14 @@ export class GeminiClient {
       };
 
       const apiCall = () =>
-        this.getContentGenerator().generateContent({
-          model: modelToUse,
-          config: requestConfig,
-          contents,
-        });
+        this.getContentGenerator().generateContent(
+          {
+            model: modelToUse,
+            config: requestConfig,
+            contents,
+          },
+          this.lastPromptId,
+        );
 
       const result = await retryWithBackoff(apiCall, {
         onPersistent429: async (authType?: string, error?: unknown) =>
