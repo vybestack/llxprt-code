@@ -421,16 +421,16 @@ export const useSlashCommandProcessor = (
             }
 
             return { type: 'handled' };
-            } catch (e) {
-              addItem(
-                {
-                  type: MessageType.ERROR,
-                  text: e instanceof Error ? e.message : String(e),
-                },
-                Date.now(),
-              );
-              return { type: 'handled' };
-            }
+          } catch (e) {
+            addItem(
+              {
+                type: MessageType.ERROR,
+                text: e instanceof Error ? e.message : String(e),
+              },
+              Date.now(),
+            );
+            return { type: 'handled' };
+          }
           } else if (commandToExecute.subCommands) {
             const helpText = `Command '/${commandToExecute.name}' requires a subcommand. Available:\n${commandToExecute.subCommands
               .map((sc) => `  - ${sc.name}: ${sc.description || ''}`)

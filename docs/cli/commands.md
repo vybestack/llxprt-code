@@ -59,7 +59,7 @@ Slash commands provide meta-level control over the CLI itself.
     - **`add`**:
       - **Description:** Adds the following text to the AI's memory. Usage: `/memory add <text to remember>`
     - **`show`**:
-      - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `LLXPRT.md` files. This lets you inspect the instructional context being provided to the Gemini model.
+      - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `LLXPRT.md` files. This lets you inspect the instructional context being provided to the model.
     - **`refresh`**:
       - **Description:** Reload the hierarchical instructional memory from all `LLXPRT.md` files found in the configured locations (global, project/ancestors, and sub-directories). This command updates the model with the latest `LLXPRT.md` content.
     - **Note:** For more details on how `LLXPRT.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-geminimd-files-hierarchical-instructional-context).
@@ -141,7 +141,7 @@ Example custom endpoints:
     - **Editing commands:** Delete with `x`, change with `c`, insert with `i`, `a`, `o`, `O`; complex operations like `dd`, `cc`, `dw`, `cw`
     - **Count support:** Prefix commands with numbers (e.g., `3h`, `5w`, `10G`)
     - **Repeat last command:** Use `.` to repeat the last editing operation
-    - **Persistent setting:** Vim mode preference is saved to `~/.gemini/settings.json` and restored between sessions
+    - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 - **`/vim`**
@@ -152,7 +152,7 @@ Example custom endpoints:
     - **Editing commands:** Delete with `x`, change with `c`, insert with `i`, `a`, `o`, `O`; complex operations like `dd`, `cc`, `dw`, `cw`
     - **Count support:** Prefix commands with numbers (e.g., `3h`, `5w`, `10G`)
     - **Repeat last command:** Use `.` to repeat the last editing operation
-    - **Persistent setting:** Vim mode preference is saved to `~/.gemini/settings.json` and restored between sessions
+    - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 ### Custom Commands
@@ -254,7 +254,7 @@ When you run `/changelog 1.2.0 added "New feature"`, the final text sent to the 
 
 You can make your commands dynamic by executing shell commands directly within your `prompt` and injecting their output. This is ideal for gathering context from your local environment, like reading file content or checking the status of Git.
 
-When a custom command attempts to execute a shell command, Gemini CLI will now prompt you for confirmation before proceeding. This is a security measure to ensure that only intended commands can be run.
+When a custom command attempts to execute a shell command, LLxprt Code will now prompt you for confirmation before proceeding. This is a security measure to ensure that only intended commands can be run.
 
 **How It Works:**
 
@@ -272,7 +272,7 @@ The CLI still respects the global `excludeTools` and `coreTools` settings. A com
 This command gets the staged git diff and uses it to ask the model to write a commit message.
 
 ````toml
-# In: <project>/.gemini/commands/git/commit.toml
+# In: <project>/.llxprt/commands/git/commit.toml
 # Invoked via: /git:commit
 
 description = "Generates a Git commit message based on staged changes."
@@ -339,7 +339,7 @@ LLxprt Code will then execute the multi-line prompt defined in your TOML file.
 
 ## At commands (`@`)
 
-At commands are used to include the content of files or directories as part of your prompt to Gemini. These commands include git-aware filtering.
+At commands are used to include the content of files or directories as part of your prompt to the model. These commands include git-aware filtering.
 
 - **`@<path_to_file_or_directory>`**
   - **Description:** Inject the content of the specified file or files into your current prompt. This is useful for asking questions about specific code, text, or collections of files.
@@ -351,17 +351,17 @@ At commands are used to include the content of files or directories as part of y
     - If a path to a single file is provided, the content of that file is read.
     - If a path to a directory is provided, the command attempts to read the content of files within that directory and any subdirectories.
     - Spaces in paths should be escaped with a backslash (e.g., `@My\ Documents/file.txt`).
-    - The command uses the `read_many_files` tool internally. The content is fetched and then inserted into your query before being sent to the Gemini model.
+    - The command uses the `read_many_files` tool internally. The content is fetched and then inserted into your query before being sent to the model.
     - **Git-aware filtering:** By default, git-ignored files (like `node_modules/`, `dist/`, `.env`, `.git/`) are excluded. This behavior can be changed via the `fileFiltering` settings.
     - **File types:** The command is intended for text-based files. While it might attempt to read any file, binary files or very large files might be skipped or truncated by the underlying `read_many_files` tool to ensure performance and relevance. The tool indicates if files were skipped.
   - **Output:** The CLI will show a tool call message indicating that `read_many_files` was used, along with a message detailing the status and the path(s) that were processed.
 
 - **`@` (Lone at symbol)**
-  - **Description:** If you type a lone `@` symbol without a path, the query is passed as-is to the Gemini model. This might be useful if you are specifically talking _about_ the `@` symbol in your prompt.
+  - **Description:** If you type a lone `@` symbol without a path, the query is passed as-is to the model. This might be useful if you are specifically talking _about_ the `@` symbol in your prompt.
 
 ### Error handling for `@` commands
 
-- If the path specified after `@` is not found or is invalid, an error message will be displayed, and the query might not be sent to the Gemini model, or it will be sent without the file content.
+- If the path specified after `@` is not found or is invalid, an error message will be displayed, and the query might not be sent to the model, or it will be sent without the file content.
 - If the `read_many_files` tool encounters an error (e.g., permission issues), this will also be reported.
 
 ## Shell mode & passthrough commands (`!`)
