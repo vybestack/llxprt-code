@@ -52,6 +52,7 @@ export class TestRig {
     const execOptions = {
       cwd: this.testDir,
       encoding: 'utf-8',
+      env: process.env,
     };
 
     if (typeof promptOrOptions === 'string') {

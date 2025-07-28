@@ -29,20 +29,23 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
+const mockLoadServerHierarchicalMemory = vi.fn(
+  (cwd, debug, fileService, extensionPaths, _maxDirs) =>
+    Promise.resolve({
+      memoryContent: extensionPaths?.join(',') || '',
+      fileCount: extensionPaths?.length || 0,
+    }),
+);
+
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualServer = await vi.importActual<typeof ServerConfig>(
     '@vybestack/llxprt-code-core',
   );
   return {
     ...actualServer,
+    DEFAULT_TELEMETRY_TARGET: 'local',
     loadEnvironment: vi.fn(),
-    loadServerHierarchicalMemory: vi.fn(
-      (cwd, debug, fileService, extensionPaths, _maxDirs) =>
-        Promise.resolve({
-          memoryContent: extensionPaths?.join(',') || '',
-          fileCount: extensionPaths?.length || 0,
-        }),
-    ),
+    loadServerHierarchicalMemory: mockLoadServerHierarchicalMemory,
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: false,
       respectLlxprtIgnore: true,
@@ -375,19 +378,17 @@ describe('loadCliConfig telemetry', () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
     const settings: Settings = {
-      telemetry: { target: ServerConfig.DEFAULT_TELEMETRY_TARGET },
+      telemetry: { target: 'local' },
     };
     const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getTelemetryTarget()).toBe(
-      ServerConfig.DEFAULT_TELEMETRY_TARGET,
-    );
+    expect(config.getTelemetryTarget()).toBe('local');
   });
 
   it('should prioritize --telemetry-target CLI flag over settings', async () => {
     process.argv = ['node', 'script.js', '--telemetry-target', 'gcp'];
     const argv = await parseArguments();
     const settings: Settings = {
-      telemetry: { target: ServerConfig.DEFAULT_TELEMETRY_TARGET },
+      telemetry: { target: 'local' },
     };
     const config = await loadCliConfig(settings, [], 'test-session', argv);
     expect(config.getTelemetryTarget()).toBe('gcp');
@@ -398,9 +399,7 @@ describe('loadCliConfig telemetry', () => {
     const argv = await parseArguments();
     const settings: Settings = { telemetry: { enabled: true } };
     const config = await loadCliConfig(settings, [], 'test-session', argv);
-    expect(config.getTelemetryTarget()).toBe(
-      ServerConfig.DEFAULT_TELEMETRY_TARGET,
-    );
+    expect(config.getTelemetryTarget()).toBe('local');
   });
 
   it('should use telemetry log prompts from settings if CLI flag is not present', async () => {
@@ -478,7 +477,7 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
     ];
     const argv = await parseArguments();
     await loadCliConfig(settings, extensions, 'session-id', argv);
-    expect(ServerConfig.loadServerHierarchicalMemory).toHaveBeenCalledWith(
+    expect(mockLoadServerHierarchicalMemory).toHaveBeenCalledWith(
       expect.any(String),
       false,
       expect.any(Object),

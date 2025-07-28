@@ -17,7 +17,7 @@ import { Server as HTTPServer } from 'node:http';
 import { RecentFilesManager } from './recent-files-manager.js';
 
 const MCP_SESSION_ID_HEADER = 'mcp-session-id';
-const IDE_SERVER_PORT_ENV_VAR = 'GEMINI_CLI_IDE_SERVER_PORT';
+const IDE_SERVER_PORT_ENV_VAR = 'LLXPRT_CODE_IDE_SERVER_PORT';
 const MAX_SELECTED_TEXT_LENGTH = 16384; // 16 KiB limit
 
 function sendOpenFilesChangedNotification(
@@ -239,7 +239,7 @@ export class IDEServer {
 const createMcpServer = () => {
   const server = new McpServer(
     {
-      name: 'gemini-cli-companion-mcp-server',
+      name: 'llxprt-code-companion-mcp-server',
       version: '1.0.0',
     },
     { capabilities: { logging: {} } },

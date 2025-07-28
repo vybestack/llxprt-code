@@ -31,9 +31,9 @@ function getContainerPath(hostPath: string): string {
   return hostPath;
 }
 
-const LOCAL_DEV_SANDBOX_IMAGE_NAME = 'gemini-cli-sandbox';
-const SANDBOX_NETWORK_NAME = 'gemini-cli-sandbox';
-const SANDBOX_PROXY_NAME = 'gemini-cli-sandbox-proxy';
+const LOCAL_DEV_SANDBOX_IMAGE_NAME = 'llxprt-code-sandbox';
+const SANDBOX_NETWORK_NAME = 'llxprt-code-sandbox';
+const SANDBOX_PROXY_NAME = 'llxprt-code-sandbox-proxy';
 const BUILTIN_SEATBELT_PROFILES = [
   'permissive-open',
   'permissive-closed',
@@ -301,7 +301,7 @@ export async function start_sandbox(
 
   console.error(`hopping into sandbox (command: ${config.command}) ...`);
 
-  // determine full path for gemini-cli to distinguish linked vs installed setting
+  // determine full path for llxprt-code to distinguish linked vs installed setting
   const gcPath = fs.realpathSync(process.argv[1]);
 
   const projectSandboxDockerfile = path.join(
@@ -314,14 +314,14 @@ export async function start_sandbox(
   const workdir = path.resolve(process.cwd());
   const containerWorkdir = getContainerPath(workdir);
 
-  // if BUILD_SANDBOX is set, then call scripts/build_sandbox.js under gemini-cli repo
+  // if BUILD_SANDBOX is set, then call scripts/build_sandbox.js under llxprt-code repo
   //
-  // note this can only be done with binary linked from gemini-cli repo
+  // note this can only be done with binary linked from llxprt-code repo
   if (process.env.BUILD_SANDBOX) {
-    if (!gcPath.includes('gemini-cli/packages/')) {
+    if (!gcPath.includes('llxprt-code/packages/')) {
       console.error(
-        'ERROR: cannot build sandbox using installed gemini binary; ' +
-          'run `npm link ./packages/cli` under gemini-cli repo to switch to linked binary.',
+        'ERROR: cannot build sandbox using installed llxprt binary; ' +
+          'run `npm link ./packages/cli` under llxprt-code repo to switch to linked binary.',
       );
       process.exit(1);
     } else {
@@ -354,7 +354,7 @@ export async function start_sandbox(
   if (!(await ensureSandboxImageIsPresent(config.command, image))) {
     const remedy =
       image === LOCAL_DEV_SANDBOX_IMAGE_NAME
-        ? 'Try running `npm run build:all` or `npm run build:sandbox` under the gemini-cli repo to build it locally, or check the image name and your network connection.'
+        ? 'Try running `npm run build:all` or `npm run build:sandbox` under the llxprt-code repo to build it locally, or check the image name and your network connection.'
         : 'Please check the image name, your network connection, or report issues at https://github.com/acoliver/llxprt-code/issues if the issue persists.';
     console.error(
       `ERROR: Sandbox image '${image}' is missing or could not be pulled. ${remedy}`,

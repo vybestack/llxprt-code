@@ -19,10 +19,11 @@
     "AI"
   ],
   "keywords": [
-    "gemini-cli",
-    "gemini cli",
-    "gemini",
-    "gemini code",
+    "llxprt-code",
+    "llxprt code",
+    "llxprt",
+    "multi-provider",
+    "ai",
     "cli",
     "ide integration",
     "ide companion"
@@ -33,8 +34,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "gemini-cli.runGeminiCLI",
-        "title": "Gemini CLI: Run"
+        "command": "llxprt-code.runLLxprtCode",
+        "title": "LLxprt Code: Run"
       }
     ]
   },

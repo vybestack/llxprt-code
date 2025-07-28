@@ -13,7 +13,7 @@ let logger: vscode.OutputChannel;
 let log: (message: string) => void = () => {};
 
 export async function activate(context: vscode.ExtensionContext) {
-  logger = vscode.window.createOutputChannel('Gemini CLI IDE Companion');
+  logger = vscode.window.createOutputChannel('LLxprt Code IDE Companion');
   log = createLogger(context, logger);
   log('Extension activated');
   ideServer = new IDEServer(log);
@@ -25,11 +25,11 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('gemini-cli.runGeminiCLI', () => {
-      const geminiCmd = 'gemini';
-      const terminal = vscode.window.createTerminal(`Gemini CLI`);
+    vscode.commands.registerCommand('llxprt-code.runLLxprtCode', () => {
+      const llxprtCmd = 'llxprt';
+      const terminal = vscode.window.createTerminal(`LLxprt Code`);
       terminal.show();
-      terminal.sendText(geminiCmd);
+      terminal.sendText(llxprtCmd);
     }),
   );
 }
