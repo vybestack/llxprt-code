@@ -12,7 +12,7 @@ const LLXPRT_IGNORE_FILE_NAME = '.llxprtignore';
 
 export interface FilterFilesOptions {
   respectGitIgnore?: boolean;
-  respectGeminiIgnore?: boolean;
+  respectLlxprtIgnore?: boolean;
 }
 
 export class FileDiscoveryService {
@@ -47,7 +47,7 @@ export class FileDiscoveryService {
     filePaths: string[],
     options: FilterFilesOptions = {
       respectGitIgnore: true,
-      respectGeminiIgnore: true,
+      respectLlxprtIgnore: true,
     },
   ): string[] {
     return filePaths.filter((filePath) => {
@@ -55,8 +55,8 @@ export class FileDiscoveryService {
         return false;
       }
       if (
-        options.respectGeminiIgnore &&
-        this.shouldGeminiIgnoreFile(filePath)
+        options.respectLlxprtIgnore &&
+        this.shouldLlxprtIgnoreFile(filePath)
       ) {
         return false;
       }
@@ -75,9 +75,9 @@ export class FileDiscoveryService {
   }
 
   /**
-   * Checks if a single file should be gemini-ignored
+   * Checks if a single file should be llxprt-ignored
    */
-  shouldGeminiIgnoreFile(filePath: string): boolean {
+  shouldLlxprtIgnoreFile(filePath: string): boolean {
     if (this.llxprtIgnoreFilter) {
       return this.llxprtIgnoreFilter.isIgnored(filePath);
     }
@@ -91,12 +91,12 @@ export class FileDiscoveryService {
     filePath: string,
     options: FilterFilesOptions = {},
   ): boolean {
-    const { respectGitIgnore = true, respectGeminiIgnore = true } = options;
+    const { respectGitIgnore = true, respectLlxprtIgnore = true } = options;
 
     if (respectGitIgnore && this.shouldGitIgnoreFile(filePath)) {
       return true;
     }
-    if (respectGeminiIgnore && this.shouldGeminiIgnoreFile(filePath)) {
+    if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(filePath)) {
       return true;
     }
     return false;
@@ -105,7 +105,7 @@ export class FileDiscoveryService {
   /**
    * Returns loaded patterns from .llxprtignore
    */
-  getGeminiIgnorePatterns(): string[] {
+  getLlxprtIgnorePatterns(): string[] {
     return this.llxprtIgnoreFilter?.getPatterns() ?? [];
   }
 }

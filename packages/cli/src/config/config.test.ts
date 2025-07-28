@@ -45,11 +45,11 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     ),
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: false,
-      respectGeminiIgnore: true,
+      respectLlxprtIgnore: true,
     },
     DEFAULT_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: true,
-      respectGeminiIgnore: true,
+      respectLlxprtIgnore: true,
     },
   };
 });
@@ -489,7 +489,7 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
       ],
       {
         respectGitIgnore: false,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       },
       undefined, // maxDirs
     );

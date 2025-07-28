@@ -61,7 +61,7 @@ describe('ReadManyFilesTool', () => {
 
       getFileFilteringOptions: () => ({
         respectGitIgnore: true,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       }),
       getTargetDir: () => tempRootDir,
     } as Partial<Config> as Config;

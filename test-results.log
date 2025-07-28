@@ -1,0 +1,537 @@
+
+> @vybestack/llxprt-code@0.1.14 test
+> npm run test --workspaces
+
+
+> @vybestack/llxprt-code@0.1.14 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/cli
+      Coverage enabled with istanbul
+
+ ✓ src/ui/commands/restoreCommand.test.ts (13 tests) 109ms
+ ✓ src/ui/components/InputPrompt.paste.test.tsx (3 tests | 1 skipped) 169ms
+ ✓ src/ui/components/messages/DiffRenderer.test.tsx (13 tests) 183ms
+ ✓ src/ui/commands/aboutCommand.test.ts (4 tests) 1659ms
+   ✓ aboutCommand > should call addItem with all version info  1655ms
+ ❯ src/ui/hooks/atCommandProcessor.test.ts (18 tests | 2 failed) 173ms
+   ✓ handleAtCommand > should pass through query if no @ command is present 10ms
+   ✓ handleAtCommand > should pass through original query if only a lone @ symbol is present 2ms
+   ✓ handleAtCommand > should process a valid text file path 36ms
+   ✓ handleAtCommand > should process a valid directory path and convert to glob 12ms
+   ✓ handleAtCommand > should handle query with text before and after @command 16ms
+   ✓ handleAtCommand > should correctly unescape paths with escaped spaces 9ms
+   ✓ handleAtCommand > should handle multiple @file references 8ms
+   ✓ handleAtCommand > should handle multiple @file references with interleaved text 6ms
+   ✓ handleAtCommand > should handle a mix of valid, invalid, and lone @ references 14ms
+   ✓ handleAtCommand > should return original query if all @paths are invalid or lone @ 3ms
+   ✓ handleAtCommand > git-aware filtering > should skip git-ignored files in @ commands 5ms
+   ✓ handleAtCommand > git-aware filtering > should process non-git-ignored files normally 5ms
+   ✓ handleAtCommand > git-aware filtering > should handle mixed git-ignored and valid files 10ms
+   ✓ handleAtCommand > git-aware filtering > should always ignore .git directory files 3ms
+   ✓ handleAtCommand > when recursive file search is disabled > should not use glob search for a nonexistent file 1ms
+   × handleAtCommand > gemini-ignore filtering > should skip gemini-ignored files in @ commands 11ms
+     → expected { …(2) } to deeply equal { …(2) }
+   ✓ handleAtCommand > should process non-ignored files when .geminiignore is present 11ms
+   × handleAtCommand > should handle mixed gemini-ignored and valid files 10ms
+     → expected "spy" to be called with arguments: [ Array(1) ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path src/main.ts resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-dNkxjG/src/main.ts",[90m
+[2m  ][22m
+
+[1m  2nd spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path dist/bundle.js resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-dNkxjG/dist/bundle.js",[90m
+[2m  ][22m
+[39m[90m
+
+Number of calls: [1m2[22m
+[39m
+ ✓ src/ui/components/AuthDialog.test.tsx (10 tests) 370ms
+ ✓ src/ui/hooks/useGeminiStream.test.tsx (28 tests) 346ms
+ ✓ src/ui/hooks/useShellHistory.test.ts (7 tests) 541ms
+ ✓ src/ui/utils/clipboardUtils.test.ts (6 tests) 124ms
+ ✓ src/ui/utils/MarkdownDisplay.test.tsx (14 tests) 142ms
+ ✓ src/ui/containers/SessionController.test.tsx (15 tests) 69ms
+ ✓ src/ui/utils/commandUtils.test.ts (19 tests) 77ms
+ ✓ src/ui/hooks/useLoadingIndicator.test.ts (5 tests) 43ms
+ ✓ src/utils/userStartupWarnings.test.ts (5 tests) 20ms
+ ✓ src/ui/components/shared/MaxSizedBox.test.tsx (21 tests) 43ms
+ ✓ src/config/config.test.ts (62 tests) 185ms
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts (14 tests | 1 failed) 1783ms
+   ✓ useSlashCommandProcessor > Command Loading > should load builtin and file commands 66ms
+   ✓ useSlashCommandProcessor > Command Loading > should handle deduplication with file commands overriding builtin 54ms
+   ✓ useSlashCommandProcessor > Command Execution > should execute a simple command 56ms
+   ✓ useSlashCommandProcessor > Command Execution > should handle command with arguments 53ms
+   ✓ useSlashCommandProcessor > Command Execution > should handle unknown commands 4ms
+   ✓ useSlashCommandProcessor > Command Execution > should return false for non-command input 2ms
+   ✓ useSlashCommandProcessor > Dialog Commands > should open help dialog 53ms
+   ✓ useSlashCommandProcessor > Dialog Commands > should open auth dialog 53ms
+   ✓ useSlashCommandProcessor > Special Command Actions > should handle quit command 159ms
+   ✓ useSlashCommandProcessor > Special Command Actions > should handle tool scheduling 57ms
+   ✓ useSlashCommandProcessor > Special Command Actions > should handle submit prompt 54ms
+   ✓ useSlashCommandProcessor > Subcommands > should execute subcommands 53ms
+   × useSlashCommandProcessor > Subcommands > should show help for parent command without subcommand 1065ms
+     → expected "spy" to be called 2 times, but got 1 times
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+   ✓ useSlashCommandProcessor > Alias Support > should execute command using alias 53ms
+ ✓ src/ui/components/shared/RadioButtonSelect.test.tsx (7 tests) 29ms
+ ✓ src/services/FileCommandLoader.test.ts (14 tests) 79ms
+ ✓ src/ui/components/shared/text-buffer.test.ts (73 tests) 88ms
+ ✓ src/ui/hooks/useKeypress.test.tsx (3 tests) 17ms
+ ✓ src/ui/hooks/useToolScheduler.test.ts (21 tests | 4 skipped) 30ms
+ ✓ src/ui/hooks/useInputHistory.test.ts (11 tests) 44ms
+ ✓ src/ui/hooks/useCompletion.test.ts (37 tests) 1992ms
+[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h ✓ src/ui/components/StatsDisplay.test.tsx (10 tests) 57ms
+[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h ✓ src/ui/components/ToolStatsDisplay.test.tsx (5 tests) 31ms
+[?2004l[?2004h[?2004l ✓ src/ui/App.test.tsx (19 tests) 502ms
+ ✓ src/ui/components/messages/ToolMessage.test.tsx (11 tests) 26ms
+ ✓ src/ui/hooks/useGitBranchName.test.ts (7 tests) 39ms
+ ✓ src/ui/commands/editorCommand.test.ts (2 tests) 2ms
+ ✓ src/ui/commands/mcpCommand.test.ts (36 tests) 19ms
+ ✓ src/config/settings.test.ts (30 tests) 12ms
+ ✓ src/ui/components/ModelStatsDisplay.test.tsx (6 tests) 49ms
+ ✓ src/ui/components/SessionSummaryDisplay.test.tsx (1 test) 79ms
+ ✓ src/ui/components/InputPrompt.test.tsx (40 tests) 3904ms
+ ✓ src/ui/components/HistoryItemDisplay.test.tsx (6 tests) 120ms
+ ✓ src/ui/components/ContextIndicator.ui.test.tsx (6 tests) 22ms
+ ✓ src/ui/components/LoadingIndicator.test.tsx (11 tests) 39ms
+ ✓ src/ui/components/__tests__/LayoutManager.test.tsx (5 tests) 79ms
+ ✓ src/ui/hooks/usePhraseCycler.test.ts (7 tests) 39ms
+ ✓ src/ui/hooks/useKeypress.test.ts (14 tests) 37ms
+ ✓ src/ui/hooks/useTimer.test.ts (8 tests) 15ms
+ ✓ src/ui/hooks/useHistoryManager.test.ts (8 tests) 14ms
+ ✓ src/ui/hooks/useStableCallback.test.ts (5 tests) 14ms
+ ✓ src/ui/hooks/useConsoleMessages.test.ts (9 tests) 32ms
+ ✓ src/ui/themes/theme-manager.test.ts (9 tests) 12ms
+ ✓ src/ui/hooks/useFocus.test.ts (5 tests) 26ms
+ ✓ src/ui/components/messages/ToolConfirmationMessage.test.tsx (2 tests) 44ms
+ ✓ src/ui/hooks/shellCommandProcessor.test.ts (3 tests) 33ms
+ ✓ src/config/extension.test.ts (7 tests) 8ms
+ ✓ src/ui/utils/updateCheck.test.ts (8 tests) 5ms
+ ✓ src/services/BuiltinCommandLoader.test.ts (4 tests) 3ms
+ ✓ src/ui/contexts/SessionContext.test.tsx (3 tests) 22ms
+ ✓ src/ui/hooks/useEditorSettings.test.tsx (10 tests) 20ms
+ ✓ src/ui/commands/chatCommand.test.ts (12 tests) 7ms
+ ✓ src/ui/commands/copyCommand.test.ts (11 tests) 6ms
+ ✓ src/ui/commands/statsCommand.test.ts (3 tests) 4ms
+ ✓ src/ui/commands/compressCommand.test.ts (5 tests) 9ms
+ ✓ src/ui/hooks/useAutoAcceptIndicator.test.ts (6 tests) 17ms
+ ✓ src/ui/commands/quitCommand.test.ts (1 test) 6ms
+ ✓ src/ui/commands/privacyCommand.test.ts (2 tests) 3ms
+ ✓ src/services/CommandService.test.ts (7 tests) 5ms
+ ✓ src/validateNonInterActiveAuth.test.ts (10 tests) 18ms
+ ✓ src/ui/themes/color-utils.test.ts (16 tests) 4ms
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 4ms
+ ✓ src/ui/commands/toolsCommand.test.ts (4 tests) 13ms
+ ✓ src/nonInteractiveCli.test.ts (6 tests) 6ms
+ ✓ src/ui/commands/memoryCommand.test.ts (8 tests) 7ms
+ ✓ src/test-utils/mockCommandContext.test.ts (3 tests) 2ms
+ ✓ src/ui/commands/helpCommand.test.ts (2 tests) 4ms
+ ✓ src/ui/utils/textUtils.test.ts (5 tests) 2ms
+ ✓ src/ui/commands/docsCommand.test.ts (3 tests) 6ms
+ ✓ src/utils/ConversationContext.test.ts (6 tests) 3ms
+ ✓ src/ui/commands/extensionsCommand.test.ts (2 tests) 3ms
+ ✓ src/ui/commands/bugCommand.test.ts (2 tests) 5ms
+ ✓ src/services/prompt-processors/argumentProcessor.test.ts (6 tests) 3ms
+ ✓ src/ui/commands/clearCommand.test.ts (2 tests) 5ms
+ ✓ src/ui/utils/computeStats.test.ts (11 tests) 2ms
+ ✓ src/ui/commands/toolformatCommand.test.ts (5 tests) 5ms
+ ✓ src/ui/commands/ideCommand.test.ts (11 tests) 7ms
+ ✓ src/providers/enhanceConfigWithProviders.test.ts (6 tests) 4ms
+ ✓ src/ui/utils/errorParsing.test.ts (21 tests) 7ms
+ ✓ src/ui/utils/formatters.test.ts (14 tests) 2ms
+ ✓ src/ui/commands/themeCommand.test.ts (2 tests) 5ms
+ ✓ src/gemini.test.tsx (1 test) 9ms
+ ✓ src/ui/utils/displayUtils.test.ts (5 tests) 5ms
+ ✓ src/ui/utils/markdownUtilities.test.ts (7 tests) 5ms
+ ✓ src/config/auth.test.ts (8 tests) 5ms
+ ✓ src/providers/provider-gemini-switching.test.ts (3 tests) 3ms
+ ✓ src/ui/commands/authCommand.test.ts (2 tests) 6ms
+ ✓ src/utils/startupWarnings.test.ts (4 tests) 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > gemini-ignore filtering > should skip gemini-ignored files in @ commands
+AssertionError: expected { …(2) } to deeply equal { …(2) }
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[2m    "processedQuery": [[22m
+[2m      {[22m
+[2m        "text": "@/var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-8yAg0q/build/output.js",[22m
+[2m      },[22m
+[31m+     {[39m
+[31m+       "text": "[39m
+[31m+ --- Content from referenced files ---",[39m
+[31m+     },[39m
+[31m+     {[39m
+[31m+       "text": "No files matching the criteria were found or all were skipped.",[39m
+[31m+     },[39m
+[31m+     {[39m
+[31m+       "text": "[39m
+[31m+ --- End of content ---",[39m
+[31m+     },[39m
+[2m    ],[22m
+[2m    "shouldProceed": true,[22m
+[2m  }[22m
+
+ ❯ src/ui/hooks/atCommandProcessor.test.ts:620:22
+    618|       });
+    619| 
+    620|       expect(result).toEqual({
+       |                      ^
+    621|         processedQuery: [{ text: query }],
+    622|         shouldProceed: true,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should handle mixed gemini-ignored and valid files
+AssertionError: expected "spy" to be called with arguments: [ Array(1) ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path src/main.ts resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-dNkxjG/src/main.ts",[90m
+[2m  ][22m
+
+[1m  2nd spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path dist/bundle.js resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-dNkxjG/dist/bundle.js",[90m
+[2m  ][22m
+[39m[90m
+
+Number of calls: [1m2[22m
+[39m
+ ❯ src/ui/hooks/atCommandProcessor.test.ts:701:32
+    699|       shouldProceed: true,
+    700|     });
+    701|     expect(mockOnDebugMessage).toHaveBeenCalledWith(
+       |                                ^
+    702|       `Path ${relativePath2} is gemini-ignored and will be skipped.`,
+    703|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/ui/hooks/slashCommandProcessor.test.ts > useSlashCommandProcessor > Subcommands > should show help for parent command without subcommand
+AssertionError: expected "spy" to be called 2 times, but got 1 times
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+ ❯ src/ui/hooks/slashCommandProcessor.test.ts:510:29
+    508| 
+    509|       await waitFor(() => {
+    510|         expect(mockAddItem).toHaveBeenCalledTimes(2);
+       |                             ^
+    511|       });
+    512| 
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 89 passed (91)
+      Tests  3 failed | 970 passed | 5 skipped (978)
+   Start at  10:46:33
+   Duration  12.72s (transform 7.78s, setup 0ms, collect 60.18s, tests 13.83s, environment 32.58s, prepare 6.43s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/cli/junit.xml
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.1.14
+npm error location /Users/acoliver/projects/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c vitest run
+
+
+> @vybestack/llxprt-code-core@0.1.14 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/core
+      Coverage enabled with v8
+
+ ✓ src/mcp/oauth-provider.test.ts (17 tests) 109ms
+ ✓ src/core/logger.test.ts (22 tests) 188ms
+ ✓ src/tools/read-file.test.ts (17 tests) 95ms
+ ✓ src/tools/grep.test.ts (20 tests) 220ms
+ ✓ src/utils/flashFallback.integration.test.ts (4 tests) 155ms
+ ✓ src/tools/read-many-files.test.ts (22 tests) 167ms
+ ✓ src/utils/getFolderStructure.test.ts (15 tests) 102ms
+ ✓ src/core/client.test.ts (37 tests | 5 skipped) 76ms
+ ✓ src/tools/web-fetch.integration.test.ts (22 tests) 73ms
+ ✓ src/utils/memoryDiscovery.test.ts (11 tests) 174ms
+ ❯ src/services/loopDetectionService.test.ts (17 tests | 6 failed) 412ms
+   ✓ LoopDetectionService > Tool Call Loop Detection > should not detect a loop for fewer than TOOL_CALL_LOOP_THRESHOLD identical calls 2ms
+   × LoopDetectionService > Tool Call Loop Detection > should detect a loop on the TOOL_CALL_LOOP_THRESHOLD-th identical call 5ms
+     → expected false to be true // Object.is equality
+   × LoopDetectionService > Tool Call Loop Detection > should detect a loop on subsequent identical calls 0ms
+     → expected false to be true // Object.is equality
+   ✓ LoopDetectionService > Tool Call Loop Detection > should not detect a loop for different tool calls 0ms
+   × LoopDetectionService > Tool Call Loop Detection > should not reset tool call counter for other event types 0ms
+     → expected false to be true // Object.is equality
+   ✓ LoopDetectionService > Content Loop Detection > should not detect a loop for random content 116ms
+   ✓ LoopDetectionService > Content Loop Detection > should detect a loop when a chunk of content repeats consecutively 1ms
+   ✓ LoopDetectionService > Content Loop Detection > should not detect a loop if repetitions are very far apart 285ms
+   ✓ LoopDetectionService > Edge Cases > should handle empty content 0ms
+   ✓ LoopDetectionService > Reset Functionality > tool call should reset content count 0ms
+   ✓ LoopDetectionService > General Behavior > should return false for unhandled event types 0ms
+   ✓ LoopDetectionService LLM Checks > should not trigger LLM check before LLM_CHECK_AFTER_TURNS 0ms
+   × LoopDetectionService LLM Checks > should trigger LLM check on the 30th turn 0ms
+     → expected "spy" to be called 1 times, but got 0 times
+   × LoopDetectionService LLM Checks > should detect a cognitive loop when confidence is high 0ms
+     → expected "spy" to be called 1 times, but got 0 times
+   ✓ LoopDetectionService LLM Checks > should not detect a loop when confidence is low 0ms
+   × LoopDetectionService LLM Checks > should adjust the check interval based on confidence 0ms
+     → expected "spy" to be called 1 times, but got 0 times
+   ✓ LoopDetectionService LLM Checks > should handle errors from generateJson gracefully 0ms
+ ✓ src/tools/todo-store.test.ts (14 tests) 40ms
+ ✓ src/utils/fileUtils.test.ts (36 tests) 59ms
+ ✓ src/utils/gitIgnoreParser.test.ts (18 tests) 72ms
+ ✓ src/tools/web-search.test.ts (13 tests) 30ms
+ ✓ src/utils/user_account.test.ts (16 tests) 26ms
+ ✓ src/utils/retry.test.ts (13 tests) 35ms
+ ✓ src/tools/glob.test.ts (27 tests) 1307ms
+ ✓ src/utils/schemaValidator.test.ts (7 tests) 32ms
+ ✓ src/tools/edit.test.ts (30 tests) 68ms
+ ✓ src/telemetry/metrics.test.ts (8 tests) 55ms
+ ✓ src/tools/write-file.test.ts (21 tests) 55ms
+ ✓ src/providers/anthropic/AnthropicProvider.test.ts (11 tests) 24ms
+ ✓ src/utils/errorReporting.test.ts (6 tests) 39ms
+ ✓ src/tools/ToolFormatter.test.ts (18 tests) 9ms
+ ✓ src/utils/bfsFileSearch.test.ts (10 tests) 135ms
+ ✓ src/code_assist/server.test.ts (7 tests) 11ms
+ ✓ src/utils/editor.test.ts (95 tests) 13ms
+ ✓ src/code_assist/oauth2.test.ts (10 tests | 2 skipped) 22ms
+ ✓ src/core/prompts.test.ts (23 tests) 9ms
+ ✓ src/tools/tool-registry.test.ts (18 tests) 17ms
+ ✓ src/utils/editCorrector.test.ts (40 tests) 12ms
+ ✓ src/tools/shell.test.ts (6 tests) 14ms
+ ✓ src/providers/openai/parseResponsesStream.responsesToolCalls.test.ts (7 tests) 9ms
+ ✓ src/tools/memoryTool.test.ts (14 tests) 9ms
+ ✓ src/utils/nextSpeakerChecker.test.ts (10 tests) 20ms
+ ✓ src/parsers/TextToolCallParser.test.ts (15 tests) 9ms
+ ✓ src/mcp/google-auth-provider.test.ts (4 tests) 5ms
+ ✓ src/tools/modifiable-tool.test.ts (11 tests) 9ms
+ ✓ src/providers/openai/buildResponsesRequest.test.ts (22 tests) 9ms
+ ✓ src/utils/systemEncoding.test.ts (38 tests) 12ms
+ ✓ src/tools/todo-write.test.ts (18 tests) 15ms
+ ✓ src/mcp/oauth-token-storage.test.ts (21 tests) 8ms
+ ✓ src/utils/shell-utils.test.ts (65 tests) 9ms
+ ✓ src/utils/summarizer.test.ts (8 tests) 22ms
+ ✓ src/telemetry/loggers.test.ts (13 tests) 8ms
+ ✓ src/core/geminiChat.test.ts (21 tests) 11ms
+ ✓ src/utils/memoryImportProcessor.test.ts (14 tests) 6ms
+ ✓ src/ide/ideContext.test.ts (8 tests) 4ms
+ ✓ src/tools/todo-read.test.ts (13 tests) 7ms
+ ✓ src/config/config.test.ts (21 tests) 7ms
+ ✓ src/providers/openai/OpenAIProvider.test.ts (7 tests) 12ms
+ ✓ src/core/turn.test.ts (12 tests) 8ms
+ ✓ src/providers/ProviderManager.test.ts (23 tests) 14ms
+ ✓ src/tools/mcp-client.test.ts (19 tests) 11ms
+ ✓ src/services/gitService.test.ts (13 tests) 7ms
+ ✓ src/tools/mcp-tool.test.ts (20 tests) 5ms
+ ✓ src/providers/gemini/GeminiProvider.integration.test.ts (3 tests) 9ms
+ ✓ src/tools/todo-schemas.test.ts (13 tests) 10ms
+ ✓ src/providers/openai/OpenAIProvider.responses.test.ts (3 tests) 5ms
+ ✓ src/telemetry/uiTelemetry.test.ts (17 tests) 8ms
+ ✓ src/code_assist/setup.test.ts (3 tests) 8ms
+ ✓ src/core/coreToolScheduler.test.ts (16 tests) 10ms
+ ✓ src/providers/openai/OpenAIProvider.switch.test.ts (5 tests | 2 skipped) 7ms
+ ✓ src/providers/adapters/GeminiCompatibleWrapper.test.ts (4 tests) 5ms
+ ✓ src/mcp/oauth-utils.test.ts (16 tests) 6ms
+ ✓ src/providers/openai/OpenAIProvider.shouldUseResponses.test.ts (10 tests) 5ms
+ ✓ src/services/fileDiscoveryService.test.ts (9 tests) 4ms
+ ✓ src/providers/openai/ConversationCache.test.ts (9 tests) 4ms
+ ✓ src/core/contentGenerator.test.ts (7 tests) 5ms
+ ✓ src/utils/safeJsonStringify.test.ts (8 tests) 2ms
+ ✓ src/tools/ToolFormatter.toResponsesTool.test.ts (6 tests) 3ms
+ ✓ src/utils/generateContentResponseUtilities.test.ts (36 tests) 5ms
+ ✓ src/providers/openai/OpenAIProvider.integration.test.ts (3 tests) 4058ms
+   ✓ OpenAIProvider Integration Tests > should fetch real models from OpenAI API  1151ms
+   ✓ OpenAIProvider Integration Tests > should generate real chat completion  1495ms
+   ✓ OpenAIProvider Integration Tests > should handle tool calls  1408ms
+ ✓ src/utils/partUtils.test.ts (23 tests) 3ms
+ ✓ src/code_assist/converter.test.ts (11 tests) 3ms
+ ✓ src/providers/openai/estimateRemoteTokens.test.ts (10 tests) 3ms
+ ✓ src/telemetry/telemetry.test.ts (2 tests) 5ms
+ ✓ src/utils/user_id.test.ts (1 test) 2ms
+ ✓ src/core/nonInteractiveToolExecutor.test.ts (5 tests) 15ms
+ ✓ src/providers/openai/buildResponsesRequest.stripToolCalls.test.ts (3 tests) 2ms
+ ✓ src/providers/openai/buildResponsesRequest.undefined.test.ts (3 tests) 3ms
+ ✓ src/providers/ProviderManager.gemini-switch.test.ts (3 tests) 5ms
+ ✓ src/providers/openai/ConversationCache.accumTokens.test.ts (9 tests) 2ms
+ ✓ src/core/tokenLimits.test.ts (15 tests) 3ms
+ ✓ src/providers/openai/__tests__/formatArrayResponse.test.ts (13 tests) 6ms
+ ✓ src/index.test.ts (1 test) 3ms
+ ✓ src/providers/openai/parseResponsesStream.test.ts (11 tests | 5 skipped) 5ms
+ ↓ src/providers/openai/OpenAIProvider.callResponses.stateless.test.ts (5 tests | 5 skipped)
+ ↓ src/providers/openai/OpenAIProvider.responsesIntegration.test.ts (6 tests | 6 skipped)
+ ↓ src/providers/openai/ResponsesContextTrim.integration.test.ts (4 tests | 4 skipped)
+ ✓ src/providers/gemini/GeminiProvider.test.ts (5 tests) 6ms
+ ✓ src/config/flashFallback.test.ts (10 tests) 3ms
+ ✓ src/providers/openai/OpenAIProvider.stateful.integration.test.ts (2 tests) 6883ms
+   ✓ OpenAIProvider Stateful Integration > should maintain context across multiple turns with a stateful model (o3)  6217ms
+   ✓ OpenAIProvider Stateful Integration > should not break stateless models by correctly passing full message history  665ms
+ ✓ src/providers/integration/multi-provider.integration.test.ts (11 tests) 6175ms
+   ✓ Multi-Provider Integration Tests > Model Management > should list available models from OpenAI  758ms
+   ✓ Multi-Provider Integration Tests > Chat Completion with Real API > should generate chat completion with default model  882ms
+   ✓ Multi-Provider Integration Tests > Chat Completion with Real API > should handle streaming correctly  1125ms
+   ✓ Multi-Provider Integration Tests > Chat Completion with Real API > should work with GPT-4 model  727ms
+   ✓ Multi-Provider Integration Tests > Chat Completion with Real API > should handle tool calls  2434ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/services/loopDetectionService.test.ts > LoopDetectionService > Tool Call Loop Detection > should detect a loop on the TOOL_CALL_LOOP_THRESHOLD-th identical call
+AssertionError: expected false to be true // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+ ❯ src/services/loopDetectionService.test.ts:73:42
+     71|         service.addAndCheck(event);
+     72|       }
+     73|       expect(service.addAndCheck(event)).toBe(true);
+       |                                          ^
+     74|       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
+     75|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/services/loopDetectionService.test.ts > LoopDetectionService > Tool Call Loop Detection > should detect a loop on subsequent identical calls
+AssertionError: expected false to be true // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+ ❯ src/services/loopDetectionService.test.ts:82:42
+     80|         service.addAndCheck(event);
+     81|       }
+     82|       expect(service.addAndCheck(event)).toBe(true);
+       |                                          ^
+     83|       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
+     84|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/services/loopDetectionService.test.ts > LoopDetectionService > Tool Call Loop Detection > should not reset tool call counter for other event types
+AssertionError: expected false to be true // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- true[39m
+[31m+ false[39m
+
+ ❯ src/services/loopDetectionService.test.ts:121:50
+    119| 
+    120|       // Send the tool call event again, which should now trigger the …
+    121|       expect(service.addAndCheck(toolCallEvent)).toBe(true);
+       |                                                  ^
+    122|       expect(loggers.logLoopDetected).toHaveBeenCalledTimes(1);
+    123|     });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  src/services/loopDetectionService.test.ts > LoopDetectionService LLM Checks > should trigger LLM check on the 30th turn
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ src/services/loopDetectionService.test.ts:263:43
+    261|       .mockResolvedValue({ confidence: 0.1 });
+    262|     await advanceTurns(30);
+    263|     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
+       |                                           ^
+    264|   });
+    265| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  src/services/loopDetectionService.test.ts > LoopDetectionService LLM Checks > should detect a cognitive loop when confidence is high
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ src/services/loopDetectionService.test.ts:272:43
+    270|       .mockResolvedValue({ confidence: 0.85, reasoning: 'Repetitive ac…
+    271|     await advanceTurns(30);
+    272|     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
+       |                                           ^
+    273| 
+    274|     // The confidence of 0.85 will result in a low interval.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  src/services/loopDetectionService.test.ts > LoopDetectionService LLM Checks > should adjust the check interval based on confidence
+AssertionError: expected "spy" to be called 1 times, but got 0 times
+ ❯ src/services/loopDetectionService.test.ts:309:43
+    307|       .mockResolvedValue({ confidence: 0.0 });
+    308|     await advanceTurns(30); // First check at turn 30
+    309|     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
+       |                                           ^
+    310| 
+    311|     await advanceTurns(14); // Advance to turn 44
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  1 failed | 91 passed | 3 skipped (95)
+      Tests  6 failed | 1354 passed | 29 skipped (1389)
+   Start at  10:46:46
+   Duration  9.56s (transform 3.01s, setup 437ms, collect 20.29s, tests 21.37s, environment 13ms, prepare 6.58s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/core/junit.xml
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/core
+npm error workspace @vybestack/llxprt-code-core@0.1.14
+npm error location /Users/acoliver/projects/llxprt-code/packages/core
+npm error command failed
+npm error command sh -c vitest run
+
+
+> llxprt-code-vscode-ide-companion@0.1.14 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/vscode-ide-companion
+
+ ✓ src/recent-files-manager.test.ts (13 tests) 10ms
+
+ Test Files  1 passed (1)
+      Tests  13 passed (13)
+   Start at  10:46:56
+   Duration  233ms (transform 38ms, setup 0ms, collect 39ms, tests 10ms, environment 0ms, prepare 41ms)
+

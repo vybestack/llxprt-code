@@ -21,8 +21,8 @@ vi.mock('../telemetry/loggers.js', () => ({
   logLoopDetected: vi.fn(),
 }));
 
-const TOOL_CALL_LOOP_THRESHOLD = 5;
-const CONTENT_LOOP_THRESHOLD = 10;
+const TOOL_CALL_LOOP_THRESHOLD = 10;
+const CONTENT_LOOP_THRESHOLD = 15;
 const CONTENT_CHUNK_SIZE = 50;
 
 describe('LoopDetectionService', () => {
@@ -251,15 +251,15 @@ describe('LoopDetectionService LLM Checks', () => {
   };
 
   it('should not trigger LLM check before LLM_CHECK_AFTER_TURNS', async () => {
-    await advanceTurns(29);
+    await advanceTurns(39);
     expect(mockGeminiClient.generateJson).not.toHaveBeenCalled();
   });
 
-  it('should trigger LLM check on the 30th turn', async () => {
+  it('should trigger LLM check on the 40th turn', async () => {
     mockGeminiClient.generateJson = vi
       .fn()
       .mockResolvedValue({ confidence: 0.1 });
-    await advanceTurns(30);
+    await advanceTurns(40);
     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
   });
 
@@ -268,7 +268,7 @@ describe('LoopDetectionService LLM Checks', () => {
     mockGeminiClient.generateJson = vi
       .fn()
       .mockResolvedValue({ confidence: 0.85, reasoning: 'Repetitive actions' });
-    await advanceTurns(30);
+    await advanceTurns(40);
     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
 
     // The confidence of 0.85 will result in a low interval.
@@ -294,7 +294,7 @@ describe('LoopDetectionService LLM Checks', () => {
     mockGeminiClient.generateJson = vi
       .fn()
       .mockResolvedValue({ confidence: 0.5, reasoning: 'Looks okay' });
-    await advanceTurns(30);
+    await advanceTurns(40);
     const result = await service.turnStarted(abortController.signal);
     expect(result).toBe(false);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
@@ -305,13 +305,13 @@ describe('LoopDetectionService LLM Checks', () => {
     mockGeminiClient.generateJson = vi
       .fn()
       .mockResolvedValue({ confidence: 0.0 });
-    await advanceTurns(30); // First check at turn 30
+    await advanceTurns(40); // First check at turn 40
     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
 
-    await advanceTurns(14); // Advance to turn 44
+    await advanceTurns(14); // Advance to turn 54
     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
 
-    await service.turnStarted(abortController.signal); // Turn 45
+    await service.turnStarted(abortController.signal); // Turn 55
     expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(2);
   });
 
@@ -319,7 +319,7 @@ describe('LoopDetectionService LLM Checks', () => {
     mockGeminiClient.generateJson = vi
       .fn()
       .mockRejectedValue(new Error('API error'));
-    await advanceTurns(30);
+    await advanceTurns(40);
     const result = await service.turnStarted(abortController.signal);
     expect(result).toBe(false);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();

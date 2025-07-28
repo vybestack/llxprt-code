@@ -87,17 +87,17 @@ export interface GeminiCLIExtension {
 }
 export interface FileFilteringOptions {
   respectGitIgnore: boolean;
-  respectGeminiIgnore: boolean;
+  respectLlxprtIgnore: boolean;
 }
 // For memory files
 export const DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
   respectGitIgnore: false,
-  respectGeminiIgnore: true,
+  respectLlxprtIgnore: true,
 };
 // For all other files
 export const DEFAULT_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
   respectGitIgnore: true,
-  respectGeminiIgnore: true,
+  respectLlxprtIgnore: true,
 };
 export class MCPServerConfig {
   constructor(
@@ -172,7 +172,7 @@ export interface ConfigParameters {
   usageStatisticsEnabled?: boolean;
   fileFiltering?: {
     respectGitIgnore?: boolean;
-    respectGeminiIgnore?: boolean;
+    respectLlxprtIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
   };
   checkpointing?: boolean;
@@ -222,7 +222,7 @@ export class Config {
   private geminiClient!: GeminiClient;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
-    respectGeminiIgnore: boolean;
+    respectLlxprtIgnore: boolean;
     enableRecursiveFileSearch: boolean;
   };
   private fileDiscoveryService: FileDiscoveryService | null = null;
@@ -294,7 +294,7 @@ export class Config {
 
     this.fileFiltering = {
       respectGitIgnore: params.fileFiltering?.respectGitIgnore ?? true,
-      respectGeminiIgnore: params.fileFiltering?.respectGeminiIgnore ?? true,
+      respectLlxprtIgnore: params.fileFiltering?.respectLlxprtIgnore ?? true,
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
     };
@@ -550,14 +550,14 @@ export class Config {
   getFileFilteringRespectGitIgnore(): boolean {
     return this.fileFiltering.respectGitIgnore;
   }
-  getFileFilteringRespectGeminiIgnore(): boolean {
-    return this.fileFiltering.respectGeminiIgnore;
+  getFileFilteringRespectLlxprtIgnore(): boolean {
+    return this.fileFiltering.respectLlxprtIgnore;
   }
 
   getFileFilteringOptions(): FileFilteringOptions {
     return {
       respectGitIgnore: this.fileFiltering.respectGitIgnore,
-      respectGeminiIgnore: this.fileFiltering.respectGeminiIgnore,
+      respectLlxprtIgnore: this.fileFiltering.respectLlxprtIgnore,
     };
   }
 

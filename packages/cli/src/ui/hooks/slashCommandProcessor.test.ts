@@ -490,34 +490,32 @@ describe('useSlashCommandProcessor', () => {
     });
 
     it('should show help for parent command without subcommand', async () => {
-      const parentCommand = createTestCommand({
+      const parentCommand: SlashCommand = {
         name: 'parent',
+        description: 'a parent command',
+        kind: CommandKind.BUILT_IN,
         subCommands: [
-          createTestCommand({ name: 'sub1', description: 'First sub' }),
-          createTestCommand({ name: 'sub2', description: 'Second sub' }),
+          {
+            name: 'child1',
+            description: 'First child.',
+            kind: CommandKind.BUILT_IN,
+          }
         ],
-      });
-
+      };
       const { result } = setupProcessorHook([parentCommand]);
+      await waitFor(() => expect(result.current.slashCommands).toHaveLength(1));
 
-      await waitFor(() => {
-        expect(result.current.slashCommands).toHaveLength(1);
+      await act(async () => {
+        await result.current.handleSlashCommand('/parent');
       });
 
-      await result.current.handleSlashCommand('/parent');
-
-      await waitFor(() => {
-        expect(mockAddItem).toHaveBeenCalledTimes(2);
-      });
-
-      expect(mockAddItem).toHaveBeenCalledWith(
+      expect(mockAddItem).toHaveBeenCalledTimes(2);
+      expect(mockAddItem).toHaveBeenLastCalledWith(
         {
           type: MessageType.INFO,
-          text: expect.stringContaining(
-            "Command '/parent' requires a subcommand",
-          ),
+          text: expect.stringContaining("Command '/parent' requires a subcommand."),
         },
-        expect.any(Number),
+        expect.any(Number)
       );
     });
   });

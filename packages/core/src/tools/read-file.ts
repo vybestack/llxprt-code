@@ -97,7 +97,7 @@ export class ReadFileTool extends BaseTool<ReadFileToolParams, ToolResult> {
     }
 
     const fileService = this.config.getFileService();
-    if (fileService.shouldGeminiIgnoreFile(params.absolute_path)) {
+    if (fileService.shouldLlxprtIgnoreFile(params.absolute_path)) {
       return `File path '${filePath}' is ignored by .llxprtignore pattern(s).`;
     }
 

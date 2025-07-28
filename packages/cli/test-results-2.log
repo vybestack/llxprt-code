@@ -1,0 +1,225 @@
+
+> @vybestack/llxprt-code@0.1.14 test
+> vitest run
+
+
+ RUN  v3.2.4 /Users/acoliver/projects/llxprt-code/packages/cli
+      Coverage enabled with istanbul
+
+ ✓ src/ui/components/InputPrompt.paste.test.tsx (3 tests | 1 skipped) 170ms
+ ✓ src/ui/components/messages/DiffRenderer.test.tsx (13 tests) 172ms
+ ✓ src/ui/utils/clipboardUtils.test.ts (6 tests) 124ms
+ ✓ src/ui/commands/aboutCommand.test.ts (4 tests) 1188ms
+   ✓ aboutCommand > should call addItem with all version info  1185ms
+ ❯ src/ui/hooks/atCommandProcessor.test.ts (18 tests | 2 failed) 162ms
+   ✓ handleAtCommand > should pass through query if no @ command is present 5ms
+   ✓ handleAtCommand > should pass through original query if only a lone @ symbol is present 2ms
+   ✓ handleAtCommand > should process a valid text file path 27ms
+   ✓ handleAtCommand > should process a valid directory path and convert to glob 13ms
+   ✓ handleAtCommand > should handle query with text before and after @command 9ms
+   ✓ handleAtCommand > should correctly unescape paths with escaped spaces 15ms
+   ✓ handleAtCommand > should handle multiple @file references 8ms
+   ✓ handleAtCommand > should handle multiple @file references with interleaved text 12ms
+   ✓ handleAtCommand > should handle a mix of valid, invalid, and lone @ references 10ms
+   ✓ handleAtCommand > should return original query if all @paths are invalid or lone @ 2ms
+   ✓ handleAtCommand > git-aware filtering > should skip git-ignored files in @ commands 4ms
+   ✓ handleAtCommand > git-aware filtering > should process non-git-ignored files normally 4ms
+   ✓ handleAtCommand > git-aware filtering > should handle mixed git-ignored and valid files 8ms
+   ✓ handleAtCommand > git-aware filtering > should always ignore .git directory files 11ms
+   ✓ handleAtCommand > when recursive file search is disabled > should not use glob search for a nonexistent file 3ms
+   × handleAtCommand > gemini-ignore filtering > should skip gemini-ignored files in @ commands 12ms
+     → expected { …(2) } to deeply equal { …(2) }
+   ✓ handleAtCommand > should process non-ignored files when .geminiignore is present 8ms
+   × handleAtCommand > should handle mixed gemini-ignored and valid files 7ms
+     → expected "spy" to be called with arguments: [ Array(1) ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path src/main.ts resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-wuZiZw/src/main.ts",[90m
+[2m  ][22m
+
+[1m  2nd spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path dist/bundle.js resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-wuZiZw/dist/bundle.js",[90m
+[2m  ][22m
+[39m[90m
+
+Number of calls: [1m2[22m
+[39m
+ ✓ src/config/config.test.ts (62 tests) 112ms
+ ✓ src/ui/components/AuthDialog.test.tsx (10 tests) 364ms
+ ✓ src/ui/hooks/useGeminiStream.test.tsx (28 tests) 351ms
+ ✓ src/ui/hooks/useShellHistory.test.ts (7 tests) 545ms
+ ✓ src/ui/utils/MarkdownDisplay.test.tsx (14 tests) 168ms
+ ✓ src/ui/commands/restoreCommand.test.ts (13 tests) 131ms
+ ✓ src/ui/utils/commandUtils.test.ts (19 tests) 74ms
+ ✓ src/ui/components/__tests__/LayoutManager.test.tsx (5 tests) 23ms
+ ✓ src/ui/components/shared/text-buffer.test.ts (73 tests) 88ms
+ ✓ src/services/FileCommandLoader.test.ts (14 tests) 35ms
+ ✓ src/ui/components/HistoryItemDisplay.test.tsx (6 tests) 31ms
+ ✓ src/ui/components/SessionSummaryDisplay.test.tsx (1 test) 26ms
+ ✓ src/ui/hooks/useInputHistory.test.ts (11 tests) 16ms
+ ✓ src/ui/containers/SessionController.test.tsx (15 tests) 80ms
+[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h ✓ src/ui/hooks/useCompletion.test.ts (37 tests) 2036ms
+ ✓ src/ui/hooks/useLoadingIndicator.test.ts (5 tests) 32ms
+[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l ✓ src/ui/components/ModelStatsDisplay.test.tsx (6 tests) 41ms
+ ✓ src/ui/components/StatsDisplay.test.tsx (10 tests) 79ms
+ ✓ src/ui/App.test.tsx (19 tests) 400ms
+ ✓ src/ui/hooks/useGitBranchName.test.ts (7 tests) 36ms
+ ✓ src/ui/hooks/slashCommandProcessor.test.ts (14 tests) 798ms
+ ✓ src/ui/components/shared/MaxSizedBox.test.tsx (21 tests) 72ms
+ ✓ src/ui/hooks/usePhraseCycler.test.ts (7 tests) 30ms
+ ✓ src/ui/components/LoadingIndicator.test.tsx (11 tests) 28ms
+ ✓ src/ui/components/messages/ToolConfirmationMessage.test.tsx (2 tests) 37ms
+ ✓ src/ui/hooks/useConsoleMessages.test.ts (9 tests) 21ms
+ ✓ src/ui/hooks/useKeypress.test.ts (14 tests) 20ms
+ ✓ src/ui/components/shared/RadioButtonSelect.test.tsx (7 tests) 32ms
+ ✓ src/ui/components/messages/ToolMessage.test.tsx (11 tests) 26ms
+ ✓ src/utils/userStartupWarnings.test.ts (5 tests) 39ms
+ ✓ src/ui/hooks/useFocus.test.ts (5 tests) 13ms
+ ✓ src/ui/components/InputPrompt.test.tsx (40 tests) 3904ms
+ ✓ src/ui/hooks/shellCommandProcessor.test.ts (3 tests) 35ms
+ ✓ src/ui/hooks/useToolScheduler.test.ts (21 tests | 4 skipped) 87ms
+ ✓ src/ui/components/ToolStatsDisplay.test.tsx (5 tests) 30ms
+ ✓ src/ui/hooks/useTimer.test.ts (8 tests) 18ms
+ ✓ src/ui/contexts/SessionContext.test.tsx (3 tests) 44ms
+ ✓ src/ui/hooks/useKeypress.test.tsx (3 tests) 16ms
+ ✓ src/ui/hooks/useEditorSettings.test.tsx (10 tests) 30ms
+ ✓ src/ui/components/ContextIndicator.ui.test.tsx (6 tests) 27ms
+ ✓ src/ui/hooks/useHistoryManager.test.ts (8 tests) 18ms
+ ✓ src/ui/hooks/useStableCallback.test.ts (5 tests) 15ms
+ ✓ src/ui/commands/toolsCommand.test.ts (4 tests) 4ms
+ ✓ src/validateNonInterActiveAuth.test.ts (10 tests) 12ms
+ ✓ src/ui/commands/mcpCommand.test.ts (36 tests) 16ms
+ ✓ src/ui/themes/theme-manager.test.ts (9 tests) 12ms
+ ✓ src/ui/commands/compressCommand.test.ts (5 tests) 16ms
+ ✓ src/config/extension.test.ts (7 tests) 7ms
+ ✓ src/ui/commands/chatCommand.test.ts (12 tests) 10ms
+ ✓ src/ui/hooks/useAutoAcceptIndicator.test.ts (6 tests) 16ms
+ ✓ src/ui/commands/quitCommand.test.ts (1 test) 3ms
+ ✓ src/ui/commands/docsCommand.test.ts (3 tests) 16ms
+ ✓ src/config/settings.test.ts (30 tests) 14ms
+ ✓ src/ui/commands/memoryCommand.test.ts (8 tests) 6ms
+ ✓ src/ui/utils/errorParsing.test.ts (21 tests) 4ms
+ ✓ src/ui/commands/copyCommand.test.ts (11 tests) 10ms
+ ✓ src/ui/utils/displayUtils.test.ts (5 tests) 2ms
+ ✓ src/ui/commands/authCommand.test.ts (2 tests) 5ms
+ ✓ src/services/CommandService.test.ts (7 tests) 5ms
+ ✓ src/ui/commands/bugCommand.test.ts (2 tests) 4ms
+ ✓ src/nonInteractiveCli.test.ts (6 tests) 7ms
+ ✓ src/ui/commands/themeCommand.test.ts (2 tests) 7ms
+ ✓ src/ui/utils/markdownUtilities.test.ts (7 tests) 2ms
+ ✓ src/ui/utils/updateCheck.test.ts (8 tests) 3ms
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 5ms
+ ✓ src/ui/themes/color-utils.test.ts (16 tests) 4ms
+ ✓ src/ui/commands/statsCommand.test.ts (3 tests) 4ms
+ ✓ src/ui/commands/helpCommand.test.ts (2 tests) 3ms
+ ✓ src/config/auth.test.ts (8 tests) 3ms
+ ✓ src/gemini.test.tsx (1 test) 9ms
+ ✓ src/ui/commands/clearCommand.test.ts (2 tests) 3ms
+ ✓ src/ui/commands/extensionsCommand.test.ts (2 tests) 6ms
+ ✓ src/ui/commands/toolformatCommand.test.ts (5 tests) 5ms
+ ✓ src/utils/ConversationContext.test.ts (6 tests) 3ms
+ ✓ src/services/BuiltinCommandLoader.test.ts (4 tests) 3ms
+ ✓ src/services/prompt-processors/argumentProcessor.test.ts (6 tests) 10ms
+ ✓ src/providers/enhanceConfigWithProviders.test.ts (6 tests) 4ms
+ ✓ src/ui/commands/ideCommand.test.ts (11 tests) 10ms
+ ✓ src/ui/commands/privacyCommand.test.ts (2 tests) 3ms
+ ✓ src/ui/utils/formatters.test.ts (14 tests) 3ms
+ ✓ src/test-utils/mockCommandContext.test.ts (3 tests) 3ms
+ ✓ src/ui/utils/computeStats.test.ts (11 tests) 3ms
+ ✓ src/ui/commands/editorCommand.test.ts (2 tests) 3ms
+ ✓ src/providers/provider-gemini-switching.test.ts (3 tests) 3ms
+ ✓ src/utils/startupWarnings.test.ts (4 tests) 2ms
+ ✓ src/ui/utils/textUtils.test.ts (5 tests) 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > gemini-ignore filtering > should skip gemini-ignored files in @ commands
+AssertionError: expected { …(2) } to deeply equal { …(2) }
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[2m  {[22m
+[2m    "processedQuery": [[22m
+[2m      {[22m
+[2m        "text": "@/var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-ag6zIp/build/output.js",[22m
+[2m      },[22m
+[31m+     {[39m
+[31m+       "text": "[39m
+[31m+ --- Content from referenced files ---",[39m
+[31m+     },[39m
+[31m+     {[39m
+[31m+       "text": "No files matching the criteria were found or all were skipped.",[39m
+[31m+     },[39m
+[31m+     {[39m
+[31m+       "text": "[39m
+[31m+ --- End of content ---",[39m
+[31m+     },[39m
+[2m    ],[22m
+[2m    "shouldProceed": true,[22m
+[2m  }[22m
+
+ ❯ src/ui/hooks/atCommandProcessor.test.ts:620:22
+    618|       });
+    619| 
+    620|       expect(result).toEqual({
+       |                      ^
+    621|         processedQuery: [{ text: query }],
+    622|         shouldProceed: true,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/ui/hooks/atCommandProcessor.test.ts > handleAtCommand > should handle mixed gemini-ignored and valid files
+AssertionError: expected "spy" to be called with arguments: [ Array(1) ][90m
+
+Received: 
+
+[1m  1st spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path src/main.ts resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-wuZiZw/src/main.ts",[90m
+[2m  ][22m
+
+[1m  2nd spy call:
+
+[22m[2m  [[22m
+[32m-   "Path dist/bundle.js is gemini-ignored and will be skipped.",[90m
+[31m+   "Path dist/bundle.js resolved to file: /var/folders/9v/l7wpbxmx1lz338tpwz3lh0nh0000gn/T/folder-structure-test-wuZiZw/dist/bundle.js",[90m
+[2m  ][22m
+[39m[90m
+
+Number of calls: [1m2[22m
+[39m
+ ❯ src/ui/hooks/atCommandProcessor.test.ts:701:32
+    699|       shouldProceed: true,
+    700|     });
+    701|     expect(mockOnDebugMessage).toHaveBeenCalledWith(
+       |                                ^
+    702|       `Path ${relativePath2} is gemini-ignored and will be skipped.`,
+    703|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 90 passed (91)
+      Tests  2 failed | 971 passed | 5 skipped (978)
+   Start at  11:02:06
+   Duration  11.53s (transform 8.54s, setup 0ms, collect 58.21s, tests 12.10s, environment 28.07s, prepare 6.11s)
+
+JUNIT report written to /Users/acoliver/projects/llxprt-code/packages/cli/junit.xml
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path /Users/acoliver/projects/llxprt-code/packages/cli
+npm error workspace @vybestack/llxprt-code@0.1.14
+npm error location /Users/acoliver/projects/llxprt-code/packages/cli
+npm error command failed
+npm error command sh -c vitest run

@@ -338,7 +338,7 @@ export function useCompletion(
       fileDiscovery: FileDiscoveryService | null,
       filterOptions: {
         respectGitIgnore?: boolean;
-        respectGeminiIgnore?: boolean;
+        respectLlxprtIgnore?: boolean;
       },
       currentRelativePath = '',
       depth = 0,
@@ -415,7 +415,7 @@ export function useCompletion(
       fileDiscoveryService: FileDiscoveryService,
       filterOptions: {
         respectGitIgnore?: boolean;
-        respectGeminiIgnore?: boolean;
+        respectLlxprtIgnore?: boolean;
       },
       maxResults = 50,
     ): Promise<Suggestion[]> => {

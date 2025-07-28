@@ -54,10 +54,10 @@ describe('handleAtCommand', () => {
       isSandboxed: () => false,
       getFileService: () => new FileDiscoveryService(testRootDir),
       getFileFilteringRespectGitIgnore: () => true,
-      getFileFilteringRespectGeminiIgnore: () => true,
+      getFileFilteringRespectLlxprtIgnore: () => true,
       getFileFilteringOptions: () => ({
         respectGitIgnore: true,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       }),
       getEnableRecursiveFileSearch: vi.fn(() => true),
     } as unknown as Config;
@@ -596,17 +596,17 @@ describe('handleAtCommand', () => {
     });
   });
 
-  describe('gemini-ignore filtering', () => {
-    it('should skip gemini-ignored files in @ commands', async () => {
+  describe('llxprt-ignore filtering', () => {
+    it('should skip llxprt-ignored files in @ commands', async () => {
       await createTestFile(
-        path.join(testRootDir, '.geminiignore'),
+        path.join(testRootDir, '.llxprtignore'),
         'build/output.js',
       );
-      const geminiIgnoredFile = await createTestFile(
+      const llxprtIgnoredFile = await createTestFile(
         path.join(testRootDir, 'build', 'output.js'),
         'console.log("Hello");',
       );
-      const query = `@${geminiIgnoredFile}`;
+      const query = `@${llxprtIgnoredFile}`;
 
       const result = await handleAtCommand({
         query,
@@ -622,16 +622,16 @@ describe('handleAtCommand', () => {
         shouldProceed: true,
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Path ${geminiIgnoredFile} is gemini-ignored and will be skipped.`,
+        `Path ${llxprtIgnoredFile} is ignored by both git and llxprt and will be skipped.`,
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Ignored 1 files:\nGemini-ignored: ${geminiIgnoredFile}`,
+        `Ignored 1 files:\nIgnored by both: ${llxprtIgnoredFile}`,
       );
     });
   });
   it('should process non-ignored files when .geminiignore is present', async () => {
     await createTestFile(
-      path.join(testRootDir, '.geminiignore'),
+      path.join(testRootDir, '.llxprtignore'),
       'build/output.js',
     );
     const relativePath = path.join('src', 'index.ts');
@@ -662,9 +662,9 @@ describe('handleAtCommand', () => {
     });
   });
 
-  it('should handle mixed gemini-ignored and valid files', async () => {
+  it('should handle mixed llxprt-ignored and valid files', async () => {
     await createTestFile(
-      path.join(testRootDir, '.geminiignore'),
+      path.join(testRootDir, '.llxprtignore'),
       'dist/bundle.js',
     );
     const relativePath1 = path.join('src', 'main.ts');
@@ -673,7 +673,7 @@ describe('handleAtCommand', () => {
       '// Main application entry',
     );
     const relativePath2 = path.join('dist', 'bundle.js');
-    const _geminiIgnoredFile = await createTestFile(
+    const _llxprtIgnoredFile = await createTestFile(
       path.join(testRootDir, relativePath2),
       'console.log("bundle");',
     );
@@ -699,10 +699,10 @@ describe('handleAtCommand', () => {
       shouldProceed: true,
     });
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
-      `Path ${relativePath2} is gemini-ignored and will be skipped.`,
+      `Path ${relativePath2} is ignored by both git and llxprt and will be skipped.`,
     );
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
-      `Ignored 1 files:\nGemini-ignored: ${relativePath2}`,
+      `Ignored 1 files:\nIgnored by both: ${relativePath2}`,
     );
   });
   // });

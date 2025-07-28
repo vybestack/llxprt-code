@@ -82,7 +82,7 @@ export interface Settings {
   // Git-aware file filtering settings
   fileFiltering?: {
     respectGitIgnore?: boolean;
-    respectGeminiIgnore?: boolean;
+    respectLlxprtIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
   };
 

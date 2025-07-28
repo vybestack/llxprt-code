@@ -56,7 +56,7 @@ describe('useCompletion', () => {
       getProjectRoot: () => testRootDir,
       getFileFilteringOptions: vi.fn(() => ({
         respectGitIgnore: true,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       })),
       getEnableRecursiveFileSearch: vi.fn(() => true),
       getFileService: vi.fn(() => new FileDiscoveryService(testRootDir)),

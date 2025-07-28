@@ -28,11 +28,11 @@ export interface LSToolParams {
   ignore?: string[];
 
   /**
-   * Whether to respect .gitignore and .geminiignore patterns (optional, defaults to true)
+   * Whether to respect .gitignore and .llxprtignore patterns (optional, defaults to true)
    */
   file_filtering_options?: {
     respect_git_ignore?: boolean;
-    respect_gemini_ignore?: boolean;
+    respect_llxprt_ignore?: boolean;
   };
 }
 
@@ -94,7 +94,7 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
           },
           file_filtering_options: {
             description:
-              'Optional: Whether to respect ignore patterns from .gitignore or .geminiignore',
+              'Optional: Whether to respect ignore patterns from .gitignore or .llxprtignore',
             type: Type.OBJECT,
             properties: {
               respect_git_ignore: {
@@ -102,9 +102,9 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
                   'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
                 type: Type.BOOLEAN,
               },
-              respect_gemini_ignore: {
+              respect_llxprt_ignore: {
                 description:
-                  'Optional: Whether to respect .geminiignore patterns when listing files. Defaults to true.',
+                  'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
                 type: Type.BOOLEAN,
               },
             },
@@ -221,9 +221,9 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
         respectGitIgnore:
           params.file_filtering_options?.respect_git_ignore ??
           defaultFileIgnores.respectGitIgnore,
-        respectGeminiIgnore:
-          params.file_filtering_options?.respect_gemini_ignore ??
-          defaultFileIgnores.respectGeminiIgnore,
+        respectLlxprtIgnore:
+          params.file_filtering_options?.respect_llxprt_ignore ??
+          defaultFileIgnores.respectLlxprtIgnore,
       };
 
       // Get centralized file discovery service
@@ -232,7 +232,7 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
 
       const entries: FileEntry[] = [];
       let gitIgnoredCount = 0;
-      let geminiIgnoredCount = 0;
+      let llxprtIgnoredCount = 0;
 
       if (files.length === 0) {
         // Changed error message to be more neutral for LLM
@@ -253,7 +253,7 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
           fullPath,
         );
 
-        // Check if this file should be ignored based on git or gemini ignore rules
+        // Check if this file should be ignored based on git or llxprt ignore rules
         if (
           fileFilteringOptions.respectGitIgnore &&
           fileDiscovery.shouldGitIgnoreFile(relativePath)
@@ -262,10 +262,10 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
           continue;
         }
         if (
-          fileFilteringOptions.respectGeminiIgnore &&
-          fileDiscovery.shouldGeminiIgnoreFile(relativePath)
+          fileFilteringOptions.respectLlxprtIgnore &&
+          fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
         ) {
-          geminiIgnoredCount++;
+          llxprtIgnoredCount++;
           continue;
         }
 
@@ -302,8 +302,8 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
       if (gitIgnoredCount > 0) {
         ignoredMessages.push(`${gitIgnoredCount} git-ignored`);
       }
-      if (geminiIgnoredCount > 0) {
-        ignoredMessages.push(`${geminiIgnoredCount} gemini-ignored`);
+      if (llxprtIgnoredCount > 0) {
+        ignoredMessages.push(`${llxprtIgnoredCount} llxprt-ignored`);
       }
 
       if (ignoredMessages.length > 0) {

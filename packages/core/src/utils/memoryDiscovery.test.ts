@@ -307,7 +307,7 @@ Subdir memory
       [],
       {
         respectGitIgnore: true,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       },
     );
 
@@ -336,7 +336,7 @@ My code memory
       [],
       {
         respectGitIgnore: true,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       },
       50, // maxDirs
     );

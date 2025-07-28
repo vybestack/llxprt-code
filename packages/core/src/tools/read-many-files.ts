@@ -62,11 +62,11 @@ export interface ReadManyFilesParams {
   useDefaultExcludes?: boolean;
 
   /**
-   * Whether to respect .gitignore and .geminiignore patterns (optional, defaults to true)
+   * Whether to respect .gitignore and .llxprtignore patterns (optional, defaults to true)
    */
   file_filtering_options?: {
     respect_git_ignore?: boolean;
-    respect_gemini_ignore?: boolean;
+    respect_llxprt_ignore?: boolean;
   };
 }
 
@@ -178,7 +178,7 @@ export class ReadManyFilesTool extends BaseTool<
         },
         file_filtering_options: {
           description:
-            'Whether to respect ignore patterns from .gitignore or .geminiignore',
+            'Whether to respect ignore patterns from .gitignore or .llxprtignore',
           type: Type.OBJECT,
           properties: {
             respect_git_ignore: {
@@ -186,9 +186,9 @@ export class ReadManyFilesTool extends BaseTool<
                 'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
               type: Type.BOOLEAN,
             },
-            respect_gemini_ignore: {
+            respect_llxprt_ignore: {
               description:
-                'Optional: Whether to respect .geminiignore patterns when listing files. Defaults to true.',
+                'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
               type: Type.BOOLEAN,
             },
           },
@@ -215,7 +215,7 @@ Use this tool when the user's query implies needing the content of several files
     );
     this.llxprtIgnorePatterns = config
       .getFileService()
-      .getGeminiIgnorePatterns();
+      .getLlxprtIgnorePatterns();
   }
 
   validateParams(params: ReadManyFilesParams): string | null {
@@ -233,10 +233,10 @@ Use this tool when the user's query implies needing the content of several files
     // Determine the final list of exclusion patterns exactly as in execute method
     const paramExcludes = params.exclude || [];
     const paramUseDefaultExcludes = params.useDefaultExcludes !== false;
-    // Note: geminiIgnorePatterns are not currently used in the description
-    // const geminiIgnorePatterns = this.config
+    // Note: llxprtIgnorePatterns are not currently used in the description
+    // const llxprtIgnorePatterns = this.config
     //   .getFileService()
-    //   .getGeminiIgnorePatterns();
+    //   .getLlxprtIgnorePatterns();
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes
         ? [...DEFAULT_EXCLUDES, ...paramExcludes, ...this.llxprtIgnorePatterns]
@@ -246,11 +246,11 @@ Use this tool when the user's query implies needing the content of several files
 
     // Add a note if .llxprtignore patterns contributed to the final list of exclusions
     if (this.llxprtIgnorePatterns.length > 0) {
-      const geminiPatternsInEffect = this.llxprtIgnorePatterns.filter((p) =>
+      const llxprtPatternsInEffect = this.llxprtIgnorePatterns.filter((p) =>
         finalExclusionPatternsForDescription.includes(p),
       ).length;
-      if (geminiPatternsInEffect > 0) {
-        excludeDesc += ` (includes ${geminiPatternsInEffect} from .llxprtignore)`;
+      if (llxprtPatternsInEffect > 0) {
+        excludeDesc += ` (includes ${llxprtPatternsInEffect} from .llxprtignore)`;
       }
     }
 
@@ -284,9 +284,9 @@ Use this tool when the user's query implies needing the content of several files
       respectGitIgnore:
         params.file_filtering_options?.respect_git_ignore ??
         defaultFileIgnores.respectGitIgnore, // Use the property from the returned object
-      respectGeminiIgnore:
-        params.file_filtering_options?.respect_gemini_ignore ??
-        defaultFileIgnores.respectGeminiIgnore, // Use the property from the returned object
+      respectLlxprtIgnore:
+        params.file_filtering_options?.respect_llxprt_ignore ??
+        defaultFileIgnores.respectLlxprtIgnore, // Use the property from the returned object
     };
     // Get centralized file discovery service
     const fileDiscovery = this.config.getFileService();
@@ -328,14 +328,14 @@ Use this tool when the user's query implies needing the content of several files
               entries.map((p) => path.relative(this.config.getTargetDir(), p)),
               {
                 respectGitIgnore: true,
-                respectGeminiIgnore: false,
+                respectLlxprtIgnore: false,
               },
             )
             .map((p) => path.resolve(this.config.getTargetDir(), p))
         : entries;
 
-      // Apply gemini ignore filtering if enabled
-      const finalFilteredEntries = fileFilteringOptions.respectGeminiIgnore
+      // Apply llxprt ignore filtering if enabled
+      const finalFilteredEntries = fileFilteringOptions.respectLlxprtIgnore
         ? fileDiscovery
             .filterFiles(
               gitFilteredEntries.map((p) =>
@@ -343,14 +343,14 @@ Use this tool when the user's query implies needing the content of several files
               ),
               {
                 respectGitIgnore: false,
-                respectGeminiIgnore: true,
+                respectLlxprtIgnore: true,
               },
             )
             .map((p) => path.resolve(this.config.getTargetDir(), p))
         : gitFilteredEntries;
 
       let gitIgnoredCount = 0;
-      let geminiIgnoredCount = 0;
+      let llxprtIgnoredCount = 0;
 
       for (const absoluteFilePath of entries) {
         // Security check: ensure the glob library didn't return something outside targetDir.
@@ -371,12 +371,12 @@ Use this tool when the user's query implies needing the content of several files
           continue;
         }
 
-        // Check if this file was filtered out by gemini ignore
+        // Check if this file was filtered out by llxprt ignore
         if (
-          fileFilteringOptions.respectGeminiIgnore &&
+          fileFilteringOptions.respectLlxprtIgnore &&
           !finalFilteredEntries.includes(absoluteFilePath)
         ) {
-          geminiIgnoredCount++;
+          llxprtIgnoredCount++;
           continue;
         }
 
@@ -391,11 +391,11 @@ Use this tool when the user's query implies needing the content of several files
         });
       }
 
-      // Add info about gemini-ignored files if any were filtered
-      if (geminiIgnoredCount > 0) {
+      // Add info about llxprt-ignored files if any were filtered
+      if (llxprtIgnoredCount > 0) {
         skippedFiles.push({
-          path: `${geminiIgnoredCount} file(s)`,
-          reason: 'gemini ignored',
+          path: `${llxprtIgnoredCount} file(s)`,
+          reason: 'llxprt ignored',
         });
       }
     } catch (error) {
