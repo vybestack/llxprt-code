@@ -41,6 +41,25 @@ jobs:
         if: matrix.sandbox == 'sandbox:docker'
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
 
+      - name: Check if sandbox image exists
+        if: matrix.sandbox == 'sandbox:docker'
+        id: check-image
+        run: |
+          # Try to pull the image, if it fails we'll build it locally
+          if docker pull ghcr.io/acoliver/llxprt-code/sandbox:0.1.14; then
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+        continue-on-error: true
+
+      - name: Build sandbox Docker image locally
+        if: matrix.sandbox == 'sandbox:docker' && steps.check-image.outputs.image_exists == 'false'
+        run: |
+          # Build the sandbox image locally for testing
+          # The build script reads the image name from package.json config
+          npm run build:sandbox
+
       - name: Set up Podman
         if: matrix.sandbox == 'sandbox:podman'
         uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
