@@ -288,14 +288,11 @@ export class GeminiChat {
           );
         }
 
-        return this.contentGenerator.generateContent(
-          {
-            model: modelToUse,
-            contents: requestContents,
-            config: { ...this.generationConfig, ...params.config },
-          },
-          prompt_id,
-        );
+        return this.contentGenerator.generateContent({
+          model: modelToUse,
+          contents: requestContents,
+          config: { ...this.generationConfig, ...params.config },
+        });
       };
 
       response = await retryWithBackoff(apiCall, {
@@ -505,10 +502,7 @@ export class GeminiChat {
           config: mergedConfig,
         };
 
-        return this.contentGenerator.generateContentStream(
-          requestParams,
-          prompt_id,
-        );
+        return this.contentGenerator.generateContentStream(requestParams);
       };
 
       // Note: Retrying streams can be complex. If generateContentStream itself doesn't handle retries

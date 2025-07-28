@@ -27,12 +27,10 @@ import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 export interface ContentGenerator {
   generateContent(
     request: GenerateContentParameters,
-    userPromptId: string,
   ): Promise<GenerateContentResponse>;
 
   generateContentStream(
     request: GenerateContentParameters,
-    userPromptId: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>>;
 
   countTokens(request: CountTokensParameters): Promise<CountTokensResponse>;
