@@ -64,7 +64,7 @@ export class GitService {
     // We don't want to inherit the user's name, email, or gpg signing
     // preferences for the shadow repository, so we create a dedicated gitconfig.
     const gitConfigContent =
-      '[user]\n  name = llxprt-code\n  email = https://github.com/acoliver/llxprt-code/issues\n[commit]\n  gpgsign = false\n';
+      '[user]\n  name = llxprt-code\n  email = llxprt-code-bot@users.noreply.github.com\n[commit]\n  gpgsign = false\n';
     await fs.writeFile(gitConfigPath, gitConfigContent);
 
     const repo = simpleGit(repoDir);

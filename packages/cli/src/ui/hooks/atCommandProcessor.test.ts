@@ -622,10 +622,10 @@ describe('handleAtCommand', () => {
         shouldProceed: true,
       });
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Path ${llxprtIgnoredFile} is ignored by both git and llxprt and will be skipped.`,
+        `Path ${llxprtIgnoredFile} is llxprt-ignored and will be skipped.`,
       );
       expect(mockOnDebugMessage).toHaveBeenCalledWith(
-        `Ignored 1 files:\nIgnored by both: ${llxprtIgnoredFile}`,
+        `Ignored 1 files:\nLlxprt-ignored: ${llxprtIgnoredFile}`,
       );
     });
   });
@@ -699,10 +699,10 @@ describe('handleAtCommand', () => {
       shouldProceed: true,
     });
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
-      `Path ${relativePath2} is ignored by both git and llxprt and will be skipped.`,
+      `Path ${relativePath2} is llxprt-ignored and will be skipped.`,
     );
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
-      `Ignored 1 files:\nIgnored by both: ${relativePath2}`,
+      `Ignored 1 files:\nLlxprt-ignored: ${relativePath2}`,
     );
   });
   // });

@@ -9,20 +9,18 @@ import { USER_SETTINGS_PATH } from './config/settings.js';
 import { validateAuthMethod } from './config/auth.js';
 
 function getAuthTypeFromEnv(): AuthType | undefined {
-  // Check for provider-specific environment variables first
-  if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY) {
+  // In llxprt-code's multi-provider architecture, we always return USE_PROVIDER
+  // when any authentication environment variables are set, regardless of the specific type.
+  // This allows the provider system to handle the specific authentication method.
+  if (
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.GOOGLE_GENAI_USE_GCA === 'true' ||
+    process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true' ||
+    process.env.GEMINI_API_KEY ||
+    process.env.LLXPRT_API_KEY
+  ) {
     return AuthType.USE_PROVIDER;
-  }
-
-  // Then check Gemini-specific auth methods
-  if (process.env.GOOGLE_GENAI_USE_GCA === 'true') {
-    return AuthType.LOGIN_WITH_GOOGLE;
-  }
-  if (process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true') {
-    return AuthType.USE_VERTEX_AI;
-  }
-  if (process.env.GEMINI_API_KEY || process.env.LLXPRT_API_KEY) {
-    return AuthType.USE_GEMINI;
   }
   return undefined;
 }
