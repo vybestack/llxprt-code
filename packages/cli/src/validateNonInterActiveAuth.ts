@@ -13,7 +13,7 @@ function getAuthTypeFromEnv(): AuthType | undefined {
   if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY) {
     return AuthType.USE_PROVIDER;
   }
-  
+
   // Then check Gemini-specific auth methods
   if (process.env.GOOGLE_GENAI_USE_GCA === 'true') {
     return AuthType.LOGIN_WITH_GOOGLE;
@@ -34,11 +34,11 @@ export async function validateNonInteractiveAuth(
   // Check if a provider is already configured via command line
   const providerManager = nonInteractiveConfig.getProviderManager?.();
   const configProvider = nonInteractiveConfig.getProvider?.();
-  
+
   if (configProvider && providerManager?.hasActiveProvider?.()) {
     // Provider is configured, but we still need to call refreshAuth to initialize content generator
     await nonInteractiveConfig.refreshAuth(AuthType.USE_PROVIDER);
-    
+
     // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
     const serverToolsProvider = providerManager.getServerToolsProvider?.();
     if (
@@ -67,7 +67,7 @@ export async function validateNonInteractiveAuth(
   }
 
   await nonInteractiveConfig.refreshAuth(effectiveAuthType);
-  
+
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
   if (providerManager) {
     const serverToolsProvider = providerManager.getServerToolsProvider?.();
@@ -79,6 +79,6 @@ export async function validateNonInteractiveAuth(
       serverToolsProvider.setConfig(nonInteractiveConfig);
     }
   }
-  
+
   return nonInteractiveConfig;
 }

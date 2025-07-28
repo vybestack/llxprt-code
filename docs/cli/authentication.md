@@ -68,6 +68,7 @@ If you want to use Google's Gemini models, including their free tier offerings, 
           ```
 
           :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
+
     - To use Application Default Credentials (ADC), use the following command:
       - Ensure you have a Google Cloud project and have enabled the Vertex AI API.
         ```bash
@@ -91,6 +92,7 @@ If you want to use Google's Gemini models, including their free tier offerings, 
           ```
 
           :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
+
 4.  **Cloud Shell:**
     - This option is only available when running in a Google Cloud Shell environment.
     - It automatically uses the credentials of the logged-in user in the Cloud Shell environment.

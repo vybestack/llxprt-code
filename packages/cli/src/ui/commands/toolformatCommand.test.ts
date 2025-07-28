@@ -7,31 +7,42 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { toolformatCommand } from './toolformatCommand';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { CommandContext } from './types.js';
+import { IProvider, IProviderManager } from '@vybestack/llxprt-code-core';
 
 vi.mock('../../providers/providerManagerInstance.js');
 
-function mockProvider(extra: Partial<any> = {}) {
+function mockProvider(extra: Partial<IProvider> = {}) {
   return {
     name: 'openai',
     getToolFormat: vi.fn().mockReturnValue('openai'),
     setToolFormatOverride: vi.fn(),
+    getModels: vi.fn().mockResolvedValue([]),
+    generateChatCompletion: vi.fn(),
+    getServerTools: vi.fn().mockReturnValue([]),
+    invokeServerTool: vi.fn().mockResolvedValue({}),
     ...extra,
-  };
+  } as unknown as IProvider;
 }
 
 describe('toolformatCommand', () => {
-  let mockContext: any;
-  let providerManager: any;
-  let provider: any;
+  let mockContext: CommandContext;
+  let providerManager: IProviderManager;
+  let provider: IProvider;
   beforeEach(() => {
     provider = mockProvider();
     providerManager = {
       hasActiveProvider: vi.fn().mockReturnValue(true),
       getActiveProvider: vi.fn().mockReturnValue(provider),
-    };
+      listProviders: vi.fn().mockReturnValue([]),
+      switchProvider: vi.fn(),
+      resetAllProviders: vi.fn(),
+    } as unknown as IProviderManager;
     (getProviderManager as unknown as vi.Mock).mockReturnValue(providerManager);
     mockContext = createMockCommandContext();
-    mockContext.services.settings.merged.providerToolFormatOverrides = { openai: 'xml' };
+    mockContext.services.settings.merged.providerToolFormatOverrides = {
+      openai: 'xml',
+    };
     mockContext.services.settings.setValue = vi.fn();
   });
 
@@ -62,7 +73,7 @@ describe('toolformatCommand', () => {
     const result = toolformatCommand.action(mockContext, 'hermes');
     expect(provider.setToolFormatOverride).toHaveBeenCalledWith('hermes');
     expect(mockContext.services.settings.setValue).toHaveBeenCalledWith(
-      expect.anything(),
+      expect.any(Object),
       'providerToolFormatOverrides',
       expect.objectContaining({ openai: 'hermes' }),
     );

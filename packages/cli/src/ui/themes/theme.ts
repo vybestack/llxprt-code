@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CSSProperties } from 'react';
 import { isValidColor, resolveColor } from './color-utils.js';
 
 // Type for syntax highlighter theme styles

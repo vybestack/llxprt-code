@@ -400,9 +400,7 @@ describe('oauth2', () => {
         getAccessToken: mockGetAccessToken,
         on: vi.fn(),
       } as unknown as OAuth2Client;
-      vi.mocked(OAuth2Client).mockImplementation(
-        () => mockOAuth2Client,
-      );
+      vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
       // Mock the UserInfo API response for fetchAndCacheUserInfo
       vi.mocked(global.fetch).mockResolvedValue({
@@ -471,9 +469,7 @@ describe('oauth2', () => {
         getTokenInfo: mockGetTokenInfo,
         on: vi.fn(),
       } as unknown as OAuth2Client;
-      vi.mocked(OAuth2Client).mockImplementation(
-        () => mockOAuth2Client,
-      );
+      vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
       // Make it fall through to cached credentials path
       const cachedCreds = { refresh_token: 'cached-token' };
@@ -502,9 +498,7 @@ describe('oauth2', () => {
         getTokenInfo: mockGetTokenInfo,
         on: vi.fn(),
       } as unknown as OAuth2Client;
-      vi.mocked(OAuth2Client).mockImplementation(
-        () => mockOAuth2Client,
-      );
+      vi.mocked(OAuth2Client).mockImplementation(() => mockOAuth2Client);
 
       // Make it fall through to cached credentials path
       const cachedCreds = { refresh_token: 'cached-token' };

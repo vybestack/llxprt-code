@@ -7,19 +7,9 @@
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { type PartListUnion } from '@google/genai';
 import process from 'node:process';
-import { ansi } from '../colors.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { useStateAndRef } from './useStateAndRef.js';
-import {
-  Config,
-  GitService,
-  Logger,
-  MCPDiscoveryState,
-  MCPServerStatus,
-  getMCPDiscoveryState,
-  getMCPServerStatus,
-  AuthType,
-} from '@vybestack/llxprt-code-core';
+import { Config, GitService, Logger } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
   Message,
@@ -28,16 +18,9 @@ import {
   HistoryItem,
   SlashCommandProcessorResult,
 } from '../types.js';
-import { promises as fs } from 'fs';
-import path from 'path';
-import { GIT_COMMIT_INFO } from '../../generated/git-commit.js';
-import { formatDuration, formatMemoryUsage } from '../utils/formatters.js';
-import { getCliVersion } from '../../utils/version.js';
 import { LoadedSettings } from '../../config/settings.js';
 import { type CommandContext, type SlashCommand } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import open from 'open';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 

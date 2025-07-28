@@ -4,16 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CommandKind, OpenDialogActionReturn, SlashCommand, SlashCommandActionReturn } from './types.js';
+import { CommandKind, SlashCommand } from './types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { MessageType } from '../types.js';
 
 export const authCommand: SlashCommand = {
   name: 'auth',
   description: 'change the auth method',
   kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+  action: async (context, args) => {
     const authMode = args?.split(' ')[0];
     const providerManager = getProviderManager();
 
@@ -69,7 +68,8 @@ export const authCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Auth mode switching is only supported for the Gemini provider',
+          content:
+            'Auth mode switching is only supported for the Gemini provider',
         };
       }
     } catch (error) {

@@ -32,7 +32,8 @@ export const extensionsCommand: SlashCommand = {
     }
 
     const extensionLines = activeExtensions.map(
-      (ext: GeminiCLIExtension) => `  - \u001b[36m${ext.name} (v${ext.version})\u001b[0m`,
+      (ext: GeminiCLIExtension) =>
+        `  - \u001b[36m${ext.name} (v${ext.version})\u001b[0m`,
     );
     const message = `Active extensions:\n\n${extensionLines.join('\n')}\n`;
 

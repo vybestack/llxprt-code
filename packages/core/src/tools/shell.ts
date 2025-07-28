@@ -12,9 +12,7 @@ import { Config } from '../config/config.js';
 import {
   BaseTool,
   ToolResult,
-  ToolCallConfirmationDetails,
   ToolExecuteConfirmationDetails,
-  ToolConfirmationOutcome,
   Icon,
 } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
@@ -112,18 +110,18 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
 
   async shouldConfirmExecute(
     params: ShellToolParams,
-    signal: AbortSignal,
   ): Promise<ToolExecuteConfirmationDetails | false> {
     const commandRoots = getCommandRoots(params.command);
     const uniqueRoots = [...new Set(commandRoots)];
-    const rootCommand = uniqueRoots.length === 1 ? uniqueRoots[0] : uniqueRoots.join(', ');
-    
+    const rootCommand =
+      uniqueRoots.length === 1 ? uniqueRoots[0] : uniqueRoots.join(', ');
+
     return {
       type: 'exec',
       title: `Execute shell command`,
       command: this.formatCommand(params),
       rootCommand,
-      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+      onConfirm: async () => {
         // This will be handled by the calling code
       },
     };
@@ -132,9 +130,7 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
   async execute(
     params: ShellToolParams,
     signal: AbortSignal,
-    updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
-
     try {
       const isWindows = os.platform() === 'win32';
       const shell = isWindows ? 'cmd.exe' : 'bash';
@@ -198,9 +194,11 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
 
           // Check if summarization is enabled for this tool
           const summarizerConfig = this.config.getSummarizeToolOutputConfig();
-          const toolSummarizeConfig = summarizerConfig ? summarizerConfig[this.name] : undefined;
+          const toolSummarizeConfig = summarizerConfig
+            ? summarizerConfig[this.name]
+            : undefined;
           let llmContent = response;
-          
+
           if (toolSummarizeConfig) {
             const tokenBudget = toolSummarizeConfig.tokenBudget;
             llmContent = await summarizeToolOutput(
@@ -210,7 +208,7 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
               tokenBudget,
             );
           }
-          
+
           return {
             summary: `Executed command: ${params.command}`,
             returnDisplay: response,
@@ -246,9 +244,11 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
         const allOutput = stripAnsi(result.all || '');
         // Check if summarization is enabled for this tool
         const summarizerConfig = this.config.getSummarizeToolOutputConfig();
-        const toolSummarizeConfig = summarizerConfig ? summarizerConfig[this.name] : undefined;
+        const toolSummarizeConfig = summarizerConfig
+          ? summarizerConfig[this.name]
+          : undefined;
         let llmContent = allOutput;
-        
+
         if (toolSummarizeConfig) {
           const tokenBudget = toolSummarizeConfig.tokenBudget;
           llmContent = await summarizeToolOutput(
@@ -258,7 +258,7 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
             tokenBudget,
           );
         }
-        
+
         return {
           summary: `Executed command: ${params.command}`,
           returnDisplay: allOutput,

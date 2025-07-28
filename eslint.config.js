@@ -12,7 +12,6 @@ import prettierConfig from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
 import globals from 'globals';
 import licenseHeader from 'eslint-plugin-license-header';
-import noRelativeCrossPackageImports from './eslint-rules/no-relative-cross-package-imports.js';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import path from 'node:path'; // Use node: prefix for built-ins
@@ -129,7 +128,12 @@ export default tseslint.config(
       'import/no-internal-modules': [
         'error',
         {
-          allow: ['react-dom/test-utils', 'memfs/lib/volume.js', 'yargs/**'],
+          allow: [
+            'react-dom/test-utils',
+            'memfs/lib/volume.js',
+            'yargs/**',
+            '@anthropic-ai/sdk/**',
+          ],
         },
       ],
       'import/no-relative-packages': 'error',
@@ -205,6 +209,25 @@ export default tseslint.config(
       ],
     },
   },
+  // Settings for eslint-rules directory
+  {
+    files: ['./eslint-rules/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
   {
     files: ['packages/vscode-ide-companion/esbuild.js'],
     languageOptions: {
@@ -248,20 +271,13 @@ export default tseslint.config(
     plugins: {
       custom: {
         rules: {
-          'no-relative-cross-package-imports': noRelativeCrossPackageImports,
           'react-render-safety': reactRenderSafety,
           'no-inline-deps': noInlineDeps,
         },
       },
     },
     rules: {
-      // Enable and configure your custom rule
-      'custom/no-relative-cross-package-imports': [
-        'error',
-        {
-          root: path.join(projectRoot, 'packages'),
-        },
-      ],
+      // Custom rules
       // 'custom/react-render-safety': 'error', // TODO: Fix for ESLint 9 API
       'custom/no-inline-deps': 'warn', // Set to warn initially, can be changed to error later
     },

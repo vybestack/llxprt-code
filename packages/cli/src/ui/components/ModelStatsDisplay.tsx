@@ -69,12 +69,15 @@ export const ModelStatsDisplay: React.FC = () => {
 
   const getModelValues = (
     getter: (metrics: ModelMetrics) => string | React.ReactElement,
-  ) => activeModels.map(([, metrics]: [string, ModelMetrics]) => getter(metrics));
+  ) =>
+    activeModels.map(([, metrics]: [string, ModelMetrics]) => getter(metrics));
 
   const hasThoughts = activeModels.some(
     ([, metrics]: [string, ModelMetrics]) => metrics.tokens.thoughts > 0,
   );
-  const hasTool = activeModels.some(([, metrics]: [string, ModelMetrics]) => metrics.tokens.tool > 0);
+  const hasTool = activeModels.some(
+    ([, metrics]: [string, ModelMetrics]) => metrics.tokens.tool > 0,
+  );
   const hasCached = activeModels.some(
     ([, metrics]: [string, ModelMetrics]) => metrics.tokens.cached > 0,
   );

@@ -12,7 +12,6 @@ import { GeminiClient } from '../core/client.js';
 import { ToolExecuteConfirmationDetails } from './tools.js';
 import os from 'os';
 
-
 describe('ShellTool Bug Reproduction', () => {
   let shellTool: ShellTool;
   let config: Config;
@@ -156,12 +155,9 @@ describe('shouldConfirmExecute', () => {
       getCoreTools: () => ['run_shell_command'],
       getExcludeTools: () => [],
     } as unknown as Config);
-    const result = (await shellTool.shouldConfirmExecute(
-      {
-        command: 'git status && git log',
-      },
-      new AbortController().signal,
-    )) as ToolExecuteConfirmationDetails;
+    const result = (await shellTool.shouldConfirmExecute({
+      command: 'git status && git log',
+    })) as ToolExecuteConfirmationDetails;
     expect(result.rootCommand).toEqual('git');
   });
 });

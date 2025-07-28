@@ -46,6 +46,16 @@ vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
 vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
 vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
+vi.mock('../ui/commands/copyCommand.js', () => ({ copyCommand: {} }));
+vi.mock('../ui/commands/vimCommand.js', () => ({ vimCommand: {} }));
+vi.mock('../ui/commands/providerCommand.js', () => ({ providerCommand: {} }));
+vi.mock('../ui/commands/modelCommand.js', () => ({ modelCommand: {} }));
+vi.mock('../ui/commands/keyCommand.js', () => ({ keyCommand: {} }));
+vi.mock('../ui/commands/keyfileCommand.js', () => ({ keyfileCommand: {} }));
+vi.mock('../ui/commands/baseurlCommand.js', () => ({ baseurlCommand: {} }));
+vi.mock('../ui/commands/toolformatCommand.js', () => ({
+  toolformatCommand: {},
+}));
 
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;

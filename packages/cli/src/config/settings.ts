@@ -117,7 +117,7 @@ export interface Settings {
   // Default model to use when no model is specified
   defaultModel?: string;
   memoryDiscoveryMaxDirs?: number;
-  
+
   // Vim mode setting
   vimMode?: boolean;
 }

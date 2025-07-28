@@ -58,9 +58,6 @@ import {
   isEditorAvailable,
   EditorType,
   type OpenFiles,
-  FlashFallbackEvent,
-  logFlashFallback,
-  AuthType,
   ideContext,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from '../config/auth.js';
@@ -223,7 +220,7 @@ const AppInner = ({
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
   const showPrivacyNotice = appState.openDialogs.privacy;
   // modelSwitchedFromQuotaError and userTier are now in sessionState
-  const [activeFile, setActiveFile] = useState<string | undefined>();
+  const [_activeFile, _setActiveFile] = useState<string | undefined>();
   const [openFiles, setOpenFiles] = useState<OpenFiles | undefined>();
 
   useEffect(() => {
@@ -907,7 +904,7 @@ const AppInner = ({
                     </Text>
                   ) : (
                     <ContextSummaryDisplay
-                      activeFile={activeFile}
+                      activeFile={_activeFile}
                       openFiles={openFiles}
                       llxprtMdFileCount={llxprtMdFileCount}
                       contextFileNames={contextFileNames}

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
 import { themeManager, DEFAULT_THEME } from '../themes/theme-manager.js';
@@ -89,10 +89,13 @@ export function ThemeDialog({
     [onSelect, selectedScope],
   );
 
-  const handleThemeHighlight = (themeName: string) => {
-    setHighlightedThemeName(themeName);
-    onHighlight(themeName);
-  };
+  const handleThemeHighlight = useCallback(
+    (themeName: string) => {
+      setHighlightedThemeName(themeName);
+      onHighlight(themeName);
+    },
+    [onHighlight],
+  );
 
   const handleScopeHighlight = useCallback((scope: SettingScope) => {
     setSelectedScope(scope);
@@ -210,6 +213,59 @@ export function ThemeDialog({
   // The code block is slightly longer than the diff, so give it more space.
   const codeBlockHeight = Math.ceil(availableHeightForPanes * 0.6);
   const diffHeight = Math.floor(availableHeightForPanes * 0.4);
+
+  const previewTheme = useMemo(
+    () =>
+      themeManager.getTheme(highlightedThemeName || DEFAULT_THEME.name) ||
+      DEFAULT_THEME,
+    [highlightedThemeName],
+  );
+
+  const previewContent = useMemo(
+    () => (
+      <Box
+        borderStyle="single"
+        borderColor={Colors.Gray}
+        paddingTop={includePadding ? 1 : 0}
+        paddingBottom={includePadding ? 1 : 0}
+        paddingLeft={1}
+        paddingRight={1}
+        flexDirection="column"
+      >
+        {colorizeCode(
+          `# function
+def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        a, b = b, a + b
+    return a`,
+          'python',
+          codeBlockHeight,
+          colorizeCodeWidth,
+        )}
+        <Box marginTop={1} />
+        <DiffRenderer
+          diffContent={`--- a/util.py
++++ b/util.py
+@@ -1,2 +1,2 @@
+- print("Hello, " + name)
++ print(f"Hello, {name}!")
+`}
+          availableTerminalHeight={diffHeight}
+          terminalWidth={colorizeCodeWidth}
+          theme={previewTheme}
+        />
+      </Box>
+    ),
+    [
+      codeBlockHeight,
+      colorizeCodeWidth,
+      diffHeight,
+      includePadding,
+      previewTheme,
+    ],
+  );
+
   return (
     <Box
       borderStyle="round"
@@ -262,47 +318,7 @@ export function ThemeDialog({
         <Box flexDirection="column" width="55%" paddingLeft={2}>
           <Text bold>Preview</Text>
           {/* Get the Theme object for the highlighted theme, fall back to default if not found */}
-          {(() => {
-            const previewTheme =
-              themeManager.getTheme(
-                highlightedThemeName || DEFAULT_THEME.name,
-              ) || DEFAULT_THEME;
-            return (
-              <Box
-                borderStyle="single"
-                borderColor={Colors.Gray}
-                paddingTop={includePadding ? 1 : 0}
-                paddingBottom={includePadding ? 1 : 0}
-                paddingLeft={1}
-                paddingRight={1}
-                flexDirection="column"
-              >
-                {colorizeCode(
-                  `# function
-def fibonacci(n):
-    a, b = 0, 1
-    for _ in range(n):
-        a, b = b, a + b
-    return a`,
-                  'python',
-                  codeBlockHeight,
-                  colorizeCodeWidth,
-                )}
-                <Box marginTop={1} />
-                <DiffRenderer
-                  diffContent={`--- a/util.py
-+++ b/util.py
-@@ -1,2 +1,2 @@
-- print("Hello, " + name)
-+ print(f"Hello, {name}!")
-`}
-                  availableTerminalHeight={diffHeight}
-                  terminalWidth={colorizeCodeWidth}
-                  theme={previewTheme}
-                />
-              </Box>
-            );
-          })()}
+          {previewContent}
         </Box>
       </Box>
       <Box marginTop={1}>

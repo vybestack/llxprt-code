@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import type { Mocked } from 'vitest';
 import { handleAtCommand } from './atCommandProcessor.js';
 import {
   Config,
@@ -18,38 +17,8 @@ import * as os from 'os';
 import { ToolCallStatus } from '../types.js';
 import { UseHistoryManagerReturn } from './useHistoryManager';
 import * as fsPromises from 'fs/promises';
-import type { Stats } from 'fs';
 
-const mockGetToolRegistry = vi.fn();
-const mockGetTargetDir = vi.fn();
-const mockConfig = {
-  getToolRegistry: mockGetToolRegistry,
-  getTargetDir: mockGetTargetDir,
-  isSandboxed: vi.fn(() => false),
-  getFileService: vi.fn(),
-  getFileFilteringRespectGitIgnore: vi.fn(() => true),
-  getEnableRecursiveFileSearch: vi.fn(() => true),
-} as unknown as Config;
-
-const mockReadManyFilesExecute = vi.fn();
-const mockReadManyFilesTool = {
-  name: 'read_many_files',
-  displayName: 'Read Many Files',
-  description: 'Reads multiple files.',
-  execute: mockReadManyFilesExecute,
-  getDescription: vi.fn((params) => `Read files: ${params.paths.join(', ')}`),
-};
-
-const mockGlobExecute = vi.fn();
-const mockGlobTool = {
-  name: 'glob',
-  displayName: 'Glob Tool',
-  execute: mockGlobExecute,
-  getDescription: vi.fn(() => 'Glob tool description'),
-};
-
-const mockAddItem: Mock<UseHistoryManagerReturn['addItem']> = vi.fn();
-const mockOnDebugMessage: Mock<(message: string) => void> = vi.fn();
+// These will be used in describe block below
 
 vi.mock('fs/promises', async () => {
   const actual = await vi.importActual('fs/promises');
@@ -72,8 +41,8 @@ describe('handleAtCommand', () => {
   let testRootDir: string;
   let mockConfig: Config;
 
-  const mockAddItem: Mock<UseHistoryManagerReturn['addItem']> = vi.fn();
-  const mockOnDebugMessage: Mock<(message: string) => void> = vi.fn();
+  const mockAddItem = vi.fn() as Mock<UseHistoryManagerReturn['addItem']>;
+  const mockOnDebugMessage = vi.fn() as Mock<(message: string) => void>;
 
   let abortController: AbortController;
 

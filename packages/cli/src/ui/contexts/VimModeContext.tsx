@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useMemo,
 } from 'react';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 
@@ -58,15 +59,22 @@ export const VimModeProvider = ({
     return newValue;
   }, [vimEnabled, settings]);
 
+  const memoizedSetVimMode = useCallback((mode: VimMode) => {
+    setVimMode(mode);
+  }, []);
+
+  const contextValue = useMemo(
+    () => ({
+      vimEnabled,
+      vimMode,
+      toggleVimEnabled,
+      setVimMode: memoizedSetVimMode,
+    }),
+    [vimEnabled, vimMode, toggleVimEnabled, memoizedSetVimMode],
+  );
+
   return (
-    <VimModeContext.Provider
-      value={{
-        vimEnabled,
-        vimMode,
-        toggleVimEnabled,
-        setVimMode,
-      }}
-    >
+    <VimModeContext.Provider value={contextValue}>
       {children}
     </VimModeContext.Provider>
   );

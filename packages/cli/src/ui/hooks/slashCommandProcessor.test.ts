@@ -71,15 +71,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import open from 'open';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
-import { SlashCommandProcessorResult, MessageType } from '../types.js';
-import { Config, GeminiClient } from '@vybestack/llxprt-code-core';
-import { useSessionStats } from '../contexts/SessionContext.js';
+import { MessageType } from '../types.js';
+import { Config } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import * as ShowMemoryCommandModule from './useShowMemoryCommand.js';
-import { CommandService } from '../../services/CommandService.js';
 import { CommandKind, SlashCommand } from '../commands/types.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
-import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 
 const createTestCommand = (
   overrides: Partial<SlashCommand>,
@@ -109,7 +106,6 @@ describe('useSlashCommandProcessor', () => {
   let mockOpenPrivacyNotice: ReturnType<typeof vi.fn>;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockLogger: ReturnType<typeof vi.fn>;
   let mockGeminiClient: ReturnType<typeof vi.fn>;
 
   beforeAll(() => {
@@ -123,7 +119,7 @@ describe('useSlashCommandProcessor', () => {
     (vi.mocked(BuiltinCommandLoader) as Mock).mockClear();
     mockBuiltinLoadCommands.mockResolvedValue([]);
     mockFileLoadCommands.mockResolvedValue([]);
-    
+
     mockAddItem = vi.fn();
     mockClearItems = vi.fn();
     mockLoadHistory = vi.fn();
@@ -144,10 +140,6 @@ describe('useSlashCommandProcessor', () => {
         getHistory: vi.fn(() => []),
       })),
       setHistory: vi.fn(),
-    };
-
-    mockLogger = {
-      initialize: vi.fn(),
     };
 
     mockConfig = {
@@ -337,9 +329,8 @@ describe('useSlashCommandProcessor', () => {
     it('should return false for non-command input', async () => {
       const { result } = setupProcessorHook([]);
 
-      const commandResult = await result.current.handleSlashCommand(
-        'not a command',
-      );
+      const commandResult =
+        await result.current.handleSlashCommand('not a command');
 
       expect(commandResult).toBe(false);
       expect(mockAddItem).not.toHaveBeenCalled();
@@ -518,7 +509,9 @@ describe('useSlashCommandProcessor', () => {
       expect(mockAddItem).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,
-          text: expect.stringContaining("Command '/parent' requires a subcommand"),
+          text: expect.stringContaining(
+            "Command '/parent' requires a subcommand",
+          ),
         },
         expect.any(Number),
       );

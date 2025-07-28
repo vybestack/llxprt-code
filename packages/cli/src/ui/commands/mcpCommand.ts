@@ -288,7 +288,9 @@ const authCommand: SlashCommand = {
     if (!serverName) {
       // List servers that support OAuth
       const oauthServers = Object.entries(mcpServers)
-        .filter(([_, server]: [string, MCPServerConfig]) => server.oauth?.enabled)
+        .filter(
+          ([_, server]: [string, MCPServerConfig]) => server.oauth?.enabled,
+        )
         .map(([name, _]) => name);
 
       if (oauthServers.length === 0) {

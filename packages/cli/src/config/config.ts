@@ -18,14 +18,10 @@ import {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
   TelemetryTarget,
-  MCPServerConfig,
   FileFilteringOptions,
   IdeClient,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
-
-// TODO: This was removed from core, find proper replacement
-const IDE_SERVER_NAME = 'ide';
 
 import { Extension, annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
@@ -40,12 +36,9 @@ const LLXPRT_DIR = '.llxprt';
 
 // Simple console logger for now - replace with actual logger if available
 const logger = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug: (...args: any[]) => console.debug('[DEBUG]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  warn: (...args: any[]) => console.warn('[WARN]', ...args),
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  error: (...args: any[]) => console.error('[ERROR]', ...args),
+  debug: (...args: unknown[]) => console.debug('[DEBUG]', ...args),
+  warn: (...args: unknown[]) => console.warn('[WARN]', ...args),
+  error: (...args: unknown[]) => console.error('[ERROR]', ...args),
 };
 
 export interface CliArgs {

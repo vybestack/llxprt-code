@@ -18,7 +18,7 @@ export const vimCommand: SlashCommand = {
         content: 'Vim mode is not available in this version.',
       };
     }
-    
+
     const newVimState = await context.ui.toggleVimEnabled();
 
     const message = newVimState

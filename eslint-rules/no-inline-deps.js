@@ -23,10 +23,10 @@ export default {
     fixable: null,
     schema: [],
   },
-  create(context) {
+  create(/* _context */) {
     // NotYetImplemented stub - will be implemented in Phase 01a
     return {
-      CallExpression(node) {
+      CallExpression(/* _node */) {
         // TODO: Implement detection of inline dependency arrays in:
         // - useEffect
         // - useCallback

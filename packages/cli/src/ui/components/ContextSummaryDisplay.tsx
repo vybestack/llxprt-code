@@ -11,7 +11,6 @@ import {
   type OpenFiles,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import path from 'path';
 
 interface ContextSummaryDisplayProps {
   activeFile?: string;
@@ -24,7 +23,7 @@ interface ContextSummaryDisplayProps {
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
-  activeFile,
+  activeFile: _activeFile,
   llxprtMdFileCount,
   contextFileNames,
   mcpServers,

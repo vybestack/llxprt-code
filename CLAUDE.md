@@ -12,102 +12,85 @@
 - Fix all linting errors, including warnings about `any` types
 - Run `npm run typecheck` to ensure type safety
 
-## Working Methodology - CRITICAL
+## Working Methodology
 
-### NEVER do work yourself
+### Use Subagents for Complex Tasks
 
-- **ALWAYS delegate to Claude workers** using `claude --dangerously-skip-permissions -p`
-- You are a manager/orchestrator, not a worker
-- Your job is to:
-  1. Understand the problem
-  2. Create clear, detailed prompts for workers
-  3. Launch workers to do the actual work
-  4. Read and summarize worker reports
-  5. Coordinate multiple workers when needed
+- **Use the Task tool with subagents** for multi-step tasks, research, and complex implementations
+- Subagents are specialized for different types of work:
+  - `general-purpose`: For research, searching, and multi-step tasks
+  - `typescript-code-reviewer`: For reviewing TypeScript code compliance
+  - `typescript-coder`: For writing production-ready TypeScript code
 
-### Launching Workers
+### When to Use Subagents
 
-#### Synchronous Workers (when you need results immediately)
+Use subagents for:
 
-Use for:
+- Complex multi-step tasks requiring coordination
+- Research and investigation across multiple files
+- Writing new features with proper tests
+- Code review and quality enforcement
+- Tasks requiring extensive file searching
 
-- Quick fixes that block other work
-- Critical path tasks
-- When you need to verify results before proceeding
+### When to Work Directly
 
-```bash
-claude --dangerously-skip-permissions -p --model opus < prompt_file.txt
-```
+Work directly for:
 
-#### Asynchronous Workers (for parallel tasks)
+- Simple file edits with clear requirements
+- Quick fixes in known locations
+- Running straightforward commands
+- Reading specific files you already know
 
-Use for:
+### Example Subagent Usage
 
-- Independent tasks that can run in parallel
-- Research/investigation tasks
-- Non-blocking work
-
-```bash
-# Launch in background and capture output
-claude --dangerously-skip-permissions -p --model opus < prompt_file.txt > output.log 2>&1 &
-
-# For async workers, ALWAYS have them write a summary report to a specific file
-echo "...your prompt... Write a summary report to /tmp/worker-report-taskname.txt when complete" | claude --dangerously-skip-permissions -p --model opus > /tmp/worker-log-taskname.txt 2>&1 &
-```
-
-### Worker Prompt Guidelines
-
-1. Be extremely specific about the task
-2. Include all necessary context and file paths
-3. Specify exact changes needed
-4. For async workers, ALWAYS request a summary report
-5. Include success criteria
-6. Tell workers to use proper Gemini model versions (gemini-2.5-flash-exp, NOT 2.0)
-
-### Example Worker Prompts
-
-#### Investigation Worker
+#### Research Subagent
 
 ```
-Investigate why tool calls are failing in the gemini-cli project.
-Check:
-1. Error messages in recent test runs
-2. Provider configurations
-3. Tool schema definitions
-Focus on packages/cli/src/providers and packages/core/src/tools
-Write findings to /tmp/tool-investigation-report.txt
-Include: root cause, affected files, and recommended fixes
+Task(
+  description="Research auth flow",
+  prompt="Investigate the authentication flow in the llxprt-code project. Find all auth-related files, understand the flow, and document how OAuth and API keys are handled.",
+  subagent_type="general-purpose"
+)
 ```
 
-#### Fix Implementation Worker
+#### TypeScript Implementation Subagent
 
 ```
-Fix the require is not defined error in user_id.js:
-- File: packages/core/src/utils/user_id.js line 59
-- Error: Cannot use require in ESM module
-- Solution: Replace require with proper ESM import or use createRequire
-Test your fix compiles with npm run build
-Report completion status to /tmp/require-fix-status.txt
+Task(
+  description="Implement user service",
+  prompt="Create a new UserService class in packages/core/src/services with proper TypeScript types, comprehensive tests, and following all project conventions. The service should handle user CRUD operations.",
+  subagent_type="typescript-coder"
+)
 ```
 
-### DO NOT
+#### Code Review Subagent
 
-- Run commands directly (except to launch workers or check their status)
-- Edit files yourself
-- Test things yourself
-- Do "quick checks" - have a worker do it
+```
+Task(
+  description="Review auth changes",
+  prompt="Review the recent changes to the authentication module for compliance with project standards, type safety, and test coverage.",
+  subagent_type="typescript-code-reviewer"
+)
+```
+
+### Best Practices
+
+1. Launch multiple subagents concurrently for independent tasks
+2. Be specific about expected outputs in your prompts
+3. Use TodoWrite to track subagent tasks
+4. Subagents are stateless - provide all context in the initial prompt
+5. Trust subagent outputs - they're specialized for their tasks
 
 ### Context Management
 
-- Keep your context clean by delegating work
-- Read worker reports instead of full outputs
-- Use TodoWrite to track worker tasks
-- Summarize findings instead of storing full details
+- Delegate complex work to subagents to keep your context clean
+- Subagents return summaries - you don't need to store full details
+- Use direct tools (Read, Edit, Bash) for simple, targeted tasks
 
 # important-instruction-reminders
 
-- NEVER edit files directly - launch a worker
-- NEVER test directly - launch a worker to test
-- NEVER investigate directly - launch a worker to investigate
-- Use gemini-2.5-flash-exp, NOT gemini-2.0-flash-exp
-- Always use --dangerously-skip-permissions -p with claude
+- Use subagents for complex multi-step tasks
+- Work directly only for simple, well-defined tasks
+- Launch multiple subagents concurrently when possible
+- Always provide complete context to subagents
+- Trust subagent outputs - they're specialized for their domains

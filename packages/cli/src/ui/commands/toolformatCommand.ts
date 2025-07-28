@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SlashCommand, CommandContext, MessageActionReturn } from './types.js';
+import type {
+  SlashCommand,
+  CommandContext,
+  MessageActionReturn,
+} from './types.js';
 import { CommandKind } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { SettingScope } from '../../config/settings.js';
@@ -15,7 +19,8 @@ const ALL_FORMATS = [...STRUCTURED_FORMATS, ...TEXT_FORMATS];
 
 export const toolformatCommand: SlashCommand = {
   name: 'toolformat',
-  description: 'override the auto-detected tool calling/format parser for tools',
+  description:
+    'override the auto-detected tool calling/format parser for tools',
   kind: CommandKind.BUILT_IN,
   action: (
     context: CommandContext,
@@ -27,7 +32,8 @@ export const toolformatCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'No active provider. Please select a provider before setting tool format.',
+        content:
+          'No active provider. Please select a provider before setting tool format.',
       };
     }
     const activeProvider = providerManager.getActiveProvider();
@@ -54,7 +60,9 @@ export const toolformatCommand: SlashCommand = {
       if (activeProvider.setToolFormatOverride) {
         activeProvider.setToolFormatOverride(null);
       }
-      const currentOverrides = { ...(settings.merged.providerToolFormatOverrides || {}) };
+      const currentOverrides = {
+        ...(settings.merged.providerToolFormatOverrides || {}),
+      };
       delete currentOverrides[providerName];
       settings.setValue(
         SettingScope.User,
@@ -81,7 +89,9 @@ export const toolformatCommand: SlashCommand = {
       if (activeProvider.setToolFormatOverride) {
         activeProvider.setToolFormatOverride(formatName);
       }
-      const currentOverrides = { ...(settings.merged.providerToolFormatOverrides || {}) };
+      const currentOverrides = {
+        ...(settings.merged.providerToolFormatOverrides || {}),
+      };
       currentOverrides[providerName] = formatName;
       settings.setValue(
         SettingScope.User,

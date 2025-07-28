@@ -233,9 +233,10 @@ Use this tool when the user's query implies needing the content of several files
     // Determine the final list of exclusion patterns exactly as in execute method
     const paramExcludes = params.exclude || [];
     const paramUseDefaultExcludes = params.useDefaultExcludes !== false;
-    const geminiIgnorePatterns = this.config
-      .getFileService()
-      .getGeminiIgnorePatterns();
+    // Note: geminiIgnorePatterns are not currently used in the description
+    // const geminiIgnorePatterns = this.config
+    //   .getFileService()
+    //   .getGeminiIgnorePatterns();
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes
         ? [...DEFAULT_EXCLUDES, ...paramExcludes, ...this.llxprtIgnorePatterns]
@@ -273,6 +274,7 @@ Use this tool when the user's query implies needing the content of several files
       include = [],
       exclude = [],
       useDefaultExcludes = true,
+      recursive: _recursive,
     } = params;
 
     const defaultFileIgnores =

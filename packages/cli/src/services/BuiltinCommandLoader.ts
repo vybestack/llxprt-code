@@ -33,6 +33,7 @@ import { modelCommand } from '../ui/commands/modelCommand.js';
 import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
+import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -76,6 +77,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       keyCommand,
       keyfileCommand,
       baseurlCommand,
+      toolformatCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

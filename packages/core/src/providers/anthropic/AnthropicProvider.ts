@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { Stream } from '@anthropic-ai/sdk/streaming';
-import { RawMessageStreamEvent } from '@anthropic-ai/sdk/resources/messages.js';
+import type { Stream } from '@anthropic-ai/sdk/streaming';
 import { IProvider } from '../IProvider.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
@@ -213,7 +212,7 @@ export class AnthropicProvider implements IProvider {
       }
 
       return this.anthropic.messages.create(createOptions) as Promise<
-        Stream<RawMessageStreamEvent>
+        Stream<Anthropic.MessageStreamEvent>
       >;
     };
 
