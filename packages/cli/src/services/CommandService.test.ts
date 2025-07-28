@@ -33,6 +33,7 @@ class MockCommandLoader implements ICommandLoader {
   );
 }
 
+
 describe('CommandService', () => {
   beforeEach(() => {
     vi.spyOn(console, 'debug').mockImplementation(() => {});

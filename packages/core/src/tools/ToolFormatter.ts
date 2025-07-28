@@ -104,6 +104,18 @@ export class ToolFormatter implements IToolFormatter {
           description: tool.function.description || '',
           parameters: tool.function.parameters,
         }));
+      case 'gemma':
+        // Gemma models use the same format as OpenAI with type: 'function'
+        return tools.map((tool) => ({
+          type: 'function',
+          function: {
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters: this.convertGeminiSchemaToStandard(
+              tool.function.parameters,
+            ),
+          },
+        }));
       default:
         throw new Error(`Tool format '${format}' not yet implemented`);
     }
@@ -116,7 +128,8 @@ export class ToolFormatter implements IToolFormatter {
     switch (format) {
       case 'openai':
       case 'deepseek':
-      case 'qwen': {
+      case 'qwen':
+      case 'gemma': {
         const openAiToolCall = rawToolCall as {
           id: string;
           type?: string;
@@ -242,6 +255,7 @@ export class ToolFormatter implements IToolFormatter {
       case 'openai':
       case 'deepseek':
       case 'qwen':
+      case 'gemma':
         // All use same accumulation logic for now
         if (deltaToolCall.index !== undefined) {
           if (!accumulatedToolCalls[deltaToolCall.index]) {
@@ -258,6 +272,12 @@ export class ToolFormatter implements IToolFormatter {
           if (deltaToolCall.function?.arguments)
             tc.function.arguments += deltaToolCall.function.arguments;
         }
+        break;
+      case 'hermes':
+      case 'xml':
+      case 'llama':
+        // For text-based toolcalls, streaming accumulation isn't required (they arrive parsed)
+        // NO-OP (future implementation can extend if needed)
         break;
       default:
         throw new Error(
