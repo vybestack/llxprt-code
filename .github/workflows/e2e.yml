@@ -43,6 +43,9 @@ jobs:
 
       - name: Build sandbox Docker image
         if: matrix.sandbox == 'sandbox:docker'
+        env:
+          # Tell the build script to use docker for sandboxing
+          LLXPRT_SANDBOX: docker
         run: |
           # Build the sandbox image locally with the same tag that's in package.json
           # This matches Google's approach - build locally, no registry needed
