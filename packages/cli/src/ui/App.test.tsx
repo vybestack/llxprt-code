@@ -239,7 +239,7 @@ describe('App UI', () => {
     );
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Use the already mocked Config from llxprt-code-core
     mockConfig = new ServerConfig({
       embeddingModel: 'test-embedding-model',

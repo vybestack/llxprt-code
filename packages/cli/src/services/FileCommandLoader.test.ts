@@ -9,7 +9,7 @@ import {
   Config,
   getProjectCommandsDir,
   getUserCommandsDir,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import mock from 'mock-fs';
 import { assert } from 'vitest';
 import { createMockCommandContext } from '../test-utils/mockCommandContext.js';

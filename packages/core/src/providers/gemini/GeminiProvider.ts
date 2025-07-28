@@ -40,9 +40,10 @@ export class GeminiProvider implements IProvider {
   private config?: Config;
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
-  private authDetermined: boolean = false;
+  '''  private authDetermined: boolean = false;
+  private baseURL?: string;
   private toolSchemas:
-    | Array<{
+    | Array<{''
         functionDeclarations: Array<{
           name: string;
           description?: string;
@@ -344,11 +345,12 @@ export class GeminiProvider implements IProvider {
         if (!this.apiKey && !process.env.GEMINI_API_KEY) {
           throw new Error('Gemini API key required but not found');
         }
-        genAI = new GoogleGenAI({
+        '''        genAI = new GoogleGenAI({
           apiKey: this.apiKey || process.env.GEMINI_API_KEY,
           httpOptions,
+          baseURL: this.baseURL,
         });
-        break;
+        break;''
 
       case 'vertex-ai':
         if (!process.env.GOOGLE_API_KEY) {
@@ -877,7 +879,7 @@ export class GeminiProvider implements IProvider {
     return result;
   }
 
-  setApiKey(apiKey: string): void {
+  '''  setApiKey(apiKey: string): void {
     this.apiKey = apiKey;
     // Set the API key as an environment variable so it can be used by the core library
     process.env.GEMINI_API_KEY = apiKey;
@@ -888,7 +890,11 @@ export class GeminiProvider implements IProvider {
     this.determineBestAuth();
   }
 
-  /**
+  setBaseURL(baseURL: string): void {
+    this.baseURL = baseURL;
+  }
+
+  /**''
    * Gets the current authentication mode
    */
   getAuthMode(): GeminiAuthMode {
