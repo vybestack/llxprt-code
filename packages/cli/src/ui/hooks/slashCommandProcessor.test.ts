@@ -499,7 +499,7 @@ describe('useSlashCommandProcessor', () => {
             name: 'child1',
             description: 'First child.',
             kind: CommandKind.BUILT_IN,
-          }
+          },
         ],
       };
       const { result } = setupProcessorHook([parentCommand]);
@@ -513,9 +513,11 @@ describe('useSlashCommandProcessor', () => {
       expect(mockAddItem).toHaveBeenLastCalledWith(
         {
           type: MessageType.INFO,
-          text: expect.stringContaining("Command '/parent' requires a subcommand."),
+          text: expect.stringContaining(
+            "Command '/parent' requires a subcommand.",
+          ),
         },
-        expect.any(Number)
+        expect.any(Number),
       );
     });
   });

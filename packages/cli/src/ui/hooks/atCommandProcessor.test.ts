@@ -388,9 +388,9 @@ describe('handleAtCommand', () => {
     expect(result.processedQuery[0]).toEqual({
       text: `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`,
     });
-    
+
     // Check that both files are included but don't enforce order
-    const queryText = result.processedQuery.map(p => p.text).join('');
+    const queryText = result.processedQuery.map((p) => p.text).join('');
     expect(queryText).toContain('--- Content from referenced files ---');
     expect(queryText).toContain(`Content from @${file1Path}:`);
     expect(queryText).toContain(content1);

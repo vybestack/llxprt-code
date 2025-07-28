@@ -78,7 +78,9 @@ describe('bugCommand', () => {
     if (!bugCommand.action) throw new Error('Action is not defined');
     await bugCommand.action(mockContext, 'A test bug');
     expect(open).toHaveBeenCalledWith(
-      expect.stringContaining('https://internal.bug-tracker.com/new?desc=A%20test%20bug&details='),
+      expect.stringContaining(
+        'https://internal.bug-tracker.com/new?desc=A%20test%20bug&details=',
+      ),
     );
   });
 });
