@@ -55,7 +55,8 @@ export const useThemeCommand = (
       return;
     }
 
-    if (!themeManager.setActiveTheme(effectiveTheme)) {
+    // Check for invalid theme configuration on startup
+    if (effectiveTheme && !themeManager.findThemeByName(effectiveTheme)) {
       appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
       appDispatch({
         type: 'SET_THEME_ERROR',
@@ -111,10 +112,29 @@ export const useThemeCommand = (
 
   const handleThemeSelect = useCallback(
     (themeName: string | undefined, scope: SettingScope) => {
-      // Added scope parameter
       try {
+        // Merge user and workspace custom themes (workspace takes precedence)
+        const mergedCustomThemes = {
+          ...(loadedSettings.user.settings.customThemes || {}),
+          ...(loadedSettings.workspace.settings.customThemes || {}),
+        };
+        // Only allow selecting themes available in the merged custom themes or built-in themes
+        const isBuiltIn = themeManager.findThemeByName(themeName);
+        const isCustom = themeName && mergedCustomThemes[themeName];
+        if (!isBuiltIn && !isCustom) {
+          appDispatch({
+            type: 'SET_THEME_ERROR',
+            payload: `Theme "${themeName}" not found in selected scope.`,
+          });
+          appDispatch({ type: 'OPEN_DIALOG', payload: 'theme' });
+          return;
+        }
         loadedSettings.setValue(scope, 'theme', themeName); // Update the merged settings
+        if (loadedSettings.merged.customThemes) {
+          themeManager.loadCustomThemes(loadedSettings.merged.customThemes);
+        }
         applyTheme(loadedSettings.merged.theme); // Apply the current theme
+        appDispatch({ type: 'SET_THEME_ERROR', payload: null });
       } finally {
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'theme' }); // Close the dialog
       }

@@ -35,11 +35,15 @@ export * from './utils/editor.js';
 export * from './utils/quotaErrorDetection.js';
 export * from './utils/fileUtils.js';
 export * from './utils/retry.js';
+export * from './utils/systemEncoding.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
 export * from './services/gitService.js';
-export * from './services/ideContext.js';
+
+// Export IDE specific logic
+export * from './ide/ide-client.js';
+export * from './ide/ideContext.js';
 
 // Export base tool definitions
 export * from './tools/tools.js';

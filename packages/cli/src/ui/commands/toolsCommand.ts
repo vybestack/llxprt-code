@@ -4,12 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type CommandContext, type SlashCommand } from './types.js';
+import {
+  type CommandContext,
+  type SlashCommand,
+  CommandKind,
+} from './types.js';
 import { MessageType } from '../types.js';
+import { Tool } from '@vybestack/llxprt-code-core';
 
 export const toolsCommand: SlashCommand = {
   name: 'tools',
   description: 'list available Gemini CLI tools',
+  kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext, args?: string): Promise<void> => {
     const subCommand = args?.trim();
 
@@ -33,12 +39,12 @@ export const toolsCommand: SlashCommand = {
 
     const tools = toolRegistry.getAllTools();
     // Filter out MCP tools by checking for the absence of a serverName property
-    const geminiTools = tools.filter((tool) => !('serverName' in tool));
+    const geminiTools = tools.filter((tool: Tool) => !('serverName' in tool));
 
     let message = 'Available Gemini CLI tools:\n\n';
 
     if (geminiTools.length > 0) {
-      geminiTools.forEach((tool) => {
+      geminiTools.forEach((tool: Tool) => {
         if (useShowDescriptions && tool.description) {
           message += `  - \u001b[36m${tool.displayName} (${tool.name})\u001b[0m:\n`;
 

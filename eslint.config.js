@@ -36,7 +36,6 @@ export default tseslint.config(
       'packages/core/dist/**',
       'packages/server/dist/**',
       'packages/vscode-ide-companion/dist/**',
-      'eslint-rules/*',
       'bundle/**',
       'packages/cli/src/test-*.ts',
       'packages/cli/src/test-*.tsx',
@@ -85,6 +84,14 @@ export default tseslint.config(
   {
     // General overrides and rules for the project (TS/TSX files)
     files: ['packages/*/src/**/*.{ts,tsx}'], // Target only TS/TSX in the cli package
+    plugins: {
+      import: importPlugin,
+    },
+    settings: {
+      'import/resolver': {
+        node: true,
+      },
+    },
     languageOptions: {
       globals: {
         ...globals.node,
@@ -119,6 +126,13 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
+      'import/no-internal-modules': [
+        'error',
+        {
+          allow: ['react-dom/test-utils', 'memfs/lib/volume.js', 'yargs/**'],
+        },
+      ],
+      'import/no-relative-packages': 'error',
       'no-cond-assign': 'error',
       'no-debugger': 'error',
       'no-duplicate-case': 'error',

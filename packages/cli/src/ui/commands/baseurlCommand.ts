@@ -4,13 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SlashCommand, CommandContext, MessageActionReturn } from './types.js';
+import { SlashCommand, CommandContext, MessageActionReturn, CommandKind } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { setProviderBaseUrl } from '../../providers/providerConfigUtils.js';
 
 export const baseurlCommand: SlashCommand = {
   name: 'baseurl',
   description: 'set base URL for the current provider',
+  kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
     args: string,

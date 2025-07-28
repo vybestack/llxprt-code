@@ -8,11 +8,22 @@ import { render } from 'ink-testing-library';
 import { InputPrompt, InputPromptProps } from './InputPrompt.js';
 import type { TextBuffer } from './shared/text-buffer.js';
 import { Config } from '@vybestack/llxprt-code-core';
-import { CommandContext, SlashCommand } from '../commands/types.js';
+import * as path from 'path';
+import {
+  CommandContext,
+  SlashCommand,
+  CommandKind,
+} from '../commands/types.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useShellHistory } from '../hooks/useShellHistory.js';
-import { useCompletion } from '../hooks/useCompletion.js';
-import { useInputHistory } from '../hooks/useInputHistory.js';
+import {
+  useShellHistory,
+  UseShellHistoryReturn,
+} from '../hooks/useShellHistory.js';
+import { useCompletion, UseCompletionReturn } from '../hooks/useCompletion.js';
+import {
+  useInputHistory,
+  UseInputHistoryReturn,
+} from '../hooks/useInputHistory.js';
 import * as clipboardUtils from '../utils/clipboardUtils.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
@@ -21,28 +32,47 @@ vi.mock('../hooks/useCompletion.js');
 vi.mock('../hooks/useInputHistory.js');
 vi.mock('../utils/clipboardUtils.js');
 
-type MockedUseShellHistory = ReturnType<typeof useShellHistory>;
-type MockedUseCompletion = ReturnType<typeof useCompletion>;
-type MockedUseInputHistory = ReturnType<typeof useInputHistory>;
-
 const mockSlashCommands: SlashCommand[] = [
-  { name: 'clear', description: 'Clear screen', action: vi.fn() },
+  {
+    name: 'clear',
+    kind: CommandKind.BUILT_IN,
+    description: 'Clear screen',
+    action: vi.fn(),
+  },
   {
     name: 'memory',
+    kind: CommandKind.BUILT_IN,
     description: 'Manage memory',
     subCommands: [
-      { name: 'show', description: 'Show memory', action: vi.fn() },
-      { name: 'add', description: 'Add to memory', action: vi.fn() },
-      { name: 'refresh', description: 'Refresh memory', action: vi.fn() },
+      {
+        name: 'show',
+        kind: CommandKind.BUILT_IN,
+        description: 'Show memory',
+        action: vi.fn(),
+      },
+      {
+        name: 'add',
+        kind: CommandKind.BUILT_IN,
+        description: 'Add to memory',
+        action: vi.fn(),
+      },
+      {
+        name: 'refresh',
+        kind: CommandKind.BUILT_IN,
+        description: 'Refresh memory',
+        action: vi.fn(),
+      },
     ],
   },
   {
     name: 'chat',
     description: 'Manage chats',
+    kind: CommandKind.BUILT_IN,
     subCommands: [
       {
         name: 'resume',
         description: 'Resume a chat',
+        kind: CommandKind.BUILT_IN,
         action: vi.fn(),
         completion: async () => ['fix-foo', 'fix-bar'],
       },
@@ -52,9 +82,9 @@ const mockSlashCommands: SlashCommand[] = [
 
 describe('InputPrompt', () => {
   let props: InputPromptProps;
-  let mockShellHistory: MockedUseShellHistory;
-  let mockCompletion: MockedUseCompletion;
-  let mockInputHistory: MockedUseInputHistory;
+  let mockShellHistory: UseShellHistoryReturn;
+  let mockCompletion: UseCompletionReturn;
+  let mockInputHistory: UseInputHistoryReturn;
   let mockBuffer: TextBuffer;
   let mockCommandContext: CommandContext;
 
@@ -91,6 +121,15 @@ describe('InputPrompt', () => {
       openInExternalEditor: vi.fn(),
       newline: vi.fn(),
       backspace: vi.fn(),
+      preferredCol: null,
+      selectionAnchor: null,
+      insert: vi.fn(),
+      del: vi.fn(),
+      undo: vi.fn(),
+      redo: vi.fn(),
+      replaceRange: vi.fn(),
+      deleteWordLeft: vi.fn(),
+      deleteWordRight: vi.fn(),
     } as unknown as TextBuffer;
 
     mockShellHistory = {
@@ -107,11 +146,13 @@ describe('InputPrompt', () => {
       isLoadingSuggestions: false,
       showSuggestions: false,
       visibleStartIndex: 0,
+      isPerfectMatch: false,
       navigateUp: vi.fn(),
       navigateDown: vi.fn(),
       resetCompletionState: vi.fn(),
       setActiveSuggestionIndex: vi.fn(),
       setShowSuggestions: vi.fn(),
+      handleAutocomplete: vi.fn(),
     };
     mockedUseCompletion.mockReturnValue(mockCompletion);
 
@@ -128,10 +169,10 @@ describe('InputPrompt', () => {
       userMessages: [],
       onClearScreen: vi.fn(),
       config: {
-        getProjectRoot: () => '/test/project',
-        getTargetDir: () => '/test/project/src',
+        getProjectRoot: () => path.join('test', 'project'),
+        getTargetDir: () => path.join('test', 'project', 'src'),
       } as unknown as Config,
-      slashCommands: [],
+      slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
       shellModeActive: false,
       setShellModeActive: vi.fn(),
@@ -139,8 +180,6 @@ describe('InputPrompt', () => {
       suggestionsWidth: 80,
       focus: true,
     };
-
-    props.slashCommands = mockSlashCommands;
   });
 
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -221,6 +260,83 @@ describe('InputPrompt', () => {
     unmount();
   });
 
+  it('should call completion.navigateUp for both up arrow and Ctrl+P when suggestions are showing', async () => {
+    mockedUseCompletion.mockReturnValue({
+      ...mockCompletion,
+      showSuggestions: true,
+      suggestions: [
+        { label: 'memory', value: 'memory' },
+        { label: 'memcache', value: 'memcache' },
+      ],
+    });
+
+    props.buffer.setText('/mem');
+
+    const { stdin, unmount } = render(<InputPrompt {...props} />);
+    await wait();
+
+    // Test up arrow
+    stdin.write('\u001B[A'); // Up arrow
+    await wait();
+
+    stdin.write('\u0010'); // Ctrl+P
+    await wait();
+    expect(mockCompletion.navigateUp).toHaveBeenCalledTimes(2);
+    expect(mockCompletion.navigateDown).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('should call completion.navigateDown for both down arrow and Ctrl+N when suggestions are showing', async () => {
+    mockedUseCompletion.mockReturnValue({
+      ...mockCompletion,
+      showSuggestions: true,
+      suggestions: [
+        { label: 'memory', value: 'memory' },
+        { label: 'memcache', value: 'memcache' },
+      ],
+    });
+    props.buffer.setText('/mem');
+
+    const { stdin, unmount } = render(<InputPrompt {...props} />);
+    await wait();
+
+    // Test down arrow
+    stdin.write('\u001B[B'); // Down arrow
+    await wait();
+
+    stdin.write('\u000E'); // Ctrl+N
+    await wait();
+    expect(mockCompletion.navigateDown).toHaveBeenCalledTimes(2);
+    expect(mockCompletion.navigateUp).not.toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it('should NOT call completion navigation when suggestions are not showing', async () => {
+    mockedUseCompletion.mockReturnValue({
+      ...mockCompletion,
+      showSuggestions: false,
+    });
+    props.buffer.setText('some text');
+
+    const { stdin, unmount } = render(<InputPrompt {...props} />);
+    await wait();
+
+    stdin.write('\u001B[A'); // Up arrow
+    await wait();
+    stdin.write('\u001B[B'); // Down arrow
+    await wait();
+    stdin.write('\u0010'); // Ctrl+P
+    await wait();
+    stdin.write('\u000E'); // Ctrl+N
+    await wait();
+
+    expect(mockCompletion.navigateUp).not.toHaveBeenCalled();
+    expect(mockCompletion.navigateDown).not.toHaveBeenCalled();
+    unmount();
+  });
+
   describe('clipboard image paste', () => {
     beforeEach(() => {
       vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(false);
@@ -285,10 +401,13 @@ describe('InputPrompt', () => {
     });
 
     it('should insert image path at cursor position with proper spacing', async () => {
-      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
-      vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(
-        '/test/.llxprt-clipboard/clipboard-456.png',
+      const imagePath = path.join(
+        'test',
+        '.llxprt-clipboard',
+        'clipboard-456.png',
       );
+      vi.mocked(clipboardUtils.clipboardHasImage).mockResolvedValue(true);
+      vi.mocked(clipboardUtils.saveClipboardImage).mockResolvedValue(imagePath);
 
       // Set initial text and cursor position
       mockBuffer.text = 'Hello world';
@@ -357,7 +476,7 @@ describe('InputPrompt', () => {
     stdin.write('\t'); // Press Tab
     await wait();
 
-    expect(props.buffer.setText).toHaveBeenCalledWith('/memory');
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
     unmount();
   });
 
@@ -380,7 +499,7 @@ describe('InputPrompt', () => {
     stdin.write('\t'); // Press Tab
     await wait();
 
-    expect(props.buffer.setText).toHaveBeenCalledWith('/memory add');
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(1);
     unmount();
   });
 
@@ -405,7 +524,7 @@ describe('InputPrompt', () => {
     await wait();
 
     // It should NOT become '/show'. It should correctly become '/memory show'.
-    expect(props.buffer.setText).toHaveBeenCalledWith('/memory show');
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
     unmount();
   });
 
@@ -425,7 +544,7 @@ describe('InputPrompt', () => {
     stdin.write('\t'); // Press Tab
     await wait();
 
-    expect(props.buffer.setText).toHaveBeenCalledWith('/chat resume fix-foo');
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
     unmount();
   });
 
@@ -445,19 +564,21 @@ describe('InputPrompt', () => {
     await wait();
 
     // The app should autocomplete the text, NOT submit.
-    expect(props.buffer.setText).toHaveBeenCalledWith('/memory');
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
 
     expect(props.onSubmit).not.toHaveBeenCalled();
     unmount();
   });
 
-  it('should complete a command based on its altName', async () => {
-    // Add a command with an altName to our mock for this test
-    props.slashCommands.push({
-      name: 'help',
-      altName: '?',
-      description: '...',
-    });
+  it('should complete a command based on its altNames', async () => {
+    props.slashCommands = [
+      {
+        name: 'help',
+        altNames: ['?'],
+        kind: CommandKind.BUILT_IN,
+        description: '...',
+      },
+    ];
 
     mockedUseCompletion.mockReturnValue({
       ...mockCompletion,
@@ -473,7 +594,7 @@ describe('InputPrompt', () => {
     stdin.write('\t'); // Press Tab for autocomplete
     await wait();
 
-    expect(props.buffer.setText).toHaveBeenCalledWith('/help');
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
     unmount();
   });
 
@@ -490,10 +611,29 @@ describe('InputPrompt', () => {
     unmount();
   });
 
+  it('should submit directly on Enter when isPerfectMatch is true', async () => {
+    mockedUseCompletion.mockReturnValue({
+      ...mockCompletion,
+      showSuggestions: false,
+      isPerfectMatch: true,
+    });
+    props.buffer.setText('/clear');
+
+    const { stdin, unmount } = render(<InputPrompt {...props} />);
+    await wait();
+
+    stdin.write('\r');
+    await wait();
+
+    expect(props.onSubmit).toHaveBeenCalledWith('/clear');
+    unmount();
+  });
+
   it('should submit directly on Enter when a complete leaf command is typed', async () => {
     mockedUseCompletion.mockReturnValue({
       ...mockCompletion,
       showSuggestions: false,
+      isPerfectMatch: false, // Added explicit isPerfectMatch false
     });
     props.buffer.setText('/clear');
 
@@ -522,7 +662,7 @@ describe('InputPrompt', () => {
     stdin.write('\r');
     await wait();
 
-    expect(props.buffer.replaceRangeByOffset).toHaveBeenCalled();
+    expect(mockCompletion.handleAutocomplete).toHaveBeenCalledWith(0);
     expect(props.onSubmit).not.toHaveBeenCalled();
     unmount();
   });
@@ -587,11 +727,10 @@ describe('InputPrompt', () => {
       const { unmount } = render(<InputPrompt {...props} />);
       await wait();
 
-      // Verify useCompletion was called with true (should show completion)
+      // Verify useCompletion was called with correct signature
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@src/components',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -615,9 +754,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '/memory',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -641,9 +779,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@src/file.ts hello',
-        '/test/project/src',
-        false, // shouldShowCompletion should be false
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -667,9 +804,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '/memory add',
-        '/test/project/src',
-        false, // shouldShowCompletion should be false
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -693,9 +829,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        'hello world',
-        '/test/project/src',
-        false, // shouldShowCompletion should be false
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -718,10 +853,10 @@ describe('InputPrompt', () => {
       const { unmount } = render(<InputPrompt {...props} />);
       await wait();
 
+      // Verify useCompletion was called with the buffer
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        'first line\n/memory',
-        '/test/project/src',
-        false, // shouldShowCompletion should be false (isSlashCommand returns false because text doesn't start with /)
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -745,9 +880,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '/memory',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true (isSlashCommand returns true AND cursor is after / without space)
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -772,9 +906,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@src/file👍.txt',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -799,9 +932,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@src/file👍.txt hello',
-        '/test/project/src',
-        false, // shouldShowCompletion should be false
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -826,9 +958,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@src/my\\ file.txt',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -853,9 +984,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@path/my\\ file.txt hello',
-        '/test/project/src',
-        false, // shouldShowCompletion should be false
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -882,9 +1012,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@docs/my\\ long\\ file\\ name.md',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -909,9 +1038,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '/memory\\ test',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),
@@ -922,8 +1050,8 @@ describe('InputPrompt', () => {
 
     it('should handle Unicode characters with escaped spaces', async () => {
       // Test combining Unicode and escaped spaces
-      mockBuffer.text = '@files/emoji\\ 👍\\ test.txt';
-      mockBuffer.lines = ['@files/emoji\\ 👍\\ test.txt'];
+      mockBuffer.text = '@' + path.join('files', 'emoji\\ 👍\\ test.txt');
+      mockBuffer.lines = ['@' + path.join('files', 'emoji\\ 👍\\ test.txt')];
       mockBuffer.cursor = [0, 25]; // After the escaped space and emoji
 
       mockedUseCompletion.mockReturnValue({
@@ -938,9 +1066,8 @@ describe('InputPrompt', () => {
       await wait();
 
       expect(mockedUseCompletion).toHaveBeenCalledWith(
-        '@files/emoji\\ 👍\\ test.txt',
-        '/test/project/src',
-        true, // shouldShowCompletion should be true
+        mockBuffer,
+        path.join('test', 'project', 'src'),
         mockSlashCommands,
         mockCommandContext,
         expect.any(Object),

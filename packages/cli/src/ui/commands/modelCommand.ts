@@ -9,6 +9,7 @@ import {
   CommandContext,
   OpenDialogActionReturn,
   MessageActionReturn,
+  CommandKind,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { SettingScope } from '../../config/settings.js';
@@ -16,6 +17,7 @@ import { SettingScope } from '../../config/settings.js';
 export const modelCommand: SlashCommand = {
   name: 'model',
   description: 'select or switch model',
+  kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
     args: string,

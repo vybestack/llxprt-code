@@ -1,0 +1,18 @@
+0 verbose cli /opt/homebrew/Cellar/node/24.1.0/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.3.0
+2 info using node@v24.1.0
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/acoliver/projects/llxprt-code/.npmrc
+5 silly config load:file:/Users/acoliver/.npmrc
+6 silly config load:file:/opt/homebrew/etc/npmrc
+7 verbose title npm run bundle
+8 verbose argv "run" "bundle"
+9 verbose logfile logs-max:10 dir:/Users/acoliver/projects/llxprt-code/temp-npm-cache/_logs/2025-07-27T17_35_27_073Z-
+10 verbose logfile /Users/acoliver/projects/llxprt-code/temp-npm-cache/_logs/2025-07-27T17_35_27_073Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /Users/acoliver/projects/llxprt-code
+13 verbose os Darwin 24.5.0
+14 verbose node v24.1.0
+15 verbose npm  v11.3.0
+16 verbose exit 0
+17 info ok

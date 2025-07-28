@@ -133,7 +133,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getShowMemoryUsage: vi.fn(() => opts.showMemoryUsage ?? false),
         getAccessibility: vi.fn(() => opts.accessibility ?? {}),
         getProjectRoot: vi.fn(() => opts.targetDir),
-        getGeminiClient: vi.fn(() => ({})),
+        getGeminiClient: vi.fn(() => ({
+          getUserTier: vi.fn(),
+        })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
         getAllLlxprtMdFilenames: vi.fn(() => ['LLXPRT.md']),
         getBlockedMcpServers: vi.fn(() => opts.blockedMcpServers || []),
@@ -144,11 +146,17 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getIdeMode: vi.fn(() => false),
       };
     });
+  const ideContextMock = {
+    getOpenFilesContext: vi.fn(),
+    subscribeToOpenFiles: vi.fn(() => vi.fn()), // subscribe returns an unsubscribe function
+  };
+
   return {
     ...actualCore,
     Config: ConfigClassMock,
     MCPServerConfig: actualCore.MCPServerConfig,
     getAllLlxprtMdFilenames: vi.fn(() => ['LLXPRT.md']),
+    ideContext: ideContextMock,
   };
 });
 
@@ -258,6 +266,8 @@ describe('App UI', () => {
 
     // Ensure a theme is set so the theme dialog does not appear.
     mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
+    const { ideContext } = await import('@vybestack/llxprt-code-core');
+    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -268,8 +278,74 @@ describe('App UI', () => {
     vi.clearAllMocks(); // Clear mocks after each test
   });
 
+  it('should display active file when available', async () => {
+    const { ideContext } = await import('@vybestack/llxprt-code-core');
+    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
+      activeFile: '/path/to/my-file.ts',
+      recentOpenFiles: [{ filePath: '/path/to/my-file.ts', content: 'hello' }],
+      selectedText: 'hello',
+    });
+
+    const { lastFrame, unmount } = render(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(lastFrame()).toContain('1 recent file (ctrl+e to view)');
+  });
+
+  it('should not display active file when not available', async () => {
+    const { ideContext } = await import('@vybestack/llxprt-code-core');
+    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
+      activeFile: '',
+    });
+
+    const { lastFrame, unmount } = render(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(lastFrame()).not.toContain('Open File');
+  });
+
+  it('should display active file and other context', async () => {
+    const { ideContext } = await import('@vybestack/llxprt-code-core');
+    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
+      activeFile: '/path/to/my-file.ts',
+      recentOpenFiles: [{ filePath: '/path/to/my-file.ts', content: 'hello' }],
+      selectedText: 'hello',
+    });
+    mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue(['LLXPRT.md']);
+
+    const { lastFrame, unmount } = render(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(lastFrame()).toContain(
+      'Using: 1 recent file (ctrl+e to view) | 1 LLXPRT.md file',
+    );
+  });
+
   it('should display default "LLXPRT.md" in footer when contextFileName is not set and count is 1', async () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue(['LLXPRT.md']);
+    // For this test, ensure showMemoryUsage is false or debugMode is false if it relies on that
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -285,6 +361,12 @@ describe('App UI', () => {
 
   it('should display default "LLXPRT.md" with plural when contextFileName is not set and count is > 1', async () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue([
+      'LLXPRT.md',
+      'LLXPRT.md',
+    ]);
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -303,6 +385,9 @@ describe('App UI', () => {
       workspace: { contextFileName: 'AGENTS.md', theme: 'Default' },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue(['AGENTS.md']);
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -324,6 +409,12 @@ describe('App UI', () => {
       },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue([
+      'AGENTS.md',
+      'CONTEXT.md',
+    ]);
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -342,6 +433,13 @@ describe('App UI', () => {
       workspace: { contextFileName: 'MY_NOTES.TXT', theme: 'Default' },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(3);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue([
+      'MY_NOTES.TXT',
+      'MY_NOTES.TXT',
+      'MY_NOTES.TXT',
+    ]);
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -360,6 +458,9 @@ describe('App UI', () => {
       workspace: { contextFileName: 'ANY_FILE.MD', theme: 'Default' },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(0);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue([]);
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -375,6 +476,10 @@ describe('App UI', () => {
 
   it('should display LLXPRT.md and MCP server count when both are present', async () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(2);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue([
+      'LLXPRT.md',
+      'LLXPRT.md',
+    ]);
     mockConfig.getMcpServers.mockReturnValue({
       server1: {} as MCPServerConfig,
     });
@@ -388,11 +493,12 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using: 2 LLXPRT.md files | 1 MCP Server');
+    expect(lastFrame()).toContain('1 MCP server');
   });
 
   it('should display only MCP server count when LLXPRT.md count is 0', async () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(0);
+    mockConfig.getAllLlxprtMdFilenames.mockReturnValue([]);
     mockConfig.getMcpServers.mockReturnValue({
       server1: {} as MCPServerConfig,
       server2: {} as MCPServerConfig,
@@ -407,7 +513,7 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('Using: 2 MCP Servers');
+    expect(lastFrame()).toContain('Using: 2 MCP servers (ctrl+t to view)');
   });
 
   it('should display Tips component by default', async () => {
@@ -518,7 +624,7 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      expect(lastFrame()).toContain('Select Theme');
+      expect(lastFrame()).toContain("I'm Feeling Lucky (esc to cancel");
     });
 
     it('should display a message if NO_COLOR is set', async () => {
@@ -557,6 +663,11 @@ describe('App UI', () => {
         pendingHistoryItems: [],
         thought: null,
       });
+
+      mockConfig.getGeminiClient.mockReturnValue({
+        isInitialized: vi.fn(() => true),
+        getUserTier: vi.fn(),
+      } as unknown as GeminiClient);
 
       const { unmount, rerender } = render(
         <App

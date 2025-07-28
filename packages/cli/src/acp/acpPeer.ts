@@ -645,6 +645,7 @@ function toAcpToolCallConfirmation(
           : confirmationDetails.prompt,
       };
     default: {
+      // Type exhaustiveness check - if this errors, a new type was added
       const unreachable: never = confirmationDetails;
       throw new Error(`Unexpected: ${unreachable}`);
     }

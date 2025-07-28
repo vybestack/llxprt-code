@@ -24,7 +24,7 @@ LLxprt Code uses `settings.json` files for persistent configuration. There are t
   - **Location:** `.llxprt/settings.json` within your project's root directory.
   - **Scope:** Applies only when running LLxprt Code from that specific project. Project settings override user settings.
 - **System settings file:**
-  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LLxprtCode/settings.json` (macOS).
+  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LLxprtCode/settings.json` (macOS). The path can be overridden using the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` environment variable.
   - **Scope:** Applies to all LLxprt Code sessions on the system, for all users. System settings override user and project settings. May be useful for system administrators at enterprises to have controls over users' LLxprt Code setups.
 
 **Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"apiKey": "$MY_API_TOKEN"`.
@@ -132,6 +132,8 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
       - `cwd` (string, optional): The working directory in which to start the server.
       - `timeout` (number, optional): Timeout in milliseconds for requests to this MCP server.
       - `trust` (boolean, optional): Trust this server and bypass all tool call confirmations.
+      - `includeTools` (array of strings, optional): List of tool names to include from this MCP server. When specified, only the tools listed here will be available from this server (whitelist behavior). If not specified, all tools from the server are enabled by default.
+      - `excludeTools` (array of strings, optional): List of tool names to exclude from this MCP server. Tools listed here will not be available to the model, even if they are exposed by the server. **Note:** `excludeTools` takes precedence over `includeTools` - if a tool is in both lists, it will be excluded.
   - **Example:**
     ```json
     "mcpServers": {
@@ -139,12 +141,14 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
         "command": "python",
         "args": ["mcp_server.py", "--port", "8080"],
         "cwd": "./mcp_tools/python",
-        "timeout": 5000
+        "timeout": 5000,
+        "includeTools": ["safe_tool", "file_reader"]
       },
       "myNodeServer": {
         "command": "node",
         "args": ["mcp_server.js"],
-        "cwd": "./mcp_tools/node"
+        "cwd": "./mcp_tools/node",
+        "excludeTools": ["dangerous_tool", "file_deleter"]
       },
       "myDockerServer": {
         "command": "docker",

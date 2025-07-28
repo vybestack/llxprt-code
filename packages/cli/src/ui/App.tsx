@@ -48,6 +48,7 @@ import { registerCleanup } from '../utils/cleanup.js';
 import { DetailedMessagesDisplay } from './components/DetailedMessagesDisplay.js';
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
+import { IDEContextDetailDisplay } from './components/IDEContextDetailDisplay.js';
 // useHistory is now managed by SessionController
 import process from 'node:process';
 import {
@@ -56,7 +57,10 @@ import {
   ApprovalMode,
   isEditorAvailable,
   EditorType,
-  type ActiveFile,
+  type OpenFiles,
+  FlashFallbackEvent,
+  logFlashFallback,
+  AuthType,
   ideContext,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from '../config/auth.js';
@@ -208,6 +212,8 @@ const AppInner = ({
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
+  const [showIDEContextDetail, setShowIDEContextDetail] =
+    useState<boolean>(false);
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
     HistoryItem[] | null
@@ -217,12 +223,13 @@ const AppInner = ({
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
   const showPrivacyNotice = appState.openDialogs.privacy;
   // modelSwitchedFromQuotaError and userTier are now in sessionState
-  const [activeFile, setActiveFile] = useState<ActiveFile | undefined>();
+  const [activeFile, setActiveFile] = useState<string | undefined>();
+  const [openFiles, setOpenFiles] = useState<OpenFiles | undefined>();
 
   useEffect(() => {
-    const unsubscribe = ideContext.subscribeToActiveFile(setActiveFile);
+    const unsubscribe = ideContext.subscribeToOpenFiles(setOpenFiles);
     // Set the initial value
-    setActiveFile(ideContext.getActiveFileContext());
+    setOpenFiles(ideContext.getOpenFilesContext());
     return unsubscribe;
   }, []);
 
@@ -452,6 +459,8 @@ const AppInner = ({
       if (Object.keys(mcpServers || {}).length > 0) {
         handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
       }
+    } else if (key.ctrl && input === 'e' && ideContext) {
+      setShowIDEContextDetail((prev) => !prev);
     } else if (key.ctrl && (input === 'c' || input === 'C')) {
       handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
     } else if (key.ctrl && (input === 'd' || input === 'D')) {
@@ -877,6 +886,7 @@ const AppInner = ({
                 }
                 elapsedTime={elapsedTime}
               />
+
               <Box
                 marginTop={1}
                 display="flex"
@@ -898,6 +908,7 @@ const AppInner = ({
                   ) : (
                     <ContextSummaryDisplay
                       activeFile={activeFile}
+                      openFiles={openFiles}
                       llxprtMdFileCount={llxprtMdFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
@@ -916,7 +927,9 @@ const AppInner = ({
                   {shellModeActive && <ShellModeIndicator />}
                 </Box>
               </Box>
-
+              {showIDEContextDetail && (
+                <IDEContextDetailDisplay openFiles={openFiles} />
+              )}
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
