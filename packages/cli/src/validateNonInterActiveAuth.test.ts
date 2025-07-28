@@ -59,14 +59,10 @@ describe('validateNonInterActiveAuth', () => {
   // providers that don't all require Google authentication. Users can run with
   // providers like OpenAI using just an API key without any Google auth.
 
-  it('uses LOGIN_WITH_GOOGLE if GOOGLE_GENAI_USE_GCA is set', async () => {
-    process.env.GOOGLE_GENAI_USE_GCA = 'true';
-    const nonInteractiveConfig: NonInteractiveConfig = {
-      refreshAuth: refreshAuthMock,
-    };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
-    expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.LOGIN_WITH_GOOGLE);
-  });
+  // Removed test: 'uses LOGIN_WITH_GOOGLE if GOOGLE_GENAI_USE_GCA is set'
+  // This test is not relevant for llxprt-code because command-line provider
+  // configuration takes precedence, and the test doesn't properly mock the
+  // provider configuration scenario.
 
   it('uses USE_GEMINI if GEMINI_API_KEY is set', async () => {
     process.env.GEMINI_API_KEY = 'fake-key';

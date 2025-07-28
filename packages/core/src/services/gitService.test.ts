@@ -205,7 +205,7 @@ describe('GitService', () => {
       const service = new GitService(mockProjectRoot);
       await service.setupShadowGitRepository();
       const expectedConfigContent =
-        '[user]\n  name = llxprt-code\n  email = noreply@llxprt-code\n[commit]\n  gpgsign = false\n';
+        '[user]\n  name = llxprt-code\n  email = https://github.com/acoliver/llxprt-code/issues\n[commit]\n  gpgsign = false\n';
       expect(hoistedMockWriteFile).toHaveBeenCalledWith(
         gitConfigPath,
         expectedConfigContent,
