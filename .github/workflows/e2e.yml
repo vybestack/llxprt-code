@@ -44,21 +44,24 @@ jobs:
       - name: Build sandbox Docker image
         if: matrix.sandbox == 'sandbox:docker'
         run: |
-          # Always build the sandbox image locally for testing
-          # This ensures we test with the current code, not an old registry image
-          echo "Building sandbox image..."
+          # Build sandbox with a development tag to avoid conflicts with releases
+          # We'll use the commit SHA for uniqueness
+          export LLXPRT_SANDBOX_IMAGE_TAG="dev-${{ github.sha }}"
+          echo "Building sandbox image with tag: $LLXPRT_SANDBOX_IMAGE_TAG"
+          
           npm run build:sandbox
           
-          # List all docker images to debug
+          # Export the built image name for the test step
+          echo "LLXPRT_SANDBOX_IMAGE=ghcr.io/acoliver/llxprt-code/sandbox:dev-${{ github.sha }}" >> $GITHUB_ENV
+          
+          # Verify the image was built
           echo "Docker images after build:"
           docker images
           
-          # Verify the image was built (looking for the exact image name)
-          if docker images | grep -q "ghcr.io/acoliver/llxprt-code/sandbox"; then
-            echo "✓ Sandbox image built successfully"
+          if docker images | grep -q "ghcr.io/acoliver/llxprt-code/sandbox.*dev-${{ github.sha }}"; then
+            echo "✓ Sandbox image built successfully with dev tag"
           else
             echo "✗ Sandbox image not found after build!"
-            echo "Expected image: ghcr.io/acoliver/llxprt-code/sandbox:0.1.14"
             exit 1
           fi
 

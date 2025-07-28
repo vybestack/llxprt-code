@@ -1,8 +1,13 @@
 name: Build and Push Sandbox Image
 
 on:
+  # Build on release
   release:
     types: [published]
+  # Build on push to main (with 'latest' tag)
+  push:
+    branches: [main]
+  # Allow manual builds with custom tags
   workflow_dispatch:
     inputs:
       tag:
@@ -38,9 +43,14 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            # On release, use the release tag (e.g., v0.1.14 -> 0.1.14)
             type=ref,event=tag
+            # On push to main, use 'latest'
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ github.event.inputs.tag || 'latest' }}
+            # On push to main, also tag with commit SHA for testing
+            type=sha,prefix=dev-,enable={{is_default_branch}}
+            # Manual dispatch uses the provided tag
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
