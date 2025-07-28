@@ -102,7 +102,7 @@ async function main() {
         stdio: 'pipe',
         env: {
           ...process.env,
-          GEMINI_CLI_INTEGRATION_TEST: 'true',
+          LLXPRT_CODE_INTEGRATION_TEST: 'true',
           INTEGRATION_TEST_FILE_DIR: testFileDir,
           KEEP_OUTPUT: keepOutput.toString(),
           VERBOSE: verbose.toString(),

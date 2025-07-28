@@ -629,10 +629,7 @@ export async function start_sandbox(
   let userFlag = '';
   const finalEntrypoint = entrypoint(workdir);
 
-  if (process.env.GEMINI_CLI_INTEGRATION_TEST === 'true') {
-    args.push('--user', 'root');
-    userFlag = '--user root';
-  } else if (await shouldUseCurrentUserInSandbox()) {
+  if (await shouldUseCurrentUserInSandbox()) {
     // For the user-creation logic to work, the container must start as root.
     // The entrypoint script then handles dropping privileges to the correct user.
     args.push('--user', 'root');
