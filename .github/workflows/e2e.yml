@@ -48,11 +48,11 @@ jobs:
           # This matches Google's approach - build locally, no registry needed
           echo "Building sandbox image..."
           npm run build:sandbox
-          
+
           # Verify the image was built
           echo "Docker images after build:"
           docker images
-          
+
           # The image should be tagged as specified in package.json
           if docker images | grep -q "ghcr.io/acoliver/llxprt-code/sandbox"; then
             echo "✓ Sandbox image built successfully"
