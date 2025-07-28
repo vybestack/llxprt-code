@@ -31,6 +31,11 @@ vi.mock('../ui/commands/aboutCommand.js', () => ({
   aboutCommand: { name: 'about', description: 'Mock About' },
 }));
 
+// Also mock the new toolformat command
+vi.mock('../ui/commands/toolformatCommand.js', () => ({
+  toolformatCommand: { name: 'toolformat', description: 'Mock Toolformat' },
+}));
+
 describe('CommandService', () => {
   describe('when using default production loader', () => {
     let commandService: CommandService;
@@ -55,7 +60,7 @@ describe('CommandService', () => {
         const tree = commandService.getCommands();
 
         // Post-condition assertions
-        expect(tree.length).toBe(22);
+        expect(tree.length).toBe(23); // <-- CHANGED FROM 22
 
         const commandNames = tree.map((cmd) => cmd.name);
         expect(commandNames).toContain('auth');
@@ -65,19 +70,20 @@ describe('CommandService', () => {
         expect(commandNames).toContain('theme');
         expect(commandNames).toContain('privacy');
         expect(commandNames).toContain('about');
+        expect(commandNames).toContain('toolformat'); // new
       });
 
       it('should overwrite any existing commands when called again', async () => {
         // Load once
         await commandService.loadCommands();
-        expect(commandService.getCommands().length).toBe(22);
+        expect(commandService.getCommands().length).toBe(23); // <-- CHANGED FROM 22
 
         // Load again
         await commandService.loadCommands();
         const tree = commandService.getCommands();
 
         // Should not append, but overwrite
-        expect(tree.length).toBe(22);
+        expect(tree.length).toBe(23); // <-- CHANGED FROM 22
       });
     });
 
@@ -89,8 +95,7 @@ describe('CommandService', () => {
         await commandService.loadCommands();
 
         const loadedTree = commandService.getCommands();
-        expect(loadedTree.length).toBe(22);
-        // Check that key commands are present
+        expect(loadedTree.length).toBe(23); // <-- CHANGED FROM 22
         const commandNames = loadedTree.map((cmd) => cmd.name);
         expect(commandNames).toContain('about');
         expect(commandNames).toContain('auth');
@@ -99,6 +104,7 @@ describe('CommandService', () => {
         expect(commandNames).toContain('memory');
         expect(commandNames).toContain('privacy');
         expect(commandNames).toContain('theme');
+        expect(commandNames).toContain('toolformat'); // new
       });
     });
   });
@@ -110,22 +116,11 @@ describe('CommandService', () => {
         { name: 'injected-test-1', description: 'injected 1' },
         { name: 'injected-test-2', description: 'injected 2' },
       ];
-
-      // Arrange: Create a mock loader FUNCTION that resolves with our mock commands.
       const mockLoader = vi.fn().mockResolvedValue(mockCommands);
-
-      // Act: Instantiate the service WITH the injected loader function.
       const commandService = new CommandService(null, mockLoader);
       await commandService.loadCommands();
       const tree = commandService.getCommands();
-
-      // Assert: The tree should contain ONLY our injected commands.
-      expect(mockLoader).toHaveBeenCalled(); // Verify our mock loader was actually called.
-      expect(tree.length).toBe(2);
       expect(tree).toEqual(mockCommands);
-
-      const commandNames = tree.map((cmd) => cmd.name);
-      expect(commandNames).not.toContain('memory'); // Verify it didn't load production commands.
     });
   });
 });

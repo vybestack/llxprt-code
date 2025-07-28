@@ -70,16 +70,13 @@ export class OpenAIProvider implements IProvider {
 
     // Check if current tool format requires text-based parsing
     const currentFormat = this.getToolFormat();
-    const textBasedFormats: ToolFormat[] = ['hermes', 'xml', 'llama', 'gemma'];
+    const textBasedFormats: ToolFormat[] = ['hermes', 'xml', 'llama'];
     if (textBasedFormats.includes(currentFormat)) {
       return true;
     }
 
-    const defaultModels = ['gemma-3-12b-it', 'gemma-2-27b-it'];
     const configuredModels = this.config?.textToolCallModels || [];
-    const allModels = [...defaultModels, ...configuredModels];
-
-    return allModels.includes(this.currentModel);
+    return configuredModels.includes(this.currentModel);
   }
 
   getToolFormat(): ToolFormat {

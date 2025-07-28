@@ -31,6 +31,7 @@ import { modelCommand } from '../ui/commands/modelCommand.js';
 import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
+import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 
 const loadBuiltInCommands = async (
   config: Config | null,
@@ -60,6 +61,7 @@ const loadBuiltInCommands = async (
     statsCommand,
     themeCommand,
     toolsCommand,
+    toolformatCommand,
   ];
 
   return allCommands.filter(
@@ -75,13 +77,9 @@ export class CommandService {
     private commandLoader: (
       config: Config | null,
     ) => Promise<SlashCommand[]> = loadBuiltInCommands,
-  ) {
-    // The constructor can be used for dependency injection in the future.
-  }
+  ) {}
 
   async loadCommands(): Promise<void> {
-    // For now, we only load the built-in commands.
-    // File-based and remote commands will be added later.
     this.commands = await this.commandLoader(this.config);
   }
 
