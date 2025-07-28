@@ -42,9 +42,13 @@ USER node
 # install llxprt-code and clean up
 COPY packages/cli/dist/vybestack-llxprt-code-*.tgz /usr/local/share/npm-global/llxprt-code.tgz
 COPY packages/core/dist/vybestack-llxprt-code-core-*.tgz /usr/local/share/npm-global/llxprt-code-core.tgz
-RUN npm install -g /usr/local/share/npm-global/llxprt-code.tgz /usr/local/share/npm-global/llxprt-code-core.tgz \
+# First install the core package, then the CLI package
+# The --force flag ensures npm installs all dependencies
+RUN cd /usr/local/share/npm-global \
+  && npm install -g llxprt-code-core.tgz --force \
+  && npm install -g llxprt-code.tgz --force \
   && npm cache clean --force \
-  && rm -f /usr/local/share/npm-global/llxprt-code{,-core}.tgz
+  && rm -f llxprt-code{,-core}.tgz
 
 # default entrypoint when none specified
 CMD ["llxprt"]

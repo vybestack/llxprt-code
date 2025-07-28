@@ -21,6 +21,7 @@
     "dist"
   ],
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
     "@google/genai": "1.9.0",
     "@modelcontextprotocol/sdk": "^1.11.0",
