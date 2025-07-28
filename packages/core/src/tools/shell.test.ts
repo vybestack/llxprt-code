@@ -18,15 +18,20 @@ vi.mock('execa', () => ({
     // The shell.ts wraps commands in a specific format with pwd capture
     // Extract the actual command from the wrapped format
     let actualCommand = command;
-    
+
     // Check if it's the wrapped format used by shell.ts
-    const wrappedMatch = command.match(/bash\s+-c\s+'{\s*(.+?)\s*};\s*__code=\$\?;/);
+    const wrappedMatch = command.match(
+      /bash\s+-c\s+'{\s*(.+?)\s*};\s*__code=\$\?;/,
+    );
     if (wrappedMatch) {
       actualCommand = wrappedMatch[1];
     }
-    
+
     // Parse the command to extract the actual command being run
-    if (actualCommand.includes('echo hello') || actualCommand.includes('echo "hello"')) {
+    if (
+      actualCommand.includes('echo hello') ||
+      actualCommand.includes('echo "hello"')
+    ) {
       return {
         stdout: 'hello\n',
         stderr: '',
@@ -35,7 +40,10 @@ vi.mock('execa', () => ({
         command,
       };
     }
-    if (actualCommand.includes('echo $GEMINI_CLI') || actualCommand.includes('echo "$GEMINI_CLI"')) {
+    if (
+      actualCommand.includes('echo $GEMINI_CLI') ||
+      actualCommand.includes('echo "$GEMINI_CLI"')
+    ) {
       return {
         stdout: '1\n',
         stderr: '',
@@ -45,13 +53,16 @@ vi.mock('execa', () => ({
       };
     }
     // Default case for unknown commands
-    throw Object.assign(new Error(`Command failed with exit code 127: ${command}`), {
-      exitCode: 127,
-      stdout: '',
-      stderr: 'bash: command not found',
-      all: 'bash: command not found',
-      command,
-    });
+    throw Object.assign(
+      new Error(`Command failed with exit code 127: ${command}`),
+      {
+        exitCode: 127,
+        stdout: '',
+        stderr: 'bash: command not found',
+        all: 'bash: command not found',
+        command,
+      },
+    );
   }),
 }));
 

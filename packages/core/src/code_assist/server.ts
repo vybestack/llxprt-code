@@ -205,9 +205,7 @@ export class CodeAssistServer implements ContentGenerator {
 
   getMethodUrl(method: string): string {
     const endpoint =
-      this.baseURL ??
-      process.env.CODE_ASSIST_ENDPOINT ??
-      CODE_ASSIST_ENDPOINT;
+      this.baseURL ?? process.env.CODE_ASSIST_ENDPOINT ?? CODE_ASSIST_ENDPOINT;
     return `${endpoint}/${CODE_ASSIST_API_VERSION}:${method}`;
   }
 }
