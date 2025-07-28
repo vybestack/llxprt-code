@@ -5,6 +5,7 @@
  */
 
 import type { SlashCommand, CommandContext, MessageActionReturn } from './types.js';
+import { CommandKind } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { SettingScope } from '../../config/settings.js';
 
@@ -15,6 +16,7 @@ const ALL_FORMATS = [...STRUCTURED_FORMATS, ...TEXT_FORMATS];
 export const toolformatCommand: SlashCommand = {
   name: 'toolformat',
   description: 'override the auto-detected tool calling/format parser for tools',
+  kind: CommandKind.BUILT_IN,
   action: (
     context: CommandContext,
     args: string,
