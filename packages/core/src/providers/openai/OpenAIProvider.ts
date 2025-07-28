@@ -113,9 +113,15 @@ export class OpenAIProvider implements IProvider {
       return false;
     }
 
-    // Check settings override
-    if (this.config?.openaiResponsesEnabled !== undefined) {
-      return this.config.openaiResponsesEnabled;
+    // Check settings override - if explicitly set to false, always respect that
+    if (this.config?.openaiResponsesEnabled === false) {
+      return false;
+    }
+
+    // Never use Responses API for non-OpenAI providers (those with custom base URLs)
+    const baseURL = this.baseURL || 'https://api.openai.com/v1';
+    if (baseURL !== 'https://api.openai.com/v1') {
+      return false;
     }
 
     // Default: Check if model starts with any of the responses API model prefixes
