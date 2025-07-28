@@ -179,20 +179,23 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
           const providerManager = getProviderManager();
           const provider = providerManager.getActiveProvider();
 
-          if (newPaymentMode === true) {
-            dispatch({
-              type: 'SET_TRANSIENT_WARNINGS',
-              payload: [
-                `! PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
-              ],
-            });
-          } else if (newPaymentMode === false && provider.name === 'gemini') {
-            dispatch({
-              type: 'SET_TRANSIENT_WARNINGS',
-              payload: [
-                `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-              ],
-            });
+          // Only show payment mode warnings for Gemini provider
+          if (provider.name === 'gemini') {
+            if (newPaymentMode === true) {
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
+                ],
+              });
+            } else if (newPaymentMode === false) {
+              dispatch({
+                type: 'SET_TRANSIENT_WARNINGS',
+                payload: [
+                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                ],
+              });
+            }
           }
 
           // Clear warning timer if exists
@@ -289,20 +292,23 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
             const providerManager = getProviderManager();
             const provider = providerManager.getActiveProvider();
 
-            if (paymentMode === true) {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `! PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
-                ],
-              });
-            } else if (paymentMode === false && provider.name === 'gemini') {
-              dispatch({
-                type: 'SET_TRANSIENT_WARNINGS',
-                payload: [
-                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
-                ],
-              });
+            // Only show payment mode warnings for Gemini provider
+            if (provider.name === 'gemini') {
+              if (paymentMode === true) {
+                dispatch({
+                  type: 'SET_TRANSIENT_WARNINGS',
+                  payload: [
+                    `! PAID MODE: You are now using Gemini with API credentials - usage will be charged to your account`,
+                  ],
+                });
+              } else if (paymentMode === false) {
+                dispatch({
+                  type: 'SET_TRANSIENT_WARNINGS',
+                  payload: [
+                    `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                  ],
+                });
+              }
             }
 
             // Clear warning timer if exists

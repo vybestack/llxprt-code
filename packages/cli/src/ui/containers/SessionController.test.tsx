@@ -253,13 +253,13 @@ describe('SessionController', () => {
     expect(contextValue!.sessionState.isPaidMode).toBe(false);
     expect(contextValue!.sessionState.transientWarnings).toHaveLength(0);
 
-    // Switch to paid mode
+    // Switch to paid mode with Gemini provider (only Gemini shows warnings)
     mockGetProviderManager.mockReturnValue({
       hasActiveProvider: () => true,
       getActiveProvider: () =>
         ({
-          name: 'anthropic',
-          getCurrentModel: () => 'claude-model',
+          name: 'gemini',
+          getCurrentModel: () => 'gemini-model',
           isPaidMode: () => true,
         }) as Partial<IProvider> as IProvider,
     } as ReturnType<typeof providerModule.getProviderManager>);
@@ -279,9 +279,7 @@ describe('SessionController', () => {
     expect(contextValue!.sessionState.transientWarnings[0]).toContain(
       'PAID MODE',
     );
-    expect(contextValue!.sessionState.transientWarnings[0]).toContain(
-      'anthropic',
-    );
+    expect(contextValue!.sessionState.transientWarnings[0]).toContain('Gemini');
 
     unmount();
   });
