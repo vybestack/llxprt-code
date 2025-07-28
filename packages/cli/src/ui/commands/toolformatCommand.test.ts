@@ -73,9 +73,9 @@ describe('toolformatCommand', () => {
     const result = toolformatCommand.action(mockContext, 'hermes');
     expect(provider.setToolFormatOverride).toHaveBeenCalledWith('hermes');
     expect(mockContext.services.settings.setValue).toHaveBeenCalledWith(
-      expect.any(Object),
+      'User',
       'providerToolFormatOverrides',
-      expect.objectContaining({ openai: 'hermes' }),
+      { openai: 'hermes' },
     );
     expect(result?.type).toBe('message');
     expect(result?.messageType).toBe('info');

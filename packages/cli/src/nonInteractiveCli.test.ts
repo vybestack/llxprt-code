@@ -270,7 +270,7 @@ describe('runNonInteractive', () => {
     );
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'Error executing tool nonexistentTool: Tool "nonexistentTool" not found in registry.',
+      'Error executing tool nonExistentTool: Tool "nonexistentTool" not found in registry.',
     );
 
     expect(mockProcessExit).not.toHaveBeenCalled();

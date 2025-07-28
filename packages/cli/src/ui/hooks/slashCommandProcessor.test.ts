@@ -506,6 +506,10 @@ describe('useSlashCommandProcessor', () => {
 
       await result.current.handleSlashCommand('/parent');
 
+      await waitFor(() => {
+        expect(mockAddItem).toHaveBeenCalledTimes(2);
+      });
+
       expect(mockAddItem).toHaveBeenCalledWith(
         {
           type: MessageType.INFO,

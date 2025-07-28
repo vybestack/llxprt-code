@@ -16,12 +16,12 @@ describe('authCommand', () => {
     mockContext = createMockCommandContext();
   });
 
-  it('should return a dialog action to open the auth dialog', () => {
+  it('should return a dialog action to open the auth dialog', async () => {
     if (!authCommand.action) {
       throw new Error('The auth command must have an action.');
     }
 
-    const result = authCommand.action(mockContext, '');
+    const result = await authCommand.action(mockContext, '');
 
     expect(result).toEqual({
       type: 'dialog',

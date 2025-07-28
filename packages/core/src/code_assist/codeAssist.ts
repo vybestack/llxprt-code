@@ -14,6 +14,7 @@ export async function createCodeAssistContentGenerator(
   httpOptions: HttpOptions,
   authType: AuthType,
   config: Config,
+  baseURL?: string, // Add baseURL parameter
   sessionId?: string,
 ): Promise<ContentGenerator> {
   if (
@@ -28,6 +29,7 @@ export async function createCodeAssistContentGenerator(
       httpOptions,
       sessionId,
       userData.userTier,
+      baseURL, // Pass baseURL to constructor
     );
   }
 

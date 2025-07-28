@@ -110,4 +110,44 @@ describe('GeminiProvider Integration', () => {
     });
     expect(result[0].parts[2]).toEqual({ text: 'Is it red?' });
   });
+  it('should include a custom baseURL when it is set', async () => {
+    const provider = new GeminiProvider();
+    const baseURL = 'https://my-custom-url';
+
+    provider.setBaseURL(baseURL);
+
+    // Simulate mixed content with text and an image
+    const messages: IMessage[] = [
+      {
+        role: ContentGeneratorRole.USER,
+        content: 'What do you see in this image? Is it red?',
+        parts: [
+          { text: 'What do you see in this image?' },
+          {
+            inlineData: {
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', // 1x1 red pixel PNG
+              mimeType: 'image/png',
+            },
+          },
+          { text: 'Is it red?' },
+        ],
+      },
+    ];
+
+    const result = provider['convertMessagesToGeminiFormat'](messages);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].role).toBe('user');
+    expect(result[0].parts).toHaveLength(3);
+    expect(result[0].parts[0]).toEqual({
+      text: 'What do you see in this image?',
+    });
+    expect(result[0].parts[1]).toEqual({
+      inlineData: {
+        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+        mimeType: 'image/png',
+      },
+    });
+    expect(result[0].parts[2]).toEqual({ text: 'Is it red?' });
+  });
 });

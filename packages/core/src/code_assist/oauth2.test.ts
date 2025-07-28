@@ -438,7 +438,7 @@ describe('oauth2', () => {
       // Verify Google Account was cached
       const googleAccountPath = path.join(
         tempHomeDir,
-        '.gemini',
+        '.llxprt',
         'google_accounts.json',
       );
       expect(writeFileSpy).toHaveBeenCalledWith(

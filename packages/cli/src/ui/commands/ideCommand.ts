@@ -137,7 +137,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
             context.ui.addItem(
               {
                 type: 'info',
-                text: 'VS Code companion extension installed successfully. Restart gemini-cli in a fresh terminal window.',
+                text: 'VS Code companion extension installed successfully. Restart llxprt in a fresh terminal window.',
               },
               Date.now(),
             );

@@ -11,8 +11,8 @@ import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
 import { SchemaUnion, Type } from '@google/genai';
 
-const TOOL_CALL_LOOP_THRESHOLD = 5;
-const CONTENT_LOOP_THRESHOLD = 10;
+const TOOL_CALL_LOOP_THRESHOLD = 10;
+const CONTENT_LOOP_THRESHOLD = 15;
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 1000;
 
@@ -24,7 +24,7 @@ const LLM_LOOP_CHECK_HISTORY_COUNT = 20;
 /**
  * The number of turns that must pass in a single prompt before the LLM-based loop check is activated.
  */
-const LLM_CHECK_AFTER_TURNS = 30;
+const LLM_CHECK_AFTER_TURNS = 40;
 
 /**
  * The default interval, in number of turns, at which the LLM-based loop check is performed.

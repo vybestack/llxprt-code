@@ -213,7 +213,7 @@ describe('ReadFileTool', () => {
 
       expect(await tool.execute(params, abortSignal)).toEqual({
         llmContent: [
-          '[File content truncated: showing lines 6-8 of 20 total lines. Use offset/limit parameters to view more.]',
+          '[File content truncated. Showing lines 6-8 of 20. To read the next chunk, use offset: 8, limit: 3.]',
           'Line 6',
           'Line 7',
           'Line 8',
