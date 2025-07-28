@@ -97,7 +97,7 @@ Each server configuration supports the following properties:
 
 ### OAuth Support for Remote MCP Servers
 
-The Gemini CLI supports OAuth 2.0 authentication for remote MCP servers using SSE or HTTP transports. This enables secure access to MCP servers that require authentication.
+The LLxprt Code supports OAuth 2.0 authentication for remote MCP servers using SSE or HTTP transports. This enables secure access to MCP servers that require authentication.
 
 #### Automatic OAuth Discovery
 
@@ -574,3 +574,66 @@ This comprehensive integration makes MCP servers a powerful way to extend the LL
 ## MCP Prompts as Slash Commands
 
 In addition to tools, MCP servers can expose predefined prompts that can be executed as slash commands within the LLxprt Code. This allows you to create shortcuts for common or complex queries that can be easily invoked by name.
+
+### Defining Prompts on the Server
+
+Here's a small example of a stdio MCP server that defines prompts:
+
+```ts
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { z } from 'zod';
+
+const server = new McpServer({
+  name: 'prompt-server',
+  version: '1.0.0',
+});
+
+server.registerPrompt(
+  'poem-writer',
+  {
+    title: 'Poem Writer',
+    description: 'Write a nice haiku',
+    argsSchema: { title: z.string(), mood: z.string().optional() },
+  },
+  ({ title, mood }) => ({
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: `Write a haiku${mood ? ` with the mood ${mood}` : ''} called ${title}. Note that a haiku is 5 syllables followed by 7 syllables followed by 5 syllables `,
+        },
+      },
+    ],
+  }),
+);
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+This can be included in `settings.json` under `mcpServers` with:
+
+```json
+"nodeServer": {
+  "command": "node",
+  "args": ["filename.ts"],
+}
+```
+
+### Invoking Prompts
+
+Once a prompt is discovered, you can invoke it using its name as a slash command. The CLI will automatically handle parsing arguments.
+
+```bash
+/poem-writer --title="LLxprt Code" --mood="reverent"
+```
+
+or, using positional arguments:
+
+```bash
+/poem-writer "LLxprt Code" reverent
+```
+
+When you run this command, the LLxprt Code executes the `prompts/get` method on the MCP server with the provided arguments. The server is responsible for substituting the arguments into the prompt template and returning the final prompt text. The CLI then sends this prompt to the model for execution. This provides a convenient way to automate and share common workflows.
