@@ -41,24 +41,26 @@ jobs:
         if: matrix.sandbox == 'sandbox:docker'
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3
 
-      - name: Check if sandbox image exists
+      - name: Build sandbox Docker image
         if: matrix.sandbox == 'sandbox:docker'
-        id: check-image
         run: |
-          # Try to pull the image, if it fails we'll build it locally
-          if docker pull ghcr.io/acoliver/llxprt-code/sandbox:0.1.14; then
-            echo "image_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "image_exists=false" >> $GITHUB_OUTPUT
-          fi
-        continue-on-error: true
-
-      - name: Build sandbox Docker image locally
-        if: matrix.sandbox == 'sandbox:docker' && steps.check-image.outputs.image_exists == 'false'
-        run: |
-          # Build the sandbox image locally for testing
-          # The build script reads the image name from package.json config
+          # Always build the sandbox image locally for testing
+          # This ensures we test with the current code, not an old registry image
+          echo "Building sandbox image..."
           npm run build:sandbox
+          
+          # List all docker images to debug
+          echo "Docker images after build:"
+          docker images
+          
+          # Verify the image was built (looking for the exact image name)
+          if docker images | grep -q "ghcr.io/acoliver/llxprt-code/sandbox"; then
+            echo "✓ Sandbox image built successfully"
+          else
+            echo "✗ Sandbox image not found after build!"
+            echo "Expected image: ghcr.io/acoliver/llxprt-code/sandbox:0.1.14"
+            exit 1
+          fi
 
       - name: Set up Podman
         if: matrix.sandbox == 'sandbox:podman'
@@ -80,6 +82,8 @@ jobs:
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
+          # Force the test runner to skip its own build since we built above
+          CI: true
         run: npm run test:integration:${{ matrix.sandbox }} -- --verbose --keep-output
 
   e2e-test-macos:
@@ -103,5 +107,14 @@ jobs:
 
       - name: Run E2E tests
         env:
+          # Use OpenRouter as a cost-effective alternative to Google's API
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
+          LLXPRT_DEFAULT_PROVIDER: openai
+          # Also provide Gemini API key if available
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Set auth type to none since we're not using Google services in these tests
+          LLXPRT_AUTH_TYPE: none
+          LLXPRT_SANDBOX: false
         run: npm run test:e2e
