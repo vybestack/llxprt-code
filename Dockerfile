@@ -39,9 +39,9 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 # switch to non-root user node
 USER node
 
-# Copy and install packages
-COPY packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
-COPY packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
+# Copy packages with proper ownership
+COPY --chown=node:node packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
+COPY --chown=node:node packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
 
 # Install packages globally
 # npm install -g with local tarballs will install dependencies from npm registry
