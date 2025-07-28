@@ -1,8 +1,9 @@
 name: llxprt Scheduled PR Triage 🚀
 
 on:
-  schedule:
-    - cron: '0 9,21 * * *' # Runs twice per day at 9 AM and 9 PM UTC
+  # Disabled until GitHub App is configured
+  # schedule:
+  #   - cron: '0 9,21 * * *' # Runs twice per day at 9 AM and 9 PM UTC
   workflow_dispatch: {}
 
 jobs:
@@ -21,16 +22,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
-      - name: Generate GitHub App Token
-        id: generate_token
-        uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
+      # Option 1: Use GitHub App Token (requires APP_ID and PRIVATE_KEY secrets)
+      # - name: Generate GitHub App Token
+      #   id: generate_token
+      #   uses: actions/create-github-app-token@df432ceedc7162793a195dd1713ff69aefc7379e # v2
+      #   with:
+      #     app-id: ${{ secrets.APP_ID }}
+      #     private-key: ${{ secrets.PRIVATE_KEY }}
 
+      # Option 2: Use GITHUB_TOKEN (automatically provided by GitHub Actions)
       - name: Run PR Triage Script
         id: run_triage
         env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: ./.github/scripts/pr-triage.sh

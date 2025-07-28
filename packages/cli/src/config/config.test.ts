@@ -29,14 +29,6 @@ vi.mock('read-package-up', () => ({
   ),
 }));
 
-const mockLoadServerHierarchicalMemory = vi.fn(
-  (cwd, debug, fileService, extensionPaths, _maxDirs) =>
-    Promise.resolve({
-      memoryContent: extensionPaths?.join(',') || '',
-      fileCount: extensionPaths?.length || 0,
-    }),
-);
-
 vi.mock('@vybestack/llxprt-code-core', async () => {
   const actualServer = await vi.importActual<typeof ServerConfig>(
     '@vybestack/llxprt-code-core',
@@ -45,7 +37,13 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
     ...actualServer,
     DEFAULT_TELEMETRY_TARGET: 'local',
     loadEnvironment: vi.fn(),
-    loadServerHierarchicalMemory: mockLoadServerHierarchicalMemory,
+    loadServerHierarchicalMemory: vi.fn(
+      (cwd, debug, fileService, extensionPaths, _maxDirs) =>
+        Promise.resolve({
+          memoryContent: extensionPaths?.join(',') || '',
+          fileCount: extensionPaths?.length || 0,
+        }),
+    ),
     DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: {
       respectGitIgnore: false,
       respectLlxprtIgnore: true,
@@ -477,7 +475,10 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
     ];
     const argv = await parseArguments();
     await loadCliConfig(settings, extensions, 'session-id', argv);
-    expect(mockLoadServerHierarchicalMemory).toHaveBeenCalledWith(
+    
+    // Get the mocked function from the module
+    const { loadServerHierarchicalMemory } = await import('@vybestack/llxprt-code-core');
+    expect(loadServerHierarchicalMemory).toHaveBeenCalledWith(
       expect.any(String),
       false,
       expect.any(Object),
