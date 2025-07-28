@@ -475,9 +475,11 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
     ];
     const argv = await parseArguments();
     await loadCliConfig(settings, extensions, 'session-id', argv);
-    
+
     // Get the mocked function from the module
-    const { loadServerHierarchicalMemory } = await import('@vybestack/llxprt-code-core');
+    const { loadServerHierarchicalMemory } = await import(
+      '@vybestack/llxprt-code-core'
+    );
     expect(loadServerHierarchicalMemory).toHaveBeenCalledWith(
       expect.any(String),
       false,

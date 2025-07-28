@@ -16,6 +16,7 @@ import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
 import Gradient from 'ink-gradient';
 import { MemoryUsageDisplay } from './MemoryUsageDisplay.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 interface FooterProps {
   model: string;
@@ -102,14 +103,29 @@ export const Footer: React.FC<FooterProps> = ({
             ({Math.max(0, Math.round((1 - percentage) * 100))}% context left)
           </Text>
         </Text>
-        {isPaidMode !== undefined && (
-          <Text>
-            <Text color={Colors.Gray}> | </Text>
-            <Text color={isPaidMode ? Colors.AccentYellow : Colors.AccentGreen}>
-              {isPaidMode ? 'paid mode' : 'free mode'}
-            </Text>
-          </Text>
-        )}
+        {isPaidMode !== undefined &&
+          (() => {
+            const providerManager = getProviderManager();
+            const activeProvider = providerManager?.getActiveProvider?.();
+            const isGeminiProvider = activeProvider?.name === 'gemini';
+
+            // Only show paid/free mode for Gemini provider
+            if (isGeminiProvider) {
+              return (
+                <Text>
+                  <Text color={Colors.Gray}> | </Text>
+                  <Text
+                    color={
+                      isPaidMode ? Colors.AccentYellow : Colors.AccentGreen
+                    }
+                  >
+                    {isPaidMode ? 'paid mode' : 'free mode'}
+                  </Text>
+                </Text>
+              );
+            }
+            return null;
+          })()}
 
         {!showErrorDetails && errorCount > 0 && (
           <Box>

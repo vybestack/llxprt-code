@@ -174,14 +174,15 @@ const AppInner = ({
           const provider = providerManager.getActiveProvider();
           const isPaidMode = provider.isPaidMode?.();
 
-          if (isPaidMode !== undefined) {
+          // Only show paid/free mode warnings for Gemini provider
+          if (isPaidMode !== undefined && provider.name === 'gemini') {
             if (isPaidMode) {
               warnings.push(
-                `⚠️  PAID MODE: You are using ${provider.name} with API credentials - usage will be charged to your account`,
+                `! PAID MODE: You are using Gemini with API credentials - usage will be charged to your account`,
               );
-            } else if (provider.name === 'gemini') {
+            } else {
               warnings.push(
-                `✅ FREE MODE: You are using Gemini with OAuth authentication - no charges will apply`,
+                `FREE MODE: You are using Gemini with OAuth authentication - no charges will apply`,
               );
             }
           }
@@ -546,10 +547,12 @@ const AppInner = ({
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
+        // Clear transient warnings when user submits a message
+        sessionDispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
         submitQuery(trimmedValue);
       }
     },
-    [submitQuery],
+    [submitQuery, sessionDispatch],
   );
 
   const logger = useLogger();

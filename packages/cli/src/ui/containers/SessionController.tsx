@@ -183,14 +183,14 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
             dispatch({
               type: 'SET_TRANSIENT_WARNINGS',
               payload: [
-                `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+                `! PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
               ],
             });
           } else if (newPaymentMode === false && provider.name === 'gemini') {
             dispatch({
               type: 'SET_TRANSIENT_WARNINGS',
               payload: [
-                `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
               ],
             });
           }
@@ -293,14 +293,14 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
               dispatch({
                 type: 'SET_TRANSIENT_WARNINGS',
                 payload: [
-                  `⚠️  PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
+                  `! PAID MODE: You are now using ${provider.name} with API credentials - usage will be charged to your account`,
                 ],
               });
             } else if (paymentMode === false && provider.name === 'gemini') {
               dispatch({
                 type: 'SET_TRANSIENT_WARNINGS',
                 payload: [
-                  `✅ FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
+                  `FREE MODE: You are now using Gemini with OAuth authentication - no charges will apply`,
                 ],
               });
             }
