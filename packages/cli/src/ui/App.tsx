@@ -46,8 +46,12 @@ import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
-import { loadHierarchicalLlxprtMemory } from '../config/config.js';
-import { LoadedSettings } from '../config/settings.js';
+import {
+  loadHierarchicalLlxprtMemory,
+  loadCliConfig,
+  parseArguments,
+} from '../config/config.js';
+import { LoadedSettings, loadSettings } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -70,6 +74,7 @@ import {
   type IdeContext,
   ideContext,
   type IModel,
+  sessionId,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
@@ -109,6 +114,7 @@ import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { ProviderDialog } from './components/ProviderDialog.js';
+import { loadExtensions } from '../config/extension.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -143,18 +149,15 @@ interface AppInternalProps extends AppProps {
   appDispatch: React.Dispatch<AppAction>;
 }
 
-const App = ({
-  config,
-  settings,
-  startupWarnings = [],
-  version,
-  appState,
-}: AppInternalProps) => {
+const App = (props: AppInternalProps) => {
+  const [config, setConfig] = useState<Config>(props.config);
+  const [settings, setSettings] = useState<LoadedSettings>(props.settings);
+  const { appState } = props;
   const isFocused = useFocus();
   useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const { stdout } = useStdout();
-  const nightly = version.includes('nightly');
+  const nightly = props.version.includes('nightly');
 
   useEffect(() => {
     checkForUpdates().then(setUpdateMessage);
@@ -405,6 +408,22 @@ const App = ({
     }
   }, [config, addItem, settings.merged]);
 
+  const refreshConfig = useCallback(async () => {
+    const newSettings = loadSettings(process.cwd());
+    const newExtensions = loadExtensions(process.cwd());
+    const argv = await parseArguments();
+    const newConfig = await loadCliConfig(
+      newSettings.merged,
+      newExtensions,
+      sessionId,
+      argv,
+    );
+    await newConfig.initialize();
+    setConfig(newConfig);
+    setSettings(newSettings);
+    setLlxprtMdFileCount(newConfig.getLlxprtMdFileCount());
+  }, []);
+
   // Watch for model changes (e.g., from Flash fallback)
   useEffect(() => {
     const checkModelChange = () => {
@@ -588,6 +607,7 @@ const App = ({
     openPrivacyNotice,
     toggleVimEnabled,
     setIsProcessing,
+    refreshConfig,
   );
 
   const {
@@ -895,7 +915,7 @@ const App = ({
               {!settings.merged.hideBanner && (
                 <Header
                   terminalWidth={terminalWidth}
-                  version={version}
+                  version={props.version}
                   nightly={nightly}
                 />
               )}
@@ -939,7 +959,7 @@ const App = ({
         {showHelp && <Help commands={slashCommands} />}
 
         <Box flexDirection="column" ref={mainControlsRef}>
-          {startupWarnings.length > 0 && (
+          {props.startupWarnings && props.startupWarnings.length > 0 && (
             <Box
               borderStyle="round"
               borderColor={Colors.AccentYellow}
@@ -947,7 +967,7 @@ const App = ({
               marginY={1}
               flexDirection="column"
             >
-              {startupWarnings.map((warning, index) => (
+              {props.startupWarnings.map((warning, index) => (
                 <Text key={index} color={Colors.AccentYellow}>
                   {warning}
                 </Text>
