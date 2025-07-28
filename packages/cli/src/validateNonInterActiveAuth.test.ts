@@ -54,21 +54,10 @@ describe('validateNonInterActiveAuth', () => {
     vi.restoreAllMocks();
   });
 
-  it('exits if no auth type is configured or env vars set', async () => {
-    const nonInteractiveConfig: NonInteractiveConfig = {
-      refreshAuth: refreshAuthMock,
-    };
-    try {
-      await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
-      expect.fail('Should have exited');
-    } catch (e) {
-      expect((e as Error).message).toContain('process.exit(1) called');
-    }
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Please set an Auth method'),
-    );
-    expect(processExitSpy).toHaveBeenCalledWith(1);
-  });
+  // Removed test: 'exits if no auth type is configured or env vars set'
+  // This test is no longer relevant for llxprt-code since it supports multiple
+  // providers that don't all require Google authentication. Users can run with
+  // providers like OpenAI using just an API key without any Google auth.
 
   it('uses LOGIN_WITH_GOOGLE if GOOGLE_GENAI_USE_GCA is set', async () => {
     process.env.GOOGLE_GENAI_USE_GCA = 'true';
