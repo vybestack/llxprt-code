@@ -38,6 +38,8 @@ import { type CommandContext, type SlashCommand } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import open from 'open';
+import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
@@ -61,9 +63,10 @@ export const useSlashCommandProcessor = (
   openPrivacyNotice: () => void,
   checkPaymentModeChange?: (forcePreviousProvider?: string) => void,
   showToolDescriptions?: boolean,
+  toggleVimEnabled?: () => Promise<boolean>,
 ) => {
   const session = useSessionStats();
-  const [commands, setCommands] = useState<SlashCommand[]>([]);
+  const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
   const gitService = useMemo(() => {
     if (!config?.getProjectRoot()) {
       return;
@@ -139,11 +142,6 @@ export const useSlashCommandProcessor = (
     [addItem],
   );
 
-  // const showMemoryAction = useMemo(
-  //   () => createShowMemoryAction(config, settings, addMessage),
-  //   [config, settings, addMessage],
-  // );
-
   const commandContext = useMemo(
     (): CommandContext => ({
       services: {
@@ -163,6 +161,7 @@ export const useSlashCommandProcessor = (
         setDebugMessage: onDebugMessage,
         pendingItem: pendingCompressionItemRef.current,
         setPendingItem: setPendingCompressionItem,
+        toggleVimEnabled,
       },
       session: {
         stats: session.stats,
@@ -181,664 +180,30 @@ export const useSlashCommandProcessor = (
       onDebugMessage,
       pendingCompressionItemRef,
       setPendingCompressionItem,
+      toggleVimEnabled,
     ],
   );
 
-  const commandService = useMemo(() => new CommandService(config), [config]);
-
   useEffect(() => {
+    const controller = new AbortController();
     const load = async () => {
-      await commandService.loadCommands();
+      const loaders = [
+        new BuiltinCommandLoader(config),
+        new FileCommandLoader(config),
+      ];
+      const commandService = await CommandService.create(
+        loaders,
+        controller.signal,
+      );
       setCommands(commandService.getCommands());
     };
 
     load();
-  }, [commandService]);
 
-  const _savedChatTags = useCallback(async () => {
-    const geminiDir = config?.getProjectTempDir();
-    if (!geminiDir) {
-      return [];
-    }
-    try {
-      const files = await fs.readdir(geminiDir);
-      return files
-        .filter(
-          (file) => file.startsWith('checkpoint-') && file.endsWith('.json'),
-        )
-        .map((file) => file.replace('checkpoint-', '').replace('.json', ''));
-    } catch (_err) {
-      return [];
-    }
+    return () => {
+      controller.abort();
+    };
   }, [config]);
-
-  // Define legacy commands
-  // This list contains all commands that have NOT YET been migrated to the
-  // new system. As commands are migrated, they are removed from this list.
-  const _legacyCommands = useMemo(() => {
-    const commands: SlashCommand[] = [
-      // `/help` and `/clear` have been migrated and REMOVED from this list.
-      {
-        name: 'docs',
-        description: 'open full LLxprt Code documentation in your browser',
-        action: async (_context: CommandContext, _args: string) => {
-          const docsUrl = 'https://goo.gle/gemini-cli-docs';
-          if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
-            addMessage({
-              type: MessageType.INFO,
-              content: `Please open the following URL in your browser to view the documentation:\n${docsUrl}`,
-              timestamp: new Date(),
-            });
-          } else {
-            addMessage({
-              type: MessageType.INFO,
-              content: `Opening documentation in your browser: ${docsUrl}`,
-              timestamp: new Date(),
-            });
-            await open(docsUrl);
-          }
-        },
-      },
-      {
-        name: 'auth',
-        description: 'change the auth method',
-        action: async (_context: CommandContext, args: string) => {
-          const authMode = args?.split(' ')[0];
-          const providerManager = getProviderManager();
-
-          // If no auth mode specified, open the dialog
-          if (!authMode) {
-            openAuthDialog();
-            return;
-          }
-
-          // Handle specific auth mode changes for Gemini provider
-          try {
-            const activeProvider = providerManager.getActiveProvider();
-
-            // Check if this is the Gemini provider
-            if (activeProvider.name === 'gemini' && config) {
-              const validModes = ['oauth', 'api-key', 'vertex'];
-
-              if (!validModes.includes(authMode)) {
-                addMessage({
-                  type: MessageType.ERROR,
-                  content: `Invalid auth mode. Valid modes: ${validModes.join(', ')}`,
-                  timestamp: new Date(),
-                });
-                return;
-              }
-
-              // Map the auth mode to the appropriate AuthType
-              let authType: AuthType;
-              switch (authMode) {
-                case 'oauth':
-                  authType = AuthType.LOGIN_WITH_GOOGLE;
-                  break;
-                case 'api-key':
-                  authType = AuthType.USE_GEMINI;
-                  break;
-                case 'vertex':
-                  authType = AuthType.USE_VERTEX_AI;
-                  break;
-                default:
-                  authType = AuthType.LOGIN_WITH_GOOGLE;
-              }
-
-              // Refresh auth with the new type
-              await config.refreshAuth(authType);
-
-              addMessage({
-                type: MessageType.INFO,
-                content: `Switched to ${authMode} authentication mode`,
-                timestamp: new Date(),
-              });
-            } else {
-              addMessage({
-                type: MessageType.ERROR,
-                content:
-                  'Auth mode switching is only supported for the Gemini provider',
-                timestamp: new Date(),
-              });
-            }
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Failed to switch auth mode: ${error instanceof Error ? error.message : String(error)}`,
-              timestamp: new Date(),
-            });
-          }
-        },
-      },
-      {
-        name: 'editor',
-        description: 'set external editor preference',
-        action: (_context: CommandContext, _args: string) => ({
-          type: 'dialog' as const,
-          dialog: 'editor' as const,
-        }),
-      },
-      {
-        name: 'stats',
-        altName: 'usage',
-        description: 'check session stats. Usage: /stats [model|tools]',
-        action: (_context: CommandContext, args: string) => {
-          const subCommand = args?.split(' ')[0];
-          if (subCommand === 'model') {
-            addMessage({
-              type: MessageType.MODEL_STATS,
-              timestamp: new Date(),
-            });
-            return;
-          } else if (subCommand === 'tools') {
-            addMessage({
-              type: MessageType.TOOL_STATS,
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          const now = new Date();
-          const { sessionStartTime } = session.stats;
-          const wallDuration = now.getTime() - sessionStartTime.getTime();
-
-          addMessage({
-            type: MessageType.STATS,
-            duration: formatDuration(wallDuration),
-            timestamp: new Date(),
-          });
-        },
-      },
-      {
-        name: 'mcp',
-        description: 'list configured MCP servers and tools',
-        action: async (_context: CommandContext, args: string) => {
-          // Check if the args includes a specific flag to control description visibility
-          const [subCommand, ...rest] = args?.split(' ') || [];
-          const remainingArgs = rest.join(' ');
-          let useShowDescriptions = showToolDescriptions;
-          if (subCommand === 'desc' || subCommand === 'descriptions') {
-            useShowDescriptions = true;
-          } else if (
-            subCommand === 'nodesc' ||
-            subCommand === 'nodescriptions'
-          ) {
-            useShowDescriptions = false;
-          } else if (
-            remainingArgs === 'desc' ||
-            remainingArgs === 'descriptions'
-          ) {
-            useShowDescriptions = true;
-          } else if (
-            remainingArgs === 'nodesc' ||
-            remainingArgs === 'nodescriptions'
-          ) {
-            useShowDescriptions = false;
-          }
-          // Check if the args includes a specific flag to show detailed tool schema
-          let useShowSchema = false;
-          if (subCommand === 'schema' || remainingArgs === 'schema') {
-            useShowSchema = true;
-          }
-
-          const toolRegistry = await config?.getToolRegistry();
-          if (!toolRegistry) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'Could not retrieve tool registry.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          const mcpServers = config?.getMcpServers() || {};
-          const serverNames = Object.keys(mcpServers);
-
-          if (serverNames.length === 0) {
-            const docsUrl = 'https://goo.gle/gemini-cli-docs-mcp';
-            if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
-              addMessage({
-                type: MessageType.INFO,
-                content: `No MCP servers configured. Please open the following URL in your browser to view documentation:\n${docsUrl}`,
-                timestamp: new Date(),
-              });
-            } else {
-              addMessage({
-                type: MessageType.INFO,
-                content: `No MCP servers configured. Opening documentation in your browser: ${docsUrl}`,
-                timestamp: new Date(),
-              });
-              await open(docsUrl);
-            }
-            return;
-          }
-
-          // Check if any servers are still connecting
-          const connectingServers = serverNames.filter(
-            (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
-          );
-          const discoveryState = getMCPDiscoveryState();
-
-          let message = '';
-
-          // Add overall discovery status message if needed
-          if (
-            discoveryState === MCPDiscoveryState.IN_PROGRESS ||
-            connectingServers.length > 0
-          ) {
-            message +=
-              ansi.accentYellow(
-                `⏳ MCP servers are starting up (${connectingServers.length} initializing)...`,
-              ) + '\n';
-            message +=
-              ansi.gray(
-                'Note: First startup may take longer. Tool availability will update automatically.',
-              ) + '\n\n';
-          }
-
-          message += 'Configured MCP servers:\n\n';
-
-          for (const serverName of serverNames) {
-            const serverTools = toolRegistry.getToolsByServer(serverName);
-            const status = getMCPServerStatus(serverName);
-
-            // Add status indicator with descriptive text
-            let statusIndicator = '';
-            let statusText = '';
-            switch (status) {
-              case MCPServerStatus.CONNECTED:
-                statusIndicator = '🟢';
-                statusText = 'Ready';
-                break;
-              case MCPServerStatus.CONNECTING:
-                statusIndicator = '🔄';
-                statusText = 'Starting... (first startup may take longer)';
-                break;
-              case MCPServerStatus.DISCONNECTED:
-              default:
-                statusIndicator = '🔴';
-                statusText = 'Disconnected';
-                break;
-            }
-
-            // Get server description if available
-            const server = mcpServers[serverName];
-
-            // Format server header with bold formatting and status
-            message += `${statusIndicator} ${ansi.bold(serverName)} - ${statusText}`;
-
-            // Add tool count with conditional messaging
-            if (status === MCPServerStatus.CONNECTED) {
-              message += ` (${serverTools.length} tools)`;
-            } else if (status === MCPServerStatus.CONNECTING) {
-              message += ` (tools will appear when ready)`;
-            } else {
-              message += ` (${serverTools.length} tools cached)`;
-            }
-
-            // Add server description with proper handling of multi-line descriptions
-            if ((useShowDescriptions || useShowSchema) && server?.description) {
-              const descLines = server.description.trim().split('\n');
-              if (descLines) {
-                message += ':\n';
-                for (const descLine of descLines) {
-                  message += `    ${ansi.accentGreen(descLine)}\n`;
-                }
-              } else {
-                message += '\n';
-              }
-            } else {
-              message += '\n';
-            }
-
-            if (serverTools.length > 0) {
-              serverTools.forEach((tool) => {
-                if (
-                  (useShowDescriptions || useShowSchema) &&
-                  tool.description
-                ) {
-                  // Format tool name in cyan using simple ANSI cyan color
-                  message += `  - ${ansi.accentCyan(tool.name)}`;
-
-                  // Handle multi-line descriptions by properly indenting and preserving formatting
-                  const descLines = tool.description.trim().split('\n');
-                  if (descLines) {
-                    message += ':\n';
-                    for (const descLine of descLines) {
-                      message += `      ${ansi.accentGreen(descLine)}\n`;
-                    }
-                  } else {
-                    message += '\n';
-                  }
-                } else {
-                  // Use cyan color for the tool name even when not showing descriptions
-                  message += `  - ${ansi.accentCyan(tool.name)}\n`;
-                }
-                if (useShowSchema) {
-                  // Prefix the parameters in cyan
-                  message += `    ${ansi.accentCyan('Parameters')}:\n`;
-
-                  const paramsLines = JSON.stringify(
-                    tool.schema.parameters,
-                    null,
-                    2,
-                  )
-                    .trim()
-                    .split('\n');
-                  if (paramsLines) {
-                    for (const paramsLine of paramsLines) {
-                      message += `      ${ansi.accentGreen(paramsLine)}\n`;
-                    }
-                  }
-                }
-              });
-            } else {
-              message += '  No tools available\n';
-            }
-            message += '\n';
-          }
-
-          addMessage({
-            type: MessageType.INFO,
-            content: message,
-            timestamp: new Date(),
-          });
-        },
-      },
-      {
-        name: 'extensions',
-        description: 'list active extensions',
-        action: async () => {
-          const activeExtensions = config?.getActiveExtensions();
-          if (!activeExtensions || activeExtensions.length === 0) {
-            addMessage({
-              type: MessageType.INFO,
-              content: 'No active extensions.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          let message = 'Active extensions:\n\n';
-          for (const ext of activeExtensions) {
-            message += `  - \u001b[36m${ext.name} (v${ext.version})\u001b[0m\n`;
-          }
-          // Make sure to reset any ANSI formatting at the end to prevent it from affecting the terminal
-          message += '\u001b[0m';
-
-          addMessage({
-            type: MessageType.INFO,
-            content: message,
-            timestamp: new Date(),
-          });
-        },
-      },
-      {
-        name: 'tools',
-        description: 'list available LLxprt Code tools',
-        action: async (_context: CommandContext, args: string) => {
-          // Check if the args includes a specific flag to control description visibility
-          const [subCommand, ...rest] = args?.split(' ') || [];
-          const remainingArgs = rest.join(' ');
-          let useShowDescriptions = showToolDescriptions;
-          if (subCommand === 'desc' || subCommand === 'descriptions') {
-            useShowDescriptions = true;
-          } else if (
-            subCommand === 'nodesc' ||
-            subCommand === 'nodescriptions'
-          ) {
-            useShowDescriptions = false;
-          } else if (
-            remainingArgs === 'desc' ||
-            remainingArgs === 'descriptions'
-          ) {
-            useShowDescriptions = true;
-          } else if (
-            remainingArgs === 'nodesc' ||
-            remainingArgs === 'nodescriptions'
-          ) {
-            useShowDescriptions = false;
-          }
-
-          const toolRegistry = await config?.getToolRegistry();
-          const tools = toolRegistry?.getAllTools();
-          if (!tools) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'Could not retrieve tools.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          // Filter out MCP tools by checking if they have a serverName property
-          const geminiTools = tools.filter((tool) => !('serverName' in tool));
-
-          let message = 'Available Gemini CLI tools:\n\n';
-
-          if (geminiTools.length > 0) {
-            geminiTools.forEach((tool) => {
-              if (useShowDescriptions && tool.description) {
-                // Format tool name in cyan using simple ANSI cyan color
-                message += `  - ${ansi.accentCyan(`${tool.displayName} (${tool.name})`)}:\n`;
-
-                // Handle multi-line descriptions by properly indenting and preserving formatting
-                const descLines = tool.description.trim().split('\n');
-
-                // If there are multiple lines, add proper indentation for each line
-                if (descLines) {
-                  for (const descLine of descLines) {
-                    message += `      ${ansi.accentGreen(descLine)}\n`;
-                  }
-                }
-              } else {
-                // Use cyan color for the tool name even when not showing descriptions
-                message += `  - ${ansi.accentCyan(tool.displayName)}\n`;
-              }
-            });
-          } else {
-            message += '  No tools available\n';
-          }
-          message += '\n';
-
-          addMessage({
-            type: MessageType.INFO,
-            content: message,
-            timestamp: new Date(),
-          });
-        },
-      },
-      {
-        name: 'bug',
-        description: 'submit a bug report',
-        action: async (_context: CommandContext, args: string) => {
-          const bugDescription = args?.trim() || '';
-
-          const osVersion = `${process.platform} ${process.version}`;
-          let sandboxEnv = 'no sandbox';
-          if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
-            sandboxEnv = process.env.SANDBOX.replace(/^gemini-(?:code-)?/, '');
-          } else if (process.env.SANDBOX === 'sandbox-exec') {
-            sandboxEnv = `sandbox-exec (${
-              process.env.SEATBELT_PROFILE || 'unknown'
-            })`;
-          }
-          const modelVersion = config?.getModel() || 'Unknown';
-          const cliVersion = await getCliVersion();
-          const memoryUsage = formatMemoryUsage(process.memoryUsage().rss);
-
-          const info = `
-*   **CLI Version:** ${cliVersion}
-*   **Git Commit:** ${GIT_COMMIT_INFO}
-*   **Operating System:** ${osVersion}
-*   **Sandbox Environment:** ${sandboxEnv}
-*   **Model Version:** ${modelVersion}
-*   **Memory Usage:** ${memoryUsage}
-`;
-
-          let bugReportUrl =
-            'https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml&title={title}&info={info}';
-          const bugCommand = config?.getBugCommand();
-          if (bugCommand?.urlTemplate) {
-            bugReportUrl = bugCommand.urlTemplate;
-          }
-          bugReportUrl = bugReportUrl
-            .replace('{title}', encodeURIComponent(bugDescription))
-            .replace('{info}', encodeURIComponent(info));
-
-          addMessage({
-            type: MessageType.INFO,
-            content: `To submit your bug report, please open the following URL in your browser:\n${bugReportUrl}`,
-            timestamp: new Date(),
-          });
-          (async () => {
-            try {
-              await open(bugReportUrl);
-            } catch (error) {
-              const errorMessage =
-                error instanceof Error ? error.message : String(error);
-              addMessage({
-                type: MessageType.ERROR,
-                content: `Could not open URL in browser: ${errorMessage}`,
-                timestamp: new Date(),
-              });
-            }
-          })();
-        },
-      },
-    ];
-
-    if (config?.getCheckpointingEnabled()) {
-      commands.push({
-        name: 'restore',
-        description:
-          'restore a tool call. This will reset the conversation and file history to the state it was in when the tool call was suggested',
-        completion: async () => {
-          const checkpointDir = config?.getProjectTempDir()
-            ? path.join(config.getProjectTempDir(), 'checkpoints')
-            : undefined;
-          if (!checkpointDir) {
-            return [];
-          }
-          try {
-            const files = await fs.readdir(checkpointDir);
-            return files
-              .filter((file) => file.endsWith('.json'))
-              .map((file) => file.replace('.json', ''));
-          } catch (_err) {
-            return [];
-          }
-        },
-        action: async (_context: CommandContext, args: string) => {
-          const subCommand = args?.split(' ')[0];
-          const checkpointDir = config?.getProjectTempDir()
-            ? path.join(config.getProjectTempDir(), 'checkpoints')
-            : undefined;
-
-          if (!checkpointDir) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: 'Could not determine the .llxprt directory path.',
-              timestamp: new Date(),
-            });
-            return;
-          }
-
-          try {
-            // Ensure the directory exists before trying to read it.
-            await fs.mkdir(checkpointDir, { recursive: true });
-            const files = await fs.readdir(checkpointDir);
-            const jsonFiles = files.filter((file) => file.endsWith('.json'));
-
-            if (!subCommand) {
-              if (jsonFiles.length === 0) {
-                addMessage({
-                  type: MessageType.INFO,
-                  content: 'No restorable tool calls found.',
-                  timestamp: new Date(),
-                });
-                return;
-              }
-              const truncatedFiles = jsonFiles.map((file) => {
-                const components = file.split('.');
-                if (components.length <= 1) {
-                  return file;
-                }
-                components.pop();
-                return components.join('.');
-              });
-              const fileList = truncatedFiles.join('\n');
-              addMessage({
-                type: MessageType.INFO,
-                content: `Available tool calls to restore:\n\n${fileList}`,
-                timestamp: new Date(),
-              });
-              return;
-            }
-
-            const selectedFile = subCommand.endsWith('.json')
-              ? subCommand
-              : `${subCommand}.json`;
-
-            if (!jsonFiles.includes(selectedFile)) {
-              addMessage({
-                type: MessageType.ERROR,
-                content: `File not found: ${selectedFile}`,
-                timestamp: new Date(),
-              });
-              return;
-            }
-
-            const filePath = path.join(checkpointDir, selectedFile);
-            const data = await fs.readFile(filePath, 'utf-8');
-            const toolCallData = JSON.parse(data);
-
-            if (toolCallData.history) {
-              loadHistory(toolCallData.history);
-            }
-
-            if (toolCallData.clientHistory) {
-              await config
-                ?.getGeminiClient()
-                ?.setHistory(toolCallData.clientHistory);
-            }
-
-            if (toolCallData.commitHash) {
-              await gitService?.restoreProjectFromSnapshot(
-                toolCallData.commitHash,
-              );
-              addMessage({
-                type: MessageType.INFO,
-                content: `Restored project to the state before the tool call.`,
-                timestamp: new Date(),
-              });
-            }
-
-            return {
-              type: 'tool',
-              toolName: toolCallData.toolCall.name,
-              toolArgs: toolCallData.toolCall.args,
-            };
-          } catch (error) {
-            addMessage({
-              type: MessageType.ERROR,
-              content: `Could not read restorable tool calls. This is the error: ${error}`,
-              timestamp: new Date(),
-            });
-          }
-        },
-      });
-    }
-    return commands;
-  }, [
-    addMessage,
-    openAuthDialog,
-    config,
-    session,
-    gitService,
-    loadHistory,
-    showToolDescriptions,
-  ]);
 
   const handleSlashCommand = useCallback(
     async (
@@ -854,12 +219,7 @@ export const useSlashCommandProcessor = (
       }
 
       const userMessageTimestamp = Date.now();
-      if (trimmed !== '/quit' && trimmed !== '/exit') {
-        addItem(
-          { type: MessageType.USER, text: trimmed },
-          userMessageTimestamp,
-        );
-      }
+      addItem({ type: MessageType.USER, text: trimmed }, userMessageTimestamp);
 
       const parts = trimmed.substring(1).trim().split(/\s+/);
       const commandPath = parts.filter((p) => p); // The parts of the command, e.g., ['memory', 'add']
@@ -869,9 +229,21 @@ export const useSlashCommandProcessor = (
       let pathIndex = 0;
 
       for (const part of commandPath) {
-        const foundCommand = currentCommands.find(
-          (cmd) => cmd.name === part || cmd.altName === part,
-        );
+        // TODO: For better performance and architectural clarity, this two-pass
+        // search could be replaced. A more optimal approach would be to
+        // pre-compute a single lookup map in `CommandService.ts` that resolves
+        // all name and alias conflicts during the initial loading phase. The
+        // processor would then perform a single, fast lookup on that map.
+
+        // First pass: check for an exact match on the primary command name.
+        let foundCommand = currentCommands.find((cmd) => cmd.name === part);
+
+        // Second pass: if no primary name matches, check for an alias.
+        if (!foundCommand) {
+          foundCommand = currentCommands.find((cmd) =>
+            cmd.altNames?.includes(part),
+          );
+        }
 
         if (foundCommand) {
           commandToExecute = foundCommand;
@@ -890,7 +262,18 @@ export const useSlashCommandProcessor = (
         const args = parts.slice(pathIndex).join(' ');
 
         if (commandToExecute.action) {
-          const result = await commandToExecute.action(commandContext, args);
+          const fullCommandContext: CommandContext = {
+            ...commandContext,
+            invocation: {
+              raw: trimmed,
+              name: commandToExecute.name,
+              args,
+            },
+          };
+          const result = await commandToExecute.action(
+            fullCommandContext,
+            args,
+          );
 
           if (result) {
             switch (result.type) {
@@ -946,9 +329,9 @@ export const useSlashCommandProcessor = (
                 await config
                   ?.getGeminiClient()
                   ?.setHistory(result.clientHistory);
-                commandContext.ui.clear();
+                fullCommandContext.ui.clear();
                 result.history.forEach((item, index) => {
-                  commandContext.ui.addItem(item, index);
+                  fullCommandContext.ui.addItem(item, index);
                 });
                 return { type: 'handled' };
               }
@@ -958,6 +341,12 @@ export const useSlashCommandProcessor = (
                   process.exit(0);
                 }, 100);
                 return { type: 'handled' };
+
+              case 'submit_prompt':
+                return {
+                  type: 'submit_prompt',
+                  content: result.content,
+                };
               default: {
                 const unhandled: never = result;
                 throw new Error(`Unhandled slash command result: ${unhandled}`);

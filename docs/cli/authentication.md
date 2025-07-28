@@ -18,7 +18,7 @@ If you want to use Google's Gemini models, including their free tier offerings, 
       1. You have been assigned a license to a current Gemini Code Assist standard or enterprise subscription.
       1. You are using the product outside the [supported regions](https://developers.google.com/gemini-code-assist/resources/available-locations) for free individual usage.
       1. You are a Google account holder under the age of 18
-      - If you fall into one of these categories, you must first configure a Google Cloud Project Id to use, [enable the Gemini for Cloud API](https://cloud.google.com/gemini/docs/discover/set-up-gemini#enable-api) and [configure access permissions](https://cloud.google.com/gemini/docs/discover/set-up-gemini#grant-iam).
+      - If you fall into one of these categories, you must first configure a Google Cloud Project ID to use, [enable the Gemini for Cloud API](https://cloud.google.com/gemini/docs/discover/set-up-gemini#enable-api) and [configure access permissions](https://cloud.google.com/gemini/docs/discover/set-up-gemini#grant-iam).
 
       You can temporarily set the environment variable in your current shell session using the following command:
 
@@ -40,11 +40,16 @@ If you want to use Google's Gemini models, including their free tier offerings, 
         ```bash
         export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
         ```
-      - For repeated use, you can add the environment variable to your [.env file](#persisting-environment-variables-with-env-files) or your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following command adds the environment variable to a `~/.bashrc` file:
+      - For repeated use, you can add the environment variable to your [.env file](#persisting-environment-variables-with-env-files).
+
+      - Alternatively you can export the API key from your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following command adds the environment variable to a `~/.bashrc` file:
+
         ```bash
         echo 'export GEMINI_API_KEY="YOUR_GEMINI_API_KEY"' >> ~/.bashrc
         source ~/.bashrc
         ```
+
+        :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
 
 3.  **Vertex AI:**
     - Obtain your Google Cloud API key: [Get an API Key](https://cloud.google.com/vertex-ai/generative-ai/docs/start/api-keys?usertype=newuser)
@@ -53,11 +58,16 @@ If you want to use Google's Gemini models, including their free tier offerings, 
           ```bash
           export GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"
           ```
-        - For repeated use, you can add the environment variables to your [.env file](#persisting-environment-variables-with-env-files) or your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following commands add the environment variables to a `~/.bashrc` file:
+        - For repeated use, you can add the environment variables to your [.env file](#persisting-environment-variables-with-env-files).
+
+        - Alternatively you can export the environment variables from your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following commands add the environment variables to a `~/.bashrc` file:
+
           ```bash
           echo 'export GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"' >> ~/.bashrc
           source ~/.bashrc
           ```
+
+          :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
     - To use Application Default Credentials (ADC), use the following command:
       - Ensure you have a Google Cloud project and have enabled the Vertex AI API.
         ```bash
@@ -70,12 +80,17 @@ If you want to use Google's Gemini models, including their free tier offerings, 
           export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"
           export GOOGLE_CLOUD_LOCATION="YOUR_PROJECT_LOCATION" # e.g., us-central1
           ```
-        - For repeated use, you can add the environment variables to your [.env file](#persisting-environment-variables-with-env-files) or your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following commands add the environment variables to a `~/.bashrc` file:
+        - For repeated use, you can add the environment variables to your [.env file](#persisting-environment-variables-with-env-files).
+
+        - Alternatively you can export the environment variables from your shell's configuration file (like `~/.bashrc`, `~/.zshrc`, or `~/.profile`). For example, the following commands add the environment variables to a `~/.bashrc` file:
+
           ```bash
           echo 'export GOOGLE_CLOUD_PROJECT="YOUR_PROJECT_ID"' >> ~/.bashrc
           echo 'export GOOGLE_CLOUD_LOCATION="YOUR_PROJECT_LOCATION"' >> ~/.bashrc
           source ~/.bashrc
           ```
+
+          :warning: Be advised that when you export your API key inside your shell configuration file, any other process executed from the shell can read it.
 4.  **Cloud Shell:**
     - This option is only available when running in a Google Cloud Shell environment.
     - It automatically uses the credentials of the logged-in user in the Cloud Shell environment.

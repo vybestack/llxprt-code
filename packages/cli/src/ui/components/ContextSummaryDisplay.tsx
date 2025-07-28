@@ -8,27 +8,29 @@ import React from 'react';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import {
-  type ActiveFile,
+  type OpenFiles,
   type MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
 
 interface ContextSummaryDisplayProps {
+  activeFile?: string;
   llxprtMdFileCount: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
   showToolDescriptions?: boolean;
-  activeFile?: ActiveFile;
+  openFiles?: OpenFiles;
 }
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
+  activeFile,
   llxprtMdFileCount,
   contextFileNames,
   mcpServers,
   blockedMcpServers,
   showToolDescriptions,
-  activeFile,
+  openFiles,
 }) => {
   const mcpServerCount = Object.keys(mcpServers || {}).length;
   const blockedMcpServerCount = blockedMcpServers?.length || 0;
@@ -37,16 +39,17 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     llxprtMdFileCount === 0 &&
     mcpServerCount === 0 &&
     blockedMcpServerCount === 0 &&
-    !activeFile?.filePath
+    (openFiles?.recentOpenFiles?.length ?? 0) === 0
   ) {
     return <Text> </Text>; // Render an empty space to reserve height
   }
 
-  const activeFileText = (() => {
-    if (!activeFile?.filePath) {
+  const recentFilesText = (() => {
+    const count = openFiles?.recentOpenFiles?.length ?? 0;
+    if (count === 0) {
       return '';
     }
-    return `Open File (${path.basename(activeFile.filePath)})`;
+    return `${count} recent file${count > 1 ? 's' : ''} (ctrl+e to view)`;
   })();
 
   const geminiMdText = (() => {
@@ -68,14 +71,14 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     const parts = [];
     if (mcpServerCount > 0) {
       parts.push(
-        `${mcpServerCount} MCP Server${mcpServerCount > 1 ? 's' : ''}`,
+        `${mcpServerCount} MCP server${mcpServerCount > 1 ? 's' : ''}`,
       );
     }
 
     if (blockedMcpServerCount > 0) {
       let blockedText = `${blockedMcpServerCount} Blocked`;
       if (mcpServerCount === 0) {
-        blockedText += ` MCP Server${blockedMcpServerCount > 1 ? 's' : ''}`;
+        blockedText += ` MCP server${blockedMcpServerCount > 1 ? 's' : ''}`;
       }
       parts.push(blockedText);
     }
@@ -84,8 +87,8 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
 
   let summaryText = 'Using: ';
   const summaryParts = [];
-  if (activeFileText) {
-    summaryParts.push(activeFileText);
+  if (recentFilesText) {
+    summaryParts.push(recentFilesText);
   }
   if (geminiMdText) {
     summaryParts.push(geminiMdText);

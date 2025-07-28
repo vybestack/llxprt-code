@@ -25,7 +25,6 @@ import {
   clearCachedGoogleAccount,
 } from '../utils/user_account.js';
 import { AuthType } from '../core/contentGenerator.js';
-import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import readline from 'node:readline';
 import open from 'open';
 
@@ -83,6 +82,18 @@ export async function getOauthClient(
       proxy: config.getProxy(),
     },
   });
+
+  if (
+    process.env.GOOGLE_GENAI_USE_GCA &&
+    process.env.GOOGLE_CLOUD_ACCESS_TOKEN
+  ) {
+    client.setCredentials({
+      access_token: process.env.GOOGLE_CLOUD_ACCESS_TOKEN,
+    });
+    await fetchAndCacheUserInfo(client);
+    return client;
+  }
+
   client.on('tokens', (tokens: Credentials) => {
     // Don't await - cache credentials asynchronously to avoid blocking
     cacheCredentials(tokens).catch((error) => {
@@ -129,7 +140,7 @@ export async function getOauthClient(
     }
   }
 
-  if (config.getNoBrowser() || !shouldAttemptBrowserLaunch()) {
+  if (config.isBrowserLaunchSuppressed()) {
     let success = false;
     const maxRetries = 2;
     for (let i = 0; !success && i < maxRetries; i++) {

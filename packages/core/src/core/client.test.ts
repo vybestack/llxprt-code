@@ -25,6 +25,7 @@ import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { tokenLimit } from './tokenLimits.js';
+import { ideContext } from '../ide/ideContext.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -76,6 +77,7 @@ vi.mock('../telemetry/index.js', () => ({
 vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
+vi.mock('../ide/ideContext.js');
 
 describe('findIndexAfterFraction', () => {
   const history: Content[] = [
@@ -182,37 +184,43 @@ describe('Gemini Client (client.ts)', () => {
       vertexai: false,
       authType: AuthType.USE_GEMINI,
     };
-    MockedConfig.mockImplementation((): Config => {
-      const mock: Partial<Config> = {
-        getContentGeneratorConfig: vi
-          .fn()
-          .mockReturnValue(contentGeneratorConfig),
-        getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
-        getModel: vi.fn().mockReturnValue('test-model'),
-        getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
-
-        getUserMemory: vi.fn().mockReturnValue(''),
-        getFullContext: vi.fn().mockReturnValue(false),
-        getSessionId: vi.fn().mockReturnValue('test-session-id'),
-        getProxy: vi.fn().mockReturnValue(undefined),
-        getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
-        getFileService: vi.fn().mockReturnValue(fileService),
-        getMaxSessionTurns: vi.fn().mockReturnValue(0),
-        getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
-        setQuotaErrorOccurred: vi.fn(),
-        getNoBrowser: vi.fn().mockReturnValue(false),
-        getIdeMode: vi.fn().mockReturnValue(false),
-        getGeminiClient: vi.fn(() => client),
-        getDebugMode: vi.fn().mockReturnValue(false),
-      };
-      return mock as Config;
-    });
+    const mockConfigObject = {
+      getContentGeneratorConfig: vi
+        .fn()
+        .mockReturnValue(contentGeneratorConfig),
+      getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
+      getModel: vi.fn().mockReturnValue('test-model'),
+      getEmbeddingModel: vi.fn().mockReturnValue('test-embedding-model'),
+      getApiKey: vi.fn().mockReturnValue('test-key'),
+      getVertexAI: vi.fn().mockReturnValue(false),
+      getUserAgent: vi.fn().mockReturnValue('test-agent'),
+      getUserMemory: vi.fn().mockReturnValue(''),
+      getFullContext: vi.fn().mockReturnValue(false),
+      getSessionId: vi.fn().mockReturnValue('test-session-id'),
+      getProxy: vi.fn().mockReturnValue(undefined),
+      getWorkingDir: vi.fn().mockReturnValue('/test/dir'),
+      getFileService: vi.fn().mockReturnValue(fileService),
+      getMaxSessionTurns: vi.fn().mockReturnValue(0),
+      getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
+      setQuotaErrorOccurred: vi.fn(),
+      getNoBrowser: vi.fn().mockReturnValue(false),
+      getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
+      getIdeMode: vi.fn().mockReturnValue(false),
+      getGeminiClient: vi.fn(),
+      getDebugMode: vi.fn().mockReturnValue(false),
+    };
+    MockedConfig.mockImplementation(
+      () => mockConfigObject as unknown as Config,
+    );
 
     // We can instantiate the client here since Config is mocked
     // and the constructor will use the mocked GoogleGenAI
     const mockConfig = new Config({} as ConfigParameters);
     client = new GeminiClient(mockConfig);
     await client.initialize(contentGeneratorConfig);
+
+    // Update the mock to return the client
+    mockConfigObject.getGeminiClient.mockReturnValue(client);
 
     // Add missing methods to the client instance for tests
     client.getHistory = vi.fn().mockReturnValue([]);
@@ -720,6 +728,69 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   describe('sendMessageStream', () => {
+    it('should include IDE context when ideMode is enabled', async () => {
+      // Arrange
+      vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
+        activeFile: '/path/to/active/file.ts',
+        selectedText: 'hello',
+        cursor: { line: 5, character: 10 },
+        recentOpenFiles: [
+          { filePath: '/path/to/recent/file1.ts', timestamp: Date.now() },
+          { filePath: '/path/to/recent/file2.ts', timestamp: Date.now() },
+        ],
+      });
+
+      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Hello' };
+      })();
+      mockTurnRunFn.mockReturnValue(mockStream);
+
+      const mockChat: Partial<GeminiChat> = {
+        addHistory: vi.fn(),
+        getHistory: vi.fn().mockReturnValue([]),
+      };
+      client['chat'] = mockChat as GeminiChat;
+
+      const mockGenerator: Partial<ContentGenerator> = {
+        countTokens: vi.fn().mockResolvedValue({ totalTokens: 0 }),
+        generateContent: mockGenerateContentFn,
+      };
+      client['contentGenerator'] = mockGenerator as ContentGenerator;
+
+      const initialRequest = [{ text: 'Hi' }];
+
+      // Act
+      const stream = client.sendMessageStream(
+        initialRequest,
+        new AbortController().signal,
+        'prompt-id-ide',
+      );
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      // Assert
+      expect(ideContext.getOpenFilesContext).toHaveBeenCalled();
+      const expectedContext = `
+This is the file that the user was most recently looking at:
+- Path: /path/to/active/file.ts
+This is the cursor position in the file:
+- Cursor Position: Line 5, Character 10
+This is the selected text in the active file:
+- hello
+Here are files the user has recently opened, with the most recent at the top:
+- /path/to/recent/file1.ts
+- /path/to/recent/file2.ts
+      `.trim();
+      const expectedRequest = [{ text: expectedContext }, ...initialRequest];
+      expect(mockTurnRunFn).toHaveBeenCalledWith(
+        expectedRequest,
+        expect.any(Object),
+      );
+    });
+
     it('should return the turn instance after the stream is complete', async () => {
       // Arrange
       const mockStream = (async function* () {

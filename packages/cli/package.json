@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "LLxprt Code",
   "repository": {
     "type": "git",
@@ -33,12 +33,13 @@
     "dist"
   ],
   "config": {
-    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.13"
+    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.14"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
-    "@google/genai": "^1.8.0",
+    "@google/genai": "1.9.0",
+    "@iarna/toml": "^2.2.5",
     "@types/update-notifier": "^6.0.8",
     "@vybestack/llxprt-code-core": "file:../core",
     "chalk": "^5.3.0",
@@ -64,7 +65,8 @@
     "strip-ansi": "^7.1.0",
     "strip-json-comments": "^3.1.1",
     "update-notifier": "^7.3.1",
-    "yargs": "^17.7.2"
+    "yargs": "^17.7.2",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@babel/runtime": "^7.27.6",

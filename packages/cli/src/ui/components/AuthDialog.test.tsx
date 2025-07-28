@@ -31,7 +31,7 @@ describe('AuthDialog', () => {
 
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       {
@@ -41,7 +41,7 @@ describe('AuthDialog', () => {
         path: '',
       },
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       [],
@@ -69,11 +69,17 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
           },
           path: '',
         },
         {
-          settings: {},
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
         [],
@@ -97,11 +103,17 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
           },
           path: '',
         },
         {
-          settings: {},
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
         [],
@@ -124,11 +136,17 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
           },
           path: '',
         },
         {
-          settings: {},
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
         [],
@@ -152,11 +170,17 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
           },
           path: '',
         },
         {
-          settings: {},
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
         [],
@@ -175,11 +199,17 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
           },
           path: '',
         },
         {
-          settings: {},
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
         [],
@@ -200,11 +230,17 @@ describe('AuthDialog', () => {
         {
           settings: {
             selectedAuthType: undefined,
+            customThemes: {},
+            mcpServers: {},
           },
           path: '',
         },
         {
-          settings: {},
+          settings: { customThemes: {}, mcpServers: {} },
+          path: '',
+        },
+        {
+          settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
         [],
@@ -227,17 +263,19 @@ describe('AuthDialog', () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       {
         settings: {
           selectedAuthType: undefined,
+          customThemes: {},
+          mcpServers: {},
         },
         path: '',
       },
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       [],
@@ -264,11 +302,19 @@ describe('AuthDialog', () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       {
-        settings: {},
+        settings: {
+          selectedAuthType: undefined,
+          customThemes: {},
+          mcpServers: {},
+        },
+        path: '',
+      },
+      {
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       [],
@@ -298,17 +344,19 @@ describe('AuthDialog', () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       {
         settings: {
           selectedAuthType: AuthType.USE_GEMINI,
+          customThemes: {},
+          mcpServers: {},
         },
         path: '',
       },
       {
-        settings: {},
+        settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
       [],

@@ -83,7 +83,6 @@ export function isProQuotaExceededError(error: unknown): boolean {
       }
     }
   }
-
   return false;
 }
 

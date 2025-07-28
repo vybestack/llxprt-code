@@ -11,7 +11,6 @@ import {
   ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
-import { UserTierId } from '../code_assist/types.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
@@ -31,8 +30,8 @@ import { WebSearchTool } from '../tools/web-search.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
-import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import { getProjectTempDir } from '../utils/paths.js';
+import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import {
   // TELEMETRY REMOVED: Disabled imports for telemetry
   // initializeTelemetry,
@@ -48,6 +47,12 @@ import {
 // TELEMETRY REMOVED: ClearcutLogger import disabled
 // import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
+import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
+import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
+import { IdeClient } from '../ide/ide-client.js';
+
+// Re-export OAuth config type
+export type { MCPOAuthConfig };
 
 export enum ApprovalMode {
   DEFAULT = 'default',
@@ -72,6 +77,7 @@ export interface TelemetrySettings {
   target?: TelemetryTarget;
   otlpEndpoint?: string;
   logPrompts?: boolean;
+  outfile?: string;
 }
 
 export interface GeminiCLIExtension {
@@ -79,7 +85,20 @@ export interface GeminiCLIExtension {
   version: string;
   isActive: boolean;
 }
-
+export interface FileFilteringOptions {
+  respectGitIgnore: boolean;
+  respectGeminiIgnore: boolean;
+}
+// For memory files
+export const DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
+  respectGitIgnore: false,
+  respectGeminiIgnore: true,
+};
+// For all other files
+export const DEFAULT_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
+  respectGitIgnore: true,
+  respectGeminiIgnore: true,
+};
 export class MCPServerConfig {
   constructor(
     // For stdio transport
@@ -102,7 +121,15 @@ export class MCPServerConfig {
     readonly includeTools?: string[],
     readonly excludeTools?: string[],
     readonly extensionName?: string,
+    // OAuth configuration
+    readonly oauth?: MCPOAuthConfig,
+    readonly authProviderType?: AuthProviderType,
   ) {}
+}
+
+export enum AuthProviderType {
+  DYNAMIC_DISCOVERY = 'dynamic_discovery',
+  GOOGLE_CREDENTIALS = 'google_credentials',
 }
 
 export interface SandboxConfig {
@@ -145,6 +172,7 @@ export interface ConfigParameters {
   usageStatisticsEnabled?: boolean;
   fileFiltering?: {
     respectGitIgnore?: boolean;
+    respectGeminiIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
   };
   checkpointing?: boolean;
@@ -165,6 +193,7 @@ export interface ConfigParameters {
   noBrowser?: boolean;
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
   ideMode?: boolean;
+  ideClient?: IdeClient;
 }
 
 export class Config {
@@ -193,6 +222,7 @@ export class Config {
   private geminiClient!: GeminiClient;
   private readonly fileFiltering: {
     respectGitIgnore: boolean;
+    respectGeminiIgnore: boolean;
     enableRecursiveFileSearch: boolean;
   };
   private fileDiscoveryService: FileDiscoveryService | null = null;
@@ -206,6 +236,7 @@ export class Config {
   private readonly extensionContextFilePaths: string[];
   private readonly noBrowser: boolean;
   private readonly ideMode: boolean;
+  private readonly ideClient: IdeClient | undefined;
   private modelSwitchedDuringSession: boolean = false;
   private readonly maxSessionTurns: number;
   private readonly _activeExtensions: ActiveExtension[];
@@ -257,11 +288,13 @@ export class Config {
       target: params.telemetry?.target ?? DEFAULT_TELEMETRY_TARGET,
       otlpEndpoint: params.telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
       logPrompts: params.telemetry?.logPrompts ?? true,
+      outfile: params.telemetry?.outfile,
     };
     this.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
 
     this.fileFiltering = {
       respectGitIgnore: params.fileFiltering?.respectGitIgnore ?? true,
+      respectGeminiIgnore: params.fileFiltering?.respectGeminiIgnore ?? true,
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
     };
@@ -284,6 +317,7 @@ export class Config {
     this.noBrowser = params.noBrowser ?? false;
     this.summarizeToolOutput = params.summarizeToolOutput;
     this.ideMode = params.ideMode ?? false;
+    this.ideClient = params.ideClient;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -390,14 +424,6 @@ export class Config {
     return this.quotaErrorOccurred;
   }
 
-  async getUserTier(): Promise<UserTierId | undefined> {
-    if (!this.geminiClient) {
-      return undefined;
-    }
-    const generator = this.geminiClient.getContentGenerator();
-    return await generator.getTier?.();
-  }
-
   getEmbeddingModel(): string {
     return this.embeddingModel;
   }
@@ -501,6 +527,10 @@ export class Config {
     return this.telemetrySettings.target ?? DEFAULT_TELEMETRY_TARGET;
   }
 
+  getTelemetryOutfile(): string | undefined {
+    return this.telemetrySettings.outfile;
+  }
+
   getGeminiClient(): GeminiClient {
     return this.geminiClient;
   }
@@ -519,6 +549,16 @@ export class Config {
 
   getFileFilteringRespectGitIgnore(): boolean {
     return this.fileFiltering.respectGitIgnore;
+  }
+  getFileFilteringRespectGeminiIgnore(): boolean {
+    return this.fileFiltering.respectGeminiIgnore;
+  }
+
+  getFileFilteringOptions(): FileFilteringOptions {
+    return {
+      respectGitIgnore: this.fileFiltering.respectGitIgnore,
+      respectGeminiIgnore: this.fileFiltering.respectGeminiIgnore,
+    };
   }
 
   getCheckpointingEnabled(): boolean {
@@ -580,6 +620,10 @@ export class Config {
     return this.noBrowser;
   }
 
+  isBrowserLaunchSuppressed(): boolean {
+    return this.getNoBrowser() || !shouldAttemptBrowserLaunch();
+  }
+
   getSummarizeToolOutputConfig():
     | Record<string, SummarizeToolOutputSettings>
     | undefined {
@@ -588,6 +632,10 @@ export class Config {
 
   getIdeMode(): boolean {
     return this.ideMode;
+  }
+
+  getIdeClient(): IdeClient | undefined {
+    return this.ideClient;
   }
 
   async getGitService(): Promise<GitService> {
@@ -660,7 +708,7 @@ export class Config {
     registerCoreTool(MemoryTool);
     registerCoreTool(WebSearchTool, this);
 
-    await registry.discoverTools();
+    await registry.discoverAllTools();
     return registry;
   }
 }

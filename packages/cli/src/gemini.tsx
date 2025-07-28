@@ -19,7 +19,6 @@ import chalk from 'chalk';
 import {
   LoadedSettings,
   loadSettings,
-  USER_SETTINGS_PATH,
   SettingScope,
 } from './config/settings.js';
 import { themeManager } from './ui/themes/theme-manager.js';
@@ -38,7 +37,6 @@ import {
   // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
   getOauthClient,
-  shouldAttemptBrowserLaunch,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
@@ -48,6 +46,7 @@ import {
   setProviderApiKeyFromFile,
   setProviderBaseUrl,
 } from './providers/providerConfigUtils.js';
+import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 
 function getNodeMemoryArgs(config: Config): string[] {
   const totalMemoryMB = os.totalmem() / (1024 * 1024);
@@ -174,6 +173,9 @@ export async function main() {
 
   await config.initialize();
 
+  // Load custom themes from settings
+  themeManager.loadCustomThemes(settings.merged.customThemes);
+
   // If a provider is specified via CLI, activate it after initialization
   const configProvider = config.getProvider();
   if (configProvider) {
@@ -291,7 +293,7 @@ export async function main() {
 
   if (
     settings.merged.selectedAuthType === AuthType.LOGIN_WITH_GOOGLE &&
-    (config.getNoBrowser() || !shouldAttemptBrowserLaunch())
+    config.isBrowserLaunchSuppressed()
   ) {
     // Do oauth before app renders to make copying the link possible.
     await getOauthClient(settings.merged.selectedAuthType, config);
@@ -537,49 +539,8 @@ async function loadNonInteractiveConfig(
     }
   }
 
-  return await validateNonInterActiveAuth(
+  return await validateNonInteractiveAuth(
     settings.merged.selectedAuthType,
     finalConfig,
   );
-}
-
-async function validateNonInterActiveAuth(
-  selectedAuthType: AuthType | undefined,
-  nonInteractiveConfig: Config,
-) {
-  // Check if a provider is specified via command line
-  const configProvider = nonInteractiveConfig.getProvider();
-  if (!configProvider && !selectedAuthType && !process.env.LLXPRT_API_KEY) {
-    // making a special case for the cli. many headless environments might not have a settings.json set
-    // so if GEMINI_API_KEY is set, we'll use that. However since the oauth things are interactive anyway, we'll
-    // still expect that exists
-    console.error(
-      `Please set an Auth method in your ${USER_SETTINGS_PATH} OR specify GEMINI_API_KEY env variable file before running`,
-    );
-    process.exit(1);
-  }
-
-  selectedAuthType = selectedAuthType || AuthType.USE_GEMINI;
-  const err = validateAuthMethod(selectedAuthType);
-  if (err != null) {
-    console.error(err);
-    process.exit(1);
-  }
-
-  await nonInteractiveConfig.refreshAuth(selectedAuthType);
-
-  // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
-  const providerManager = nonInteractiveConfig.getProviderManager();
-  if (providerManager) {
-    const serverToolsProvider = providerManager.getServerToolsProvider();
-    if (
-      serverToolsProvider &&
-      serverToolsProvider.name === 'gemini' &&
-      serverToolsProvider.setConfig
-    ) {
-      serverToolsProvider.setConfig(nonInteractiveConfig);
-    }
-  }
-
-  return nonInteractiveConfig;
 }

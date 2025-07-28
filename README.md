@@ -17,12 +17,19 @@ LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/googl
 With LLxprt Code you can:
 
 - Query and edit large codebases with any LLM provider
+- Generate new apps from PDFs or sketches, using multimodal capabilities
 - Use local models for privacy-sensitive work
 - Switch between providers seamlessly within a session
 - Leverage all the powerful tools and MCP servers from Gemini CLI
+- Use tools and MCP servers to connect new capabilities, including [media generation with Imagen, Veo or Lyria](https://github.com/GoogleCloudPlatform/vertex-ai-creative-studio/tree/main/experiments/mcp-genmedia)
+- Ground your queries with the [Google Search](https://ai.google.dev/gemini-api/docs/grounding) tool when using Gemini
 - Enjoy a beautifully themed interface across all commands
 
 ## Quickstart
+
+You have two options to install LLxprt Code.
+
+### With Node
 
 1. **Prerequisites:** Ensure you have [Node.js version 20](https://nodejs.org/en/download) or higher installed.
 2. **Install LLxprt Code:**
@@ -36,6 +43,23 @@ With LLxprt Code you can:
    ```bash
    npx https://github.com/acoliver/llxprt-code
    ```
+
+### With Homebrew
+
+1. **Prerequisites:** Ensure you have [Homebrew](https://brew.sh/) installed.
+2. **Install the CLI:** Execute the following command in your terminal:
+
+   ```bash
+   brew install llxprt-code
+   ```
+
+   Then, run the CLI from anywhere:
+
+   ```bash
+   llxprt
+   ```
+
+### Common Configuration Steps
 
 3. **Run and configure:**
 

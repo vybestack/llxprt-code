@@ -239,6 +239,12 @@ export class Logger {
     if (!this.llxprtDir) {
       throw new Error('Checkpoint file path not set.');
     }
+    // Sanitize tag to prevent directory traversal attacks
+    tag = tag.replace(/[^a-zA-Z0-9-_]/g, '');
+    if (!tag) {
+      console.error('Sanitized tag is empty setting to "default".');
+      tag = 'default';
+    }
     return path.join(this.llxprtDir, `checkpoint-${tag}.json`);
   }
 

@@ -9,6 +9,7 @@ import {
   CommandContext,
   OpenDialogActionReturn,
   MessageActionReturn,
+  CommandKind,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
@@ -18,6 +19,7 @@ export const providerCommand: SlashCommand = {
   name: 'provider',
   description:
     'switch between different AI providers (openai, anthropic, etc.)',
+  kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
     args: string,

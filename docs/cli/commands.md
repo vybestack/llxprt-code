@@ -6,7 +6,7 @@ LLxprt Code supports several built-in commands to help you manage your session, 
 
 Slash commands provide meta-level control over the CLI itself.
 
-### General Commands
+### Built-in Commands
 
 - **`/bug`**
   - **Description:** File an issue about LLxprt Code. By default, the issue is filed within the GitHub repository for LLxprt Code. The string you enter after `/bug` will become the headline for the bug being filed. The default `/bug` behavior can be modified using the `bugCommand` setting in your `.llxprt/settings.json` files.
@@ -29,6 +29,9 @@ Slash commands provide meta-level control over the CLI itself.
 
 - **`/compress`**
   - **Description:** Replace the entire chat context with a summary. This saves on tokens used for future tasks while retaining a high level summary of what has happened.
+
+- **`/copy`**
+  - **Description:** Copies the last output produced by LLxprt Code to your clipboard, for easy sharing or reuse.
 
 - **`/editor`**
   - **Description:** Open a dialog for selecting supported editors.
