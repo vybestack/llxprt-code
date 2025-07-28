@@ -34,7 +34,6 @@ import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
-import { configCommand } from '../ui/commands/configCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -59,7 +58,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
       clearCommand,
       compressCommand,
       copyCommand,
-      configCommand,
       docsCommand,
       editorCommand,
       extensionsCommand,

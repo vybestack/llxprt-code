@@ -64,7 +64,6 @@ export interface CommandContext {
      * @returns A promise that resolves to the new vim enabled state.
      */
     toggleVimEnabled: () => Promise<boolean>;
-    refreshConfig: () => Promise<void>;
   };
   // Session-specific data
   session: {
