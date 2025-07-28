@@ -39,16 +39,16 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 # switch to non-root user node
 USER node
 
-# install llxprt-code and clean up
-COPY packages/cli/dist/vybestack-llxprt-code-*.tgz /usr/local/share/npm-global/llxprt-code.tgz
-COPY packages/core/dist/vybestack-llxprt-code-core-*.tgz /usr/local/share/npm-global/llxprt-code-core.tgz
-# First install the core package, then the CLI package
-# The --force flag ensures npm installs all dependencies
-RUN cd /usr/local/share/npm-global \
-  && npm install -g llxprt-code-core.tgz --force \
-  && npm install -g llxprt-code.tgz --force \
-  && npm cache clean --force \
-  && rm -f llxprt-code{,-core}.tgz
+# Copy and install packages
+COPY packages/core/dist/vybestack-llxprt-code-core-*.tgz /tmp/
+COPY packages/cli/dist/vybestack-llxprt-code-*.tgz /tmp/
+
+# Install packages globally
+# npm install -g with local tarballs will install dependencies from npm registry
+RUN npm install -g /tmp/vybestack-llxprt-code-core-*.tgz && \
+    npm install -g /tmp/vybestack-llxprt-code-*.tgz && \
+    npm cache clean --force && \
+    rm -f /tmp/*.tgz
 
 # default entrypoint when none specified
 CMD ["llxprt"]

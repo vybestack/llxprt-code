@@ -121,7 +121,7 @@ chmodSync(
   0o755,
 );
 
-const buildStdout = process.env.VERBOSE ? 'inherit' : 'ignore';
+const buildStdout = 'inherit'; // Always show output to debug CI failures
 
 function buildImage(imageName, dockerfile) {
   console.log(`building ${imageName} ... (can be slow first time)`);
