@@ -13,7 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        sandbox: [sandbox:none, sandbox:docker]
+        # Temporarily disable sandbox:docker until OAuth issue is resolved
+        sandbox: [sandbox:none] # , sandbox:docker]
         node-version: [24.x]
     steps:
       - name: Checkout repository
