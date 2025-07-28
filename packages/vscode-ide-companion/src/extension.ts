@@ -9,7 +9,7 @@ import * as vscode from 'vscode';
 import { IDEServer } from './ide-server';
 import { createLogger } from './utils/logger';
 
-const IDE_WORKSPACE_PATH_ENV_VAR = 'GEMINI_CLI_IDE_WORKSPACE_PATH';
+const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
 
 let ideServer: IDEServer;
 let logger: vscode.OutputChannel;
