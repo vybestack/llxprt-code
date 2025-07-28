@@ -301,136 +301,136 @@ export const useSlashCommandProcessor = (
 
               if (result) {
                 switch (result.type) {
-                case 'tool':
-                  return {
-                    type: 'schedule_tool',
-                    toolName: result.toolName,
-                    toolArgs: result.toolArgs,
-                  };
-                case 'message':
-                  addItem(
-                    {
-                      type:
-                        result.messageType === 'error'
-                          ? MessageType.ERROR
-                          : MessageType.INFO,
-                      text: result.content,
-                    },
-                    Date.now(),
-                  );
-                  return { type: 'handled' };
-                case 'dialog':
-                  switch (result.dialog) {
-                    case 'help':
-                      setShowHelp(true);
-                      return { type: 'handled' };
-                    case 'auth':
-                      openAuthDialog();
-                      return { type: 'handled' };
-                    case 'theme':
-                      openThemeDialog();
-                      return { type: 'handled' };
-                    case 'editor':
-                      openEditorDialog();
-                      return { type: 'handled' };
-                    case 'privacy':
-                      openPrivacyNotice();
-                      return { type: 'handled' };
-                    case 'provider':
-                      openProviderDialog();
-                      return { type: 'handled' };
-                    case 'providerModel':
-                      openProviderModelDialog();
-                      return { type: 'handled' };
-                    default: {
-                      const unhandled: never = result.dialog;
-                      throw new Error(
-                        `Unhandled slash command result: ${unhandled}`,
-                      );
-                    }
-                  }
-                case 'load_history': {
-                  await config
-                    ?.getGeminiClient()
-                    ?.setHistory(result.clientHistory);
-                  fullCommandContext.ui.clear();
-                  result.history.forEach((item, index) => {
-                    fullCommandContext.ui.addItem(item, index);
-                  });
-                  return { type: 'handled' };
-                }
-                case 'quit':
-                  setQuittingMessages(result.messages);
-                  setTimeout(() => {
-                    process.exit(0);
-                  }, 100);
-                  return { type: 'handled' };
-
-                case 'submit_prompt':
-                  return {
-                    type: 'submit_prompt',
-                    content: result.content,
-                  };
-                case 'confirm_shell_commands': {
-                  const { outcome, approvedCommands } = await new Promise<{
-                    outcome: ToolConfirmationOutcome;
-                    approvedCommands?: string[];
-                  }>((resolve) => {
-                    setShellConfirmationRequest({
-                      commands: result.commandsToConfirm,
-                      onConfirm: (
-                        resolvedOutcome,
-                        resolvedApprovedCommands,
-                      ) => {
-                        setShellConfirmationRequest(null); // Close the dialog
-                        resolve({
-                          outcome: resolvedOutcome,
-                          approvedCommands: resolvedApprovedCommands,
-                        });
+                  case 'tool':
+                    return {
+                      type: 'schedule_tool',
+                      toolName: result.toolName,
+                      toolArgs: result.toolArgs,
+                    };
+                  case 'message':
+                    addItem(
+                      {
+                        type:
+                          result.messageType === 'error'
+                            ? MessageType.ERROR
+                            : MessageType.INFO,
+                        text: result.content,
                       },
+                      Date.now(),
+                    );
+                    return { type: 'handled' };
+                  case 'dialog':
+                    switch (result.dialog) {
+                      case 'help':
+                        setShowHelp(true);
+                        return { type: 'handled' };
+                      case 'auth':
+                        openAuthDialog();
+                        return { type: 'handled' };
+                      case 'theme':
+                        openThemeDialog();
+                        return { type: 'handled' };
+                      case 'editor':
+                        openEditorDialog();
+                        return { type: 'handled' };
+                      case 'privacy':
+                        openPrivacyNotice();
+                        return { type: 'handled' };
+                      case 'provider':
+                        openProviderDialog();
+                        return { type: 'handled' };
+                      case 'providerModel':
+                        openProviderModelDialog();
+                        return { type: 'handled' };
+                      default: {
+                        const unhandled: never = result.dialog;
+                        throw new Error(
+                          `Unhandled slash command result: ${unhandled}`,
+                        );
+                      }
+                    }
+                  case 'load_history': {
+                    await config
+                      ?.getGeminiClient()
+                      ?.setHistory(result.clientHistory);
+                    fullCommandContext.ui.clear();
+                    result.history.forEach((item, index) => {
+                      fullCommandContext.ui.addItem(item, index);
                     });
-                  });
-
-                  if (
-                    outcome === ToolConfirmationOutcome.Cancel ||
-                    !approvedCommands ||
-                    approvedCommands.length === 0
-                  ) {
                     return { type: 'handled' };
                   }
+                  case 'quit':
+                    setQuittingMessages(result.messages);
+                    setTimeout(() => {
+                      process.exit(0);
+                    }, 100);
+                    return { type: 'handled' };
 
-                  if (outcome === ToolConfirmationOutcome.ProceedAlways) {
-                    setSessionShellAllowlist(
-                      (prev) => new Set([...prev, ...approvedCommands]),
+                  case 'submit_prompt':
+                    return {
+                      type: 'submit_prompt',
+                      content: result.content,
+                    };
+                  case 'confirm_shell_commands': {
+                    const { outcome, approvedCommands } = await new Promise<{
+                      outcome: ToolConfirmationOutcome;
+                      approvedCommands?: string[];
+                    }>((resolve) => {
+                      setShellConfirmationRequest({
+                        commands: result.commandsToConfirm,
+                        onConfirm: (
+                          resolvedOutcome,
+                          resolvedApprovedCommands,
+                        ) => {
+                          setShellConfirmationRequest(null); // Close the dialog
+                          resolve({
+                            outcome: resolvedOutcome,
+                            approvedCommands: resolvedApprovedCommands,
+                          });
+                        },
+                      });
+                    });
+
+                    if (
+                      outcome === ToolConfirmationOutcome.Cancel ||
+                      !approvedCommands ||
+                      approvedCommands.length === 0
+                    ) {
+                      return { type: 'handled' };
+                    }
+
+                    if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+                      setSessionShellAllowlist(
+                        (prev) => new Set([...prev, ...approvedCommands]),
+                      );
+                    }
+
+                    return await handleSlashCommand(
+                      result.originalInvocation.raw,
+                      // Pass the approved commands as a one-time grant for this execution.
+                      new Set(approvedCommands),
                     );
                   }
-
-                  return await handleSlashCommand(
-                    result.originalInvocation.raw,
-                    // Pass the approved commands as a one-time grant for this execution.
-                    new Set(approvedCommands),
-                  );
-                }
-                default: {
-                  const unhandled: never = result;
-                  throw new Error(
-                    `Unhandled slash command result: ${unhandled}`,
-                  );
+                  default: {
+                    const unhandled: never = result;
+                    throw new Error(
+                      `Unhandled slash command result: ${unhandled}`,
+                    );
+                  }
                 }
               }
-            }
 
-            return { type: 'handled' };
-          } catch (e) {
-            addItem(
-              {
-                type: MessageType.ERROR,
-                text: e instanceof Error ? e.message : String(e),
-              },
-              Date.now(),
-            );
-            return { type: 'handled' };
-          }
+              return { type: 'handled' };
+            } catch (e) {
+              addItem(
+                {
+                  type: MessageType.ERROR,
+                  text: e instanceof Error ? e.message : String(e),
+                },
+                Date.now(),
+              );
+              return { type: 'handled' };
+            }
           } else if (commandToExecute.subCommands) {
             const helpText = `Command '/${commandToExecute.name}' requires a subcommand. Available:\n${commandToExecute.subCommands
               .map((sc) => `  - ${sc.name}: ${sc.description || ''}`)

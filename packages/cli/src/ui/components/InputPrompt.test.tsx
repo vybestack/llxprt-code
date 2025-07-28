@@ -32,7 +32,6 @@ vi.mock('../hooks/useCompletion.js');
 vi.mock('../hooks/useInputHistory.js');
 vi.mock('../utils/clipboardUtils.js');
 
-
 const mockSlashCommands: SlashCommand[] = [
   {
     name: 'clear',

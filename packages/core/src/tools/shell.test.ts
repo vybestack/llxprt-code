@@ -389,27 +389,24 @@ describe('ShellTool', () => {
 
       // Mock shell execution for this specific test
       mockShellExecutionService.mockImplementationOnce(() => ({
+        pid: 12345,
+        result: Promise.resolve({
+          rawOutput: Buffer.from('1\n'),
+          output: '1\n',
+          stdout: '1\n',
+          stderr: '',
+          exitCode: 0,
+          signal: null,
+          error: null,
+          aborted: false,
           pid: 12345,
-          result: Promise.resolve({
-            rawOutput: Buffer.from('1\n'),
-            output: '1\n',
-            stdout: '1\n',
-            stderr: '',
-            exitCode: 0,
-            signal: null,
-            error: null,
-            aborted: false,
-            pid: 12345,
-          }),
-        }));
+        }),
+      }));
 
       const abortSignal = new AbortController().signal;
       const command =
         os.platform() === 'win32' ? 'echo %LLXPRT_CLI%' : 'echo "$LLXPRT_CLI"';
-      const result = await testShellTool.execute(
-        { command },
-        abortSignal,
-      );
+      const result = await testShellTool.execute({ command }, abortSignal);
 
       expect(result.returnDisplay).toContain('1');
     });
