@@ -1037,7 +1037,7 @@ export class GeminiProvider implements IProvider {
           const contentGenerator = genAI.models;
 
           const apiKeyRequest = {
-            model: this.currentModel,
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 role: 'user',
@@ -1073,7 +1073,7 @@ export class GeminiProvider implements IProvider {
           const vertexContentGenerator = genAI.models;
 
           const vertexRequest = {
-            model: this.currentModel,
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 role: 'user',
@@ -1098,14 +1098,9 @@ export class GeminiProvider implements IProvider {
             this.config!,
           );
 
-          const oauthModel = this.modelExplicitlySet
-            ? this.currentModel
-            : this.config?.getModel() || this.currentModel;
-
-          // For OAuth, we need to use the ContentGenerator interface
-          // which has a different API - it expects tools in the config
+          // For web search, always use gemini-2.5-flash regardless of the active model
           const oauthRequest: GenerateContentParameters = {
-            model: oauthModel,
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 role: 'user',
@@ -1162,7 +1157,7 @@ export class GeminiProvider implements IProvider {
           const contentGenerator = genAI.models;
 
           const apiKeyRequest = {
-            model: this.currentModel,
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 role: 'user',
@@ -1198,7 +1193,7 @@ export class GeminiProvider implements IProvider {
           const vertexContentGenerator = genAI.models;
 
           const vertexRequest = {
-            model: this.currentModel,
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 role: 'user',
@@ -1223,14 +1218,9 @@ export class GeminiProvider implements IProvider {
             this.config!,
           );
 
-          const oauthModel = this.modelExplicitlySet
-            ? this.currentModel
-            : this.config?.getModel() || this.currentModel;
-
-          // For OAuth, we need to use the ContentGenerator interface
-          // which has a different API - it expects tools in the config
+          // For web fetch, always use gemini-2.5-flash regardless of the active model
           const oauthRequest: GenerateContentParameters = {
-            model: oauthModel,
+            model: 'gemini-2.5-flash',
             contents: [
               {
                 role: 'user',
