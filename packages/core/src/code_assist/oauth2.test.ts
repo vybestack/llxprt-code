@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -306,13 +306,6 @@ describe('oauth2', () => {
     let mockComputeClient: Compute;
 
     beforeEach(() => {
-      vi.spyOn(os, 'homedir').mockReturnValue('/user/home');
-      vi.spyOn(fs.promises, 'mkdir').mockResolvedValue(undefined);
-      vi.spyOn(fs.promises, 'writeFile').mockResolvedValue(undefined);
-      vi.spyOn(fs.promises, 'readFile').mockRejectedValue(
-        new Error('File not found'),
-      ); // Default to no cached creds
-
       mockGetAccessToken.mockResolvedValue({ token: 'test-access-token' });
       mockComputeClient = {
         credentials: { refresh_token: 'test-refresh-token' },
@@ -324,9 +317,9 @@ describe('oauth2', () => {
 
     it('should attempt to load cached credentials first', async () => {
       const cachedCreds = { refresh_token: 'cached-token' };
-      vi.spyOn(fs.promises, 'readFile').mockResolvedValue(
-        JSON.stringify(cachedCreds),
-      );
+      const credsPath = path.join(tempHomeDir, '.llxprt', 'oauth_creds.json');
+      await fs.promises.mkdir(path.dirname(credsPath), { recursive: true });
+      await fs.promises.writeFile(credsPath, JSON.stringify(cachedCreds));
 
       const mockClient = {
         setCredentials: vi.fn(),
@@ -342,10 +335,6 @@ describe('oauth2', () => {
 
       await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
 
-      expect(fs.promises.readFile).toHaveBeenCalledWith(
-        '/user/home/.llxprt/oauth_creds.json',
-        'utf-8',
-      );
       expect(mockClient.setCredentials).toHaveBeenCalledWith(cachedCreds);
       expect(mockClient.getAccessToken).toHaveBeenCalled();
       expect(mockClient.getTokenInfo).toHaveBeenCalled();
@@ -366,7 +355,8 @@ describe('oauth2', () => {
 
       await getOauthClient(AuthType.CLOUD_SHELL, mockConfig);
 
-      expect(fs.promises.writeFile).not.toHaveBeenCalled();
+      const credsPath = path.join(tempHomeDir, '.llxprt', 'oauth_creds.json');
+      expect(fs.existsSync(credsPath)).toBe(false);
     });
 
     it('should return the Compute client on successful ADC authentication', async () => {
@@ -410,10 +400,6 @@ describe('oauth2', () => {
           .mockResolvedValue({ email: 'test-gcp-account@gmail.com' }),
       } as unknown as Response);
 
-      const writeFileSpy = vi
-        .spyOn(fs.promises, 'writeFile')
-        .mockResolvedValue(undefined);
-
       const client = await getOauthClient(
         AuthType.LOGIN_WITH_GOOGLE,
         mockConfig,
@@ -441,18 +427,11 @@ describe('oauth2', () => {
         '.llxprt',
         'google_accounts.json',
       );
-      expect(writeFileSpy).toHaveBeenCalledWith(
-        googleAccountPath,
-        JSON.stringify(
-          {
-            active: 'test-gcp-account@gmail.com',
-            old: [],
-          },
-          null,
-          2,
-        ),
-        'utf-8',
-      );
+      const cachedContent = fs.readFileSync(googleAccountPath, 'utf-8');
+      expect(JSON.parse(cachedContent)).toEqual({
+        active: 'test-gcp-account@gmail.com',
+        old: [],
+      });
     });
 
     it('should not use GCP token if GOOGLE_CLOUD_ACCESS_TOKEN is not set', async () => {
@@ -473,9 +452,9 @@ describe('oauth2', () => {
 
       // Make it fall through to cached credentials path
       const cachedCreds = { refresh_token: 'cached-token' };
-      vi.spyOn(fs.promises, 'readFile').mockResolvedValue(
-        JSON.stringify(cachedCreds),
-      );
+      const credsPath = path.join(tempHomeDir, '.llxprt', 'oauth_creds.json');
+      await fs.promises.mkdir(path.dirname(credsPath), { recursive: true });
+      await fs.promises.writeFile(credsPath, JSON.stringify(cachedCreds));
 
       await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
 
@@ -502,9 +481,9 @@ describe('oauth2', () => {
 
       // Make it fall through to cached credentials path
       const cachedCreds = { refresh_token: 'cached-token' };
-      vi.spyOn(fs.promises, 'readFile').mockResolvedValue(
-        JSON.stringify(cachedCreds),
-      );
+      const credsPath = path.join(tempHomeDir, '.llxprt', 'oauth_creds.json');
+      await fs.promises.mkdir(path.dirname(credsPath), { recursive: true });
+      await fs.promises.writeFile(credsPath, JSON.stringify(cachedCreds));
 
       await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
 

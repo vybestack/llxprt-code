@@ -4,10 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useReducer,
+} from 'react';
 import {
   Box,
   DOMElement,
+  measureElement,
   Static,
   Text,
   useStdin,
@@ -16,15 +24,12 @@ import {
   type Key as InkKeyType,
 } from 'ink';
 import { StreamingState, type HistoryItem, MessageType } from './types.js';
+import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
-import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
-import { useProviderDialog } from './hooks/useProviderDialog.js';
-import { ProviderModelDialog } from './components/ProviderModelDialog.js';
-import { ProviderDialog } from './components/ProviderDialog.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
@@ -38,9 +43,10 @@ import { ThemeDialog } from './components/ThemeDialog.js';
 import { AuthDialog } from './components/AuthDialog.js';
 import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
+import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
-// loadHierarchicalLlxprtMemory is now imported in SessionController
+import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import { LoadedSettings } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
@@ -49,16 +55,21 @@ import { DetailedMessagesDisplay } from './components/DetailedMessagesDisplay.js
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
 import { IDEContextDetailDisplay } from './components/IDEContextDetailDisplay.js';
-// useHistory is now managed by SessionController
+import { useHistory } from './hooks/useHistoryManager.js';
 import process from 'node:process';
 import {
+  getErrorMessage,
   type Config,
   getAllLlxprtMdFilenames,
   ApprovalMode,
   isEditorAvailable,
   EditorType,
-  type OpenFiles,
+  FlashFallbackEvent,
+  logFlashFallback,
+  AuthType,
+  type IdeContext,
   ideContext,
+  type IModel,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
@@ -71,23 +82,35 @@ import { useGitBranchName } from './hooks/useGitBranchName.js';
 import { useFocus } from './hooks/useFocus.js';
 import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
+import { useVimMode, VimModeProvider } from './contexts/VimModeContext.js';
+import { useVim } from './hooks/vim.js';
 import * as fs from 'fs';
+import {
+  appReducer,
+  initialAppState,
+  type AppState,
+  type AppAction,
+} from './reducers/appReducer.js';
+import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
 import { UpdateNotification } from './components/UpdateNotification.js';
-// Quota error functions moved to SessionController
+import {
+  isProQuotaExceededError,
+  isGenericQuotaExceededError,
+  UserTierId,
+} from '@vybestack/llxprt-code-core';
 import { checkForUpdates } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
+import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
-import { UIStateShell } from './containers/UIStateShell.js';
-import { useLayout } from './components/LayoutManager.js';
-import { SessionController } from './containers/SessionController.js';
-import { useSession } from './hooks/useSession.js';
+import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
+import { useProviderDialog } from './hooks/useProviderDialog.js';
+import { ProviderModelDialog } from './components/ProviderModelDialog.js';
+import { ProviderDialog } from './components/ProviderDialog.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
-
-// Helper functions moved to SessionController
 
 interface AppProps {
   config: Config;
@@ -96,25 +119,37 @@ interface AppProps {
   version: string;
 }
 
-interface AppInnerProps extends AppProps {
-  isAuthenticating: boolean;
-  setIsAuthenticating: (value: boolean) => void;
-}
-
 export const AppWrapper = (props: AppProps) => (
   <SessionStatsProvider>
-    <App {...props} />
+    <VimModeProvider settings={props.settings}>
+      <AppWithState {...props} />
+    </VimModeProvider>
   </SessionStatsProvider>
 );
 
-// Inner component that uses layout context
-const AppInner = ({
+// New intermediate component that manages state and provides context
+const AppWithState = (props: AppProps) => {
+  const [appState, appDispatch] = useReducer(appReducer, initialAppState);
+
+  return (
+    <AppDispatchProvider value={appDispatch}>
+      <App {...props} appState={appState} appDispatch={appDispatch} />
+    </AppDispatchProvider>
+  );
+};
+
+interface AppInternalProps extends AppProps {
+  appState: AppState;
+  appDispatch: React.Dispatch<AppAction>;
+}
+
+const App = ({
   config,
   settings,
   startupWarnings = [],
   version,
-  setIsAuthenticating,
-}: AppInnerProps) => {
+  appState,
+}: AppInternalProps) => {
   const isFocused = useFocus();
   useBracketedPaste();
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -125,18 +160,7 @@ const AppInner = ({
     checkForUpdates().then(setUpdateMessage);
   }, []);
 
-  const {
-    history,
-    addItem,
-    clearItems,
-    loadHistory,
-    sessionState,
-    dispatch: sessionDispatch,
-    appState,
-    appDispatch,
-    checkPaymentModeChange,
-    performMemoryRefresh,
-  } = useSession();
+  const { history, addItem, clearItems, loadHistory } = useHistory();
   const {
     consoleMessages,
     handleNewMessage,
@@ -153,49 +177,6 @@ const AppInner = ({
   }, [handleNewMessage, config]);
 
   const { stats: sessionStats } = useSessionStats();
-
-  // These are now managed by SessionController
-  const {
-    currentModel,
-    isPaidMode,
-    transientWarnings: sessionTransientWarnings,
-    modelSwitchedFromQuotaError,
-  } = sessionState;
-
-  // Add payment mode warning to startup warnings only at startup
-  const allStartupWarnings = useMemo(() => {
-    const warnings = [...startupWarnings];
-
-    // Only show payment warnings at startup (when history is empty)
-    if (history.length === 0) {
-      try {
-        const providerManager = getProviderManager();
-        if (providerManager.hasActiveProvider()) {
-          const provider = providerManager.getActiveProvider();
-          const isPaidMode = provider.isPaidMode?.();
-
-          // Only show paid/free mode warnings for Gemini provider
-          if (isPaidMode !== undefined && provider.name === 'gemini') {
-            if (isPaidMode) {
-              warnings.push(
-                `! PAID MODE: You are using Gemini with API credentials - usage will be charged to your account`,
-              );
-            } else {
-              warnings.push(
-                `FREE MODE: You are using Gemini with OAuth authentication - no charges will apply`,
-              );
-            }
-          }
-        }
-      } catch (_e) {
-        // Ignore errors when checking payment mode
-      }
-    }
-
-    return warnings;
-  }, [startupWarnings, history]);
-  // Use transient warnings from session state
-  const transientWarnings = sessionTransientWarnings;
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -206,6 +187,12 @@ const AppInner = ({
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
+  const [_themeError, _setThemeError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [_editorError, _setEditorError] = useState<string | null>(null);
+  const [footerHeight, setFooterHeight] = useState<number>(0);
+  const [_corgiMode, setCorgiMode] = useState(false);
+  const [currentModel, setCurrentModel] = useState(config.getModel());
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
@@ -219,42 +206,57 @@ const AppInner = ({
   const ctrlCTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
   const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const showPrivacyNotice = appState.openDialogs.privacy;
-  // modelSwitchedFromQuotaError and userTier are now in sessionState
-  const [_activeFile, _setActiveFile] = useState<string | undefined>();
-  const [openFiles, setOpenFiles] = useState<OpenFiles | undefined>();
+  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
+  const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
+    useState<boolean>(false);
+  const [userTier, setUserTier] = useState<UserTierId | undefined>(undefined);
+  const [ideContextState, setIdeContextState] = useState<
+    IdeContext | undefined
+  >();
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [providerModels, setProviderModels] = useState<IModel[]>([]);
 
   useEffect(() => {
-    const unsubscribe = ideContext.subscribeToOpenFiles(setOpenFiles);
+    const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
     // Set the initial value
-    setOpenFiles(ideContext.getOpenFilesContext());
+    setIdeContextState(ideContext.getIdeContext());
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    const openDebugConsole = () => {
+      setShowErrorDetails(true);
+      setConstrainHeight(false); // Make sure the user sees the full message.
+    };
+    appEvents.on(AppEvent.OpenDebugConsole, openDebugConsole);
+
+    const logErrorHandler = (errorMessage: unknown) => {
+      handleNewMessage({
+        type: 'error',
+        content: String(errorMessage),
+        count: 1,
+      });
+    };
+    appEvents.on(AppEvent.LogError, logErrorHandler);
+
+    return () => {
+      appEvents.off(AppEvent.OpenDebugConsole, openDebugConsole);
+      appEvents.off(AppEvent.LogError, logErrorHandler);
+    };
+  }, [handleNewMessage]);
+
   const openPrivacyNotice = useCallback(() => {
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'privacy' });
-  }, [appDispatch]);
-
-  const closePrivacyNotice = useCallback(() => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'privacy' });
-  }, [appDispatch]);
-
+    setShowPrivacyNotice(true);
+  }, []);
   const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
-    () => consoleMessages.filter((msg) => msg.type === 'error').length,
+    () =>
+      consoleMessages
+        .filter((msg) => msg.type === 'error')
+        .reduce((total, msg) => total + msg.count, 0),
     [consoleMessages],
-  );
-
-  // Create dispatch-based wrapper for addItem
-  const addItemViaDispatch = useCallback(
-    (itemData: Omit<HistoryItem, 'id'>, baseTimestamp: number) => {
-      appDispatch({
-        type: 'ADD_ITEM',
-        payload: { itemData, baseTimestamp },
-      });
-    },
-    [appDispatch],
   );
 
   const {
@@ -262,98 +264,301 @@ const AppInner = ({
     openThemeDialog,
     handleThemeSelect,
     handleThemeHighlight,
-  } = useThemeCommand(settings, appState, addItemViaDispatch);
+  } = useThemeCommand(settings, appState, addItem);
 
   const {
     isAuthDialogOpen,
     openAuthDialog,
     handleAuthSelect,
-    isAuthenticating: authIsAuthenticating,
+    isAuthenticating,
     cancelAuthentication,
   } = useAuthCommand(settings, appState, config);
-
-  // Sync auth state with parent
-  useEffect(() => {
-    setIsAuthenticating(authIsAuthenticating);
-  }, [authIsAuthenticating, setIsAuthenticating]);
-
-  const onAuthTimeout = useCallback(() => {
-    appDispatch({
-      type: 'SET_AUTH_ERROR',
-      payload: 'Authentication timed out. Please try again.',
-    });
-    cancelAuthentication();
-    openAuthDialog();
-  }, [cancelAuthentication, openAuthDialog, appDispatch]);
 
   useEffect(() => {
     if (settings.merged.selectedAuthType) {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
       if (error) {
-        appDispatch({ type: 'SET_AUTH_ERROR', payload: error });
+        setAuthError(error);
         openAuthDialog();
       }
     }
-  }, [settings.merged.selectedAuthType, openAuthDialog, appDispatch]);
+  }, [settings.merged.selectedAuthType, openAuthDialog, setAuthError]);
 
-  // User tier sync is now handled by SessionController
+  // Sync user tier from config when authentication changes
+  useEffect(() => {
+    // Only sync when not currently authenticating
+    if (!isAuthenticating) {
+      setUserTier(config.getGeminiClient()?.getUserTier());
+    }
+  }, [config, isAuthenticating]);
 
   const {
     isEditorDialogOpen,
     openEditorDialog,
     handleEditorSelect,
     exitEditorDialog,
-  } = useEditorSettings(settings, appState, addItemViaDispatch);
+  } = useEditorSettings(settings, appState, addItem);
 
-  const providerModelDialog = useProviderModelDialog({
-    addMessage: (m) =>
-      addItemViaDispatch(
-        { type: m.type, text: m.content },
-        m.timestamp.getTime(),
+  const providerManager = getProviderManager(config);
+  const {
+    showDialog: isProviderDialogOpen,
+    openDialog: openProviderDialog,
+    handleSelect: handleProviderSelect,
+    closeDialog: exitProviderDialog,
+  } = useProviderDialog({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
       ),
-    onModelChange: () => {
-      // Model change detection is handled by SessionController's useEffect
-      // No need to manually update here
-    },
-    appState,
-  });
-
-  const handleClearScreen = useCallback(() => {
-    clearItems();
-    clearConsoleMessagesState();
-    console.clear();
-    refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
-
-  // Provider selection dialog
-  const providerDialog = useProviderDialog({
-    addMessage: (m: { type: MessageType; content: string; timestamp: Date }) =>
-      addItemViaDispatch(
-        { type: m.type, text: m.content },
-        m.timestamp.getTime(),
-      ),
-    onProviderChange: () => {
-      // Provider change will be detected by SessionController's useEffect
-      checkPaymentModeChange?.();
-    },
     appState,
     config,
-    onClear: handleClearScreen,
   });
 
-  // checkPaymentModeChange is now provided by SessionController
+  const {
+    showDialog: isProviderModelDialogOpen,
+    openDialog: openProviderModelDialogRaw,
+    handleSelect: handleProviderModelChange,
+    closeDialog: exitProviderModelDialog,
+  } = useProviderModelDialog({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+  });
 
-  // performMemoryRefresh is now provided by SessionController
+  const openProviderModelDialog = useCallback(async () => {
+    try {
+      const activeProvider = providerManager.getActiveProvider();
+      if (activeProvider) {
+        const models = await activeProvider.getModels();
+        setProviderModels(models);
+      }
+    } catch (e) {
+      console.error('Failed to load models:', e);
+      setProviderModels([]);
+    }
+    await openProviderModelDialogRaw();
+  }, [providerManager, openProviderModelDialogRaw]);
 
-  // Model watching is now handled by SessionController
+  // Update current model when provider or model changes
+  useEffect(() => {
+    const activeProvider = providerManager.getActiveProvider();
+    if (activeProvider) {
+      const providerModel = activeProvider.getCurrentModel?.();
+      if (providerModel && providerModel !== currentModel) {
+        setCurrentModel(providerModel);
+      }
+    }
+  }, [providerManager, currentModel]);
 
-  // Flash fallback handler is now set up by SessionController
+  const toggleCorgiMode = useCallback(() => {
+    setCorgiMode((prev) => !prev);
+  }, []);
+
+  const performMemoryRefresh = useCallback(async () => {
+    addItem(
+      {
+        type: MessageType.INFO,
+        text: 'Refreshing hierarchical memory (LLXPRT.md or other context files)...',
+      },
+      Date.now(),
+    );
+    try {
+      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
+        process.cwd(),
+        config.getDebugMode(),
+        config.getFileService(),
+        settings.merged,
+        config.getExtensionContextFilePaths(),
+        config.getFileFilteringOptions(),
+      );
+
+      config.setUserMemory(memoryContent);
+      config.setLlxprtMdFileCount(fileCount);
+      setLlxprtMdFileCount(fileCount);
+
+      addItem(
+        {
+          type: MessageType.INFO,
+          text: `Memory refreshed successfully. ${memoryContent.length > 0 ? `Loaded ${memoryContent.length} characters from ${fileCount} file(s).` : 'No memory content found.'}`,
+        },
+        Date.now(),
+      );
+      if (config.getDebugMode()) {
+        console.log(
+          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
+        );
+      }
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      addItem(
+        {
+          type: MessageType.ERROR,
+          text: `Error refreshing memory: ${errorMessage}`,
+        },
+        Date.now(),
+      );
+      console.error('Error refreshing memory:', error);
+    }
+  }, [config, addItem, settings.merged]);
+
+  // Watch for model changes (e.g., from Flash fallback)
+  useEffect(() => {
+    const checkModelChange = () => {
+      const configModel = config.getModel();
+      if (configModel !== currentModel) {
+        setCurrentModel(configModel);
+      }
+    };
+
+    // Check immediately and then periodically
+    checkModelChange();
+    const interval = setInterval(checkModelChange, 1000); // Check every second
+
+    return () => clearInterval(interval);
+  }, [config, currentModel]);
+
+  // Set up Flash fallback handler
+  useEffect(() => {
+    const flashFallbackHandler = async (
+      currentModel: string,
+      fallbackModel: string,
+      error?: unknown,
+    ): Promise<boolean> => {
+      let message: string;
+
+      const contentGenConfig = config.getContentGeneratorConfig();
+      const authType = contentGenConfig?.authType;
+      if (authType === AuthType.LOGIN_WITH_GOOGLE) {
+        // Use actual user tier if available; otherwise, default to FREE tier behavior (safe default)
+        const isPaidTier =
+          userTier === UserTierId.LEGACY || userTier === UserTierId.STANDARD;
+
+        // Check if this is a Pro quota exceeded error
+        if (error && isProQuotaExceededError(error)) {
+          if (isPaidTier) {
+            message = `⚡ You have reached your daily ${currentModel} quota limit.
+⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
+⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+          } else {
+            message = `⚡ You have reached your daily ${currentModel} quota limit.
+⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
+⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+⚡ You can switch authentication methods by typing /auth`;
+          }
+        } else if (error && isGenericQuotaExceededError(error)) {
+          if (isPaidTier) {
+            message = `⚡ You have reached your daily quota limit.
+⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
+⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+          } else {
+            message = `⚡ You have reached your daily quota limit.
+⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
+⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+⚡ You can switch authentication methods by typing /auth`;
+          }
+        } else {
+          if (isPaidTier) {
+            // Default fallback message for other cases (like consecutive 429s)
+            message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
+⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
+⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+          } else {
+            // Default fallback message for other cases (like consecutive 429s)
+            message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
+⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
+⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+⚡ You can switch authentication methods by typing /auth`;
+          }
+        }
+
+        // Add message to UI history
+        if (message) {
+          addItem(
+            {
+              type: MessageType.INFO,
+              text: message,
+            },
+            Date.now(),
+          );
+        }
+
+        // Set the flag to prevent tool continuation
+        setModelSwitchedFromQuotaError(true);
+        // Set global quota error flag to prevent Flash model calls
+        config.setQuotaErrorOccurred(true);
+      }
+
+      // Switch model for future use but return false to stop current retry
+      if (fallbackModel) {
+        config.setModel(fallbackModel);
+      }
+      config.setFallbackMode(true);
+      const contentGenConfigForEvent = config.getContentGeneratorConfig();
+      const authTypeForEvent =
+        contentGenConfigForEvent?.authType || AuthType.USE_GEMINI;
+      logFlashFallback(config, new FlashFallbackEvent(authTypeForEvent));
+      return false; // Don't continue with current prompt
+    };
+
+    config.setFlashFallbackHandler(flashFallbackHandler);
+  }, [config, addItem, userTier]);
+
+  // Terminal and UI setup
+  const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
+  const { stdin, setRawMode } = useStdin();
+  const isInitialMount = useRef(true);
+
+  const widthFraction = 0.9;
+  const inputWidth = Math.max(
+    20,
+    Math.floor(terminalWidth * widthFraction) - 3,
+  );
+  const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
+
+  // Utility callbacks
+  const isValidPath = useCallback((filePath: string): boolean => {
+    try {
+      return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+    } catch (_e) {
+      return false;
+    }
+  }, []);
+
+  const getPreferredEditor = useCallback(() => {
+    const editorType = settings.merged.preferredEditor;
+    const isValidEditor = isEditorAvailable(editorType);
+    if (!isValidEditor) {
+      openEditorDialog();
+      return;
+    }
+    return editorType as EditorType;
+  }, [settings, openEditorDialog]);
+
+  const onAuthError = useCallback(() => {
+    setAuthError('reauth required');
+    openAuthDialog();
+  }, [openAuthDialog, setAuthError]);
+
+  // Core hooks and processors
+  const {
+    vimEnabled: vimModeEnabled,
+    vimMode,
+    toggleVimEnabled,
+  } = useVimMode();
 
   const {
     handleSlashCommand,
     slashCommands,
     pendingHistoryItems: pendingSlashCommandHistoryItems,
     commandContext,
+    shellConfirmationRequest,
   } = useSlashCommandProcessor(
     config,
     settings,
@@ -366,52 +571,64 @@ const AppInner = ({
     openThemeDialog,
     openAuthDialog,
     openEditorDialog,
-    providerDialog.openDialog,
-    providerModelDialog.openDialog,
-    performMemoryRefresh,
+    openProviderDialog,
+    openProviderModelDialog,
+    toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
-    checkPaymentModeChange,
-    showToolDescriptions,
+    toggleVimEnabled,
+    setIsProcessing,
   );
-  // FIX: Initialize as empty array, will be combined with pendingGeminiHistoryItems later
-  // This prevents mutations during render
-  let pendingHistoryItems = [...pendingSlashCommandHistoryItems];
 
   const {
-    terminalHeight,
-    terminalWidth,
-    constrainHeight,
-    availableTerminalHeight,
-    setConstrainHeight,
-    footerRef,
-    registerFooterDependency,
-  } = useLayout();
-  const isInitialMount = useRef(true);
-  const { stdin, setRawMode } = useStdin();
-  const isValidPath = useCallback((filePath: string): boolean => {
-    try {
-      return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
-    } catch (_e) {
-      return false;
-    }
-  }, []);
-
-  const widthFraction = 0.9;
-  const inputWidth = Math.max(
-    20,
-    Math.floor(terminalWidth * widthFraction) - 3,
+    streamingState,
+    submitQuery,
+    initError,
+    pendingHistoryItems: pendingGeminiHistoryItems,
+    thought,
+  } = useGeminiStream(
+    config.getGeminiClient(),
+    history,
+    addItem,
+    setShowHelp,
+    config,
+    setDebugMessage,
+    handleSlashCommand,
+    shellModeActive,
+    getPreferredEditor,
+    onAuthError,
+    performMemoryRefresh,
+    modelSwitchedFromQuotaError,
+    setModelSwitchedFromQuotaError,
   );
-  const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
+
+  // Input handling
+  const handleFinalSubmit = useCallback(
+    (submittedValue: string) => {
+      const trimmedValue = submittedValue.trim();
+      if (trimmedValue.length > 0) {
+        submitQuery(trimmedValue);
+      }
+    },
+    [submitQuery],
+  );
 
   const buffer = useTextBuffer({
     initialText: '',
-    viewport: useMemo(() => ({ height: 10, width: inputWidth }), [inputWidth]),
+    viewport: { height: 10, width: inputWidth },
     stdin,
     setRawMode,
     isValidPath,
     shellModeActive,
   });
+
+  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
+  const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
+  pendingHistoryItems.push(...pendingGeminiHistoryItems);
+
+  const { elapsedTime, currentLoadingPhrase } =
+    useLoadingIndicator(streamingState);
+  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config });
 
   const handleExit = useCallback(
     (
@@ -457,7 +674,7 @@ const AppInner = ({
       if (Object.keys(mcpServers || {}).length > 0) {
         handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
       }
-    } else if (key.ctrl && input === 'e' && ideContext) {
+    } else if (key.ctrl && input === 'e' && ideContextState) {
       setShowIDEContextDetail((prev) => !prev);
     } else if (key.ctrl && (input === 'c' || input === 'C')) {
       handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
@@ -477,83 +694,6 @@ const AppInner = ({
       setLlxprtMdFileCount(config.getLlxprtMdFileCount());
     }
   }, [config]);
-
-  const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.preferredEditor;
-    const isValidEditor = isEditorAvailable(editorType);
-    if (!isValidEditor) {
-      openEditorDialog();
-      return;
-    }
-    return editorType as EditorType;
-  }, [settings, openEditorDialog]);
-
-  const onAuthError = useCallback(() => {
-    appDispatch({ type: 'SET_AUTH_ERROR', payload: 'reauth required' });
-    openAuthDialog();
-  }, [openAuthDialog, appDispatch]);
-
-  const geminiClientForStream = useMemo(
-    () => config.getGeminiClient(),
-    [config],
-  );
-
-  const {
-    streamingState,
-    submitQuery,
-    initError,
-    pendingHistoryItems: pendingGeminiHistoryItems,
-    thought,
-  } = useGeminiStream(
-    geminiClientForStream,
-    history,
-    addItem,
-    setShowHelp,
-    config,
-    setDebugMessage,
-    handleSlashCommand,
-    shellModeActive,
-    getPreferredEditor,
-    onAuthError,
-    performMemoryRefresh,
-    modelSwitchedFromQuotaError,
-    useCallback(
-      (value: boolean | ((prev: boolean) => boolean)) => {
-        if (typeof value === 'function') {
-          // Handle function form of setState
-          const currentValue = modelSwitchedFromQuotaError;
-          sessionDispatch({
-            type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR',
-            payload: value(currentValue),
-          });
-        } else {
-          sessionDispatch({
-            type: 'SET_MODEL_SWITCHED_FROM_QUOTA_ERROR',
-            payload: value,
-          });
-        }
-      },
-      [modelSwitchedFromQuotaError, sessionDispatch],
-    ) as React.Dispatch<React.SetStateAction<boolean>>,
-  );
-  // FIX: Create a new array instead of mutating the existing one
-  // This ensures React can properly track changes and prevents infinite loops
-  pendingHistoryItems = [...pendingHistoryItems, ...pendingGeminiHistoryItems];
-  const { elapsedTime, currentLoadingPhrase } =
-    useLoadingIndicator(streamingState);
-  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config });
-
-  const handleFinalSubmit = useCallback(
-    (submittedValue: string) => {
-      const trimmedValue = submittedValue.trim();
-      if (trimmedValue.length > 0) {
-        // Clear transient warnings when user submits a message
-        sessionDispatch({ type: 'CLEAR_TRANSIENT_WARNINGS' });
-        submitQuery(trimmedValue);
-      }
-    },
-    [submitQuery, sessionDispatch],
-  );
 
   const logger = useLogger();
   const [userMessages, setUserMessages] = useState<string[]>([]);
@@ -594,14 +734,31 @@ const AppInner = ({
     fetchUserMessages();
   }, [history, logger]);
 
-  const isInputActive = streamingState === StreamingState.Idle && !initError;
+  const isInputActive =
+    streamingState === StreamingState.Idle && !initError && !isProcessing;
 
+  const handleClearScreen = useCallback(() => {
+    clearItems();
+    clearConsoleMessagesState();
+    console.clear();
+    refreshStatic();
+  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
+
+  const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
 
-  // Register dependencies that affect footer height with LayoutManager
   useEffect(() => {
-    registerFooterDependency();
-  }, [consoleMessages, showErrorDetails, registerFooterDependency]);
+    if (mainControlsRef.current) {
+      const fullFooterMeasurement = measureElement(mainControlsRef.current);
+      setFooterHeight(fullFooterMeasurement.height);
+    }
+  }, [terminalHeight, consoleMessages, showErrorDetails]);
+
+  const staticExtraHeight = /* margins and padding */ 3;
+  const availableTerminalHeight = useMemo(
+    () => terminalHeight - footerHeight - staticExtraHeight,
+    [terminalHeight, footerHeight],
+  );
 
   useEffect(() => {
     // skip refreshing Static during first mount
@@ -646,18 +803,20 @@ const AppInner = ({
   }, [settings.merged.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
-  const geminiClient = useMemo(() => config.getGeminiClient(), [config]);
+  const geminiClient = config.getGeminiClient();
 
   useEffect(() => {
     if (
       initialPrompt &&
       !initialPromptSubmitted.current &&
-      !authIsAuthenticating &&
+      !isAuthenticating &&
       !isAuthDialogOpen &&
       !isThemeDialogOpen &&
       !isEditorDialogOpen &&
+      !isProviderDialogOpen &&
+      !isProviderModelDialogOpen &&
       !showPrivacyNotice &&
-      geminiClient
+      geminiClient?.isInitialized?.()
     ) {
       submitQuery(initialPrompt);
       initialPromptSubmitted.current = true;
@@ -665,10 +824,12 @@ const AppInner = ({
   }, [
     initialPrompt,
     submitQuery,
-    authIsAuthenticating,
+    isAuthenticating,
     isAuthDialogOpen,
     isThemeDialogOpen,
     isEditorDialogOpen,
+    isProviderDialogOpen,
+    isProviderModelDialogOpen,
     showPrivacyNotice,
     geminiClient,
   ]);
@@ -696,16 +857,13 @@ const AppInner = ({
   // Arbitrary threshold to ensure that items in the static area are large
   // enough but not too large to make the terminal hard to use.
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
-
-  // Show loading state if geminiClient is not initialized
-  if (!geminiClientForStream) {
-    console.log('App: geminiClientForStream is not initialized yet');
-    return <Text>Initializing Gemini client...</Text>;
-  }
+  const placeholder = vimModeEnabled
+    ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
+    : '  Type your message or @path/to/file';
 
   return (
     <StreamingContext.Provider value={streamingState}>
-      <Box flexDirection="column" marginBottom={1} width="90%">
+      <Box flexDirection="column" width="90%">
         {/* Move UpdateNotification outside Static so it can re-render when updateMessage changes */}
         {updateMessage && <UpdateNotification message={updateMessage} />}
 
@@ -770,8 +928,8 @@ const AppInner = ({
 
         {showHelp && <Help commands={slashCommands} />}
 
-        <Box flexDirection="column" ref={footerRef}>
-          {(allStartupWarnings.length > 0 || transientWarnings.length > 0) && (
+        <Box flexDirection="column" ref={mainControlsRef}>
+          {startupWarnings.length > 0 && (
             <Box
               borderStyle="round"
               borderColor={Colors.AccentYellow}
@@ -779,12 +937,7 @@ const AppInner = ({
               marginY={1}
               flexDirection="column"
             >
-              {allStartupWarnings.map((warning, index) => (
-                <Text key={index} color={Colors.AccentYellow}>
-                  {warning}
-                </Text>
-              ))}
-              {transientWarnings.map((warning, index) => (
+              {startupWarnings.map((warning, index) => (
                 <Text key={index} color={Colors.AccentYellow}>
                   {warning}
                 </Text>
@@ -792,11 +945,13 @@ const AppInner = ({
             </Box>
           )}
 
-          {isThemeDialogOpen ? (
+          {shellConfirmationRequest ? (
+            <ShellConfirmationDialog request={shellConfirmationRequest} />
+          ) : isThemeDialogOpen ? (
             <Box flexDirection="column">
-              {appState.errors.theme && (
+              {_themeError && (
                 <Box marginBottom={1}>
-                  <Text color={Colors.AccentRed}>{appState.errors.theme}</Text>
+                  <Text color={Colors.AccentRed}>{_themeError}</Text>
                 </Box>
               )}
               <ThemeDialog
@@ -805,15 +960,21 @@ const AppInner = ({
                 settings={settings}
                 availableTerminalHeight={
                   constrainHeight
-                    ? terminalHeight - 3 // margins and padding
+                    ? terminalHeight - staticExtraHeight
                     : undefined
                 }
                 terminalWidth={mainAreaWidth}
               />
             </Box>
-          ) : authIsAuthenticating ? (
+          ) : isAuthenticating ? (
             <>
-              <AuthInProgress onTimeout={onAuthTimeout} />
+              <AuthInProgress
+                onTimeout={() => {
+                  setAuthError('Authentication timed out. Please try again.');
+                  cancelAuthentication();
+                  openAuthDialog();
+                }}
+              />
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
@@ -834,14 +995,14 @@ const AppInner = ({
               <AuthDialog
                 onSelect={handleAuthSelect}
                 settings={settings}
-                initialErrorMessage={appState.errors.auth}
+                initialErrorMessage={authError}
               />
             </Box>
           ) : isEditorDialogOpen ? (
             <Box flexDirection="column">
-              {appState.errors.editor && (
+              {_editorError && (
                 <Box marginBottom={1}>
-                  <Text color={Colors.AccentRed}>{appState.errors.editor}</Text>
+                  <Text color={Colors.AccentRed}>{_editorError}</Text>
                 </Box>
               )}
               <EditorSettingsDialog
@@ -850,26 +1011,29 @@ const AppInner = ({
                 onExit={exitEditorDialog}
               />
             </Box>
-          ) : providerModelDialog.showDialog ? (
-            <Box flexDirection="column">
-              <ProviderModelDialog
-                models={providerModelDialog.models}
-                currentModel={providerModelDialog.currentModel}
-                onSelect={providerModelDialog.handleSelect}
-                onClose={providerModelDialog.closeDialog}
-              />
-            </Box>
-          ) : providerDialog.showDialog ? (
+          ) : isProviderDialogOpen ? (
             <Box flexDirection="column">
               <ProviderDialog
-                providers={providerDialog.providers}
-                currentProvider={providerDialog.currentProvider}
-                onSelect={providerDialog.handleSelect}
-                onClose={providerDialog.closeDialog}
+                providers={providerManager.listProviders()}
+                currentProvider={providerManager.getActiveProviderName()}
+                onSelect={handleProviderSelect}
+                onClose={exitProviderDialog}
+              />
+            </Box>
+          ) : isProviderModelDialogOpen ? (
+            <Box flexDirection="column">
+              <ProviderModelDialog
+                models={providerModels}
+                currentModel={currentModel}
+                onSelect={handleProviderModelChange}
+                onClose={exitProviderModelDialog}
               />
             </Box>
           ) : showPrivacyNotice ? (
-            <PrivacyNotice onExit={closePrivacyNotice} config={config} />
+            <PrivacyNotice
+              onExit={() => setShowPrivacyNotice(false)}
+              config={config}
+            />
           ) : (
             <>
               <LoadingIndicator
@@ -907,8 +1071,7 @@ const AppInner = ({
                     </Text>
                   ) : (
                     <ContextSummaryDisplay
-                      activeFile={_activeFile}
-                      openFiles={openFiles}
+                      ideContext={ideContextState}
                       llxprtMdFileCount={llxprtMdFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
@@ -928,7 +1091,7 @@ const AppInner = ({
                 </Box>
               </Box>
               {showIDEContextDetail && (
-                <IDEContextDetailDisplay openFiles={openFiles} />
+                <IDEContextDetailDisplay ideContext={ideContextState} />
               )}
               {showErrorDetails && (
                 <OverflowProvider>
@@ -959,6 +1122,8 @@ const AppInner = ({
                   shellModeActive={shellModeActive}
                   setShellModeActive={setShellModeActive}
                   focus={isFocused}
+                  vimHandleInput={vimHandleInput}
+                  placeholder={placeholder}
                 />
               )}
             </>
@@ -1008,36 +1173,11 @@ const AppInner = ({
               config.getDebugMode() || config.getShowMemoryUsage()
             }
             promptTokenCount={sessionStats.lastPromptTokenCount}
-            isPaidMode={isPaidMode}
             nightly={nightly}
+            vimMode={vimModeEnabled ? vimMode : undefined}
           />
         </Box>
       </Box>
     </StreamingContext.Provider>
   );
 };
-
-// Intermediate component to pass isAuthenticating to SessionController
-const AppWithAuth = (props: AppProps) => {
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-
-  return (
-    <SessionController
-      config={props.config}
-      isAuthenticating={isAuthenticating}
-    >
-      <AppInner
-        {...props}
-        isAuthenticating={isAuthenticating}
-        setIsAuthenticating={setIsAuthenticating}
-      />
-    </SessionController>
-  );
-};
-
-// Main App component that provides the UIStateShell wrapper
-const App = (props: AppProps) => (
-  <UIStateShell>
-    <AppWithAuth {...props} />
-  </UIStateShell>
-);

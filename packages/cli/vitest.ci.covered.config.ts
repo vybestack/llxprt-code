@@ -26,7 +26,7 @@ export default defineConfig({
     },
     coverage: {
       enabled: true,
-      provider: 'istanbul',
+      provider: 'v8',
       reportsDirectory: './coverage',
       include: [
         'src/**/reducers/**/*.{ts,tsx}',

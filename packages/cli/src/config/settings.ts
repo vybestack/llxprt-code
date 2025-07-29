@@ -86,7 +86,6 @@ export interface Settings {
     enableRecursiveFileSearch?: boolean;
   };
 
-  // UI setting. Does not display the ANSI-controlled terminal title.
   hideWindowTitle?: boolean;
 
   hideTips?: boolean;
@@ -111,15 +110,15 @@ export interface Settings {
   // A map of tool names to their summarization settings.
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
 
+  // Vim mode setting
+  vimMode?: boolean;
+
   // Add other settings here.
   ideMode?: boolean;
 
   // Default model to use when no model is specified
   defaultModel?: string;
   memoryDiscoveryMaxDirs?: number;
-
-  // Vim mode setting
-  vimMode?: boolean;
 }
 
 export interface SettingsError {

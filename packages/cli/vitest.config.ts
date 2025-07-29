@@ -33,7 +33,7 @@ export default defineConfig({
     hookTimeout: 30000,
     coverage: {
       enabled: true,
-      provider: 'istanbul',
+      provider: 'v8',
       reportsDirectory: './coverage',
       include: ['src/**/*'],
       reporter: [

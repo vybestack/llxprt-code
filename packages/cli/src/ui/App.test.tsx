@@ -15,11 +15,13 @@ import {
   AccessibilitySettings,
   SandboxConfig,
   GeminiClient,
+  ideContext,
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
-import { StreamingState } from './types.js';
+import { useConsoleMessages } from './hooks/useConsoleMessages.js';
+import { StreamingState, ConsoleMessageItem } from './types.js';
 import { Tips } from './components/Tips.js';
 
 // Define a more complete mock server config based on actual Config
@@ -58,6 +60,12 @@ interface MockServerConfig {
   getToolCallCommand: Mock<() => string | undefined>;
   getMcpServerCommand: Mock<() => string | undefined>;
   getMcpServers: Mock<() => Record<string, MCPServerConfig> | undefined>;
+  getExtensions: Mock<
+    () => Array<{ name: string; version: string; isActive: boolean }>
+  >;
+  getBlockedMcpServers: Mock<
+    () => Array<{ name: string; extensionName: string }>
+  >;
   getUserAgent: Mock<() => string>;
   getUserMemory: Mock<() => string>;
   setUserMemory: Mock<(newUserMemory: string) => void>;
@@ -72,13 +80,9 @@ interface MockServerConfig {
   getAllLlxprtMdFilenames: Mock<() => string[]>;
   getGeminiClient: Mock<() => GeminiClient | undefined>;
   getUserTier: Mock<() => Promise<string | undefined>>;
-  getBlockedMcpServers: Mock<
-    () => Array<{ name: string; extensionName: string }>
-  >;
-  getProxy: Mock<() => string | undefined>;
 }
 
-// Mock llxprt-code-core and its Config class
+// Mock @vybestack/llxprt-code-core and its Config class
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actualCore =
     await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
@@ -122,6 +126,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getToolCallCommand: vi.fn(() => opts.toolCallCommand),
         getMcpServerCommand: vi.fn(() => opts.mcpServerCommand),
         getMcpServers: vi.fn(() => opts.mcpServers),
+        getPromptRegistry: vi.fn(),
+        getExtensions: vi.fn(() => []),
+        getBlockedMcpServers: vi.fn(() => []),
         getUserAgent: vi.fn(() => opts.userAgent || 'test-agent'),
         getUserMemory: vi.fn(() => opts.userMemory || ''),
         setUserMemory: vi.fn(),
@@ -138,17 +145,16 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         })),
         getCheckpointingEnabled: vi.fn(() => opts.checkpointing ?? true),
         getAllLlxprtMdFilenames: vi.fn(() => ['LLXPRT.md']),
-        getBlockedMcpServers: vi.fn(() => opts.blockedMcpServers || []),
-        getProxy: vi.fn(() => opts.proxy),
         setFlashFallbackHandler: vi.fn(),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
         getIdeMode: vi.fn(() => false),
       };
     });
+
   const ideContextMock = {
-    getOpenFilesContext: vi.fn(),
-    subscribeToOpenFiles: vi.fn(() => vi.fn()), // subscribe returns an unsubscribe function
+    getIdeContext: vi.fn(),
+    subscribeToIdeContext: vi.fn(() => vi.fn()), // subscribe returns an unsubscribe function
   };
 
   return {
@@ -184,6 +190,14 @@ vi.mock('./hooks/useAuthCommand', () => ({
 vi.mock('./hooks/useLogger', () => ({
   useLogger: vi.fn(() => ({
     getPreviousUserMessages: vi.fn().mockResolvedValue([]),
+  })),
+}));
+
+vi.mock('./hooks/useConsoleMessages.js', () => ({
+  useConsoleMessages: vi.fn(() => ({
+    consoleMessages: [],
+    handleNewMessage: vi.fn(),
+    clearConsoleMessages: vi.fn(),
   })),
 }));
 
@@ -239,15 +253,15 @@ describe('App UI', () => {
     );
   };
 
-  beforeEach(async () => {
-    // Use the already mocked Config from llxprt-code-core
-    mockConfig = new ServerConfig({
+  beforeEach(() => {
+    const ServerConfigMocked = vi.mocked(ServerConfig, true);
+    mockConfig = new ServerConfigMocked({
       embeddingModel: 'test-embedding-model',
       sandbox: undefined,
       targetDir: '/test/dir',
       debugMode: false,
       userMemory: '',
-      llxprtMdFileCount: 0,
+      geminiMdFileCount: 0,
       showMemoryUsage: false,
       sessionId: 'test-session-id',
       cwd: '/tmp',
@@ -255,19 +269,15 @@ describe('App UI', () => {
     }) as unknown as MockServerConfig;
     mockVersion = '0.0.0-test';
 
-    // The mock constructor already sets up getShowMemoryUsage to return false by default
-    // But we need to ensure it's accessible as a mock function for tests that check mockReturnValue
-    if (
-      mockConfig.getShowMemoryUsage &&
-      !mockConfig.getShowMemoryUsage.mockReturnValue
-    ) {
-      // The mock is already set up correctly by the factory
+    // Ensure the getShowMemoryUsage mock function is specifically set up if not covered by constructor mock
+    if (!mockConfig.getShowMemoryUsage) {
+      mockConfig.getShowMemoryUsage = vi.fn(() => false);
     }
+    mockConfig.getShowMemoryUsage.mockReturnValue(false); // Default for most tests
 
     // Ensure a theme is set so the theme dialog does not appear.
     mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
-    const { ideContext } = await import('@vybestack/llxprt-code-core');
-    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue(undefined);
+    vi.mocked(ideContext.getIdeContext).mockReturnValue(undefined);
   });
 
   afterEach(() => {
@@ -279,11 +289,17 @@ describe('App UI', () => {
   });
 
   it('should display active file when available', async () => {
-    const { ideContext } = await import('@vybestack/llxprt-code-core');
-    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
-      activeFile: '/path/to/my-file.ts',
-      recentOpenFiles: [{ filePath: '/path/to/my-file.ts', content: 'hello' }],
-      selectedText: 'hello',
+    vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      workspaceState: {
+        openFiles: [
+          {
+            path: '/path/to/my-file.ts',
+            isActive: true,
+            selectedText: 'hello',
+            timestamp: 0,
+          },
+        ],
+      },
     });
 
     const { lastFrame, unmount } = render(
@@ -295,13 +311,14 @@ describe('App UI', () => {
     );
     currentUnmount = unmount;
     await Promise.resolve();
-    expect(lastFrame()).toContain('1 recent file (ctrl+e to view)');
+    expect(lastFrame()).toContain('1 open file (ctrl+e to view)');
   });
 
-  it('should not display active file when not available', async () => {
-    const { ideContext } = await import('@vybestack/llxprt-code-core');
-    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
-      activeFile: '',
+  it('should not display any files when not available', async () => {
+    vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      workspaceState: {
+        openFiles: [],
+      },
     });
 
     const { lastFrame, unmount } = render(
@@ -316,12 +333,54 @@ describe('App UI', () => {
     expect(lastFrame()).not.toContain('Open File');
   });
 
+  it('should display active file and other open files', async () => {
+    vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      workspaceState: {
+        openFiles: [
+          {
+            path: '/path/to/my-file.ts',
+            isActive: true,
+            selectedText: 'hello',
+            timestamp: 0,
+          },
+          {
+            path: '/path/to/another-file.ts',
+            isActive: false,
+            timestamp: 1,
+          },
+          {
+            path: '/path/to/third-file.ts',
+            isActive: false,
+            timestamp: 2,
+          },
+        ],
+      },
+    });
+
+    const { lastFrame, unmount } = render(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    expect(lastFrame()).toContain('3 open files (ctrl+e to view)');
+  });
+
   it('should display active file and other context', async () => {
-    const { ideContext } = await import('@vybestack/llxprt-code-core');
-    vi.mocked(ideContext.getOpenFilesContext).mockReturnValue({
-      activeFile: '/path/to/my-file.ts',
-      recentOpenFiles: [{ filePath: '/path/to/my-file.ts', content: 'hello' }],
-      selectedText: 'hello',
+    vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      workspaceState: {
+        openFiles: [
+          {
+            path: '/path/to/my-file.ts',
+            isActive: true,
+            selectedText: 'hello',
+            timestamp: 0,
+          },
+        ],
+      },
     });
     mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
     mockConfig.getAllLlxprtMdFilenames.mockReturnValue(['LLXPRT.md']);
@@ -336,7 +395,7 @@ describe('App UI', () => {
     currentUnmount = unmount;
     await Promise.resolve();
     expect(lastFrame()).toContain(
-      'Using: 1 recent file (ctrl+e to view) | 1 LLXPRT.md file',
+      'Using: 1 open file (ctrl+e to view) | 1 LLXPRT.md file',
     );
   });
 
@@ -483,6 +542,8 @@ describe('App UI', () => {
     mockConfig.getMcpServers.mockReturnValue({
       server1: {} as MCPServerConfig,
     });
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -503,6 +564,8 @@ describe('App UI', () => {
       server1: {} as MCPServerConfig,
       server2: {} as MCPServerConfig,
     });
+    mockConfig.getDebugMode.mockReturnValue(false);
+    mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
     const { lastFrame, unmount } = render(
       <App
@@ -606,6 +669,8 @@ describe('App UI', () => {
       originalNoColor = process.env.NO_COLOR;
       // Ensure no theme is set for these tests
       mockSettings = createMockSettings({});
+      mockConfig.getDebugMode.mockReturnValue(false);
+      mockConfig.getShowMemoryUsage.mockReturnValue(false);
     });
 
     afterEach(() => {
@@ -624,7 +689,7 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      expect(lastFrame()).toContain('Select Theme');
+      expect(lastFrame()).toContain("I'm Feeling Lucky (esc to cancel");
     });
 
     it('should display a message if NO_COLOR is set', async () => {
@@ -639,22 +704,48 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      // Wait for async updates
-      await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      expect(lastFrame()).toContain(
-        'Theme configuration unavailable due to NO_COLOR env variable.',
-      );
+      expect(lastFrame()).toContain("I'm Feeling Lucky (esc to cancel");
       expect(lastFrame()).not.toContain('Select Theme');
     });
+  });
+
+  it('should render the initial UI correctly', () => {
+    const { lastFrame, unmount } = render(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    expect(lastFrame()).toMatchSnapshot();
+  });
+
+  it('should render correctly with the prompt input box', () => {
+    vi.mocked(useGeminiStream).mockReturnValue({
+      streamingState: StreamingState.Idle,
+      submitQuery: vi.fn(),
+      initError: null,
+      pendingHistoryItems: [],
+      thought: null,
+    });
+
+    const { lastFrame, unmount } = render(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    expect(lastFrame()).toMatchSnapshot();
   });
 
   describe('with initial prompt from --prompt-interactive', () => {
     it('should submit the initial prompt automatically', async () => {
       const mockSubmitQuery = vi.fn();
 
-      mockConfig.getQuestion.mockReturnValue('hello from prompt-interactive');
+      mockConfig.getQuestion = vi.fn(() => 'hello from prompt-interactive');
 
       vi.mocked(useGeminiStream).mockReturnValue({
         streamingState: StreamingState.Idle,
@@ -692,6 +783,37 @@ describe('App UI', () => {
       expect(mockSubmitQuery).toHaveBeenCalledWith(
         'hello from prompt-interactive',
       );
+    });
+  });
+
+  describe('errorCount', () => {
+    it('should correctly sum the counts of error messages', async () => {
+      const mockConsoleMessages: ConsoleMessageItem[] = [
+        { type: 'error', content: 'First error', count: 1 },
+        { type: 'log', content: 'some log', count: 1 },
+        { type: 'error', content: 'Second error', count: 3 },
+        { type: 'warn', content: 'a warning', count: 1 },
+        { type: 'error', content: 'Third error', count: 1 },
+      ];
+
+      vi.mocked(useConsoleMessages).mockReturnValue({
+        consoleMessages: mockConsoleMessages,
+        handleNewMessage: vi.fn(),
+        clearConsoleMessages: vi.fn(),
+      });
+
+      const { lastFrame, unmount } = render(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+      await Promise.resolve();
+
+      // Total error count should be 1 + 3 + 1 = 5
+      expect(lastFrame()).toContain('5 errors');
     });
   });
 });

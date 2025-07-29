@@ -39,6 +39,7 @@ export interface InputPromptProps {
   suggestionsWidth: number;
   shellModeActive: boolean;
   setShellModeActive: (value: boolean) => void;
+  vimHandleInput?: (key: Key) => boolean;
 }
 
 export const InputPrompt: React.FC<InputPromptProps> = ({
@@ -55,6 +56,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   suggestionsWidth,
   shellModeActive,
   setShellModeActive,
+  vimHandleInput,
 }) => {
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
   const [pasteMessage, setPasteMessage] = useState<string | null>(null);
@@ -168,6 +170,10 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     (key: Key) => {
       /// We want to handle paste even when not focused to support drag and drop.
       if (!focus && !key.paste) {
+        return;
+      }
+
+      if (vimHandleInput && vimHandleInput(key)) {
         return;
       }
 
@@ -359,6 +365,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       shellHistory,
       handleClipboardImage,
       resetCompletionState,
+      vimHandleInput,
     ],
   );
 

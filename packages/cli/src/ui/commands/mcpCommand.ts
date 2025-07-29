@@ -12,6 +12,7 @@ import {
   MessageActionReturn,
 } from './types.js';
 import {
+  DiscoveredMCPPrompt,
   DiscoveredMCPTool,
   getMCPDiscoveryState,
   getMCPServerStatus,
@@ -103,6 +104,8 @@ const getMcpStatus = async (
       (tool: Tool) =>
         tool instanceof DiscoveredMCPTool && tool.serverName === serverName,
     ) as DiscoveredMCPTool[];
+    const promptRegistry = await config.getPromptRegistry();
+    const serverPrompts = promptRegistry.getPromptsByServer(serverName) || [];
 
     const status = getMCPServerStatus(serverName);
 
@@ -162,9 +165,26 @@ const getMcpStatus = async (
 
     // Add tool count with conditional messaging
     if (status === MCPServerStatus.CONNECTED) {
-      message += ` (${serverTools.length} tools)`;
+      const parts = [];
+      if (serverTools.length > 0) {
+        parts.push(
+          `${serverTools.length} ${serverTools.length === 1 ? 'tool' : 'tools'}`,
+        );
+      }
+      if (serverPrompts.length > 0) {
+        parts.push(
+          `${serverPrompts.length} ${
+            serverPrompts.length === 1 ? 'prompt' : 'prompts'
+          }`,
+        );
+      }
+      if (parts.length > 0) {
+        message += ` (${parts.join(', ')})`;
+      } else {
+        message += ` (0 tools)`;
+      }
     } else if (status === MCPServerStatus.CONNECTING) {
-      message += ` (tools will appear when ready)`;
+      message += ` (tools and prompts will appear when ready)`;
     } else {
       message += ` (${serverTools.length} tools cached)`;
     }
@@ -188,6 +208,7 @@ const getMcpStatus = async (
     message += RESET_COLOR;
 
     if (serverTools.length > 0) {
+      message += `  ${COLOR_CYAN}Tools:${RESET_COLOR}\n`;
       serverTools.forEach((tool) => {
         if (showDescriptions && tool.description) {
           // Format tool name in cyan using simple ANSI cyan color
@@ -224,12 +245,41 @@ const getMcpStatus = async (
           }
         }
       });
-    } else {
+    }
+    if (serverPrompts.length > 0) {
+      if (serverTools.length > 0) {
+        message += '\n';
+      }
+      message += `  ${COLOR_CYAN}Prompts:${RESET_COLOR}\n`;
+      serverPrompts.forEach((prompt: DiscoveredMCPPrompt) => {
+        if (showDescriptions && prompt.description) {
+          message += `  - ${COLOR_CYAN}${prompt.name}${RESET_COLOR}`;
+          const descLines = prompt.description.trim().split('\n');
+          if (descLines) {
+            message += ':\n';
+            for (const descLine of descLines) {
+              message += `      ${COLOR_GREEN}${descLine}${RESET_COLOR}\n`;
+            }
+          } else {
+            message += '\n';
+          }
+        } else {
+          message += `  - ${COLOR_CYAN}${prompt.name}${RESET_COLOR}\n`;
+        }
+      });
+    }
+
+    if (serverTools.length === 0 && serverPrompts.length === 0) {
+      message += '  No tools or prompts available\n';
+    } else if (serverTools.length === 0) {
       message += '  No tools available';
       if (status === MCPServerStatus.DISCONNECTED && needsAuthHint) {
         message += ` ${COLOR_GREY}(type: "/mcp auth ${serverName}" to authenticate this server)${RESET_COLOR}`;
       }
       message += '\n';
+    } else if (status === MCPServerStatus.DISCONNECTED && needsAuthHint) {
+      // This case is for when serverTools.length > 0
+      message += `  ${COLOR_GREY}(type: "/mcp auth ${serverName}" to authenticate this server)${RESET_COLOR}\n`;
     }
     message += '\n';
   }
@@ -332,11 +382,10 @@ const authCommand: SlashCommand = {
       // Import dynamically to avoid circular dependencies
       const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
 
-      // Create OAuth config for authentication (will be discovered automatically)
-      const oauthConfig = server.oauth || {
-        authorizationUrl: '', // Will be discovered automatically
-        tokenUrl: '', // Will be discovered automatically
-      };
+      let oauthConfig = server.oauth;
+      if (!oauthConfig) {
+        oauthConfig = { enabled: false };
+      }
 
       // Pass the MCP server URL for OAuth discovery
       const mcpServerUrl = server.httpUrl || server.url;

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -82,8 +82,8 @@ export const VimModeProvider = ({
 
 export const useVimMode = () => {
   const context = useContext(VimModeContext);
-  if (!context) {
-    throw new Error('useVimMode must be used within VimModeProvider');
+  if (context === undefined) {
+    throw new Error('useVimMode must be used within a VimModeProvider');
   }
   return context;
 };

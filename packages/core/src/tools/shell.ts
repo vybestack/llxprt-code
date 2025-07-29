@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,13 +18,19 @@ import {
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { Type } from '@google/genai';
-import stripAnsi from 'strip-ansi';
+import { summarizeToolOutput } from '../utils/summarizer.js';
+import {
+  ShellExecutionService,
+  ShellOutputEvent,
+} from '../services/shellExecutionService.js';
+import { formatMemoryUsage } from '../utils/formatters.js';
 import {
   getCommandRoots,
   isCommandAllowed,
   stripShellWrapper,
 } from '../utils/shell-utils.js';
-import { summarizeToolOutput } from '../utils/summarizer.js';
+
+export const OUTPUT_UPDATE_INTERVAL_MS = 1000;
 
 export interface ShellToolParams {
   /**
@@ -36,10 +42,15 @@ export interface ShellToolParams {
    * Optional description of what this command does, used for confirmation prompts
    */
   description?: string;
+
+  /**
+   * Optional directory to execute the command in, relative to the target directory
+   */
+  directory?: string;
 }
 
 export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
-  static readonly Name = 'shell_tool';
+  static readonly Name = 'run_shell_command';
 
   constructor(private config: Config) {
     super(
@@ -56,6 +67,11 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
           description: {
             description:
               'Optional description of what this command does, used for confirmation prompts',
+            type: Type.STRING,
+          },
+          directory: {
+            description:
+              'Optional directory to execute the command in, relative to the target directory',
             type: Type.STRING,
           },
         },
@@ -130,156 +146,209 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
   async execute(
     params: ShellToolParams,
     signal: AbortSignal,
+    updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
+    const strippedCommand = stripShellWrapper(params.command);
+    const validationError = this.validateToolParams({
+      ...params,
+      command: strippedCommand,
+    });
+    if (validationError) {
+      return {
+        llmContent: validationError,
+        returnDisplay: validationError,
+      };
+    }
+
+    if (signal.aborted) {
+      return {
+        llmContent: 'Command was cancelled by user before it could start.',
+        returnDisplay: 'Command cancelled by user.',
+      };
+    }
+
+    const isWindows = os.platform() === 'win32';
+    const tempFileName = `shell_pgrep_${crypto
+      .randomBytes(6)
+      .toString('hex')}.tmp`;
+    const tempFilePath = path.join(os.tmpdir(), tempFileName);
+
     try {
-      const isWindows = os.platform() === 'win32';
-      const shell = isWindows ? 'cmd.exe' : 'bash';
-      const shellArgs = isWindows
-        ? ['/c', params.command]
-        : ['-c', params.command];
+      // pgrep is not available on Windows, so we can't get background PIDs
+      const commandToExecute = isWindows
+        ? strippedCommand
+        : (() => {
+            // wrap command to append subprocess pids (via pgrep) to temporary file
+            let command = strippedCommand.trim();
+            if (!command.endsWith('&')) command += ';';
+            return `{ ${command} }; __code=$?; pgrep -g 0 >${tempFilePath} 2>&1; exit $__code;`;
+          })();
 
-      const { execaCommandSync } = await import('execa');
+      const cwd = path.resolve(
+        this.config.getTargetDir(),
+        params.directory || '',
+      );
 
-      let cleanedCommand = stripShellWrapper(params.command);
-      if (!isWindows) {
-        // On non-windows, wrap the command to capture the final working directory.
-        const pwdFileName = `shell_pwd_${crypto.randomBytes(6).toString('hex')}.tmp`;
-        const pwdFilePath = path.join(os.tmpdir(), pwdFileName);
-        // Ensure command ends with a separator before adding our own.
-        cleanedCommand = cleanedCommand.trim();
-        if (!cleanedCommand.endsWith(';') && !cleanedCommand.endsWith('&')) {
-          cleanedCommand += ';';
-        }
-        cleanedCommand = `{ ${cleanedCommand} }; __code=$?; pwd > "${pwdFilePath}"; exit $__code`;
+      let cumulativeStdout = '';
+      let cumulativeStderr = '';
 
-        try {
-          const result = execaCommandSync(
-            `${shell} ${shellArgs.map((arg) => `'${arg}'`).join(' ')} '${cleanedCommand}'`,
-            {
-              cwd: this.config.getTargetDir(),
-              env: {
-                ...process.env,
-                GEMINI_CLI: '1',
-              },
-              timeout: 1000 * 60 * 15, // 15 minutes
-              all: true,
-              shell: false,
-            },
-          );
+      let lastUpdateTime = Date.now();
+      let isBinaryStream = false;
 
-          // Read the captured PWD
-          let finalPwd = this.config.getTargetDir();
-          if (fs.existsSync(pwdFilePath)) {
-            try {
-              finalPwd = fs.readFileSync(pwdFilePath, 'utf8').trim();
-            } catch (readError) {
-              console.debug('Failed to read PWD file:', readError);
-            } finally {
-              // Clean up the temporary file
-              try {
-                fs.unlinkSync(pwdFilePath);
-              } catch (unlinkError) {
-                console.debug('Failed to unlink PWD file:', unlinkError);
+      const { result: resultPromise } = ShellExecutionService.execute(
+        commandToExecute,
+        cwd,
+        (event: ShellOutputEvent) => {
+          if (!updateOutput) {
+            return;
+          }
+
+          let currentDisplayOutput = '';
+          let shouldUpdate = false;
+
+          switch (event.type) {
+            case 'data':
+              if (isBinaryStream) break; // Don't process text if we are in binary mode
+              if (event.stream === 'stdout') {
+                cumulativeStdout += event.chunk;
+              } else {
+                cumulativeStderr += event.chunk;
               }
+              currentDisplayOutput =
+                cumulativeStdout +
+                (cumulativeStderr ? `\n${cumulativeStderr}` : '');
+              if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
+                shouldUpdate = true;
+              }
+              break;
+            case 'binary_detected':
+              isBinaryStream = true;
+              currentDisplayOutput =
+                '[Binary output detected. Halting stream...]';
+              shouldUpdate = true;
+              break;
+            case 'binary_progress':
+              isBinaryStream = true;
+              currentDisplayOutput = `[Receiving binary output... ${formatMemoryUsage(
+                event.bytesReceived,
+              )} received]`;
+              if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
+                shouldUpdate = true;
+              }
+              break;
+            default: {
+              throw new Error('An unhandled ShellOutputEvent was found.');
             }
           }
 
-          const allOutput = stripAnsi(result.all || '');
-          let response = allOutput;
-
-          // Add warning if directory changed
-          if (finalPwd !== this.config.getTargetDir()) {
-            response = `WARNING: shell mode is stateless; the directory change to '${finalPwd}' will not persist.\n\n${response}`;
+          if (shouldUpdate) {
+            updateOutput(currentDisplayOutput);
+            lastUpdateTime = Date.now();
           }
+        },
+        signal,
+      );
 
-          // Check if summarization is enabled for this tool
-          const summarizerConfig = this.config.getSummarizeToolOutputConfig();
-          const toolSummarizeConfig = summarizerConfig
-            ? summarizerConfig[this.name]
-            : undefined;
-          let llmContent = response;
+      const result = await resultPromise;
 
-          if (toolSummarizeConfig) {
-            const tokenBudget = toolSummarizeConfig.tokenBudget;
-            llmContent = await summarizeToolOutput(
-              response,
-              this.config.getGeminiClient(),
-              signal,
-              tokenBudget,
-            );
-          }
-
-          return {
-            summary: `Executed command: ${params.command}`,
-            returnDisplay: response,
-            llmContent,
-          };
-        } catch (error) {
-          // Clean up PWD file on error
-          if (fs.existsSync(pwdFilePath)) {
-            try {
-              fs.unlinkSync(pwdFilePath);
-            } catch (unlinkError) {
-              console.debug('Failed to unlink PWD file:', unlinkError);
+      const backgroundPIDs: number[] = [];
+      if (os.platform() !== 'win32') {
+        if (fs.existsSync(tempFilePath)) {
+          const pgrepLines = fs
+            .readFileSync(tempFilePath, 'utf8')
+            .split('\n')
+            .filter(Boolean);
+          for (const line of pgrepLines) {
+            if (!/^\d+$/.test(line)) {
+              console.error(`pgrep: ${line}`);
+            }
+            const pid = Number(line);
+            if (pid !== result.pid) {
+              backgroundPIDs.push(pid);
             }
           }
-          throw error; // Re-throw to be caught by outer try-catch
+        } else {
+          if (!signal.aborted) {
+            console.error('missing pgrep output');
+          }
+        }
+      }
+
+      let llmContent = '';
+      if (result.aborted) {
+        llmContent = 'Command was cancelled by user before it could complete.';
+        if (result.output.trim()) {
+          llmContent += ` Below is the output (on stdout and stderr) before it was cancelled:\n${result.output}`;
+        } else {
+          llmContent += ' There was no output before it was cancelled.';
         }
       } else {
-        // Windows path
-        const result = execaCommandSync(
-          `${shell} ${shellArgs.map((arg) => `"${arg}"`).join(' ')} "${cleanedCommand}"`,
-          {
-            cwd: this.config.getTargetDir(),
-            env: {
-              ...process.env,
-              GEMINI_CLI: '1',
-            },
-            timeout: 1000 * 60 * 15, // 15 minutes
-            all: true,
-            shell: false,
-          },
-        );
+        // Create a formatted error string for display, replacing the wrapper command
+        // with the user-facing command.
+        const finalError = result.error
+          ? result.error.message.replace(commandToExecute, params.command)
+          : '(none)';
 
-        const allOutput = stripAnsi(result.all || '');
-        // Check if summarization is enabled for this tool
-        const summarizerConfig = this.config.getSummarizeToolOutputConfig();
-        const toolSummarizeConfig = summarizerConfig
-          ? summarizerConfig[this.name]
-          : undefined;
-        let llmContent = allOutput;
+        llmContent = [
+          `Command: ${params.command}`,
+          `Directory: ${params.directory || '(root)'}`,
+          `Stdout: ${result.stdout || '(empty)'}`,
+          `Stderr: ${result.stderr || '(empty)'}`,
+          `Error: ${finalError}`, // Use the cleaned error string.
+          `Exit Code: ${result.exitCode ?? '(none)'}`,
+          `Signal: ${result.signal ?? '(none)'}`,
+          `Background PIDs: ${
+            backgroundPIDs.length ? backgroundPIDs.join(', ') : '(none)'
+          }`,
+          `Process Group PGID: ${result.pid ?? '(none)'}`,
+        ].join('\n');
+      }
 
-        if (toolSummarizeConfig) {
-          const tokenBudget = toolSummarizeConfig.tokenBudget;
-          llmContent = await summarizeToolOutput(
-            allOutput,
-            this.config.getGeminiClient(),
-            signal,
-            tokenBudget,
-          );
+      let returnDisplayMessage = '';
+      if (this.config.getDebugMode()) {
+        returnDisplayMessage = llmContent;
+      } else {
+        if (result.output.trim()) {
+          returnDisplayMessage = result.output;
+        } else {
+          if (result.aborted) {
+            returnDisplayMessage = 'Command cancelled by user.';
+          } else if (result.signal) {
+            returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
+          } else if (result.error) {
+            returnDisplayMessage = `Command failed: ${getErrorMessage(
+              result.error,
+            )}`;
+          } else if (result.exitCode !== null && result.exitCode !== 0) {
+            returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
+          }
+          // If output is empty and command succeeded (code 0, no error/signal/abort),
+          // returnDisplayMessage will remain empty, which is fine.
         }
+      }
 
-        return {
-          summary: `Executed command: ${params.command}`,
-          returnDisplay: allOutput,
+      const summarizeConfig = this.config.getSummarizeToolOutputConfig();
+      if (summarizeConfig && summarizeConfig[this.name]) {
+        const summary = await summarizeToolOutput(
           llmContent,
+          this.config.getGeminiClient(),
+          signal,
+          summarizeConfig[this.name].tokenBudget,
+        );
+        return {
+          llmContent: summary,
+          returnDisplay: returnDisplayMessage,
         };
       }
-    } catch (error) {
-      let errorMessage = getErrorMessage(error);
-      // Check if error has execa-specific properties
-      if (error && typeof error === 'object' && 'all' in error) {
-        const execaError = error as { all?: string };
-        if (execaError.all) {
-          const allOutput = stripAnsi(execaError.all);
-          errorMessage += `\nOutput:\n${allOutput}`;
-        }
-      }
+
       return {
-        summary: `Command failed: ${params.command}`,
-        llmContent: errorMessage,
-        returnDisplay: errorMessage,
+        llmContent,
+        returnDisplay: returnDisplayMessage,
       };
+    } finally {
+      if (fs.existsSync(tempFilePath)) {
+        fs.unlinkSync(tempFilePath);
+      }
     }
   }
 }

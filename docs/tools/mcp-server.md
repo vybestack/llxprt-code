@@ -570,3 +570,7 @@ The MCP integration tracks several states:
 - **Conflict resolution:** Tool name conflicts between servers are resolved through automatic prefixing
 
 This comprehensive integration makes MCP servers a powerful way to extend the LLxprt Code's capabilities while maintaining security, reliability, and ease of use.
+
+## MCP Prompts as Slash Commands
+
+In addition to tools, MCP servers can expose predefined prompts that can be executed as slash commands within the LLxprt Code. This allows you to create shortcuts for common or complex queries that can be easily invoked by name.

@@ -302,7 +302,8 @@ Expectation for required parameters:
     let editData: CalculatedEdit;
     try {
       editData = await this.calculateEdit(params, abortSignal);
-    } catch {
+    } catch (error) {
+      console.error('Failed to calculate edit:', error);
       return false;
     }
 

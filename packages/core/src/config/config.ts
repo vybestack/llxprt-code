@@ -11,6 +11,7 @@ import {
   ContentGeneratorConfig,
   createContentGeneratorConfig,
 } from '../core/contentGenerator.js';
+import { PromptRegistry } from '../prompts/prompt-registry.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
@@ -198,6 +199,7 @@ export interface ConfigParameters {
 
 export class Config {
   private toolRegistry!: ToolRegistry;
+  private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
   private contentGeneratorConfig!: ContentGeneratorConfig;
   private readonly embeddingModel: string;
@@ -237,7 +239,7 @@ export class Config {
   private readonly noBrowser: boolean;
   private readonly ideMode: boolean;
   private readonly ideClient: IdeClient | undefined;
-  private modelSwitchedDuringSession: boolean = false;
+  private inFallbackMode = false;
   private readonly maxSessionTurns: number;
   private readonly _activeExtensions: ActiveExtension[];
   private readonly listExtensions: boolean;
@@ -346,6 +348,7 @@ export class Config {
     if (this.getCheckpointingEnabled()) {
       await this.getGitService();
     }
+    this.promptRegistry = new PromptRegistry();
     this.toolRegistry = await this.createToolRegistry();
 
     // Create GeminiClient instance immediately without authentication
@@ -372,7 +375,7 @@ export class Config {
     await this.geminiClient.initialize(this.contentGeneratorConfig);
 
     // Reset the session flag since we're explicitly changing auth and using default model
-    this.modelSwitchedDuringSession = false;
+    this.inFallbackMode = false;
   }
 
   getSessionId(): string {
@@ -390,22 +393,25 @@ export class Config {
   setModel(newModel: string): void {
     if (this.contentGeneratorConfig) {
       this.contentGeneratorConfig.model = newModel;
-      this.modelSwitchedDuringSession = true;
     }
     // Also update the base model so it persists across refreshAuth
     this.model = newModel;
   }
 
-  isModelSwitchedDuringSession(): boolean {
-    return this.modelSwitchedDuringSession;
+  isInFallbackMode(): boolean {
+    return this.inFallbackMode;
   }
 
   resetModelToDefault(): void {
     if (this.contentGeneratorConfig) {
       this.contentGeneratorConfig.model = this.originalModel; // Reset to the original default model
-      this.modelSwitchedDuringSession = false;
+      this.inFallbackMode = false;
     }
     this.model = this.originalModel;
+  }
+
+  setFallbackMode(active: boolean): void {
+    this.inFallbackMode = active;
   }
 
   setFlashFallbackHandler(handler: FlashFallbackHandler): void {
@@ -442,6 +448,10 @@ export class Config {
 
   getToolRegistry(): Promise<ToolRegistry> {
     return Promise.resolve(this.toolRegistry);
+  }
+
+  getPromptRegistry(): PromptRegistry {
+    return this.promptRegistry;
   }
 
   getDebugMode(): boolean {

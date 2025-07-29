@@ -151,6 +151,10 @@ describe('Server Config (config.ts)', () => {
 
       (createContentGeneratorConfig as Mock).mockReturnValue(mockContentConfig);
 
+      // Set fallback mode to true to ensure it gets reset
+      config.setFallbackMode(true);
+      expect(config.isInFallbackMode()).toBe(true);
+
       await config.refreshAuth(authType);
 
       expect(createContentGeneratorConfig).toHaveBeenCalledWith(
@@ -162,6 +166,8 @@ describe('Server Config (config.ts)', () => {
       expect(config.getContentGeneratorConfig()?.model).toBe(newModel);
       expect(config.getModel()).toBe(newModel); // getModel() should return the updated model
       expect(GeminiClient).toHaveBeenCalledWith(config);
+      // Verify that fallback mode is reset
+      expect(config.isInFallbackMode()).toBe(false);
     });
   });
 
