@@ -251,6 +251,15 @@ export class Config {
   }>;
   flashFallbackHandler?: FlashFallbackHandler;
   private quotaErrorOccurred: boolean = false;
+  private providerManager?: ProviderManager;
+
+  setProviderManager(providerManager: ProviderManager) {
+    this.providerManager = providerManager;
+  }
+
+  getProviderManager(): ProviderManager | undefined {
+    return this.providerManager;
+  }
   private readonly provider?: string;
   private readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
