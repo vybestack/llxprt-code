@@ -9,9 +9,9 @@ import { getInstallationInfo, PackageManager } from './installationInfo.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as childProcess from 'child_process';
-import { isGitRepository } from '@google/gemini-cli-core';
+import { isGitRepository } from '@vybestack/llxprt-code-core';
 
-vi.mock('@google/gemini-cli-core', () => ({
+vi.mock('@vybestack/llxprt-code-core', () => ({
   isGitRepository: vi.fn(),
 }));
 
@@ -140,7 +140,7 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
-      'brew list -1 | grep -q "^gemini-cli$"',
+      'brew list -1 | grep -q "^llxprt-code$"',
       { stdio: 'ignore' },
     );
     expect(info.packageManager).toBe(PackageManager.HOMEBREW);
@@ -162,7 +162,7 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
 
     expect(mockedExecSync).toHaveBeenCalledWith(
-      'brew list -1 | grep -q "^gemini-cli$"',
+      'brew list -1 | grep -q "^llxprt-code$"',
       { stdio: 'ignore' },
     );
     // Should fall back to default global npm
@@ -171,7 +171,7 @@ describe('getInstallationInfo', () => {
   });
 
   it('should detect global pnpm installation', () => {
-    const pnpmPath = `/Users/test/.pnpm/global/5/node_modules/.pnpm/some-hash/node_modules/@google/gemini-cli/dist/index.js`;
+    const pnpmPath = `/Users/test/.pnpm/global/5/node_modules/.pnpm/some-hash/node_modules/@vybestack/llxprt-code/dist/index.js`;
     process.argv[1] = pnpmPath;
     mockedRealPathSync.mockReturnValue(pnpmPath);
     mockedExecSync.mockImplementation(() => {
@@ -181,7 +181,7 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
     expect(info.packageManager).toBe(PackageManager.PNPM);
     expect(info.isGlobal).toBe(true);
-    expect(info.updateCommand).toBe('pnpm add -g @google/gemini-cli@latest');
+    expect(info.updateCommand).toBe('pnpm add -g @vybestack/llxprt-code@latest');
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
     const infoDisabled = getInstallationInfo(projectRoot, true);
@@ -189,7 +189,7 @@ describe('getInstallationInfo', () => {
   });
 
   it('should detect global yarn installation', () => {
-    const yarnPath = `/Users/test/.yarn/global/node_modules/@google/gemini-cli/dist/index.js`;
+    const yarnPath = `/Users/test/.yarn/global/node_modules/@vybestack/llxprt-code/dist/index.js`;
     process.argv[1] = yarnPath;
     mockedRealPathSync.mockReturnValue(yarnPath);
     mockedExecSync.mockImplementation(() => {
@@ -200,7 +200,7 @@ describe('getInstallationInfo', () => {
     expect(info.packageManager).toBe(PackageManager.YARN);
     expect(info.isGlobal).toBe(true);
     expect(info.updateCommand).toBe(
-      'yarn global add @google/gemini-cli@latest',
+      'yarn global add @vybestack/llxprt-code@latest',
     );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
@@ -219,7 +219,7 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
     expect(info.packageManager).toBe(PackageManager.BUN);
     expect(info.isGlobal).toBe(true);
-    expect(info.updateCommand).toBe('bun add -g @google/gemini-cli@latest');
+    expect(info.updateCommand).toBe('bun add -g @vybestack/llxprt-code@latest');
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
     const infoDisabled = getInstallationInfo(projectRoot, true);
@@ -304,7 +304,7 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
     expect(info.packageManager).toBe(PackageManager.NPM);
     expect(info.isGlobal).toBe(true);
-    expect(info.updateCommand).toBe('npm install -g @google/gemini-cli@latest');
+    expect(info.updateCommand).toBe('npm install -g @vybestack/llxprt-code@latest');
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
     const infoDisabled = getInstallationInfo(projectRoot, true);
