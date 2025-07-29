@@ -16,13 +16,13 @@ describe('GoogleGenAIWrapper', () => {
     const mockGenerateContent = vi.fn().mockResolvedValue({
       candidates: [{ content: { parts: [{ text: 'test response' }] } }],
     });
-    const mockGenerateContentStream = vi
-      .fn()
-      .mockResolvedValue((async function* () {
+    const mockGenerateContentStream = vi.fn().mockResolvedValue(
+      (async function* () {
         yield {
           candidates: [{ content: { parts: [{ text: 'test response' }] } }],
         };
-      })());
+      })(),
+    );
     const mockCountTokens = vi.fn().mockResolvedValue({ totalTokens: 100 });
     const mockEmbedContent = vi
       .fn()
@@ -35,9 +35,12 @@ describe('GoogleGenAIWrapper', () => {
       embedContent: mockEmbedContent,
     };
 
-    vi.mocked(GoogleGenAI).mockImplementation(() => ({
-      models: mockModels,
-    } as any));
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () =>
+        ({
+          models: mockModels,
+        }) as unknown as GoogleGenAI,
+    );
 
     const config = {
       model: 'gemini-pro',
@@ -53,7 +56,7 @@ describe('GoogleGenAIWrapper', () => {
       contents: [{ role: 'user', parts: [{ text: 'Hello' }] }],
     };
 
-    await wrapper.generateContent(request, 'test-prompt-id');
+    await wrapper.generateContent(request);
 
     expect(mockGenerateContent).toHaveBeenCalledWith(request);
     expect(mockGenerateContent).not.toHaveBeenCalledWith(
@@ -63,7 +66,7 @@ describe('GoogleGenAIWrapper', () => {
     );
 
     // Test generateContentStream - should NOT receive user_prompt_id
-    await wrapper.generateContentStream(request, 'test-prompt-id');
+    await wrapper.generateContentStream(request);
 
     expect(mockGenerateContentStream).toHaveBeenCalledWith(request);
     expect(mockGenerateContentStream).not.toHaveBeenCalledWith(
@@ -81,9 +84,12 @@ describe('GoogleGenAIWrapper', () => {
       embedContent: vi.fn(),
     };
 
-    vi.mocked(GoogleGenAI).mockImplementation(() => ({
-      models: mockModels,
-    } as any));
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () =>
+        ({
+          models: mockModels,
+        }) as unknown as GoogleGenAI,
+    );
 
     const config = {
       model: 'gemini-pro',
@@ -111,9 +117,12 @@ describe('GoogleGenAIWrapper', () => {
       embedContent: vi.fn(),
     };
 
-    vi.mocked(GoogleGenAI).mockImplementation(() => ({
-      models: mockModels,
-    } as any));
+    vi.mocked(GoogleGenAI).mockImplementation(
+      () =>
+        ({
+          models: mockModels,
+        }) as unknown as GoogleGenAI,
+    );
 
     const config = {
       model: 'gemini-pro',

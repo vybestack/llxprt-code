@@ -40,7 +40,6 @@ export class GoogleGenAIWrapper implements ContentGenerator {
 
   async generateContent(
     request: GenerateContentParameters,
-    _userPromptId: string, // Ignored - not sent to Google GenAI API
   ): Promise<GenerateContentResponse> {
     // The Google GenAI SDK doesn't accept user_prompt_id, so we just pass the request as-is
     return this.models.generateContent(request);
@@ -48,7 +47,6 @@ export class GoogleGenAIWrapper implements ContentGenerator {
 
   async generateContentStream(
     request: GenerateContentParameters,
-    _userPromptId: string, // Ignored - not sent to Google GenAI API
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     // The Google GenAI SDK doesn't accept user_prompt_id, so we just pass the request as-is
     return this.models.generateContentStream(request);

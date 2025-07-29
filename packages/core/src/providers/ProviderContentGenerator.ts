@@ -40,14 +40,12 @@ export class ProviderContentGenerator implements ContentGenerator {
 
   async generateContent(
     request: GenerateContentParameters,
-    _userPromptId: string,
   ): Promise<GenerateContentResponse> {
     return this.getWrapper().generateContent(request);
   }
 
   async generateContentStream(
     request: GenerateContentParameters,
-    _userPromptId: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     return this.getWrapper().generateContentStream(request);
   }
