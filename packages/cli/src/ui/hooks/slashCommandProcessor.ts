@@ -13,6 +13,8 @@ import {
   Config,
   GitService,
   Logger,
+  logSlashCommand,
+  SlashCommandEvent,
   ToolConfirmationOutcome,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
@@ -237,6 +239,7 @@ export const useSlashCommandProcessor = (
         let currentCommands = commands;
         let commandToExecute: SlashCommand | undefined;
         let pathIndex = 0;
+        const canonicalPath: string[] = [];
 
         for (const part of commandPath) {
           // TODO: For better performance and architectural clarity, this two-pass
@@ -257,6 +260,7 @@ export const useSlashCommandProcessor = (
 
           if (foundCommand) {
             commandToExecute = foundCommand;
+            canonicalPath.push(foundCommand.name);
             pathIndex++;
             if (foundCommand.subCommands) {
               currentCommands = foundCommand.subCommands;
@@ -272,6 +276,17 @@ export const useSlashCommandProcessor = (
           const args = parts.slice(pathIndex).join(' ');
 
           if (commandToExecute.action) {
+            if (config) {
+              const resolvedCommandPath = canonicalPath;
+              const event = new SlashCommandEvent(
+                resolvedCommandPath[0],
+                resolvedCommandPath.length > 1
+                  ? resolvedCommandPath.slice(1).join(' ')
+                  : undefined,
+              );
+              logSlashCommand(config, event);
+            }
+
             const fullCommandContext: CommandContext = {
               ...commandContext,
               invocation: {

@@ -15,6 +15,7 @@ export const EVENT_CLI_CONFIG = 'llxprt_code.config';
 export const EVENT_FLASH_FALLBACK = 'llxprt_code.flash_fallback';
 export const EVENT_FLASH_DECIDED_TO_CONTINUE =
   'llxprt_code.flash_decided_to_continue';
+export const EVENT_SLASH_COMMAND = 'llxprt_code.slash_command';
 
 export const METRIC_TOOL_CALL_COUNT = 'llxprt_code.tool.call.count';
 export const METRIC_TOOL_CALL_LATENCY = 'llxprt_code.tool.call.latency';
