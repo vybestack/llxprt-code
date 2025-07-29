@@ -11,7 +11,6 @@ import {
   CountTokensParameters,
   EmbedContentResponse,
   EmbedContentParameters,
-  GoogleGenAI,
 } from '@google/genai';
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
@@ -20,6 +19,7 @@ import { getEffectiveModel } from './modelCheck.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
 import { UserTierId } from '../code_assist/types.js';
+import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 
 /**
  * Interface abstracting the core functionalities for generating content and counting tokens.
@@ -143,13 +143,7 @@ export async function createContentGenerator(
     config.authType === AuthType.USE_GEMINI ||
     config.authType === AuthType.USE_VERTEX_AI
   ) {
-    const googleGenAI = new GoogleGenAI({
-      apiKey: config.apiKey === '' ? undefined : config.apiKey,
-      vertexai: config.vertexai,
-      httpOptions,
-    });
-
-    return googleGenAI.models;
+    return new GoogleGenAIWrapper(config, httpOptions);
   }
 
   throw new Error(

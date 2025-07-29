@@ -36,7 +36,7 @@ describe('createContentGenerator', () => {
     expect(generator).toBe(mockGenerator);
   });
 
-  it('should create a GoogleGenAI content generator', async () => {
+  it('should create a GoogleGenAIWrapper content generator', async () => {
     const mockGenerator = {
       models: {},
     } as unknown;
@@ -58,7 +58,11 @@ describe('createContentGenerator', () => {
         },
       },
     });
-    expect(generator).toBe((mockGenerator as GoogleGenAI).models);
+    // Now we expect a GoogleGenAIWrapper instance, not the raw models
+    expect(generator).toHaveProperty('generateContent');
+    expect(generator).toHaveProperty('generateContentStream');
+    expect(generator).toHaveProperty('countTokens');
+    expect(generator).toHaveProperty('embedContent');
   });
 });
 
