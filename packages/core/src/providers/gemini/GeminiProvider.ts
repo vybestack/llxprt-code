@@ -421,9 +421,8 @@ export class GeminiProvider implements IProvider {
         };
 
         // Use the content generator stream
-        const streamResult = await contentGenerator.generateContentStream(
-          request,
-        );
+        const streamResult =
+          await contentGenerator.generateContentStream(request);
 
         // Convert the stream to our format
         for await (const response of streamResult) {
@@ -1111,9 +1110,8 @@ export class GeminiProvider implements IProvider {
               tools: [{ googleSearch: {} }],
             },
           };
-          const result = await oauthContentGenerator.generateContent(
-            oauthRequest,
-          );
+          const result =
+            await oauthContentGenerator.generateContent(oauthRequest);
           return result;
         }
 
@@ -1231,9 +1229,8 @@ export class GeminiProvider implements IProvider {
               tools: [{ urlContext: {} }],
             },
           };
-          const result = await oauthContentGenerator.generateContent(
-            oauthRequest,
-          );
+          const result =
+            await oauthContentGenerator.generateContent(oauthRequest);
           return result;
         }
 
