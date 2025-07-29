@@ -19,6 +19,7 @@ import {
   SERVICE_NAME,
   EVENT_SLASH_COMMAND,
 } from './constants.js';
+import { ClearcutLogger } from './clearcut-logger/clearcut-logger.js';
 import {
   ApiErrorEvent,
   ApiRequestEvent,
