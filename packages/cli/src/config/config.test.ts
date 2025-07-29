@@ -36,6 +36,11 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actualServer,
     DEFAULT_TELEMETRY_TARGET: 'local',
+    IdeClient: vi.fn().mockImplementation(() => ({
+      getConnectionStatus: vi.fn(),
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+    })),
     loadEnvironment: vi.fn(),
     loadServerHierarchicalMemory: vi.fn(
       (cwd, debug, fileService, extensionPaths, _maxDirs) =>
