@@ -26,7 +26,10 @@ export async function checkForUpdates(): Promise<UpdateObject | null> {
     }
 
     const notifier = updateNotifier({
-      pkg: packageJson,
+      pkg: {
+        name: packageJson.name,
+        version: packageJson.version,
+      },
       updateCheckInterval: 0, // Check immediately
     });
 
