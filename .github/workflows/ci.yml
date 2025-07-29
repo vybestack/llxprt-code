@@ -59,8 +59,8 @@ jobs:
       pull-requests: write
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        node-version: [20.x, 22.x, 24.x]
+        os: [ubuntu-latest, macos-latest]
+        node-version: [24.x]
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -131,7 +131,7 @@ jobs:
       matrix:
         # Reduce noise by only posting the comment once
         os: [ubuntu-latest]
-        node-version: [22.x]
+        node-version: [24.x]
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
