@@ -122,6 +122,7 @@ export class ClearcutLogger {
   }
 
   async flushToClearcut(): Promise<LogResponse> {
+    // TELEMETRY REMOVED: This method includes retry logic improvements but telemetry remains disabled
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
