@@ -4,34 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import updateNotifier, { UpdateInfo } from 'update-notifier';
 import semver from 'semver';
 import { getPackageJson } from '../../utils/package.js';
 
-const UPDATE_CHECK_URL =
-  'https://registry.npmjs.org/@vybestack/llxprt-code/latest';
-const UPDATE_CHECK_TIMEOUT_MS = 5000;
-
-async function fetchWithTimeout(
-  url: string,
-  timeout: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    return response;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeout}ms`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+export interface UpdateObject {
+  message: string;
+  update: UpdateInfo;
 }
 
-export async function checkForUpdates(): Promise<string | null> {
+export async function checkForUpdates(): Promise<UpdateObject | null> {
   try {
     // Skip update check when running from source (development mode)
     if (process.env.DEV === 'true') {
@@ -43,22 +25,18 @@ export async function checkForUpdates(): Promise<string | null> {
       return null;
     }
 
-    const response = await fetchWithTimeout(
-      UPDATE_CHECK_URL,
-      UPDATE_CHECK_TIMEOUT_MS,
-    );
-    if (!response.ok) {
-      return null;
-    }
+    const notifier = updateNotifier({
+      pkg: packageJson,
+      updateCheckInterval: 0, // Check immediately
+    });
 
-    const latestPackageData = await response.json();
+    const updateInfo = await notifier.fetchInfo();
 
-    if (
-      latestPackageData &&
-      latestPackageData.version &&
-      semver.gt(latestPackageData.version, packageJson.version)
-    ) {
-      return `LLxprt Code update available! ${packageJson.version} → ${latestPackageData.version}\nRun npm install -g ${packageJson.name} to update`;
+    if (updateInfo && semver.gt(updateInfo.latest, updateInfo.current)) {
+      return {
+        message: `LLxprt Code update available! ${updateInfo.current} → ${updateInfo.latest}`,
+        update: updateInfo,
+      };
     }
 
     return null;

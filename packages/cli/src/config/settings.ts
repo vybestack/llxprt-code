@@ -118,6 +118,10 @@ export interface Settings {
 
   // Default model to use when no model is specified
   defaultModel?: string;
+
+  // Setting for disabling auto-update.
+  disableAutoUpdate?: boolean;
+
   memoryDiscoveryMaxDirs?: number;
 }
 
