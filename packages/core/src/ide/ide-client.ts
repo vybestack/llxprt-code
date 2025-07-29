@@ -53,11 +53,11 @@ export class IdeClient {
   }
 
   private getPortFromEnv(): string | undefined {
-    const port = process.env['GEMINI_CLI_IDE_SERVER_PORT'];
+    const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     if (!port) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        'Gemini CLI Companion extension not found. Install via /ide install and restart the CLI in a fresh terminal window.',
+        'LLxprt Code Companion extension not found. Install via /ide install and restart the CLI in a fresh terminal window.',
       );
       return undefined;
     }
@@ -65,7 +65,7 @@ export class IdeClient {
   }
 
   private validateWorkspacePath(): boolean {
-    const ideWorkspacePath = process.env['GEMINI_CLI_IDE_WORKSPACE_PATH'];
+    const ideWorkspacePath = process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
     if (!ideWorkspacePath) {
       this.setState(
         IDEConnectionStatus.Disconnected,
@@ -76,7 +76,7 @@ export class IdeClient {
     if (ideWorkspacePath !== process.cwd()) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `Gemini CLI is running in a different directory (${process.cwd()}) from the IDE's open workspace (${ideWorkspacePath}). Please run Gemini CLI in the same directory.`,
+        `LLxprt Code is running in a different directory (${process.cwd()}) from the IDE's open workspace (${ideWorkspacePath}). Please run LLxprt Code in the same directory.`,
       );
       return false;
     }
