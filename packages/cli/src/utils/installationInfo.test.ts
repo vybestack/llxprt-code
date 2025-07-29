@@ -181,7 +181,9 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
     expect(info.packageManager).toBe(PackageManager.PNPM);
     expect(info.isGlobal).toBe(true);
-    expect(info.updateCommand).toBe('pnpm add -g @vybestack/llxprt-code@latest');
+    expect(info.updateCommand).toBe(
+      'pnpm add -g @vybestack/llxprt-code@latest',
+    );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
     const infoDisabled = getInstallationInfo(projectRoot, true);
@@ -304,7 +306,9 @@ describe('getInstallationInfo', () => {
     const info = getInstallationInfo(projectRoot, false);
     expect(info.packageManager).toBe(PackageManager.NPM);
     expect(info.isGlobal).toBe(true);
-    expect(info.updateCommand).toBe('npm install -g @vybestack/llxprt-code@latest');
+    expect(info.updateCommand).toBe(
+      'npm install -g @vybestack/llxprt-code@latest',
+    );
     expect(info.updateMessage).toContain('Attempting to automatically update');
 
     const infoDisabled = getInstallationInfo(projectRoot, true);
