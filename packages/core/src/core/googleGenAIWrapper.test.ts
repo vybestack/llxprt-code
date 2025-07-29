@@ -7,6 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
 import { GoogleGenAI } from '@google/genai';
+import { AuthType } from './contentGenerator.js';
 
 vi.mock('@google/genai');
 
@@ -41,7 +42,7 @@ describe('GoogleGenAIWrapper', () => {
     const config = {
       model: 'gemini-pro',
       apiKey: 'test-key',
-      authType: 'gemini-api-key' as const,
+      authType: AuthType.USE_GEMINI,
     };
 
     const wrapper = new GoogleGenAIWrapper(config, { headers: {} });
@@ -88,7 +89,7 @@ describe('GoogleGenAIWrapper', () => {
       model: 'gemini-pro',
       apiKey: 'test-key',
       vertexai: true,
-      authType: 'vertex-ai' as const,
+      authType: AuthType.USE_VERTEX_AI,
     };
 
     const httpOptions = { headers: { 'User-Agent': 'Test' } };
@@ -117,7 +118,7 @@ describe('GoogleGenAIWrapper', () => {
     const config = {
       model: 'gemini-pro',
       apiKey: '',
-      authType: 'gemini-api-key' as const,
+      authType: AuthType.USE_GEMINI,
     };
 
     new GoogleGenAIWrapper(config, { headers: {} });
