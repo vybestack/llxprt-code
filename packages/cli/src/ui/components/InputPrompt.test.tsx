@@ -1131,12 +1131,7 @@ describe('InputPrompt', () => {
       stdin.write('\x1B[200~pasted text\x1B[201~');
       await wait();
 
-      expect(mockBuffer.handleInput).toHaveBeenCalledWith(
-        expect.objectContaining({
-          paste: true,
-          sequence: 'pasted text',
-        }),
-      );
+      expect(mockBuffer.insert).toHaveBeenCalledWith('pasted text');
       unmount();
     });
 

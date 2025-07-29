@@ -131,7 +131,7 @@ describe('themeManager.loadCustomThemes', () => {
   };
 
   it('should use values from DEFAULT_THEME when DiffAdded and DiffRemoved are not provided', () => {
-    const { darkTheme } = themeModule;
+    // In llxprt-code, the DEFAULT_THEME is GreenScreen, not darkTheme
     const legacyTheme: Partial<CustomTheme> = { ...baseTheme };
     delete legacyTheme.DiffAdded;
     delete legacyTheme.DiffRemoved;
@@ -139,8 +139,9 @@ describe('themeManager.loadCustomThemes', () => {
     themeManager.loadCustomThemes({ 'Legacy Custom Theme': legacyTheme });
     const result = themeManager.getTheme('Legacy Custom Theme')!;
 
-    expect(result.colors.DiffAdded).toBe(darkTheme.DiffAdded);
-    expect(result.colors.DiffRemoved).toBe(darkTheme.DiffRemoved);
+    // Should use GreenScreen colors for missing fields
+    expect(result.colors.DiffAdded).toBe('#00ff00'); // GreenScreen DiffAdded
+    expect(result.colors.DiffRemoved).toBe('#6a9955'); // GreenScreen DiffRemoved
     expect(result.colors.AccentBlue).toBe(legacyTheme.AccentBlue);
     expect(result.name).toBe(legacyTheme.name);
   });

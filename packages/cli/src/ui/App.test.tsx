@@ -220,6 +220,28 @@ vi.mock('./components/Header.js', () => ({
   Header: vi.fn(() => null),
 }));
 
+vi.mock('./hooks/useFocus.js', () => ({
+  useFocus: vi.fn(() => true),
+}));
+
+vi.mock('./hooks/useBracketedPaste.js', () => ({
+  useBracketedPaste: vi.fn(),
+}));
+
+vi.mock('../providers/providerManagerInstance.js', () => ({
+  getProviderManager: vi.fn(() => ({
+    getActiveProvider: vi.fn(() => ({
+      name: 'test-provider',
+      getCurrentModel: vi.fn(() => 'test-model'),
+      getModels: vi.fn(() => Promise.resolve(['test-model'])),
+    })),
+    getActiveProviderName: vi.fn(() => 'test-provider'),
+    listProviders: vi.fn(() => ['test-provider']),
+    registerProvider: vi.fn(),
+    setActiveProvider: vi.fn(),
+  })),
+}));
+
 describe('App UI', () => {
   let mockConfig: MockServerConfig;
   let mockSettings: LoadedSettings;
@@ -689,7 +711,8 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      expect(lastFrame()).toContain("I'm Feeling Lucky (esc to cancel");
+      expect(lastFrame()).toContain('Select Theme');
+      expect(lastFrame()).toContain('Use Enter to select');
     });
 
     it('should display a message if NO_COLOR is set', async () => {
@@ -704,7 +727,9 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      expect(lastFrame()).toContain("I'm Feeling Lucky (esc to cancel");
+      expect(lastFrame()).toContain(
+        'Theme configuration unavailable due to NO_COLOR env variable',
+      );
       expect(lastFrame()).not.toContain('Select Theme');
     });
   });

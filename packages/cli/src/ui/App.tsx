@@ -546,6 +546,16 @@ const App = ({
     openAuthDialog();
   }, [openAuthDialog, setAuthError]);
 
+  const handleAuthTimeout = useCallback(() => {
+    setAuthError('Authentication timed out. Please try again.');
+    cancelAuthentication();
+    openAuthDialog();
+  }, [setAuthError, cancelAuthentication, openAuthDialog]);
+
+  const handlePrivacyNoticeExit = useCallback(() => {
+    setShowPrivacyNotice(false);
+  }, []);
+
   // Core hooks and processors
   const {
     vimEnabled: vimModeEnabled,
@@ -968,13 +978,7 @@ const App = ({
             </Box>
           ) : isAuthenticating ? (
             <>
-              <AuthInProgress
-                onTimeout={() => {
-                  setAuthError('Authentication timed out. Please try again.');
-                  cancelAuthentication();
-                  openAuthDialog();
-                }}
-              />
+              <AuthInProgress onTimeout={handleAuthTimeout} />
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
@@ -1030,10 +1034,7 @@ const App = ({
               />
             </Box>
           ) : showPrivacyNotice ? (
-            <PrivacyNotice
-              onExit={() => setShowPrivacyNotice(false)}
-              config={config}
-            />
+            <PrivacyNotice onExit={handlePrivacyNoticeExit} config={config} />
           ) : (
             <>
               <LoadingIndicator
