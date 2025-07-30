@@ -113,7 +113,9 @@ export interface Settings {
   // Vim mode setting
   vimMode?: boolean;
 
-  // Add other settings here.
+  // Flag to be removed post-launch.
+  ideModeFeature?: boolean;
+  /// IDE mode setting configured via slash command toggle.
   ideMode?: boolean;
 
   // Default model to use when no model is specified

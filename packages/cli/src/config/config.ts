@@ -65,6 +65,7 @@ export interface CliArgs {
   listExtensions: boolean | undefined;
   provider: string | undefined;
   ideMode: boolean | undefined;
+  ideModeFeature: boolean | undefined;
   key: string | undefined;
   keyfile: string | undefined;
   baseurl: string | undefined;
@@ -202,12 +203,16 @@ export async function parseArguments(): Promise<CliArgs> {
       type: 'boolean',
       description: 'List all available extensions and exit.',
     })
+<<<<<<< HEAD
     .option('provider', {
       type: 'string',
       description: 'The provider to use.',
       default: process.env.LLXPRT_DEFAULT_PROVIDER || 'gemini',
     })
     .option('ide-mode', {
+=======
+    .option('ide-mode-feature', {
+>>>>>>> 325bb891 (Add toggleable IDE mode setting (#5146))
       type: 'boolean',
       description: 'Run in IDE mode?',
     })
@@ -296,10 +301,13 @@ export async function loadCliConfig(
       (v) => v === 'true' || v === '1',
     );
 
-  const ideMode =
-    (argv.ideMode ?? settings.ideMode ?? false) && !process.env.SANDBOX;
+  const ideMode = settings.ideMode ?? false;
 
-  const ideClient = IdeClient.getInstance(ideMode);
+  const ideModeFeature =
+    (argv.ideModeFeature ?? settings.ideModeFeature ?? false) &&
+    !process.env.SANDBOX;
+
+  const ideClient = IdeClient.getInstance(ideMode && ideModeFeature);
 
   const allExtensions = annotateActiveExtensions(
     extensions,
@@ -462,6 +470,7 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: settings.summarizeToolOutput,
     ideMode,
+    ideModeFeature,
     ideClient,
   });
 

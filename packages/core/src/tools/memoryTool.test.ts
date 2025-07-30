@@ -294,7 +294,7 @@ describe('MemoryTool', () => {
         expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
         expect(result.fileName).toContain(path.join('mock', 'home', '.llxprt'));
         expect(result.fileName).toContain('LLXPRT.md');
-        expect(result.fileDiff).toContain('Index: GEMINI.md');
+        expect(result.fileDiff).toContain('Index: LLXPRT.md');
         expect(result.fileDiff).toContain('+## Gemini Added Memories');
         expect(result.fileDiff).toContain('+- Test fact');
         expect(result.originalContent).toBe('');
@@ -406,7 +406,7 @@ describe('MemoryTool', () => {
       if (result && result.type === 'edit') {
         const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
         expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-        expect(result.fileDiff).toContain('Index: GEMINI.md');
+        expect(result.fileDiff).toContain('Index: LLXPRT.md');
         expect(result.fileDiff).toContain('+- New fact');
         expect(result.originalContent).toBe(existingContent);
         expect(result.newContent).toContain('- Old fact');

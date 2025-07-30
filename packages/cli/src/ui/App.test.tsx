@@ -151,6 +151,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         setFlashFallbackHandler: vi.fn(),
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
+        getIdeModeFeature: vi.fn(() => false),
         getIdeMode: vi.fn(() => false),
         getWorkspaceContext: vi.fn(() => ({
           getDirectories: vi.fn(() => []),
