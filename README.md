@@ -155,6 +155,31 @@ For fast inference with popular open models:
    /model accounts/fireworks/models/llama-v3p3-70b-instruct
    ```
 
+### Using xAI (Grok)
+
+Access Grok models through xAI's API:
+
+1. Get your API key from [xAI](https://x.ai/)
+2. Configure using command line:
+
+   ```bash
+   llxprt --provider openai --baseurl https://api.x.ai/v1/ --model grok-3 --keyfile ~/.mh_key
+   ```
+
+   Or configure interactively:
+
+   ```
+   /provider openai
+   /baseurl https://api.x.ai/v1/
+   /model grok-3
+   /keyfile ~/.mh_key
+   ```
+
+3. List available Grok models:
+   ```
+   /model
+   ```
+
 ### Using Google Gemini
 
 You can still use Google's services:
