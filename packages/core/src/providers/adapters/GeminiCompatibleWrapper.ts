@@ -567,11 +567,17 @@ export class GeminiCompatibleWrapper {
         // If there are binary parts from function responses or non-functionResponse parts, add them as user messages
         const allBinaryParts = [...binaryParts, ...nonFunctionResponseParts];
         if (allBinaryParts.length > 0) {
-          messages.push({
-            role: 'user',
+          const binaryMessage: ProviderMessage = {
+            role: ContentGeneratorRole.USER,
             content: '',
-            parts: allBinaryParts,
-          } as ProviderMessage);
+          };
+          
+          // Only include parts field for Gemini provider
+          if (this.provider.name === 'gemini') {
+            binaryMessage.parts = allBinaryParts;
+          }
+          
+          messages.push(binaryMessage);
         }
       } else {
         // Check for function calls (tool calls from the model)
@@ -611,9 +617,14 @@ export class GeminiCompatibleWrapper {
         const message: ProviderMessage = {
           role,
           content: combinedText,
-          // Preserve all parts including non-text content (PDFs, images, etc.)
-          parts: allParts,
         };
+
+        // Only include parts field for Gemini provider
+        // OpenAI and Anthropic don't support the parts field
+        if (this.provider.name === 'gemini') {
+          // Preserve all parts including non-text content (PDFs, images, etc.)
+          message.parts = allParts;
+        }
 
         // If this is an assistant message with function calls, add them
         if (role === 'assistant' && functionCalls.length > 0) {
