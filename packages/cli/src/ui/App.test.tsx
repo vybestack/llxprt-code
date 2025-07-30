@@ -152,6 +152,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getSessionId: vi.fn(() => 'test-session-id'),
         getUserTier: vi.fn().mockResolvedValue(undefined),
         getIdeMode: vi.fn(() => false),
+        getWorkspaceContext: vi.fn(() => ({
+          getDirectories: vi.fn(() => []),
+        })),
       };
     });
 
@@ -314,6 +317,13 @@ describe('App UI', () => {
 
     // Ensure a theme is set so the theme dialog does not appear.
     mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
+
+    // Ensure getWorkspaceContext is available if not added by the constructor
+    if (!mockConfig.getWorkspaceContext) {
+      mockConfig.getWorkspaceContext = vi.fn(() => ({
+        getDirectories: vi.fn(() => ['/test/dir']),
+      }));
+    }
     vi.mocked(ideContext.getIdeContext).mockReturnValue(undefined);
   });
 

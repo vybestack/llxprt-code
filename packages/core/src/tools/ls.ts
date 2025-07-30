@@ -129,8 +129,11 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
     if (!path.isAbsolute(params.path)) {
       return `Path must be absolute: ${params.path}`;
     }
-    if (!isWithinRoot(params.path, this.config.getTargetDir())) {
-      return `Path must be within the root directory (${this.config.getTargetDir()}): ${params.path}`;
+
+    const workspaceContext = this.config.getWorkspaceContext();
+    if (!workspaceContext.isPathWithinWorkspace(params.path)) {
+      const directories = workspaceContext.getDirectories();
+      return `Path must be within one of the workspace directories: ${directories.join(', ')}`;
     }
     return null;
   }

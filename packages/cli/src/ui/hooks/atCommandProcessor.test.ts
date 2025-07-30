@@ -60,6 +60,10 @@ describe('handleAtCommand', () => {
         respectLlxprtIgnore: true,
       }),
       getEnableRecursiveFileSearch: vi.fn(() => true),
+      getWorkspaceContext: () => ({
+        isPathWithinWorkspace: () => true,
+        getDirectories: () => [testRootDir],
+      }),
     } as unknown as Config;
 
     const registry = new ToolRegistry(mockConfig);
