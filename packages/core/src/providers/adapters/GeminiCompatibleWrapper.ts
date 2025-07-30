@@ -571,12 +571,12 @@ export class GeminiCompatibleWrapper {
             role: ContentGeneratorRole.USER,
             content: '',
           };
-          
+
           // Only include parts field for Gemini provider
           if (this.provider.name === 'gemini') {
             binaryMessage.parts = allBinaryParts;
           }
-          
+
           messages.push(binaryMessage);
         }
       } else {
