@@ -335,9 +335,8 @@ export class GeminiCompatibleWrapper {
     providerStream: AsyncIterableIterator<ProviderMessage>,
   ): AsyncIterableIterator<ServerGeminiStreamEvent> {
     for await (const message of providerStream) {
-      // Emit content event if message has content
-      if (message.content) {
-        // Ensure we only pass the string content, not the entire message object
+      // Emit content event if message has non-empty content
+      if (message.content && message.content.length > 0) {
         const contentValue =
           typeof message.content === 'string'
             ? message.content
@@ -393,6 +392,18 @@ export class GeminiCompatibleWrapper {
   private convertContentsToMessages(
     contents: ContentListUnion,
   ): ProviderMessage[] {
+    // Debug logging for OpenRouter issue
+    if (process.env.DEBUG) {
+      console.log(
+        '[GeminiCompatibleWrapper] convertContentsToMessages input:',
+        {
+          type: Array.isArray(contents) ? 'array' : typeof contents,
+          length: Array.isArray(contents) ? contents.length : 'N/A',
+          contents: JSON.stringify(contents).substring(0, 500),
+        },
+      );
+    }
+
     // Normalize ContentListUnion to Content[]
     let contentArray: Content[];
 
