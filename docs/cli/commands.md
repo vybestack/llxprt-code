@@ -95,14 +95,13 @@ These commands are unique to LLxprt Code and enable multi-provider support:
   - **Example:** `/model o3-mini` switches to OpenAI's o3-mini model
 
 - **`/baseurl`**
-- **Usage:** `/baseurl <url>`
-- **Description:** Sets a custom base URL for the current provider's API endpoint, overriding the default URL. Note that when using a custom base URL with the OpenAI provider, some advanced features like the Responses API will be automatically disabled as they are specific to the official OpenAI API.
-
-Example custom endpoints:
-
-- `/baseurl http://localhost:1234/v1/` for local LM Studio
-- `/baseurl https://openrouter.ai/api/v1/` for OpenRouter
-- `/baseurl https://api.fireworks.ai/inference/v1/` for Fireworks
+  - **Usage:** `/baseurl <url>`
+  - **Description:** Sets a custom base URL for the current provider's API endpoint, overriding the default URL. Note that when using a custom base URL with the OpenAI provider, some advanced features like the Responses API will be automatically disabled as they are specific to the official OpenAI API.
+  - **Example custom endpoints:**
+    - `/baseurl http://localhost:1234/v1/` for local LM Studio
+    - `/baseurl https://openrouter.ai/api/v1/` for OpenRouter
+    - `/baseurl https://api.fireworks.ai/inference/v1/` for Fireworks
+    - `/baseurl https://api.x.ai/v1/` for xAI (Grok models)
 
 - **`/key`**
   - **Description:** Set the API key for the current provider session.

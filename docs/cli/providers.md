@@ -10,6 +10,13 @@ LLxprt Code currently supports the following providers:
 - **OpenAI** - o3, o1, GPT-4.1, GPT-4o, and other OpenAI models
 - **Anthropic** - Claude Opus 4, Claude Sonnet 4, and other Anthropic models
 
+Additionally, LLxprt Code supports any OpenAI-compatible API, including:
+
+- **xAI** - Grok models (grok-3, etc.)
+- **OpenRouter** - Access to 100+ models
+- **Fireworks** - Fast inference with open models
+- **Local Models** - LM Studio, llama.cpp, and other local servers
+
 ## Switching Providers
 
 You can switch between providers using the `/provider` command:
@@ -99,6 +106,29 @@ Each provider offers different models. You can select a specific model using the
 - Default provider with seamless integration
 - Supports Gemini Pro and other Google models
 - Native multimodal support
+
+### OpenAI-Compatible Providers
+
+Many providers offer OpenAI-compatible APIs, which can be used by setting the `openai` provider with a custom base URL:
+
+#### xAI (Grok)
+
+To use Grok models:
+
+```bash
+# Command line configuration
+llxprt --provider openai --baseurl https://api.x.ai/v1/ --model grok-3 --keyfile ~/.mh_key
+
+# Or interactive configuration
+/provider openai
+/baseurl https://api.x.ai/v1/
+/model grok-3
+/keyfile ~/.mh_key
+```
+
+#### Other OpenAI-Compatible Services
+
+The same pattern works for OpenRouter, Fireworks, and local models. See the README for detailed examples of each.
 
 ## Tool Parsing
 
