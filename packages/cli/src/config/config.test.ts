@@ -36,11 +36,13 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actualServer,
     DEFAULT_TELEMETRY_TARGET: 'local',
-    IdeClient: vi.fn().mockImplementation(() => ({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    })),
+    IdeClient: {
+      getInstance: vi.fn().mockReturnValue({
+        getConnectionStatus: vi.fn(),
+        initialize: vi.fn(),
+        shutdown: vi.fn(),
+      }),
+    },
     loadEnvironment: vi.fn(),
     loadServerHierarchicalMemory: vi.fn(
       (cwd, debug, fileService, extensionPaths, _maxDirs) =>
@@ -924,8 +926,6 @@ describe('loadCliConfig ideMode', () => {
     vi.resetAllMocks();
     vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
     process.env.GEMINI_API_KEY = 'test-api-key';
-    // Explicitly delete TERM_PROGRAM and SANDBOX before each test
-    delete process.env.TERM_PROGRAM;
     delete process.env.SANDBOX;
     delete process.env.LLXPRT_CODE_IDE_SERVER_PORT;
   });
@@ -944,6 +944,7 @@ describe('loadCliConfig ideMode', () => {
     expect(config.getIdeMode()).toBe(false);
   });
 
+<<<<<<< HEAD
   it('should be false if --ide-mode is true but TERM_PROGRAM is not vscode', async () => {
     process.argv = ['node', 'script.js', '--ide-mode'];
     const settings: Settings = {};
@@ -1009,7 +1010,7 @@ describe('loadCliConfig ideMode', () => {
     expect(config.getIdeMode()).toBe(false);
   });
 
-  it('should be false when settings.ideMode is true, TERM_PROGRAM is vscode, but SANDBOX is set', async () => {
+  it('should be false when settings.ideMode is true, but SANDBOX is set', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments();
     process.env.TERM_PROGRAM = 'vscode';
