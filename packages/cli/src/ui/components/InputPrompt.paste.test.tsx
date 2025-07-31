@@ -101,7 +101,7 @@ let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
 vi.mock('../hooks/useKeypress.js', () => ({
-  useKeypress: (handler: (key: Record<string, unknown>) => void, options?: unknown) => {
+  useKeypress: (handler: (key: Record<string, unknown>) => void, _options?: unknown) => {
     keypressHandler = handler;
   },
   Key: {},
