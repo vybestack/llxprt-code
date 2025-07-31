@@ -59,7 +59,11 @@ describe('Turn', () => {
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
     };
-    turn = new Turn(mockChatInstance as unknown as GeminiChat, 'prompt-id-1');
+    turn = new Turn(
+      mockChatInstance as unknown as GeminiChat,
+      'prompt-id-1',
+      'test',
+    );
     mockGetHistory.mockReturnValue([]);
     mockSendMessageStream.mockResolvedValue((async function* () {})());
   });
@@ -222,7 +226,7 @@ describe('Turn', () => {
       expect(turn.getDebugResponses().length).toBe(0);
       expect(reportError).toHaveBeenCalledWith(
         error,
-        'Error when talking to Gemini API',
+        'Error when talking to test API',
         [...historyContent, reqParts],
         'Turn.run-sendMessageStream',
       );

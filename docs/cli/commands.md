@@ -17,9 +17,10 @@ Slash commands provide meta-level control over the CLI itself.
     - **`save`**
       - **Description:** Saves the current conversation history. You must add a `<tag>` for identifying the conversation state.
       - **Usage:** `/chat save <tag>`
-      - **Details on Checkpoint Location:** The default locations for saved chat checkpoints are:
-        - Linux/macOS: `~/.llxprt/tmp/{project-hash}/`
-        - Windows: `C:\Users\<YourUsername>\.llxprt\tmp\{project-hash}\`
+      - **Details on Checkpoint Location:**
+        - Linux: `/home/username/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
+        - macOS: `/Users/username/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
+        - Windows: `C:\Users\username\.llxprt\tmp\{project-hash}\checkpoint-{tag}.json`
         - When you run `/chat list`, the CLI only scans these specific directories to find available checkpoints.
         - **Note:** These checkpoints are for manually saving and resuming conversation states. For automatic checkpoints created before file modifications, see the [Checkpointing documentation](../checkpointing.md).
     - **`resume`**
@@ -147,17 +148,6 @@ These commands are unique to LLxprt Code and enable multi-provider support:
 
 - **`/quit`** (or **`/exit`**)
   - **Description:** Exit LLxprt Code.
-
-- **`/vim`**
-  - **Description:** Toggle vim mode on or off. When vim mode is enabled, the input area supports vim-style navigation and editing commands in both NORMAL and INSERT modes.
-  - **Features:**
-    - **NORMAL mode:** Navigate with `h`, `j`, `k`, `l`; jump by words with `w`, `b`, `e`; go to line start/end with `0`, `$`, `^`; go to specific lines with `G` (or `gg` for first line)
-    - **INSERT mode:** Standard text input with escape to return to NORMAL mode
-    - **Editing commands:** Delete with `x`, change with `c`, insert with `i`, `a`, `o`, `O`; complex operations like `dd`, `cc`, `dw`, `cw`
-    - **Count support:** Prefix commands with numbers (e.g., `3h`, `5w`, `10G`)
-    - **Repeat last command:** Use `.` to repeat the last editing operation
-    - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
-  - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 - **`/vim`**
   - **Description:** Toggle vim mode on or off. When vim mode is enabled, the input area supports vim-style navigation and editing commands in both NORMAL and INSERT modes.

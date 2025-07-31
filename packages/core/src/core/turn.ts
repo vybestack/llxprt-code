@@ -182,6 +182,7 @@ export class Turn {
   constructor(
     private readonly chat: GeminiChat,
     private readonly prompt_id: string,
+    private readonly providerName: string = 'backend',
   ) {
     this.pendingToolCalls = [];
     this.debugResponses = [];
@@ -278,7 +279,7 @@ export class Turn {
       const contextForReport = [...this.chat.getHistory(/*curated*/ true), req];
       await reportError(
         error,
-        'Error when talking to Gemini API',
+        `Error when talking to ${this.providerName} API`,
         contextForReport,
         'Turn.run-sendMessageStream',
       );
