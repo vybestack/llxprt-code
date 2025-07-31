@@ -440,7 +440,7 @@ describe('ReadManyFilesTool', () => {
         getFileService: () => fileService,
         getFileFilteringOptions: () => ({
           respectGitIgnore: true,
-          respectGeminiIgnore: true,
+          respectLlxprtIgnore: true,
         }),
         getWorkspaceContext: () => new WorkspaceContext(tempDir1, [tempDir2]),
         getTargetDir: () => tempDir1,

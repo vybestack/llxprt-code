@@ -265,7 +265,7 @@ describe('LSTool', () => {
         } as fs.Stats;
       });
       vi.mocked(fs.readdirSync).mockReturnValue(mockFiles as any);
-      (mockFileService.shouldGeminiIgnoreFile as any).mockImplementation(
+      (mockFileService.shouldLlxprtIgnoreFile as any).mockImplementation(
         (path: string) => path.includes('private.js'),
       );
 

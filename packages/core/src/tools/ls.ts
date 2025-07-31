@@ -11,7 +11,6 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
 import { Type } from '@google/genai';
-import { isWithinRoot } from '../utils/fileUtils.js';
 
 /**
  * Parameters for the LS tool
