@@ -159,6 +159,9 @@ These commands are unique to LLxprt Code and enable multi-provider support:
     - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
+- **`/init`**
+  - **Description:** To help users easily create a `LLXPRT.md` file, this command analyzes the current directory and generates a tailored context file, making it simpler for them to provide project-specific instructions to the LLxprt Code agent.
+
 ### Custom Commands
 
 For a quick start, see the [example](#example-a-pure-function-refactoring-command) below.
