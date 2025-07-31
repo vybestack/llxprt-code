@@ -18,7 +18,13 @@ import { type CommandContext } from './types.js';
 import { type Config, DetectedIde } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
-vi.mock('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    getIdeInstaller: vi.fn(),
+  };
+});
 
 describe('ideCommand', () => {
   let mockContext: CommandContext;
