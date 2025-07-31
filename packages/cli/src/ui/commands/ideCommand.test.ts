@@ -17,15 +17,10 @@ import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
 import { 
   type Config, 
-  DetectedIde,
-  IDEConnectionStatus 
+  DetectedIde
 } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
-import * as child_process from 'child_process';
-import { glob } from 'glob';
 
-vi.mock('child_process');
-vi.mock('glob');
 vi.mock('@vybestack/llxprt-code-core');
 
 describe('ideCommand', () => {

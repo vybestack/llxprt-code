@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { fileURLToPath } from 'url';
 import {
   Config,
   getIdeDisplayName,
@@ -100,27 +99,6 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
             },
             Date.now(),
           );
-<<<<<<< HEAD
-          try {
-            child_process.execSync(command, { stdio: 'pipe' });
-            context.ui.addItem(
-              {
-                type: 'info',
-                text: 'VS Code companion extension installed successfully. Restart llxprt in a fresh terminal window.',
-              },
-              Date.now(),
-            );
-          } catch (_error) {
-            context.ui.addItem(
-              {
-                type: 'error',
-                text: `Failed to install VS Code companion extension.`,
-              },
-              Date.now(),
-            );
-          }
-=======
->>>>>>> 7bc87665 (Introduce IDE mode installer (#4877))
         },
       },
     ],
