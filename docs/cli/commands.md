@@ -17,9 +17,10 @@ Slash commands provide meta-level control over the CLI itself.
     - **`save`**
       - **Description:** Saves the current conversation history. You must add a `<tag>` for identifying the conversation state.
       - **Usage:** `/chat save <tag>`
-      - **Details on Checkpoint Location:** The default locations for saved chat checkpoints are:
-        - Linux/macOS/Windows: `~/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
-        - When you run `/chat list`, the CLI only scans these specific directories to find available checkpoints.
+      - **Details on Checkpoint Location:**
+        - Linux: `/home/username/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
+        - macOS: `/Users/username/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
+        - Windows: `C:\Users\username\.llxprt\tmp\{project-hash}\checkpoint-{tag}.json`
         - **Note:** These checkpoints are for manually saving and resuming conversation states. For automatic checkpoints created before file modifications, see the [Checkpointing documentation](../checkpointing.md).
     - **`resume`**
       - **Description:** Resumes a conversation from a previous save.
