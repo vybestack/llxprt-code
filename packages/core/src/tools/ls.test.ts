@@ -62,7 +62,7 @@ describe('LSTool', () => {
       getFileService: vi.fn().mockReturnValue(mockFileService),
       getFileFilteringOptions: vi.fn().mockReturnValue({
         respectGitIgnore: true,
-        respectGeminiIgnore: true,
+        respectLlxprtIgnore: true,
       }),
     } as unknown as Config;
 
@@ -249,7 +249,7 @@ describe('LSTool', () => {
       expect(result.returnDisplay).toBe('Listed 2 item(s). (1 git-ignored)');
     });
 
-    it('should respect geminiignore patterns', async () => {
+    it('should respect llxprtignore patterns', async () => {
       const testPath = '/home/user/project/src';
       const mockFiles = ['file1.js', 'file2.js', 'private.js'];
 
