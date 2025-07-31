@@ -202,7 +202,7 @@ describe('GeminiCompatibleWrapper', () => {
   describe('PDF handling in tool responses', () => {
     it('should extract PDF content from tool responses and add as user message', () => {
       const mockProvider: Provider = {
-        name: 'test-provider',
+        name: 'gemini', // Set to gemini for PDF parts test
         getCurrentModel: () => 'test-model',
         setModel: vi.fn(),
         getModels: vi.fn().mockResolvedValue([]),

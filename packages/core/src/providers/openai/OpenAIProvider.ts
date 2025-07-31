@@ -548,6 +548,7 @@ export class OpenAIProvider implements IProvider {
 
     let fullContent = '';
     const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
+    let hasStreamedContent = false;
     let usageData:
       | {
           prompt_tokens: number;
@@ -561,12 +562,47 @@ export class OpenAIProvider implements IProvider {
 
       if (delta?.content) {
         fullContent += delta.content;
+
+        // Enhanced debug logging to understand streaming behavior
+        if (process.env.DEBUG && this.currentModel.includes('qwen')) {
+          console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
+            content: delta.content,
+            contentLength: delta.content.length,
+            fullContentLength: fullContent.length,
+            chunkIndex: chunk.choices[0]?.index,
+          });
+          // Check if this chunk contains repeated content
+          const beforeAddition = fullContent.substring(
+            0,
+            fullContent.length - delta.content.length,
+          );
+          if (beforeAddition.endsWith(delta.content)) {
+            console.log(
+              `[OpenAIProvider/${this.currentModel}] WARNING: Chunk appears to be a repeat!`,
+            );
+          }
+        }
+
         // For text-based models, don't yield content chunks yet
         if (!parser) {
+          // Skip whitespace-only chunks for Qwen models to prevent extra spacing
+          if (
+            this.currentModel.includes('qwen') &&
+            delta.content &&
+            delta.content.trim() === ''
+          ) {
+            if (process.env.DEBUG) {
+              console.log(
+                `[OpenAIProvider/${this.currentModel}] Skipping whitespace-only chunk: ${JSON.stringify(delta.content)}`,
+              );
+            }
+            continue;
+          }
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: delta.content,
           };
+          hasStreamedContent = true;
         }
       }
 
@@ -622,12 +658,39 @@ export class OpenAIProvider implements IProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: fullContent || '',
-          tool_calls: accumulatedToolCalls,
-          usage: usageData,
-        };
+        if (process.env.DEBUG && this.currentModel.includes('qwen')) {
+          console.log(
+            `[OpenAIProvider/${this.currentModel}] Final message with tool calls:`,
+            {
+              contentLength: fullContent.length,
+              content:
+                fullContent.substring(0, 200) +
+                (fullContent.length > 200 ? '...' : ''),
+              toolCallCount: accumulatedToolCalls.length,
+              hasStreamedContent,
+            },
+          );
+        }
+        // For Qwen models, don't duplicate content if we've already streamed it
+        const shouldOmitContent =
+          hasStreamedContent && this.currentModel.includes('qwen');
+        if (shouldOmitContent) {
+          // Only yield tool calls with empty content to avoid duplication
+          yield {
+            role: ContentGeneratorRole.ASSISTANT,
+            content: '',
+            tool_calls: accumulatedToolCalls,
+            usage: usageData,
+          };
+        } else {
+          // Include full content with tool calls
+          yield {
+            role: ContentGeneratorRole.ASSISTANT,
+            content: fullContent || '',
+            tool_calls: accumulatedToolCalls,
+            usage: usageData,
+          };
+        }
       } else if (usageData) {
         // Always emit usage data so downstream consumers can update stats
         yield {

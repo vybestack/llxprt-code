@@ -390,6 +390,17 @@ export const useGeminiStream = (
         return '';
       }
       let newGeminiMessageBuffer = currentGeminiMessageBuffer + eventValue;
+
+      // Debug logging for repetition issue
+      if (process.env.DEBUG) {
+        console.log('[useGeminiStream] Content event:', {
+          eventValue: eventValue.substring(0, 100),
+          currentBuffer: currentGeminiMessageBuffer.substring(0, 100),
+          newBuffer: newGeminiMessageBuffer.substring(0, 100),
+          pendingType: pendingHistoryItemRef.current?.type,
+        });
+      }
+
       if (
         pendingHistoryItemRef.current?.type !== 'gemini' &&
         pendingHistoryItemRef.current?.type !== 'gemini_content'
