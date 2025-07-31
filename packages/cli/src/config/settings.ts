@@ -112,6 +112,7 @@ export interface Settings {
 
   // Vim mode setting
   vimMode?: boolean;
+  memoryImportFormat?: 'tree' | 'flat';
 
   // Flag to be removed post-launch.
   ideModeFeature?: boolean;
