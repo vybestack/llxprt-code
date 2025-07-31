@@ -52,7 +52,7 @@ describe('LSTool', () => {
     // Mock FileService
     mockFileService = {
       shouldGitIgnoreFile: vi.fn().mockReturnValue(false),
-      shouldGeminiIgnoreFile: vi.fn().mockReturnValue(false),
+      shouldLlxprtIgnoreFile: vi.fn().mockReturnValue(false),
     } as unknown as FileDiscoveryService;
 
     // Mock Config
@@ -277,7 +277,7 @@ describe('LSTool', () => {
       expect(result.llmContent).toContain('file1.js');
       expect(result.llmContent).toContain('file2.js');
       expect(result.llmContent).not.toContain('private.js');
-      expect(result.returnDisplay).toBe('Listed 2 item(s). (1 gemini-ignored)');
+      expect(result.returnDisplay).toBe('Listed 2 item(s). (1 llxprt-ignored)');
     });
 
     it('should handle non-directory paths', async () => {

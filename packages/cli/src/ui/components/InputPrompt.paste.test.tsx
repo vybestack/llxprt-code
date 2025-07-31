@@ -149,7 +149,10 @@ describe('InputPrompt paste functionality', () => {
         mockBuffer.allVisualLines = text.split('\n');
         mockBuffer.viewportVisualLines = text.split('\n');
       }),
-      insert: vi.fn(),
+      insert: vi.fn((text: string) => {
+        mockBuffer.text += text;
+        mockBuffer.lines = mockBuffer.text.split('\n');
+      }),
       newline: vi.fn(),
       backspace: vi.fn(),
       del: vi.fn(),
