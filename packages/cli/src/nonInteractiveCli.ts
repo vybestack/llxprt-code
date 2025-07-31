@@ -11,8 +11,9 @@ import {
   ToolRegistry,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
+  GeminiEventType,
 } from '@vybestack/llxprt-code-core';
-import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
+import { Content, Part, FunctionCall } from '@google/genai';
 
 import { parseAndFormatApiError } from './ui/utils/errorParsing.js';
 
@@ -44,7 +45,7 @@ export async function runNonInteractive(
     while (true) {
       turnCount++;
       if (
-        config.getMaxSessionTurns() > 0 &&
+        config.getMaxSessionTurns() >= 0 &&
         turnCount > config.getMaxSessionTurns()
       ) {
         console.error(
@@ -54,78 +55,8 @@ export async function runNonInteractive(
       }
       const functionCalls: FunctionCall[] = [];
 
-      // For tool responses, send the parts directly; otherwise send just the parts array
-      let messageToSend: Part[] | PartListUnion;
-
-      if (process.env.DEBUG) {
-        console.log(
-          'DEBUG [nonInteractiveCli]: ===== MESSAGE PROCESSING START =====',
-        );
-        console.log('DEBUG [nonInteractiveCli]: Model:', config.getModel());
-        console.log(
-          'DEBUG [nonInteractiveCli]: Provider:',
-          config.getProvider(),
-        );
-        console.log(
-          'DEBUG [nonInteractiveCli]: Current messages count:',
-          currentMessages.length,
-        );
-        console.log(
-          'DEBUG [nonInteractiveCli]: Full currentMessages:',
-          JSON.stringify(currentMessages, null, 2),
-        );
-      }
-
-      if (currentMessages[0]?.parts?.[0]?.functionResponse) {
-        // Send tool response parts directly
-        messageToSend = currentMessages[0].parts;
-        if (process.env.DEBUG) {
-          console.log('DEBUG [nonInteractiveCli]: Message type: TOOL RESPONSE');
-          console.log(
-            'DEBUG [nonInteractiveCli]: Sending tool response parts:',
-            JSON.stringify(messageToSend, null, 2),
-          );
-        }
-      } else {
-        // Send just the parts array from the first message
-        // This matches what interactive mode does when it sends req (PartListUnion)
-        messageToSend = currentMessages[0]?.parts || [];
-        if (process.env.DEBUG) {
-          console.log(
-            'DEBUG [nonInteractiveCli]: Message type: REGULAR MESSAGE',
-          );
-          console.log(
-            'DEBUG [nonInteractiveCli]: Sending message parts:',
-            JSON.stringify(messageToSend, null, 2),
-          );
-          console.log(
-            'DEBUG [nonInteractiveCli]: Parts array length:',
-            messageToSend.length,
-          );
-          console.log(
-            'DEBUG [nonInteractiveCli]: Parts array types:',
-            messageToSend.map((p: Part) => Object.keys(p)),
-          );
-        }
-      }
-      if (process.env.DEBUG) {
-        console.log(
-          'DEBUG [nonInteractiveCli]: ===== MESSAGE PROCESSING END =====',
-        );
-      }
-
-      if (process.env.DEBUG) {
-        console.log(
-          'DEBUG [nonInteractiveCli]: Model being used:',
-          config.getModel(),
-        );
-        console.log(
-          'DEBUG [nonInteractiveCli]: About to call sendMessageStream with messageToSend',
-        );
-      }
-
       const responseStream = geminiClient.sendMessageStream(
-        messageToSend,
+        currentMessages[0]?.parts || [],
         abortController.signal,
         prompt_id,
       );
@@ -136,36 +67,16 @@ export async function runNonInteractive(
           return;
         }
 
-        // Handle different event types
-        switch (event.type) {
-          case 'content':
-            process.stdout.write(event.value);
-            break;
-
-          case 'tool_call_request':
-            // Store the tool call request for processing
-            functionCalls.push({
-              name: event.value.name,
-              args: event.value.args,
-              id: event.value.callId,
-            });
-            break;
-
-          case 'error':
-            console.error('\nError:', event.value.error.message);
-            return;
-
-          case 'max_session_turns':
-            console.error('\nReached max session turns for this session.');
-            return;
-
-          case 'loop_detected':
-            console.error('\nLoop detected in conversation.');
-            return;
-
-          default:
-            // Handle any unexpected event types
-            break;
+        if (event.type === GeminiEventType.Content) {
+          process.stdout.write(event.value);
+        } else if (event.type === GeminiEventType.ToolCallRequest) {
+          const toolCallRequest = event.value;
+          const fc: FunctionCall = {
+            name: toolCallRequest.name,
+            args: toolCallRequest.args,
+            id: toolCallRequest.callId,
+          };
+          functionCalls.push(fc);
         }
       }
 
