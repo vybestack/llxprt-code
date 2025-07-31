@@ -307,11 +307,12 @@ export async function loadCliConfig(
       (v) => v === 'true' || v === '1',
     ) ||
     false;
-  
+
   const memoryImportFormat = settings.memoryImportFormat || 'tree';
-  
-  const ideMode = (argv.ideMode ?? settings.ideMode ?? false) && 
-    process.env.TERM_PROGRAM === 'vscode' && 
+
+  const ideMode =
+    (argv.ideMode ?? settings.ideMode ?? false) &&
+    process.env.TERM_PROGRAM === 'vscode' &&
     !process.env.SANDBOX;
 
   const ideModeFeature =

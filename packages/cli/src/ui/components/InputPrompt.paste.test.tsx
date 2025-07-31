@@ -101,7 +101,10 @@ let keypressHandler: ((key: Record<string, unknown>) => void) | null = null;
 
 // Mock useKeypress hook to capture the handler
 vi.mock('../hooks/useKeypress.js', () => ({
-  useKeypress: (handler: (key: Record<string, unknown>) => void, _options?: unknown) => {
+  useKeypress: (
+    handler: (key: Record<string, unknown>) => void,
+    _options?: unknown,
+  ) => {
     keypressHandler = handler;
   },
   Key: {},
@@ -213,12 +216,12 @@ describe('InputPrompt paste functionality', () => {
 
     // Ensure the handler was captured
     expect(keypressHandler).toBeDefined();
-    
+
     // Call the handler directly instead of emitting stdin events
     if (!keypressHandler) {
       throw new Error('keypressHandler was not captured');
     }
-    
+
     keypressHandler({
       name: '',
       ctrl: false,
@@ -232,7 +235,10 @@ describe('InputPrompt paste functionality', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Check if the handler threw an error
-    if (!mockBuffer.insert.mock.calls.length && !mockBuffer.handleInput.mock.calls.length) {
+    if (
+      !mockBuffer.insert.mock.calls.length &&
+      !mockBuffer.handleInput.mock.calls.length
+    ) {
       // Try calling the handler again with logging
       const testKey = {
         name: '',
@@ -339,7 +345,7 @@ describe('InputPrompt paste functionality', () => {
 
     // Ensure the handler was captured
     expect(keypressHandler).toBeDefined();
-    
+
     // Call the handler directly instead of emitting stdin events
     keypressHandler?.({
       name: '',

@@ -15,10 +15,7 @@ import {
 } from 'vitest';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
-import { 
-  type Config, 
-  DetectedIde
-} from '@vybestack/llxprt-code-core';
+import { type Config, DetectedIde } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
 vi.mock('@vybestack/llxprt-code-core');
