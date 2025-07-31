@@ -88,16 +88,10 @@ jobs:
           IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
           MANUAL_VERSION: ${{ inputs.version }}
 
-      - name: Fix rollup platform dependency
-        run: |
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-linux-x64-gnu --no-save || true
-
       - name: Run Tests
         if: github.event.inputs.force_skip_tests != 'true'
         run: |
-          npm run preflight
+          node scripts/preflight-ci.js
           npm run test:integration:sandbox:none
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
