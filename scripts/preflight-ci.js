@@ -4,7 +4,7 @@
  * Custom preflight script for CI/CD that handles the rollup platform dependency issue
  */
 
-const { execSync } = require('child_process'); // eslint-disable-line @typescript-eslint/no-require-imports
+import { execSync } from 'child_process';
 
 function run(cmd) {
   console.log(`Running: ${cmd}`);
