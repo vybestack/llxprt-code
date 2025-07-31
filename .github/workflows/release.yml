@@ -71,7 +71,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install Dependencies
@@ -91,7 +91,7 @@ jobs:
       - name: Run Tests
         if: github.event.inputs.force_skip_tests != 'true'
         run: |
-          npm run preflight
+          node scripts/preflight-ci.js
           npm run test:integration:sandbox:none
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
@@ -139,7 +139,7 @@ jobs:
       - name: Configure npm for publishing
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org/'
           scope: '@vybestack'
 
