@@ -36,6 +36,8 @@ import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
+import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
+import { isGitHubRepository } from '../utils/gitUtils.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -82,6 +84,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       keyfileCommand,
       baseurlCommand,
       toolformatCommand,
+      ...(isGitHubRepository() ? [setupGithubCommand] : []),
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
