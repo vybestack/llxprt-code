@@ -203,18 +203,18 @@ export async function parseArguments(): Promise<CliArgs> {
       type: 'boolean',
       description: 'List all available extensions and exit.',
     })
-<<<<<<< HEAD
     .option('provider', {
       type: 'string',
       description: 'The provider to use.',
       default: process.env.LLXPRT_DEFAULT_PROVIDER || 'gemini',
     })
     .option('ide-mode', {
-=======
-    .option('ide-mode-feature', {
->>>>>>> 325bb891 (Add toggleable IDE mode setting (#5146))
       type: 'boolean',
       description: 'Run in IDE mode?',
+    })
+    .option('ide-mode-feature', {
+      type: 'boolean',
+      description: 'Enable IDE mode feature flag?',
     })
     .option('key', {
       type: 'string',
@@ -301,7 +301,9 @@ export async function loadCliConfig(
       (v) => v === 'true' || v === '1',
     );
 
-  const ideMode = settings.ideMode ?? false;
+  const ideMode = (argv.ideMode ?? settings.ideMode ?? false) && 
+    process.env.TERM_PROGRAM === 'vscode' && 
+    !process.env.SANDBOX;
 
   const ideModeFeature =
     (argv.ideModeFeature ?? settings.ideModeFeature ?? false) &&
