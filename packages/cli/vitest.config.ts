@@ -26,6 +26,7 @@ export default defineConfig({
     outputFile: {
       junit: 'junit.xml',
     },
+    setupFiles: ['./test-setup.ts'],
     poolOptions: {
       threads: {
         singleThread: true, // Run tests sequentially to reduce memory pressure
