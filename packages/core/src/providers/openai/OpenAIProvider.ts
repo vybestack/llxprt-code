@@ -557,53 +557,58 @@ export class OpenAIProvider implements IProvider {
         }
       | undefined;
 
+    // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
+    let pendingWhitespace: string | null = null;
+
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
 
       if (delta?.content) {
-        fullContent += delta.content;
-
         // Enhanced debug logging to understand streaming behavior
         if (process.env.DEBUG && this.currentModel.includes('qwen')) {
           console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
             content: delta.content,
             contentLength: delta.content.length,
-            fullContentLength: fullContent.length,
+            isWhitespaceOnly: delta.content.trim() === '',
             chunkIndex: chunk.choices[0]?.index,
           });
-          // Check if this chunk contains repeated content
-          const beforeAddition = fullContent.substring(
-            0,
-            fullContent.length - delta.content.length,
-          );
-          if (beforeAddition.endsWith(delta.content)) {
-            console.log(
-              `[OpenAIProvider/${this.currentModel}] WARNING: Chunk appears to be a repeat!`,
-            );
-          }
         }
 
         // For text-based models, don't yield content chunks yet
         if (!parser) {
-          // Skip whitespace-only chunks for Qwen models to prevent extra spacing
-          if (
-            this.currentModel.includes('qwen') &&
-            delta.content &&
-            delta.content.trim() === ''
-          ) {
-            if (process.env.DEBUG) {
-              console.log(
-                `[OpenAIProvider/${this.currentModel}] Skipping whitespace-only chunk: ${JSON.stringify(delta.content)}`,
-              );
+          if (this.currentModel.includes('qwen')) {
+            const isWhitespaceOnly = delta.content.trim() === '';
+            if (isWhitespaceOnly) {
+              // Buffer whitespace-only chunk
+              pendingWhitespace = (pendingWhitespace || '') + delta.content;
+              if (process.env.DEBUG) {
+                console.log(
+                  `[OpenAIProvider/${this.currentModel}] Buffered whitespace-only chunk (len=${delta.content.length}). pendingWhitespace now len=${pendingWhitespace.length}`,
+                );
+              }
+              continue;
+            } else if (pendingWhitespace) {
+              // Flush buffered whitespace before non-empty chunk to preserve spacing
+              if (process.env.DEBUG) {
+                console.log(
+                  `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
+                );
+              }
+              yield { role: ContentGeneratorRole.ASSISTANT, content: pendingWhitespace };
+              hasStreamedContent = true;
+              fullContent += pendingWhitespace;
+              pendingWhitespace = null;
             }
-            continue;
           }
+
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: delta.content,
           };
           hasStreamedContent = true;
         }
+
+        fullContent += delta.content;
       }
 
       if (delta?.tool_calls) {
@@ -624,6 +629,19 @@ export class OpenAIProvider implements IProvider {
           total_tokens: chunk.usage.total_tokens,
         };
       }
+    }
+
+    // Flush any remaining pending whitespace for Qwen
+    if (pendingWhitespace && this.currentModel.includes('qwen') && !parser) {
+      if (process.env.DEBUG) {
+        console.log(
+          `[OpenAIProvider/${this.currentModel}] Flushing trailing pending whitespace (len=${pendingWhitespace.length}) at stream end`,
+        );
+      }
+      yield { role: ContentGeneratorRole.ASSISTANT, content: pendingWhitespace };
+      hasStreamedContent = true;
+      fullContent += pendingWhitespace;
+      pendingWhitespace = null;
     }
 
     // After stream ends, parse text-based tool calls if needed
