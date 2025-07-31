@@ -13,8 +13,7 @@ export const EVENT_API_ERROR = 'llxprt_code.api_error';
 export const EVENT_API_RESPONSE = 'llxprt_code.api_response';
 export const EVENT_CLI_CONFIG = 'llxprt_code.config';
 export const EVENT_FLASH_FALLBACK = 'llxprt_code.flash_fallback';
-export const EVENT_FLASH_DECIDED_TO_CONTINUE =
-  'llxprt_code.flash_decided_to_continue';
+export const EVENT_NEXT_SPEAKER_CHECK = 'llxprt_code.next_speaker_check';
 export const EVENT_SLASH_COMMAND = 'llxprt_code.slash_command';
 
 export const METRIC_TOOL_CALL_COUNT = 'llxprt_code.tool.call.count';
