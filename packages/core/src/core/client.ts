@@ -390,12 +390,20 @@ export class GeminiClient {
       this.sessionTurnCount > this.config.getMaxSessionTurns()
     ) {
       yield { type: GeminiEventType.MaxSessionTurns };
-      return new Turn(this.getChat(), prompt_id);
+      const contentGenConfig = this.config.getContentGeneratorConfig();
+      const providerManager = contentGenConfig?.providerManager;
+      const providerName =
+        providerManager?.getActiveProviderName() || 'backend';
+      return new Turn(this.getChat(), prompt_id, providerName);
     }
     // Ensure turns never exceeds MAX_TURNS to prevent infinite loops
     const boundedTurns = Math.min(turns, this.MAX_TURNS);
     if (!boundedTurns) {
-      return new Turn(this.getChat(), prompt_id);
+      const contentGenConfig = this.config.getContentGeneratorConfig();
+      const providerManager = contentGenConfig?.providerManager;
+      const providerName =
+        providerManager?.getActiveProviderName() || 'backend';
+      return new Turn(this.getChat(), prompt_id, providerName);
     }
 
     // Track the original model from the first call to detect model switching
@@ -453,7 +461,12 @@ export class GeminiClient {
       }
     }
 
-    const turn = new Turn(this.getChat(), prompt_id);
+    // Get provider name for error messages
+    const contentGenConfig = this.config.getContentGeneratorConfig();
+    const providerManager = contentGenConfig?.providerManager;
+    const providerName = providerManager?.getActiveProviderName() || 'backend';
+
+    const turn = new Turn(this.getChat(), prompt_id, providerName);
 
     const loopDetected = await this.loopDetector.turnStarted(signal);
     if (loopDetected) {

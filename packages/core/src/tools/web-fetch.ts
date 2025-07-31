@@ -283,8 +283,8 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         geminiResponse.candidates.length === 0
       ) {
         return {
-          llmContent: `Error: The Gemini API did not return any response candidates. This may indicate an issue with the urlContext tool configuration.`,
-          returnDisplay: 'No response from Gemini API.',
+          llmContent: `Error: The backend API did not return any response candidates. This may indicate an issue with the urlContext tool configuration.`,
+          returnDisplay: 'No response from backend API.',
         };
       }
 
