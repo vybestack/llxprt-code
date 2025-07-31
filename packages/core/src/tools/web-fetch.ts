@@ -267,19 +267,42 @@ export class WebFetchTool extends BaseTool<WebFetchToolParams, ToolResult> {
         { signal },
       );
 
+      if (process.env.DEBUG) {
+        console.log(
+          '[WEB-FETCH] Raw response:',
+          JSON.stringify(response, null, 2),
+        );
+      }
+
+      // Cast response to expected type for better type safety
+      const geminiResponse = response as GenerateContentResponse;
+
+      // Check if response has the expected structure
+      if (
+        !geminiResponse.candidates ||
+        geminiResponse.candidates.length === 0
+      ) {
+        return {
+          llmContent: `Error: The Gemini API did not return any response candidates. This may indicate an issue with the urlContext tool configuration.`,
+          returnDisplay: 'No response from Gemini API.',
+        };
+      }
+
+      // Remove the error checking - just let the LLM's response through
+      // The LLM is smart enough to handle failures appropriately
+
       // Extract text using utility function
-      const responseText = getResponseText(response as GenerateContentResponse);
+      const responseText = getResponseText(geminiResponse);
 
       // Simple check - if no text, return error
       if (!responseText || !responseText.trim()) {
         return {
-          llmContent: `No content found for the provided URL(s).`,
+          llmContent: `No content found for the provided URL(s). The site may have blocked access or returned empty content.`,
           returnDisplay: 'No content found.',
         };
       }
 
-      // Process grounding metadata
-      const geminiResponse = response as GenerateContentResponse;
+      // Process grounding metadata (geminiResponse already cast above)
       const groundingMetadata =
         geminiResponse.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
