@@ -13,10 +13,12 @@ import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
 import os from 'node:os';
+import dns from 'node:dns';
 import { spawn } from 'node:child_process';
 import { start_sandbox } from './utils/sandbox.js';
 import chalk from 'chalk';
 import {
+  DnsResolutionOrder,
   LoadedSettings,
   loadSettings,
   SettingScope,
@@ -50,6 +52,23 @@ import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from './utils/events.js';
+
+export function validateDnsResolutionOrder(
+  order: string | undefined,
+): DnsResolutionOrder {
+  const defaultValue: DnsResolutionOrder = 'ipv4first';
+  if (order === undefined) {
+    return defaultValue;
+  }
+  if (order === 'ipv4first' || order === 'verbatim') {
+    return order;
+  }
+  // We don't want to throw here, just warn and use the default.
+  console.warn(
+    `Invalid value for dnsResolutionOrder in settings: "${order}". Using default "${defaultValue}".`,
+  );
+  return defaultValue;
+}
 
 function getNodeMemoryArgs(config: Config): string[] {
   const totalMemoryMB = os.totalmem() / (1024 * 1024);
@@ -163,6 +182,11 @@ export async function main() {
   ) {
     serverToolsProvider.setConfig(config);
   }
+
+  // Set DNS resolution order (prefer IPv4 by default)
+  dns.setDefaultResultOrder(
+    validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),
+  );
 
   if (argv.promptInteractive && !process.stdin.isTTY) {
     console.error(
