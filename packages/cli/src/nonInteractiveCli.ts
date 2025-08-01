@@ -103,9 +103,9 @@ export async function runNonInteractive(
 
           if (toolResponse.error) {
             console.error(
-              `Error executing tool ${fc.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
+              `Error executing tool ${fc.name}: ${toolResponse.error.message}`,
             );
-            if (toolResponse.errorType === ToolErrorType.UNHANDLED_EXCEPTION)
+            if (toolResponse.error.type === ToolErrorType.UNHANDLED_EXCEPTION)
               process.exit(1);
           }
 

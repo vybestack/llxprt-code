@@ -64,8 +64,10 @@ export async function executeToolCall(
         },
       },
       resultDisplay: error.message,
-      error,
-      errorType: ToolErrorType.TOOL_NOT_REGISTERED,
+      error: {
+        message: error.message,
+        type: ToolErrorType.TOOL_NOT_REGISTERED,
+      },
     };
   }
 
@@ -138,8 +140,10 @@ export async function executeToolCall(
         },
       },
       resultDisplay: error.message,
-      error,
-      errorType: ToolErrorType.UNHANDLED_EXCEPTION,
+      error: {
+        message: error.message,
+        type: ToolErrorType.UNHANDLED_EXCEPTION,
+      },
     };
   }
 }

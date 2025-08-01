@@ -14,6 +14,7 @@ import {
   ToolCallConfirmationDetails,
   Config,
   Icon,
+  ToolErrorType,
 } from '../index.js';
 import { Part, Type } from '@google/genai';
 
@@ -123,10 +124,10 @@ describe('executeToolCall', () => {
     );
 
     expect(response.callId).toBe('call2');
-    expect(response.error).toBeInstanceOf(Error);
-    expect(response.error?.message).toBe(
-      'Tool "nonexistentTool" not found in registry.',
-    );
+    expect(response.error).toEqual({
+      message: 'Tool "nonexistentTool" not found in registry.',
+      type: ToolErrorType.TOOL_NOT_REGISTERED,
+    });
     expect(response.resultDisplay).toBe(
       'Tool "nonexistentTool" not found in registry.',
     );
@@ -159,7 +160,10 @@ describe('executeToolCall', () => {
     );
 
     expect(response.callId).toBe('call3');
-    expect(response.error).toBe(executionError);
+    expect(response.error).toEqual({
+      message: 'Tool execution failed',
+      type: ToolErrorType.UNHANDLED_EXCEPTION,
+    });
     expect(response.resultDisplay).toBe('Tool execution failed');
     expect(response.responseParts).toEqual({
       functionResponse: {
