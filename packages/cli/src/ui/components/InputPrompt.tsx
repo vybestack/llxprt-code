@@ -415,11 +415,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     return buffer.viewportVisualLines.map((line: string) => {
       // If the line contains the actual text, replace it with masked version
       if (buffer.text && line.includes(buffer.text.trim())) {
-        return line.replace(buffer.text, displayText);
+        return line.replace(buffer.text, textToDisplay);
       }
       return line;
     });
-  }, [buffer.viewportVisualLines, buffer.text, displayText]);
+  }, [buffer.viewportVisualLines, buffer.text, textToDisplay]);
 
   const linesToRender = displayLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =
