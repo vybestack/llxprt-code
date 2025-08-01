@@ -102,8 +102,8 @@ export class ShellExecutionService {
     const result = new Promise<ShellExecutionResult>((resolve) => {
       // Determine encoding once per process
       const encoding = getSystemEncoding() || 'utf-8';
-      let stdoutDecoder = new TextDecoder(encoding);
-      let stderrDecoder = new TextDecoder(encoding);
+      const stdoutDecoder = new TextDecoder(encoding);
+      const stderrDecoder = new TextDecoder(encoding);
 
       let stdout = '';
       let stderr = '';

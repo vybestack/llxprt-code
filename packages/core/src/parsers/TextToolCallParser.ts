@@ -227,7 +227,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         /:(\s)*"((?:\\.|[^"])*?)"(\s*)([,}])/gs,
         (_m, s1, val, s2, tail) => {
           // Escape only unescaped quotes inside the value
-          const fixed = val.replace(/(?<!\\)\"/g, '\\"');
+          const fixed = val.replace(/(?<!\\)"/g, '\\"');
           return `:${s1}"${fixed}"${s2}${tail}`;
         },
       );

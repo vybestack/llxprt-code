@@ -201,6 +201,11 @@ export async function runNonInteractive(
             }
           }
 
+          // Emit resultDisplay to stdout exactly as produced when available (string only)
+          if (typeof toolResponse.resultDisplay === 'string') {
+            process.stdout.write(toolResponse.resultDisplay);
+          }
+
           if (toolResponse.responseParts) {
             // Handle responseParts as PartListUnion (can be Part, Part[], or string)
             const parts = toolResponse.responseParts;

@@ -11,19 +11,21 @@ import { spawn } from 'child_process';
 vi.mock('os');
 
 // create a controllable fake child each time spawn is called
+type Listener = (...args: unknown[]) => void;
+
 const fakeChildFactory = () => {
-  const child: any = {
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
-    on: vi.fn(),
+  const child = {
+    stdout: { on: vi.fn<(event: string, cb: Listener) => void>() },
+    stderr: { on: vi.fn<(event: string, cb: Listener) => void>() },
+    on: vi.fn<(event: string, cb: Listener) => void>(),
     pid: 2222,
-    kill: vi.fn(),
+    kill: vi.fn<(signal?: NodeJS.Signals) => boolean>(),
   };
   return child;
 };
 
 vi.mock('child_process', async (orig) => {
-  const mod: any = await orig();
+  const mod = (await orig()) as typeof import('child_process');
   return {
     ...mod,
     spawn: vi.fn(() => fakeChildFactory()),
@@ -74,19 +76,19 @@ describe('ShellExecutionService (Windows behavior)', () => {
     const sjisBytes = Buffer.from([0x93, 0xfa, 0x96, 0x7b]);
 
     // Capture handlers for the just-spawned child
-    let stdoutHandlers: any[] = [];
-    let stderrHandlers: any[] = [];
-    let exitHandlers: any[] = [];
+    const stdoutHandlers: Listener[] = [];
+    const stderrHandlers: Listener[] = [];
+    const exitHandlers: Listener[] = [];
 
-    (spawn as any).mockImplementationOnce(() => {
+    (spawn as unknown as { mockImplementationOnce: (fn: () => ReturnType<typeof fakeChildFactory>) => void }).mockImplementationOnce(() => {
       const child = fakeChildFactory();
-      child.stdout.on.mockImplementation((_ev: string, cb: any) => {
+      child.stdout.on.mockImplementation((_ev: string, cb: Listener) => {
         stdoutHandlers.push(cb);
       });
-      child.stderr.on.mockImplementation((_ev: string, cb: any) => {
+      child.stderr.on.mockImplementation((_ev: string, cb: Listener) => {
         stderrHandlers.push(cb);
       });
-      child.on.mockImplementation((ev: string, cb: any) => {
+      child.on.mockImplementation((ev: string, cb: Listener) => {
         if (ev === 'exit') exitHandlers.push(cb);
       });
       return child;

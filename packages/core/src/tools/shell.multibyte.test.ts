@@ -26,6 +26,18 @@ function deferred<T>() {
   return { promise: p, resolve };
 }
 
+type ExecResult = {
+  rawOutput: Buffer;
+  output: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  error: Error | null;
+  aborted: boolean;
+  pid: number | undefined;
+};
+
 describe('ShellTool multibyte handling', () => {
   const MULTIBYTE = 'ありがとう 世界';
   let tool: ShellTool;
@@ -51,8 +63,8 @@ describe('ShellTool multibyte handling', () => {
     );
 
     mockShellExecutionService.mockImplementation(
-      (_cmd: string, _cwd: string, _cb: any, _signal: AbortSignal) => {
-        const d = deferred<any>();
+      (_cmd: string, _cwd: string, _cb: (e: unknown) => void, _signal: AbortSignal) => {
+        const d = deferred<ExecResult>();
         return {
           pid: 11111,
           result: d.promise,
@@ -65,10 +77,10 @@ describe('ShellTool multibyte handling', () => {
     const abortSignal = new AbortController().signal;
 
     // Arrange mock to return our deferred then resolve after calling execute
-    let resolveNow!: (v: any) => void;
+    let resolveNow!: (v: ExecResult) => void;
     mockShellExecutionService.mockImplementationOnce(
-      (_cmd: string, _cwd: string, _cb: any, _signal: AbortSignal) => {
-        const d = deferred<any>();
+      (_cmd: string, _cwd: string, _cb: (e: unknown) => void, _signal: AbortSignal) => {
+        const d = deferred<ExecResult>();
         resolveNow = d.resolve;
         return { pid: 11111, result: d.promise };
       },
