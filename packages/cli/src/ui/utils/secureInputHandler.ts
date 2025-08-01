@@ -27,14 +27,15 @@ export class SecureInputHandler {
    */
   shouldUseSecureMode(text: string): boolean {
     const trimmed = text.trim();
-    // Check for /key command with a space (indicating an argument is being typed)
-    return trimmed.startsWith('/key ') && trimmed.length > 5;
+    // Check for /key command with a space (indicating an argument is being typed or about to be typed)
+    return trimmed.startsWith('/key ') || trimmed === '/key';
   }
 
   /**
    * Processes input text and returns masked version if in secure mode
    */
   processInput(text: string): string {
+    // Always check if we should be in secure mode based on current text
     const shouldBeSecure = this.shouldUseSecureMode(text);
 
     if (shouldBeSecure && !this.secureState.isSecureMode) {
@@ -52,6 +53,11 @@ export class SecureInputHandler {
       // Extract the API key portion (everything after "/key ")
       const keyStartIndex = this.secureState.commandPrefix.length;
       const keyPortion = text.substring(keyStartIndex);
+      
+      // If there's no key portion yet (just "/key " or "/key"), return as-is
+      if (!keyPortion || keyPortion.length === 0) {
+        return text;
+      }
       
       // Check if the key contains newlines
       const newlineIndex = keyPortion.indexOf('\n');
@@ -105,8 +111,8 @@ export class SecureInputHandler {
    * Enters secure mode
    */
   private enterSecureMode(text: string): void {
-    // Find where the API key starts (after "/key ")
-    const keyCommandMatch = text.match(/^(\/key\s+)/);
+    // Find where the API key starts (after "/key" or "/key ")
+    const keyCommandMatch = text.match(/^(\/key(?:\s+)?)/);
     if (keyCommandMatch) {
       this.secureState.commandPrefix = keyCommandMatch[1];
       this.secureState.isSecureMode = true;
