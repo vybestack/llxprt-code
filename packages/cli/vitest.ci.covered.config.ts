@@ -21,6 +21,7 @@ export default defineConfig({
     outputFile: {
       junit: 'junit.covered.xml',
     },
+    setupFiles: ['./test-setup.ts'],
     poolOptions: {
       threads: { singleThread: true, maxThreads: 2 },
     },
