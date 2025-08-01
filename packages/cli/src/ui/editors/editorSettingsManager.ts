@@ -38,6 +38,7 @@ class EditorSettingsManager {
       'windsurf',
       'cursor',
       'vim',
+      'emacs',
       'neovim',
     ];
     this.availableEditors = [
