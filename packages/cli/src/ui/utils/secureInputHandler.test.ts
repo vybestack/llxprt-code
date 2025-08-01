@@ -149,6 +149,17 @@ describe('SecureInputHandler', () => {
       });
     });
 
+    it('should mask pasted API keys immediately', () => {
+      // Simulate pasting a full command with API key
+      handler.reset();
+      const pastedContent = '/key sk-proj-abcdefghijklmnopqrstuvwxyz123456789';
+      const masked = handler.processInput(pastedContent);
+      
+      expect(masked).toBe('/key sk***************************************89');
+      expect(handler.isInSecureMode()).toBe(true);
+      expect(handler.getActualValue()).toBe(pastedContent);
+    });
+
     it('should mask short keys completely', () => {
       const testCases = [
         { input: '/key a', expected: '/key *' },

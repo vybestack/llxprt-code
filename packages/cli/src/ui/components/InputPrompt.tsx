@@ -399,13 +399,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   useKeypress(handleInput, { isActive: true });
 
   // Process buffer text through secure input handler
-  const displayText = useMemo(
+  // This will return masked text if it detects /key command, otherwise returns original text
+  const textToDisplay = useMemo(
     () => secureInputHandler.processInput(buffer.text),
     [buffer.text],
   );
-
-  // Use masked text for display when in secure mode
-  const textToDisplay = secureInputHandler.isInSecureMode() ? displayText : buffer.text;
   
   // Calculate visual lines for the display text
   const displayLines = useMemo(() => {
@@ -510,13 +508,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       {pasteMessage && (
         <Box marginTop={1}>
           <Text color={Colors.Comment}>{pasteMessage}</Text>
-        </Box>
-      )}
-      {secureInputHandler.isInSecureMode() && (
-        <Box marginTop={1}>
-          <Text color={Colors.AccentYellow}>
-            [SECURE] API key input is masked for security
-          </Text>
         </Box>
       )}
     </>
