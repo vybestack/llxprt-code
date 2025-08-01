@@ -27,7 +27,10 @@ export async function executeToolCall(
 ): Promise<ToolCallResponseInfo> {
   // Create context from config
   const context: ToolContext = {
-    sessionId: config.getSessionId(),
+    sessionId:
+      typeof config.getSessionId === 'function'
+        ? config.getSessionId()
+        : 'default-session',
     // TODO: Add agentId when available in the request
   };
 

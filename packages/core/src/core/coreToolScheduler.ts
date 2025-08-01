@@ -443,7 +443,10 @@ export class CoreToolScheduler {
       (reqInfo): ToolCall => {
         // Create context from config
         const context: ToolContext = {
-          sessionId: this.config.getSessionId(),
+          sessionId:
+            typeof this.config.getSessionId === 'function'
+              ? this.config.getSessionId()
+              : 'default-session',
           // TODO: Add agentId when available in the request
         };
 
