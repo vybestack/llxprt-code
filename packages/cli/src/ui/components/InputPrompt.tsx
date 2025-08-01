@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
@@ -24,6 +24,7 @@ import {
   cleanupOldClipboardImages,
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 export interface InputPromptProps {
   buffer: TextBuffer;
@@ -85,13 +86,25 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
+      // Get the actual value if in secure mode
+      const actualValue = secureInputHandler.isInSecureMode() 
+        ? secureInputHandler.getActualValue() 
+        : submittedValue;
+      
       if (shellModeActive) {
-        shellHistory.addCommandToHistory(submittedValue);
+        // Sanitize for history if it's a secure command
+        const historyValue = secureInputHandler.sanitizeForHistory(actualValue);
+        shellHistory.addCommandToHistory(historyValue);
       }
+      
       // Clear the buffer *before* calling onSubmit to prevent potential re-submission
       // if onSubmit triggers a re-render while the buffer still holds the old value.
       buffer.setText('');
-      onSubmit(submittedValue);
+      
+      // Reset secure input handler
+      secureInputHandler.reset();
+      
+      onSubmit(actualValue);
       resetCompletionState();
       setPasteMessage(null);
     },
@@ -102,6 +115,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     (newText: string) => {
       buffer.setText(newText);
       setJustNavigatedHistory(true);
+      // Process through secure handler to update its state
+      secureInputHandler.processInput(newText);
     },
     [buffer, setJustNavigatedHistory],
   );
@@ -322,6 +337,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         if (buffer.text.length > 0) {
           buffer.setText('');
           resetCompletionState();
+          secureInputHandler.reset();
           return;
         }
         return;
@@ -382,7 +398,32 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   useKeypress(handleInput, { isActive: true });
 
-  const linesToRender = buffer.viewportVisualLines;
+  // Process buffer text through secure input handler
+  const displayText = useMemo(
+    () => secureInputHandler.processInput(buffer.text),
+    [buffer.text],
+  );
+
+  // Use masked text for display when in secure mode
+  const textToDisplay = secureInputHandler.isInSecureMode() ? displayText : buffer.text;
+  
+  // Calculate visual lines for the display text
+  const displayLines = useMemo(() => {
+    if (!secureInputHandler.isInSecureMode()) {
+      return buffer.viewportVisualLines;
+    }
+    // For secure mode, we need to recalculate visual lines with masked text
+    // This is a simplified approach - just replace the text content
+    return buffer.viewportVisualLines.map((line: string) => {
+      // If the line contains the actual text, replace it with masked version
+      if (buffer.text && line.includes(buffer.text.trim())) {
+        return line.replace(buffer.text, displayText);
+      }
+      return line;
+    });
+  }, [buffer.viewportVisualLines, buffer.text, displayText]);
+
+  const linesToRender = displayLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =
     buffer.visualCursor;
   const scrollVisualRow = buffer.visualScrollRow;
@@ -400,7 +441,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           {shellModeActive ? '! ' : '> '}
         </Text>
         <Box flexGrow={1} flexDirection="column">
-          {buffer.text.length === 0 && placeholder ? (
+          {textToDisplay.length === 0 && placeholder ? (
             focus ? (
               <Text>
                 {chalk.inverse(placeholder.slice(0, 1))}
@@ -410,7 +451,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
               <Text color={Colors.Gray}>{placeholder}</Text>
             )
           ) : (
-            linesToRender.map((lineText, visualIdxInRenderedSet) => {
+            linesToRender.map((lineText: string, visualIdxInRenderedSet: number) => {
               const cursorVisualRow = cursorVisualRowAbsolute - scrollVisualRow;
               let display = cpSlice(lineText, 0, inputWidth);
               const currentVisualWidth = stringWidth(display);
@@ -462,13 +503,20 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             isLoading={completion.isLoadingSuggestions}
             width={suggestionsWidth}
             scrollOffset={completion.visibleStartIndex}
-            userInput={buffer.text}
+            userInput={textToDisplay}
           />
         </Box>
       )}
       {pasteMessage && (
         <Box marginTop={1}>
           <Text color={Colors.Comment}>{pasteMessage}</Text>
+        </Box>
+      )}
+      {secureInputHandler.isInSecureMode() && (
+        <Box marginTop={1}>
+          <Text color={Colors.AccentYellow}>
+            [SECURE] API key input is masked for security
+          </Text>
         </Box>
       )}
     </>

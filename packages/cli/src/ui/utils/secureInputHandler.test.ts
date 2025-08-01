@@ -1,0 +1,166 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SecureInputHandler } from './secureInputHandler';
+
+describe('SecureInputHandler', () => {
+  let handler: SecureInputHandler;
+
+  beforeEach(() => {
+    handler = new SecureInputHandler();
+  });
+
+  describe('shouldUseSecureMode', () => {
+    it('should detect /key command with argument', () => {
+      expect(handler.shouldUseSecureMode('/key abc')).toBe(true);
+      expect(handler.shouldUseSecureMode('/key test-key-123')).toBe(true);
+      expect(handler.shouldUseSecureMode('  /key   secret  ')).toBe(true);
+    });
+
+    it('should not detect /key command without argument', () => {
+      expect(handler.shouldUseSecureMode('/key')).toBe(false);
+      expect(handler.shouldUseSecureMode('/key ')).toBe(false);
+      expect(handler.shouldUseSecureMode('/ke')).toBe(false);
+      expect(handler.shouldUseSecureMode('key abc')).toBe(false);
+    });
+
+    it('should not detect other commands', () => {
+      expect(handler.shouldUseSecureMode('/help')).toBe(false);
+      expect(handler.shouldUseSecureMode('/clear')).toBe(false);
+      expect(handler.shouldUseSecureMode('hello world')).toBe(false);
+    });
+  });
+
+  describe('processInput', () => {
+    it('should mask API key in /key command', () => {
+      const input = '/key my-secret-api-key';
+      const processed = handler.processInput(input);
+      
+      // The key portion is 'my-secret-api-key' which is 17 characters
+      // First 2: 'my', Last 2: 'ey', Middle: 13 asterisks
+      expect(processed).toBe('/key my*************ey');
+      expect(handler.isInSecureMode()).toBe(true);
+      expect(handler.getActualValue()).toBe(input);
+    });
+
+    it('should mask short API keys completely', () => {
+      const input = '/key abc123';
+      const processed = handler.processInput(input);
+      
+      expect(processed).toBe('/key ******');
+      expect(handler.getActualValue()).toBe(input);
+    });
+
+    it('should not mask non-key commands', () => {
+      const input = '/help me with this';
+      const processed = handler.processInput(input);
+      
+      expect(processed).toBe(input);
+      expect(handler.isInSecureMode()).toBe(false);
+    });
+
+    it('should handle progressive typing', () => {
+      // Simulate typing character by character
+      expect(handler.processInput('/')).toBe('/');
+      expect(handler.processInput('/k')).toBe('/k');
+      expect(handler.processInput('/ke')).toBe('/ke');
+      expect(handler.processInput('/key')).toBe('/key');
+      expect(handler.processInput('/key ')).toBe('/key ');
+      
+      // Now entering secure mode
+      expect(handler.processInput('/key a')).toBe('/key *');
+      expect(handler.isInSecureMode()).toBe(true);
+      
+      expect(handler.processInput('/key ab')).toBe('/key **');
+      expect(handler.processInput('/key abc')).toBe('/key ***');
+      // 'abcd1234' is 8 characters, so it should be fully masked
+      expect(handler.processInput('/key abcd1234')).toBe('/key ********');
+    });
+
+    it('should exit secure mode when text is cleared', () => {
+      handler.processInput('/key secret');
+      expect(handler.isInSecureMode()).toBe(true);
+      
+      handler.processInput('');
+      expect(handler.isInSecureMode()).toBe(false);
+      expect(handler.getActualValue()).toBe('');
+    });
+  });
+
+  describe('sanitizeForHistory', () => {
+    it('should sanitize /key commands for history', () => {
+      const command = '/key my-very-secret-api-key-12345';
+      const sanitized = handler.sanitizeForHistory(command);
+      
+      // The key portion is 'my-very-secret-api-key-12345' which is 28 characters
+      // First 2: 'my', Last 2: '45', Middle: 24 asterisks
+      expect(sanitized).toBe('/key my************************45');
+      expect(sanitized).not.toContain('secret');
+    });
+
+    it('should not sanitize other commands', () => {
+      const commands = [
+        '/help',
+        '/clear',
+        'normal text',
+        '/auth login',
+      ];
+      
+      commands.forEach(cmd => {
+        expect(handler.sanitizeForHistory(cmd)).toBe(cmd);
+      });
+    });
+
+    it('should handle edge cases', () => {
+      expect(handler.sanitizeForHistory('')).toBe('');
+      expect(handler.sanitizeForHistory('/key')).toBe('/key');
+      expect(handler.sanitizeForHistory('/key ')).toBe('/key ');
+    });
+  });
+
+  describe('reset', () => {
+    it('should clear all secure state', () => {
+      handler.processInput('/key secret-key');
+      expect(handler.isInSecureMode()).toBe(true);
+      expect(handler.getActualValue()).toBe('/key secret-key');
+      
+      handler.reset();
+      
+      expect(handler.isInSecureMode()).toBe(false);
+      expect(handler.getActualValue()).toBe('');
+    });
+  });
+
+  describe('masking behavior', () => {
+    it('should show first and last 2 characters for long keys', () => {
+      const testCases = [
+        { input: '/key 123456789', expected: '/key 12*****89' }, // 9 chars: 12 + 5 asterisks + 89
+        { input: '/key abcdefghijklmnop', expected: '/key ab************op' }, // 16 chars: ab + 12 asterisks + op
+        { input: '/key AAAAAAAAAA', expected: '/key AA******AA' }, // 10 chars: AA + 6 asterisks + AA
+      ];
+      
+      testCases.forEach(({ input, expected }) => {
+        handler.reset();
+        expect(handler.processInput(input)).toBe(expected);
+      });
+    });
+
+    it('should mask short keys completely', () => {
+      const testCases = [
+        { input: '/key a', expected: '/key *' },
+        { input: '/key ab', expected: '/key **' },
+        { input: '/key abc', expected: '/key ***' },
+        { input: '/key 12345678', expected: '/key ********' },
+      ];
+      
+      testCases.forEach(({ input, expected }) => {
+        handler.reset();
+        expect(handler.processInput(input)).toBe(expected);
+      });
+    });
+  });
+});
