@@ -39,6 +39,7 @@ git cherry-pick <commit-hash>
 ```
 
 #### What to Cherry-pick:
+
 - Bug fixes
 - Performance improvements
 - New features that don't conflict with multi-provider support
@@ -46,13 +47,16 @@ git cherry-pick <commit-hash>
 - UI/UX enhancements
 
 #### What to Skip:
+
 - `gemini-automated-issue-triage.yml` (GitHub workflow specific to gemini-cli)
 - Changes that would break llxprt's multi-provider support
 - Branding changes that would overwrite llxprt branding
 - Auth changes that assume only Google auth (llxprt supports multiple providers)
 
 #### Handling Conflicts:
+
 When conflicts occur, preserve llxprt's:
+
 - Multi-provider architecture (USE_PROVIDER instead of specific auth types)
 - Import paths (`@vybestack/llxprt-code-core` instead of `@google/gemini-cli-core`)
 - Branding and naming
@@ -130,6 +134,7 @@ git push origin YYYYMMDD-gmerge
 ### 9. Create Pull Request
 
 Create a PR to main with:
+
 - Summary of cherry-picked changes
 - Any conflicts resolved
 - Test results confirming everything works
@@ -167,8 +172,8 @@ LLxprt may use different error structures:
 ```typescript
 // Example: ToolCallResponseInfo
 {
-  error: Error;           // Error object
-  errorType: ToolErrorType;  // Separate type field
+  error: Error; // Error object
+  errorType: ToolErrorType; // Separate type field
 }
 ```
 
@@ -183,6 +188,7 @@ LLxprt may use different error structures:
 ## Merge Strategy
 
 The `-s ours` merge strategy creates a merge commit without actually merging any content. This is used because:
+
 1. We've already cherry-picked all desired changes
 2. We want to maintain the same merge structure as upstream
 3. It prevents accidental overwrites of llxprt customizations

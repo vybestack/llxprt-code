@@ -669,7 +669,7 @@ export class GeminiClient {
             },
             contents,
           },
-          this.lastPromptId,
+          this.lastPromptId || this.config.getSessionId(),
         );
 
       const result = await retryWithBackoff(apiCall, {
@@ -780,7 +780,7 @@ export class GeminiClient {
             config: requestConfig,
             contents,
           },
-          this.lastPromptId,
+          this.lastPromptId || this.config.getSessionId(),
         );
 
       const result = await retryWithBackoff(apiCall, {

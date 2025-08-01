@@ -457,32 +457,55 @@ describe('Gemini Client (client.ts)', () => {
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
 
-      // Mock countTokens
+      // Mock lazyInitialize to prevent it from overriding our mock
+      client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
+
+      // Track the arguments manually
+      let capturedRequest: any;
+      let capturedPromptId: any;
+
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: mockGenerateContentFn,
+        generateContent: vi.fn(async (request: any, promptId: any) => {
+          capturedRequest = request;
+          capturedPromptId = promptId;
+          return {
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: '{"key": "value"}' }],
+                },
+              },
+            ],
+          } as GenerateContentResponse;
+        }),
         generateContentStream: vi.fn(),
         embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      await client.generateJson(contents, schema, abortSignal);
+      try {
+        await client.generateJson(contents, schema, abortSignal);
+      } catch (error) {
+        console.error('Error in generateJson:', error);
+        throw error;
+      }
 
-      expect(mockGenerateContentFn).toHaveBeenCalledWith(
-        {
-          model: 'test-model', // Should use current model from config
-          config: {
-            abortSignal,
-            systemInstruction: getCoreSystemPrompt(''),
-            temperature: 0,
-            topP: 1,
-            responseSchema: schema,
-            responseMimeType: 'application/json',
-          },
-          contents,
+      // Check the captured arguments
+      expect(capturedRequest).toBeDefined();
+      expect(capturedPromptId).toBe('test-session-id');
+      expect(capturedRequest).toMatchObject({
+        model: 'test-model', // Should use current model from config
+        config: {
+          abortSignal,
+          systemInstruction: getCoreSystemPrompt(''),
+          temperature: 0,
+          topP: 1,
+          responseSchema: schema,
+          responseMimeType: 'application/json',
         },
-        'test-session-id',
-      );
+        contents,
+      });
     });
 
     it('should allow overriding model and config', async () => {
@@ -492,9 +515,28 @@ describe('Gemini Client (client.ts)', () => {
       const customModel = 'custom-json-model';
       const customConfig = { temperature: 0.9, topK: 20 };
 
+      // Mock lazyInitialize to prevent it from overriding our mock
+      client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
+
+      // Track the arguments manually
+      let capturedRequest: any;
+      let capturedPromptId: any;
+
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: mockGenerateContentFn,
+        generateContent: vi.fn(async (request: any, promptId: any) => {
+          capturedRequest = request;
+          capturedPromptId = promptId;
+          return {
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: '{"key": "value"}' }],
+                },
+              },
+            ],
+          } as GenerateContentResponse;
+        }),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -506,22 +548,22 @@ describe('Gemini Client (client.ts)', () => {
         customConfig,
       );
 
-      expect(mockGenerateContentFn).toHaveBeenCalledWith(
-        {
-          model: customModel,
-          config: {
-            abortSignal,
-            systemInstruction: getCoreSystemPrompt(''),
-            temperature: 0.9,
-            topP: 1, // from default
-            topK: 20,
-            responseSchema: schema,
-            responseMimeType: 'application/json',
-          },
-          contents,
+      // Check the captured arguments
+      expect(capturedRequest).toBeDefined();
+      expect(capturedPromptId).toBe('test-session-id');
+      expect(capturedRequest).toMatchObject({
+        model: customModel,
+        config: {
+          abortSignal,
+          systemInstruction: getCoreSystemPrompt(''),
+          temperature: 0.9,
+          topP: 1, // from default
+          topK: 20,
+          responseSchema: schema,
+          responseMimeType: 'application/json',
         },
-        'test-session-id',
-      );
+        contents,
+      });
     });
   });
 

@@ -505,7 +505,10 @@ export class GeminiChat {
           config: mergedConfig,
         };
 
-        return this.contentGenerator.generateContentStream(requestParams, prompt_id);
+        return this.contentGenerator.generateContentStream(
+          requestParams,
+          prompt_id,
+        );
       };
 
       // Note: Retrying streams can be complex. If generateContentStream itself doesn't handle retries
