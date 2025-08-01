@@ -8,6 +8,7 @@ import {
   Config,
   executeToolCall,
   ToolRegistry,
+  ToolErrorType,
   shutdownTelemetry,
   GeminiEventType,
   ServerGeminiStreamEvent,
@@ -164,10 +165,8 @@ describe('runNonInteractive', () => {
       },
     };
     mockCoreExecuteToolCall.mockResolvedValue({
-      error: {
-        message: 'Tool execution failed badly',
-        type: 'unhandled_exception',
-      },
+      error: new Error('Tool execution failed badly'),
+      errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       responseParts: {
         functionResponse: {
           id: 'tool-1',
@@ -215,10 +214,8 @@ describe('runNonInteractive', () => {
       },
     };
     mockCoreExecuteToolCall.mockResolvedValue({
-      error: {
-        message: 'Tool "nonexistentTool" not found in registry.',
-        type: 'tool_not_registered',
-      },
+      error: new Error('Tool "nonexistentTool" not found in registry.'),
+      errorType: ToolErrorType.TOOL_NOT_REGISTERED,
       resultDisplay: 'Tool "nonexistentTool" not found in registry.',
       responseParts: {
         functionResponse: {
