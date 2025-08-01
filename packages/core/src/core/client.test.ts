@@ -462,24 +462,26 @@ describe('Gemini Client (client.ts)', () => {
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
       // Track the arguments manually
-      let capturedRequest: GenerateContentParameters;
-      let capturedPromptId: string;
+      let capturedRequest: GenerateContentParameters | undefined;
+      let capturedPromptId: string | undefined;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(async (request: GenerateContentParameters, promptId: string) => {
-          capturedRequest = request;
-          capturedPromptId = promptId;
-          return {
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: '{"key": "value"}' }],
+        generateContent: vi.fn(
+          async (request: GenerateContentParameters, promptId: string) => {
+            capturedRequest = request;
+            capturedPromptId = promptId;
+            return {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '{"key": "value"}' }],
+                  },
                 },
-              },
-            ],
-          } as GenerateContentResponse;
-        }),
+              ],
+            } as GenerateContentResponse;
+          },
+        ),
         generateContentStream: vi.fn(),
         embedContent: vi.fn(),
       };
@@ -520,24 +522,26 @@ describe('Gemini Client (client.ts)', () => {
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
       // Track the arguments manually
-      let capturedRequest: GenerateContentParameters;
-      let capturedPromptId: string;
+      let capturedRequest: GenerateContentParameters | undefined;
+      let capturedPromptId: string | undefined;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(async (request: GenerateContentParameters, promptId: string) => {
-          capturedRequest = request;
-          capturedPromptId = promptId;
-          return {
-            candidates: [
-              {
-                content: {
-                  parts: [{ text: '{"key": "value"}' }],
+        generateContent: vi.fn(
+          async (request: GenerateContentParameters, promptId: string) => {
+            capturedRequest = request;
+            capturedPromptId = promptId;
+            return {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '{"key": "value"}' }],
+                  },
                 },
-              },
-            ],
-          } as GenerateContentResponse;
-        }),
+              ],
+            } as GenerateContentResponse;
+          },
+        ),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
