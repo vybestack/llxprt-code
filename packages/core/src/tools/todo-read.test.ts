@@ -181,8 +181,9 @@ describe('TodoRead', () => {
         Object.create(Object.getPrototypeOf(tool)),
         tool,
       );
-      (toolWithSession as unknown as { sessionId: string }).sessionId =
-        'test-session-123';
+      toolWithSession.context = {
+        sessionId: 'test-session-123',
+      };
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
 
@@ -196,12 +197,10 @@ describe('TodoRead', () => {
         Object.create(Object.getPrototypeOf(tool)),
         tool,
       );
-      (
-        toolWithAgent as unknown as { sessionId: string; agentId: string }
-      ).sessionId = 'test-session-123';
-      (
-        toolWithAgent as unknown as { sessionId: string; agentId: string }
-      ).agentId = 'test-agent-456';
+      toolWithAgent.context = {
+        sessionId: 'test-session-123',
+        agentId: 'test-agent-456',
+      };
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
 
@@ -218,8 +217,9 @@ describe('TodoRead', () => {
         Object.create(Object.getPrototypeOf(tool)),
         tool,
       );
-      (toolNoAgent as unknown as { sessionId: string }).sessionId =
-        'test-session-123';
+      toolNoAgent.context = {
+        sessionId: 'test-session-123',
+      };
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue(sampleTodos);
 

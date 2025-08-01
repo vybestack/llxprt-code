@@ -13,6 +13,7 @@ import {
 } from '../index.js';
 import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
+import { ToolContext } from '../tools/tool-context.js';
 
 /**
  * Executes a single tool call non-interactively.
@@ -24,7 +25,13 @@ export async function executeToolCall(
   toolRegistry: ToolRegistry,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
-  const tool = toolRegistry.getTool(toolCallRequest.name);
+  // Create context from config
+  const context: ToolContext = {
+    sessionId: config.getSessionId(),
+    // TODO: Add agentId when available in the request
+  };
+
+  const tool = toolRegistry.getTool(toolCallRequest.name, context);
 
   const startTime = Date.now();
   if (!tool) {

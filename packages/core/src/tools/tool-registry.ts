@@ -6,6 +6,7 @@
 
 import { FunctionDeclaration, Schema, Type } from '@google/genai';
 import { Tool, ToolResult, BaseTool, Icon } from './tools.js';
+import { ToolContext } from './tool-context.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
@@ -383,9 +384,18 @@ export class ToolRegistry {
 
   /**
    * Get the definition of a specific tool.
+   * @param name The name of the tool to retrieve
+   * @param context Optional context to inject into the tool instance
    */
-  getTool(name: string): Tool | undefined {
-    return this.tools.get(name);
+  getTool(name: string, context?: ToolContext): Tool | undefined {
+    const tool = this.tools.get(name);
+    if (tool && context) {
+      // Inject context into tool instance
+      if ('context' in tool) {
+        (tool as BaseTool).context = context;
+      }
+    }
+    return tool;
   }
 }
 

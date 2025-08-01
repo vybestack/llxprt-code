@@ -28,6 +28,8 @@ import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
 } from '../tools/memoryTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
+import { TodoWrite } from '../tools/todo-write.js';
+import { TodoRead } from '../tools/todo-read.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
@@ -71,6 +73,12 @@ export interface BugCommandSettings {
 
 export interface SummarizeToolOutputSettings {
   tokenBudget?: number;
+}
+
+export interface ComplexityAnalyzerSettings {
+  complexityThreshold?: number;
+  minTasksForSuggestion?: number;
+  suggestionCooldownMs?: number;
 }
 
 export interface TelemetrySettings {
@@ -196,6 +204,7 @@ export interface ConfigParameters {
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
   ideMode?: boolean;
   ideClient?: IdeClient;
+  complexityAnalyzer?: ComplexityAnalyzerSettings;
 }
 
 export class Config {
@@ -266,6 +275,7 @@ export class Config {
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
   private readonly experimentalAcp: boolean = false;
+  private readonly complexityAnalyzerSettings: ComplexityAnalyzerSettings;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -322,6 +332,11 @@ export class Config {
     this.summarizeToolOutput = params.summarizeToolOutput;
     this.ideMode = params.ideMode ?? false;
     this.ideClient = params.ideClient;
+    this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
+      complexityThreshold: 0.6,
+      minTasksForSuggestion: 3,
+      suggestionCooldownMs: 300000, // 5 minutes
+    };
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -650,6 +665,10 @@ export class Config {
     return this.ideClient;
   }
 
+  getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {
+    return this.complexityAnalyzerSettings;
+  }
+
   async getGitService(): Promise<GitService> {
     if (!this.gitService) {
       this.gitService = new GitService(this.targetDir);
@@ -719,6 +738,8 @@ export class Config {
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool);
     registerCoreTool(WebSearchTool, this);
+    registerCoreTool(TodoWrite);
+    registerCoreTool(TodoRead);
 
     await registry.discoverAllTools();
     return registry;

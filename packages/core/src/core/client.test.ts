@@ -26,6 +26,8 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { tokenLimit } from './tokenLimits.js';
 import { ideContext } from '../ide/ideContext.js';
+import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import { TodoReminderService } from '../services/todo-reminder-service.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -34,6 +36,23 @@ const mockEmbedContentFn = vi.fn();
 const mockTurnRunFn = vi.fn();
 
 vi.mock('@google/genai');
+vi.mock('../services/complexity-analyzer.js', () => ({
+  ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
+    analyzeComplexity: vi.fn().mockReturnValue({
+      complexityScore: 0.2,
+      isComplex: false,
+      detectedTasks: [],
+      sequentialIndicators: [],
+      questionCount: 0,
+      shouldSuggestTodos: false,
+    }),
+  })),
+}));
+vi.mock('../services/todo-reminder-service.js', () => ({
+  TodoReminderService: vi.fn().mockImplementation(() => ({
+    getComplexTaskSuggestion: vi.fn(),
+  })),
+}));
 vi.mock('./turn', () => {
   // Define a mock class that has the same shape as the real Turn
   class MockTurn {
@@ -142,6 +161,28 @@ describe('Gemini Client (client.ts)', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
 
+    // Re-setup mocks after reset
+    vi.mocked(ComplexityAnalyzer).mockImplementation(
+      () =>
+        ({
+          analyzeComplexity: vi.fn().mockReturnValue({
+            complexityScore: 0.2,
+            isComplex: false,
+            detectedTasks: [],
+            sequentialIndicators: [],
+            questionCount: 0,
+            shouldSuggestTodos: false,
+          }),
+        }) as unknown as ComplexityAnalyzer,
+    );
+
+    vi.mocked(TodoReminderService).mockImplementation(
+      () =>
+        ({
+          getComplexTaskSuggestion: vi.fn(),
+        }) as unknown as TodoReminderService,
+    );
+
     // Disable 429 simulation for tests
     setSimulate429(false);
 
@@ -209,6 +250,11 @@ describe('Gemini Client (client.ts)', () => {
       getGeminiClient: vi.fn(),
       getDebugMode: vi.fn().mockReturnValue(false),
       setFallbackMode: vi.fn(),
+      getComplexityAnalyzerSettings: vi.fn().mockReturnValue({
+        complexityThreshold: 0.6,
+        minTasksForSuggestion: 3,
+        suggestionCooldownMs: 300000,
+      }),
     };
     MockedConfig.mockImplementation(
       () => mockConfigObject as unknown as Config,

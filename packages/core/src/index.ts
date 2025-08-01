@@ -55,6 +55,7 @@ export * from './services/shellExecutionService.js';
 // Export base tool definitions
 export * from './tools/tools.js';
 export * from './tools/tool-registry.js';
+export * from './tools/tool-context.js';
 
 // Export prompt logic
 export * from './prompts/mcp-prompts.js';
