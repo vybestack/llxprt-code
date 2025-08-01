@@ -6,6 +6,7 @@
 
 import { FunctionDeclaration, PartListUnion, Schema } from '@google/genai';
 import { ToolContext, ContextAwareTool } from './tool-context.js';
+import { ToolErrorType } from './tool-error.js';
 
 /**
  * Interface representing the base Tool functionality
@@ -226,6 +227,14 @@ export interface ToolResult {
    * Optional metadata about the tool execution
    */
   metadata?: Record<string, unknown>;
+
+  /**
+   * If this property is present, the tool call is considered a failure.
+   */
+  error?: {
+    message: string; // raw error message
+    type?: ToolErrorType; // An optional machine-readable error type (e.g., 'FILE_NOT_FOUND').
+  };
 }
 
 export type ToolResultDisplay = string | FileDiff;
