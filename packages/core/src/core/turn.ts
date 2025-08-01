@@ -16,6 +16,7 @@ import {
   ToolResult,
   ToolResultDisplay,
 } from '../tools/tools.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 import {
   getResponseText,
   getFunctionCalls,
@@ -80,6 +81,7 @@ export interface ToolCallResponseInfo {
   responseParts: PartListUnion;
   resultDisplay: ToolResultDisplay | undefined;
   error: Error | undefined;
+  errorType: ToolErrorType | undefined;
 }
 
 export interface ServerToolCallConfirmationDetails {
