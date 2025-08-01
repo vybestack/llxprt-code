@@ -43,11 +43,10 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext } from '../ide/ideContext.js';
-import { logNextSpeakerCheck, logFlashDecidedToContinue } from '../telemetry/loggers.js';
+import { logNextSpeakerCheck } from '../telemetry/loggers.js';
 import {
   MalformedJsonResponseEvent,
   NextSpeakerCheckEvent,
-  FlashDecidedToContinueEvent,
 } from '../telemetry/types.js';
 import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';

@@ -1098,7 +1098,7 @@ const App = (props: AppInternalProps) => {
                   ideContext={ideContextState}
                   detectedIdeDisplay={config
                     .getIdeClient()
-                    .getDetectedIdeDisplayName()}
+                    ?.getDetectedIdeDisplayName()}
                 />
               )}
               {showErrorDetails && (

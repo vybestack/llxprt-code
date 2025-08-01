@@ -22,7 +22,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
   if (!config?.getIdeModeFeature()) {
     return null;
   }
-  const currentIDE = config.getIdeClient().getCurrentIde();
+  const currentIDE = config.getIdeClient()?.getCurrentIde();
   if (!currentIDE) {
     return null;
   }
@@ -39,7 +39,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     description: 'check status of IDE integration',
     kind: CommandKind.BUILT_IN,
     action: (_context: CommandContext): SlashCommandActionReturn => {
-      const connection = config.getIdeClient().getConnectionStatus();
+      const connection = config.getIdeClient()?.getConnectionStatus();
       switch (connection?.status) {
         case IDEConnectionStatus.Connected:
           return {
