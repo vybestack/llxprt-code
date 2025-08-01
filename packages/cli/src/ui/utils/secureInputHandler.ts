@@ -53,9 +53,19 @@ export class SecureInputHandler {
       const keyStartIndex = this.secureState.commandPrefix.length;
       const keyPortion = text.substring(keyStartIndex);
       
-      // Create masked version
-      const maskedKey = this.maskValue(keyPortion);
-      this.secureState.maskedValue = this.secureState.commandPrefix + maskedKey;
+      // Check if the key contains newlines
+      const newlineIndex = keyPortion.indexOf('\n');
+      if (newlineIndex !== -1) {
+        // Mask only up to the newline, preserve everything after
+        const keyToMask = keyPortion.substring(0, newlineIndex);
+        const afterNewline = keyPortion.substring(newlineIndex);
+        const maskedKey = this.maskValue(keyToMask);
+        this.secureState.maskedValue = this.secureState.commandPrefix + maskedKey + afterNewline;
+      } else {
+        // No newline, mask the entire key portion
+        const maskedKey = this.maskValue(keyPortion);
+        this.secureState.maskedValue = this.secureState.commandPrefix + maskedKey;
+      }
       
       return this.secureState.maskedValue;
     }

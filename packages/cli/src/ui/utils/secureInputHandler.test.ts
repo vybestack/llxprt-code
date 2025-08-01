@@ -160,6 +160,28 @@ describe('SecureInputHandler', () => {
       expect(handler.getActualValue()).toBe(pastedContent);
     });
 
+    it('should handle multi-line pasted content correctly', () => {
+      // Simulate pasting API key with newline at the end
+      handler.reset();
+      const pastedContent = '/key sk-proj-abcdefghijklmnopqrstuvwxyz123456789\n';
+      const masked = handler.processInput(pastedContent);
+      
+      expect(masked).toBe('/key sk***************************************89\n');
+      expect(handler.isInSecureMode()).toBe(true);
+      expect(handler.getActualValue()).toBe(pastedContent);
+    });
+
+    it('should mask only the key part when content has newline in the middle', () => {
+      // Simulate pasting API key with newline and additional content
+      handler.reset();
+      const pastedContent = '/key sk-proj-secret123\nsome other text';
+      const masked = handler.processInput(pastedContent);
+      
+      expect(masked).toBe('/key sk*************23\nsome other text');
+      expect(handler.isInSecureMode()).toBe(true);
+      expect(handler.getActualValue()).toBe(pastedContent);
+    });
+
     it('should mask short keys completely', () => {
       const testCases = [
         { input: '/key a', expected: '/key *' },
