@@ -231,12 +231,12 @@ export const useSlashCommandProcessor = (
         }
 
         const userMessageTimestamp = Date.now();
-        
+
         // Sanitize the command if it contains sensitive data
-        const sanitizedCommand = trimmed.startsWith('/key ') 
+        const sanitizedCommand = trimmed.startsWith('/key ')
           ? secureInputHandler.sanitizeForHistory(trimmed)
           : trimmed;
-          
+
         addItem(
           { type: MessageType.USER, text: sanitizedCommand },
           userMessageTimestamp,
