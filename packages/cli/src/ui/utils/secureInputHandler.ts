@@ -35,47 +35,41 @@ export class SecureInputHandler {
    * Processes input text and returns masked version if in secure mode
    */
   processInput(text: string): string {
-    // Always check if we should be in secure mode based on current text
+    // Always update the actual value
+    this.secureState.actualValue = text;
+    
+    // Check if we should be in secure mode based on current text
     const shouldBeSecure = this.shouldUseSecureMode(text);
 
-    if (shouldBeSecure && !this.secureState.isSecureMode) {
-      // Entering secure mode
-      this.enterSecureMode(text);
-    } else if (!shouldBeSecure && this.secureState.isSecureMode) {
-      // Exiting secure mode
-      this.exitSecureMode();
-    }
-
-    if (this.secureState.isSecureMode) {
-      // Update the actual value
-      this.secureState.actualValue = text;
+    if (shouldBeSecure) {
       
-      // Extract the API key portion (everything after "/key ")
-      const keyStartIndex = this.secureState.commandPrefix.length;
-      const keyPortion = text.substring(keyStartIndex);
-      
-      // If there's no key portion yet (just "/key " or "/key"), return as-is
-      if (!keyPortion || keyPortion.length === 0) {
+      // Check if text starts with /key followed by space and content
+      const match = text.match(/^\/key\s+([\s\S]*)/);
+      if (match && match[1]) {
+        // We have content after "/key "
+        const keyContent = match[1];
+        
+        // Check if the key contains newlines or carriage returns
+        const lineBreakMatch = keyContent.match(/[\r\n]/);
+        if (lineBreakMatch) {
+          const lineBreakIndex = lineBreakMatch.index!;
+          // Mask only up to the line break, preserve everything after
+          const keyToMask = keyContent.substring(0, lineBreakIndex);
+          const afterLineBreak = keyContent.substring(lineBreakIndex);
+          const maskedKey = this.maskValue(keyToMask);
+          return `/key ${maskedKey}${afterLineBreak}`;
+        } else {
+          // No line break, mask the entire key portion
+          const maskedKey = this.maskValue(keyContent);
+          return `/key ${maskedKey}`;
+        }
+      } else {
+        // Just "/key" or "/key " with no content yet
         return text;
       }
-      
-      // Check if the key contains newlines
-      const newlineIndex = keyPortion.indexOf('\n');
-      if (newlineIndex !== -1) {
-        // Mask only up to the newline, preserve everything after
-        const keyToMask = keyPortion.substring(0, newlineIndex);
-        const afterNewline = keyPortion.substring(newlineIndex);
-        const maskedKey = this.maskValue(keyToMask);
-        this.secureState.maskedValue = this.secureState.commandPrefix + maskedKey + afterNewline;
-      } else {
-        // No newline, mask the entire key portion
-        const maskedKey = this.maskValue(keyPortion);
-        this.secureState.maskedValue = this.secureState.commandPrefix + maskedKey;
-      }
-      
-      return this.secureState.maskedValue;
     }
-
+    
+    // Not in secure mode
     return text;
   }
 
@@ -83,16 +77,15 @@ export class SecureInputHandler {
    * Gets the actual (unmasked) value
    */
   getActualValue(): string {
-    return this.secureState.isSecureMode 
-      ? this.secureState.actualValue 
-      : '';
+    return this.secureState.actualValue || '';
   }
 
   /**
    * Checks if currently in secure mode
    */
   isInSecureMode(): boolean {
-    return this.secureState.isSecureMode;
+    // We're in secure mode if the current actual value matches /key pattern
+    return this.shouldUseSecureMode(this.secureState.actualValue || '');
   }
 
   /**
@@ -105,26 +98,6 @@ export class SecureInputHandler {
       maskedValue: '',
       commandPrefix: '',
     };
-  }
-
-  /**
-   * Enters secure mode
-   */
-  private enterSecureMode(text: string): void {
-    // Find where the API key starts (after "/key" or "/key ")
-    const keyCommandMatch = text.match(/^(\/key(?:\s+)?)/);
-    if (keyCommandMatch) {
-      this.secureState.commandPrefix = keyCommandMatch[1];
-      this.secureState.isSecureMode = true;
-      this.secureState.actualValue = text;
-    }
-  }
-
-  /**
-   * Exits secure mode
-   */
-  private exitSecureMode(): void {
-    this.reset();
   }
 
   /**

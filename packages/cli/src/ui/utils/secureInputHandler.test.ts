@@ -210,6 +210,41 @@ describe('SecureInputHandler', () => {
       expect(handler.isInSecureMode()).toBe(true);
     });
 
+    it('should not mask space after /key command', () => {
+      // When user types "/key " the space should not be masked
+      handler.reset();
+      const result = handler.processInput('/key ');
+      expect(result).toBe('/key '); // Should NOT be '/key *'
+      expect(handler.isInSecureMode()).toBe(true);
+    });
+
+    it('should handle type /key[space] then paste scenario correctly', () => {
+      // This is the exact scenario the user reported
+      handler.reset();
+      
+      // Step 1: User types "/key "
+      let result = handler.processInput('/key ');
+      expect(result).toBe('/key '); // Space should not be masked
+      
+      // Step 2: User pastes content from pbcopy (with trailing newline)
+      result = handler.processInput('/key mySecretAPIKeyFromFile\n');
+      expect(result).toBe('/key my******************le\n'); // Should be masked with newline preserved
+      
+      // Verify we can get the actual value
+      expect(handler.getActualValue()).toBe('/key mySecretAPIKeyFromFile\n');
+    });
+
+    it('should mask API key with carriage return after the key', () => {
+      // Test with a carriage return (CR) after the key
+      handler.reset();
+      const keyWithCR = '/key mySecretKey123\r';
+      const result = handler.processInput(keyWithCR);
+      
+      // The key should be masked and the carriage return preserved
+      expect(result).toBe('/key my**********23\r');
+      expect(handler.getActualValue()).toBe(keyWithCR);
+    });
+
     it('should mask only the key part when content has newline in the middle', () => {
       // Simulate pasting API key with newline and additional content
       handler.reset();
