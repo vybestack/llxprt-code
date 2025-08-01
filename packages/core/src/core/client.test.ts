@@ -11,6 +11,7 @@ import {
   Content,
   EmbedContentResponse,
   GenerateContentResponse,
+  GenerateContentParameters,
   GoogleGenAI,
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
@@ -461,12 +462,12 @@ describe('Gemini Client (client.ts)', () => {
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
       // Track the arguments manually
-      let capturedRequest: any;
-      let capturedPromptId: any;
+      let capturedRequest: GenerateContentParameters;
+      let capturedPromptId: string;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(async (request: any, promptId: any) => {
+        generateContent: vi.fn(async (request: GenerateContentParameters, promptId: string) => {
           capturedRequest = request;
           capturedPromptId = promptId;
           return {
@@ -519,12 +520,12 @@ describe('Gemini Client (client.ts)', () => {
       client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
 
       // Track the arguments manually
-      let capturedRequest: any;
-      let capturedPromptId: any;
+      let capturedRequest: GenerateContentParameters;
+      let capturedPromptId: string;
 
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: vi.fn(async (request: any, promptId: any) => {
+        generateContent: vi.fn(async (request: GenerateContentParameters, promptId: string) => {
           capturedRequest = request;
           capturedPromptId = promptId;
           return {
