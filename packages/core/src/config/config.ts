@@ -28,6 +28,8 @@ import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
 } from '../tools/memoryTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
+import { TodoWrite } from '../tools/todo-write.js';
+import { TodoRead } from '../tools/todo-read.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
@@ -72,6 +74,12 @@ export interface BugCommandSettings {
 
 export interface SummarizeToolOutputSettings {
   tokenBudget?: number;
+}
+
+export interface ComplexityAnalyzerSettings {
+  complexityThreshold?: number;
+  minTasksForSuggestion?: number;
+  suggestionCooldownMs?: number;
 }
 
 export interface TelemetrySettings {
@@ -198,7 +206,8 @@ export interface ConfigParameters {
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
   ideModeFeature?: boolean;
   ideMode?: boolean;
-  ideClient: IdeClient;
+  ideClient?: IdeClient;
+  complexityAnalyzer?: ComplexityAnalyzerSettings;
 }
 
 export class Config {
@@ -244,7 +253,7 @@ export class Config {
   private readonly noBrowser: boolean;
   private readonly ideModeFeature: boolean;
   private ideMode: boolean;
-  private ideClient: IdeClient;
+  private ideClient?: IdeClient;
   private inFallbackMode = false;
   private modelSwitchedDuringSession: boolean = false;
   private readonly maxSessionTurns: number;
@@ -271,6 +280,7 @@ export class Config {
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
   private readonly experimentalAcp: boolean = false;
+  private readonly complexityAnalyzerSettings: ComplexityAnalyzerSettings;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -332,6 +342,11 @@ export class Config {
     this.ideModeFeature = params.ideModeFeature ?? false;
     this.ideMode = params.ideMode ?? true;
     this.ideClient = params.ideClient;
+    this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
+      complexityThreshold: 0.6,
+      minTasksForSuggestion: 3,
+      suggestionCooldownMs: 300000, // 5 minutes
+    };
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -671,7 +686,7 @@ export class Config {
     return this.ideModeFeature;
   }
 
-  getIdeClient(): IdeClient {
+  getIdeClient(): IdeClient | undefined {
     return this.ideClient;
   }
 
@@ -684,11 +699,15 @@ export class Config {
   }
 
   setIdeClientDisconnected(): void {
-    this.ideClient.setDisconnected();
+    this.ideClient?.setDisconnected();
   }
 
   setIdeClientConnected(): void {
-    this.ideClient.reconnect(this.ideMode && this.ideModeFeature);
+    this.ideClient?.reconnect(this.ideMode && this.ideModeFeature);
+  }
+
+  getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {
+    return this.complexityAnalyzerSettings;
   }
 
   async getGitService(): Promise<GitService> {
@@ -760,6 +779,8 @@ export class Config {
     registerCoreTool(ShellTool, this);
     registerCoreTool(MemoryTool);
     registerCoreTool(WebSearchTool, this);
+    registerCoreTool(TodoWrite);
+    registerCoreTool(TodoRead);
 
     await registry.discoverAllTools();
     return registry;

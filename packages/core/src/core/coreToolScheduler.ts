@@ -28,6 +28,7 @@ import {
   modifyWithEditor,
 } from '../tools/modifiable-tool.js';
 import * as Diff from 'diff';
+import { ToolContext } from '../tools/tool-context.js';
 
 export type ValidatingToolCall = {
   status: 'validating';
@@ -440,7 +441,16 @@ export class CoreToolScheduler {
 
     const newToolCalls: ToolCall[] = requestsToProcess.map(
       (reqInfo): ToolCall => {
-        const toolInstance = toolRegistry.getTool(reqInfo.name);
+        // Create context from config
+        const context: ToolContext = {
+          sessionId:
+            typeof this.config.getSessionId === 'function'
+              ? this.config.getSessionId()
+              : 'default-session',
+          // TODO: Add agentId when available in the request
+        };
+
+        const toolInstance = toolRegistry.getTool(reqInfo.name, context);
         if (!toolInstance) {
           return {
             status: 'error',

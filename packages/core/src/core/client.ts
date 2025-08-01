@@ -43,12 +43,15 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext } from '../ide/ideContext.js';
-import { logNextSpeakerCheck } from '../telemetry/loggers.js';
+import { logNextSpeakerCheck, logFlashDecidedToContinue } from '../telemetry/loggers.js';
 import {
   MalformedJsonResponseEvent,
   NextSpeakerCheckEvent,
+  FlashDecidedToContinueEvent,
 } from '../telemetry/types.js';
 import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
+import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import { TodoReminderService } from '../services/todo-reminder-service.js';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -129,6 +132,10 @@ export class GeminiClient {
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
+  private readonly complexityAnalyzer: ComplexityAnalyzer;
+  private readonly todoReminderService: TodoReminderService;
+  private lastComplexitySuggestionTime: number = 0;
+  private readonly complexitySuggestionCooldown: number;
 
   constructor(private config: Config) {
     if (config.getProxy()) {
@@ -137,6 +144,17 @@ export class GeminiClient {
 
     this.embeddingModel = config.getEmbeddingModel();
     this.loopDetector = new LoopDetectionService(config);
+
+    // Initialize complexity analyzer with config settings
+    const complexitySettings = config.getComplexityAnalyzerSettings();
+    this.complexityAnalyzer = new ComplexityAnalyzer({
+      complexityThreshold: complexitySettings.complexityThreshold,
+      minTasksForSuggestion: complexitySettings.minTasksForSuggestion,
+    });
+    this.complexitySuggestionCooldown =
+      complexitySettings.suggestionCooldownMs ?? 300000;
+
+    this.todoReminderService = new TodoReminderService();
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -511,6 +529,45 @@ export class GeminiClient {
             { text: contextParts.join('\n') },
             ...(Array.isArray(request) ? request : [request]),
           ];
+        }
+      }
+    }
+
+    // Complexity detection for proactive todo suggestions
+    if (
+      this.sessionTurnCount === 1 && // Only on first user message
+      Array.isArray(request) &&
+      request.length > 0
+    ) {
+      // Extract user message text
+      const userMessage = request
+        .filter((part) => typeof part === 'object' && 'text' in part)
+        .map((part) => (part as { text: string }).text)
+        .join(' ');
+
+      if (userMessage) {
+        const analysis = this.complexityAnalyzer.analyzeComplexity(userMessage);
+
+        // Check if we should suggest todos (with cooldown)
+        const currentTime = Date.now();
+        if (
+          analysis.shouldSuggestTodos &&
+          currentTime - this.lastComplexitySuggestionTime >
+            this.complexitySuggestionCooldown
+        ) {
+          // Generate suggestion reminder
+          const suggestionReminder =
+            this.todoReminderService.getComplexTaskSuggestion(
+              analysis.detectedTasks,
+            );
+
+          // Inject reminder into request
+          request = [
+            ...(Array.isArray(request) ? request : [request]),
+            { text: suggestionReminder },
+          ];
+
+          this.lastComplexitySuggestionTime = currentTime;
         }
       }
     }

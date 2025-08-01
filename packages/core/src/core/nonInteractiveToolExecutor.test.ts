@@ -86,7 +86,9 @@ describe('executeToolCall', () => {
       abortController.signal,
     );
 
-    expect(mockToolRegistry.getTool).toHaveBeenCalledWith('testTool');
+    expect(mockToolRegistry.getTool).toHaveBeenCalledWith('testTool', {
+      sessionId: 'test-session-id',
+    });
     expect(mockTool.execute).toHaveBeenCalledWith(
       request.args,
       abortController.signal,

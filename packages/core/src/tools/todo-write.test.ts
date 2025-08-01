@@ -65,7 +65,7 @@ describe('TodoWrite', () => {
 
       const result = await tool.execute({ todos: validTodos }, abortSignal);
 
-      expect(result.llmContent).toContain('2 todos');
+      expect(result.llmContent).toContain('Total: 2');
       expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
         validTodos,
       );
@@ -135,7 +135,7 @@ describe('TodoWrite', () => {
       expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
         singleTodo,
       );
-      expect(result.llmContent).toContain('1 todo');
+      expect(result.llmContent).toContain('Total tasks: 1');
     });
 
     it('should handle empty todo list', async () => {
@@ -147,7 +147,7 @@ describe('TodoWrite', () => {
       expect(vi.mocked(TodoStore.prototype.writeTodos)).toHaveBeenCalledWith(
         [],
       );
-      expect(result.llmContent).toContain('0 todos');
+      expect(result.llmContent).toContain('Total: 0');
     });
 
     it('should return both old and new todos for diff tracking', async () => {
@@ -156,8 +156,8 @@ describe('TodoWrite', () => {
 
       const result = await tool.execute({ todos: validTodos }, abortSignal);
 
-      expect(result.llmContent).toContain('Previous: 3 todos');
-      expect(result.llmContent).toContain('Updated: 2 todos');
+      expect(result.llmContent).toContain('Removed: 3 tasks');
+      expect(result.llmContent).toContain('Total tasks: 2');
     });
   });
 
@@ -207,7 +207,7 @@ describe('TodoWrite', () => {
         llmContent: expect.any(String),
         returnDisplay: expect.any(String),
       });
-      expect(result.llmContent).toContain('Todo list updated');
+      expect(result.llmContent).toContain('## Todo List Updated');
     });
 
     it('should include summary of changes in output', async () => {
@@ -216,7 +216,7 @@ describe('TodoWrite', () => {
 
       const result = await tool.execute({ todos: validTodos }, abortSignal);
 
-      expect(result.llmContent).toMatch(/Added.*Removed/s);
+      expect(result.llmContent).toMatch(/Added.*tasks/);
     });
   });
 
@@ -226,8 +226,9 @@ describe('TodoWrite', () => {
         Object.create(Object.getPrototypeOf(tool)),
         tool,
       );
-      (toolWithSession as unknown as { sessionId: string }).sessionId =
-        'test-session-123';
+      toolWithSession.context = {
+        sessionId: 'test-session-123',
+      };
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
@@ -242,12 +243,10 @@ describe('TodoWrite', () => {
         Object.create(Object.getPrototypeOf(tool)),
         tool,
       );
-      (
-        toolWithAgent as unknown as { sessionId: string; agentId: string }
-      ).sessionId = 'test-session-123';
-      (
-        toolWithAgent as unknown as { sessionId: string; agentId: string }
-      ).agentId = 'test-agent-456';
+      toolWithAgent.context = {
+        sessionId: 'test-session-123',
+        agentId: 'test-agent-456',
+      };
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
@@ -265,8 +264,9 @@ describe('TodoWrite', () => {
         Object.create(Object.getPrototypeOf(tool)),
         tool,
       );
-      (toolNoAgent as unknown as { sessionId: string }).sessionId =
-        'test-session-123';
+      toolNoAgent.context = {
+        sessionId: 'test-session-123',
+      };
 
       vi.mocked(TodoStore.prototype.readTodos).mockResolvedValue([]);
       vi.mocked(TodoStore.prototype.writeTodos).mockResolvedValue(undefined);
