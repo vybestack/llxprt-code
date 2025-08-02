@@ -254,7 +254,7 @@ export async function main() {
         }
       }
 
-      if (baseUrl && activeProvider.setBaseUrl) {
+      if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
         activeProvider.setBaseUrl(baseUrl);
       }
 
@@ -295,7 +295,7 @@ export async function main() {
         }
       }
 
-      if (baseUrl && activeProvider.setBaseUrl) {
+      if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
         activeProvider.setBaseUrl(baseUrl);
       }
 
