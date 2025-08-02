@@ -110,24 +110,16 @@ describe('checkForUpdates', () => {
     expect(result).toBeNull();
   });
 
-  it('should return null if fetchInfo times out', async () => {
+  it('should return null if fetchInfo rejects', async () => {
     getPackageJson.mockResolvedValue({
       name: 'test-package',
       version: '1.0.0',
     });
     updateNotifier.mockReturnValue({
-      fetchInfo: vi.fn(
-        async () =>
-          new Promise((resolve) => {
-            setTimeout(() => {
-              resolve({ current: '1.0.0', latest: '1.1.0' });
-            }, FETCH_TIMEOUT_MS + 1);
-          }),
-      ),
+      fetchInfo: vi.fn().mockRejectedValue(new Error('Timeout')),
     });
-    const promise = checkForUpdates();
-    await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS);
-    const result = await promise;
+
+    const result = await checkForUpdates();
     expect(result).toBeNull();
   });
 
@@ -149,5 +141,88 @@ describe('checkForUpdates', () => {
     });
     const result = await checkForUpdates();
     expect(result).toBeNull();
+  });
+
+  describe('nightly updates', () => {
+    it('should notify for a newer nightly version when current is nightly', async () => {
+      getPackageJson.mockResolvedValue({
+        name: 'test-package',
+        version: '1.2.3-nightly.1',
+      });
+
+      const fetchInfoMock = vi.fn().mockImplementation(({ distTag }) => {
+        if (distTag === 'nightly') {
+          return Promise.resolve({
+            latest: '1.2.3-nightly.2',
+            current: '1.2.3-nightly.1',
+          });
+        }
+        if (distTag === 'latest') {
+          return Promise.resolve({
+            latest: '1.2.3',
+            current: '1.2.3-nightly.1',
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      updateNotifier.mockImplementation(({ pkg, distTag }) => ({
+        fetchInfo: () => fetchInfoMock({ pkg, distTag }),
+      }));
+
+      const result = await checkForUpdates();
+      expect(result?.message).toContain('1.2.3-nightly.1 → 1.2.3-nightly.2');
+      expect(result?.update.latest).toBe('1.2.3-nightly.2');
+    });
+
+    it('should prefer a newer stable version over an older nightly', async () => {
+      getPackageJson.mockResolvedValue({
+        name: 'test-package',
+        version: '1.2.3-nightly.1',
+      });
+
+      const fetchInfoMock = vi.fn().mockImplementation(({ distTag }) => {
+        if (distTag === 'nightly') {
+          return Promise.resolve({
+            latest: '1.2.3-nightly.2',
+            current: '1.2.3-nightly.1',
+          });
+        }
+        if (distTag === 'latest') {
+          return Promise.resolve({
+            latest: '1.3.0',
+            current: '1.2.3-nightly.1',
+          });
+        }
+        return Promise.resolve(null);
+      });
+
+      updateNotifier.mockImplementation(({ pkg, distTag }) => ({
+        fetchInfo: () => fetchInfoMock({ pkg, distTag }),
+      }));
+
+      const result = await checkForUpdates();
+      expect(result?.message).toContain('1.2.3-nightly.1 → 1.3.0');
+      expect(result?.update.latest).toBe('1.3.0');
+    });
+
+    it('should handle timeout gracefully for nightly checks', async () => {
+      vi.useFakeTimers();
+      getPackageJson.mockResolvedValue({
+        name: 'test-package',
+        version: '1.2.3-nightly.1',
+      });
+
+      updateNotifier.mockImplementation(() => ({
+        fetchInfo: () => new Promise(() => {}), // Never resolves
+      }));
+
+      const checkPromise = checkForUpdates();
+      vi.advanceTimersByTime(FETCH_TIMEOUT_MS + 100);
+      const result = await checkPromise;
+
+      expect(result).toBeNull();
+      vi.useRealTimers();
+    });
   });
 });
