@@ -125,10 +125,17 @@ const saveCommand: SlashCommand = {
         }
       }
 
-      // Get auth-key from ephemeral settings (set by /key command)
-      const ephemeralApiKey = allEphemeralSettings['auth-key'];
-      if (ephemeralApiKey) {
-        (ephemeralSettings as Record<string, unknown>)['auth-key'] = ephemeralApiKey;
+      // Get auth-keyfile from ephemeral settings (set by /keyfile command)
+      const ephemeralKeyfile = allEphemeralSettings['auth-keyfile'];
+      if (ephemeralKeyfile) {
+        (ephemeralSettings as Record<string, unknown>)['auth-keyfile'] = ephemeralKeyfile;
+        // Don't save auth-key if using keyfile
+      } else {
+        // Get auth-key from ephemeral settings (set by /key command)
+        const ephemeralApiKey = allEphemeralSettings['auth-key'];
+        if (ephemeralApiKey) {
+          (ephemeralSettings as Record<string, unknown>)['auth-key'] = ephemeralApiKey;
+        }
       }
 
       // Fallback: Check persistent settings for base-url if not in ephemeral
@@ -262,12 +269,28 @@ const loadCommand: SlashCommand = {
         // Store in ephemeral settings
         context.services.config.setEphemeralSetting(key, value);
 
-        // Special handling for auth-key and base-url
+        // Special handling for auth-key, auth-keyfile, and base-url
         if (key === 'auth-key' && typeof value === 'string') {
           // Directly set API key on the provider without saving to persistent settings
           const activeProvider = providerManager?.getActiveProvider();
           if (activeProvider && activeProvider.setApiKey) {
             activeProvider.setApiKey(value);
+          }
+        } else if (key === 'auth-keyfile' && typeof value === 'string') {
+          // Load API key from file
+          try {
+            const { promises: fs } = await import('fs');
+            const { homedir } = await import('os');
+            const resolvedPath = value.replace(/^~/, homedir());
+            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
+            
+            const activeProvider = providerManager?.getActiveProvider();
+            if (activeProvider && activeProvider.setApiKey && apiKey) {
+              activeProvider.setApiKey(apiKey);
+            }
+          } catch (error) {
+            // Log error but continue loading profile
+            console.error(`Failed to load keyfile ${value}:`, error);
           }
         } else if (key === 'base-url' && typeof value === 'string') {
           // Directly set base URL on the provider without saving to persistent settings

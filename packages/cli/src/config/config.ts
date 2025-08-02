@@ -72,7 +72,7 @@ export interface CliArgs {
   baseurl: string | undefined;
   proxy: string | undefined;
   includeDirectories: string[] | undefined;
-  profile: string | undefined;
+  profileLoad: string | undefined;
 }
 
 export async function parseArguments(): Promise<CliArgs> {
@@ -241,9 +241,9 @@ export async function parseArguments(): Promise<CliArgs> {
         // Handle comma-separated values
         dirs.flatMap((dir) => dir.split(',').map((d) => d.trim())),
     })
-    .option('profile', {
+    .option('profile-load', {
       type: 'string',
-      description: 'Load a saved profile configuration',
+      description: 'Load a saved profile configuration on startup',
     })
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
@@ -310,10 +310,10 @@ export async function loadCliConfig(
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
 
-  if (argv.profile) {
+  if (argv.profileLoad) {
     try {
       const profileManager = new ProfileManager();
-      const profile = await profileManager.loadProfile(argv.profile);
+      const profile = await profileManager.loadProfile(argv.profileLoad);
 
       // Store profile values to apply after Config creation
       profileProvider = profile.provider;
@@ -335,11 +335,11 @@ export async function loadCliConfig(
 
       if (tempDebugMode) {
         logger.debug(
-          `Loaded profile '${argv.profile}' with provider: ${profileProvider}, model: ${profileModel}`,
+          `Loaded profile '${argv.profileLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
         );
       }
     } catch (error) {
-      logger.error(`Failed to load profile '${argv.profile}': ${error}`);
+      logger.error(`Failed to load profile '${argv.profileLoad}': ${error}`);
       // Continue without the profile settings
     }
   }
