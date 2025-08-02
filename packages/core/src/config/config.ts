@@ -177,6 +177,8 @@ export interface ConfigParameters {
   llxprtMdFileCount?: number;
   approvalMode?: ApprovalMode;
   showMemoryUsage?: boolean;
+  contextLimit?: number;
+  compressionThreshold?: number;
   contextFileName?: string | string[];
   accessibility?: AccessibilitySettings;
   telemetry?: TelemetrySettings;

@@ -1211,6 +1211,11 @@ const App = (props: AppInternalProps) => {
             promptTokenCount={sessionStats.lastPromptTokenCount}
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}
+            contextLimit={
+              (settings.merged as Record<string, unknown>)['context-limit'] as
+                | number
+                | undefined
+            }
           />
         </Box>
       </Box>

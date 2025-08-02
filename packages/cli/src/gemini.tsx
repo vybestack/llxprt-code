@@ -313,6 +313,23 @@ export async function main() {
             throw new Error(err);
           }
           await config.refreshAuth(settings.merged.selectedAuthType);
+
+          // Apply compression settings after authentication
+          const merged = settings.merged as Record<string, unknown>;
+          const contextLimit = merged['context-limit'] as number | undefined;
+          const compressionThreshold = merged['compression-threshold'] as
+            | number
+            | undefined;
+
+          if (contextLimit || compressionThreshold) {
+            const geminiClient = config.getGeminiClient();
+            if (geminiClient) {
+              geminiClient.setCompressionSettings(
+                compressionThreshold,
+                contextLimit,
+              );
+            }
+          }
         } catch (err) {
           console.error('Error authenticating:', err);
           process.exit(1);
@@ -596,5 +613,6 @@ async function loadNonInteractiveConfig(
   return await validateNonInteractiveAuth(
     settings.merged.selectedAuthType,
     finalConfig,
+    settings,
   );
 }

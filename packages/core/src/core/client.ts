@@ -122,12 +122,16 @@ export class GeminiClient {
    * Threshold for compression token count as a fraction of the model's token limit.
    * If the chat history exceeds this threshold, it will be compressed.
    */
-  private readonly COMPRESSION_TOKEN_THRESHOLD = 0.7;
+  private COMPRESSION_TOKEN_THRESHOLD = 0.7;
   /**
    * The fraction of the latest chat history to keep. A value of 0.3
    * means that only the last 30% of the chat history will be kept after compression.
    */
   private readonly COMPRESSION_PRESERVE_THRESHOLD = 0.3;
+  /**
+   * User-defined context limit override
+   */
+  private userContextLimit?: number;
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
@@ -154,6 +158,22 @@ export class GeminiClient {
       complexitySettings.suggestionCooldownMs ?? 300000;
 
     this.todoReminderService = new TodoReminderService();
+  }
+
+  /**
+   * Set the compression threshold and context limit overrides
+   */
+  setCompressionSettings(compressionThreshold?: number, contextLimit?: number) {
+    if (
+      compressionThreshold !== undefined &&
+      compressionThreshold > 0 &&
+      compressionThreshold <= 1
+    ) {
+      this.COMPRESSION_TOKEN_THRESHOLD = compressionThreshold;
+    }
+    if (contextLimit !== undefined && contextLimit > 0) {
+      this.userContextLimit = contextLimit;
+    }
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -863,9 +883,10 @@ export class GeminiClient {
     }
 
     // Don't compress if not forced and we are under the limit.
+    const contextLimit = tokenLimit(model, this.userContextLimit);
     if (
       !force &&
-      originalTokenCount < this.COMPRESSION_TOKEN_THRESHOLD * tokenLimit(model)
+      originalTokenCount < this.COMPRESSION_TOKEN_THRESHOLD * contextLimit
     ) {
       return null;
     }

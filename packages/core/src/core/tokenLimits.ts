@@ -9,7 +9,15 @@ type TokenCount = number;
 
 export const DEFAULT_TOKEN_LIMIT = 1_048_576;
 
-export function tokenLimit(model: Model): TokenCount {
+export function tokenLimit(
+  model: Model,
+  userContextLimit?: number,
+): TokenCount {
+  // If user has set a context limit, use it
+  if (userContextLimit && userContextLimit > 0) {
+    return userContextLimit;
+  }
+
   // Strip provider prefix if present (e.g., "openai:gpt-4o" -> "gpt-4o")
   const modelWithoutPrefix = model.includes(':') ? model.split(':')[1] : model;
 
