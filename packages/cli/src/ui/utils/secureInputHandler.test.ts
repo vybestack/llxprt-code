@@ -6,6 +6,9 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SecureInputHandler } from './secureInputHandler';
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
 
 describe('SecureInputHandler', () => {
   let handler: SecureInputHandler;
@@ -300,7 +303,9 @@ describe('SecureInputHandler', () => {
         null,
         2,
       );
-      fs.writeFileSync('/tmp/cr-debug.json', debugOutput);
+      // Use os.tmpdir() for cross-platform temp directory
+      const tmpPath = path.join(os.tmpdir(), 'cr-debug.json');
+      fs.writeFileSync(tmpPath, debugOutput);
 
       // Expectations
       expect(result1).toBe('/key ');
