@@ -17,13 +17,26 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 /**
- * Implementation for the /save command that saves the current model configuration to a profile.
- * Usage: /save "<profile-name>"
+ * Implementation for the /save command that redirects to /profile save.
+ * @deprecated Use /profile save instead
  */
 export const saveCommand: SlashCommand = {
   name: 'save',
   description: 'save current configuration to a profile',
   kind: CommandKind.BUILT_IN,
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<MessageActionReturn> => {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'The /save command has been replaced by /profile save. Please use /profile save "<name>" instead.',
+    };
+  },
+};
+
+/* Original save implementation - kept for reference
   action: async (
     context: CommandContext,
     args: string,
@@ -151,3 +164,4 @@ export const saveCommand: SlashCommand = {
     }
   },
 };
+*/

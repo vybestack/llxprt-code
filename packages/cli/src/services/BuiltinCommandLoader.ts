@@ -40,6 +40,7 @@ import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import { saveCommand } from '../ui/commands/saveCommand.js';
 import { loadCommand } from '../ui/commands/loadCommand.js';
+import { profileCommand } from '../ui/commands/profileCommand.js';
 import { isGitHubRepository } from '../utils/gitUtils.js';
 
 /**
@@ -88,8 +89,9 @@ export class BuiltinCommandLoader implements ICommandLoader {
       baseurlCommand,
       toolformatCommand,
       setCommand,
-      saveCommand,
-      loadCommand,
+      profileCommand,
+      saveCommand, // Deprecated - redirects to /profile save
+      loadCommand, // Deprecated - redirects to /profile load
       ...(isGitHubRepository() ? [setupGithubCommand] : []),
     ];
 

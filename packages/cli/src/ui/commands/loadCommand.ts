@@ -14,8 +14,8 @@ import {
 import { ProfileManager, AuthType } from '@vybestack/llxprt-code-core';
 
 /**
- * Implementation for the /load command that loads a saved profile configuration.
- * Usage: /load "<profile-name>"
+ * Implementation for the /load command that redirects to /profile load.
+ * @deprecated Use /profile load instead
  */
 export const loadCommand: SlashCommand = {
   name: 'load',
@@ -36,6 +36,19 @@ export const loadCommand: SlashCommand = {
 
     return profiles;
   },
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'The /load command has been replaced by /profile load. Please use /profile load "<name>" instead.',
+    };
+  },
+};
+
+/* Original load implementation - kept for reference
   action: async (
     context: CommandContext,
     args: string,
@@ -188,3 +201,4 @@ export const loadCommand: SlashCommand = {
     }
   },
 };
+*/
