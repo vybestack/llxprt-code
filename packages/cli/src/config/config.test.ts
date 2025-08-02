@@ -1045,7 +1045,7 @@ describe('loadCliConfig ideModeFeature', () => {
   });
 });
 
-describe('--load flag functionality', () => {
+describe('--profile-load flag functionality', () => {
   const originalArgv = process.argv;
   const originalEnv = { ...process.env };
 
@@ -1064,14 +1064,14 @@ describe('--load flag functionality', () => {
     vi.restoreAllMocks();
   });
 
-  it('should parse --load argument correctly', async () => {
-    process.argv = ['node', 'script.js', '--load', 'test-profile'];
+  it('should parse --profile-load argument correctly', async () => {
+    process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
-    expect(argv.load).toBe('test-profile');
+    expect(argv.profileLoad).toBe('test-profile');
   });
 
   it('should load profile settings in loadCliConfig', async () => {
-    process.argv = ['node', 'script.js', '--load', 'test-profile'];
+    process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
       defaultModel: 'gemini-2.5-pro',
@@ -1146,7 +1146,7 @@ describe('--load flag functionality', () => {
   });
 
   it('should merge profile ephemeral settings with existing settings', async () => {
-    process.argv = ['node', 'script.js', '--load', 'test-profile'];
+    process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
       defaultModel: 'gemini-2.5-pro',

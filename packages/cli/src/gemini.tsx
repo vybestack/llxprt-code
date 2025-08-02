@@ -265,6 +265,54 @@ export async function main() {
     }
   }
 
+  // Apply ephemeral settings from profile if provider came from profile (not CLI)
+  // This handles the case where profile was loaded via --profile-load
+  if (!argv.provider && (argv.profileLoad || settings.merged.defaultProfile)) {
+    const activeProvider = providerManager.getActiveProvider();
+    if (activeProvider) {
+      // Apply ephemeral settings from profile to the provider
+      const authKey = config.getEphemeralSetting('auth-key') as string;
+      const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
+      const baseUrl = config.getEphemeralSetting('base-url') as string;
+
+      if (authKey && activeProvider.setApiKey) {
+        activeProvider.setApiKey(authKey);
+      } else if (authKeyfile && activeProvider.setApiKey) {
+        // Load API key from file
+        try {
+          const apiKey = (
+            await fs.readFile(authKeyfile.replace(/^~/, os.homedir()), 'utf-8')
+          ).trim();
+          if (apiKey) {
+            activeProvider.setApiKey(apiKey);
+          }
+        } catch (error) {
+          console.error(
+            chalk.red(
+              `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
+        }
+      }
+
+      if (baseUrl && activeProvider.setBaseUrl) {
+        activeProvider.setBaseUrl(baseUrl);
+      }
+
+      // Apply profile model params if loaded
+      const configWithProfile = config as Config & {
+        _profileModelParams?: Record<string, unknown>;
+      };
+      if (
+        configWithProfile._profileModelParams &&
+        'setModelParams' in activeProvider &&
+        activeProvider.setModelParams
+      ) {
+        activeProvider.setModelParams(configWithProfile._profileModelParams);
+      }
+    }
+  }
+
   // Process CLI-provided credentials (--key, --keyfile, --baseurl)
   if (argv.key || argv.keyfile || argv.baseurl) {
     // Provider-specific credentials are now handled directly

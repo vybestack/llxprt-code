@@ -46,6 +46,12 @@ describe('setCommand', () => {
     // Create a mock config
     mockConfig = {
       getProviderManager: vi.fn().mockReturnValue(mockProviderManager),
+      setEphemeralSetting: vi.fn(),
+      getEphemeralSetting: vi.fn(() => undefined),
+      getEphemeralSettings: vi.fn(() => ({})),
+      getGeminiClient: vi.fn(() => ({
+        setCompressionSettings: vi.fn(),
+      })),
     };
 
     // Create context with the mock config
@@ -69,7 +75,7 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /set modelparam <key> <value> or /set <ephemeral-key> <value>',
+        'Usage: /set <ephemeral-key> <value>\nExample: /set context-limit 100000\n\nFor model parameters use: /set modelparam <key> <value>',
     });
   });
 
@@ -79,15 +85,13 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /set modelparam <key> <value> or /set <ephemeral-key> <value>',
+        'Usage: /set temperature <value>\n\nValid ephemeral keys:\n  context-limit: Maximum number of tokens for the context window (e.g., 100000)\n  compression-threshold: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)\n  base-url: Base URL for API requests\n  tool-format: Tool format override for the provider\n  api-version: API version to use\n  custom-headers: Custom HTTP headers as JSON object',
     });
   });
 
   it('should set model parameter successfully', async () => {
-    const result = await setCommand.action!(
-      context,
-      'modelparam temperature 0.7',
-    );
+    const modelParamCommand = setCommand.subCommands![0];
+    const result = await modelParamCommand.action!(context, 'temperature 0.7');
 
     expect(mockProvider.setModelParams).toHaveBeenCalledWith({
       temperature: 0.7,
@@ -95,26 +99,34 @@ describe('setCommand', () => {
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: "Model parameter 'temperature' set to 0.7",
+      content:
+        "Model parameter 'temperature' set to 0.7 (use /profile save to persist)",
     });
   });
 
   it('should show error for modelparam with insufficient arguments', async () => {
-    const result = await setCommand.action!(context, 'modelparam temperature');
+    const modelParamCommand = setCommand.subCommands![0];
+    const result = await modelParamCommand.action!(context, 'temperature');
     expect(result).toEqual({
       type: 'message',
       messageType: 'error',
-      content: 'Usage: /set modelparam <key> <value>',
+      content:
+        'Usage: /set modelparam <key> <value>\nExample: /set modelparam temperature 0.7',
     });
   });
 
   it('should set ephemeral setting successfully', async () => {
     const result = await setCommand.action!(context, 'context-limit 32000');
 
+    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+      'context-limit',
+      32000,
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: "Ephemeral setting 'context-limit' set to 32000",
+      content:
+        "Ephemeral setting 'context-limit' set to 32000 (session only, use /profile save to persist)",
     });
   });
 
@@ -124,32 +136,36 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, auth-key, auth-keyfile, base-url, tool-format, api-version, custom-headers',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers',
     });
   });
 
   it('should handle multi-word JSON values correctly', async () => {
     const result = await setCommand.action!(
       context,
-      'modelparam custom-headers {"Authorization": "Bearer token"}',
+      'custom-headers {"Authorization": "Bearer token"}',
     );
 
-    expect(mockProvider.setModelParams).toHaveBeenCalledWith({
-      'custom-headers': { Authorization: 'Bearer token' },
-    });
+    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+      'custom-headers',
+      {
+        Authorization: 'Bearer token',
+      },
+    );
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
       content:
-        'Model parameter \'custom-headers\' set to {"Authorization":"Bearer token"}',
+        'Ephemeral setting \'custom-headers\' set to {"Authorization":"Bearer token"} (session only, use /profile save to persist)',
     });
   });
 
   describe('modelparam behavioral tests', () => {
     it('should call provider.setModelParams with correct parameters', async () => {
-      const result = await setCommand.action!(
+      const modelParamCommand = setCommand.subCommands![0];
+      const result = await modelParamCommand.action!(
         context,
-        'modelparam temperature 0.7',
+        'temperature 0.7',
       );
 
       // Verify the calls
@@ -163,7 +179,8 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: "Model parameter 'temperature' set to 0.7",
+        content:
+          "Model parameter 'temperature' set to 0.7 (use /profile save to persist)",
       });
     });
 
@@ -181,9 +198,10 @@ describe('setCommand', () => {
         providerWithoutModelParams,
       );
 
-      const result = await setCommand.action!(
+      const modelParamCommand = setCommand.subCommands![0];
+      const result = await modelParamCommand.action!(
         context,
-        'modelparam temperature 0.7',
+        'temperature 0.7',
       );
 
       expect(result).toEqual({
@@ -194,7 +212,8 @@ describe('setCommand', () => {
     });
 
     it('should parse numeric values correctly for temperature', async () => {
-      await setCommand.action!(context, 'modelparam temperature 0.95');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'temperature 0.95');
 
       // Verify it was called with a number, not a string
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
@@ -206,7 +225,8 @@ describe('setCommand', () => {
     });
 
     it('should parse integer values correctly for max_tokens', async () => {
-      await setCommand.action!(context, 'modelparam max_tokens 4096');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'max_tokens 4096');
 
       // Verify it was called with a number
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
@@ -218,14 +238,15 @@ describe('setCommand', () => {
     });
 
     it('should handle multiple modelparams being set sequentially', async () => {
+      const modelParamCommand = setCommand.subCommands![0];
       // Set temperature first
-      await setCommand.action!(context, 'modelparam temperature 0.7');
+      await modelParamCommand.action!(context, 'temperature 0.7');
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
         temperature: 0.7,
       });
 
       // Set max_tokens second
-      await setCommand.action!(context, 'modelparam max_tokens 2048');
+      await modelParamCommand.action!(context, 'max_tokens 2048');
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
         max_tokens: 2048,
       });
@@ -235,7 +256,8 @@ describe('setCommand', () => {
     });
 
     it('should handle string values without parsing', async () => {
-      await setCommand.action!(context, 'modelparam model gpt-4-turbo');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'model gpt-4-turbo');
 
       // Verify it was called with a string
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
@@ -247,9 +269,10 @@ describe('setCommand', () => {
     });
 
     it('should handle JSON values for complex parameters', async () => {
-      await setCommand.action!(
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(
         context,
-        'modelparam response_format {"type":"json_object"}',
+        'response_format {"type":"json_object"}',
       );
 
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
@@ -294,8 +317,9 @@ describe('setCommand', () => {
 
       expect(result).toEqual({
         type: 'message',
-        messageType: 'info',
-        content: 'Ephemeral setting \'auth-key\' set to "sk-1234567890"',
+        messageType: 'error',
+        content:
+          'Invalid setting key: auth-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers',
       });
     });
 
@@ -307,8 +331,9 @@ describe('setCommand', () => {
 
       expect(result).toEqual({
         type: 'message',
-        messageType: 'info',
-        content: 'Ephemeral setting \'auth-keyfile\' set to "~/.keys/api-key"',
+        messageType: 'error',
+        content:
+          'Invalid setting key: auth-keyfile. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers',
       });
     });
 
@@ -322,7 +347,7 @@ describe('setCommand', () => {
         type: 'message',
         messageType: 'info',
         content:
-          'Ephemeral setting \'base-url\' set to "http://localhost:8080/v1"',
+          'Ephemeral setting \'base-url\' set to "http://localhost:8080/v1" (session only, use /profile save to persist)',
       });
     });
 
@@ -336,7 +361,7 @@ describe('setCommand', () => {
         type: 'message',
         messageType: 'info',
         content:
-          'Ephemeral setting \'custom-headers\' set to {"Authorization":"Bearer token","X-Custom":"value"}',
+          'Ephemeral setting \'custom-headers\' set to {"Authorization":"Bearer token","X-Custom":"value"} (session only, use /profile save to persist)',
       });
     });
   });
@@ -364,9 +389,10 @@ describe('setCommand', () => {
         throw new Error('Provider error');
       });
 
-      const result = await setCommand.action!(
+      const modelParamCommand = setCommand.subCommands![0];
+      const result = await modelParamCommand.action!(
         context,
-        'modelparam temperature 0.7',
+        'temperature 0.7',
       );
 
       expect(result).toEqual({
@@ -379,9 +405,10 @@ describe('setCommand', () => {
     it('should handle missing config gracefully', async () => {
       context.services.config = null;
 
-      const result = await setCommand.action!(
+      const modelParamCommand = setCommand.subCommands![0];
+      const result = await modelParamCommand.action!(
         context,
-        'modelparam temperature 0.7',
+        'temperature 0.7',
       );
 
       expect(result).toEqual({
@@ -394,7 +421,8 @@ describe('setCommand', () => {
 
   describe('value parsing behavioral tests', () => {
     it('should parse boolean values correctly', async () => {
-      await setCommand.action!(context, 'modelparam stream true');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'stream true');
 
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
         stream: true,
@@ -404,14 +432,15 @@ describe('setCommand', () => {
       );
 
       // Test false as well
-      await setCommand.action!(context, 'modelparam stream false');
+      await modelParamCommand.action!(context, 'stream false');
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
         stream: false,
       });
     });
 
     it('should handle null values', async () => {
-      await setCommand.action!(context, 'modelparam stop null');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'stop null');
 
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({ stop: null });
     });
@@ -429,7 +458,8 @@ describe('setCommand', () => {
     });
 
     it('should handle array values', async () => {
-      await setCommand.action!(context, 'modelparam stop ["\\n","END"]');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'stop ["\\n","END"]');
 
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
         stop: ['\n', 'END'],
