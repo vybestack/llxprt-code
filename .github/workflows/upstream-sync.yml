@@ -168,6 +168,8 @@ jobs:
           # Create an empty merge commit to mark sync point
           # This prevents the repo from showing as "behind" upstream
           LAST_COMMIT="${{ steps.llxprt.outputs.last_commit }}"
+          COMMITS_BEHIND="${{ steps.check-commits.outputs.commits_behind }}"
+          COMMIT_RANGE="${{ steps.commit-info.outputs.commit_range }}"
           echo "Creating empty merge commit for upstream commit: $LAST_COMMIT"
           
           # Get the full commit hash
@@ -180,8 +182,8 @@ jobs:
 This is an empty merge commit to maintain parity with upstream structure.
 All changes have already been cherry-picked in previous commits.
 
-Synced upstream commits: ${{ steps.check-commits.outputs.commits_behind }}
-Cherry-picked from range: ${{ steps.commit-info.outputs.commit_range }}
+Synced upstream commits: $COMMITS_BEHIND
+Cherry-picked from range: $COMMIT_RANGE
 
 Maintains llxprt's multi-provider support, branding, and authentication
 differences while staying in sync with upstream improvements."

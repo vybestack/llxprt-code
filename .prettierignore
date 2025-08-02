@@ -13,9 +13,6 @@ coverage/
 .vscode/
 .idea/
 
-# GitHub workflows (YAML with complex multi-line strings)
-.github/
-
 # Project planning documents
 project-plans/
 
@@ -28,3 +25,6 @@ project-plans/
 package-lock.json
 tsconfig.tsbuildinfo
 research/
+
+# GitHub Actions YAML files with complex multi-line strings
+.github/workflows/upstream-sync.yml
