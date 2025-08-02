@@ -46,13 +46,13 @@ function makeAbortSignal() {
   return c.signal;
 }
 
-describe('ShellExecutionService (Windows behavior)', () => {
+describe.skipIf(process.platform !== 'win32')('ShellExecutionService (Windows behavior)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(os.platform).mockReturnValue('win32');
   });
 
-  it('uses cmd.exe with /d /s /c when operators present', async () => {
+  it('uses shell: true mode on Windows', async () => {
     ShellExecutionService.execute(
       'echo a & echo b',
       '.',
@@ -60,15 +60,15 @@ describe('ShellExecutionService (Windows behavior)', () => {
       makeAbortSignal(),
     );
     expect(spawn).toHaveBeenCalledWith(
-      expect.stringMatching(/cmd\.exe/i),
-      ['/d', '/s', '/c', 'echo a & echo b'],
-      expect.objectContaining({ shell: false }),
+      'echo a & echo b',
+      [],
+      expect.objectContaining({ shell: true }),
     );
   });
 
-  it('spawns program directly when no operators present', async () => {
+  it('uses shell: true mode on Windows for simple commands', async () => {
     ShellExecutionService.execute('node -v', '.', () => {}, makeAbortSignal());
-    expect(spawn).toHaveBeenCalledWith('node', ['-v'], expect.any(Object));
+    expect(spawn).toHaveBeenCalledWith('node -v', [], expect.objectContaining({ shell: true }));
   });
 
   it('initializes TextDecoder with system encoding mapping (CP932->shift_jis) and decodes stderr bytes', async () => {

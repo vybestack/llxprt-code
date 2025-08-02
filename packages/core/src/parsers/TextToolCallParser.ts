@@ -207,7 +207,11 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       // .replace(/<think>[\s\S]*?<\/think>/g, '') // Keep think tags visible by default
       .replace(/<tool_call>\s*\{[^}]*$/gm, '') // Remove incomplete tool calls
       .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '') // Remove incomplete JSON tool calls
-      .replace(/✦\s*<think>/g, '');
+      .replace(/✦\s*<think>/g, '')
+      .trim();
+
+    // Collapse multiple consecutive newlines/spaces after removing tool calls
+    cleanedContent = cleanedContent.replace(/\n\s*\n/g, '\n').replace(/\n/g, ' ').trim();
 
     return {
       cleanedContent,
