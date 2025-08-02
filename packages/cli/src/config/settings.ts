@@ -126,6 +126,7 @@ export interface Settings {
   disableAutoUpdate?: boolean;
 
   memoryDiscoveryMaxDirs?: number;
+
 }
 
 export interface SettingsError {

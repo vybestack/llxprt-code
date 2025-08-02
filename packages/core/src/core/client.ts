@@ -624,12 +624,24 @@ export class GeminiClient {
       // Only check next speaker for Gemini provider
       const contentGenConfig = this.config.getContentGeneratorConfig();
       const providerManager = contentGenConfig?.providerManager;
-      const providerName = providerManager?.getActiveProviderName() || 'gemini';
+      const providerName = providerManager?.getActiveProviderName();
+      
+      if (process.env.DEBUG) {
+        console.log('DEBUG [client.sendMessageStream]: Provider check for nextSpeaker:', {
+          providerName,
+          hasProviderManager: !!providerManager,
+          activeProviderName: providerManager?.getActiveProviderName(),
+        });
+      }
+      
+      // Only run nextSpeaker check if we explicitly have gemini provider
+      // Don't default to gemini if provider manager is missing
       if (providerName === 'gemini') {
         const nextSpeakerCheck = await checkNextSpeaker(
           this.getChat(),
           this,
           signal,
+          providerName,
         );
         logNextSpeakerCheck(
           this.config,
