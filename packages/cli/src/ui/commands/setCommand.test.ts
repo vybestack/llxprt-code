@@ -288,7 +288,8 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: "Ephemeral setting 'context-limit' set to 32000 (session only, use /profile save to persist)",
+        content:
+          "Ephemeral setting 'context-limit' set to 32000 (session only, use /profile save to persist)",
       });
     });
 
@@ -302,7 +303,8 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: "Ephemeral setting 'compression-threshold' set to 0.8 (session only, use /profile save to persist)",
+        content:
+          "Ephemeral setting 'compression-threshold' set to 0.8 (session only, use /profile save to persist)",
       });
 
       // Note: Validation of compression-threshold range should be done when the value is used,
@@ -381,7 +383,8 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: 'Model parameter \'response_format\' set to "{invalid json}" (use /profile save to persist)',
+        content:
+          'Model parameter \'response_format\' set to "{invalid json}" (use /profile save to persist)',
       });
     });
 

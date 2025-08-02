@@ -57,7 +57,7 @@ export const aboutCommand: SlashCommand = {
 
     // Determine keyfile path and key status for the active provider (if any)
     let keyfilePath = '';
-    let keyStatus = '';
+    const keyStatus = '';
     try {
       const { getProviderManager } = await import(
         '../../providers/providerManagerInstance.js'

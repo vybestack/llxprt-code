@@ -7,7 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { ProviderManager, Config, AuthType } from '@vybestack/llxprt-code-core';
-import { LoadedSettings, SettingScope } from '../config/settings.js';
+import { LoadedSettings } from '../config/settings.js';
 
 export interface ProviderConfigResult {
   success: boolean;

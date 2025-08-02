@@ -1132,7 +1132,12 @@ describe('--profile-load flag functionality', () => {
       new Error('Profile not found'),
     );
 
-    process.argv = ['node', 'script.js', '--profile-load', 'non-existent-profile'];
+    process.argv = [
+      'node',
+      'script.js',
+      '--profile-load',
+      'non-existent-profile',
+    ];
     const argv = await parseArguments();
     const settings: Settings = {
       defaultModel: 'gemini-2.5-pro',
