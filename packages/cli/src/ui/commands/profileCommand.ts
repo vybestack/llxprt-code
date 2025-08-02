@@ -49,7 +49,7 @@ const saveCommand: SlashCommand = {
     const trimmedArgs = args?.trim();
 
     if (!trimmedArgs) {
-      // TODO: Implement interactive profile selection dialog
+      // For now, show usage until dialog system is implemented
       return {
         type: 'message',
         messageType: 'error',
@@ -347,8 +347,10 @@ const loadCommand: SlashCommand = {
           if (activeProvider && activeProvider.setBaseUrl) {
             // Handle "none" as clearing the base URL
             if (value === 'none') {
+              console.debug('[Profile] Clearing base URL (value was "none")');
               activeProvider.setBaseUrl(undefined);
             } else {
+              console.debug(`[Profile] Setting base URL to: ${value}`);
               activeProvider.setBaseUrl(value);
             }
           }
@@ -464,7 +466,7 @@ const deleteCommand: SlashCommand = {
     const trimmedArgs = args?.trim();
 
     if (!trimmedArgs) {
-      // TODO: Implement interactive profile selection dialog
+      // For now, show usage until dialog system is implemented
       return {
         type: 'message',
         messageType: 'error',
