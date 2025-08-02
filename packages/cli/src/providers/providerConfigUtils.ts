@@ -39,10 +39,7 @@ export async function setProviderApiKey(
       if (activeProvider.setApiKey) {
         activeProvider.setApiKey('');
 
-        // Remove from settings
-        const currentKeys = settings.merged.providerApiKeys || {};
-        delete currentKeys[providerName];
-        settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
+        // Don't need to remove from settings as we no longer save API keys there
 
         // If this is the Gemini provider, we might need to switch auth mode
         const requiresAuthRefresh = providerName === 'gemini' && !!config;
@@ -75,10 +72,7 @@ export async function setProviderApiKey(
     if (activeProvider.setApiKey) {
       activeProvider.setApiKey(apiKey);
 
-      // Save to settings
-      const currentKeys = settings.merged.providerApiKeys || {};
-      currentKeys[providerName] = apiKey;
-      settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
+      // Don't save API keys to settings - they should only be in profiles or ephemeral
 
       // If this is the Gemini provider, we need to refresh auth to use API key mode
       const requiresAuthRefresh = providerName === 'gemini' && !!config;
@@ -177,10 +171,7 @@ export async function setProviderBaseUrl(
       if (activeProvider.setBaseUrl) {
         activeProvider.setBaseUrl(undefined);
 
-        // Remove from settings
-        const currentUrls = settings.merged.providerBaseUrls || {};
-        delete currentUrls[providerName];
-        settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+        // Don't need to remove from settings as we no longer save base URLs there
 
         return {
           success: true,
@@ -198,10 +189,7 @@ export async function setProviderBaseUrl(
     if (activeProvider.setBaseUrl) {
       activeProvider.setBaseUrl(baseUrl);
 
-      // Save to settings
-      const currentUrls = settings.merged.providerBaseUrls || {};
-      currentUrls[providerName] = baseUrl;
-      settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+      // Don't save base URLs to settings - they should only be in profiles or ephemeral
 
       return {
         success: true,

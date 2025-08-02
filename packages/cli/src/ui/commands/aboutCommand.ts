@@ -67,10 +67,7 @@ export const aboutCommand: SlashCommand = {
       if (providerName) {
         keyfilePath =
           context.services.settings.getProviderKeyfile?.(providerName) || '';
-        const keys = context.services.settings.merged.providerApiKeys || {};
-        if (keys[providerName]) {
-          keyStatus = 'active';
-        }
+        // We don't check for API keys anymore - they're only in profiles
       }
     } catch {
       // Ignore errors and leave defaults
