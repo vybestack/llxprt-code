@@ -84,6 +84,11 @@ jobs:
           # Get the list of commits to cherry-pick
           COMMIT_LIST=$(git log --oneline --reverse HEAD..upstream/main | awk '{print $1}' | tr '\n' ' ')
           echo "Commits to cherry-pick: $COMMIT_LIST"
+          
+          # Get the last commit hash we'll cherry-pick (for the merge commit later)
+          LAST_COMMIT=$(git log --oneline --reverse HEAD..upstream/main | tail -1 | awk '{print $1}')
+          echo "last_commit=$LAST_COMMIT" >> $GITHUB_OUTPUT
+          
           # Run llxprt-code and capture output
           set +e  # Don't exit on error
           npx https://github.com/acoliver/llxprt-code \
@@ -157,6 +162,29 @@ jobs:
             git add -A
             git commit -m "Sync with upstream: cherry-pick commits from upstream"
           fi
+      - name: Create empty merge commit
+        if: steps.check-commits.outputs.has_new_commits == 'true' && steps.llxprt.outputs.exit_code == '0'
+        run: |
+          # Create an empty merge commit to mark sync point
+          # This prevents the repo from showing as "behind" upstream
+          LAST_COMMIT="${{ steps.llxprt.outputs.last_commit }}"
+          echo "Creating empty merge commit for upstream commit: $LAST_COMMIT"
+          
+          # Get the full commit hash
+          FULL_COMMIT=$(git rev-parse $LAST_COMMIT)
+          
+          # Create the merge commit using -s ours strategy
+          # This creates a merge commit without actually merging any content
+          git merge -s ours --no-ff $FULL_COMMIT -m "Merge upstream gemini-cli up to commit $LAST_COMMIT
+
+This is an empty merge commit to maintain parity with upstream structure.
+All changes have already been cherry-picked in previous commits.
+
+Synced upstream commits: ${{ steps.check-commits.outputs.commits_behind }}
+Cherry-picked from range: ${{ steps.commit-info.outputs.commit_range }}
+
+Maintains llxprt's multi-provider support, branding, and authentication
+differences while staying in sync with upstream improvements."
       - name: Push branch
         if: steps.check-commits.outputs.has_new_commits == 'true'
         run: |
@@ -170,6 +198,12 @@ jobs:
           echo "- **Branch created:** \`${{ steps.create-branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Commits synced:** ${{ steps.check-commits.outputs.commits_behind }}" >> $GITHUB_STEP_SUMMARY
           echo "- **llxprt-code exit code:** ${{ steps.llxprt.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.llxprt.outputs.exit_code }}" == "0" ]; then
+            echo "- **Merge commit:** ✅ Created (sync point established)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Merge commit:** ⚠️ Not created (llxprt-code had errors)" >> $GITHUB_STEP_SUMMARY
+          fi
 
           if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
             echo "- **Status:** ⚠️ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
