@@ -8,6 +8,7 @@ import {
   SlashCommand,
   CommandContext,
   MessageActionReturn,
+  OpenDialogActionReturn,
   CommandKind,
 } from './types.js';
 import { ProfileManager, AuthType } from '@vybestack/llxprt-code-core';
@@ -26,18 +27,33 @@ export const loadCommand: SlashCommand = {
   name: 'load',
   description: 'load configuration from a saved profile',
   kind: CommandKind.BUILT_IN,
+  completion: async (_context: CommandContext, partialArg: string) => {
+    const profileManager = new ProfileManager();
+    const profiles = await profileManager.listProfiles();
+
+    // Filter profiles based on partial argument
+    if (partialArg) {
+      // Handle quoted partial arguments
+      const unquoted = partialArg.startsWith('"')
+        ? partialArg.slice(1)
+        : partialArg;
+      return profiles.filter((profile) => profile.startsWith(unquoted));
+    }
+
+    return profiles;
+  },
   action: async (
     context: CommandContext,
     args: string,
-  ): Promise<MessageActionReturn> => {
+  ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     // Parse profile name from args
     const trimmedArgs = args?.trim();
 
     if (!trimmedArgs) {
+      // Open interactive profile selection dialog
       return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Usage: /load "<profile-name>"',
+        type: 'dialog',
+        dialog: 'loadProfile',
       };
     }
 

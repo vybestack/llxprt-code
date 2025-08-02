@@ -108,8 +108,10 @@ import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
+import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { ProviderDialog } from './components/ProviderDialog.js';
+import { LoadProfileDialog } from './components/LoadProfileDialog.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -355,6 +357,23 @@ const App = (props: AppInternalProps) => {
     setCorgiMode((prev) => !prev);
   }, []);
 
+  const {
+    showDialog: isLoadProfileDialogOpen,
+    openDialog: openLoadProfileDialog,
+    handleSelect: handleProfileSelect,
+    closeDialog: exitLoadProfileDialog,
+    profiles,
+  } = useLoadProfileDialog({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+    config,
+    settings,
+  });
+
   const performMemoryRefresh = useCallback(async () => {
     addItem(
       {
@@ -581,6 +600,7 @@ const App = (props: AppInternalProps) => {
     openEditorDialog,
     openProviderDialog,
     openProviderModelDialog,
+    openLoadProfileDialog,
     toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
@@ -1033,6 +1053,14 @@ const App = (props: AppInternalProps) => {
                 currentModel={currentModel}
                 onSelect={handleProviderModelChange}
                 onClose={exitProviderModelDialog}
+              />
+            </Box>
+          ) : isLoadProfileDialogOpen ? (
+            <Box flexDirection="column">
+              <LoadProfileDialog
+                profiles={profiles}
+                onSelect={handleProfileSelect}
+                onClose={exitLoadProfileDialog}
               />
             </Box>
           ) : showPrivacyNotice ? (

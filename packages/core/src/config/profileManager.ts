@@ -93,11 +93,23 @@ export class ProfileManager {
    * @returns Array of profile names (without .json extension)
    */
   async listProfiles(): Promise<string[]> {
-    // TODO: Implement list functionality
-    // 1. Read profilesDir
-    // 2. Filter for .json files
-    // 3. Return names without extension
-    throw new Error('NotYetImplemented');
+    try {
+      // Ensure profiles directory exists
+      await fs.mkdir(this.profilesDir, { recursive: true });
+
+      // Read all files in the profiles directory
+      const files = await fs.readdir(this.profilesDir);
+
+      // Filter for .json files and remove extension
+      const profileNames = files
+        .filter((file) => file.endsWith('.json'))
+        .map((file) => file.slice(0, -5)); // Remove .json extension
+
+      return profileNames;
+    } catch (_error) {
+      // If directory doesn't exist or other error, return empty array
+      return [];
+    }
   }
 
   /**
