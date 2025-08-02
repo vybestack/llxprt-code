@@ -345,7 +345,12 @@ const loadCommand: SlashCommand = {
           // Directly set base URL on the provider without saving to persistent settings
           const activeProvider = providerManager?.getActiveProvider();
           if (activeProvider && activeProvider.setBaseUrl) {
-            activeProvider.setBaseUrl(value);
+            // Handle "none" as clearing the base URL
+            if (value === 'none') {
+              activeProvider.setBaseUrl(undefined);
+            } else {
+              activeProvider.setBaseUrl(value);
+            }
           }
         }
       }
