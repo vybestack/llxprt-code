@@ -88,7 +88,6 @@
     "yargs": "^18.0.0"
   },
   "dependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.46.2",
     "execa": "^9.6.0",
     "fast-uri": "^3.0.6",
     "openai": "^5.10.1",

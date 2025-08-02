@@ -29,12 +29,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Fix rollup platform dependency
-        run: |
-          # Explicitly install the platform-specific rollup package
-          # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-linux-x64-gnu --no-save || true
-
       - name: Build project
         run: npm run build
 
