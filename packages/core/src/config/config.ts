@@ -217,6 +217,7 @@ export class Config {
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
   private contentGeneratorConfig!: ContentGeneratorConfig;
+  private ephemeralSettings: Record<string, unknown> = {};
   private readonly embeddingModel: string;
   private readonly sandbox: SandboxConfig | undefined;
   private readonly targetDir: string;
@@ -714,6 +715,18 @@ export class Config {
 
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {
     return this.complexityAnalyzerSettings;
+  }
+
+  getEphemeralSetting(key: string): unknown {
+    return this.ephemeralSettings[key];
+  }
+
+  setEphemeralSetting(key: string, value: unknown): void {
+    this.ephemeralSettings[key] = value;
+  }
+
+  getEphemeralSettings(): Record<string, unknown> {
+    return { ...this.ephemeralSettings };
   }
 
   async getGitService(): Promise<GitService> {

@@ -127,10 +127,10 @@ const modelParamCommand: SlashCommand = {
  */
 // Help text for ephemeral settings - these are session-only and saved only via profiles
 const ephemeralSettingHelp: Record<string, string> = {
-  'context-limit': 'Maximum number of tokens for the context window (e.g., 100000)',
-  'compression-threshold': 'Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)',
-  'auth-key': 'API key for the current provider',
-  'auth-keyfile': 'Path to file containing API key',
+  'context-limit':
+    'Maximum number of tokens for the context window (e.g., 100000)',
+  'compression-threshold':
+    'Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)',
   'base-url': 'Base URL for API requests',
   'tool-format': 'Tool format override for the provider',
   'api-version': 'API version to use',
@@ -159,7 +159,7 @@ export const setCommand: SlashCommand = {
 
     const parts = trimmedArgs.split(/\s+/);
     const key = parts[0];
-    
+
     // If only key is provided, show help for that key
     if (parts.length === 1) {
       if (ephemeralSettingHelp[key]) {
@@ -172,7 +172,11 @@ export const setCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Usage: /set ${key} <value>\n\nValid ephemeral keys:\n${Object.entries(ephemeralSettingHelp).map(([k, v]) => `  ${k}: ${v}`).join('\n')}`,
+        content: `Usage: /set ${key} <value>\n\nValid ephemeral keys:\n${Object.entries(
+          ephemeralSettingHelp,
+        )
+          .map(([k, v]) => `  ${k}: ${v}`)
+          .join('\n')}`,
       };
     }
 
@@ -207,7 +211,11 @@ export const setCommand: SlashCommand = {
 
     if (key === 'context-limit') {
       const numValue = parsedValue as number;
-      if (typeof numValue !== 'number' || numValue <= 0 || !Number.isInteger(numValue)) {
+      if (
+        typeof numValue !== 'number' ||
+        numValue <= 0 ||
+        !Number.isInteger(numValue)
+      ) {
         return {
           type: 'message',
           messageType: 'error',
@@ -230,16 +238,17 @@ export const setCommand: SlashCommand = {
     if (key === 'context-limit' || key === 'compression-threshold') {
       const geminiClient = config.getGeminiClient();
       if (geminiClient) {
-        const contextLimit = key === 'context-limit' ? parsedValue as number : undefined;
-        const compressionThreshold = key === 'compression-threshold' ? parsedValue as number : undefined;
+        const contextLimit =
+          key === 'context-limit' ? (parsedValue as number) : undefined;
+        const compressionThreshold =
+          key === 'compression-threshold' ? (parsedValue as number) : undefined;
         geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
       }
     }
 
     // Store ephemeral settings in memory only
     // They will be saved only when user explicitly saves a profile
-    // For now, we need to store them somewhere accessible for the UI
-    // TODO: Implement proper ephemeral storage mechanism
+    config.setEphemeralSetting(key, parsedValue);
 
     return {
       type: 'message',
@@ -250,15 +259,15 @@ export const setCommand: SlashCommand = {
   completion: async (_context: CommandContext, partialArg: string) => {
     // Provide completions for ephemeral settings
     const ephemeralKeys = Object.keys(ephemeralSettingHelp);
-    
+
     if (partialArg) {
       const parts = partialArg.split(/\s+/);
       if (parts.length === 1) {
         // Still typing the key
-        return ephemeralKeys.filter(key => key.startsWith(parts[0]));
+        return ephemeralKeys.filter((key) => key.startsWith(parts[0]));
       }
     }
-    
+
     return ephemeralKeys;
   },
 };

@@ -88,13 +88,12 @@ export const saveCommand: SlashCommand = {
         modelParams = activeProvider.getModelParams() || {};
       }
 
-      // Get ephemeral settings from context
-      const allSettings = context.services.settings.merged || {};
+      // Get ephemeral settings from config
+      const allEphemeralSettings =
+        context.services.config.getEphemeralSettings();
       const ephemeralKeys: Array<keyof EphemeralSettings> = [
         'context-limit',
         'compression-threshold',
-        'auth-key',
-        'auth-keyfile',
         'base-url',
         'tool-format',
         'api-version',
@@ -103,32 +102,26 @@ export const saveCommand: SlashCommand = {
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};
       for (const key of ephemeralKeys) {
-        if (key in allSettings) {
-          // TypeScript requires us to cast here because allSettings is a general object
-          // but we know these keys are valid ephemeral settings
-          const value = allSettings[key as keyof typeof allSettings];
-          if (value !== undefined) {
-            (ephemeralSettings as Record<string, unknown>)[key] = value;
-          }
+        const value = allEphemeralSettings[key];
+        if (value !== undefined) {
+          (ephemeralSettings as Record<string, unknown>)[key] = value;
         }
       }
 
-      // Special handling for provider-specific settings
-      const providerApiKeys =
-        (allSettings.providerApiKeys as Record<string, string>) || {};
-      const providerBaseUrls =
-        (allSettings.providerBaseUrls as Record<string, string>) || {};
-
-      // Map provider-specific API key to ephemeral auth-key
-      if (providerName && providerApiKeys[providerName]) {
-        (ephemeralSettings as Record<string, unknown>)['auth-key'] =
-          providerApiKeys[providerName];
+      // Get auth-key from ephemeral settings (set by /key command)
+      const ephemeralApiKey = allEphemeralSettings['auth-key'];
+      if (ephemeralApiKey) {
+        (ephemeralSettings as Record<string, unknown>)['auth-key'] = ephemeralApiKey;
       }
 
-      // Map provider-specific base URL to ephemeral base-url
-      if (providerName && providerBaseUrls[providerName]) {
-        (ephemeralSettings as Record<string, unknown>)['base-url'] =
-          providerBaseUrls[providerName];
+      // Fallback: Check persistent settings for base-url if not in ephemeral
+      // This handles the case where base-url was set with the old command
+      if (!ephemeralSettings['base-url']) {
+        const allSettings = context.services.settings.merged || {};
+        const providerBaseUrls = (allSettings.providerBaseUrls as Record<string, string>) || {};
+        if (providerName && providerBaseUrls[providerName]) {
+          (ephemeralSettings as Record<string, unknown>)['base-url'] = providerBaseUrls[providerName];
+        }
       }
 
       // Create profile object

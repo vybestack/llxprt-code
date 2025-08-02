@@ -12,12 +12,6 @@ import {
   CommandKind,
 } from './types.js';
 import { ProfileManager, AuthType } from '@vybestack/llxprt-code-core';
-import { SettingScope, Settings } from '../../config/settings.js';
-import {
-  setProviderApiKey,
-  setProviderBaseUrl,
-} from '../../providers/providerConfigUtils.js';
-import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 /**
  * Implementation for the /load command that loads a saved profile configuration.
@@ -109,25 +103,23 @@ export const loadCommand: SlashCommand = {
       context.services.config.setModel(profile.model);
 
       // 3. Apply ephemeral settings third
-      const settings = context.services.settings;
       for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
+        // Store in ephemeral settings
+        context.services.config.setEphemeralSetting(key, value);
+
         // Special handling for auth-key and base-url
         if (key === 'auth-key' && typeof value === 'string') {
-          // Set API key for the provider - use the concrete provider manager
-          const concreteProviderManager = getProviderManager();
-          await setProviderApiKey(
-            concreteProviderManager,
-            settings,
-            value,
-            context.services.config,
-          );
+          // Directly set API key on the provider without saving to persistent settings
+          const activeProvider = providerManager?.getActiveProvider();
+          if (activeProvider && activeProvider.setApiKey) {
+            activeProvider.setApiKey(value);
+          }
         } else if (key === 'base-url' && typeof value === 'string') {
-          // Set base URL for the provider - use the concrete provider manager
-          const concreteProviderManager = getProviderManager();
-          await setProviderBaseUrl(concreteProviderManager, settings, value);
-        } else {
-          // Use setValue with SettingScope.User for other ephemeral settings
-          settings.setValue(SettingScope.User, key as keyof Settings, value);
+          // Directly set base URL on the provider without saving to persistent settings
+          const activeProvider = providerManager?.getActiveProvider();
+          if (activeProvider && activeProvider.setBaseUrl) {
+            activeProvider.setBaseUrl(value);
+          }
         }
       }
 

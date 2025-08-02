@@ -342,16 +342,39 @@ const App = (props: AppInternalProps) => {
     await openProviderModelDialogRaw();
   }, [providerManager, openProviderModelDialogRaw]);
 
-  // Update current model when provider or model changes
+  // Consolidated model update logic - single source of truth from config
   useEffect(() => {
-    const activeProvider = providerManager.getActiveProvider();
-    if (activeProvider) {
-      const providerModel = activeProvider.getCurrentModel?.();
-      if (providerModel && providerModel !== currentModel) {
-        setCurrentModel(providerModel);
+    const updateModel = () => {
+      // Always use config as the source of truth
+      const configModel = config.getModel();
+      const activeProvider = providerManager.getActiveProvider();
+      
+      // If we have an active provider, check if its model matches config
+      if (activeProvider && activeProvider.getCurrentModel) {
+        const providerModel = activeProvider.getCurrentModel();
+        // Only update if there's a real difference
+        if (providerModel && providerModel !== configModel) {
+          // Provider model differs from config - this shouldn't happen
+          // but if it does, config wins
+          config.setModel(providerModel);
+        }
       }
-    }
-  }, [providerManager, currentModel]);
+      
+      // Update the UI state
+      if (configModel !== currentModel) {
+        setCurrentModel(configModel);
+      }
+    };
+
+    // Run immediately
+    updateModel();
+    
+    // Set up periodic check
+    const interval = setInterval(updateModel, 1000);
+    
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config, providerManager]); // Intentionally omit currentModel to prevent feedback loop
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
@@ -422,21 +445,7 @@ const App = (props: AppInternalProps) => {
     }
   }, [config, addItem, settings.merged]);
 
-  // Watch for model changes (e.g., from Flash fallback)
-  useEffect(() => {
-    const checkModelChange = () => {
-      const configModel = config.getModel();
-      if (configModel !== currentModel) {
-        setCurrentModel(configModel);
-      }
-    };
-
-    // Check immediately and then periodically
-    checkModelChange();
-    const interval = setInterval(checkModelChange, 1000); // Check every second
-
-    return () => clearInterval(interval);
-  }, [config, currentModel]);
+  // Removed - consolidated into single useEffect above
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -1212,9 +1221,7 @@ const App = (props: AppInternalProps) => {
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}
             contextLimit={
-              (settings.merged as Record<string, unknown>)['context-limit'] as
-                | number
-                | undefined
+              config.getEphemeralSetting('context-limit') as number | undefined
             }
           />
         </Box>

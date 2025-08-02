@@ -51,11 +51,12 @@ export const useAuthCommand = (
         await config.refreshAuth(authType);
 
         // Apply compression settings after authentication
-        const merged = settings.merged as Record<string, unknown>;
-        const contextLimit = merged['context-limit'] as number | undefined;
-        const compressionThreshold = merged['compression-threshold'] as
+        const contextLimit = config.getEphemeralSetting('context-limit') as
           | number
           | undefined;
+        const compressionThreshold = config.getEphemeralSetting(
+          'compression-threshold',
+        ) as number | undefined;
 
         if (contextLimit || compressionThreshold) {
           const geminiClient = config.getGeminiClient();
