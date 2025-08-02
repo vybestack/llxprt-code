@@ -87,17 +87,31 @@ export const providerCommand: SlashCommand = {
         // Update the provider in config
         context.services.config.setProvider(providerName);
 
-        // Get the provider's default model - it should already be set since we just switched
+        // Get the active provider and ensure it uses a valid default model
         const activeProvider = providerManager.getActiveProvider();
-        const defaultModel = activeProvider.getCurrentModel?.() || '';
 
-        // Ensure the model is valid for this provider
+        // Determine the correct default model for this provider
+        let defaultModel = '';
+        switch (providerName) {
+          case 'gemini':
+            defaultModel = 'gemini-2.5-pro';
+            break;
+          case 'openai':
+            defaultModel = 'gpt-4.1';
+            break;
+          case 'anthropic':
+            defaultModel = 'claude-sonnet-4-latest';
+            break;
+          default:
+            defaultModel = activeProvider.getCurrentModel?.() || '';
+        }
+
+        // Set the model on both the provider and config
         if (defaultModel) {
-          context.services.config.setModel(defaultModel);
-          // Also explicitly set it on the provider to be sure
           if (activeProvider.setModel) {
             activeProvider.setModel(defaultModel);
           }
+          context.services.config.setModel(defaultModel);
         }
 
         // Clear conversation history BEFORE switching to prevent tool call ID mismatches
