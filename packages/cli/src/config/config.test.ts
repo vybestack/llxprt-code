@@ -1107,7 +1107,7 @@ describe('--profile-load flag functionality', () => {
     process.argv = [
       'node',
       'script.js',
-      '--load',
+      '--profile-load',
       'test-profile',
       '--model',
       'claude-3-opus-20240229',
@@ -1132,7 +1132,7 @@ describe('--profile-load flag functionality', () => {
       new Error('Profile not found'),
     );
 
-    process.argv = ['node', 'script.js', '--load', 'non-existent-profile'];
+    process.argv = ['node', 'script.js', '--profile-load', 'non-existent-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
       defaultModel: 'gemini-2.5-pro',

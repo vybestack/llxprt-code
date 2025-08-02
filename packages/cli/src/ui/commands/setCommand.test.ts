@@ -288,7 +288,7 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: "Ephemeral setting 'context-limit' set to 32000",
+        content: "Ephemeral setting 'context-limit' set to 32000 (session only, use /profile save to persist)",
       });
     });
 
@@ -302,7 +302,7 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: "Ephemeral setting 'compression-threshold' set to 0.8",
+        content: "Ephemeral setting 'compression-threshold' set to 0.8 (session only, use /profile save to persist)",
       });
 
       // Note: Validation of compression-threshold range should be done when the value is used,
@@ -369,9 +369,10 @@ describe('setCommand', () => {
   describe('error handling behavioral tests', () => {
     it('should handle invalid JSON gracefully', async () => {
       // When value looks like JSON but isn't valid, it's treated as a string
-      const result = await setCommand.action!(
+      const modelParamCommand = setCommand.subCommands![0];
+      const result = await modelParamCommand.action!(
         context,
-        'modelparam response_format {invalid json}',
+        'response_format {invalid json}',
       );
 
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
@@ -380,7 +381,7 @@ describe('setCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: 'Model parameter \'response_format\' set to "{invalid json}"',
+        content: 'Model parameter \'response_format\' set to "{invalid json}" (use /profile save to persist)',
       });
     });
 
@@ -447,7 +448,8 @@ describe('setCommand', () => {
 
     it('should preserve string values that look like numbers', async () => {
       // Quoted values are parsed as JSON, which preserves them as strings
-      await setCommand.action!(context, 'modelparam api_version "2023-05-15"');
+      const modelParamCommand = setCommand.subCommands![0];
+      await modelParamCommand.action!(context, 'api_version "2023-05-15"');
 
       expect(mockProvider.setModelParams).toHaveBeenCalledWith({
         api_version: '2023-05-15',

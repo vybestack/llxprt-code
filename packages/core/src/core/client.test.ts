@@ -1081,6 +1081,16 @@ Here are some files the user has open, with the most recent at the top:
         next_speaker: 'model',
         reasoning: 'Test case - always continue',
       });
+      
+      // Mock provider manager to return 'gemini' provider
+      const mockProviderManager = {
+        getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+        getActiveProvider: vi.fn().mockReturnValue(null),
+      };
+      const mockContentGenConfig = {
+        providerManager: mockProviderManager,
+      };
+      vi.spyOn(client['config'], 'getContentGeneratorConfig').mockReturnValue(mockContentGenConfig as any);
 
       // Mock Turn to have no pending tool calls (which would allow nextSpeaker check)
       const mockStream = (async function* () {
