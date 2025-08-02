@@ -434,7 +434,7 @@ describe('InputPrompt', () => {
       expect(actualCall[0]).toBe(5); // start offset
       expect(actualCall[1]).toBe(5); // end offset
       expect(actualCall[2]).toMatch(
-        /@.*\.llxprt-clipboard[\/\\]clipboard-456\.png/,
+        /@.*\.llxprt-clipboard[/\\]clipboard-456\.png/,
       ); // flexible path match for both Unix and Windows
       unmount();
     });
