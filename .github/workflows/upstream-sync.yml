@@ -1,0 +1,237 @@
+name: Upstream Sync
+
+# This workflow syncs changes from upstream by:
+# 1. Cherry-picking new commits from upstream/main
+# 2. Using llxprt-code to resolve any merge conflicts
+# 3. Creating a new branch with the synced changes
+# 4. Providing a summary in the Actions tab
+# You can then manually review and merge the changes
+
+on:
+  # schedule:
+  # Run daily at 3 AM ART (UTC-3), which is 6 AM UTC
+  # - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstream:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60 # Overall job timeout
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Add upstream remote
+        run: |
+          # Add upstream remote if it doesn't exist
+          if ! git remote | grep -q '^upstream$'; then
+            echo "Adding upstream remote..."
+            # Replace this with your actual upstream repository URL
+            git remote add upstream https://github.com/google-gemini/gemini-cli.git
+          fi
+          git fetch upstream
+      - name: Check for new upstream commits
+        id: check-commits
+        run: |
+          # Get the current branch
+          CURRENT_BRANCH=$(git branch --show-current)
+          echo "Current branch: $CURRENT_BRANCH"
+          # Check if there are new commits in upstream
+          COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/$CURRENT_BRANCH || echo "0")
+          echo "Commits behind upstream: $COMMITS_BEHIND"
+          if [ "$COMMITS_BEHIND" -gt 0 ]; then
+            echo "has_new_commits=true" >> $GITHUB_OUTPUT
+            echo "commits_behind=$COMMITS_BEHIND" >> $GITHUB_OUTPUT
+          else
+            echo "has_new_commits=false" >> $GITHUB_OUTPUT
+            echo "No new commits from upstream"
+          fi
+      - name: Create sync branch
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        id: create-branch
+        run: |
+          # Create a unique branch name with timestamp
+          BRANCH_NAME="upstream-sync-$(date +%Y%m%d-%H%M%S)"
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          # Create and checkout the new branch
+          git checkout -b $BRANCH_NAME
+          echo "Created branch: $BRANCH_NAME"
+      - name: Run llxprt-code
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        id: llxprt
+        timeout-minutes: 180
+        env:
+          GEMINI_MERGE_KEY: ${{ secrets.GEMINI_MERGE_KEY }}
+        run: |
+          echo "Running llxprt-code with --yolo flag..."
+          # Get the list of commits to cherry-pick
+          COMMIT_LIST=$(git log --oneline --reverse HEAD..upstream/main | awk '{print $1}' | tr '\n' ' ')
+          echo "Commits to cherry-pick: $COMMIT_LIST"
+          
+          # Get the last commit hash we'll cherry-pick (for the merge commit later)
+          LAST_COMMIT=$(git log --oneline --reverse HEAD..upstream/main | tail -1 | awk '{print $1}')
+          echo "last_commit=$LAST_COMMIT" >> $GITHUB_OUTPUT
+          
+          # Run llxprt-code and capture output
+          set +e  # Don't exit on error
+          npx https://github.com/acoliver/llxprt-code \
+            --yolo \
+            --provider gemini \
+            --model gemini-2.5-pro \
+            --key "$GEMINI_MERGE_KEY" \
+            --prompt "Cherry-pick these commits from upstream/main IN ORDER: $COMMIT_LIST. CRITICAL: This is LLXPRT-CODE, not gemini-cli. Preserve ALL our custom features: Multi-provider support (Gemini, Qwen, etc.) - DO NOT remove. Our authentication system (API keys) - DO NOT revert to OAuth-only. UI improvements and custom themes. Performance optimizations we've added. All LLXPRT branding and vybestack package names. When resolving conflicts: Take upstream bug fixes and improvements. KEEP our features and enhancements. If unsure, preserve the LLXPRT version. When you get build errors about missing exports, add them to the appropriate index.ts files. When you get type errors, investigate and fix them. After each cherry-pick, run npm run build to check for errors. Fix ALL errors before moving to the next commit. Run npm run test, npm run lint, npm run format at the end. Keep working until everything passes." \
+            2>&1 | tee llxprt-output.log
+          LLXPRT_EXIT_CODE=$?
+          set -e
+          echo "llxprt-code exit code: $LLXPRT_EXIT_CODE"
+          echo "exit_code=$LLXPRT_EXIT_CODE" >> $GITHUB_OUTPUT
+          # Save the output for the PR description
+          {
+            echo 'llxprt_output<<EOF'
+            tail -n 100 llxprt-output.log
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+      - name: Check for merge conflicts
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        id: check-conflicts
+        run: |
+          echo "Checking for unresolved merge conflicts..."
+          # Search for conflict markers in all files
+          set +e  # Don't exit on error
+          CONFLICT_FILES=$(git grep -l "^<<<<<<< " || true)
+          set -e
+          if [ -n "$CONFLICT_FILES" ]; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            echo "Found merge conflicts in the following files:"
+            echo "$CONFLICT_FILES"
+            
+            # Save conflict files for PR description
+            {
+              echo 'conflict_files<<EOF'
+              echo "$CONFLICT_FILES"
+              echo 'EOF'
+            } >> $GITHUB_OUTPUT
+          else
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            echo "No merge conflicts detected"
+          fi
+      - name: Get commit information
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        id: commit-info
+        run: |
+          # Get the list of commits that were cherry-picked
+          CURRENT_BRANCH=$(git branch --show-current | sed 's/upstream-sync-.*/main/')
+          # Get commit log between HEAD and upstream
+          {
+            echo 'commit_log<<EOF'
+            git log --oneline --reverse HEAD..upstream/$CURRENT_BRANCH | head -50
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          # Get the commit range
+          FIRST_COMMIT=$(git rev-list --reverse HEAD..upstream/$CURRENT_BRANCH | head -1 | cut -c1-7)
+          LAST_COMMIT=$(git rev-list HEAD..upstream/$CURRENT_BRANCH | head -1 | cut -c1-7)
+          echo "commit_range=$FIRST_COMMIT..$LAST_COMMIT" >> $GITHUB_OUTPUT
+      - name: Commit changes
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        run: |
+          # Revert any changes to .github/ directory to avoid workflow permission errors
+          git checkout HEAD -- .github/ || true
+
+          # Remove the log file
+          rm -f llxprt-output.log
+
+          # Check if there are changes to commit
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "Sync with upstream: cherry-pick commits from upstream"
+          fi
+      - name: Create empty merge commit
+        if: steps.check-commits.outputs.has_new_commits == 'true' && steps.llxprt.outputs.exit_code == '0'
+        run: |
+          # Create an empty merge commit to mark sync point
+          # This prevents the repo from showing as "behind" upstream
+          LAST_COMMIT="${{ steps.llxprt.outputs.last_commit }}"
+          echo "Creating empty merge commit for upstream commit: $LAST_COMMIT"
+          
+          # Get the full commit hash
+          FULL_COMMIT=$(git rev-parse $LAST_COMMIT)
+          
+          # Create the merge commit using -s ours strategy
+          # This creates a merge commit without actually merging any content
+          git merge -s ours --no-ff $FULL_COMMIT -m "Merge upstream gemini-cli up to commit $LAST_COMMIT
+
+This is an empty merge commit to maintain parity with upstream structure.
+All changes have already been cherry-picked in previous commits.
+
+Synced upstream commits: ${{ steps.check-commits.outputs.commits_behind }}
+Cherry-picked from range: ${{ steps.commit-info.outputs.commit_range }}
+
+Maintains llxprt's multi-provider support, branding, and authentication
+differences while staying in sync with upstream improvements."
+      - name: Push branch
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        run: |
+          git push origin ${{ steps.create-branch.outputs.branch_name }}
+      - name: Summary
+        if: steps.check-commits.outputs.has_new_commits == 'true'
+        run: |
+          echo "## 🔄 Upstream Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Sync Status" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch created:** \`${{ steps.create-branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commits synced:** ${{ steps.check-commits.outputs.commits_behind }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **llxprt-code exit code:** ${{ steps.llxprt.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.llxprt.outputs.exit_code }}" == "0" ]; then
+            echo "- **Merge commit:** ✅ Created (sync point established)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Merge commit:** ⚠️ Not created (llxprt-code had errors)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
+            echo "- **Status:** ⚠️ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ⚠️ Conflicted Files" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.check-conflicts.outputs.conflict_files }}" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status:** ✅ No conflicts" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📝 Commits Cherry-picked" >> $GITHUB_STEP_SUMMARY
+          echo "Range: \`${{ steps.commit-info.outputs.commit_range }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.commit-info.outputs.commit_log }}" | head -20 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⚡ Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check out the branch: \`git fetch origin && git checkout ${{ steps.create-branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "2. Review the changes" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
+            echo "3. Resolve any remaining conflicts" >> $GITHUB_STEP_SUMMARY
+            echo "4. Run tests to ensure everything works" >> $GITHUB_STEP_SUMMARY
+            echo "5. Merge when ready" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "3. Run tests to ensure everything works" >> $GITHUB_STEP_SUMMARY
+            echo "4. Merge when ready" >> $GITHUB_STEP_SUMMARY
+          fi
