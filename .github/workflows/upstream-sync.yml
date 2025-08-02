@@ -11,7 +11,7 @@ on:
   # schedule:
   # Run daily at 3 AM ART (UTC-3), which is 6 AM UTC
   # - cron: '0 6 * * *'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   contents: write
