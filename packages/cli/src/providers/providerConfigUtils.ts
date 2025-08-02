@@ -126,7 +126,43 @@ export async function setProviderApiKeyFromFile(
     const resolvedPath = filePath.replace(/^~/, homedir());
 
     // Read the API key from file
-    const apiKey = (await readFile(resolvedPath, 'utf-8')).trim();
+    const buffer = await readFile(resolvedPath);
+
+    // Detect encoding and convert to string
+    let fileContent: string;
+
+    // Check for UTF-16 LE BOM (FF FE)
+    if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+      fileContent = buffer.toString('utf16le').slice(1); // Remove BOM
+    }
+    // Check for UTF-16 BE BOM (FE FF)
+    else if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+      // UTF-16 BE is less common on Windows but handle it
+      fileContent = buffer.swap16().toString('utf16le').slice(1);
+    }
+    // Check for UTF-8 BOM (EF BB BF)
+    else if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+      fileContent = buffer.toString('utf-8').slice(1); // Remove BOM
+    }
+    // Check if content appears to be UTF-16 LE without BOM (common on Windows)
+    // Look for null bytes between ASCII characters
+    else if (buffer.length > 3 && buffer[1] === 0x00 && buffer[3] === 0x00) {
+      fileContent = buffer.toString('utf16le');
+    }
+    // Default to UTF-8
+    else {
+      fileContent = buffer.toString('utf-8');
+    }
+
+    // Clean up any remaining encoding artifacts
+    // Remove null bytes that might remain
+    fileContent = fileContent.replace(/\0/g, '');
+
+    // Remove any Unicode replacement characters
+    fileContent = fileContent.replace(/\uFFFD/g, '');
+
+    // Remove all types of whitespace and newlines, then trim
+    const apiKey = fileContent.trim();
 
     if (!apiKey) {
       return {
