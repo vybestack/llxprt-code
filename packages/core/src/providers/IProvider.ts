@@ -50,9 +50,9 @@ export interface IProvider {
 
   /**
    * Set model parameters to be included in API calls
-   * @param params Parameters to merge with existing
+   * @param params Parameters to merge with existing, or undefined to clear all
    */
-  setModelParams?(params: Record<string, unknown>): void;
+  setModelParams?(params: Record<string, unknown> | undefined): void;
 
   /**
    * Get current model parameters

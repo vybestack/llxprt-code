@@ -310,10 +310,13 @@ export async function loadCliConfig(
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
 
-  if (argv.profileLoad) {
+  // Check for profile to load - either from CLI arg or default profile setting
+  const profileToLoad = argv.profileLoad || settings.defaultProfile;
+
+  if (profileToLoad) {
     try {
       const profileManager = new ProfileManager();
-      const profile = await profileManager.loadProfile(argv.profileLoad);
+      const profile = await profileManager.loadProfile(profileToLoad);
 
       // Store profile values to apply after Config creation
       profileProvider = profile.provider;
@@ -335,11 +338,11 @@ export async function loadCliConfig(
 
       if (tempDebugMode) {
         logger.debug(
-          `Loaded profile '${argv.profileLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
+          `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
         );
       }
     } catch (error) {
-      logger.error(`Failed to load profile '${argv.profileLoad}': ${error}`);
+      logger.error(`Failed to load profile '${profileToLoad}': ${error}`);
       // Continue without the profile settings
     }
   }
@@ -555,6 +558,28 @@ export async function loadCliConfig(
 
   // Enhance the config with provider support
   const enhancedConfig = await enhanceConfigWithProviders(config);
+
+  // Apply ephemeral settings from profile if loaded
+  if (profileToLoad && effectiveSettings) {
+    // Extract ephemeral settings that were merged from the profile
+    const ephemeralKeys = [
+      'auth-key',
+      'auth-keyfile',
+      'context-limit',
+      'compression-threshold',
+      'base-url',
+      'tool-format',
+      'api-version',
+      'custom-headers',
+    ];
+
+    for (const key of ephemeralKeys) {
+      const value = (effectiveSettings as Record<string, unknown>)[key];
+      if (value !== undefined) {
+        enhancedConfig.setEphemeralSetting(key, value);
+      }
+    }
+  }
 
   // Store profile model params on the config for later application
   if (profileModelParams) {

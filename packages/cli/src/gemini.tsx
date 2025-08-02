@@ -12,6 +12,7 @@ import { loadCliConfig, parseArguments, CliArgs } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
+import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { start_sandbox } from './utils/sandbox.js';
@@ -226,6 +227,35 @@ export async function main() {
         ) {
           activeProvider.setModelParams(configWithProfile._profileModelParams);
         }
+      }
+
+      // Apply ephemeral settings from profile to the provider
+      const authKey = config.getEphemeralSetting('auth-key') as string;
+      const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
+      const baseUrl = config.getEphemeralSetting('base-url') as string;
+
+      if (authKey && activeProvider.setApiKey) {
+        activeProvider.setApiKey(authKey);
+      } else if (authKeyfile && activeProvider.setApiKey) {
+        // Load API key from file
+        try {
+          const apiKey = (
+            await fs.readFile(authKeyfile.replace(/^~/, os.homedir()), 'utf-8')
+          ).trim();
+          if (apiKey) {
+            activeProvider.setApiKey(apiKey);
+          }
+        } catch (error) {
+          console.error(
+            chalk.red(
+              `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
+        }
+      }
+
+      if (baseUrl && activeProvider.setBaseUrl) {
+        activeProvider.setBaseUrl(baseUrl);
       }
 
       // No need to set auth type when using a provider

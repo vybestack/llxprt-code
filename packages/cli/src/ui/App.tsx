@@ -342,39 +342,32 @@ const App = (props: AppInternalProps) => {
     await openProviderModelDialogRaw();
   }, [providerManager, openProviderModelDialogRaw]);
 
-  // Consolidated model update logic - single source of truth from config
+  // Watch for model changes from config
   useEffect(() => {
-    const updateModel = () => {
-      // Always use config as the source of truth
+    const checkModelChange = () => {
       const configModel = config.getModel();
       const activeProvider = providerManager.getActiveProvider();
-      
-      // If we have an active provider, check if its model matches config
-      if (activeProvider && activeProvider.getCurrentModel) {
-        const providerModel = activeProvider.getCurrentModel();
-        // Only update if there's a real difference
-        if (providerModel && providerModel !== configModel) {
-          // Provider model differs from config - this shouldn't happen
-          // but if it does, config wins
-          config.setModel(providerModel);
-        }
-      }
-      
-      // Update the UI state
-      if (configModel !== currentModel) {
-        setCurrentModel(configModel);
+
+      // Get the actual current model from provider
+      const providerModel = activeProvider?.getCurrentModel?.() || configModel;
+
+      // Update UI if different from what we're showing
+      if (providerModel !== currentModel) {
+        console.debug(
+          `[Model Update] Updating footer from ${currentModel} to ${providerModel}`,
+        );
+        setCurrentModel(providerModel);
       }
     };
 
-    // Run immediately
-    updateModel();
-    
-    // Set up periodic check
-    const interval = setInterval(updateModel, 1000);
-    
+    // Check immediately
+    checkModelChange();
+
+    // Check periodically (every 500ms)
+    const interval = setInterval(checkModelChange, 500);
+
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, providerManager]); // Intentionally omit currentModel to prevent feedback loop
+  }, [config, providerManager, currentModel]); // Include currentModel in dependencies
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);

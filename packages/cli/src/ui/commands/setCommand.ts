@@ -12,6 +12,228 @@ import {
 } from './types.js';
 import { IProvider } from '@vybestack/llxprt-code-core';
 
+// Subcommand for /set unset - removes ephemeral settings or model parameters
+const unsetCommand: SlashCommand = {
+  name: 'unset',
+  description: 'remove an ephemeral setting or model parameter',
+  kind: CommandKind.BUILT_IN,
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<MessageActionReturn> => {
+    const parts = args?.trim().split(/\s+/);
+    if (!parts || parts.length === 0 || !parts[0]) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Usage: /set unset <key> [subkey]\nExamples:\n  /set unset context-limit\n  /set unset custom-headers Authorization\n  /set unset modelparam max_tokens',
+      };
+    }
+
+    const key = parts[0];
+    const subkey = parts[1];
+
+    // Get the config
+    const config = context.services.config;
+    if (!config) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'No configuration available',
+      };
+    }
+
+    // Handle unset for model parameters
+    if (key === 'modelparam' && subkey) {
+      const providerManager = config.getProviderManager();
+      const activeProvider = providerManager?.getActiveProvider();
+
+      if (!activeProvider) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'No active provider',
+        };
+      }
+
+      if (
+        'getModelParams' in activeProvider &&
+        typeof activeProvider.getModelParams === 'function'
+      ) {
+        const modelParams = activeProvider.getModelParams();
+        if (!modelParams || !(subkey in modelParams)) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Model parameter '${subkey}' is not set`,
+          };
+        }
+
+        if (
+          'setModelParams' in activeProvider &&
+          typeof activeProvider.setModelParams === 'function'
+        ) {
+          activeProvider.setModelParams({ [subkey]: undefined });
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Model parameter '${subkey}' has been removed`,
+          };
+        }
+      }
+
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Provider does not support model parameters',
+      };
+    }
+
+    // Handle nested unset for custom-headers
+    if (key === 'custom-headers' && subkey) {
+      const currentHeaders = config.getEphemeralSetting('custom-headers') as
+        | Record<string, string>
+        | undefined;
+      if (!currentHeaders || !(subkey in currentHeaders)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Custom header '${subkey}' is not set`,
+        };
+      }
+
+      // Remove the specific header
+      const updatedHeaders = { ...currentHeaders };
+      delete updatedHeaders[subkey];
+
+      // If no headers left, remove the entire setting
+      if (Object.keys(updatedHeaders).length === 0) {
+        config.setEphemeralSetting('custom-headers', undefined);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Removed custom header '${subkey}' and cleared custom-headers setting`,
+        };
+      } else {
+        config.setEphemeralSetting('custom-headers', updatedHeaders);
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Removed custom header '${subkey}'`,
+        };
+      }
+    }
+
+    // Handle regular unset (non-nested)
+    if (subkey) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Setting '${key}' does not support nested unset. Use: /set unset ${key}`,
+      };
+    }
+
+    // Check if the setting exists
+    const currentValue = config.getEphemeralSetting(key);
+    if (currentValue === undefined) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Ephemeral setting '${key}' is not set`,
+      };
+    }
+
+    // Clear the ephemeral setting
+    config.setEphemeralSetting(key, undefined);
+
+    // Special handling for context-limit and compression-threshold
+    if (key === 'context-limit' || key === 'compression-threshold') {
+      const geminiClient = config.getGeminiClient();
+      if (geminiClient) {
+        // Reset to defaults by passing undefined
+        geminiClient.setCompressionSettings(
+          key === 'compression-threshold'
+            ? undefined
+            : (config.getEphemeralSetting('compression-threshold') as
+                | number
+                | undefined),
+          key === 'context-limit'
+            ? undefined
+            : (config.getEphemeralSetting('context-limit') as
+                | number
+                | undefined),
+        );
+      }
+    }
+
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Ephemeral setting '${key}' has been removed`,
+    };
+  },
+  completion: async (_context: CommandContext, partialArg: string) => {
+    // Get all current ephemeral settings
+    const config = _context.services.config;
+    if (!config) return [];
+
+    const ephemeralSettings = config.getEphemeralSettings();
+    const ephemeralKeys = Object.keys(ephemeralSettings).filter(
+      (key) => ephemeralSettings[key] !== undefined,
+    );
+
+    // Add 'modelparam' as a completion option
+    const specialKeys = ['modelparam'];
+    const allKeys = [...ephemeralKeys, ...specialKeys];
+
+    if (partialArg) {
+      const parts = partialArg.split(/\s+/);
+
+      // If user typed "modelparam " (with space), offer model param names
+      if (parts.length === 2 && parts[0] === 'modelparam') {
+        const providerManager = config.getProviderManager();
+        const activeProvider = providerManager?.getActiveProvider();
+        if (
+          activeProvider &&
+          'getModelParams' in activeProvider &&
+          typeof activeProvider.getModelParams === 'function'
+        ) {
+          const modelParams = activeProvider.getModelParams();
+          if (modelParams) {
+            const paramNames = Object.keys(modelParams);
+            if (parts[1]) {
+              return paramNames.filter((name) => name.startsWith(parts[1]));
+            }
+            return paramNames;
+          }
+        }
+        return [];
+      }
+
+      // If user typed "custom-headers " (with space), offer header names
+      if (parts.length === 2 && parts[0] === 'custom-headers') {
+        const headers = ephemeralSettings['custom-headers'] as
+          | Record<string, string>
+          | undefined;
+        if (headers) {
+          const headerNames = Object.keys(headers);
+          if (parts[1]) {
+            return headerNames.filter((name) => name.startsWith(parts[1]));
+          }
+          return headerNames;
+        }
+        return [];
+      }
+
+      // Otherwise, complete the setting key
+      return allKeys.filter((key) => key.startsWith(parts[0]));
+    }
+
+    return allKeys;
+  },
+};
+
 // Subcommand for /set modelparam
 const modelParamCommand: SlashCommand = {
   name: 'modelparam',
@@ -83,7 +305,7 @@ const modelParamCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: `Model parameter '${key}' set to ${JSON.stringify(parsedValue)}`,
+        content: `Model parameter '${key}' set to ${JSON.stringify(parsedValue)} (use /profile save to persist)`,
       };
     } catch (error) {
       return {
@@ -105,6 +327,7 @@ const modelParamCommand: SlashCommand = {
       'frequency_penalty',
       'stop_sequences',
       'seed',
+      'enable_thinking',
     ];
 
     // If user has typed part of a parameter name, filter suggestions
@@ -141,7 +364,7 @@ export const setCommand: SlashCommand = {
   name: 'set',
   description: 'set model parameters or ephemeral settings',
   kind: CommandKind.BUILT_IN,
-  subCommands: [modelParamCommand],
+  subCommands: [modelParamCommand, unsetCommand],
   action: async (
     context: CommandContext,
     args: string,
@@ -253,7 +476,7 @@ export const setCommand: SlashCommand = {
     return {
       type: 'message',
       messageType: 'info',
-      content: `Ephemeral setting '${key}' set to ${JSON.stringify(parsedValue)} (session only, use /save to persist in a profile)`,
+      content: `Ephemeral setting '${key}' set to ${JSON.stringify(parsedValue)} (session only, use /profile save to persist)`,
     };
   },
   completion: async (_context: CommandContext, partialArg: string) => {

@@ -17,6 +17,7 @@ import {
   EphemeralSettings,
   AuthType,
 } from '@vybestack/llxprt-code-core';
+import { SettingScope } from '../../config/settings.js';
 
 /**
  * Profile save subcommand
@@ -128,13 +129,15 @@ const saveCommand: SlashCommand = {
       // Get auth-keyfile from ephemeral settings (set by /keyfile command)
       const ephemeralKeyfile = allEphemeralSettings['auth-keyfile'];
       if (ephemeralKeyfile) {
-        (ephemeralSettings as Record<string, unknown>)['auth-keyfile'] = ephemeralKeyfile;
+        (ephemeralSettings as Record<string, unknown>)['auth-keyfile'] =
+          ephemeralKeyfile;
         // Don't save auth-key if using keyfile
       } else {
         // Get auth-key from ephemeral settings (set by /key command)
         const ephemeralApiKey = allEphemeralSettings['auth-key'];
         if (ephemeralApiKey) {
-          (ephemeralSettings as Record<string, unknown>)['auth-key'] = ephemeralApiKey;
+          (ephemeralSettings as Record<string, unknown>)['auth-key'] =
+            ephemeralApiKey;
         }
       }
 
@@ -142,9 +145,11 @@ const saveCommand: SlashCommand = {
       // This handles the case where base-url was set with the old command
       if (!ephemeralSettings['base-url']) {
         const allSettings = context.services.settings.merged || {};
-        const providerBaseUrls = (allSettings.providerBaseUrls as Record<string, string>) || {};
+        const providerBaseUrls =
+          (allSettings.providerBaseUrls as Record<string, string>) || {};
         if (providerName && providerBaseUrls[providerName]) {
-          (ephemeralSettings as Record<string, unknown>)['base-url'] = providerBaseUrls[providerName];
+          (ephemeralSettings as Record<string, unknown>)['base-url'] =
+            providerBaseUrls[providerName];
         }
       }
 
@@ -262,9 +267,53 @@ const loadCommand: SlashCommand = {
       }
 
       // 2. Set model second
+      console.debug(`[Profile Load] Setting model to ${profile.model}`);
       context.services.config.setModel(profile.model);
 
-      // 3. Apply ephemeral settings third
+      // Also set model on the provider
+      const activeProviderForModel = providerManager?.getActiveProvider();
+      if (activeProviderForModel && activeProviderForModel.setModel) {
+        console.debug(
+          `[Profile Load] Setting model on provider to ${profile.model}`,
+        );
+        activeProviderForModel.setModel(profile.model);
+      }
+
+      // 3. Clear existing ephemeral settings first
+      const ephemeralKeys = [
+        'auth-key',
+        'auth-keyfile',
+        'context-limit',
+        'compression-threshold',
+        'base-url',
+        'tool-format',
+        'api-version',
+        'custom-headers',
+      ];
+
+      // Clear all known ephemeral settings
+      for (const key of ephemeralKeys) {
+        context.services.config.setEphemeralSetting(key, undefined);
+      }
+
+      // Reset GeminiClient compression settings
+      const geminiClient = context.services.config.getGeminiClient();
+      if (geminiClient) {
+        geminiClient.setCompressionSettings(undefined, undefined);
+      }
+
+      // Clear model parameters on the provider
+      const activeProvider = providerManager?.getActiveProvider();
+      if (
+        activeProvider &&
+        'setModelParams' in activeProvider &&
+        activeProvider.setModelParams
+      ) {
+        // Clear all existing model params by passing undefined
+        activeProvider.setModelParams(undefined);
+      }
+
+      // 4. Apply ephemeral settings from profile
       for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
         // Store in ephemeral settings
         context.services.config.setEphemeralSetting(key, value);
@@ -283,7 +332,7 @@ const loadCommand: SlashCommand = {
             const { homedir } = await import('os');
             const resolvedPath = value.replace(/^~/, homedir());
             const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-            
+
             const activeProvider = providerManager?.getActiveProvider();
             if (activeProvider && activeProvider.setApiKey && apiKey) {
               activeProvider.setApiKey(apiKey);
@@ -301,8 +350,21 @@ const loadCommand: SlashCommand = {
         }
       }
 
-      // 4. Call provider.setModelParams()
-      const activeProvider = providerManager?.getActiveProvider();
+      // Apply compression settings if they exist in the profile
+      const contextLimit = profile.ephemeralSettings['context-limit'] as
+        | number
+        | undefined;
+      const compressionThreshold = profile.ephemeralSettings[
+        'compression-threshold'
+      ] as number | undefined;
+      if (
+        (contextLimit !== undefined || compressionThreshold !== undefined) &&
+        geminiClient
+      ) {
+        geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
+      }
+
+      // 5. Call provider.setModelParams() with the profile's model params
       if (
         activeProvider &&
         'setModelParams' in activeProvider &&
@@ -316,7 +378,7 @@ const loadCommand: SlashCommand = {
         }
       }
 
-      // 5. Refresh auth to ensure provider is properly initialized
+      // 6. Refresh auth to ensure provider is properly initialized
       const currentAuthType =
         context.services.config.getContentGeneratorConfig()?.authType ||
         AuthType.LOGIN_WITH_GOOGLE;
@@ -462,6 +524,117 @@ const deleteCommand: SlashCommand = {
 };
 
 /**
+ * Profile set-default subcommand
+ */
+const setDefaultCommand: SlashCommand = {
+  name: 'set-default',
+  description: 'set a profile to load automatically on startup',
+  kind: CommandKind.BUILT_IN,
+  completion: async (_context: CommandContext, partialArg: string) => {
+    const profileManager = new ProfileManager();
+    const profiles = await profileManager.listProfiles();
+
+    // Add 'none' option to clear default
+    const options = ['none', ...profiles];
+
+    // Filter based on partial argument
+    if (partialArg) {
+      const unquoted = partialArg.startsWith('"')
+        ? partialArg.slice(1)
+        : partialArg;
+      return options.filter((option) => option.startsWith(unquoted));
+    }
+
+    return options;
+  },
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<MessageActionReturn> => {
+    // Parse profile name from args
+    const trimmedArgs = args?.trim();
+
+    if (!trimmedArgs) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Usage: /profile set-default "<profile-name>" or /profile set-default none',
+      };
+    }
+
+    // Extract profile name - handle quoted names
+    const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);
+    const profileName = profileNameMatch ? profileNameMatch[1] : trimmedArgs;
+
+    if (!profileName) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'Usage: /profile set-default "<profile-name>" or /profile set-default none',
+      };
+    }
+
+    try {
+      // Check if settings service is available
+      if (!context.services.settings) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Settings service not available',
+        };
+      }
+
+      if (profileName.toLowerCase() === 'none') {
+        // Clear the default profile
+        context.services.settings.setValue(
+          SettingScope.User,
+          'defaultProfile',
+          undefined,
+        );
+        return {
+          type: 'message',
+          messageType: 'info',
+          content:
+            'Default profile cleared. Gemini will start with default settings.',
+        };
+      }
+
+      // Verify profile exists
+      const profileManager = new ProfileManager();
+      const profiles = await profileManager.listProfiles();
+      if (!profiles.includes(profileName)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Profile '${profileName}' not found. Use /profile list to see available profiles.`,
+        };
+      }
+
+      // Set the default profile
+      context.services.settings.setValue(
+        SettingScope.User,
+        'defaultProfile',
+        profileName,
+      );
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Profile '${profileName}' set as default. It will be loaded automatically on startup.`,
+      };
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to set default profile: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  },
+};
+
+/**
  * Profile list subcommand
  */
 const listCommand: SlashCommand = {
@@ -480,7 +653,8 @@ const listCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'info',
-          content: 'No profiles saved yet. Use /profile save "<name>" to create one.',
+          content:
+            'No profiles saved yet. Use /profile save "<name>" to create one.',
         };
       }
 
@@ -507,20 +681,24 @@ export const profileCommand: SlashCommand = {
   name: 'profile',
   description: 'manage configuration profiles',
   kind: CommandKind.BUILT_IN,
-  subCommands: [saveCommand, loadCommand, deleteCommand, listCommand],
+  subCommands: [
+    saveCommand,
+    loadCommand,
+    deleteCommand,
+    setDefaultCommand,
+    listCommand,
+  ],
   action: async (
     _context: CommandContext,
     _args: string,
-  ): Promise<MessageActionReturn> => {
-    // If no subcommand is provided, show help
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: `Profile management commands:
-  /profile save "<name>"   - Save current configuration
-  /profile load "<name>"   - Load a saved profile
-  /profile delete "<name>" - Delete a saved profile
-  /profile list           - List all saved profiles`,
-    };
-  },
+  ): Promise<MessageActionReturn> => ({
+    type: 'message',
+    messageType: 'info',
+    content: `Profile management commands:
+  /profile save "<name>"        - Save current configuration
+  /profile load "<name>"        - Load a saved profile
+  /profile delete "<name>"      - Delete a saved profile
+  /profile set-default "<name>" - Set profile to load on startup (or "none")
+  /profile list                 - List all saved profiles`,
+  }),
 };

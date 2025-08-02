@@ -39,6 +39,7 @@ import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import { profileCommand } from '../ui/commands/profileCommand.js';
+import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { isGitHubRepository } from '../utils/gitUtils.js';
 
 /**
@@ -88,6 +89,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       toolformatCommand,
       setCommand,
       profileCommand,
+      diagnosticsCommand,
       ...(isGitHubRepository() ? [setupGithubCommand] : []),
     ];
 

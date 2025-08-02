@@ -95,10 +95,10 @@ export const keyfileCommand: SlashCommand = {
       // Verify keyfile exists and read the key
       try {
         const resolvedPath = filePath.replace(/^~/, homedir());
-        
+
         // Check if file exists
         await fs.access(resolvedPath);
-        
+
         // Read the key to set it on the provider
         const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
         if (!apiKey) {
@@ -115,10 +115,13 @@ export const keyfileCommand: SlashCommand = {
 
         if (activeProvider.setApiKey) {
           activeProvider.setApiKey(apiKey);
-          
+
           // Store the keyfile PATH in ephemeral settings, not the key itself
           if (context.services.config) {
-            context.services.config.setEphemeralSetting('auth-keyfile', filePath);
+            context.services.config.setEphemeralSetting(
+              'auth-keyfile',
+              filePath,
+            );
             // Remove any stored auth-key since we're using keyfile
             context.services.config.setEphemeralSetting('auth-key', undefined);
           }

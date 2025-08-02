@@ -804,10 +804,14 @@ export class OpenAIProvider implements IProvider {
 
   /**
    * Set model parameters to be included in API calls
-   * @param params Parameters to merge with existing
+   * @param params Parameters to merge with existing, or undefined to clear all
    */
-  setModelParams(params: Record<string, unknown>): void {
-    this.modelParams = { ...this.modelParams, ...params };
+  setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+    } else {
+      this.modelParams = { ...this.modelParams, ...params };
+    }
   }
 
   /**
