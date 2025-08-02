@@ -63,7 +63,12 @@ describe('ShellTool multibyte handling', () => {
     );
 
     mockShellExecutionService.mockImplementation(
-      (_cmd: string, _cwd: string, _cb: (e: unknown) => void, _signal: AbortSignal) => {
+      (
+        _cmd: string,
+        _cwd: string,
+        _cb: (e: unknown) => void,
+        _signal: AbortSignal,
+      ) => {
         const d = deferred<ExecResult>();
         return {
           pid: 11111,
@@ -79,7 +84,12 @@ describe('ShellTool multibyte handling', () => {
     // Arrange mock to return our deferred then resolve after calling execute
     let resolveNow!: (v: ExecResult) => void;
     mockShellExecutionService.mockImplementationOnce(
-      (_cmd: string, _cwd: string, _cb: (e: unknown) => void, _signal: AbortSignal) => {
+      (
+        _cmd: string,
+        _cwd: string,
+        _cb: (e: unknown) => void,
+        _signal: AbortSignal,
+      ) => {
         const d = deferred<ExecResult>();
         resolveNow = d.resolve;
         return { pid: 11111, result: d.promise };

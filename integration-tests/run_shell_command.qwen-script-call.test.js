@@ -16,7 +16,10 @@ test('qwen calls a local shell script via run_shell_command and preserves UTF-8 
   rig.setup(t.name);
 
   // Create a script that prints the exact multibyte string without trailing newline
-  const scriptPath = rig.createFile('print-multibyte.sh', `#!/usr/bin/env bash\nprintf "${MULTIBYTE}"`);
+  const scriptPath = rig.createFile(
+    'print-multibyte.sh',
+    `#!/usr/bin/env bash\nprintf "${MULTIBYTE}"`,
+  );
   chmodSync(scriptPath, 0o755);
   rig.sync();
 

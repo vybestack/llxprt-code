@@ -50,8 +50,25 @@ export function ensureJsonSafe(text: string): string {
   let safe = sanitizeUnicodeReplacements(text);
 
   // Remove control characters except common ones (tab, newline, carriage return)
-  // eslint-disable-next-line no-control-regex
-  safe = safe.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  let result = '';
+  for (let i = 0; i < safe.length; i++) {
+    const char = safe[i];
+    const code = safe.charCodeAt(i);
+
+    // Keep tab (0x09), newline (0x0A), and carriage return (0x0D)
+    if (code === 0x09 || code === 0x0a || code === 0x0d) {
+      result += char;
+    }
+    // Skip other control characters
+    else if ((code >= 0x00 && code <= 0x1f) || code === 0x7f) {
+      continue;
+    }
+    // Keep all other characters
+    else {
+      result += char;
+    }
+  }
+  safe = result;
 
   // Ensure valid UTF-16 surrogate pairs
   // This regex matches unpaired surrogates

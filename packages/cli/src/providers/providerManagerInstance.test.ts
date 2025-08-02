@@ -7,18 +7,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
+import {
+  sanitizeForByteString,
+  needsSanitization,
+} from '@vybestack/llxprt-code-core';
 
 vi.mock('fs');
 vi.mock('os');
 
-// Mock the sanitizeApiKey function
+// Mock the sanitizeApiKey function using the core utilities
 function sanitizeApiKey(key: string): string {
-  // eslint-disable-next-line no-control-regex
-  const sanitized = key
-    .replace(/[\uFFFD\u0000-\u001F\u0080-\uFFFF]/g, '')
-    .trim();
+  const sanitized = sanitizeForByteString(key);
 
-  if (sanitized !== key.trim()) {
+  if (needsSanitization(key)) {
     console.warn(
       '[ProviderManager] API key contained non-ASCII or control characters that were removed. ' +
         'Please check your API key file encoding (should be UTF-8 without BOM).',
@@ -55,8 +56,12 @@ describe('API key sanitization regression tests', () => {
     const sanitizedKey = sanitizeApiKey(apiKeyWithControlChars);
 
     expect(sanitizedKey).toBe('sk-abcdefghi');
-    // eslint-disable-next-line no-control-regex
-    expect(sanitizedKey).not.toMatch(/[\x00-\x1F]/);
+    // Verify no control characters remain
+    for (let i = 0; i < sanitizedKey.length; i++) {
+      const charCode = sanitizedKey.charCodeAt(i);
+      expect(charCode).toBeGreaterThan(0x1f);
+      expect(charCode).not.toBe(0x7f);
+    }
   });
 
   it('should handle API keys from files with BOM', () => {

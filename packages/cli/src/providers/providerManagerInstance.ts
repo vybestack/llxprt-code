@@ -10,6 +10,8 @@ import {
   OpenAIProvider,
   AnthropicProvider,
   GeminiProvider,
+  sanitizeForByteString,
+  needsSanitization,
 } from '@vybestack/llxprt-code-core';
 import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
@@ -23,13 +25,9 @@ import stripJsonComments from 'strip-json-comments';
  * Unicode replacement characters (U+FFFD).
  */
 function sanitizeApiKey(key: string): string {
-  // Remove Unicode replacement characters, control characters, and non-ASCII characters
-  // eslint-disable-next-line no-control-regex
-  const sanitized = key
-    .replace(/[\uFFFD\u0000-\u001F\u0080-\uFFFF]/g, '')
-    .trim();
+  const sanitized = sanitizeForByteString(key);
 
-  if (sanitized !== key.trim()) {
+  if (needsSanitization(key)) {
     console.warn(
       '[ProviderManager] API key contained non-ASCII or control characters that were removed. ' +
         'Please check your API key file encoding (should be UTF-8 without BOM).',
