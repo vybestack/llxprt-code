@@ -62,6 +62,9 @@ export const providerCommand: SlashCommand = {
         // Ensure provider manager is set on config
         context.services.config.setProviderManager(providerManager);
 
+        // Update the provider in config
+        context.services.config.setProvider(providerName);
+
         // Update model to match the new provider's default
         const newModel =
           providerManager.getActiveProvider().getCurrentModel?.() || '';

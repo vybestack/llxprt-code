@@ -37,6 +37,9 @@ import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
+import { setCommand } from '../ui/commands/setCommand.js';
+import { saveCommand } from '../ui/commands/saveCommand.js';
+import { loadCommand } from '../ui/commands/loadCommand.js';
 import { isGitHubRepository } from '../utils/gitUtils.js';
 
 /**
@@ -84,6 +87,9 @@ export class BuiltinCommandLoader implements ICommandLoader {
       keyfileCommand,
       baseurlCommand,
       toolformatCommand,
+      setCommand,
+      saveCommand,
+      loadCommand,
       ...(isGitHubRepository() ? [setupGithubCommand] : []),
     ];
 

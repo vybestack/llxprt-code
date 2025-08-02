@@ -47,6 +47,7 @@ export class OpenAIProvider implements IProvider {
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
   private conversationCache: ConversationCache;
+  private modelParams?: Record<string, unknown>;
 
   constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
     this.apiKey = apiKey;
@@ -544,6 +545,7 @@ export class OpenAIProvider implements IProvider {
         | OpenAI.Chat.Completions.ChatCompletionTool[]
         | undefined,
       tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
+      ...this.modelParams,
     });
 
     let fullContent = '';
@@ -798,5 +800,21 @@ export class OpenAIProvider implements IProvider {
     _config?: unknown,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by OpenAI provider');
+  }
+
+  /**
+   * Set model parameters to be included in API calls
+   * @param params Parameters to merge with existing
+   */
+  setModelParams(params: Record<string, unknown>): void {
+    this.modelParams = { ...this.modelParams, ...params };
+  }
+
+  /**
+   * Get current model parameters
+   * @returns Current parameters or undefined if not set
+   */
+  getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 }

@@ -215,6 +215,19 @@ export async function main() {
         activeProvider.setModel(configModel);
       }
 
+      // Apply profile model params if loaded
+      const configWithProfile = config as Config & {
+        _profileModelParams?: Record<string, unknown>;
+      };
+      if (configWithProfile._profileModelParams && activeProvider) {
+        if (
+          'setModelParams' in activeProvider &&
+          activeProvider.setModelParams
+        ) {
+          activeProvider.setModelParams(configWithProfile._profileModelParams);
+        }
+      }
+
       // No need to set auth type when using a provider
     } catch (e) {
       console.error(chalk.red((e as Error).message));
@@ -494,14 +507,33 @@ async function loadNonInteractiveConfig(
   finalConfig.setProviderManager(providerManager);
 
   // Activate provider if specified
-  if (argv.provider) {
-    await providerManager.setActiveProvider(argv.provider);
+  if (argv.provider || finalConfig.getProvider()) {
+    const providerToActivate = argv.provider || finalConfig.getProvider();
+    if (providerToActivate) {
+      await providerManager.setActiveProvider(providerToActivate);
+    }
 
     // Set model if specified and provider supports it
-    if (argv.model) {
+    const modelToSet = argv.model || finalConfig.getModel();
+    if (modelToSet) {
       const activeProvider = providerManager.getActiveProvider();
       if (activeProvider && typeof activeProvider.setModel === 'function') {
-        activeProvider.setModel(argv.model);
+        activeProvider.setModel(modelToSet);
+      }
+    }
+
+    // Apply profile model params if loaded
+    const configWithProfile = finalConfig as Config & {
+      _profileModelParams?: Record<string, unknown>;
+    };
+    if (configWithProfile._profileModelParams) {
+      const activeProvider = providerManager.getActiveProvider();
+      if (
+        activeProvider &&
+        'setModelParams' in activeProvider &&
+        activeProvider.setModelParams
+      ) {
+        activeProvider.setModelParams(configWithProfile._profileModelParams);
       }
     }
   }

@@ -10,6 +10,26 @@ import { loadCliConfig, parseArguments } from './config';
 import { Settings } from './settings';
 import { Extension } from './extension';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core';
+
+// Mock ProfileManager for --load tests
+const mockProfile = {
+  version: 1,
+  provider: 'anthropic',
+  model: 'claude-3-5-sonnet-20241022',
+  modelParams: {
+    temperature: 0.7,
+    maxOutputTokens: 4096,
+  },
+  ephemeralSettings: {
+    'context-limit': 100000,
+    'compression-threshold': 2000,
+  },
+};
+
+const mockProfileManager = {
+  loadProfile: vi.fn(),
+};
 
 vi.mock('os', async (importOriginal) => {
   const actualOs = await importOriginal<typeof os>();
@@ -36,6 +56,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   return {
     ...actualServer,
     DEFAULT_TELEMETRY_TARGET: 'local',
+    DEFAULT_GEMINI_MODEL: 'gemini-2.5-pro',
     IdeClient: {
       getInstance: vi.fn().mockReturnValue({
         getConnectionStatus: vi.fn(),
@@ -59,6 +80,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
       respectGitIgnore: true,
       respectLlxprtIgnore: true,
     },
+    ProfileManager: vi.fn(() => mockProfileManager),
   };
 });
 
@@ -1020,5 +1042,128 @@ describe('loadCliConfig ideModeFeature', () => {
     const settings: Settings = { ideModeFeature: true };
     const config = await loadCliConfig(settings, [], 'test-session', argv);
     expect(config.getIdeModeFeature()).toBe(false);
+  });
+});
+
+describe('--load flag functionality', () => {
+  const originalArgv = process.argv;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(os.homedir).mockReturnValue('/mock/home/user');
+    process.env.GEMINI_API_KEY = 'test-api-key';
+    // Reset the mock
+    mockProfileManager.loadProfile.mockReset();
+    mockProfileManager.loadProfile.mockResolvedValue(mockProfile);
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    process.env = originalEnv;
+    vi.restoreAllMocks();
+  });
+
+  it('should parse --load argument correctly', async () => {
+    process.argv = ['node', 'script.js', '--load', 'test-profile'];
+    const argv = await parseArguments();
+    expect(argv.load).toBe('test-profile');
+  });
+
+  it('should load profile settings in loadCliConfig', async () => {
+    process.argv = ['node', 'script.js', '--load', 'test-profile'];
+    const argv = await parseArguments();
+    const settings: Settings = {
+      defaultModel: 'gemini-2.5-pro',
+      showMemoryUsage: false,
+    };
+
+    const config = await loadCliConfig(settings, [], 'test-session', argv);
+
+    // Verify ProfileManager was called
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith('test-profile');
+
+    // Verify model is set from profile
+    expect(config.getModel()).toBe('claude-3-5-sonnet-20241022');
+
+    // Verify provider is set from profile
+    expect(config.getProvider()).toBe('anthropic');
+
+    // Verify ephemeral settings are applied
+    // Note: context-limit and compression-threshold are valid ephemeral settings
+    // but they don't have direct getter methods on Config, so we can't test them here
+
+    // Verify profile model params are attached to config
+    const configWithProfile = config as Config & {
+      _profileModelParams?: Record<string, unknown>;
+    };
+    expect(configWithProfile._profileModelParams).toEqual({
+      temperature: 0.7,
+      maxOutputTokens: 4096,
+    });
+  });
+
+  it('should prioritize CLI args over profile settings', async () => {
+    process.argv = [
+      'node',
+      'script.js',
+      '--load',
+      'test-profile',
+      '--model',
+      'claude-3-opus-20240229',
+      '--provider',
+      'openai',
+    ];
+    const argv = await parseArguments();
+    const settings: Settings = {
+      defaultModel: 'gemini-2.5-pro',
+    };
+
+    const config = await loadCliConfig(settings, [], 'test-session', argv);
+
+    // CLI args should override profile settings
+    expect(config.getModel()).toBe('claude-3-opus-20240229');
+    expect(config.getProvider()).toBe('openai');
+  });
+
+  it('should continue without profile if loading fails', async () => {
+    // Mock profile loading failure
+    mockProfileManager.loadProfile.mockRejectedValue(
+      new Error('Profile not found'),
+    );
+
+    process.argv = ['node', 'script.js', '--load', 'non-existent-profile'];
+    const argv = await parseArguments();
+    const settings: Settings = {
+      defaultModel: 'gemini-2.5-pro',
+    };
+
+    // Should not throw, but continue with default settings
+    const config = await loadCliConfig(settings, [], 'test-session', argv);
+
+    expect(config.getModel()).toBe('gemini-2.5-pro');
+    expect(config.getProvider()).toBe('gemini'); // Default provider is 'gemini' not undefined
+  });
+
+  it('should merge profile ephemeral settings with existing settings', async () => {
+    process.argv = ['node', 'script.js', '--load', 'test-profile'];
+    const argv = await parseArguments();
+    const settings: Settings = {
+      defaultModel: 'gemini-2.5-pro',
+      showMemoryUsage: false,
+      // Add some other settings that should be preserved
+      telemetry: { enabled: true },
+      accessibility: { screenReaderMode: true },
+    };
+
+    const config = await loadCliConfig(settings, [], 'test-session', argv);
+
+    // Verify profile settings are applied
+    expect(config.getModel()).toBe('claude-3-5-sonnet-20241022');
+    expect(config.getProvider()).toBe('anthropic');
+
+    // Verify other settings are preserved
+    expect(config.getTelemetryEnabled()).toBe(true);
+    expect(config.getAccessibility()).toEqual({ screenReaderMode: true });
   });
 });

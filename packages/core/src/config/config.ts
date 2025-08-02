@@ -275,7 +275,7 @@ export class Config {
   getProviderManager(): ProviderManager | undefined {
     return this.providerManager;
   }
-  private readonly provider?: string;
+  private provider?: string;
   private readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
@@ -666,6 +666,10 @@ export class Config {
 
   getProvider(): string | undefined {
     return this.provider;
+  }
+
+  setProvider(provider: string): void {
+    this.provider = provider;
   }
 
   getNoBrowser(): boolean {
