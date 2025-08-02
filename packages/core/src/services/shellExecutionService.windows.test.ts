@@ -80,7 +80,13 @@ describe('ShellExecutionService (Windows behavior)', () => {
     const stderrHandlers: Listener[] = [];
     const exitHandlers: Listener[] = [];
 
-    (spawn as unknown as { mockImplementationOnce: (fn: () => ReturnType<typeof fakeChildFactory>) => void }).mockImplementationOnce(() => {
+    (
+      spawn as unknown as {
+        mockImplementationOnce: (
+          fn: () => ReturnType<typeof fakeChildFactory>,
+        ) => void;
+      }
+    ).mockImplementationOnce(() => {
       const child = fakeChildFactory();
       child.stdout.on.mockImplementation((_ev: string, cb: Listener) => {
         stdoutHandlers.push(cb);

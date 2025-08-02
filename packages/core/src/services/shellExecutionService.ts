@@ -36,42 +36,6 @@ export type ShellOutputEvent =
   | { type: 'binary_detected' }
   | { type: 'binary_progress'; bytesReceived: number };
 
-function needsShell(command: string): boolean {
-  // Detect shell operators and substitutions
-  return /[|;&><]/.test(command) || /(\$\(|`)/.test(command);
-}
-
-function pickUserShell(): {
-  shell: string;
-  argsFor(command: string): string[];
-} {
-  const platform = os.platform();
-  if (platform === 'win32') {
-    // Prefer PowerShell if detectable, else cmd.exe
-    const isPowerShell =
-      /powershell/i.test(process.env.ComSpec || '') ||
-      !!process.env.PSModulePath;
-    if (isPowerShell) {
-      return {
-        shell: 'powershell.exe',
-        argsFor: (cmd: string) => [
-          '-NoLogo',
-          '-NoProfile',
-          '-NonInteractive',
-          '-Command',
-          cmd,
-        ],
-      };
-    }
-    return {
-      shell: 'cmd.exe',
-      argsFor: (cmd: string) => ['/d', '/s', '/c', cmd],
-    };
-  }
-  const userShell = process.env.SHELL || 'bash';
-  return { shell: userShell, argsFor: (cmd: string) => ['-c', cmd] };
-}
-
 export class ShellExecutionService {
   static execute(
     commandToExecute: string,
@@ -81,29 +45,24 @@ export class ShellExecutionService {
   ): ShellExecutionHandle {
     const isWindows = os.platform() === 'win32';
 
-    // Choose execution strategy: use a shell only when necessary
-    const { shell, argsFor } = pickUserShell();
-    const useShell = needsShell(commandToExecute);
-
-    const child = spawn(
-      useShell ? shell : commandToExecute.split(/\s+/)[0],
-      useShell
-        ? argsFor(commandToExecute)
-        : commandToExecute.split(/\s+/).slice(1),
-      {
-        cwd,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        detached: !isWindows,
-        env: { ...process.env, LLXPRT_CLI: '1' },
-        shell: false,
-      },
-    );
+    // On Windows, always use shell mode for simplicity and compatibility
+    // On Unix-like systems, use bash
+    const child = spawn(commandToExecute, [], {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: isWindows ? true : 'bash',
+      detached: !isWindows,
+      env: { ...process.env, LLXPRT_CLI: '1' },
+    });
 
     const result = new Promise<ShellExecutionResult>((resolve) => {
       // Determine encoding once per process
       const encoding = getSystemEncoding() || 'utf-8';
-      const stdoutDecoder = new TextDecoder(encoding);
-      const stderrDecoder = new TextDecoder(encoding);
+      // Use 'fatal: false' to avoid throwing on invalid sequences
+      // This will insert replacement characters (U+FFFD) for invalid bytes
+      // but won't crash the process
+      const stdoutDecoder = new TextDecoder(encoding, { fatal: false });
+      const stderrDecoder = new TextDecoder(encoding, { fatal: false });
 
       let stdout = '';
       let stderr = '';

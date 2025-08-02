@@ -201,13 +201,20 @@ export class OpenAIProvider implements IProvider {
     const baseURL = this.baseURL || 'https://api.openai.com/v1';
     const responsesURL = `${baseURL}/responses`;
 
+    // Ensure proper UTF-8 encoding for the request body
+    // This is crucial for handling multibyte characters (e.g., Japanese, Chinese)
+    const requestBody = JSON.stringify(request);
+    const bodyBlob = new Blob([requestBody], {
+      type: 'application/json; charset=utf-8',
+    });
+
     const response = await fetch(responsesURL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
       },
-      body: JSON.stringify(request),
+      body: bodyBlob,
     });
 
     // Handle errors
@@ -243,13 +250,19 @@ export class OpenAIProvider implements IProvider {
           tool_choice: options?.tool_choice,
         });
 
+        // Ensure proper UTF-8 encoding for retry request as well
+        const retryRequestBody = JSON.stringify(retryRequest);
+        const retryBodyBlob = new Blob([retryRequestBody], {
+          type: 'application/json; charset=utf-8',
+        });
+
         const retryResponse = await fetch(responsesURL, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json; charset=utf-8',
           },
-          body: JSON.stringify(retryRequest),
+          body: retryBodyBlob,
         });
 
         if (!retryResponse.ok) {
@@ -594,7 +607,10 @@ export class OpenAIProvider implements IProvider {
                   `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
                 );
               }
-              yield { role: ContentGeneratorRole.ASSISTANT, content: pendingWhitespace };
+              yield {
+                role: ContentGeneratorRole.ASSISTANT,
+                content: pendingWhitespace,
+              };
               hasStreamedContent = true;
               fullContent += pendingWhitespace;
               pendingWhitespace = null;
@@ -638,7 +654,10 @@ export class OpenAIProvider implements IProvider {
           `[OpenAIProvider/${this.currentModel}] Flushing trailing pending whitespace (len=${pendingWhitespace.length}) at stream end`,
         );
       }
-      yield { role: ContentGeneratorRole.ASSISTANT, content: pendingWhitespace };
+      yield {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: pendingWhitespace,
+      };
       hasStreamedContent = true;
       fullContent += pendingWhitespace;
       pendingWhitespace = null;

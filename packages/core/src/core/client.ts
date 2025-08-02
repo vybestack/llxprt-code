@@ -563,6 +563,26 @@ export class GeminiClient {
       try {
         // Extract JSON from potential markdown wrapper
         const cleanedText = extractJsonFromMarkdown(text);
+
+        // Special case: Gemini sometimes returns just "user" or "model" for next speaker checks
+        // This happens particularly with non-ASCII content in the conversation
+        if (
+          (cleanedText === 'user' || cleanedText === 'model') &&
+          contents.some((c) =>
+            c.parts?.some(
+              (p) => 'text' in p && p.text?.includes('next_speaker'),
+            ),
+          )
+        ) {
+          console.warn(
+            `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
+          );
+          return {
+            reasoning: 'Gemini returned plain text response',
+            next_speaker: cleanedText,
+          };
+        }
+
         return JSON.parse(cleanedText);
       } catch (parseError) {
         // Log both the original and cleaned text for debugging
