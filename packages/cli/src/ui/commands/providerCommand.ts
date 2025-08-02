@@ -59,16 +59,46 @@ export const providerCommand: SlashCommand = {
 
       // Update config if available
       if (context.services.config) {
+        // Clear ephemeral settings when switching providers
+        // Get current ephemeral settings and clear them one by one
+        const ephemeralKeys = [
+          'auth-key',
+          'auth-keyfile',
+          'base-url',
+          'context-limit',
+          'compression-threshold',
+          'tool-format',
+          'api-version',
+          'custom-headers',
+        ];
+        for (const key of ephemeralKeys) {
+          context.services.config.setEphemeralSetting(key, undefined);
+        }
+
+        // Clear model parameters on the new provider
+        const newProvider = providerManager.getActiveProvider();
+        if (newProvider.setModelParams) {
+          newProvider.setModelParams({});
+        }
+
         // Ensure provider manager is set on config
         context.services.config.setProviderManager(providerManager);
 
         // Update the provider in config
         context.services.config.setProvider(providerName);
 
-        // Update model to match the new provider's default
-        const newModel =
-          providerManager.getActiveProvider().getCurrentModel?.() || '';
-        context.services.config.setModel(newModel);
+        // Get the provider's default model - it should already be set since we just switched
+        const activeProvider = providerManager.getActiveProvider();
+        const defaultModel = activeProvider.getCurrentModel?.() || '';
+
+        // Ensure the model is valid for this provider
+        if (defaultModel) {
+          context.services.config.setModel(defaultModel);
+          // Also explicitly set it on the provider to be sure
+          if (activeProvider.setModel) {
+            activeProvider.setModel(defaultModel);
+          }
+        }
 
         // Clear conversation history BEFORE switching to prevent tool call ID mismatches
         const geminiClient = context.services.config.getGeminiClient();
