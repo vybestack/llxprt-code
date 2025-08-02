@@ -46,72 +46,84 @@ function makeAbortSignal() {
   return c.signal;
 }
 
-describe.skipIf(process.platform !== 'win32')('ShellExecutionService (Windows behavior)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(os.platform).mockReturnValue('win32');
-  });
-
-  it('uses shell: true mode on Windows', async () => {
-    ShellExecutionService.execute(
-      'echo a & echo b',
-      '.',
-      () => {},
-      makeAbortSignal(),
-    );
-    expect(spawn).toHaveBeenCalledWith(
-      'echo a & echo b',
-      [],
-      expect.objectContaining({ shell: true }),
-    );
-  });
-
-  it('uses shell: true mode on Windows for simple commands', async () => {
-    ShellExecutionService.execute('node -v', '.', () => {}, makeAbortSignal());
-    expect(spawn).toHaveBeenCalledWith('node -v', [], expect.objectContaining({ shell: true }));
-  });
-
-  it('initializes TextDecoder with system encoding mapping (CP932->shift_jis) and decodes stderr bytes', async () => {
-    // simulate stderr chunk containing Shift-JIS bytes for some Japanese chars
-    const sjisBytes = Buffer.from([0x93, 0xfa, 0x96, 0x7b]);
-
-    // Capture handlers for the just-spawned child
-    const stdoutHandlers: Listener[] = [];
-    const stderrHandlers: Listener[] = [];
-    const exitHandlers: Listener[] = [];
-
-    (
-      spawn as unknown as {
-        mockImplementationOnce: (
-          fn: () => ReturnType<typeof fakeChildFactory>,
-        ) => void;
-      }
-    ).mockImplementationOnce(() => {
-      const child = fakeChildFactory();
-      child.stdout.on.mockImplementation((_ev: string, cb: Listener) => {
-        stdoutHandlers.push(cb);
-      });
-      child.stderr.on.mockImplementation((_ev: string, cb: Listener) => {
-        stderrHandlers.push(cb);
-      });
-      child.on.mockImplementation((ev: string, cb: Listener) => {
-        if (ev === 'exit') exitHandlers.push(cb);
-      });
-      return child;
+describe.skipIf(process.platform !== 'win32')(
+  'ShellExecutionService (Windows behavior)',
+  () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(os.platform).mockReturnValue('win32');
     });
 
-    const { result } = ShellExecutionService.execute(
-      'cmd /c',
-      '.',
-      () => {},
-      makeAbortSignal(),
-    );
+    it('uses shell: true mode on Windows', async () => {
+      ShellExecutionService.execute(
+        'echo a & echo b',
+        '.',
+        () => {},
+        makeAbortSignal(),
+      );
+      expect(spawn).toHaveBeenCalledWith(
+        'echo a & echo b',
+        [],
+        expect.objectContaining({ shell: true }),
+      );
+    });
 
-    // emit stderr data and exit 0
-    stderrHandlers.forEach((cb) => cb(sjisBytes));
-    exitHandlers.forEach((cb) => cb(0, null));
+    it('uses shell: true mode on Windows for simple commands', async () => {
+      ShellExecutionService.execute(
+        'node -v',
+        '.',
+        () => {},
+        makeAbortSignal(),
+      );
+      expect(spawn).toHaveBeenCalledWith(
+        'node -v',
+        [],
+        expect.objectContaining({ shell: true }),
+      );
+    });
 
-    const out = await result;
-    expect(out.stderr.length).toBeGreaterThan(0);
-  });
-});
+    it('initializes TextDecoder with system encoding mapping (CP932->shift_jis) and decodes stderr bytes', async () => {
+      // simulate stderr chunk containing Shift-JIS bytes for some Japanese chars
+      const sjisBytes = Buffer.from([0x93, 0xfa, 0x96, 0x7b]);
+
+      // Capture handlers for the just-spawned child
+      const stdoutHandlers: Listener[] = [];
+      const stderrHandlers: Listener[] = [];
+      const exitHandlers: Listener[] = [];
+
+      (
+        spawn as unknown as {
+          mockImplementationOnce: (
+            fn: () => ReturnType<typeof fakeChildFactory>,
+          ) => void;
+        }
+      ).mockImplementationOnce(() => {
+        const child = fakeChildFactory();
+        child.stdout.on.mockImplementation((_ev: string, cb: Listener) => {
+          stdoutHandlers.push(cb);
+        });
+        child.stderr.on.mockImplementation((_ev: string, cb: Listener) => {
+          stderrHandlers.push(cb);
+        });
+        child.on.mockImplementation((ev: string, cb: Listener) => {
+          if (ev === 'exit') exitHandlers.push(cb);
+        });
+        return child;
+      });
+
+      const { result } = ShellExecutionService.execute(
+        'cmd /c',
+        '.',
+        () => {},
+        makeAbortSignal(),
+      );
+
+      // emit stderr data and exit 0
+      stderrHandlers.forEach((cb) => cb(sjisBytes));
+      exitHandlers.forEach((cb) => cb(0, null));
+
+      const out = await result;
+      expect(out.stderr.length).toBeGreaterThan(0);
+    });
+  },
+);

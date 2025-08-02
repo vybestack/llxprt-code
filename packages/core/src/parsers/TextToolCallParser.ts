@@ -211,7 +211,10 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       .trim();
 
     // Collapse multiple consecutive newlines/spaces after removing tool calls
-    cleanedContent = cleanedContent.replace(/\n\s*\n/g, '\n').replace(/\n/g, ' ').trim();
+    cleanedContent = cleanedContent
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/\n/g, ' ')
+      .trim();
 
     return {
       cleanedContent,
