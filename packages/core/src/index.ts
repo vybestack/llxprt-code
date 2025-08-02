@@ -48,13 +48,17 @@ export * from './services/gitService.js';
 // Export IDE specific logic
 export * from './ide/ide-client.js';
 export * from './ide/ideContext.js';
+export * from './ide/ide-installer.js';
+export { getIdeDisplayName, DetectedIde } from './ide/detect-ide.js';
 
 // Export Shell Execution Service
 export * from './services/shellExecutionService.js';
 
 // Export base tool definitions
 export * from './tools/tools.js';
+export * from './tools/tool-error.js';
 export * from './tools/tool-registry.js';
+export * from './tools/tool-context.js';
 
 // Export prompt logic
 export * from './prompts/mcp-prompts.js';

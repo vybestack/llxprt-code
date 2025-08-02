@@ -21,6 +21,7 @@ export default defineConfig({
     reporters: ['default', 'junit'],
     silent: true,
     outputFile: { junit: 'junit.fast.xml' },
+    setupFiles: ['./test-setup.ts'],
     poolOptions: { threads: { singleThread: true, maxThreads: 2 } },
     testTimeout: 30000,
     hookTimeout: 30000,

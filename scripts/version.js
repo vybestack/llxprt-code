@@ -33,11 +33,20 @@ if (!versionType) {
 
 // 2. Bump the version in the root and all workspace package.json files.
 run(`npm version ${versionType} --no-git-tag-version --allow-same-version`);
-run(
-  `npm version ${versionType} --workspaces --no-git-tag-version --allow-same-version`,
-);
 
-// 3. Get the new version number from the root package.json
+// 3. Version all our workspace packages (excluding root which was already versioned)
+const workspacesToVersion = [
+  '@vybestack/llxprt-code-core',
+  'llxprt-code-vscode-ide-companion',
+];
+
+for (const workspaceName of workspacesToVersion) {
+  run(
+    `npm version ${versionType} --workspace ${workspaceName} --no-git-tag-version --allow-same-version`,
+  );
+}
+
+// 4. Get the new version number from the root package.json
 const rootPackageJsonPath = resolve(process.cwd(), 'package.json');
 const newVersion = readJson(rootPackageJsonPath).version;
 

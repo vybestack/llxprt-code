@@ -15,6 +15,7 @@ import { clearCommand } from '../ui/commands/clearCommand.js';
 import { compressCommand } from '../ui/commands/compressCommand.js';
 import { copyCommand } from '../ui/commands/copyCommand.js';
 import { docsCommand } from '../ui/commands/docsCommand.js';
+import { directoryCommand } from '../ui/commands/directoryCommand.js';
 import { editorCommand } from '../ui/commands/editorCommand.js';
 import { extensionsCommand } from '../ui/commands/extensionsCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';
@@ -35,6 +36,8 @@ import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
+import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
+import { isGitHubRepository } from '../utils/gitUtils.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -60,6 +63,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       compressCommand,
       copyCommand,
       docsCommand,
+      directoryCommand,
       editorCommand,
       extensionsCommand,
       helpCommand,
@@ -80,6 +84,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       keyfileCommand,
       baseurlCommand,
       toolformatCommand,
+      ...(isGitHubRepository() ? [setupGithubCommand] : []),
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

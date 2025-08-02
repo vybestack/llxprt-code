@@ -16,6 +16,7 @@ import {
   ToolResult,
   ToolResultDisplay,
 } from '../tools/tools.js';
+import { ToolErrorType } from '../tools/tool-error.js';
 import {
   getResponseText,
   getFunctionCalls,
@@ -80,6 +81,7 @@ export interface ToolCallResponseInfo {
   responseParts: PartListUnion;
   resultDisplay: ToolResultDisplay | undefined;
   error: Error | undefined;
+  errorType: ToolErrorType | undefined;
 }
 
 export interface ServerToolCallConfirmationDetails {
@@ -177,13 +179,16 @@ export type ServerGeminiStreamEvent =
 export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
   private debugResponses: GenerateContentResponse[];
+  finishReason: FinishReason | undefined;
 
   constructor(
     private readonly chat: GeminiChat,
     private readonly prompt_id: string,
+    private readonly providerName: string = 'backend',
   ) {
     this.pendingToolCalls = [];
     this.debugResponses = [];
+    this.finishReason = undefined;
   }
   // The run method yields simpler events suitable for server logic
   async *run(
@@ -255,6 +260,7 @@ export class Turn {
         const finishReason = resp.candidates?.[0]?.finishReason;
 
         if (finishReason) {
+          this.finishReason = finishReason;
           yield {
             type: GeminiEventType.Finished,
             value: finishReason as FinishReason,
@@ -275,7 +281,7 @@ export class Turn {
       const contextForReport = [...this.chat.getHistory(/*curated*/ true), req];
       await reportError(
         error,
-        'Error when talking to Gemini API',
+        `Error when talking to ${this.providerName} API`,
         contextForReport,
         'Turn.run-sendMessageStream',
       );

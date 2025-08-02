@@ -305,10 +305,12 @@ Subdir memory
       false,
       new FileDiscoveryService(projectRoot),
       [],
+      'tree',
       {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       },
+      200, // maxDirs parameter
     );
 
     expect(result).toEqual({
@@ -334,6 +336,7 @@ My code memory
       true,
       new FileDiscoveryService(projectRoot),
       [],
+      'tree', // importFormat
       {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,

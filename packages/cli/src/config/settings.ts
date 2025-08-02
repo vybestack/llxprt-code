@@ -38,6 +38,8 @@ export function getSystemSettingsPath(): string {
   }
 }
 
+export type DnsResolutionOrder = 'ipv4first' | 'verbatim';
+
 export enum SettingScope {
   User = 'User',
   Workspace = 'Workspace',
@@ -60,6 +62,7 @@ export interface Settings {
   theme?: string;
   customThemes?: Record<string, CustomTheme>;
   selectedAuthType?: AuthType;
+  useExternalAuth?: boolean;
   sandbox?: boolean | string;
   coreTools?: string[];
   excludeTools?: string[];
@@ -112,8 +115,11 @@ export interface Settings {
 
   // Vim mode setting
   vimMode?: boolean;
+  memoryImportFormat?: 'tree' | 'flat';
 
-  // Add other settings here.
+  // Flag to be removed post-launch.
+  ideModeFeature?: boolean;
+  /// IDE mode setting configured via slash command toggle.
   ideMode?: boolean;
 
   // Default model to use when no model is specified
@@ -123,6 +129,7 @@ export interface Settings {
   disableAutoUpdate?: boolean;
 
   memoryDiscoveryMaxDirs?: number;
+  dnsResolutionOrder?: DnsResolutionOrder;
 }
 
 export interface SettingsError {

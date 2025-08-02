@@ -120,7 +120,26 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
     if (!params.command.trim()) {
       return 'Command cannot be empty.';
     }
+    if (getCommandRoots(params.command).length === 0) {
+      return 'Could not identify command root to obtain permission from user.';
+    }
+    if (params.directory) {
+      if (path.isAbsolute(params.directory)) {
+        return 'Directory cannot be absolute. Please refer to workspace directories by their name.';
+      }
+      const workspaceDirs = this.config.getWorkspaceContext().getDirectories();
+      const matchingDirs = workspaceDirs.filter(
+        (dir) => path.basename(dir) === params.directory,
+      );
 
+      if (matchingDirs.length === 0) {
+        return `Directory '${params.directory}' is not a registered workspace directory.`;
+      }
+
+      if (matchingDirs.length > 1) {
+        return `Directory name '${params.directory}' is ambiguous as it matches multiple workspace directories.`;
+      }
+    }
     return null;
   }
 

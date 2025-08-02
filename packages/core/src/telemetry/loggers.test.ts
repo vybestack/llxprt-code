@@ -12,6 +12,7 @@ import {
   ErroredToolCall,
   GeminiClient,
   ToolConfirmationOutcome,
+  ToolErrorType,
   ToolRegistry,
 } from '../index.js';
 import { logs } from '@opentelemetry/api-logs';
@@ -407,6 +408,11 @@ describe('loggers', () => {
       getToolRegistry: () => new ToolRegistry(cfg1),
       getFullContext: () => false,
       getUserMemory: () => 'user-memory',
+      getComplexityAnalyzerSettings: () => ({
+        complexityThreshold: 0.6,
+        minTasksForSuggestion: 3,
+        suggestionCooldownMs: 300000,
+      }),
     } as unknown as Config;
 
     const mockGeminiClient = new GeminiClient(cfg2);
@@ -448,6 +454,7 @@ describe('loggers', () => {
           responseParts: 'test-response',
           resultDisplay: undefined,
           error: undefined,
+          errorType: undefined,
         },
         tool: new EditTool(mockConfig),
         durationMs: 100,
@@ -511,6 +518,7 @@ describe('loggers', () => {
           responseParts: 'test-response',
           resultDisplay: undefined,
           error: undefined,
+          errorType: undefined,
         },
         durationMs: 100,
         outcome: ToolConfirmationOutcome.Cancel,
@@ -574,6 +582,7 @@ describe('loggers', () => {
           responseParts: 'test-response',
           resultDisplay: undefined,
           error: undefined,
+          errorType: undefined,
         },
         outcome: ToolConfirmationOutcome.ModifyWithEditor,
         tool: new EditTool(mockConfig),
@@ -638,6 +647,7 @@ describe('loggers', () => {
           responseParts: 'test-response',
           resultDisplay: undefined,
           error: undefined,
+          errorType: undefined,
         },
         tool: new EditTool(mockConfig),
         durationMs: 100,
@@ -703,6 +713,7 @@ describe('loggers', () => {
             name: 'test-error-type',
             message: 'test-error',
           },
+          errorType: ToolErrorType.UNKNOWN,
         },
         durationMs: 100,
       };
@@ -729,8 +740,8 @@ describe('loggers', () => {
           success: false,
           error: 'test-error',
           'error.message': 'test-error',
-          error_type: 'test-error-type',
-          'error.type': 'test-error-type',
+          error_type: ToolErrorType.UNKNOWN,
+          'error.type': ToolErrorType.UNKNOWN,
           prompt_id: 'prompt-id-5',
         },
       });

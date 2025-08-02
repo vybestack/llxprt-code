@@ -50,9 +50,16 @@ export class ShellExecutionService {
     const child = spawn(commandToExecute, [], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Use bash unless in Windows (since it doesn't support bash).
+      // For windows, just use the default.
       shell: isWindows ? true : 'bash',
+      // Use process groups on non-Windows for robust killing.
+      // Windows process termination is handled by `taskkill /t`.
       detached: !isWindows,
-      env: { ...process.env, LLXPRT_CLI: '1' },
+      env: {
+        ...process.env,
+        LLXPRT_CLI: '1',
+      },
     });
 
     const result = new Promise<ShellExecutionResult>((resolve) => {

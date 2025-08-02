@@ -19,6 +19,7 @@ import {
   logToolCall,
   ToolCallEvent,
   ToolConfirmationPayload,
+  ToolErrorType,
 } from '../index.js';
 import { Part, PartListUnion } from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
@@ -28,6 +29,7 @@ import {
   modifyWithEditor,
 } from '../tools/modifiable-tool.js';
 import * as Diff from 'diff';
+import { ToolContext } from '../tools/tool-context.js';
 
 export type ValidatingToolCall = {
   status: 'validating';
@@ -213,6 +215,7 @@ export function convertToFunctionResponse(
 const createErrorResponse = (
   request: ToolCallRequestInfo,
   error: Error,
+  errorType: ToolErrorType | undefined,
 ): ToolCallResponseInfo => ({
   callId: request.callId,
   error,
@@ -224,6 +227,7 @@ const createErrorResponse = (
     },
   },
   resultDisplay: error.message,
+  errorType,
 });
 
 interface CoreToolSchedulerOptions {
@@ -378,6 +382,7 @@ export class CoreToolScheduler {
               },
               resultDisplay,
               error: undefined,
+              errorType: undefined,
             },
             durationMs,
             outcome,
@@ -440,7 +445,16 @@ export class CoreToolScheduler {
 
     const newToolCalls: ToolCall[] = requestsToProcess.map(
       (reqInfo): ToolCall => {
-        const toolInstance = toolRegistry.getTool(reqInfo.name);
+        // Create context from config
+        const context: ToolContext = {
+          sessionId:
+            typeof this.config.getSessionId === 'function'
+              ? this.config.getSessionId()
+              : 'default-session',
+          // TODO: Add agentId when available in the request
+        };
+
+        const toolInstance = toolRegistry.getTool(reqInfo.name, context);
         if (!toolInstance) {
           return {
             status: 'error',
@@ -448,6 +462,7 @@ export class CoreToolScheduler {
             response: createErrorResponse(
               reqInfo,
               new Error(`Tool "${reqInfo.name}" not found in registry.`),
+              ToolErrorType.TOOL_NOT_REGISTERED,
             ),
             durationMs: 0,
           };
@@ -511,6 +526,7 @@ export class CoreToolScheduler {
           createErrorResponse(
             reqInfo,
             error instanceof Error ? error : new Error(String(error)),
+            ToolErrorType.UNHANDLED_EXCEPTION,
           ),
         );
       }
@@ -682,19 +698,30 @@ export class CoreToolScheduler {
               return;
             }
 
-            const response = convertToFunctionResponse(
-              toolName,
-              callId,
-              toolResult.llmContent,
-            );
-            const successResponse: ToolCallResponseInfo = {
-              callId,
-              responseParts: response,
-              resultDisplay: toolResult.returnDisplay,
-              error: undefined,
-            };
-
-            this.setStatusInternal(callId, 'success', successResponse);
+            if (toolResult.error === undefined) {
+              const response = convertToFunctionResponse(
+                toolName,
+                callId,
+                toolResult.llmContent,
+              );
+              const successResponse: ToolCallResponseInfo = {
+                callId,
+                responseParts: response,
+                resultDisplay: toolResult.returnDisplay,
+                error: undefined,
+                errorType: undefined,
+              };
+              this.setStatusInternal(callId, 'success', successResponse);
+            } else {
+              // It is a failure
+              const error = new Error(toolResult.error.message);
+              const errorResponse = createErrorResponse(
+                scheduledCall.request,
+                error,
+                toolResult.error.type,
+              );
+              this.setStatusInternal(callId, 'error', errorResponse);
+            }
           })
           .catch((executionError: Error) => {
             this.setStatusInternal(
@@ -705,6 +732,7 @@ export class CoreToolScheduler {
                 executionError instanceof Error
                   ? executionError
                   : new Error(String(executionError)),
+                ToolErrorType.UNHANDLED_EXCEPTION,
               ),
             );
           });

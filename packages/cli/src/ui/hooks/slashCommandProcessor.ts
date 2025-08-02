@@ -31,6 +31,7 @@ import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
@@ -189,6 +190,8 @@ export const useSlashCommandProcessor = (
     ],
   );
 
+  const ideMode = config?.getIdeMode();
+
   useEffect(() => {
     const controller = new AbortController();
     const load = async () => {
@@ -209,7 +212,7 @@ export const useSlashCommandProcessor = (
     return () => {
       controller.abort();
     };
-  }, [config]);
+  }, [config, ideMode]);
 
   const handleSlashCommand = useCallback(
     async (
@@ -228,8 +231,14 @@ export const useSlashCommandProcessor = (
         }
 
         const userMessageTimestamp = Date.now();
+
+        // Sanitize the command if it contains sensitive data
+        const sanitizedCommand = trimmed.startsWith('/key ')
+          ? secureInputHandler.sanitizeForHistory(trimmed)
+          : trimmed;
+
         addItem(
-          { type: MessageType.USER, text: trimmed },
+          { type: MessageType.USER, text: sanitizedCommand },
           userMessageTimestamp,
         );
 

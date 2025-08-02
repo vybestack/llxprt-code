@@ -5,6 +5,8 @@
  */
 
 import { FunctionDeclaration, PartListUnion, Schema } from '@google/genai';
+import { ToolContext, ContextAwareTool } from './tool-context.js';
+import { ToolErrorType } from './tool-error.js';
 
 /**
  * Interface representing the base Tool functionality
@@ -98,10 +100,13 @@ export interface Tool<
  * Base implementation for tools with common functionality
  */
 export abstract class BaseTool<
-  TParams = unknown,
-  TResult extends ToolResult = ToolResult,
-> implements Tool<TParams, TResult>
+    TParams = unknown,
+    TResult extends ToolResult = ToolResult,
+  >
+  implements Tool<TParams, TResult>, ContextAwareTool
 {
+  /** Tool execution context containing session and agent information */
+  context?: ToolContext;
   /**
    * Creates a new instance of BaseTool
    * @param name Internal name of the tool (used for API calls)
@@ -217,6 +222,19 @@ export interface ToolResult {
    * For now, we keep it as the core logic in ReadFileTool currently produces it.
    */
   returnDisplay: ToolResultDisplay;
+
+  /**
+   * Optional metadata about the tool execution
+   */
+  metadata?: Record<string, unknown>;
+
+  /**
+   * If this property is present, the tool call is considered a failure.
+   */
+  error?: {
+    message: string; // raw error message
+    type?: ToolErrorType; // An optional machine-readable error type (e.g., 'FILE_NOT_FOUND').
+  };
 }
 
 export type ToolResultDisplay = string | FileDiff;

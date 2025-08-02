@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,6 +11,7 @@ import {
   Content,
   EmbedContentResponse,
   GenerateContentResponse,
+  GenerateContentParameters,
   GoogleGenAI,
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
@@ -26,6 +27,8 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { tokenLimit } from './tokenLimits.js';
 import { ideContext } from '../ide/ideContext.js';
+import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
+import { TodoReminderService } from '../services/todo-reminder-service.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -34,6 +37,23 @@ const mockEmbedContentFn = vi.fn();
 const mockTurnRunFn = vi.fn();
 
 vi.mock('@google/genai');
+vi.mock('../services/complexity-analyzer.js', () => ({
+  ComplexityAnalyzer: vi.fn().mockImplementation(() => ({
+    analyzeComplexity: vi.fn().mockReturnValue({
+      complexityScore: 0.2,
+      isComplex: false,
+      detectedTasks: [],
+      sequentialIndicators: [],
+      questionCount: 0,
+      shouldSuggestTodos: false,
+    }),
+  })),
+}));
+vi.mock('../services/todo-reminder-service.js', () => ({
+  TodoReminderService: vi.fn().mockImplementation(() => ({
+    getComplexTaskSuggestion: vi.fn(),
+  })),
+}));
 vi.mock('./turn', () => {
   // Define a mock class that has the same shape as the real Turn
   class MockTurn {
@@ -142,6 +162,28 @@ describe('Gemini Client (client.ts)', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
 
+    // Re-setup mocks after reset
+    vi.mocked(ComplexityAnalyzer).mockImplementation(
+      () =>
+        ({
+          analyzeComplexity: vi.fn().mockReturnValue({
+            complexityScore: 0.2,
+            isComplex: false,
+            detectedTasks: [],
+            sequentialIndicators: [],
+            questionCount: 0,
+            shouldSuggestTodos: false,
+          }),
+        }) as unknown as ComplexityAnalyzer,
+    );
+
+    vi.mocked(TodoReminderService).mockImplementation(
+      () =>
+        ({
+          getComplexTaskSuggestion: vi.fn(),
+        }) as unknown as TodoReminderService,
+    );
+
     // Disable 429 simulation for tests
     setSimulate429(false);
 
@@ -205,10 +247,19 @@ describe('Gemini Client (client.ts)', () => {
       setQuotaErrorOccurred: vi.fn(),
       getNoBrowser: vi.fn().mockReturnValue(false),
       getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
-      getIdeMode: vi.fn().mockReturnValue(false),
+      getIdeModeFeature: vi.fn().mockReturnValue(false),
+      getIdeMode: vi.fn().mockReturnValue(true),
+      getWorkspaceContext: vi.fn().mockReturnValue({
+        getDirectories: vi.fn().mockReturnValue(['/test/dir']),
+      }),
       getGeminiClient: vi.fn(),
       getDebugMode: vi.fn().mockReturnValue(false),
       setFallbackMode: vi.fn(),
+      getComplexityAnalyzerSettings: vi.fn().mockReturnValue({
+        complexityThreshold: 0.6,
+        minTasksForSuggestion: 3,
+        suggestionCooldownMs: 300000,
+      }),
     };
     MockedConfig.mockImplementation(
       () => mockConfigObject as unknown as Config,
@@ -385,16 +436,19 @@ describe('Gemini Client (client.ts)', () => {
 
       await client.generateContent(contents, generationConfig, abortSignal);
 
-      expect(mockContentGeneratorGenerateContent).toHaveBeenCalledWith({
-        model: 'test-model',
-        config: {
-          abortSignal,
-          systemInstruction: getCoreSystemPrompt(''),
-          temperature: 0.5,
-          topP: 1,
+      expect(mockContentGeneratorGenerateContent).toHaveBeenCalledWith(
+        {
+          model: 'test-model',
+          config: {
+            abortSignal,
+            systemInstruction: getCoreSystemPrompt(''),
+            temperature: 0.5,
+            topP: 1,
+          },
+          contents,
         },
-        contents,
-      });
+        'test-session-id',
+      );
     });
   });
 
@@ -404,18 +458,46 @@ describe('Gemini Client (client.ts)', () => {
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
 
-      // Mock countTokens
+      // Mock lazyInitialize to prevent it from overriding our mock
+      client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
+
+      // Track the arguments manually
+      let capturedRequest: GenerateContentParameters | undefined;
+      let capturedPromptId: string | undefined;
+
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: mockGenerateContentFn,
+        generateContent: vi.fn(
+          async (request: GenerateContentParameters, promptId: string) => {
+            capturedRequest = request;
+            capturedPromptId = promptId;
+            return {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '{"key": "value"}' }],
+                  },
+                },
+              ],
+            } as GenerateContentResponse;
+          },
+        ),
         generateContentStream: vi.fn(),
         embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      await client.generateJson(contents, schema, abortSignal);
+      try {
+        await client.generateJson(contents, schema, abortSignal);
+      } catch (error) {
+        console.error('Error in generateJson:', error);
+        throw error;
+      }
 
-      expect(mockGenerateContentFn).toHaveBeenCalledWith({
+      // Check the captured arguments
+      expect(capturedRequest).toBeDefined();
+      expect(capturedPromptId).toBe('test-session-id');
+      expect(capturedRequest).toMatchObject({
         model: 'test-model', // Should use current model from config
         config: {
           abortSignal,
@@ -436,9 +518,30 @@ describe('Gemini Client (client.ts)', () => {
       const customModel = 'custom-json-model';
       const customConfig = { temperature: 0.9, topK: 20 };
 
+      // Mock lazyInitialize to prevent it from overriding our mock
+      client['lazyInitialize'] = vi.fn().mockResolvedValue(undefined);
+
+      // Track the arguments manually
+      let capturedRequest: GenerateContentParameters | undefined;
+      let capturedPromptId: string | undefined;
+
       const mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
-        generateContent: mockGenerateContentFn,
+        generateContent: vi.fn(
+          async (request: GenerateContentParameters, promptId: string) => {
+            capturedRequest = request;
+            capturedPromptId = promptId;
+            return {
+              candidates: [
+                {
+                  content: {
+                    parts: [{ text: '{"key": "value"}' }],
+                  },
+                },
+              ],
+            } as GenerateContentResponse;
+          },
+        ),
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
@@ -450,7 +553,10 @@ describe('Gemini Client (client.ts)', () => {
         customConfig,
       );
 
-      expect(mockGenerateContentFn).toHaveBeenCalledWith({
+      // Check the captured arguments
+      expect(capturedRequest).toBeDefined();
+      expect(capturedPromptId).toBe('test-session-id');
+      expect(capturedRequest).toMatchObject({
         model: customModel,
         config: {
           abortSignal,
@@ -731,7 +837,7 @@ describe('Gemini Client (client.ts)', () => {
   });
 
   describe('sendMessageStream', () => {
-    it('should include IDE context when ideMode is enabled', async () => {
+    it('should include IDE context when ideModeFeature is enabled', async () => {
       // Arrange
       vi.mocked(ideContext.getIdeContext).mockReturnValue({
         workspaceState: {
@@ -755,7 +861,7 @@ describe('Gemini Client (client.ts)', () => {
         },
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -806,7 +912,7 @@ Here are some other files the user has open, with the most recent at the top:
       );
     });
 
-    it('should not add context if ideMode is enabled but no open files', async () => {
+    it('should not add context if ideModeFeature is enabled but no open files', async () => {
       // Arrange
       vi.mocked(ideContext.getIdeContext).mockReturnValue({
         workspaceState: {
@@ -814,7 +920,7 @@ Here are some other files the user has open, with the most recent at the top:
         },
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -853,7 +959,7 @@ Here are some other files the user has open, with the most recent at the top:
       );
     });
 
-    it('should add context if ideMode is enabled and there is one active file', async () => {
+    it('should add context if ideModeFeature is enabled and there is one active file', async () => {
       // Arrange
       vi.mocked(ideContext.getIdeContext).mockReturnValue({
         workspaceState: {
@@ -869,7 +975,7 @@ Here are some other files the user has open, with the most recent at the top:
         },
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -917,7 +1023,7 @@ This is the selected text in the file:
       );
     });
 
-    it('should add context if ideMode is enabled and there are open files but no active file', async () => {
+    it('should add context if ideModeFeature is enabled and there are open files but no active file', async () => {
       // Arrange
       vi.mocked(ideContext.getIdeContext).mockReturnValue({
         workspaceState: {
@@ -934,7 +1040,7 @@ This is the selected text in the file:
         },
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -1308,6 +1414,9 @@ Here are some files the user has open, with the most recent at the top:
       expect(actualCall[0]).toHaveProperty('config');
       expect(actualCall[0].config).toHaveProperty('abortSignal');
       expect(actualCall[0].config).toHaveProperty('systemInstruction');
+
+      // Verify prompt_id was passed
+      expect(actualCall[1]).toBe('test-session-id');
     });
   });
 
