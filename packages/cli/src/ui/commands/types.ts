@@ -107,6 +107,7 @@ export interface OpenDialogActionReturn {
     | 'help'
     | 'auth'
     | 'theme'
+    | 'loadProfile'
     | 'editor'
     | 'privacy'
     | 'provider'

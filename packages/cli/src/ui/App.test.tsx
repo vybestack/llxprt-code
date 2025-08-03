@@ -84,6 +84,7 @@ interface MockServerConfig {
   getAllLlxprtMdFilenames: Mock<() => string[]>;
   getGeminiClient: Mock<() => GeminiClient | undefined>;
   getUserTier: Mock<() => Promise<string | undefined>>;
+  getEphemeralSetting?: Mock<(key: string) => unknown>;
 }
 
 // Mock @vybestack/llxprt-code-core and its Config class
@@ -157,6 +158,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getWorkspaceContext: vi.fn(() => ({
           getDirectories: vi.fn(() => []),
         })),
+        getEphemeralSetting: vi.fn(() => undefined),
       };
     });
 
@@ -330,6 +332,12 @@ describe('App UI', () => {
         getDirectories: vi.fn(() => ['/test/dir']),
       }));
     }
+
+    // Add getEphemeralSetting mock for ephemeral settings support
+    if (!mockConfig.getEphemeralSetting) {
+      mockConfig.getEphemeralSetting = vi.fn(() => undefined);
+    }
+
     vi.mocked(ideContext.getIdeContext).mockReturnValue(undefined);
   });
 

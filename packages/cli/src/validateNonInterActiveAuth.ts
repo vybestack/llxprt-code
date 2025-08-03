@@ -5,7 +5,7 @@
  */
 
 import { AuthType, Config } from '@vybestack/llxprt-code-core';
-import { USER_SETTINGS_PATH } from './config/settings.js';
+import { USER_SETTINGS_PATH, LoadedSettings } from './config/settings.js';
 import { validateAuthMethod } from './config/auth.js';
 
 function getAuthTypeFromEnv(): AuthType | undefined {
@@ -29,6 +29,7 @@ export async function validateNonInteractiveAuth(
   configuredAuthType: AuthType | undefined,
   useExternalAuth: boolean | undefined,
   nonInteractiveConfig: Config,
+  settings?: LoadedSettings,
 ) {
   // Check if a provider is already configured via command line
   const providerManager = nonInteractiveConfig.getProviderManager?.();
@@ -37,6 +38,25 @@ export async function validateNonInteractiveAuth(
   if (configProvider && providerManager?.hasActiveProvider?.()) {
     // Provider is configured, but we still need to call refreshAuth to initialize content generator
     await nonInteractiveConfig.refreshAuth(AuthType.USE_PROVIDER);
+
+    // Apply compression settings after authentication
+    if (settings) {
+      const merged = settings.merged as Record<string, unknown>;
+      const contextLimit = merged['context-limit'] as number | undefined;
+      const compressionThreshold = merged['compression-threshold'] as
+        | number
+        | undefined;
+
+      if (contextLimit || compressionThreshold) {
+        const geminiClient = nonInteractiveConfig.getGeminiClient();
+        if (geminiClient) {
+          geminiClient.setCompressionSettings(
+            compressionThreshold,
+            contextLimit,
+          );
+        }
+      }
+    }
 
     // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
     const serverToolsProvider = providerManager.getServerToolsProvider?.();
@@ -68,6 +88,22 @@ export async function validateNonInteractiveAuth(
   }
 
   await nonInteractiveConfig.refreshAuth(effectiveAuthType);
+
+  // Apply compression settings after authentication
+  if (settings) {
+    const merged = settings.merged as Record<string, unknown>;
+    const contextLimit = merged['context-limit'] as number | undefined;
+    const compressionThreshold = merged['compression-threshold'] as
+      | number
+      | undefined;
+
+    if (contextLimit || compressionThreshold) {
+      const geminiClient = nonInteractiveConfig.getGeminiClient();
+      if (geminiClient) {
+        geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
+      }
+    }
+  }
 
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
   if (providerManager) {

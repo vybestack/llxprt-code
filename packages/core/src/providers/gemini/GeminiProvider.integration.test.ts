@@ -114,7 +114,7 @@ describe('GeminiProvider Integration', () => {
     const provider = new GeminiProvider();
     const baseURL = 'https://my-custom-url';
 
-    provider.setBaseURL(baseURL);
+    provider.setBaseUrl(baseURL);
 
     // Simulate mixed content with text and an image
     const messages: IMessage[] = [

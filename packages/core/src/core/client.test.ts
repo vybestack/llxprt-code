@@ -15,7 +15,11 @@ import {
   GoogleGenAI,
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
-import { AuthType, ContentGenerator } from './contentGenerator.js';
+import {
+  AuthType,
+  ContentGenerator,
+  ContentGeneratorConfig,
+} from './contentGenerator.js';
 import type { Mock } from 'vitest';
 import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
@@ -1137,6 +1141,19 @@ Here are some files the user has open, with the most recent at the top:
         next_speaker: 'model',
         reasoning: 'Test case - always continue',
       });
+
+      // Mock provider manager to return 'gemini' provider
+      const mockProviderManager = {
+        getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+        getActiveProvider: vi.fn().mockReturnValue(null),
+      };
+      const mockContentGenConfig = {
+        model: 'test-model',
+        providerManager: mockProviderManager,
+      };
+      vi.spyOn(client['config'], 'getContentGeneratorConfig').mockReturnValue(
+        mockContentGenConfig as unknown as ContentGeneratorConfig,
+      );
 
       // Mock Turn to have no pending tool calls (which would allow nextSpeaker check)
       const mockStream = (async function* () {

@@ -88,6 +88,26 @@ Task(
 - Subagents return summaries - you don't need to store full details
 - Use direct tools (Read, Edit, Bash) for simple, targeted tasks
 
+## Git Commit Signing Policy
+
+### Never Sign Commits
+
+NEVER sign git commits with GPG or include the Claude commit signature. Always commit without signatures.
+
+**Do NOT add:**
+
+```
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+**ALWAYS use:**
+
+```bash
+git commit --no-gpg-sign -m "your commit message"
+```
+
 # important-instruction-reminders
 
 - Use subagents for complex multi-step tasks

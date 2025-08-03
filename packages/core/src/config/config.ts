@@ -177,6 +177,8 @@ export interface ConfigParameters {
   llxprtMdFileCount?: number;
   approvalMode?: ApprovalMode;
   showMemoryUsage?: boolean;
+  contextLimit?: number;
+  compressionThreshold?: number;
   contextFileName?: string | string[];
   accessibility?: AccessibilitySettings;
   telemetry?: TelemetrySettings;
@@ -215,6 +217,7 @@ export class Config {
   private promptRegistry!: PromptRegistry;
   private readonly sessionId: string;
   private contentGeneratorConfig!: ContentGeneratorConfig;
+  private ephemeralSettings: Record<string, unknown> = {};
   private readonly embeddingModel: string;
   private readonly sandbox: SandboxConfig | undefined;
   private readonly targetDir: string;
@@ -275,7 +278,7 @@ export class Config {
   getProviderManager(): ProviderManager | undefined {
     return this.providerManager;
   }
-  private readonly provider?: string;
+  private provider?: string;
   private readonly summarizeToolOutput:
     | Record<string, SummarizeToolOutputSettings>
     | undefined;
@@ -668,6 +671,10 @@ export class Config {
     return this.provider;
   }
 
+  setProvider(provider: string): void {
+    this.provider = provider;
+  }
+
   getNoBrowser(): boolean {
     return this.noBrowser;
   }
@@ -708,6 +715,18 @@ export class Config {
 
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {
     return this.complexityAnalyzerSettings;
+  }
+
+  getEphemeralSetting(key: string): unknown {
+    return this.ephemeralSettings[key];
+  }
+
+  setEphemeralSetting(key: string, value: unknown): void {
+    this.ephemeralSettings[key] = value;
+  }
+
+  getEphemeralSettings(): Record<string, unknown> {
+    return { ...this.ephemeralSettings };
   }
 
   async getGitService(): Promise<GitService> {
