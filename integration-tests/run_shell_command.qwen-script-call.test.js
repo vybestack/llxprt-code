@@ -19,10 +19,10 @@ test('qwen calls a local shell script via run_shell_command and preserves UTF-8 
   // Use different script format for Windows vs Unix
   const isWindows = process.platform === 'win32';
   const scriptName = isWindows ? 'print-multibyte.bat' : 'print-multibyte.sh';
-  const scriptContent = isWindows 
+  const scriptContent = isWindows
     ? `@echo off\necho|set /p="${MULTIBYTE}"`
     : `#!/usr/bin/env bash\nprintf "${MULTIBYTE}"`;
-  
+
   const scriptPath = rig.createFile(scriptName, scriptContent);
   if (!isWindows) {
     chmodSync(scriptPath, 0o755);

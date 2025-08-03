@@ -120,7 +120,12 @@ describe('Test Utilities', () => {
 
       const stats = await fs.stat(keyfilePath);
       // Check that only owner can read/write (600)
-      expect(stats.mode & 0o777).toBe(0o600);
+      // On Windows, permissions work differently
+      if (process.platform === 'win32') {
+        expect(stats.mode & 0o777).toBe(0o666);
+      } else {
+        expect(stats.mode & 0o777).toBe(0o600);
+      }
     });
   });
 
