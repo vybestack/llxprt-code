@@ -44,11 +44,16 @@ export class TestRig {
 
   sync() {
     // ensure file system is done before spawning
-    execSync('sync', { cwd: this.testDir });
+    // 'sync' is Unix-specific, skip on Windows
+    if (process.platform !== 'win32') {
+      execSync('sync', { cwd: this.testDir });
+    }
   }
 
   run(promptOrOptions, ...args) {
-    let command = `node ${this.bundlePath} --yolo`;
+    // Properly quote the bundle path for Windows
+    const quotedBundlePath = `"${this.bundlePath}"`;
+    let command = `node ${quotedBundlePath} --yolo`;
     const execOptions = {
       cwd: this.testDir,
       encoding: 'utf-8',
