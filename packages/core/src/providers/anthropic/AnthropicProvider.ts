@@ -16,6 +16,7 @@ export class AnthropicProvider implements IProvider {
   private apiKey: string;
   private baseURL?: string;
   private currentModel: string = 'claude-sonnet-4-latest'; // Default model using latest alias
+  private modelParams?: Record<string, unknown>;
 
   // Model cache for latest resolution
   private modelCache: { models: IModel[]; timestamp: number } | null = null;
@@ -198,6 +199,7 @@ export class AnthropicProvider implements IProvider {
         messages: anthropicMessages,
         max_tokens: this.getMaxTokensForModel(resolvedModel),
         stream: true,
+        ...this.modelParams,
       };
 
       // Add system message as top-level parameter if present
@@ -596,5 +598,25 @@ export class AnthropicProvider implements IProvider {
     _config?: unknown,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by Anthropic provider');
+  }
+
+  /**
+   * Set model parameters that will be merged into API calls
+   * @param params Parameters to merge with existing, or undefined to clear all
+   */
+  setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+    } else {
+      this.modelParams = { ...this.modelParams, ...params };
+    }
+  }
+
+  /**
+   * Get current model parameters
+   * @returns Current parameters or undefined if not set
+   */
+  getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 }

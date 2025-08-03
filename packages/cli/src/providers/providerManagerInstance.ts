@@ -45,14 +45,12 @@ export function getProviderManager(config?: Config): ProviderManager {
 
     // Only auto-initialize providers when not in test environment
     if (process.env.NODE_ENV !== 'test') {
-      // Load user settings to check for saved API keys
-      let savedApiKeys: Record<string, string> = {};
+      // Load user settings but don't load API keys from there
       let userSettings: Settings | undefined;
       try {
         if (existsSync(USER_SETTINGS_PATH)) {
           const userContent = readFileSync(USER_SETTINGS_PATH, 'utf-8');
           userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
-          savedApiKeys = userSettings.providerApiKeys || {};
         }
       } catch (_error) {
         // Failed to load user settings, that's OK
@@ -71,13 +69,8 @@ export function getProviderManager(config?: Config): ProviderManager {
       }
       providerManagerInstance.registerProvider(geminiProvider);
 
-      // Configure Gemini auth with priority: keyfile > key > oauth
-      // First check for saved API key
-      if (savedApiKeys.gemini) {
-        geminiProvider.setApiKey(sanitizeApiKey(savedApiKeys.gemini));
-      }
-      // Then check for keyfile
-      else {
+      // Configure Gemini auth - check for keyfile only
+      {
         try {
           const keyfilePath = join(homedir(), '.google_key');
           const geminiApiKey = readFileSync(keyfilePath, 'utf-8').trim();
@@ -90,10 +83,8 @@ export function getProviderManager(config?: Config): ProviderManager {
       }
 
       // Initialize with OpenAI provider if API key is available
-      // Priority: CLI /key (in settings) > Environment variable > keyfile
-      let openaiApiKey: string | undefined = savedApiKeys.openai
-        ? sanitizeApiKey(savedApiKeys.openai)
-        : undefined;
+      // Priority: Environment variable > keyfile
+      let openaiApiKey: string | undefined;
 
       if (!openaiApiKey && process.env.OPENAI_API_KEY) {
         openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
@@ -125,10 +116,8 @@ export function getProviderManager(config?: Config): ProviderManager {
       // OpenAI provider registered
 
       // Initialize with Anthropic provider if API key is available
-      // Priority: CLI /key (in settings) > Environment variable > keyfile
-      let anthropicApiKey: string | undefined = savedApiKeys.anthropic
-        ? sanitizeApiKey(savedApiKeys.anthropic)
-        : undefined;
+      // Priority: Environment variable > keyfile
+      let anthropicApiKey: string | undefined;
 
       if (!anthropicApiKey && process.env.ANTHROPIC_API_KEY) {
         anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);

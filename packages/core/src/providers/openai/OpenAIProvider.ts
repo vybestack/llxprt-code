@@ -47,6 +47,7 @@ export class OpenAIProvider implements IProvider {
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
   private conversationCache: ConversationCache;
+  private modelParams?: Record<string, unknown>;
 
   constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
     this.apiKey = apiKey;
@@ -55,12 +56,16 @@ export class OpenAIProvider implements IProvider {
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
-    this.openai = new OpenAI({
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      baseURL,
       // Allow browser environment for tests
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
-    });
+    };
+    // Only include baseURL if it's defined
+    if (baseURL) {
+      clientOptions.baseURL = baseURL;
+    }
+    this.openai = new OpenAI(clientOptions);
   }
 
   private requiresTextToolCallParsing(): boolean {
@@ -557,6 +562,7 @@ export class OpenAIProvider implements IProvider {
         | OpenAI.Chat.Completions.ChatCompletionTool[]
         | undefined,
       tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
+      ...this.modelParams,
     });
 
     let fullContent = '';
@@ -750,22 +756,30 @@ export class OpenAIProvider implements IProvider {
   setApiKey(apiKey: string): void {
     this.apiKey = apiKey;
     // Create a new OpenAI client with the updated API key
-    this.openai = new OpenAI({
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      baseURL: this.baseURL,
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
-    });
+    };
+    // Only include baseURL if it's defined
+    if (this.baseURL) {
+      clientOptions.baseURL = this.baseURL;
+    }
+    this.openai = new OpenAI(clientOptions);
   }
 
   setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
     // Create a new OpenAI client with the updated (or cleared) base URL
-    this.openai = new OpenAI({
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey: this.apiKey,
-      baseURL: this.baseURL,
       dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
-    });
+    };
+    // Only include baseURL if it's defined
+    if (this.baseURL) {
+      clientOptions.baseURL = this.baseURL;
+    }
+    this.openai = new OpenAI(clientOptions);
   }
 
   setConfig(config: IProviderConfig): void {
@@ -835,5 +849,25 @@ export class OpenAIProvider implements IProvider {
     _config?: unknown,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by OpenAI provider');
+  }
+
+  /**
+   * Set model parameters to be included in API calls
+   * @param params Parameters to merge with existing, or undefined to clear all
+   */
+  setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+    } else {
+      this.modelParams = { ...this.modelParams, ...params };
+    }
+  }
+
+  /**
+   * Get current model parameters
+   * @returns Current parameters or undefined if not set
+   */
+  getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 }

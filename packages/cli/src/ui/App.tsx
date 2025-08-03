@@ -108,8 +108,10 @@ import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
+import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { ProviderDialog } from './components/ProviderDialog.js';
+import { LoadProfileDialog } from './components/LoadProfileDialog.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -345,20 +347,53 @@ const App = (props: AppInternalProps) => {
     await openProviderModelDialogRaw();
   }, [providerManager, openProviderModelDialogRaw]);
 
-  // Update current model when provider or model changes
+  // Watch for model changes from config
   useEffect(() => {
-    const activeProvider = providerManager.getActiveProvider();
-    if (activeProvider) {
-      const providerModel = activeProvider.getCurrentModel?.();
-      if (providerModel && providerModel !== currentModel) {
+    const checkModelChange = () => {
+      const configModel = config.getModel();
+      const activeProvider = providerManager.getActiveProvider();
+
+      // Get the actual current model from provider
+      const providerModel = activeProvider?.getCurrentModel?.() || configModel;
+
+      // Update UI if different from what we're showing
+      if (providerModel !== currentModel) {
+        console.debug(
+          `[Model Update] Updating footer from ${currentModel} to ${providerModel}`,
+        );
         setCurrentModel(providerModel);
       }
-    }
-  }, [providerManager, currentModel]);
+    };
+
+    // Check immediately
+    checkModelChange();
+
+    // Check periodically (every 500ms)
+    const interval = setInterval(checkModelChange, 500);
+
+    return () => clearInterval(interval);
+  }, [config, providerManager, currentModel]); // Include currentModel in dependencies
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
+
+  const {
+    showDialog: isLoadProfileDialogOpen,
+    openDialog: openLoadProfileDialog,
+    handleSelect: handleProfileSelect,
+    closeDialog: exitLoadProfileDialog,
+    profiles,
+  } = useLoadProfileDialog({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+    config,
+    settings,
+  });
 
   const performMemoryRefresh = useCallback(async () => {
     addItem(
@@ -408,21 +443,7 @@ const App = (props: AppInternalProps) => {
     }
   }, [config, addItem, settings.merged]);
 
-  // Watch for model changes (e.g., from Flash fallback)
-  useEffect(() => {
-    const checkModelChange = () => {
-      const configModel = config.getModel();
-      if (configModel !== currentModel) {
-        setCurrentModel(configModel);
-      }
-    };
-
-    // Check immediately and then periodically
-    checkModelChange();
-    const interval = setInterval(checkModelChange, 1000); // Check every second
-
-    return () => clearInterval(interval);
-  }, [config, currentModel]);
+  // Removed - consolidated into single useEffect above
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -583,6 +604,7 @@ const App = (props: AppInternalProps) => {
     openEditorDialog,
     openProviderDialog,
     openProviderModelDialog,
+    openLoadProfileDialog,
     toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
@@ -1037,6 +1059,14 @@ const App = (props: AppInternalProps) => {
                 onClose={exitProviderModelDialog}
               />
             </Box>
+          ) : isLoadProfileDialogOpen ? (
+            <Box flexDirection="column">
+              <LoadProfileDialog
+                profiles={profiles}
+                onSelect={handleProfileSelect}
+                onClose={exitLoadProfileDialog}
+              />
+            </Box>
           ) : showPrivacyNotice ? (
             <PrivacyNotice onExit={handlePrivacyNoticeExit} config={config} />
           ) : (
@@ -1185,6 +1215,9 @@ const App = (props: AppInternalProps) => {
             promptTokenCount={sessionStats.lastPromptTokenCount}
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}
+            contextLimit={
+              config.getEphemeralSetting('context-limit') as number | undefined
+            }
           />
         </Box>
       </Box>

@@ -6,6 +6,10 @@
 
 // Export config
 export * from './config/config.js';
+export * from './config/profileManager.js';
+
+// Export types
+export * from './types/modelParams.js';
 
 // Export Core Logic
 export * from './core/client.js';

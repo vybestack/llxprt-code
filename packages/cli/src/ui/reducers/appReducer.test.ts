@@ -24,6 +24,7 @@ describe('appReducer', () => {
           providerModel: false,
           provider: false,
           privacy: false,
+          loadProfile: false,
         },
         warnings: new Map(),
         errors: {

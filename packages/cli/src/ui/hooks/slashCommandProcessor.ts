@@ -50,6 +50,7 @@ export const useSlashCommandProcessor = (
   openEditorDialog: () => void,
   openProviderDialog: () => void,
   openProviderModelDialog: () => void,
+  openLoadProfileDialog: () => void,
   toggleCorgiMode: () => void,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
@@ -366,6 +367,9 @@ export const useSlashCommandProcessor = (
                       case 'providerModel':
                         openProviderModelDialog();
                         return { type: 'handled' };
+                      case 'loadProfile':
+                        openLoadProfileDialog();
+                        return { type: 'handled' };
                       default: {
                         const unhandled: never = result.dialog;
                         throw new Error(
@@ -500,6 +504,7 @@ export const useSlashCommandProcessor = (
       openEditorDialog,
       openProviderDialog,
       openProviderModelDialog,
+      openLoadProfileDialog,
       setQuittingMessages,
       setShellConfirmationRequest,
       setSessionShellAllowlist,

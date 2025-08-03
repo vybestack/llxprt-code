@@ -139,6 +139,7 @@ describe('useSlashCommandProcessor', () => {
         vi.fn(), // openEditorDialog
         vi.fn(), // openProviderDialog
         vi.fn(), // openProviderModelDialog
+        vi.fn(), // openLoadProfileDialog
         vi.fn(), // toggleCorgiMode
         mockSetQuittingMessages,
         vi.fn(), // openPrivacyNotice
@@ -828,6 +829,7 @@ describe('useSlashCommandProcessor', () => {
           vi.fn(), // openEditorDialog,
           vi.fn(), // openProviderDialog
           vi.fn(), // openProviderModelDialog
+          vi.fn(), // openLoadProfileDialog
           vi.fn(), // toggleCorgiMode
           mockSetQuittingMessages,
           vi.fn(), // openPrivacyNotice
