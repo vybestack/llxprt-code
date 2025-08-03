@@ -16,7 +16,7 @@ test('run_shell_command handles UTF-8 multibyte output correctly (integration)',
   const rig = new TestRig();
   rig.setup(t.name);
 
-  const prompt = `Execute exactly: printf "${MULTIBYTE}"`;
+  const prompt = `Use the run_shell_command tool to execute the following command: printf "${MULTIBYTE}"`;
   const result = rig.run(prompt);
 
   assert.ok(
