@@ -1127,27 +1127,39 @@ describe('--profile-load flag functionality', () => {
   });
 
   it('should continue without profile if loading fails', async () => {
-    // Mock profile loading failure
-    mockProfileManager.loadProfile.mockRejectedValue(
-      new Error('Profile not found'),
-    );
+    // Save original env var
+    const originalProvider = process.env.LLXPRT_DEFAULT_PROVIDER;
+    // Clear the environment variable that CI sets
+    delete process.env.LLXPRT_DEFAULT_PROVIDER;
 
-    process.argv = [
-      'node',
-      'script.js',
-      '--profile-load',
-      'non-existent-profile',
-    ];
-    const argv = await parseArguments();
-    const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
-    };
+    try {
+      // Mock profile loading failure
+      mockProfileManager.loadProfile.mockRejectedValue(
+        new Error('Profile not found'),
+      );
 
-    // Should not throw, but continue with default settings
-    const config = await loadCliConfig(settings, [], 'test-session', argv);
+      process.argv = [
+        'node',
+        'script.js',
+        '--profile-load',
+        'non-existent-profile',
+      ];
+      const argv = await parseArguments();
+      const settings: Settings = {
+        defaultModel: 'gemini-2.5-pro',
+      };
 
-    expect(config.getModel()).toBe('gemini-2.5-pro');
-    expect(config.getProvider()).toBe('gemini'); // Default provider is 'gemini' not undefined
+      // Should not throw, but continue with default settings
+      const config = await loadCliConfig(settings, [], 'test-session', argv);
+
+      expect(config.getModel()).toBe('gemini-2.5-pro');
+      expect(config.getProvider()).toBe('gemini'); // Default provider is 'gemini' not undefined
+    } finally {
+      // Restore original env var
+      if (originalProvider !== undefined) {
+        process.env.LLXPRT_DEFAULT_PROVIDER = originalProvider;
+      }
+    }
   });
 
   it('should merge profile ephemeral settings with existing settings', async () => {
