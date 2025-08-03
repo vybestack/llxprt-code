@@ -57,6 +57,21 @@ import {
 import { useSessionStats } from '../contexts/SessionContext.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
+  // Special handling for function responses
+  // When we have multiple function responses, they must remain as separate parts
+  // Check if all items are function response parts
+  const allFunctionResponses = list.every((item) => {
+    if (typeof item === 'string') return false;
+    if (Array.isArray(item)) return false;
+    return item && typeof item === 'object' && 'functionResponse' in item;
+  });
+
+  if (allFunctionResponses) {
+    // Return array of function response parts without merging
+    return list as Part[];
+  }
+
+  // Original merging logic for non-function-response content
   const resultParts: Part[] = [];
   for (const item of list) {
     if (Array.isArray(item)) {

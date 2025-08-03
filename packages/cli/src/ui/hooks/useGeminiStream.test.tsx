@@ -253,6 +253,63 @@ describe('mergePartListUnions', () => {
       { text: 'Last array item' },
     ]);
   });
+
+  it('should preserve multiple function responses as separate parts', () => {
+    const functionResponse1: Part = {
+      functionResponse: {
+        id: 'call-1',
+        name: 'FindFiles',
+        response: { output: 'Found 10 files' },
+      },
+    };
+    const functionResponse2: Part = {
+      functionResponse: {
+        id: 'call-2',
+        name: 'ReadFile',
+        response: { output: 'File contents here' },
+      },
+    };
+
+    const list: PartListUnion[] = [functionResponse1, functionResponse2];
+    const result = mergePartListUnions(list);
+
+    // When all items are function responses, they should remain as separate parts
+    expect(result).toEqual([functionResponse1, functionResponse2]);
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as Part[]).length).toBe(2);
+  });
+
+  it('should merge mixed content normally when not all function responses', () => {
+    const functionResponse: Part = {
+      functionResponse: {
+        id: 'call-1',
+        name: 'Tool1',
+        response: { output: 'Result' },
+      },
+    };
+    const textPart: Part = { text: 'Some text' };
+
+    const list: PartListUnion[] = [functionResponse, textPart];
+    const result = mergePartListUnions(list);
+
+    // Mixed content should be merged normally
+    expect(result).toEqual([functionResponse, textPart]);
+  });
+
+  it('should handle string items in PartListUnion arrays', () => {
+    const list: PartListUnion[] = [
+      'plain string 1',
+      ['plain string 2', { text: 'part in array' }],
+      { text: 'regular part' },
+    ];
+    const result = mergePartListUnions(list);
+    expect(result).toEqual([
+      { text: 'plain string 1' },
+      { text: 'plain string 2' },
+      { text: 'part in array' },
+      { text: 'regular part' },
+    ]);
+  });
 });
 
 // --- Tests for useGeminiStream Hook ---
