@@ -108,6 +108,22 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 git commit --no-gpg-sign -m "your commit message"
 ```
 
+## Code Verification and Deployment Rules
+
+### Never Declare Done Without Full Verification
+
+- **NEVER** declare something done unless it has compiled, tested, and linted
+- **NEVER** push without: compile → test → lint → format
+- **ANY** code changes require restarting the entire verification cycle
+- If you compile, test, lint and get an error and change code, you MUST compile, test, lint again
+- You may commit locally before risky changes, but NEVER push until the whole cycle passes
+- **NEVER** push without explicit user permission - they need to test the UI first
+
+### Communication Style
+
+- Never bother with apologies or "You're absolutely right"
+- Be direct and focus on the task
+
 # important-instruction-reminders
 
 - Use subagents for complex multi-step tasks
@@ -115,3 +131,4 @@ git commit --no-gpg-sign -m "your commit message"
 - Launch multiple subagents concurrently when possible
 - Always provide complete context to subagents
 - Trust subagent outputs - they're specialized for their domains
+- NEVER push without full verification cycle AND user permission
