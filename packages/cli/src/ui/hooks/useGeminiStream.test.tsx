@@ -618,15 +618,20 @@ describe('useGeminiStream', () => {
 
     await waitFor(() => {
       expect(mockMarkToolsAsSubmitted).toHaveBeenCalledTimes(1);
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
+      // With the fix, multiple responses are sent individually
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
     });
 
-    const expectedMergedResponse = mergePartListUnions([
+    // Verify each response was sent individually
+    expect(mockSendMessageStream).toHaveBeenNthCalledWith(
+      1,
       toolCall1ResponseParts,
+      expect.any(AbortSignal),
+      'prompt-id-2',
+    );
+    expect(mockSendMessageStream).toHaveBeenNthCalledWith(
+      2,
       toolCall2ResponseParts,
-    ]);
-    expect(mockSendMessageStream).toHaveBeenCalledWith(
-      expectedMergedResponse,
       expect.any(AbortSignal),
       'prompt-id-2',
     );
