@@ -121,8 +121,8 @@ export class TestRig {
     mkdirSync(this.testDir, { recursive: true });
 
     // Create a settings file to point the CLI to the local collector
-    const geminiDir = join(this.testDir, '.gemini');
-    mkdirSync(geminiDir, { recursive: true });
+    const llxprtDir = join(this.testDir, '.llxprt');
+    mkdirSync(llxprtDir, { recursive: true });
     // In sandbox mode, use an absolute path for telemetry inside the container
     // The container mounts the test directory at the same path as the host
     const telemetryPath =
@@ -141,7 +141,7 @@ export class TestRig {
       ...options.settings, // Allow tests to override/add settings
     };
     writeFileSync(
-      join(geminiDir, 'settings.json'),
+      join(llxprtDir, 'settings.json'),
       JSON.stringify(settings, null, 2),
     );
   }
@@ -477,7 +477,7 @@ export class TestRig {
                 }
               } else if (
                 obj.attributes &&
-                obj.attributes['event.name'] === 'gemini_cli.tool_call'
+                obj.attributes['event.name'] === 'llxprt_cli.tool_call'
               ) {
                 logs.push({
                   timestamp: obj.attributes['event.timestamp'],
