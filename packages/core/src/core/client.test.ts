@@ -14,7 +14,11 @@ import {
   GoogleGenAI,
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
-import { AuthType, ContentGenerator, ContentGeneratorConfig } from './contentGenerator.js';
+import {
+  AuthType,
+  ContentGenerator,
+  ContentGeneratorConfig,
+} from './contentGenerator.js';
 import type { Mock } from 'vitest';
 import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';

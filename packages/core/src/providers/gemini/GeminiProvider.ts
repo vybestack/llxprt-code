@@ -42,6 +42,7 @@ export class GeminiProvider implements IProvider {
   private modelExplicitlySet: boolean = false;
   private authDetermined: boolean = false;
   private baseURL?: string;
+  private modelParams?: Record<string, unknown>;
   private toolSchemas:
     | Array<{
         functionDeclarations: Array<{
@@ -417,6 +418,7 @@ export class GeminiProvider implements IProvider {
           systemInstruction,
           config: {
             tools: geminiTools,
+            ...this.modelParams,
           },
         };
 
@@ -546,6 +548,7 @@ export class GeminiProvider implements IProvider {
       systemInstruction,
       config: {
         tools: geminiTools,
+        ...this.modelParams,
       },
     };
 
@@ -911,8 +914,9 @@ export class GeminiProvider implements IProvider {
     this.determineBestAuth();
   }
 
-  setBaseURL(baseURL: string): void {
-    this.baseURL = baseURL;
+  setBaseUrl(baseUrl?: string): void {
+    // If no baseUrl is provided or it's an empty string, clear to undefined
+    this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
   }
 
   /**
@@ -957,6 +961,24 @@ export class GeminiProvider implements IProvider {
     if (this.config) {
       this.config.setModel(modelId);
     }
+  }
+
+  /**
+   * Sets additional model parameters to include in requests
+   */
+  setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+    } else {
+      this.modelParams = { ...this.modelParams, ...params };
+    }
+  }
+
+  /**
+   * Gets the current model parameters
+   */
+  getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 
   /**
