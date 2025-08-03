@@ -7,6 +7,7 @@ import { IMessage } from '../IMessage.js';
 import { retryWithBackoff } from '../../utils/retry.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
+import { IProviderConfig } from '../types/IProviderConfig.js';
 
 export class AnthropicProvider implements IProvider {
   name: string = 'anthropic';
@@ -15,6 +16,7 @@ export class AnthropicProvider implements IProvider {
   toolFormat: ToolFormat = 'anthropic';
   private apiKey: string;
   private baseURL?: string;
+  private config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-latest'; // Default model using latest alias
   private modelParams?: Record<string, unknown>;
 
@@ -42,13 +44,17 @@ export class AnthropicProvider implements IProvider {
     { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
   ];
 
-  constructor(apiKey: string, baseURL?: string) {
+  constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
+    this.config = config;
+
     this.anthropic = new Anthropic({
-      apiKey,
+      apiKey: apiKey || '',
       baseURL,
+      dangerouslyAllowBrowser: true,
     });
+
     this.toolFormatter = new ToolFormatter();
   }
 
@@ -349,6 +355,7 @@ export class AnthropicProvider implements IProvider {
     this.anthropic = new Anthropic({
       apiKey,
       baseURL: this.baseURL,
+      dangerouslyAllowBrowser: true,
     });
   }
 
@@ -359,6 +366,7 @@ export class AnthropicProvider implements IProvider {
     this.anthropic = new Anthropic({
       apiKey: this.apiKey,
       baseURL: this.baseURL,
+      dangerouslyAllowBrowser: true,
     });
   }
 

@@ -46,7 +46,6 @@ import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';
 import {
   setProviderApiKey,
-  setProviderApiKeyFromFile,
   setProviderBaseUrl,
 } from './providers/providerConfigUtils.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
@@ -360,18 +359,40 @@ export async function main() {
 
     // Handle --keyfile
     if (argv.keyfile) {
-      const result = await setProviderApiKeyFromFile(
-        providerManager,
-        settings,
-        argv.keyfile,
-        config,
-      );
-      if (!result.success) {
-        console.error(chalk.red(result.message));
+      try {
+        // Read the API key from file
+        const resolvedPath = argv.keyfile.replace(/^~/, os.homedir());
+        const apiKey = await fs.readFile(resolvedPath, 'utf-8');
+        const trimmedKey = apiKey.trim();
+
+        if (!trimmedKey) {
+          console.error(chalk.red('The specified file is empty'));
+          process.exit(1);
+        }
+
+        const result = await setProviderApiKey(
+          providerManager,
+          settings,
+          trimmedKey,
+          config,
+        );
+
+        if (!result.success) {
+          console.error(chalk.red(result.message));
+          process.exit(1);
+        }
+
+        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
+        if (config.getDebugMode()) {
+          console.debug(message);
+        }
+      } catch (error) {
+        console.error(
+          chalk.red(
+            `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
         process.exit(1);
-      }
-      if (config.getDebugMode()) {
-        console.debug(result.message);
       }
     }
 
@@ -683,18 +704,40 @@ async function loadNonInteractiveConfig(
 
     // Handle --keyfile
     if (argv.keyfile) {
-      const result = await setProviderApiKeyFromFile(
-        providerManager,
-        settings,
-        argv.keyfile,
-        finalConfig,
-      );
-      if (!result.success) {
-        console.error(chalk.red(result.message));
+      try {
+        // Read the API key from file
+        const resolvedPath = argv.keyfile.replace(/^~/, os.homedir());
+        const apiKey = await fs.readFile(resolvedPath, 'utf-8');
+        const trimmedKey = apiKey.trim();
+
+        if (!trimmedKey) {
+          console.error(chalk.red('The specified file is empty'));
+          process.exit(1);
+        }
+
+        const result = await setProviderApiKey(
+          providerManager,
+          settings,
+          trimmedKey,
+          finalConfig,
+        );
+
+        if (!result.success) {
+          console.error(chalk.red(result.message));
+          process.exit(1);
+        }
+
+        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
+        if (finalConfig.getDebugMode()) {
+          console.debug(message);
+        }
+      } catch (error) {
+        console.error(
+          chalk.red(
+            `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
         process.exit(1);
-      }
-      if (finalConfig.getDebugMode()) {
-        console.debug(result.message);
       }
     }
 

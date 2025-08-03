@@ -53,7 +53,11 @@ export class GeminiProvider implements IProvider {
       }>
     | undefined;
 
-  constructor() {
+  constructor(apiKey?: string, baseURL?: string, config?: Config) {
+    // For consistency with other providers
+    this.apiKey = apiKey;
+    // baseURL is not used by Gemini but kept for consistent interface
+    this.config = config;
     // Do not determine auth mode on instantiation.
     // This will be done lazily when a chat completion is requested.
   }

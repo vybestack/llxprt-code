@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
+import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
 describe('AnthropicProvider - modelParams', () => {
   let provider: AnthropicProvider;
 
   beforeEach(() => {
-    provider = new AnthropicProvider('test-api-key');
+    provider = new AnthropicProvider(
+      'test-api-key',
+      undefined,
+      TEST_PROVIDER_CONFIG,
+    );
   });
 
   describe('setModelParams', () => {
