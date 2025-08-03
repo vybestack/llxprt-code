@@ -319,7 +319,7 @@ const notifyUser = (email: Email): void => emailService.sendWelcome(email);
 
 ### Start of Session:
 
-1. Read CLAUDE.md for project-specific context
+1. Read your project memory for project-specific context
 2. Understand the current task
 3. Plan the TDD approach
 
