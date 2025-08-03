@@ -4,18 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// For test environments, ensure NODE_ENV is set
-if (typeof process !== 'undefined' && !process.env.NODE_ENV) {
-  // Check for common test indicators
-  if (
-    typeof globalThis !== 'undefined' &&
-    'window' in globalThis &&
-    'document' in globalThis
-  ) {
-    process.env.NODE_ENV = 'test';
-  }
-}
-
 import {
   Config,
   ProviderManager,
@@ -69,17 +57,13 @@ function getFileSystem(): IFileSystem {
   return fileSystemInstance;
 }
 
-export function getProviderManager(config?: Config): ProviderManager {
+export function getProviderManager(
+  config?: Config,
+  allowBrowserEnvironment = false,
+): ProviderManager {
   if (!providerManagerInstance) {
     providerManagerInstance = new ProviderManager();
     const fs = getFileSystem();
-
-    // Check if we're in test environment
-    // In vitest with jsdom, we need to allow browser environment
-    const isTestEnvironment =
-      process.env.NODE_ENV === 'test' ||
-      process.env.VITEST === 'true' ||
-      (typeof globalThis !== 'undefined' && 'vi' in globalThis);
 
     // Load user settings
     let userSettings: Settings | undefined;
@@ -139,7 +123,7 @@ export function getProviderManager(config?: Config): ProviderManager {
     }
 
     const openaiBaseUrl = process.env.OPENAI_BASE_URL;
-    if (!isTestEnvironment && (process.env.DEBUG || process.env.VERBOSE)) {
+    if (process.env.DEBUG || process.env.VERBOSE) {
       console.log('[ProviderManager] Initializing OpenAI provider with:', {
         hasApiKey: !!openaiApiKey,
         baseUrl: openaiBaseUrl || 'default',
@@ -152,7 +136,7 @@ export function getProviderManager(config?: Config): ProviderManager {
       textToolCallModels: userSettings?.textToolCallModels,
       providerToolFormatOverrides: userSettings?.providerToolFormatOverrides,
       openaiResponsesEnabled: userSettings?.openaiResponsesEnabled,
-      allowBrowserEnvironment: isTestEnvironment,
+      allowBrowserEnvironment,
     };
     const openaiProvider = new OpenAIProvider(
       openaiApiKey || '',
@@ -185,7 +169,7 @@ export function getProviderManager(config?: Config): ProviderManager {
     // Create provider config from user settings
     const anthropicProviderConfig = {
       defaultModel: userSettings?.defaultModel,
-      allowBrowserEnvironment: isTestEnvironment,
+      allowBrowserEnvironment,
     };
     const anthropicProvider = new AnthropicProvider(
       anthropicApiKey || '',

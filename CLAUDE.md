@@ -90,9 +90,9 @@ Task(
 
 ## Git Commit Signing Policy
 
-### Never Sign Commits
+### Never Co-sign Commits
 
-NEVER sign git commits with GPG or include the Claude commit signature. Always commit without signatures.
+NEVER include the Claude commit signature/co-authorship.
 
 **Do NOT add:**
 
@@ -100,12 +100,6 @@ NEVER sign git commits with GPG or include the Claude commit signature. Always c
 🤖 Generated with [Claude Code](https://claude.ai/code)
 
 Co-Authored-By: Claude <noreply@anthropic.com>
-```
-
-**ALWAYS use:**
-
-```bash
-git commit --no-gpg-sign -m "your commit message"
 ```
 
 ## Code Verification and Deployment Rules
