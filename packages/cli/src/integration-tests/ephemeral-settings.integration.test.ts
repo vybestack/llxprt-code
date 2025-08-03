@@ -144,7 +144,7 @@ describe('Ephemeral Settings Integration Tests', () => {
   describe('Custom Headers Application', () => {
     it('should make custom headers available for API requests', async () => {
       // Create a ProviderManager
-      const providerManager = new ProviderManager(config);
+      const providerManager = new ProviderManager();
       config.setProviderManager(providerManager);
 
       // Set custom headers via ephemeral settings

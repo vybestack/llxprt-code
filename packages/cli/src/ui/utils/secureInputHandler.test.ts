@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { SecureInputHandler } from './secureInputHandler';
+import { SecureInputHandler } from './secureInputHandler.js';
 import * as os from 'os';
 import * as path from 'path';
 import { writeFileSync } from 'fs';

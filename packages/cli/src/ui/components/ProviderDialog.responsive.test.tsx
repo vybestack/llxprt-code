@@ -147,7 +147,7 @@ describe('ProviderDialog Responsive Behavior', () => {
       expect(output).toMatch(/● anthropic.*○/); // Selected and another on same line or nearby
 
       // Should show reasonable number of columns (2-3 for standard width)
-      const lines = output.split('\n');
+      const lines = output!.split('\n');
       const providerLines = lines.filter(
         (line) => line.includes('○') || line.includes('●'),
       );
@@ -203,7 +203,7 @@ describe('ProviderDialog Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show multiple columns efficiently using wide width
-      const lines = output.split('\n');
+      const lines = output!.split('\n');
       const contentLines = lines.filter(
         (line) => line.includes('○') || line.includes('●'),
       );

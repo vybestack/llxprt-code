@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { findLastSafeSplitPoint } from './markdownUtilities';
+import { findLastSafeSplitPoint } from './markdownUtilities.js';
 
 describe('markdownUtilities', () => {
   describe('findLastSafeSplitPoint', () => {

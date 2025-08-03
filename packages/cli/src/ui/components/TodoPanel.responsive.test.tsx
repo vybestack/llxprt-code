@@ -26,6 +26,8 @@ const mockTodoContext = {
   todos: [] as Todo[],
   addTodo: vi.fn(),
   updateTodo: vi.fn(),
+  updateTodos: vi.fn(),
+  refreshTodos: vi.fn(),
   markCompleted: vi.fn(),
   markInProgress: vi.fn(),
   removeTodo: vi.fn(),
@@ -47,16 +49,19 @@ const testTodos: Todo[] = [
     content:
       'This is a very long todo item that should be truncated at different widths',
     status: 'completed',
+    priority: 'medium',
   },
   {
     id: '2',
     content: 'Short task',
     status: 'in_progress',
+    priority: 'high',
   },
   {
     id: '3',
     content: 'Another pending task with moderate length content',
     status: 'pending',
+    priority: 'low',
   },
 ];
 
@@ -131,10 +136,10 @@ describe('TodoPanel Responsive Behavior', () => {
       expect(output).toContain('Short task'); // Short enough to show fully
 
       // The long content should either show fully or with much more visible text
-      const hasFullContent = output.includes(
+      const hasFullContent = output!.includes(
         'This is a very long todo item that should be truncated at different widths',
       );
-      const hasTruncatedContent = output.match(
+      const hasTruncatedContent = output!.match(
         /This is a very long todo.*\.\.\./,
       );
 
@@ -258,6 +263,7 @@ describe('TodoPanel Responsive Behavior', () => {
           content:
             'This is a very long todo item that should use more width for better readability instead of being truncated too early',
           status: 'pending',
+          priority: 'medium',
         },
       ];
 
@@ -278,7 +284,7 @@ describe('TodoPanel Responsive Behavior', () => {
       // This means more of the content should be visible before truncation
 
       // Count visible characters before truncation
-      const contentMatch = output.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+      const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
       if (contentMatch) {
         const visibleContent = contentMatch[1];
 
@@ -302,6 +308,7 @@ describe('TodoPanel Responsive Behavior', () => {
           content:
             'This extremely long todo item content should demonstrate the improved truncation behavior by showing much more text',
           status: 'pending',
+          priority: 'medium',
         },
       ];
 
@@ -326,7 +333,7 @@ describe('TodoPanel Responsive Behavior', () => {
         );
 
         const output = lastFrame();
-        const contentMatch = output.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+        const contentMatch = output!.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
 
         if (contentMatch) {
           const visibleContent = contentMatch[1];

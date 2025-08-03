@@ -609,7 +609,9 @@ function createMockProvider(name: string): IProvider & { baseUrl?: string } {
       provider.state = {};
     },
 
-    getModels: async () => [{ id: 'test-model', name: 'Test Model' }],
+    getModels: async () => [{ id: 'test-model', name: 'Test Model', provider: name, supportedToolFormats: [] }],
+
+    getDefaultModel: () => 'test-model',
 
     async *generateChatCompletion() {
       yield { content: 'test response' };

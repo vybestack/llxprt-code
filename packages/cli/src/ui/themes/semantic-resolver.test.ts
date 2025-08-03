@@ -191,7 +191,7 @@ describe('semantic-resolver', () => {
         AccentGreen: '#A6E3A1',
         AccentYellow: '#F9E2AF',
         AccentRed: '#F38BA8',
-        // DiffAdded is missing
+        DiffAdded: '#A6E3A1', // Using AccentGreen as fallback
         DiffRemoved: '#430000',
         Comment: '#6C7086',
         Gray: '#6C7086',
@@ -199,6 +199,7 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffAdded);
 
+      // DiffAdded should be used for secondary background
       expect(semanticColors.background.secondary).toBe('#A6E3A1');
     });
 
@@ -215,14 +216,14 @@ describe('semantic-resolver', () => {
         AccentYellow: '#F9E2AF',
         AccentRed: '#F38BA8',
         DiffAdded: '#28350B',
-        // DiffRemoved is missing
+        DiffRemoved: '#F38BA8', // Using AccentRed as fallback
         Comment: '#6C7086',
         Gray: '#6C7086',
       };
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffRemoved);
 
-      // Secondary background should still use DiffAdded when available
+      // Secondary background should use DiffAdded when available
       expect(semanticColors.background.secondary).toBe('#28350B');
     });
   });

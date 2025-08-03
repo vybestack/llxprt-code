@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { IProvider, IMessage, ITool } from '@vybestack/llxprt-code-core';
+import { 
+  IProvider, 
+  IMessage, 
+  ITool, 
+  ContentGeneratorRole 
+} from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
@@ -98,8 +103,9 @@ function createMockProvider(name: string, responseDelay = 0): IProvider {
       if (responseDelay > 0) {
         await new Promise((resolve) => setTimeout(resolve, responseDelay));
       }
-      yield { content: `Response from ${name}`, role: 'assistant' };
+      yield { content: `Response from ${name}`, role: ContentGeneratorRole.ASSISTANT };
     },
+    getDefaultModel: vi.fn().mockReturnValue(`${name}-default`),
     getServerTools: vi.fn().mockReturnValue([]),
     invokeServerTool: vi.fn().mockResolvedValue({}),
   };
@@ -108,8 +114,7 @@ function createMockProvider(name: string, responseDelay = 0): IProvider {
 function createConfigWithLogging(enabled: boolean): Config {
   return {
     getConversationLoggingEnabled: () => enabled,
-    updateSettings: vi.fn(),
-  };
+  } as Config;
 }
 
 async function consumeAsyncIterable<T>(
@@ -126,7 +131,7 @@ function createTypicalConversation(messageCount: number): IMessage[] {
   const messages: IMessage[] = [];
   for (let i = 0; i < messageCount; i++) {
     messages.push({
-      role: i % 2 === 0 ? 'user' : 'assistant',
+      role: i % 2 === 0 ? ContentGeneratorRole.USER : ContentGeneratorRole.ASSISTANT,
       content: `Message ${i + 1}: This is a typical conversation message with moderate length content.`,
     });
   }
@@ -258,7 +263,7 @@ describe('Conversation Logging Performance Impact', () => {
       storage,
     );
 
-    const message: IMessage[] = [{ role: 'user', content: 'Test message' }];
+    const message: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test message' }];
 
     // Measure wrapped provider with logging disabled
     measurer.reset();
@@ -378,7 +383,7 @@ describe('Conversation Logging Performance Impact', () => {
 
     for (const size of contentSizes) {
       const content = 'x'.repeat(size);
-      const message: IMessage = { role: 'user', content };
+      const message: IMessage = { role: ContentGeneratorRole.USER, content };
 
       measurer.reset();
       for (let i = 0; i < 100; i++) {
@@ -606,7 +611,7 @@ describe('Conversation Logging Performance Impact', () => {
     );
 
     const message: IMessage[] = [
-      { role: 'user', content: 'Switch test message' },
+      { role: ContentGeneratorRole.USER, content: 'Switch test message' },
     ];
 
     // Measure switching overhead

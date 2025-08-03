@@ -127,9 +127,10 @@ describe('semantic tokens system', () => {
         AccentGreen: '#27AE60',
         AccentYellow: '#F1C40F',
         AccentRed: '#E74C3C',
+        DiffAdded: '#27AE60', // Using AccentGreen as fallback
+        DiffRemoved: '#E74C3C', // Using AccentRed as fallback
         Comment: '#7F8C8D',
         Gray: '#95A5A6',
-        // DiffAdded and DiffRemoved missing - but will be filled from DEFAULT_THEME
       };
 
       themeManager.loadCustomThemes({ NoDiffTheme: customThemeNoDiff });
@@ -138,8 +139,8 @@ describe('semantic tokens system', () => {
 
       const semanticColors = themeManager.getSemanticColors();
 
-      // Custom themes are merged with DEFAULT_THEME, so DiffAdded will come from Green Screen theme
-      expect(semanticColors.background.secondary).toBe('#00ff00'); // From DEFAULT_THEME (GreenScreen)
+      // Custom theme now has DiffAdded property set
+      expect(semanticColors.background.secondary).toBe('#27AE60'); // Using AccentGreen fallback
     });
   });
 
@@ -322,6 +323,8 @@ describe('semantic tokens system', () => {
         AccentGreen: '#27AE60',
         AccentYellow: '#F1C40F',
         AccentRed: '#E74C3C',
+        DiffAdded: '#27AE60', // Using AccentGreen as fallback
+        DiffRemoved: '#E74C3C', // Using AccentRed as fallback
         Comment: '#7F8C8D',
         Gray: '#95A5A6',
       };

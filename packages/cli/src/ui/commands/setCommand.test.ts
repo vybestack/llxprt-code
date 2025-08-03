@@ -9,7 +9,7 @@ import { setCommand } from './setCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { CommandContext } from './types.js';
 import { IProvider } from '@vybestack/llxprt-code-core';
-import { getProviderManager } from '../../providers/providerManagerInstance.js'; // eslint-disable-line @typescript-eslint/no-unused-vars
+// import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 // Mock the provider manager module
 vi.mock('../../providers/providerManagerInstance.js', () => ({
@@ -18,12 +18,20 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
 
 describe('setCommand', () => {
   let context: CommandContext;
-  let mockProvider: IProvider;
+  let mockProvider: IProvider & { 
+    setModelParams: ReturnType<typeof vi.fn>; 
+    getModelParams: ReturnType<typeof vi.fn>; 
+  };
   let mockProviderManager: {
     getActiveProvider: ReturnType<typeof vi.fn>;
   };
   let mockConfig: {
     getProviderManager: ReturnType<typeof vi.fn>;
+    setEphemeralSetting: ReturnType<typeof vi.fn>;
+    getEphemeralSetting: ReturnType<typeof vi.fn>;
+    getEphemeralSettings: ReturnType<typeof vi.fn>;
+    getGeminiClient: ReturnType<typeof vi.fn>;
+    getSettingsService: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -32,10 +40,14 @@ describe('setCommand', () => {
       name: 'test-provider',
       getModels: vi.fn().mockResolvedValue([]),
       generateChatCompletion: vi.fn(),
+      getDefaultModel: vi.fn().mockReturnValue('default'),
       getServerTools: vi.fn().mockReturnValue([]),
       invokeServerTool: vi.fn().mockResolvedValue(undefined),
       setModelParams: vi.fn(),
       getModelParams: vi.fn(),
+    } as IProvider & { 
+      setModelParams: ReturnType<typeof vi.fn>; 
+      getModelParams: ReturnType<typeof vi.fn>; 
     };
 
     // Create a mock provider manager

@@ -15,7 +15,7 @@ import {
 } from 'vitest';
 import React, { act } from 'react';
 import { renderHook } from '@testing-library/react';
-import { useEditorSettings } from './useEditorSettings';
+import { useEditorSettings } from './useEditorSettings.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { MessageType, type HistoryItem } from '../types.js';
 import {
@@ -61,6 +61,9 @@ describe('useEditorSettings', () => {
         providerModel: false,
         provider: false,
         privacy: false,
+        loadProfile: false,
+        tools: false,
+        oauthCode: false,
       },
       warnings: new Map(),
       errors: {

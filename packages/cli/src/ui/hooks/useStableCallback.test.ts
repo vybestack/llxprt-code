@@ -5,7 +5,7 @@
  */
 
 import { renderHook } from '@testing-library/react';
-import { useStableCallback, useStableGetter } from './useStableCallback';
+import { useStableCallback, useStableGetter } from './useStableCallback.js';
 
 describe('useStableCallback', () => {
   it('should maintain a stable callback reference', () => {
@@ -43,9 +43,11 @@ describe('useStableCallback', () => {
   });
 
   it('should pass arguments correctly', () => {
-    const { result } = renderHook(() =>
-      useStableCallback((a: number, b: number) => a + b),
-    );
+    const addFunction = (...args: unknown[]) => {
+      const [a, b] = args as [number, number];
+      return a + b;
+    };
+    const { result } = renderHook(() => useStableCallback(addFunction));
 
     expect(result.current(2, 3)).toBe(5);
   });

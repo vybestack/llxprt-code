@@ -126,6 +126,8 @@ describe('themeManager.loadCustomThemes', () => {
     AccentGreen: '#080',
     AccentYellow: '#FF0',
     AccentRed: '#F00',
+    DiffAdded: '#0F0',
+    DiffRemoved: '#F00',
     Comment: '#888',
     Gray: '#888',
   };

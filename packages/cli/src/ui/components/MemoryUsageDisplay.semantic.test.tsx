@@ -22,7 +22,7 @@ vi.mock('../utils/formatters.js', () => ({
 
 describe('MemoryUsageDisplay Semantic Colors', () => {
   let originalTheme: string;
-  let originalMemoryUsage: () => NodeJS.MemoryUsage;
+  let originalMemoryUsage: typeof process.memoryUsage;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,7 +49,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
       heapUsed: 0,
       external: 0,
       arrayBuffers: 0,
-    }));
+    })) as unknown as typeof process.memoryUsage;
 
     const { lastFrame, unmount } = render(<MemoryUsageDisplay />);
 
@@ -71,7 +71,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
       heapUsed: 0,
       external: 0,
       arrayBuffers: 0,
-    }));
+    })) as unknown as typeof process.memoryUsage;
 
     const { lastFrame, unmount } = render(<MemoryUsageDisplay />);
 
@@ -93,7 +93,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
       heapUsed: 0,
       external: 0,
       arrayBuffers: 0,
-    }));
+    })) as unknown as typeof process.memoryUsage;
 
     const { lastFrame, unmount } = render(<MemoryUsageDisplay />);
 
@@ -115,7 +115,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
       heapUsed: 0,
       external: 0,
       arrayBuffers: 0,
-    }));
+    })) as unknown as typeof process.memoryUsage;
 
     const { lastFrame, unmount } = render(<MemoryUsageDisplay />);
 
@@ -138,7 +138,7 @@ describe('MemoryUsageDisplay Semantic Colors', () => {
       heapUsed: 0,
       external: 0,
       arrayBuffers: 0,
-    }));
+    })) as unknown as typeof process.memoryUsage;
 
     const { lastFrame, unmount } = render(<MemoryUsageDisplay />);
 

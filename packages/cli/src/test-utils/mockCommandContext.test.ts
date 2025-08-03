@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect } from 'vitest';
-import { createMockCommandContext } from './mockCommandContext';
+import { createMockCommandContext } from './mockCommandContext.js';
 
 describe('createMockCommandContext', () => {
   it('should return a valid CommandContext object with default mocks', () => {

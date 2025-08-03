@@ -112,6 +112,13 @@ export async function activate(context: vscode.ExtensionContext) {
       terminal.show();
       terminal.sendText(llxprtCmd);
     }),
+    vscode.commands.registerCommand('llxprt-code.showNotices', async () => {
+      const noticePath = vscode.Uri.joinPath(
+        context.extensionUri,
+        'NOTICES.txt',
+      );
+      await vscode.window.showTextDocument(noticePath);
+    }),
   );
 }
 

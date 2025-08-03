@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { GitStatsTracker } from './git-stats';
+import { GitStatsTracker } from './git-stats.js';
 import { Config } from '@vybestack/llxprt-code-core';
 
 describe('Git Stats Integration', () => {

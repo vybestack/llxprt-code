@@ -112,9 +112,7 @@ describe('CLI --profile-load Integration Tests', () => {
           temperature: 0.5,
           maxTokens: 2000,
         },
-        ephemeralSettings: {
-          debug: true,
-        },
+        ephemeralSettings: {},
       };
 
       await profileManager.saveProfile('test-profile', profile);
@@ -370,9 +368,7 @@ describe('CLI --profile-load Integration Tests', () => {
           maxTokens: 1500,
           topP: 0.9,
         },
-        ephemeralSettings: {
-          debug: true,
-        },
+        ephemeralSettings: {},
       };
 
       await profileManager.saveProfile('params-profile', profile);

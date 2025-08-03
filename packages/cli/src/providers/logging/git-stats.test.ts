@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GitStatsTracker } from './git-stats';
-import { Config } from '@vybestack/llxprt-code-core';
+import { GitStatsTracker } from './git-stats.js';
+import { Config, TelemetryTarget } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -80,7 +80,7 @@ describe('Git Statistics Tracking', () => {
         model: 'gemini-flash',
         telemetry: {
           logConversations: true,
-          target: 'gcp', // Even with GCP target
+          target: TelemetryTarget.GCP, // Even with GCP target
         },
       });
       const tracker = new GitStatsTracker(config);
@@ -226,7 +226,7 @@ describe('Git Statistics Tracking', () => {
       });
       const tracker = new GitStatsTracker(config);
 
-      const _stats = await tracker.trackFileEdit(
+      await tracker.trackFileEdit(
         'file.ts',
         'old',
         'new\ncontent',

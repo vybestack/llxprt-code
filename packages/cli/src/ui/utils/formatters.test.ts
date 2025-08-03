@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatDuration, formatMemoryUsage } from './formatters';
+import { formatDuration, formatMemoryUsage } from './formatters.js';
 
 describe('formatters', () => {
   describe('formatMemoryUsage', () => {

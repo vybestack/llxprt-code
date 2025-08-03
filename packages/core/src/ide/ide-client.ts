@@ -286,7 +286,7 @@ export class IdeClient {
     return true;
   }
 
-  private getPortFromEnv(): string | undefined {
+  private getPortFromEnvForInit(): string | undefined {
     const port = process.env['LLXPRT_CLI_IDE_SERVER_PORT'];
     if (!port) {
       return undefined;
@@ -418,7 +418,7 @@ export class IdeClient {
       return;
     }
 
-    const port = this.getPortFromEnv();
+    const port = this.getPortFromEnvForInit();
     if (!port) {
       return;
     }

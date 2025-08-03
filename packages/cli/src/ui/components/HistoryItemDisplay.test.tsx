@@ -71,6 +71,8 @@ describe('<HistoryItemDisplay />', () => {
       modelVersion: 'test-model',
       selectedAuthType: 'test-auth',
       gcpProject: 'test-project',
+      keyfile: 'test-keyfile',
+      key: 'test-key',
     };
     const { lastFrame } = render(
       <HistoryItemDisplay {...baseItem} item={item} />,

@@ -6,7 +6,7 @@
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { helpCommand } from './helpCommand';
-import { type CommandContext } from './types';
+import { type CommandContext } from './types.js';
 
 describe('helpCommand', () => {
   let mockContext: CommandContext;

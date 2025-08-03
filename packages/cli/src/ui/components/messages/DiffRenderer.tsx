@@ -10,7 +10,7 @@ import { Colors } from '../../colors.js';
 import crypto from 'crypto';
 import { colorizeCode, colorizeLine } from '../../utils/CodeColorizer.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
-import { theme } from '../../semantic-colors.js';
+import { SemanticColors } from '../../colors.js';
 
 interface DiffLine {
   type: 'add' | 'del' | 'context' | 'hunk' | 'other';
@@ -289,12 +289,12 @@ const renderDiffContent = (
         acc.push(
           <Box key={lineKey} flexDirection="row">
             <Text
-              color={theme.text.secondary}
+              color={SemanticColors.text.secondary}
               backgroundColor={
                 line.type === 'add'
-                  ? theme.background.diff.added
+                  ? Colors.DiffAddedBackground
                   : line.type === 'del'
-                    ? theme.background.diff.removed
+                    ? Colors.DiffRemovedBackground
                     : undefined
               }
             >
@@ -311,16 +311,16 @@ const renderDiffContent = (
               <Text
                 backgroundColor={
                   line.type === 'add'
-                    ? theme.background.diff.added
-                    : theme.background.diff.removed
+                    ? Colors.DiffAddedBackground
+                    : Colors.DiffRemovedBackground
                 }
                 wrap="wrap"
               >
                 <Text
                   color={
                     line.type === 'add'
-                      ? theme.status.success
-                      : theme.status.error
+                      ? SemanticColors.status.success
+                      : SemanticColors.status.error
                   }
                 >
                   {prefixSymbol}

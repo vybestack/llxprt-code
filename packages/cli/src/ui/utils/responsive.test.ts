@@ -11,7 +11,7 @@ import {
   isNarrowWidth,
   truncateMiddle,
   truncateEnd,
-} from './responsive';
+} from './responsive.js';
 
 describe('BREAKPOINTS', () => {
   it('should define consistent breakpoint values', () => {

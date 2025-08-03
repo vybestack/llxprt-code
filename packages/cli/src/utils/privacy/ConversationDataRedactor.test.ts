@@ -5,170 +5,166 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { IMessage, ITool } from '@vybestack/llxprt-code-core';
+import { IMessage, ITool, ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 import { ConversationDataRedactor } from './ConversationDataRedactor.js';
 
-// Interface that will be implemented in the next phase
-interface ConversationDataRedactorInterface {
-  redactMessage(message: IMessage, provider: string): IMessage;
-  redactToolCall(tool: ITool): ITool;
-  redactConversation(messages: IMessage[], provider: string): IMessage[];
-  redactApiKeys(content: string, provider: string): string;
-  redactSensitivePaths(content: string): string;
-  redactPersonalInfo(content: string): string;
-}
+// Note: Interface will be implemented in the next phase
+// Removed unused interface ConversationDataRedactorInterface
 
-// Mock implementation for behavioral testing
-class _MockConversationDataRedactor
-  implements ConversationDataRedactorInterface
-{
-  redactMessage(message: IMessage, provider: string): IMessage {
-    const redactedContent = this.redactApiKeys(message.content, provider);
-    const finalContent = this.redactSensitivePaths(redactedContent);
-
-    return {
-      ...message,
-      content: finalContent,
-      tool_calls: message.tool_calls?.map((call) => ({
-        ...call,
-        function: {
-          ...call.function,
-          arguments: this.redactSensitivePaths(call.function.arguments),
-        },
-      })),
-    };
-  }
-
-  redactToolCall(tool: ITool): ITool {
-    if (!tool.parameters || typeof tool.parameters !== 'object') {
-      return tool;
-    }
-
-    const redactedParams = { ...tool.parameters };
-
-    // Redact sensitive file paths
-    if (
-      redactedParams.file_path &&
-      typeof redactedParams.file_path === 'string'
-    ) {
-      const path = redactedParams.file_path;
-      if (path.includes('.ssh') && path.includes('id_rsa')) {
-        redactedParams.file_path = '[REDACTED-SSH-KEY-PATH]';
-      } else if (
-        path.includes('.env') ||
-        path.includes('secret') ||
-        path.includes('key')
-      ) {
-        redactedParams.file_path = '[REDACTED-SENSITIVE-PATH]';
-      }
-    }
-
-    // Redact API keys in any parameter
-    Object.keys(redactedParams).forEach((key) => {
-      if (typeof redactedParams[key] === 'string') {
-        redactedParams[key] = this.redactApiKeys(
-          redactedParams[key] as string,
-          'unknown',
-        );
-      }
-    });
-
-    return {
-      ...tool,
-      parameters: redactedParams,
-    };
-  }
-
-  redactConversation(messages: IMessage[], _provider: string): IMessage[] {
-    return messages.map((message) => this.redactMessage(message, _provider));
-  }
-
-  redactApiKeys(content: string, _provider: string): string {
-    let redacted = content;
-
-    // OpenAI keys
-    redacted = redacted.replace(/sk-[a-zA-Z0-9]{48}/g, '[REDACTED-OPENAI-KEY]');
-    redacted = redacted.replace(
-      /sk-proj-[a-zA-Z0-9]{48}/g,
-      '[REDACTED-OPENAI-PROJECT-KEY]',
-    );
-
-    // Anthropic keys
-    redacted = redacted.replace(
-      /sk-ant-[a-zA-Z0-9-]{95}/g,
-      '[REDACTED-ANTHROPIC-KEY]',
-    );
-
-    // Google/Gemini keys
-    redacted = redacted.replace(
-      /AIza[a-zA-Z0-9_-]{35}/g,
-      '[REDACTED-GOOGLE-KEY]',
-    );
-
-    // Generic API key patterns
-    redacted = redacted.replace(
-      /api[_-]?key["\s]*[:=]["\s]*[a-zA-Z0-9-_]{16,}/gi,
-      'api_key: "[REDACTED-API-KEY]"',
-    );
-    redacted = redacted.replace(
-      /bearer [a-zA-Z0-9-_.]{16,}/gi,
-      'bearer [REDACTED-BEARER-TOKEN]',
-    );
-
-    return redacted;
-  }
-
-  redactSensitivePaths(content: string): string {
-    let redacted = content;
-
-    // SSH keys and certificates
-    redacted = redacted.replace(
-      /\/[^"\s]*\.ssh\/[^"\s]*/g,
-      '[REDACTED-SSH-PATH]',
-    );
-    redacted = redacted.replace(
-      /\/[^"\s]*\/id_rsa[^"\s]*/g,
-      '[REDACTED-SSH-KEY-PATH]',
-    );
-
-    // Environment files
-    redacted = redacted.replace(
-      /\/[^"\s]*\.env[^"\s]*/g,
-      '[REDACTED-ENV-FILE]',
-    );
-
-    // Configuration directories
-    redacted = redacted.replace(/\/home\/[^/\s"]+/g, '[REDACTED-HOME-DIR]');
-    redacted = redacted.replace(/\/Users\/[^/\s"]+/g, '[REDACTED-USER-DIR]');
-
-    return redacted;
-  }
-
-  redactPersonalInfo(content: string): string {
-    let redacted = content;
-
-    // Email addresses
-    redacted = redacted.replace(
-      /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-      '[REDACTED-EMAIL]',
-    );
-
-    // Phone numbers (basic patterns)
-    redacted = redacted.replace(/\b\d{3}-\d{3}-\d{4}\b/g, '[REDACTED-PHONE]');
-    redacted = redacted.replace(
-      /\b\(\d{3}\)\s?\d{3}-\d{4}\b/g,
-      '[REDACTED-PHONE]',
-    );
-
-    // Credit card numbers (basic pattern)
-    redacted = redacted.replace(
-      /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-      '[REDACTED-CC-NUMBER]',
-    );
-
-    return redacted;
-  }
-}
+// Mock implementation for behavioral testing (unused in current tests)
+// class MockConversationDataRedactor
+//   implements ConversationDataRedactorInterface
+// {
+//   redactMessage(message: IMessage, provider: string): IMessage {
+//     const redactedContent = this.redactApiKeys(message.content, provider);
+//     const finalContent = this.redactSensitivePaths(redactedContent);
+//
+//     return {
+//       ...message,
+//       content: finalContent,
+//       tool_calls: message.tool_calls?.map((call) => ({
+//         ...call,
+//         function: {
+//           ...call.function,
+//           arguments: this.redactSensitivePaths(call.function.arguments),
+//         },
+//       })),
+//     };
+//   }
+//
+//   redactToolCall(tool: ITool): ITool {
+//     if (!tool.function.parameters || typeof tool.function.parameters !== 'object') {
+//       return tool;
+//     }
+//
+//     const redactedParams = { ...tool.function.parameters };
+//
+//     // Redact sensitive file paths
+//     if (
+//       redactedParams.file_path &&
+//       typeof redactedParams.file_path === 'string'
+//     ) {
+//       const path = redactedParams.file_path;
+//       if (path.includes('.ssh') && path.includes('id_rsa')) {
+//         redactedParams.file_path = '[REDACTED-SSH-KEY-PATH]';
+//       } else if (
+//         path.includes('.env') ||
+//         path.includes('secret') ||
+//         path.includes('key')
+//       ) {
+//         redactedParams.file_path = '[REDACTED-SENSITIVE-PATH]';
+//       }
+//     }
+//
+//     // Redact API keys in any parameter
+//     Object.keys(redactedParams).forEach((key) => {
+//       if (typeof redactedParams[key] === 'string') {
+//         redactedParams[key] = this.redactApiKeys(
+//           redactedParams[key] as string,
+//           'unknown',
+//         );
+//       }
+//     });
+//
+//     return {
+//       ...tool,
+//       function: {
+//         ...tool.function,
+//         parameters: redactedParams,
+//       },
+//     };
+//   }
+//
+//   redactConversation(messages: IMessage[], _provider: string): IMessage[] {
+//     return messages.map((message) => this.redactMessage(message, _provider));
+//   }
+//
+//   redactApiKeys(content: string, _provider: string): string {
+//     let redacted = content;
+//
+//     // OpenAI keys
+//     redacted = redacted.replace(/sk-[a-zA-Z0-9]{48}/g, '[REDACTED-OPENAI-KEY]');
+//     redacted = redacted.replace(
+//       /sk-proj-[a-zA-Z0-9]{48}/g,
+//       '[REDACTED-OPENAI-PROJECT-KEY]',
+//     );
+//
+//     // Anthropic keys
+//     redacted = redacted.replace(
+//       /sk-ant-[a-zA-Z0-9-]{95}/g,
+//       '[REDACTED-ANTHROPIC-KEY]',
+//     );
+//
+//     // Google/Gemini keys
+//     redacted = redacted.replace(
+//       /AIza[a-zA-Z0-9_-]{35}/g,
+//       '[REDACTED-GOOGLE-KEY]',
+//     );
+//
+//     // Generic API key patterns
+//     redacted = redacted.replace(
+//       /api[_-]?key["\s]*[:=]["\s]*[a-zA-Z0-9-_]{16,}/gi,
+//       'api_key: "[REDACTED-API-KEY]"',
+//     );
+//     redacted = redacted.replace(
+//       /bearer [a-zA-Z0-9-_.]{16,}/gi,
+//       'bearer [REDACTED-BEARER-TOKEN]',
+//     );
+//
+//     return redacted;
+//   }
+//
+//   redactSensitivePaths(content: string): string {
+//     let redacted = content;
+//
+//     // SSH keys and certificates
+//     redacted = redacted.replace(
+//       /\/[^"\s]*\.ssh\/[^"\s]*/g,
+//       '[REDACTED-SSH-PATH]',
+//     );
+//     redacted = redacted.replace(
+//       /\/[^"\s]*\/id_rsa[^"\s]*/g,
+//       '[REDACTED-SSH-KEY-PATH]',
+//     );
+//
+//     // Environment files
+//     redacted = redacted.replace(
+//       /\/[^"\s]*\.env[^"\s]*/g,
+//       '[REDACTED-ENV-FILE]',
+//     );
+//
+//     // Configuration directories
+//     redacted = redacted.replace(/\/home\/[^/\s"]+/g, '[REDACTED-HOME-DIR]');
+//     redacted = redacted.replace(/\/Users\/[^/\s"]+/g, '[REDACTED-USER-DIR]');
+//
+//     return redacted;
+//   }
+//
+//   redactPersonalInfo(content: string): string {
+//     let redacted = content;
+//
+//     // Email addresses
+//     redacted = redacted.replace(
+//       /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+//       '[REDACTED-EMAIL]',
+//     );
+//
+//     // Phone numbers (basic patterns)
+//     redacted = redacted.replace(/\b\d{3}-\d{3}-\d{4}\b/g, '[REDACTED-PHONE]');
+//     redacted = redacted.replace(
+//       /\b\(\d{3}\)\s?\d{3}-\d{4}\b/g,
+//       '[REDACTED-PHONE]',
+//     );
+//
+//     // Credit card numbers (basic pattern)
+//     redacted = redacted.replace(
+//       /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
+//       '[REDACTED-CC-NUMBER]',
+//     );
+//
+//     return redacted;
+//   }
+// }
 
 describe('Conversation Data Redaction', () => {
   let redactor: ConversationDataRedactor;
@@ -219,7 +215,7 @@ describe('Conversation Data Redaction', () => {
     ];
 
     testCases.forEach(({ content, provider, expected }) => {
-      const message: IMessage = { role: 'user', content };
+      const message: IMessage = { role: ContentGeneratorRole.USER, content };
       const redacted = redactor.redactMessage(message, provider);
 
       expect(redacted.content).toContain(expected);
@@ -236,17 +232,20 @@ describe('Conversation Data Redaction', () => {
    */
   it('should redact sensitive data from tool parameters', () => {
     const tool: ITool = {
-      name: 'read_file',
-      description: 'Read file content',
-      parameters: {
-        file_path: '/home/user/.ssh/id_rsa',
-        encoding: 'utf-8',
+      type: 'function',
+      function: {
+        name: 'read_file',
+        description: 'Read file content',
+        parameters: {
+          file_path: '/home/user/.ssh/id_rsa',
+          encoding: 'utf-8',
+        },
       },
     };
 
     const redacted = redactor.redactToolCall(tool);
-    expect(redacted.parameters.file_path).toBe('[REDACTED-SENSITIVE-PATH]');
-    expect(redacted.parameters.encoding).toBe('utf-8'); // Non-sensitive preserved
+    expect((redacted.function.parameters as { file_path: string }).file_path).toBe('[REDACTED-SENSITIVE-PATH]');
+    expect((redacted.function.parameters as { encoding: string }).encoding).toBe('utf-8'); // Non-sensitive preserved
   });
 
   /**
@@ -258,17 +257,20 @@ describe('Conversation Data Redaction', () => {
    */
   it('should redact environment file paths from tool parameters', () => {
     const tool: ITool = {
-      name: 'read_file',
-      description: 'Read environment file',
-      parameters: {
-        file_path: '/project/.env.local',
-        format: 'text',
+      type: 'function',
+      function: {
+        name: 'read_file',
+        description: 'Read environment file',
+        parameters: {
+          file_path: '/project/.env.local',
+          format: 'text',
+        },
       },
     };
 
     const redacted = redactor.redactToolCall(tool);
-    expect(redacted.parameters.file_path).toBe('[REDACTED-SENSITIVE-PATH]');
-    expect(redacted.parameters.format).toBe('text');
+    expect((redacted.function.parameters as { file_path: string }).file_path).toBe('[REDACTED-SENSITIVE-PATH]');
+    expect((redacted.function.parameters as { format: string }).format).toBe('text');
   });
 
   /**
@@ -280,7 +282,7 @@ describe('Conversation Data Redaction', () => {
    */
   it('should redact sensitive data from message tool calls', () => {
     const message: IMessage = {
-      role: 'assistant',
+      role: ContentGeneratorRole.ASSISTANT,
       content: 'I will use your API key to make the request',
       tool_calls: [
         {
@@ -317,16 +319,16 @@ describe('Conversation Data Redaction', () => {
   it('should redact entire conversation consistently', () => {
     const messages: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'My API key is sk-1234567890abcdef1234567890abcdef12345678',
       },
       {
-        role: 'assistant',
+        role: ContentGeneratorRole.ASSISTANT,
         content: 'I cannot store API keys for security reasons',
       },
-      { role: 'user', content: 'Please read /home/john/.ssh/id_rsa for me' },
+      { role: ContentGeneratorRole.USER, content: 'Please read /home/john/.ssh/id_rsa for me' },
       {
-        role: 'assistant',
+        role: ContentGeneratorRole.ASSISTANT,
         content: 'I cannot access SSH keys or other sensitive files',
       },
     ];
@@ -367,7 +369,7 @@ describe('Conversation Data Redaction', () => {
     ];
 
     testCases.forEach((content) => {
-      const message: IMessage = { role: 'user', content };
+      const message: IMessage = { role: ContentGeneratorRole.USER, content };
       const redacted = redactor.redactMessage(message, 'unknown');
 
       expect(redacted.content).toMatch(/\[REDACTED-(API-KEY|BEARER-TOKEN)\]/);
@@ -386,7 +388,7 @@ describe('Conversation Data Redaction', () => {
    */
   it('should redact sensitive file paths', () => {
     const message: IMessage = {
-      role: 'user',
+      role: ContentGeneratorRole.USER,
       content:
         'Read these files: /home/alice/.ssh/id_rsa, /Users/bob/.env, /home/charlie/secrets/key.pem',
     };
@@ -410,7 +412,7 @@ describe('Conversation Data Redaction', () => {
    */
   it('should redact personal identifiable information', () => {
     const message: IMessage = {
-      role: 'user',
+      role: ContentGeneratorRole.USER,
       content:
         'Contact me at john.doe@example.com or call 555-123-4567. My card is 4111-1111-1111-1111.',
     };
@@ -439,7 +441,7 @@ describe('Conversation Data Redaction', () => {
   it('should preserve message structure while redacting content', () => {
     const originalMessage: IMessage = {
       id: 'msg_123',
-      role: 'user',
+      role: ContentGeneratorRole.USER,
       content: 'Use API key sk-1234567890abcdef1234567890abcdef12345678',
       tool_call_id: 'call_456',
       tool_name: 'api_call',
@@ -453,7 +455,7 @@ describe('Conversation Data Redaction', () => {
     const redacted = redactor.redactMessage(originalMessage, 'openai');
 
     expect(redacted.id).toBe('msg_123');
-    expect(redacted.role).toBe('user');
+    expect(redacted.role).toBe(ContentGeneratorRole.USER);
     expect(redacted.tool_call_id).toBe('call_456');
     expect(redacted.tool_name).toBe('api_call');
     expect(redacted.usage).toEqual({
@@ -476,20 +478,24 @@ describe('Conversation Data Redaction', () => {
    */
   it('should handle empty and undefined values gracefully', () => {
     const emptyMessage: IMessage = {
-      role: 'user',
+      role: ContentGeneratorRole.USER,
       content: '',
     };
 
     const undefinedMessage: IMessage = {
-      role: 'assistant',
+      role: ContentGeneratorRole.ASSISTANT,
       content: 'Normal content',
       // Other fields intentionally undefined
     };
 
     const emptyTool: ITool = {
-      name: 'empty_tool',
-      description: 'Tool with no parameters',
-      // parameters intentionally undefined
+      type: 'function',
+      function: {
+        name: 'empty_tool',
+        description: 'Tool with no parameters',
+        // parameters intentionally undefined
+        parameters: {},
+      },
     };
 
     expect(() => redactor.redactMessage(emptyMessage, 'openai')).not.toThrow();
@@ -508,7 +514,7 @@ describe('Conversation Data Redaction', () => {
     expect(redactedUndefined.content).toBe('Normal content');
 
     const redactedEmptyTool = redactor.redactToolCall(emptyTool);
-    expect(redactedEmptyTool.name).toBe('empty_tool');
-    expect(redactedEmptyTool.parameters).toBeUndefined();
+    expect(redactedEmptyTool.function.name).toBe('empty_tool');
+    expect(redactedEmptyTool.function.parameters).toEqual({});
   });
 });

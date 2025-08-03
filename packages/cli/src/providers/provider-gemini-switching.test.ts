@@ -8,9 +8,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   getProviderManager,
   resetProviderManager,
-} from './providerManagerInstance';
-import { IProvider, IModel } from './IProvider';
-import { Config } from '@vybestack/llxprt-code-core';
+} from './providerManagerInstance.js';
+import { IProvider, IModel } from './index.js';
+import { Config, AuthType } from '@vybestack/llxprt-code-core';
 
 describe('Provider-Gemini Switching', () => {
   let mockProvider: IProvider;
@@ -22,14 +22,17 @@ describe('Provider-Gemini Switching', () => {
       name: 'test-provider',
       async getModels(): Promise<IModel[]> {
         return [
-          { id: 'model-1', name: 'Test Model 1' },
-          { id: 'model-2', name: 'Test Model 2' },
+          { id: 'model-1', name: 'Test Model 1', provider: 'test-provider', supportedToolFormats: ['json'] },
+          { id: 'model-2', name: 'Test Model 2', provider: 'test-provider', supportedToolFormats: ['json'] },
         ];
       },
       async *generateChatCompletion() {
         yield { role: 'assistant', content: 'test response' };
       },
       getCurrentModel() {
+        return 'model-1';
+      },
+      getDefaultModel() {
         return 'model-1';
       },
       setModel(model: string) {
@@ -71,7 +74,7 @@ describe('Provider-Gemini Switching', () => {
     } as unknown as Config;
 
     // Call refreshAuth
-    await config.refreshAuth('test-auth');
+    await config.refreshAuth(AuthType.USE_GEMINI);
 
     // Should have called the original since no provider is active
     expect(originalRefreshAuth).toHaveBeenCalled();
@@ -107,7 +110,7 @@ describe('Provider-Gemini Switching', () => {
     expect(config.refreshAuth).toBe(originalRefreshAuth);
 
     // Call refreshAuth
-    await config.refreshAuth('test-auth');
+    await config.refreshAuth(AuthType.USE_GEMINI);
 
     // Content generator remains null (provider support is in core now)
     expect(mockGeminiClient.chat.contentGenerator).toBeNull();
@@ -139,7 +142,7 @@ describe('Provider-Gemini Switching', () => {
     } as unknown as Config;
 
     // Call refreshAuth
-    await config.refreshAuth('test-auth');
+    await config.refreshAuth(AuthType.USE_GEMINI);
 
     // Should NOT update content generator since no provider is active
     expect(mockGeminiClient.chat.contentGenerator).toBeNull();

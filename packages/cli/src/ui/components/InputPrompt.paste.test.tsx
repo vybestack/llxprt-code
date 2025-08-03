@@ -5,7 +5,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 
 // Create stdin mock at module level
 const stdin = Object.assign(new EventEmitter(), {
@@ -115,6 +115,8 @@ import { render } from 'ink-testing-library';
 import { InputPrompt } from './InputPrompt.js';
 import { AppDispatchProvider } from '../contexts/AppDispatchContext.js';
 import { TextBuffer } from './shared/text-buffer.js';
+import { CommandContext } from '../commands/types.js';
+import { Config } from '@vybestack/llxprt-code-core';
 
 // Mock Config
 const mockConfig = {
@@ -125,7 +127,7 @@ const mockConfig = {
   getWorkspaceContext: () => ({
     getDirectories: () => ['/tmp/test'],
   }),
-} as unknown;
+} as unknown as Config;
 
 describe('InputPrompt paste functionality', () => {
   let mockBuffer: TextBuffer;
@@ -174,7 +176,7 @@ describe('InputPrompt paste functionality', () => {
       killLineLeft: vi.fn(),
       handleInput: vi.fn(),
       openInExternalEditor: vi.fn(),
-    } as TextBuffer;
+    } as unknown as TextBuffer;
 
     mockOnSubmit = vi.fn();
     mockOnClearScreen = vi.fn();
@@ -195,7 +197,7 @@ describe('InputPrompt paste functionality', () => {
           onClearScreen={mockOnClearScreen}
           config={mockConfig}
           slashCommands={[]}
-          commandContext={{} as Record<string, unknown>}
+          commandContext={{} as unknown as CommandContext}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -211,8 +213,8 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    mockBuffer.setText.mockClear();
-    mockBuffer.insert.mockClear();
+    (mockBuffer.setText as Mock).mockClear();
+    (mockBuffer.insert as Mock).mockClear();
 
     // Ensure the handler was captured
     expect(keypressHandler).toBeDefined();
@@ -236,8 +238,8 @@ describe('InputPrompt paste functionality', () => {
 
     // Check if the handler threw an error
     if (
-      !mockBuffer.insert.mock.calls.length &&
-      !mockBuffer.handleInput.mock.calls.length
+      !(mockBuffer.insert as Mock).mock.calls.length &&
+      !(mockBuffer.handleInput as Mock).mock.calls.length
     ) {
       // Try calling the handler again with logging
       const testKey = {
@@ -276,7 +278,7 @@ describe('InputPrompt paste functionality', () => {
           onClearScreen={mockOnClearScreen}
           config={mockConfig}
           slashCommands={[]}
-          commandContext={{} as Record<string, unknown>}
+          commandContext={{} as unknown as CommandContext}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -324,7 +326,7 @@ describe('InputPrompt paste functionality', () => {
           onClearScreen={mockOnClearScreen}
           config={mockConfig}
           slashCommands={[]}
-          commandContext={{} as Record<string, unknown>}
+          commandContext={{} as unknown as CommandContext}
           placeholder="Type a message..."
           focus={true}
           inputWidth={80}
@@ -340,8 +342,8 @@ describe('InputPrompt paste functionality', () => {
 
     // Clear any initial calls that might have happened during mount
     mockOnSubmit.mockClear();
-    mockBuffer.setText.mockClear();
-    mockBuffer.insert.mockClear();
+    (mockBuffer.setText as Mock).mockClear();
+    (mockBuffer.insert as Mock).mockClear();
 
     // Ensure the handler was captured
     expect(keypressHandler).toBeDefined();

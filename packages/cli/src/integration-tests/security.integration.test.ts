@@ -14,9 +14,9 @@ import {
   createTempKeyfile,
   readSettingsFile,
   writeSettingsFile,
-} from './test-utils';
+} from './test-utils.js';
 import { Config, Profile } from '@vybestack/llxprt-code-core';
-import { loadSettings } from '../config/settings';
+import { loadSettings } from '../config/settings.js';
 
 describe('API Key Security Integration Tests', () => {
   let tempDir: string;
@@ -310,8 +310,8 @@ describe('API Key Security Integration Tests', () => {
     });
 
     it('should never store API keys in global settings', async () => {
-      // Load settings
-      const _loadedSettings = loadSettings(tempDir);
+      // Load settings (verification only)
+      loadSettings(tempDir);
 
       // Try to set API key in user settings (this should be prevented in real implementation)
       const userSettings = {

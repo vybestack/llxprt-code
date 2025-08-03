@@ -5,10 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { SandboxConfig, ApprovalMode, MCPServerConfig } from '@vybestack/llxprt-code-core';
 
 // Mock the Config class to add conversation logging methods that will be implemented
-interface ExtendedConfig extends Config {
+interface ExtendedConfig {
   getConversationLoggingEnabled(): boolean;
   getConversationLogPath(): string;
   setCliFlags(flags: {
@@ -24,11 +24,13 @@ interface ExtendedConfig extends Config {
       maxLogFiles?: number;
     };
   }): void;
+  getLogRetentionDays(): number;
+  getMaxLogSizeMB(): number;
+  getMaxLogFiles(): number;
 }
 
 // Mock extended config class for testing
 class MockExtendedConfig implements ExtendedConfig {
-  private conversationLoggingEnabled = false;
   private conversationLogPath =
     process.env.HOME + '/.llxprt/logs/conversations';
   private cliFlags: {
@@ -119,20 +121,20 @@ class MockExtendedConfig implements ExtendedConfig {
   getEmbeddingModel(): string {
     return 'test-embedding';
   }
-  getSandbox(): boolean {
-    return false;
+  getSandbox(): SandboxConfig | undefined {
+    return undefined;
   }
   getCoreTools(): string[] {
     return [];
   }
-  getApprovalMode(): string {
-    return 'prompt';
+  getApprovalMode(): ApprovalMode {
+    return 'default' as ApprovalMode;
   }
   getDebugMode(): boolean {
     return false;
   }
-  getMcpServers(): Record<string, unknown> {
-    return {};
+  getMcpServers(): Record<string, MCPServerConfig> | undefined {
+    return undefined;
   }
   getTelemetryEnabled(): boolean {
     return false;
@@ -334,8 +336,8 @@ describe('Conversation Logging Configuration', () => {
       },
     });
 
-    expect((config as MockExtendedConfig).getMaxLogSizeMB()).toBe(5);
-    expect((config as MockExtendedConfig).getMaxLogFiles()).toBe(10);
+    expect(config.getMaxLogSizeMB()).toBe(5);
+    expect(config.getMaxLogFiles()).toBe(10);
   });
 
   /**
@@ -352,7 +354,7 @@ describe('Conversation Logging Configuration', () => {
       },
     });
 
-    expect((config as MockExtendedConfig).getLogRetentionDays()).toBe(7);
+    expect(config.getLogRetentionDays()).toBe(7);
   });
 
   /**
@@ -365,9 +367,9 @@ describe('Conversation Logging Configuration', () => {
   it('should provide sensible defaults for log management settings', () => {
     const freshConfig = new MockExtendedConfig();
 
-    expect((freshConfig as MockExtendedConfig).getLogRetentionDays()).toBe(30);
-    expect((freshConfig as MockExtendedConfig).getMaxLogSizeMB()).toBe(10);
-    expect((freshConfig as MockExtendedConfig).getMaxLogFiles()).toBe(5);
+    expect(freshConfig.getLogRetentionDays()).toBe(30);
+    expect(freshConfig.getMaxLogSizeMB()).toBe(10);
+    expect(freshConfig.getMaxLogFiles()).toBe(5);
     expect(freshConfig.getConversationLogPath()).toContain(
       '/.llxprt/logs/conversations',
     );
@@ -454,11 +456,9 @@ describe('Conversation Logging Configuration', () => {
     });
 
     // Should still return reasonable defaults for invalid values
-    expect((config as MockExtendedConfig).getMaxLogSizeMB()).toBeGreaterThan(0);
-    expect((config as MockExtendedConfig).getMaxLogFiles()).toBeGreaterThan(0);
-    expect(
-      (config as MockExtendedConfig).getLogRetentionDays(),
-    ).toBeGreaterThan(0);
+    expect(config.getMaxLogSizeMB()).toBeGreaterThan(0);
+    expect(config.getMaxLogFiles()).toBeGreaterThan(0);
+    expect(config.getLogRetentionDays()).toBeGreaterThan(0);
     expect(config.getConversationLogPath()).toBeTruthy();
   });
 });

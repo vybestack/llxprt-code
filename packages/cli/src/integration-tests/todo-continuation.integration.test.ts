@@ -13,7 +13,10 @@ import {
   ApprovalMode,
   todoEvents,
   type TodoUpdateEvent,
+  type Turn,
+  type ServerGeminiStreamEvent,
 } from '@vybestack/llxprt-code-core';
+import type { PartListUnion } from '@google/genai';
 import { createTempDirectory, cleanupTempDirectory } from './test-utils.js';
 
 /**
@@ -59,10 +62,7 @@ describe('Todo Continuation Integration Tests', () => {
 
     await config.initialize();
 
-    geminiClient = new GeminiClient(config, {
-      debug: false,
-      onProgress: () => {},
-    });
+    geminiClient = new GeminiClient(config);
   });
 
   afterEach(async () => {
@@ -239,21 +239,37 @@ describe('Todo Continuation Integration Tests', () => {
 
       const originalSendMessageStream = geminiClient.sendMessageStream;
       geminiClient.sendMessageStream = vi.fn(
-        (message: string, options?: unknown) => {
-          capturedMessage = message;
-          capturedOptions = options;
-          return Promise.resolve();
-        },
+        async function* (
+          request: PartListUnion,
+          signal: AbortSignal,
+          prompt_id: string,
+          turns?: number,
+          originalModel?: string
+        ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+          capturedMessage = typeof request === 'string' ? request : JSON.stringify(request);
+          capturedOptions = { signal, prompt_id, turns, originalModel };
+          // Create a mock Turn object
+          const mockTurn = {} as Turn;
+          return mockTurn;
+        }
       );
 
       // When: Send ephemeral message
-      await geminiClient.sendMessageStream('Test continuation prompt', {
-        ephemeral: true,
-      });
+      const generator = geminiClient.sendMessageStream(
+        'Test continuation prompt',
+        new AbortController().signal,
+        'test-prompt-id'
+      );
+      await generator.next();
 
       // Then: Should capture message and options
       expect(capturedMessage).toBe('Test continuation prompt');
-      expect(capturedOptions).toEqual({ ephemeral: true });
+      expect(capturedOptions).toEqual({
+        signal: expect.any(AbortSignal),
+        prompt_id: 'test-prompt-id',
+        turns: undefined,
+        originalModel: undefined
+      });
 
       // Restore original method
       geminiClient.sendMessageStream = originalSendMessageStream;
@@ -300,13 +316,16 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.emitTodoUpdated({
         sessionId,
         todos: testTodos,
+        timestamp: new Date(),
       });
 
       // Then: Event should be received
       expect(receivedEvent).toBeDefined();
-      expect(receivedEvent.sessionId).toBe(sessionId);
-      expect(receivedEvent.todos).toHaveLength(1);
-      expect(receivedEvent.todos[0].content).toBe('Event test task');
+      expect(receivedEvent).not.toBeNull();
+      const event = receivedEvent as unknown as TodoUpdateEvent;
+      expect(event.sessionId).toBe(sessionId);
+      expect(event.todos).toHaveLength(1);
+      expect(event.todos[0].content).toBe('Event test task');
 
       // Cleanup
       todoEvents.offTodoUpdated(eventHandler);
@@ -333,6 +352,7 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.emitTodoUpdated({
         sessionId,
         todos: testTodos,
+        timestamp: new Date(),
       });
 
       // Then: All handlers should receive event
@@ -365,6 +385,7 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.emitTodoUpdated({
         sessionId,
         todos: [createTodo('1', 'Test', 'pending')],
+        timestamp: new Date(),
       });
 
       expect(eventCount).toBe(1);
@@ -374,6 +395,7 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.emitTodoUpdated({
         sessionId,
         todos: [createTodo('2', 'Test 2', 'pending')],
+        timestamp: new Date(),
       });
 
       // Then: Handler should not be called again
@@ -474,6 +496,7 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.emitTodoUpdated({
         sessionId,
         todos: updatedTodos,
+        timestamp: new Date(),
       });
 
       // Then: Event should reflect state change
@@ -489,6 +512,7 @@ describe('Todo Continuation Integration Tests', () => {
       todoEvents.emitTodoUpdated({
         sessionId,
         todos: completedTodos,
+        timestamp: new Date(),
       });
 
       // Then: Should have two events showing progression
@@ -686,6 +710,7 @@ describe('Todo Continuation Integration Tests', () => {
         todoEvents.emitTodoUpdated({
           sessionId: `rapid-test-${i}`,
           todos: [createTodo(`${i}`, `Rapid event ${i}`, 'pending')],
+          timestamp: new Date(),
         });
       }
 

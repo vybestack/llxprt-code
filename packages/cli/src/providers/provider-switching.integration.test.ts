@@ -8,8 +8,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   getProviderManager,
   resetProviderManager,
-} from './providerManagerInstance';
-import { IProvider } from './IProvider';
+} from './providerManagerInstance.js';
+import { IProvider } from './index.js';
 
 describe('Provider Switching Integration', () => {
   beforeEach(() => {
@@ -35,10 +35,19 @@ describe('Provider Switching Integration', () => {
     const mockProvider: IProvider = {
       name: 'test-provider',
       async getModels() {
-        return [{ id: 'test-model', name: 'Test Model' }];
+        return [{ id: 'test-model', name: 'Test Model', provider: 'test-provider', supportedToolFormats: ['json'] }];
       },
       async *generateChatCompletion() {
         yield { role: 'assistant', content: 'test response' };
+      },
+      getDefaultModel() {
+        return 'test-model';
+      },
+      getServerTools() {
+        return [];
+      },
+      async invokeServerTool() {
+        return {};
       },
     };
 
@@ -67,6 +76,15 @@ describe('Provider Switching Integration', () => {
       async *generateChatCompletion() {
         yield { role: 'assistant', content: '' };
       },
+      getDefaultModel() {
+        return 'default';
+      },
+      getServerTools() {
+        return [];
+      },
+      async invokeServerTool() {
+        return {};
+      },
     };
 
     const provider2: IProvider = {
@@ -76,6 +94,15 @@ describe('Provider Switching Integration', () => {
       },
       async *generateChatCompletion() {
         yield { role: 'assistant', content: '' };
+      },
+      getDefaultModel() {
+        return 'default';
+      },
+      getServerTools() {
+        return [];
+      },
+      async invokeServerTool() {
+        return {};
       },
     };
 

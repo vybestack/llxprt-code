@@ -22,7 +22,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 
 // Mock fs module
 vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal() as Record<string, unknown>;
   return {
     ...actual,
     default: actual,
@@ -34,7 +34,7 @@ vi.mock('fs', async (importOriginal) => {
 
 // Mock os module
 vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal();
+  const actual = await importOriginal() as Record<string, unknown>;
   return {
     ...actual,
     homedir: vi.fn(() => '/home/user'),
@@ -224,7 +224,7 @@ describe('profileCommand', () => {
 
       expectedClears.forEach((key) => {
         expect(
-          context.services.config.setEphemeralSetting,
+          context.services.config!.setEphemeralSetting,
         ).toHaveBeenCalledWith(key, undefined);
       });
     });
@@ -337,7 +337,7 @@ describe('profileCommand', () => {
     const saveCommand = profileCommand.subCommands![0]; // save is the first subcommand
 
     it('should save compression settings from ephemeral settings', async () => {
-      context.services.config.getEphemeralSettings = vi.fn().mockReturnValue({
+      context.services.config!.getEphemeralSettings = vi.fn().mockReturnValue({
         'context-limit': 75000,
         'compression-threshold': 0.65,
         'base-url': 'https://custom.api.com',
@@ -385,7 +385,7 @@ describe('profileCommand', () => {
     });
 
     it('should save tool-output settings from ephemeral settings', async () => {
-      context.services.config.getEphemeralSettings = vi.fn().mockReturnValue({
+      context.services.config!.getEphemeralSettings = vi.fn().mockReturnValue({
         'tool-output-max-items': 100,
         'tool-output-max-tokens': 75000,
         'tool-output-truncate-mode': 'truncate',
@@ -438,23 +438,23 @@ describe('profileCommand', () => {
       );
 
       // Verify ephemeral settings were applied
-      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
         'tool-output-max-items',
         100,
       );
-      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
         'tool-output-max-tokens',
         75000,
       );
-      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
         'tool-output-truncate-mode',
         'truncate',
       );
-      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
         'tool-output-item-size-limit',
         1048576,
       );
-      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
         'max-prompt-tokens',
         150000,
       );

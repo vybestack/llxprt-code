@@ -10,7 +10,7 @@ import {
   initialAppState,
   type AppState,
   type AppAction,
-} from './appReducer';
+} from './appReducer.js';
 import type { HistoryItem } from '../types.js';
 
 describe('appReducer', () => {
@@ -570,6 +570,9 @@ describe('appReducer', () => {
           providerModel: false,
           provider: false,
           privacy: false,
+          loadProfile: false,
+          tools: false,
+          oauthCode: false,
         },
         warnings: new Map([['key1', 'value1']]),
         errors: {

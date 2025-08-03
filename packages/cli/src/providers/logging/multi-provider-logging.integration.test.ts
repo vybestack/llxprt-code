@@ -5,7 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { IProvider, IMessage, ITool } from '@vybestack/llxprt-code-core';
+import { 
+  IProvider, 
+  IMessage, 
+  ITool, 
+  ContentGeneratorRole
+} from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
@@ -50,12 +55,7 @@ interface ProviderManager {
   getProviderNames(): string[];
 }
 
-interface _ProviderSwitchEvent {
-  from_provider: string;
-  to_provider: string;
-  context_preserved: boolean;
-  timestamp: string;
-}
+// Remove unused interface to fix TS6196 error
 
 // Mock telemetry system
 const telemetrySystem = {
@@ -82,17 +82,17 @@ function createMockProvider(
     async *generateChatCompletion(_messages: IMessage[], _tools?: ITool[]) {
       // Simulate provider-specific response patterns
       if (name === 'openai') {
-        yield { content: 'OpenAI response chunk 1', role: 'assistant' };
-        yield { content: ' chunk 2', role: 'assistant' };
+        yield { content: 'OpenAI response chunk 1', role: ContentGeneratorRole.ASSISTANT };
+        yield { content: ' chunk 2', role: ContentGeneratorRole.ASSISTANT };
       } else if (name === 'anthropic') {
         yield {
           content: 'Claude response: I understand your request.',
-          role: 'assistant',
+          role: ContentGeneratorRole.ASSISTANT,
         };
       } else if (name === 'gemini') {
         yield {
           content: 'Gemini response with reasoning...',
-          role: 'assistant',
+          role: ContentGeneratorRole.ASSISTANT,
         };
       }
     },
@@ -104,6 +104,7 @@ function createMockProvider(
       .mockResolvedValue({ result: `Tool result from ${name}` }),
     setModel: vi.fn(),
     getCurrentModel: vi.fn().mockReturnValue(`${name}-model-1`),
+    getDefaultModel: vi.fn().mockReturnValue(`${name}-default`),
     getToolFormat: vi
       .fn()
       .mockReturnValue(name === 'anthropic' ? 'xml' : 'json'),
@@ -186,7 +187,7 @@ class MockConversationDataRedactor implements ConversationDataRedactor {
 class MockLoggingProviderWrapper implements LoggingProviderWrapper {
   constructor(
     private provider: IProvider,
-    private config: Config,
+    _config: Config,
     private redactor: ConversationDataRedactor,
     private storage: ConversationStorage,
   ) {}
@@ -270,8 +271,7 @@ class MockConversationStorage implements ConversationStorage {
 function createConfigWithLogging(enabled: boolean): Config {
   return {
     getConversationLoggingEnabled: () => enabled,
-    updateSettings: vi.fn(),
-  };
+  } as Config;
 }
 
 describe('Multi-Provider Conversation Logging Integration', () => {
@@ -330,7 +330,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     providerManager.setActiveProvider('openai');
     await consumeAsyncIterable(
       openaiWrapper.generateChatCompletion([
-        { role: 'user', content: 'Explain quantum computing' },
+        { role: ContentGeneratorRole.USER, content: 'Explain quantum computing' },
       ]),
     );
 
@@ -338,7 +338,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     await consumeAsyncIterable(
       anthropicWrapper.generateChatCompletion([
         {
-          role: 'user',
+          role: ContentGeneratorRole.USER,
           content: 'Continue the explanation with practical applications',
         },
       ]),
@@ -347,7 +347,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     providerManager.setActiveProvider('gemini');
     await consumeAsyncIterable(
       geminiWrapper.generateChatCompletion([
-        { role: 'user', content: 'Summarize the key points' },
+        { role: ContentGeneratorRole.USER, content: 'Summarize the key points' },
       ]),
     );
 
@@ -402,18 +402,21 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     const tools: ITool[] = [
       {
-        name: 'search_web',
-        description: 'Search the web for information',
-        parameters: {
-          type: 'object',
-          properties: { query: { type: 'string' } },
+        type: 'function',
+        function: {
+          name: 'search_web',
+          description: 'Search the web for information',
+          parameters: {
+            type: 'object',
+            properties: { query: { type: 'string' } },
+          },
         },
       },
     ];
 
     const messagesWithTools: IMessage[] = [
       {
-        role: 'user',
+        role: ContentGeneratorRole.USER,
         content: 'Search for information about AI safety',
         tool_calls: [
           {
@@ -466,20 +469,20 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     const slowStreamProvider = createMockProvider('slow-stream');
 
     // Override streaming behavior
-    fastStreamProvider.generateChatCompletion = jest
+    fastStreamProvider.generateChatCompletion = vi
       .fn()
       .mockImplementation(async function* () {
-        yield { content: 'Fast', role: 'assistant' };
-        yield { content: ' response', role: 'assistant' };
+        yield { content: 'Fast', role: ContentGeneratorRole.ASSISTANT };
+        yield { content: ' response', role: ContentGeneratorRole.ASSISTANT };
       });
 
-    slowStreamProvider.generateChatCompletion = jest
+    slowStreamProvider.generateChatCompletion = vi
       .fn()
       .mockImplementation(async function* () {
-        yield { content: 'Slow', role: 'assistant' };
+        yield { content: 'Slow', role: ContentGeneratorRole.ASSISTANT };
         await new Promise((resolve) => setTimeout(resolve, 10)); // Simulate slow streaming
-        yield { content: ' deliberate', role: 'assistant' };
-        yield { content: ' response', role: 'assistant' };
+        yield { content: ' deliberate', role: ContentGeneratorRole.ASSISTANT };
+        yield { content: ' response', role: ContentGeneratorRole.ASSISTANT };
       });
 
     const fastWrapper = new MockLoggingProviderWrapper(
@@ -496,7 +499,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     );
 
     const message: IMessage[] = [
-      { role: 'user', content: 'Tell me about machine learning' },
+      { role: ContentGeneratorRole.USER, content: 'Tell me about machine learning' },
     ];
 
     // Test fast streaming
@@ -542,7 +545,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     errorProvider.generateChatCompletion = vi
       .fn()
       .mockImplementation(async function* () {
-        yield { content: 'Starting response...', role: 'assistant' };
+        yield { content: 'Starting response...', role: ContentGeneratorRole.ASSISTANT };
         throw new Error('Provider API error');
       });
 
@@ -559,7 +562,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       storage,
     );
 
-    const message: IMessage[] = [{ role: 'user', content: 'Test message' }];
+    const message: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test message' }];
 
     // Test reliable provider first
     await consumeAsyncIterable(reliableWrapper.generateChatCompletion(message));
@@ -600,7 +603,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     );
 
     const messages: IMessage[] = [
-      { role: 'user', content: 'Concurrent test message' },
+      { role: ContentGeneratorRole.USER, content: 'Concurrent test message' },
     ];
 
     // Start all conversations concurrently
@@ -654,15 +657,15 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     const sensitiveMessages = [
       {
-        role: 'user' as const,
+        role: ContentGeneratorRole.USER as const,
         content: 'My OpenAI key is sk-1234567890abcdef1234567890abcdef12345678',
       },
       {
-        role: 'user' as const,
+        role: ContentGeneratorRole.USER as const,
         content: 'My Anthropic key is sk-ant-api03-abcd1234567890',
       },
       {
-        role: 'user' as const,
+        role: ContentGeneratorRole.USER as const,
         content: 'My Google key is AIzaSyAbcd1234567890',
       },
     ];
@@ -694,7 +697,8 @@ describe('Multi-Provider Conversation Logging Integration', () => {
    * @and Conversation continuity is tracked
    */
   it('should maintain session continuity across provider switches in logging', async () => {
-    const _sessionId = 'session_' + Date.now();
+    // Session ID for testing continuity tracking
+    'session_' + Date.now();
     const providers = ['openai', 'anthropic', 'gemini'].map((name) =>
       createMockProvider(name),
     );
@@ -705,10 +709,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     // Simulate conversation progression
     const conversationMessages = [
-      { role: 'user' as const, content: 'What is machine learning?' },
-      { role: 'user' as const, content: 'Can you give examples?' },
+      { role: ContentGeneratorRole.USER as const, content: 'What is machine learning?' },
+      { role: ContentGeneratorRole.USER as const, content: 'Can you give examples?' },
       {
-        role: 'user' as const,
+        role: ContentGeneratorRole.USER as const,
         content: 'How about neural networks specifically?',
       },
     ];

@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as os from 'os';
 import { ToolCallStatus } from '../types.js';
-import { UseHistoryManagerReturn } from './useHistoryManager';
+import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import * as fsPromises from 'fs/promises';
 
 import * as path from 'path';
@@ -397,12 +397,14 @@ describe('handleAtCommand', () => {
     });
 
     expect(result.shouldProceed).toBe(true);
-    expect(result.processedQuery[0]).toEqual({
+    expect(result.processedQuery).toBeDefined();
+    const processedQuery = result.processedQuery!;
+    expect((processedQuery as any)[0]).toEqual({
       text: `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`,
     });
 
     // Check that both files are included but don't enforce order
-    const queryText = result.processedQuery.map((p) => p.text).join('');
+    const queryText = (Array.isArray(processedQuery) ? processedQuery : [processedQuery]).map((p: any) => p.text).join('');
     expect(queryText).toContain('--- Content from referenced files ---');
     expect(queryText).toContain(`Content from @${file1Path}:`);
     expect(queryText).toContain(content1);
@@ -520,7 +522,7 @@ describe('handleAtCommand', () => {
         '# Project README',
       );
       const relativePath2 = '.env';
-      const _gitIgnoredFile = await createTestFile(
+      await createTestFile(
         path.join(testRootDir, relativePath2),
         'SECRET=123',
       );
@@ -685,7 +687,7 @@ describe('handleAtCommand', () => {
       '// Main application entry',
     );
     const relativePath2 = path.join('dist', 'bundle.js');
-    const _llxprtIgnoredFile = await createTestFile(
+    await createTestFile(
       path.join(testRootDir, relativePath2),
       'console.log("bundle");',
     );

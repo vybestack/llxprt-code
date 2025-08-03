@@ -10,7 +10,7 @@ import {
   main,
   setupUnhandledRejectionHandler,
   validateDnsResolutionOrder,
-} from './gemini.tsx';
+} from './gemini.js';
 import {
   LoadedSettings,
   SettingsFile,

@@ -13,8 +13,8 @@ import {
   type MockedFunction,
 } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { useResponsive } from './useResponsive';
-import { useTerminalSize } from './useTerminalSize';
+import { useResponsive } from './useResponsive.js';
+import { useTerminalSize } from './useTerminalSize.js';
 
 vi.mock('./useTerminalSize');
 

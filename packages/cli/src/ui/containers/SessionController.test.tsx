@@ -27,14 +27,14 @@ import {
   SessionContext,
   type SessionContextType,
 } from './SessionController.js';
-import { MessageType, type HistoryItem } from '../types.js';
+import { MessageType } from '../types.js';
 import {
   UserTierId,
   isProQuotaExceededError,
   isGenericQuotaExceededError,
   Config,
 } from '@vybestack/llxprt-code-core';
-import { IProvider } from '../../providers/IProvider.js';
+import { IProvider } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 
@@ -73,23 +73,10 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 
 describe('SessionController', () => {
   let mockConfig: Partial<Config>;
-  let mockAddItem: ReturnType<
-    typeof vi.fn<[Omit<HistoryItem, 'id'>, number], number>
-  >;
-  let mockUpdateItem: ReturnType<
-    typeof vi.fn<
-      [
-        number,
-        (
-          | Partial<Omit<HistoryItem, 'id'>>
-          | ((prevItem: HistoryItem) => Partial<Omit<HistoryItem, 'id'>>)
-        ),
-      ],
-      void
-    >
-  >;
-  let mockClearItems: ReturnType<typeof vi.fn<[], void>>;
-  let mockLoadHistory: ReturnType<typeof vi.fn<[HistoryItem[]], void>>;
+  let mockAddItem: ReturnType<typeof vi.fn>;
+  let mockUpdateItem: ReturnType<typeof vi.fn>;
+  let mockClearItems: ReturnType<typeof vi.fn>;
+  let mockLoadHistory: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -117,7 +104,7 @@ describe('SessionController', () => {
       getExtensionContextFilePaths: vi.fn(() => []),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
-      setFlashFallbackHandler: vi.fn(),
+      setFlashFallbackHandler: vi.fn() as ReturnType<typeof vi.fn>,
       setQuotaErrorOccurred: vi.fn(),
       setModel: vi.fn(),
       getUserTier: vi.fn(() => Promise.resolve(undefined)),
@@ -125,7 +112,7 @@ describe('SessionController', () => {
       getWorkspaceContext: vi.fn(() => ({
         getDirectories: vi.fn(() => [process.cwd()]),
       })),
-    };
+    } as unknown as Partial<Config> & { getUserTier: ReturnType<typeof vi.fn> };
   });
 
   afterEach(() => {
@@ -375,7 +362,7 @@ describe('SessionController', () => {
     vi.runAllTimers();
     await Promise.resolve();
 
-    expect(mockConfig.getUserTier).not.toHaveBeenCalled();
+    expect((mockConfig as unknown as { getUserTier: ReturnType<typeof vi.fn> }).getUserTier).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -387,8 +374,8 @@ describe('SessionController', () => {
       error?: unknown,
     ) => Promise<boolean>;
 
-    let flashFallbackHandler: FlashFallbackHandler | null = null;
-    mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
+    let flashFallbackHandler: FlashFallbackHandler | undefined;
+    (mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>)?.mockImplementation((handler: FlashFallbackHandler) => {
       flashFallbackHandler = handler;
     });
 
@@ -416,11 +403,13 @@ describe('SessionController', () => {
     const mockError = new Error('Quota exceeded');
     vi.mocked(isProQuotaExceededError).mockReturnValue(true);
 
-    await flashFallbackHandler?.(
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      mockError,
-    );
+    if (flashFallbackHandler) {
+      await flashFallbackHandler(
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        mockError,
+      );
+    }
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -462,7 +451,7 @@ describe('SessionController', () => {
     );
 
     // Change the model
-    mockConfig.getModel?.mockReturnValue('new-model');
+    (mockConfig.getModel as ReturnType<typeof vi.fn>)?.mockReturnValue('new-model');
     mockGetProviderManager.mockReturnValue({
       hasActiveProvider: () => true,
       getActiveProvider: () =>
@@ -525,15 +514,13 @@ describe('SessionController', () => {
       error?: unknown,
     ) => Promise<boolean>;
 
-    let flashFallbackHandler: FlashFallbackHandler | null = null;
-    mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
+    let flashFallbackHandler: FlashFallbackHandler | undefined;
+    (mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>)?.mockImplementation((handler: FlashFallbackHandler) => {
       flashFallbackHandler = handler;
     });
 
-    let _contextValue: SessionContextType | undefined;
-
     const TestComponent = () => {
-      _contextValue = React.useContext(SessionContext);
+      React.useContext(SessionContext);
       return null;
     };
 
@@ -547,11 +534,13 @@ describe('SessionController', () => {
     vi.mocked(isProQuotaExceededError).mockReturnValue(false);
     vi.mocked(isGenericQuotaExceededError).mockReturnValue(true);
 
-    await flashFallbackHandler?.(
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      mockError,
-    );
+    if (flashFallbackHandler) {
+      await flashFallbackHandler(
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        mockError,
+      );
+    }
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -716,8 +705,8 @@ describe('SessionController', () => {
       error?: unknown,
     ) => Promise<boolean>;
 
-    let flashFallbackHandler: FlashFallbackHandler | null = null;
-    mockConfig.setFlashFallbackHandler?.mockImplementation((handler) => {
+    let flashFallbackHandler: FlashFallbackHandler | undefined;
+    (mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>)?.mockImplementation((handler: FlashFallbackHandler) => {
       flashFallbackHandler = handler;
     });
 
@@ -743,11 +732,13 @@ describe('SessionController', () => {
     const mockError = new Error('Quota exceeded');
     vi.mocked(isProQuotaExceededError).mockReturnValue(true);
 
-    await flashFallbackHandler?.(
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      mockError,
-    );
+    if (flashFallbackHandler) {
+      await flashFallbackHandler(
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        mockError,
+      );
+    }
 
     expect(mockAddItem).toHaveBeenCalledWith(
       expect.objectContaining({

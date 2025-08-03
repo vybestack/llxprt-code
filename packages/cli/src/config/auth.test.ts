@@ -6,7 +6,7 @@
 
 import { AuthType } from '@vybestack/llxprt-code-core';
 import { vi } from 'vitest';
-import { validateAuthMethod } from './auth';
+import { validateAuthMethod } from './auth.js';
 
 vi.mock('./settings.js', () => ({
   loadEnvironment: vi.fn(),

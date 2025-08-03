@@ -15,7 +15,7 @@ import {
 } from 'vitest';
 import { act } from 'react';
 import { renderHook } from '@testing-library/react';
-import { useGitBranchName } from './useGitBranchName';
+import { useGitBranchName } from './useGitBranchName.js';
 import { EventEmitter } from 'node:events';
 import { exec as mockExec, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';

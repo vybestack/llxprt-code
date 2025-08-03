@@ -36,7 +36,13 @@ describe('useKeypress', () => {
 
     // Update the mock implementation for this test
     const { useStdin } = await import('ink');
-    vi.mocked(useStdin).mockReturnValue({ stdin, setRawMode });
+    vi.mocked(useStdin).mockReturnValue({ 
+      stdin: stdin as any, 
+      setRawMode,
+      isRawModeSupported: true,
+      internal_exitOnCtrlC: true,
+      internal_eventEmitter: stdin
+    });
   });
 
   afterEach(() => {

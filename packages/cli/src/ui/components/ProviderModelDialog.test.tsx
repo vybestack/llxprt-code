@@ -26,12 +26,12 @@ const mockUseResponsive = vi.mocked(useResponsive);
 
 describe('ProviderModelDialog', () => {
   const mockModels: IModel[] = [
-    { id: 'gpt-4', name: 'GPT-4' },
-    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
-    { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
-    { id: 'gemini-pro', name: 'Gemini Pro' },
-    { id: 'very-long-model-name-that-should-be-truncated', name: 'Long Model' },
+    { id: 'gpt-4', name: 'GPT-4', provider: 'openai', supportedToolFormats: ['openai'] },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', supportedToolFormats: ['openai'] },
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic', supportedToolFormats: ['anthropic'] },
+    { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', provider: 'anthropic', supportedToolFormats: ['anthropic'] },
+    { id: 'gemini-pro', name: 'Gemini Pro', provider: 'google', supportedToolFormats: ['google'] },
+    { id: 'very-long-model-name-that-should-be-truncated', name: 'Long Model', provider: 'test', supportedToolFormats: ['test'] },
   ];
 
   const defaultProps = {
@@ -101,10 +101,14 @@ describe('ProviderModelDialog', () => {
         {
           id: 'extremely-long-model-name-that-exceeds-reasonable-column-width-limits',
           name: 'Long Model 1',
+          provider: 'test',
+          supportedToolFormats: ['test'],
         },
         {
           id: 'another-extremely-long-model-name-that-also-exceeds-limits',
           name: 'Long Model 2',
+          provider: 'test',
+          supportedToolFormats: ['test'],
         },
       ];
 

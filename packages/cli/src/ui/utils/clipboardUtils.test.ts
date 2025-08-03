@@ -9,7 +9,7 @@ import {
   clipboardHasImage,
   saveClipboardImage,
   cleanupOldClipboardImages,
-} from './clipboardUtils';
+} from './clipboardUtils.js';
 
 describe('clipboardUtils', () => {
   describe('clipboardHasImage', () => {

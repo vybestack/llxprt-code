@@ -474,7 +474,6 @@ describe('Profile with Keyfile Integration Tests', () => {
           modelParams: {},
           ephemeralSettings: {
             'auth-keyfile': keyfilePath,
-            environment: name,
           },
         };
 
@@ -490,7 +489,7 @@ describe('Profile with Keyfile Integration Tests', () => {
 
         const content = await fs.readFile(keyfilePath, 'utf-8');
         expect(content).toBe(apiKey);
-        expect(loaded.ephemeralSettings.environment).toBe(name);
+        // Environment setting was removed as it's not part of EphemeralSettings interface
       }
     });
 

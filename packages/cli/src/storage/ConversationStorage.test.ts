@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
-import { IMessage } from '@vybestack/llxprt-code-core';
+import { IMessage, ContentGeneratorRole } from '@vybestack/llxprt-code-core';
 
 // Interface for conversation log entries
 interface ConversationLogEntry {
@@ -183,7 +183,7 @@ function createLargeConversationEntry(sizeBytes: number): ConversationLogEntry {
     timestamp: new Date().toISOString(),
     conversation_id: 'conv_123',
     provider_name: 'openai',
-    messages: [{ role: 'user', content: largeContent }],
+    messages: [{ role: ContentGeneratorRole.USER, content: largeContent }],
   };
 }
 
@@ -193,8 +193,8 @@ function createTypicalConversationEntry(): ConversationLogEntry {
     conversation_id: 'conv_456',
     provider_name: 'anthropic',
     messages: [
-      { role: 'user', content: 'Hello, how can you help me?' },
-      { role: 'assistant', content: 'I can help you with various tasks...' },
+      { role: ContentGeneratorRole.USER, content: 'Hello, how can you help me?' },
+      { role: ContentGeneratorRole.ASSISTANT, content: 'I can help you with various tasks...' },
     ],
     session_id: 'session_789',
   };
@@ -411,8 +411,6 @@ describe('Conversation Log Storage Management', () => {
       retentionDays: 7,
     });
 
-    const _entry = createTypicalConversationEntry();
-
     // In real implementation, this would test actual filesystem errors
     // For now, we verify the storage instance handles the invalid path gracefully
     await expect(errorProneStorage.ensureLogDirectory()).resolves.not.toThrow();
@@ -459,7 +457,7 @@ describe('Conversation Log Storage Management', () => {
       timestamp: new Date().toISOString(),
       conversation_id: 'minimal_conv',
       provider_name: 'test',
-      messages: [{ role: 'user', content: '' }],
+      messages: [{ role: ContentGeneratorRole.USER, content: '' }],
     };
 
     await expect(

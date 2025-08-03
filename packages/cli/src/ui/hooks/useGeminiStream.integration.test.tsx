@@ -258,7 +258,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       showMemoryUsage: false,
       contextFileName: undefined,
       getToolRegistry: vi.fn(
-        () => ({ getToolSchemaList: vi.fn(() => []) }) as any,
+        () => Promise.resolve({ getFunctionDeclarations: vi.fn(() => []) }) as any,
       ),
       getProjectRoot: vi.fn(() => '/test/dir'),
       getCheckpointingEnabled: vi.fn(() => false),
@@ -276,7 +276,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig),
       getEphemeralSettings: mockGetEphemeralSettings,
-      getApprovalMode: vi.fn(() => ApprovalMode.INTERACTIVE),
+      getApprovalMode: vi.fn(() => ApprovalMode.DEFAULT),
     } as unknown as Config;
 
     // Mock return value for useReactToolScheduler
@@ -414,7 +414,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
           toolCalls: initialToolCalls,
         },
         wrapper: ({ children }: { children: React.ReactNode }) =>
-          React.createElement(TodoContextProvider, { todos }, children),
+          React.createElement(TodoContextProvider, { todos, children }),
       },
     );
     return {
@@ -629,7 +629,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
 
     // Mock tool registry that includes todo_pause
     const mockToolRegistry = {
-      getToolSchemaList: vi.fn(() => [
+      getFunctionDeclarations: vi.fn(() => [
         {
           name: 'todo_pause',
           description: 'Pause the current todo task',
@@ -649,7 +649,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       ]),
     };
 
-    (mockConfig.getToolRegistry as Mock).mockReturnValue(mockToolRegistry);
+    (mockConfig.getToolRegistry as Mock).mockReturnValue(Promise.resolve(mockToolRegistry));
 
     mockSendMessageStream.mockReturnValue(
       (async function* () {
@@ -668,13 +668,14 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
     });
 
     // Verify tool registry includes todo_pause
-    const toolSchemas = mockConfig.getToolRegistry().getToolSchemaList();
+    const toolRegistry = await mockConfig.getToolRegistry();
+    const toolSchemas = toolRegistry.getFunctionDeclarations();
     const todoPauseTool = toolSchemas.find(
       (tool: any) => tool.name === 'todo_pause',
     );
 
     expect(todoPauseTool).toBeDefined();
-    expect(todoPauseTool.description).toContain('Pause');
+    expect(todoPauseTool!.description).toContain('Pause');
   });
 
   /**
@@ -980,10 +981,10 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
    * @when Tools are requested
    * @then todo_pause tool is available in the registry
    */
-  it('should have todo_pause tool available in tool registry', () => {
+  it('should have todo_pause tool available in tool registry', async () => {
     // Set up tool registry with todo_pause tool
     const mockToolRegistry = {
-      getToolSchemaList: vi.fn(() => [
+      getFunctionDeclarations: vi.fn(() => [
         {
           name: 'todo_pause',
           description: 'Pause the current todo task',
@@ -1003,21 +1004,22 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
       ]),
     };
 
-    (mockConfig.getToolRegistry as Mock).mockReturnValue(mockToolRegistry);
+    (mockConfig.getToolRegistry as Mock).mockReturnValue(Promise.resolve(mockToolRegistry));
 
     const activeTodos = createActiveTodos();
     renderTestHook([], activeTodos);
 
     // Verify tool registry includes todo_pause
-    const toolSchemas = mockConfig.getToolRegistry().getToolSchemaList();
+    const toolRegistry = await mockConfig.getToolRegistry();
+    const toolSchemas = toolRegistry.getFunctionDeclarations();
     const todoPauseTool = toolSchemas.find(
       (tool: any) => tool.name === 'todo_pause',
     );
 
     expect(todoPauseTool).toBeDefined();
-    expect(todoPauseTool.description).toContain('Pause');
-    expect(todoPauseTool.parameters.properties.reason).toBeDefined();
-    expect(todoPauseTool.parameters.required).toContain('reason');
+    expect(todoPauseTool!.description).toContain('Pause');
+    expect(todoPauseTool!.parameters!.properties!.reason).toBeDefined();
+    expect(todoPauseTool!.parameters!.required).toContain('reason');
   });
 
   /**

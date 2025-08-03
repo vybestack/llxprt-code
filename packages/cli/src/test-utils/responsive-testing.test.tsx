@@ -7,8 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { type RenderResult } from '@testing-library/react';
 import React from 'react';
-import { renderAtWidth, testResponsiveBehavior } from './responsive-testing';
-import { useResponsive } from '../ui/hooks/useResponsive';
+import { renderAtWidth, testResponsiveBehavior } from './responsive-testing.js';
+import { useResponsive } from '../ui/hooks/useResponsive.js';
 
 // Mock the useTerminalSize hook
 vi.mock('../ui/hooks/useTerminalSize');

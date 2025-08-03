@@ -5,8 +5,8 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { keyCommand } from './keyCommand';
-import { type CommandContext } from './types';
+import { keyCommand } from './keyCommand.js';
+import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 
 describe('keyCommand', () => {
@@ -24,6 +24,7 @@ describe('keyCommand', () => {
     getProviderManager: () => typeof mockProviderManager;
     setEphemeralSetting: (key: string, value: unknown) => void;
     refreshAuth: (authType: string) => Promise<void>;
+    getSettingsService: () => unknown;
   };
 
   beforeEach(() => {
@@ -39,6 +40,7 @@ describe('keyCommand', () => {
     // Create mock provider manager
     mockProviderManager = {
       getActiveProvider: vi.fn().mockReturnValue(mockActiveProvider),
+      getActiveProviderName: vi.fn().mockReturnValue('test-provider'),
     };
 
     // Create mock config with provider manager
