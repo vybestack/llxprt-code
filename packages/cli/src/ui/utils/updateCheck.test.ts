@@ -218,10 +218,13 @@ describe('checkForUpdates', () => {
       }));
 
       const checkPromise = checkForUpdates();
-      vi.advanceTimersByTime(FETCH_TIMEOUT_MS + 100);
-      const result = await checkPromise;
 
+      // Advance timers to trigger the timeout
+      await vi.advanceTimersByTimeAsync(FETCH_TIMEOUT_MS + 100);
+
+      const result = await checkPromise;
       expect(result).toBeNull();
+
       vi.useRealTimers();
     });
   });

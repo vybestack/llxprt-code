@@ -31,8 +31,6 @@ import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
 import * as dotenv from 'dotenv';
-import * as path from 'node:path';
-import * as fs from 'node:fs';
 import * as os from 'node:os';
 
 const LLXPRT_DIR = '.llxprt';

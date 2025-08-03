@@ -63,11 +63,18 @@ export async function checkForUpdates(): Promise<UpdateObject | null> {
       });
 
     // Add timeout wrapper to prevent blocking
-    const fetchWithTimeout = async (notifier: any) => {
+    const fetchWithTimeout = async (notifier: {
+      fetchInfo: () => UpdateInfo | Promise<UpdateInfo>;
+    }) => {
       const timeout = new Promise<null>((resolve) =>
         setTimeout(resolve, FETCH_TIMEOUT_MS, null),
       );
-      return Promise.race([notifier.fetchInfo(), timeout]);
+      const fetchResult = notifier.fetchInfo();
+      const fetchPromise = Promise.resolve(fetchResult);
+      return Promise.race([
+        fetchPromise,
+        timeout,
+      ]) as Promise<UpdateInfo | null>;
     };
 
     if (isNightly) {
@@ -77,8 +84,8 @@ export async function checkForUpdates(): Promise<UpdateObject | null> {
       ]);
 
       const bestUpdate = getBestAvailableUpdate(
-        nightlyUpdateInfo,
-        latestUpdateInfo,
+        nightlyUpdateInfo || undefined,
+        latestUpdateInfo || undefined,
       );
 
       if (bestUpdate && semver.gt(bestUpdate.latest, currentVersion)) {
