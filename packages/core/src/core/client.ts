@@ -641,8 +641,6 @@ export class GeminiClient {
       // Only run nextSpeaker check if we explicitly have gemini provider
       // Don't default to gemini if provider manager is missing
       if (providerName === 'gemini') {
-        // TEMPORARILY DISABLED FOR TESTING
-        /*
         const nextSpeakerCheck = await checkNextSpeaker(
           this.getChat(),
           this,
@@ -669,7 +667,6 @@ export class GeminiClient {
             initialModel,
           );
         }
-        */
       }
     }
     return turn;
