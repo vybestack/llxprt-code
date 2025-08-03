@@ -96,7 +96,7 @@ describe('aboutCommand', () => {
         cliVersion: 'test-version',
         osVersion: 'test-os',
         sandboxEnv: 'no sandbox',
-        modelVersion: 'gemini:gemini-2.5-pro', // Provider name:model format
+        modelVersion: 'test-model',
         selectedAuthType: 'test-auth',
         gcpProject: 'test-gcp-project',
         keyfile: '',

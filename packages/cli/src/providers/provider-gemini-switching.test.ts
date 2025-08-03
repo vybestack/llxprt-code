@@ -43,7 +43,7 @@ describe('Provider-Gemini Switching', () => {
   });
 
   it('should use Gemini when no provider is active', async () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Clear any auto-loaded active provider
     if (manager.hasActiveProvider()) {
@@ -72,7 +72,7 @@ describe('Provider-Gemini Switching', () => {
   });
 
   it('should use provider when active', async () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Register and activate provider
     manager.registerProvider(mockProvider);
@@ -108,7 +108,7 @@ describe('Provider-Gemini Switching', () => {
   });
 
   it('should switch back to Gemini when provider is cleared', async () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Start with active provider
     manager.registerProvider(mockProvider);

@@ -4,10 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { authCommand } from './authCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
+
+vi.mock('../../providers/providerManagerInstance.js', () => ({
+  getProviderManager: vi.fn(() => ({
+    getActiveProvider: () => ({ name: 'test-provider' }),
+  })),
+}));
 
 describe('authCommand', () => {
   let mockContext: CommandContext;
