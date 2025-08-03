@@ -211,7 +211,10 @@ rpc.send({
 
       // Validate model output - will throw if no output, fail if missing expected content
       validateModelOutput(output, '15', 'MCP server test');
-      assert.ok(output.includes('15'), 'Expected output to contain the sum (15)');
+      assert.ok(
+        output.includes('15'),
+        'Expected output to contain the sum (15)',
+      );
     });
   });
 } // End of else block for OpenRouter skip
