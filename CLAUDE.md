@@ -118,6 +118,7 @@ git commit --no-gpg-sign -m "your commit message"
 - If you compile, test, lint and get an error and change code, you MUST compile, test, lint again
 - You may commit locally before risky changes, but NEVER push until the whole cycle passes
 - **NEVER** push without explicit user permission - they need to test the UI first
+- Documentation-only changes (\*.md files, docs/) do NOT require build/test/lint cycle
 
 ### Communication Style
 
