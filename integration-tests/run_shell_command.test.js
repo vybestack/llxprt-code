@@ -13,7 +13,7 @@ test('should be able to run a shell command', async (t) => {
   rig.setup(t.name);
   rig.createFile('blah.txt', 'some content');
 
-  const prompt = `Execute the shell command "ls" to list the files in the current directory. Use the shell tool to run this command.`;
+  const prompt = `Use the run_shell_command tool to execute the following command: ls`;
   const result = rig.run(prompt);
 
   assert.ok(result.includes('blah.txt'));
@@ -24,7 +24,7 @@ test('should be able to run a shell command via stdin', async (t) => {
   rig.setup(t.name);
   rig.createFile('blah.txt', 'some content');
 
-  const prompt = `Execute the shell command "ls" to list the files in the current directory. Use the shell tool to run this command.`;
+  const prompt = `Use the run_shell_command tool to execute the following command: ls`;
   const result = rig.run({ stdin: prompt });
 
   assert.ok(result.includes('blah.txt'));
