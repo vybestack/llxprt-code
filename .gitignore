@@ -55,3 +55,13 @@ research/
 # VSCode extension packages
 packages/vscode-ide-companion/*.vsix
 tmp/
+
+# Test artifacts that might be created in root
+テストファイル.txt
+日本語.txt
+test-commands-jp.txt
+*.log
+tmp-*.sh
+
+# Test output directories
+test-e2e/
