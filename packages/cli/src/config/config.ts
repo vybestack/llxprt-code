@@ -27,7 +27,6 @@ import { Settings } from './settings.js';
 import { Extension, annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
-import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
@@ -556,8 +555,7 @@ export async function loadCliConfig(
     ideClient,
   });
 
-  // Enhance the config with provider support
-  const enhancedConfig = await enhanceConfigWithProviders(config);
+  const enhancedConfig = config;
 
   // Apply ephemeral settings from profile if loaded
   if (profileToLoad && effectiveSettings) {
