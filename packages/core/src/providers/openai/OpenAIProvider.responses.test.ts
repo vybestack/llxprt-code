@@ -158,7 +158,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
           } else {
             bodyText = options?.body as string;
           }
-          
+
           capturedRequest = {
             url: url as string,
             body: JSON.parse(bodyText) as CapturedRequest['body'],
@@ -284,7 +284,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
         } else {
           bodyText = options?.body as string;
         }
-        
+
         capturedRequest = {
           url: url as string,
           body: JSON.parse(bodyText) as CapturedRequest['body'],
@@ -394,7 +394,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
         } else {
           bodyText = options?.body as string;
         }
-        
+
         capturedRequest = {
           url: url as string,
           body: JSON.parse(bodyText) as CapturedRequest['body'],
