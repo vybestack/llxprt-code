@@ -33,8 +33,9 @@ test('qwen calls a local shell script via run_shell_command and preserves UTF-8 
   const prompt = [
     'Use the run_shell_command tool to execute the following command:',
     '',
-    isWindows ? `print-multibyte.bat` : `./print-multibyte.sh`,
+    isWindows ? `print-multibyte.bat` : `bash print-multibyte.sh`,
     '',
+    'Do not specify a directory parameter - run it in the current directory.',
     'After running it, output exactly what the command prints to stdout, with no additional commentary.',
   ].join('\n');
 
