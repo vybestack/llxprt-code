@@ -34,15 +34,11 @@ if (!versionType) {
 // 2. Bump the version in the root and all workspace package.json files.
 run(`npm version ${versionType} --no-git-tag-version --allow-same-version`);
 
-// 3. Get all workspaces and filter out the one we don't want to version.
-const workspacesToExclude = ['llxprt-code-vscode-ide-companion'];
-const lsOutput = JSON.parse(
-  execSync('npm ls --workspaces --json --depth=0').toString(),
-);
-const allWorkspaces = Object.keys(lsOutput.dependencies || {});
-const workspacesToVersion = allWorkspaces.filter(
-  (wsName) => !workspacesToExclude.includes(wsName),
-);
+// 3. Version all our workspace packages (excluding root which was already versioned)
+const workspacesToVersion = [
+  '@vybestack/llxprt-code-core',
+  'llxprt-code-vscode-ide-companion',
+];
 
 for (const workspaceName of workspacesToVersion) {
   run(

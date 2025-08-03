@@ -148,20 +148,26 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       async (url, options) => {
         console.log('Fetch called with URL:', url);
         console.log('Fetch options:', options);
-        console.log('Request body (raw):', options?.body as string);
+        console.log('Request body (raw):', options?.body);
 
         try {
+          // Handle body as Blob (for UTF-8 encoding support)
+          let bodyText: string;
+          if (options?.body instanceof Blob) {
+            bodyText = await options.body.text();
+          } else {
+            bodyText = options?.body as string;
+          }
+
           capturedRequest = {
             url: url as string,
-            body: JSON.parse(
-              options?.body as string,
-            ) as CapturedRequest['body'],
+            body: JSON.parse(bodyText) as CapturedRequest['body'],
           };
         } catch (e) {
           console.error('Failed to parse request body:', e);
           capturedRequest = {
             url: url as string,
-            body: { raw: options?.body as string },
+            body: { raw: options?.body },
           };
         }
 
@@ -271,9 +277,17 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
 
     (fetch as unknown as Mock<typeof fetch>).mockImplementation(
       async (url, options) => {
+        // Handle body as Blob (for UTF-8 encoding support)
+        let bodyText: string;
+        if (options?.body instanceof Blob) {
+          bodyText = await options.body.text();
+        } else {
+          bodyText = options?.body as string;
+        }
+
         capturedRequest = {
           url: url as string,
-          body: JSON.parse(options?.body as string) as CapturedRequest['body'],
+          body: JSON.parse(bodyText) as CapturedRequest['body'],
         };
 
         return {
@@ -373,9 +387,17 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
 
     (fetch as unknown as Mock<typeof fetch>).mockImplementation(
       async (url, options) => {
+        // Handle body as Blob (for UTF-8 encoding support)
+        let bodyText: string;
+        if (options?.body instanceof Blob) {
+          bodyText = await options.body.text();
+        } else {
+          bodyText = options?.body as string;
+        }
+
         capturedRequest = {
           url: url as string,
-          body: JSON.parse(options?.body as string) as CapturedRequest['body'],
+          body: JSON.parse(bodyText) as CapturedRequest['body'],
         };
 
         return {

@@ -423,8 +423,10 @@ export class GeminiProvider implements IProvider {
         };
 
         // Use the content generator stream
-        const streamResult =
-          await contentGenerator.generateContentStream(request);
+        const streamResult = await contentGenerator.generateContentStream(
+          request,
+          this.config?.getSessionId() || 'default',
+        );
 
         // Convert the stream to our format
         for await (const response of streamResult) {
@@ -1132,8 +1134,10 @@ export class GeminiProvider implements IProvider {
               tools: [{ googleSearch: {} }],
             },
           };
-          const result =
-            await oauthContentGenerator.generateContent(oauthRequest);
+          const result = await oauthContentGenerator.generateContent(
+            oauthRequest,
+            this.config?.getSessionId() || 'default',
+          );
           return result;
         }
 
@@ -1251,8 +1255,10 @@ export class GeminiProvider implements IProvider {
               tools: [{ urlContext: {} }],
             },
           };
-          const result =
-            await oauthContentGenerator.generateContent(oauthRequest);
+          const result = await oauthContentGenerator.generateContent(
+            oauthRequest,
+            this.config?.getSessionId() || 'default',
+          );
           return result;
         }
 

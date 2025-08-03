@@ -274,14 +274,19 @@ const App = (props: AppInternalProps) => {
   } = useAuthCommand(settings, appState, config);
 
   useEffect(() => {
-    if (settings.merged.selectedAuthType) {
+    if (settings.merged.selectedAuthType && !settings.merged.useExternalAuth) {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
       if (error) {
         setAuthError(error);
         openAuthDialog();
       }
     }
-  }, [settings.merged.selectedAuthType, openAuthDialog, setAuthError]);
+  }, [
+    settings.merged.selectedAuthType,
+    settings.merged.useExternalAuth,
+    openAuthDialog,
+    setAuthError,
+  ]);
 
   // Sync user tier from config when authentication changes
   useEffect(() => {
@@ -460,40 +465,39 @@ const App = (props: AppInternalProps) => {
         if (error && isProQuotaExceededError(error)) {
           if (isPaidTier) {
             message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+⚡ To continue using ${currentModel}, you can use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+⚡ Or you can switch to a different model using the /model command`;
           } else {
             message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
 ⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
 ⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
+⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         } else if (error && isGenericQuotaExceededError(error)) {
           if (isPaidTier) {
             message = `⚡ You have reached your daily quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+⚡ To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+⚡ Or you can switch to a different model using the /model command`;
           } else {
             message = `⚡ You have reached your daily quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
 ⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
 ⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
+⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         } else {
           if (isPaidTier) {
-            // Default fallback message for other cases (like consecutive 429s)
-            message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+            // Default message for other cases (like consecutive 429s)
+            message = `⚡ You are experiencing capacity issues with ${currentModel}.
+⚡ Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
+⚡ To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+⚡ Or you can switch to a different model using the /model command`;
           } else {
-            // Default fallback message for other cases (like consecutive 429s)
-            message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
+            // Default message for other cases (like consecutive 429s)
+            message = `⚡ You are experiencing capacity issues with ${currentModel}.
+⚡ Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
 ⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
 ⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
+⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         }
 
@@ -514,14 +518,12 @@ const App = (props: AppInternalProps) => {
         config.setQuotaErrorOccurred(true);
       }
 
-      // Switch model for future use but return false to stop current retry
-      if (fallbackModel) {
-        config.setModel(fallbackModel);
-      }
-      config.setFallbackMode(true);
+      // Don't switch models - let the user decide
+      // Don't set fallback mode either
       const contentGenConfigForEvent = config.getContentGeneratorConfig();
       const authTypeForEvent =
         contentGenConfigForEvent?.authType || AuthType.USE_GEMINI;
+      // Still log the event for telemetry
       logFlashFallback(config, new FlashFallbackEvent(authTypeForEvent));
       return false; // Don't continue with current prompt
     };

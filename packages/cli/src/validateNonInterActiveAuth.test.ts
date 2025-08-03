@@ -10,6 +10,7 @@ import {
   NonInteractiveConfig,
 } from './validateNonInterActiveAuth.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
+import * as auth from './config/auth.js';
 
 describe('validateNonInterActiveAuth', () => {
   let originalEnvGeminiApiKey: string | undefined;
@@ -71,7 +72,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      undefined,
+      undefined,
+      nonInteractiveConfig,
+    );
     // llxprt-code's multi-provider architecture always returns USE_PROVIDER
     // instead of specific auth types like USE_GEMINI when no CLI provider is configured
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
@@ -86,7 +91,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      undefined,
+      undefined,
+      nonInteractiveConfig,
+    );
     // llxprt-code's multi-provider architecture always returns USE_PROVIDER
     // instead of specific auth types like USE_VERTEX_AI when no CLI provider is configured
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
@@ -100,7 +109,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      undefined,
+      undefined,
+      nonInteractiveConfig,
+    );
     // llxprt-code's multi-provider architecture always returns USE_PROVIDER
     // instead of specific auth types like USE_VERTEX_AI when no CLI provider is configured
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
@@ -117,7 +130,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      undefined,
+      undefined,
+      nonInteractiveConfig,
+    );
     // llxprt-code's multi-provider architecture always returns USE_PROVIDER
     // instead of specific auth types like LOGIN_WITH_GOOGLE when no CLI provider is configured
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
@@ -133,7 +150,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      undefined,
+      undefined,
+      nonInteractiveConfig,
+    );
     // llxprt-code's multi-provider architecture always returns USE_PROVIDER
     // instead of specific auth types like USE_VERTEX_AI when no CLI provider is configured
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
@@ -149,7 +170,11 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(undefined, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      undefined,
+      undefined,
+      nonInteractiveConfig,
+    );
     // llxprt-code's multi-provider architecture always returns USE_PROVIDER
     // instead of specific auth types like USE_GEMINI when no CLI provider is configured
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_PROVIDER);
@@ -163,14 +188,17 @@ describe('validateNonInterActiveAuth', () => {
       getProvider: () => undefined,
       getProviderManager: () => undefined,
     };
-    await validateNonInteractiveAuth(AuthType.USE_GEMINI, nonInteractiveConfig);
+    await validateNonInteractiveAuth(
+      AuthType.USE_GEMINI,
+      undefined,
+      nonInteractiveConfig,
+    );
     expect(refreshAuthMock).toHaveBeenCalledWith(AuthType.USE_GEMINI);
   });
 
   it('exits if validateAuthMethod returns error', async () => {
     // Mock validateAuthMethod to return error
-    const mod = await import('./config/auth.js');
-    vi.spyOn(mod, 'validateAuthMethod').mockReturnValue('Auth error!');
+    vi.spyOn(auth, 'validateAuthMethod').mockReturnValue('Auth error!');
     const nonInteractiveConfig: NonInteractiveConfig = {
       refreshAuth: refreshAuthMock,
       getProvider: () => undefined,
@@ -179,6 +207,7 @@ describe('validateNonInterActiveAuth', () => {
     try {
       await validateNonInteractiveAuth(
         AuthType.USE_GEMINI,
+        undefined,
         nonInteractiveConfig,
       );
       expect.fail('Should have exited');
@@ -187,5 +216,29 @@ describe('validateNonInterActiveAuth', () => {
     }
     expect(consoleErrorSpy).toHaveBeenCalledWith('Auth error!');
     expect(processExitSpy).toHaveBeenCalledWith(1);
+  });
+
+  it('skips validation if useExternalAuth is true', async () => {
+    // Mock validateAuthMethod to return error to ensure it's not being called
+    const validateAuthMethodSpy = vi
+      .spyOn(auth, 'validateAuthMethod')
+      .mockReturnValue('Auth error!');
+    const nonInteractiveConfig: NonInteractiveConfig = {
+      refreshAuth: refreshAuthMock,
+    };
+
+    // Even with an invalid auth type, it should not exit
+    // because validation is skipped.
+    await validateNonInteractiveAuth(
+      'invalid-auth-type' as AuthType,
+      true, // useExternalAuth = true
+      nonInteractiveConfig,
+    );
+
+    expect(validateAuthMethodSpy).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(processExitSpy).not.toHaveBeenCalled();
+    // We still expect refreshAuth to be called with the (invalid) type
+    expect(refreshAuthMock).toHaveBeenCalledWith('invalid-auth-type');
   });
 });

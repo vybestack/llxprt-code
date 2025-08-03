@@ -1,6 +1,10 @@
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ResponsesTool } from '../../tools/IToolFormatter.js';
+import {
+  ensureJsonSafe,
+  hasUnicodeReplacements,
+} from '../../utils/unicodeUtils.js';
 
 export interface ResponsesRequestParams {
   messages?: IMessage[];
@@ -202,10 +206,21 @@ export function buildResponsesRequest(
 
         // Extract function call outputs from tool messages
         if (msg.role === 'tool' && msg.tool_call_id && msg.content) {
+          // Sanitize content to ensure it's safe for JSON/API transmission
+          let sanitizedContent = msg.content;
+          if (hasUnicodeReplacements(msg.content)) {
+            if (process.env.DEBUG) {
+              console.warn(
+                '[buildResponsesRequest] Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
+              );
+            }
+            sanitizedContent = ensureJsonSafe(msg.content);
+          }
+
           functionCallOutputs.push({
             type: 'function_call_output' as const,
             call_id: msg.tool_call_id,
-            output: msg.content,
+            output: sanitizedContent,
           });
         }
       });
@@ -230,9 +245,20 @@ export function buildResponsesRequest(
           | 'system'
           | 'developer';
 
+        // Sanitize content for safe API transmission
+        let sanitizedContent = cleanMsg.content;
+        if (hasUnicodeReplacements(cleanMsg.content)) {
+          if (process.env.DEBUG) {
+            console.warn(
+              `[buildResponsesRequest] Message content contains Unicode replacement characters (U+FFFD), sanitizing...`,
+            );
+          }
+          sanitizedContent = ensureJsonSafe(cleanMsg.content);
+        }
+
         return {
           role: validRole,
-          content: cleanMsg.content,
+          content: sanitizedContent,
           ...(usage ? { usage } : {}), // Preserve usage data if present
         };
       })

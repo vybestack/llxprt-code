@@ -12,6 +12,7 @@ import {
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   GeminiEventType,
+  ToolErrorType,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
@@ -101,15 +102,17 @@ export async function runNonInteractive(
           );
 
           if (toolResponse.error) {
-            const isToolNotFound = toolResponse.error.message.includes(
-              'not found in registry',
-            );
             console.error(
-              `Error executing tool ${fc.name}: ${toolResponse.resultDisplay || toolResponse.error.message}`,
+              `Error executing tool ${fc.name}: ${toolResponse.error.message}`,
             );
-            if (!isToolNotFound) {
+            if (toolResponse.errorType === ToolErrorType.UNHANDLED_EXCEPTION) {
               process.exit(1);
             }
+          }
+
+          // Emit resultDisplay to stdout exactly as produced when available (string only)
+          if (typeof toolResponse.resultDisplay === 'string') {
+            process.stdout.write(toolResponse.resultDisplay);
           }
 
           if (toolResponse.responseParts) {

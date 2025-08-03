@@ -428,7 +428,8 @@ describe('SessionController', () => {
       expect.any(Number),
     );
     expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+    // Model should NOT be switched anymore
+    expect(mockConfig.setModel).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -556,7 +557,8 @@ describe('SessionController', () => {
       expect.any(Number),
     );
     expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+    // Model should NOT be switched anymore
+    expect(mockConfig.setModel).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -753,7 +755,8 @@ describe('SessionController', () => {
       expect.any(Number),
     );
     expect(mockConfig.setQuotaErrorOccurred).toHaveBeenCalledWith(true);
-    expect(mockConfig.setModel).toHaveBeenCalledWith('gemini-2.5-flash');
+    // Model should NOT be switched anymore
+    expect(mockConfig.setModel).not.toHaveBeenCalled();
 
     unmount();
   });

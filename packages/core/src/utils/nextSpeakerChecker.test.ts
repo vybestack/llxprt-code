@@ -179,7 +179,11 @@ describe('checkNextSpeaker', () => {
       mockGeminiClient,
       abortSignal,
     );
-    expect(result).toBeNull();
+    // Now returns a default response instead of null to prevent hanging
+    expect(result).toEqual({
+      reasoning: 'Next speaker check failed, defaulting to user input',
+      next_speaker: 'user',
+    });
     consoleWarnSpy.mockRestore();
   });
 

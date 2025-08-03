@@ -44,6 +44,8 @@ export * from './utils/shell-utils.js';
 export * from './utils/systemEncoding.js';
 export * from './utils/textUtils.js';
 export * from './utils/formatters.js';
+export * from './utils/sanitization.js';
+export * from './utils/unicodeUtils.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -60,6 +62,7 @@ export * from './services/shellExecutionService.js';
 
 // Export base tool definitions
 export * from './tools/tools.js';
+export * from './tools/tool-error.js';
 export * from './tools/tool-registry.js';
 export * from './tools/tool-context.js';
 

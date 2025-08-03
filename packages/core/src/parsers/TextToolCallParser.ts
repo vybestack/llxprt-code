@@ -151,6 +151,21 @@ export class GemmaToolCallParser implements ITextToolCallParser {
         });
       } catch (error) {
         if (typeof args === 'string') {
+          // Attempt targeted repair for common unescaped inner quotes in JSON strings
+          const repaired = this.tryRepairJson(args);
+          if (repaired) {
+            try {
+              const parsedArgs = JSON.parse(repaired);
+              toolCalls.push({
+                name: toolName,
+                arguments: parsedArgs,
+              });
+              continue;
+            } catch (_ignored) {
+              // fall through to legacy fallback
+            }
+          }
+
           // Try to extract a simpler JSON pattern if the full match fails
           const simpleJsonMatch = args.match(/^{[^{]*}$/);
           if (simpleJsonMatch) {
@@ -180,7 +195,7 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       }
     }
 
-    // Clean up any extra whitespace and stray markers that were not matched (best effort)
+    // Clean up stray markers that were not matched (best effort) but preserve original whitespace
     cleanedContent = cleanedContent
       .replace(/\[TOOL_REQUEST(?:_END)?]/g, '')
       .replace(/<\|im_start\|>assistant/g, '')
@@ -192,14 +207,44 @@ export class GemmaToolCallParser implements ITextToolCallParser {
       // .replace(/<think>[\s\S]*?<\/think>/g, '') // Keep think tags visible by default
       .replace(/<tool_call>\s*\{[^}]*$/gm, '') // Remove incomplete tool calls
       .replace(/\{"name"\s*:\s*"[^"]*"\s*,?\s*"arguments"\s*:\s*\{[^}]*$/gm, '') // Remove incomplete JSON tool calls
-      .replace(/✦\s*<think>/g, '') // Remove ✦ symbol followed by think tag
-      .replace(/\s+/g, ' ')
+      .replace(/✦\s*<think>/g, '')
+      .trim();
+
+    // Collapse multiple consecutive newlines/spaces after removing tool calls
+    cleanedContent = cleanedContent
+      .replace(/\n\s*\n/g, '\n')
+      .replace(/\n/g, ' ')
       .trim();
 
     return {
       cleanedContent,
       toolCalls,
     };
+  }
+
+  // Best-effort repair for JSON with unescaped inner quotes in string values.
+  private tryRepairJson(args: string): string | null {
+    try {
+      JSON.parse(args);
+      return args; // already valid
+    } catch {
+      // Target only inner quotes within JSON string values, preserving multibyte and spacing
+      // e.g., { "command": "printf "ありがとう 世界"" } -> { "command": "printf \"ありがとう 世界\"" }
+      const repaired = args.replace(
+        /:(\s)*"((?:\\.|[^"])*?)"(\s*)([,}])/gs,
+        (_m, s1, val, s2, tail) => {
+          // Escape only unescaped quotes inside the value
+          const fixed = val.replace(/(?<!\\)"/g, '\\"');
+          return `:${s1}"${fixed}"${s2}${tail}`;
+        },
+      );
+      try {
+        JSON.parse(repaired);
+        return repaired;
+      } catch {
+        return null;
+      }
+    }
   }
 
   private parseKeyValuePairs(str: string): Record<string, unknown> {
