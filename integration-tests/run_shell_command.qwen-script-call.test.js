@@ -16,23 +16,29 @@ test('qwen calls a local shell script via run_shell_command and preserves UTF-8 
   rig.setup(t.name);
 
   // Create a script that prints the exact multibyte string without trailing newline
-  const scriptPath = rig.createFile(
-    'print-multibyte.sh',
-    `#!/usr/bin/env bash\nprintf "${MULTIBYTE}"`,
-  );
-  chmodSync(scriptPath, 0o755);
+  // Use different script format for Windows vs Unix
+  const isWindows = process.platform === 'win32';
+  const scriptName = isWindows ? 'print-multibyte.bat' : 'print-multibyte.sh';
+  const scriptContent = isWindows 
+    ? `@echo off\necho|set /p="${MULTIBYTE}"`
+    : `#!/usr/bin/env bash\nprintf "${MULTIBYTE}"`;
+  
+  const scriptPath = rig.createFile(scriptName, scriptContent);
+  if (!isWindows) {
+    chmodSync(scriptPath, 0o755);
+  }
   rig.sync();
 
   // Prompt the model to use the run_shell_command tool explicitly and report stdout exactly
   const prompt = [
     'Use the run_shell_command tool to execute the following command:',
     '',
-    `./print-multibyte.sh`,
+    isWindows ? `print-multibyte.bat` : `./print-multibyte.sh`,
     '',
     'After running it, output exactly what the command prints to stdout, with no additional commentary.',
   ].join('\n');
 
-  const result = rig.run({ prompt });
+  const result = rig.run(prompt);
 
   assert.ok(
     result.includes(MULTIBYTE),
