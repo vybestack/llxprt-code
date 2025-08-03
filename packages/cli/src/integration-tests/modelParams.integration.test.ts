@@ -127,7 +127,7 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       name: 'openai',
       getModels: vi.fn().mockResolvedValue([
         { id: 'gpt-4', name: 'GPT-4' },
-        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+        { id: 'gpt-4o-mini', name: 'GPT-4.0 Mini' },
       ]),
       generateChatCompletion: vi.fn(),
       getServerTools: vi.fn().mockReturnValue([]),
@@ -511,7 +511,7 @@ describe('Model Parameters and Profiles Integration Tests', () => {
 
       mockProviderManager.getActiveProvider.mockReturnValue(anthropicProvider);
       config.getProvider = vi.fn().mockReturnValue('anthropic');
-      config.getModel = vi.fn().mockReturnValue('claude-3-opus');
+      config.getModel = vi.fn().mockReturnValue('claude-3-opus-20240229');
 
       await saveCommand.action!(context, '"Anthropic Profile"');
 
@@ -536,7 +536,7 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       expect(mockProviderManager.setActiveProvider).toHaveBeenCalledWith(
         'anthropic',
       );
-      expect(config.setModel).toHaveBeenCalledWith('claude-3-opus');
+      expect(config.setModel).toHaveBeenCalledWith('claude-3-opus-20240229');
     });
 
     it('should handle provider-specific parameter differences', async () => {
@@ -550,7 +550,7 @@ describe('Model Parameters and Profiles Integration Tests', () => {
         {
           name: 'anthropic',
           params: { temperature: 0.5, max_output_tokens: 4096 },
-          model: 'claude-3-opus',
+          model: 'claude-3-opus-20240229',
         },
       ];
 
@@ -619,7 +619,7 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       const testProfile: Profile = {
         version: 1,
         provider: 'openai',
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         modelParams: {
           temperature: 0.5,
           max_tokens: 2048,
