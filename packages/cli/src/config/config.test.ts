@@ -1124,10 +1124,12 @@ describe('--profile-load flag functionality', () => {
   });
 
   it('should continue without profile if loading fails', async () => {
-    // Save original env var
+    // Save original env vars
     const originalProvider = process.env.LLXPRT_DEFAULT_PROVIDER;
-    // Clear the environment variable that CI sets
+    const originalModel = process.env.LLXPRT_DEFAULT_MODEL;
+    // Clear the environment variables that CI sets
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
 
     try {
       // Mock profile loading failure
@@ -1150,9 +1152,12 @@ describe('--profile-load flag functionality', () => {
       expect(config.getModel()).toBe('gemini-2.5-pro');
       expect(config.getProvider()).toBe('gemini'); // Default provider is 'gemini' not undefined
     } finally {
-      // Restore original env var
+      // Restore original env vars
       if (originalProvider !== undefined) {
         process.env.LLXPRT_DEFAULT_PROVIDER = originalProvider;
+      }
+      if (originalModel !== undefined) {
+        process.env.LLXPRT_DEFAULT_MODEL = originalModel;
       }
     }
   });
