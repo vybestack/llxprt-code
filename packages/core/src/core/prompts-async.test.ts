@@ -16,10 +16,10 @@ describe('prompts async integration', () => {
   let tempDir: string;
 
   beforeAll(async () => {
-    // Create a temporary directory for test prompts  
+    // Create a temporary directory for test prompts
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
     process.env.LLXPRT_PROMPTS_DIR = tempDir;
-    
+
     // Initialize the prompt system once for all tests
     await initializePromptSystem();
   });
@@ -31,7 +31,7 @@ describe('prompts async integration', () => {
 
   afterEach(() => {
     // Restore original environment
-    Object.keys(process.env).forEach(key => {
+    Object.keys(process.env).forEach((key) => {
       if (!(key in originalEnv)) {
         delete process.env[key];
       }
@@ -53,12 +53,15 @@ describe('prompts async integration', () => {
     it('should include user memory when provided', async () => {
       const userMemory = 'Remember: The user prefers concise responses.';
       const prompt = await getCoreSystemPromptAsync(userMemory);
-      
+
       // Debug: log what we actually get
       if (!prompt.includes(userMemory)) {
-        console.error('Prompt does not contain user memory. Last 500 chars:', prompt.slice(-500));
+        console.error(
+          'Prompt does not contain user memory. Last 500 chars:',
+          prompt.slice(-500),
+        );
       }
-      
+
       expect(prompt).toContain(userMemory);
       // Should have both core content and user memory
       expect(prompt).toContain('interactive CLI agent');
@@ -66,16 +69,25 @@ describe('prompts async integration', () => {
     });
 
     it('should handle different models', async () => {
-      const prompt = await getCoreSystemPromptAsync(undefined, 'gemini-1.5-flash');
+      const prompt = await getCoreSystemPromptAsync(
+        undefined,
+        'gemini-1.5-flash',
+      );
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
       // Flash models should have additional tool instructions
-      expect(prompt).toContain('IMPORTANT: You MUST use the provided tools when appropriate');
+      expect(prompt).toContain(
+        'IMPORTANT: You MUST use the provided tools when appropriate',
+      );
     });
 
     it('should handle custom tools list', async () => {
       const tools = ['read_file', 'write_file', 'list_directory'];
-      const prompt = await getCoreSystemPromptAsync(undefined, undefined, tools);
+      const prompt = await getCoreSystemPromptAsync(
+        undefined,
+        undefined,
+        tools,
+      );
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
       // Should still contain core content
@@ -87,7 +99,7 @@ describe('prompts async integration', () => {
       process.env.GIT_DIR = '.git';
       const prompt = await getCoreSystemPromptAsync();
       expect(prompt).toBeTruthy();
-      // Note: The git detection in buildPromptContext uses isGitRepository 
+      // Note: The git detection in buildPromptContext uses isGitRepository
       // which checks the actual file system, not env vars
     });
 
@@ -111,7 +123,7 @@ describe('prompts async integration', () => {
   describe('prompt content validation', () => {
     it('should include all required tool references', async () => {
       const prompt = await getCoreSystemPromptAsync();
-      
+
       // Check for tool references (they should be replaced with actual tool names)
       expect(prompt).toContain('Ls');
       expect(prompt).toContain('Edit');
@@ -125,7 +137,7 @@ describe('prompts async integration', () => {
     it('should properly format user memory with separator', async () => {
       const userMemory = 'Custom user preferences here';
       const prompt = await getCoreSystemPromptAsync(userMemory);
-      
+
       // Should have the separator before user memory
       expect(prompt).toMatch(/---\s*Custom user preferences here/);
     });

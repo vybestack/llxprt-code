@@ -51,7 +51,7 @@ export class PromptCache {
     this.cache = new Map();
     this.totalSize = 0;
     this.requestedSizeMB = maxSizeMB;
-    
+
     // Validate configuration per pseudocode
     if (maxSizeMB <= 0) {
       this.maxSize = 100 * 1000 * 1000; // 100MB default (using decimal)
@@ -60,7 +60,7 @@ export class PromptCache {
     } else {
       this.maxSize = maxSizeMB * 1000 * 1000; // Using decimal MB (1MB = 1,000,000 bytes)
     }
-    
+
     this.accessOrder = [];
   }
 
@@ -105,14 +105,18 @@ export class PromptCache {
   /**
    * Store a prompt in the cache
    */
-  set(context: PromptContext, prompt: string, metadata: CacheEntry['metadata']): void {
+  set(
+    context: PromptContext,
+    prompt: string,
+    metadata: CacheEntry['metadata'],
+  ): void {
     // Handle zero-size cache edge case - effectively disable caching
     if (this.requestedSizeMB <= 0) {
       return;
     }
 
     const key = this.generateKey(context);
-    
+
     // Validate inputs
     if (!key || prompt === null || prompt === undefined) {
       return;
@@ -120,13 +124,13 @@ export class PromptCache {
 
     // Calculate content size
     const contentSize = Buffer.byteLength(prompt, 'utf8');
-    
+
     // Check if content is too large
     if (contentSize > this.maxSize) {
       // Log warning in real implementation
       return;
     }
-    
+
     // Calculate effective size for storage and eviction
     // For very small caches (< 10KB), add overhead to handle edge cases
     // This ensures that when a single entry uses nearly all available space,
@@ -136,7 +140,10 @@ export class PromptCache {
       // For entries that use 85% or more of a small cache,
       // add enough overhead to ensure any additional entry causes eviction
       // Use 10% overhead or enough to reach 95% of max size, whichever is larger
-      const overhead = Math.max(contentSize * 0.1, this.maxSize * 0.95 - contentSize);
+      const overhead = Math.max(
+        contentSize * 0.1,
+        this.maxSize * 0.95 - contentSize,
+      );
       effectiveSize = Math.floor(contentSize + overhead);
     }
 
@@ -152,7 +159,10 @@ export class PromptCache {
     }
 
     // Make room if needed (LRU eviction)
-    while (this.totalSize + effectiveSize > this.maxSize && this.accessOrder.length > 0) {
+    while (
+      this.totalSize + effectiveSize > this.maxSize &&
+      this.accessOrder.length > 0
+    ) {
       const lruKey = this.accessOrder.pop()!;
       const entry = this.cache.get(lruKey);
       if (entry) {
@@ -188,7 +198,7 @@ export class PromptCache {
    */
   get(context: PromptContext): CacheEntry | null {
     const key = this.generateKey(context);
-    
+
     // Validate key
     if (!key) {
       return null;
@@ -200,7 +210,7 @@ export class PromptCache {
       // Update access tracking
       entry.lastAccessedAt = Date.now();
       entry.accessCount++;
-      
+
       // Move to front of access order
       const index = this.accessOrder.indexOf(key);
       if (index > -1) {
@@ -283,8 +293,9 @@ export class PromptCache {
     const entryCount = this.cache.size;
     const totalSizeMB = this.totalSize / (1000 * 1000);
     const maxSizeMB = this.maxSize / (1000 * 1000);
-    const utilizationPercent = entryCount > 0 ? (this.totalSize / this.maxSize) * 100 : 0;
-    
+    const utilizationPercent =
+      entryCount > 0 ? (this.totalSize / this.maxSize) * 100 : 0;
+
     // Calculate average content size (accounting for any size adjustments)
     let totalContentSize = 0;
     for (const entry of this.cache.values()) {
@@ -332,7 +343,7 @@ export class PromptCache {
 
     for (const context of contexts) {
       if (!context) continue;
-      
+
       const key = this.generateKey(context);
       if (key && !this.has(context)) {
         // In real implementation, this would trigger assembly

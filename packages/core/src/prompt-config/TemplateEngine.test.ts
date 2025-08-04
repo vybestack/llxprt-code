@@ -21,12 +21,14 @@ describe('TemplateEngine', () => {
       const template = 'You are running on {{PROVIDER}} using model {{MODEL}}';
       const variables: TemplateVariables = {
         PROVIDER: 'anthropic',
-        MODEL: 'claude-3-opus'
+        MODEL: 'claude-3-opus',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
-      expect(result).toBe('You are running on anthropic using model claude-3-opus');
+
+      expect(result).toBe(
+        'You are running on anthropic using model claude-3-opus',
+      );
     });
 
     it('should handle single variable substitution', () => {
@@ -40,11 +42,11 @@ describe('TemplateEngine', () => {
       const template = 'Current model: {{MODEL}}';
       const variables: TemplateVariables = {
         MODEL: 'gpt-4',
-        PROVIDER: 'openai'
+        PROVIDER: 'openai',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Current model: gpt-4');
     });
   });
@@ -62,11 +64,11 @@ describe('TemplateEngine', () => {
       const variables: TemplateVariables = {
         PROVIDER: 'gemini',
         MODEL: 'gemini-pro',
-        TOOL_NAME: 'ReadFile'
+        TOOL_NAME: 'ReadFile',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Use the ReadFile tool carefully');
     });
 
@@ -81,11 +83,11 @@ describe('TemplateEngine', () => {
       const template = 'Tool: {{TOOL_NAME}} for {{PROVIDER}}';
       const variables: TemplateVariables = {
         PROVIDER: 'ollama',
-        MODEL: 'llama2'
+        MODEL: 'llama2',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Tool:  for ollama');
     });
 
@@ -101,11 +103,11 @@ describe('TemplateEngine', () => {
       const variables: TemplateVariables = {
         PROVIDER: 'azure',
         MODEL: 'gpt-35-turbo',
-        TOOL_NAME: undefined as unknown as string
+        TOOL_NAME: undefined as unknown as string,
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Provider: azure, Tool: ');
     });
   });
@@ -122,11 +124,11 @@ describe('TemplateEngine', () => {
       const template = 'Valid {{MODEL}} but {{BROKEN and {{UNCLOSED';
       const variables: TemplateVariables = {
         MODEL: 'gpt-4',
-        PROVIDER: 'openai'
+        PROVIDER: 'openai',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Valid gpt-4 but {{BROKEN and {{UNCLOSED');
     });
 
@@ -141,11 +143,11 @@ describe('TemplateEngine', () => {
       const template = 'Nested {{{{MODEL}}}} here';
       const variables: TemplateVariables = {
         MODEL: 'claude',
-        PROVIDER: 'anthropic'
+        PROVIDER: 'anthropic',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       // Should process outer brackets, leaving {{claude}}
       expect(result).toBe('Nested {{claude}} here');
     });
@@ -161,11 +163,11 @@ describe('TemplateEngine', () => {
       const template = '}}Start {{MODEL}} End{{';
       const variables: TemplateVariables = {
         MODEL: 'llama-2',
-        PROVIDER: 'meta'
+        PROVIDER: 'meta',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('}}Start llama-2 End{{');
     });
   });
@@ -179,7 +181,10 @@ describe('TemplateEngine', () => {
        * @when processTemplate called
        * @then Returns empty string
        */
-      const result = engine.processTemplate('', { MODEL: 'test', PROVIDER: 'test' });
+      const result = engine.processTemplate('', {
+        MODEL: 'test',
+        PROVIDER: 'test',
+      });
       expect(result).toBe('');
     });
 
@@ -192,7 +197,10 @@ describe('TemplateEngine', () => {
        * @then Returns unchanged template
        */
       const template = 'This is plain text with no variables';
-      const result = engine.processTemplate(template, { MODEL: 'test', PROVIDER: 'test' });
+      const result = engine.processTemplate(template, {
+        MODEL: 'test',
+        PROVIDER: 'test',
+      });
       expect(result).toBe(template);
     });
 
@@ -205,10 +213,13 @@ describe('TemplateEngine', () => {
        * @then All variables substituted correctly
        */
       const template = '{{PROVIDER}} is the provider and model is {{MODEL}}';
-      const variables: TemplateVariables = { PROVIDER: 'azure', MODEL: 'gpt-35-turbo' };
-      
+      const variables: TemplateVariables = {
+        PROVIDER: 'azure',
+        MODEL: 'gpt-35-turbo',
+      };
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('azure is the provider and model is gpt-35-turbo');
     });
 
@@ -220,7 +231,10 @@ describe('TemplateEngine', () => {
        * @when processTemplate called
        * @then Returns empty string
        */
-      const result = engine.processTemplate(null as unknown as string, { MODEL: 'test', PROVIDER: 'test' });
+      const result = engine.processTemplate(null as unknown as string, {
+        MODEL: 'test',
+        PROVIDER: 'test',
+      });
       expect(result).toBe('');
     });
 
@@ -232,7 +246,10 @@ describe('TemplateEngine', () => {
        * @when processTemplate called
        * @then Returns empty string
        */
-      const result = engine.processTemplate(undefined as unknown as string, { MODEL: 'test', PROVIDER: 'test' });
+      const result = engine.processTemplate(undefined as unknown as string, {
+        MODEL: 'test',
+        PROVIDER: 'test',
+      });
       expect(result).toBe('');
     });
 
@@ -245,7 +262,10 @@ describe('TemplateEngine', () => {
        * @then Variables treated as missing (empty string)
        */
       const template = 'Model: {{MODEL}}';
-      const result = engine.processTemplate(template, null as unknown as TemplateVariables);
+      const result = engine.processTemplate(
+        template,
+        null as unknown as TemplateVariables,
+      );
       expect(result).toBe('Model: ');
     });
 
@@ -258,7 +278,10 @@ describe('TemplateEngine', () => {
        * @then Variables treated as missing (empty string)
        */
       const template = 'Provider: {{PROVIDER}}';
-      const result = engine.processTemplate(template, undefined as unknown as TemplateVariables);
+      const result = engine.processTemplate(
+        template,
+        undefined as unknown as TemplateVariables,
+      );
       expect(result).toBe('Provider: ');
     });
   });
@@ -273,10 +296,13 @@ describe('TemplateEngine', () => {
        * @then All occurrences substituted
        */
       const template = '{{MODEL}} is great. I repeat, {{MODEL}} is great!';
-      const variables: TemplateVariables = { MODEL: 'claude-3', PROVIDER: 'anthropic' };
-      
+      const variables: TemplateVariables = {
+        MODEL: 'claude-3',
+        PROVIDER: 'anthropic',
+      };
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('claude-3 is great. I repeat, claude-3 is great!');
     });
 
@@ -289,10 +315,13 @@ describe('TemplateEngine', () => {
        * @then Both substituted correctly
        */
       const template = '{{PROVIDER}}{{MODEL}}';
-      const variables: TemplateVariables = { PROVIDER: 'google/', MODEL: 'palm2' };
-      
+      const variables: TemplateVariables = {
+        PROVIDER: 'google/',
+        MODEL: 'palm2',
+      };
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('google/palm2');
     });
 
@@ -304,16 +333,19 @@ describe('TemplateEngine', () => {
        * @when processTemplate called
        * @then All variables substituted
        */
-      const template = 'Using {{PROVIDER}} provider with {{MODEL}} model for {{TOOL_NAME}} tool';
+      const template =
+        'Using {{PROVIDER}} provider with {{MODEL}} model for {{TOOL_NAME}} tool';
       const variables: TemplateVariables = {
         PROVIDER: 'anthropic',
         MODEL: 'claude-3-sonnet',
-        TOOL_NAME: 'WebSearch'
+        TOOL_NAME: 'WebSearch',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
-      expect(result).toBe('Using anthropic provider with claude-3-sonnet model for WebSearch tool');
+
+      expect(result).toBe(
+        'Using anthropic provider with claude-3-sonnet model for WebSearch tool',
+      );
     });
 
     it('should handle variables with whitespace inside brackets', () => {
@@ -325,10 +357,13 @@ describe('TemplateEngine', () => {
        * @then Whitespace trimmed, variable substituted
        */
       const template = 'Model: {{ MODEL }} and {{  PROVIDER  }}';
-      const variables: TemplateVariables = { MODEL: 'gpt-4', PROVIDER: 'openai' };
-      
+      const variables: TemplateVariables = {
+        MODEL: 'gpt-4',
+        PROVIDER: 'openai',
+      };
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Model: gpt-4 and openai');
     });
   });
@@ -343,13 +378,13 @@ describe('TemplateEngine', () => {
        * @then Values inserted as-is
        */
       const template = 'Model: {{MODEL}}';
-      const variables: TemplateVariables = { 
+      const variables: TemplateVariables = {
         MODEL: 'model-with-"quotes"-and-{brackets}',
-        PROVIDER: 'test'
+        PROVIDER: 'test',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Model: model-with-"quotes"-and-{brackets}');
     });
 
@@ -362,13 +397,13 @@ describe('TemplateEngine', () => {
        * @then Values inserted preserving newlines
        */
       const template = 'Description: {{MODEL}}';
-      const variables: TemplateVariables = { 
+      const variables: TemplateVariables = {
         MODEL: 'line1\nline2\nline3',
-        PROVIDER: 'test'
+        PROVIDER: 'test',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Description: line1\nline2\nline3');
     });
 
@@ -381,13 +416,13 @@ describe('TemplateEngine', () => {
        * @then Values inserted preserving unicode
        */
       const template = 'Model: {{MODEL}}';
-      const variables: TemplateVariables = { 
+      const variables: TemplateVariables = {
         MODEL: 'claude-3-🚀-日本語',
-        PROVIDER: 'anthropic'
+        PROVIDER: 'anthropic',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Model: claude-3-🚀-日本語');
     });
   });
@@ -415,14 +450,17 @@ describe('TemplateEngine', () => {
        * @then Logs variable substitutions
        */
       process.env.DEBUG = '1';
-      
+
       const template = 'Provider: {{PROVIDER}}';
-      const variables: TemplateVariables = { PROVIDER: 'anthropic', MODEL: 'claude' };
-      
+      const variables: TemplateVariables = {
+        PROVIDER: 'anthropic',
+        MODEL: 'claude',
+      };
+
       engine.processTemplate(template, variables);
-      
+
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('PROVIDER')
+        expect.stringContaining('PROVIDER'),
       );
     });
 
@@ -435,12 +473,15 @@ describe('TemplateEngine', () => {
        * @then No logging occurs
        */
       delete process.env.DEBUG;
-      
+
       const template = 'Provider: {{PROVIDER}}';
-      const variables: TemplateVariables = { PROVIDER: 'anthropic', MODEL: 'claude' };
-      
+      const variables: TemplateVariables = {
+        PROVIDER: 'anthropic',
+        MODEL: 'claude',
+      };
+
       engine.processTemplate(template, variables);
-      
+
       expect(consoleSpy).not.toHaveBeenCalled();
     });
 
@@ -453,14 +494,15 @@ describe('TemplateEngine', () => {
        * @then Logs variable substitutions
        */
       const template = 'Model: {{MODEL}}';
-      const variables: TemplateVariables = { MODEL: 'gpt-4', PROVIDER: 'openai' };
+      const variables: TemplateVariables = {
+        MODEL: 'gpt-4',
+        PROVIDER: 'openai',
+      };
       const options: TemplateProcessingOptions = { debug: true };
-      
+
       engine.processTemplate(template, variables, options);
-      
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('MODEL')
-      );
+
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('MODEL'));
     });
 
     it('should log multiple substitutions', () => {
@@ -472,19 +514,23 @@ describe('TemplateEngine', () => {
        * @then Logs each substitution
        */
       process.env.DEBUG = '1';
-      
+
       const template = '{{PROVIDER}} uses {{MODEL}} with {{TOOL_NAME}}';
-      const variables: TemplateVariables = { 
+      const variables: TemplateVariables = {
         PROVIDER: 'google',
         MODEL: 'gemini-pro',
-        TOOL_NAME: 'Search'
+        TOOL_NAME: 'Search',
       };
-      
+
       engine.processTemplate(template, variables);
-      
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PROVIDER'));
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('PROVIDER'),
+      );
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('MODEL'));
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('TOOL_NAME'));
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('TOOL_NAME'),
+      );
     });
   });
 
@@ -499,9 +545,9 @@ describe('TemplateEngine', () => {
        */
       const template = 'Empty {{}} variable';
       const variables: TemplateVariables = { MODEL: 'test', PROVIDER: 'test' };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Empty {{}} variable');
     });
 
@@ -515,14 +561,14 @@ describe('TemplateEngine', () => {
        */
       const longVarName = 'A'.repeat(100);
       const template = `Long {{${longVarName}}} variable`;
-      const variables: TemplateVariables = { 
+      const variables: TemplateVariables = {
         [longVarName]: 'replaced',
         MODEL: 'test',
-        PROVIDER: 'test'
+        PROVIDER: 'test',
       };
-      
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('Long replaced variable');
     });
 
@@ -535,10 +581,13 @@ describe('TemplateEngine', () => {
        * @then Only valid variables substituted
        */
       const template = '{{{{}}}}{{MODEL}}{{{{}}}}';
-      const variables: TemplateVariables = { MODEL: 'claude', PROVIDER: 'anthropic' };
-      
+      const variables: TemplateVariables = {
+        MODEL: 'claude',
+        PROVIDER: 'anthropic',
+      };
+
       const result = engine.processTemplate(template, variables);
-      
+
       expect(result).toBe('{{{{}}}}claude{{{{}}}}');
     });
   });

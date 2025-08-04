@@ -8,27 +8,24 @@ export { PromptCache } from './prompt-cache.js';
 export { PromptResolver } from './prompt-resolver.js';
 export { PromptInstaller } from './prompt-installer.js';
 export { PromptService } from './prompt-service.js';
-export type { 
-  TemplateVariables, 
+export type {
+  TemplateVariables,
   TemplateProcessingOptions,
   PromptContext,
-  PromptEnvironment
+  PromptEnvironment,
 } from './types.js';
-export type { 
-  LoadFileResult, 
-  EnvironmentInfo, 
-  FileWatcher, 
-  FileChangeCallback 
+export type {
+  LoadFileResult,
+  EnvironmentInfo,
+  FileWatcher,
+  FileChangeCallback,
 } from './prompt-loader.js';
-export type { 
-  CacheEntry,
-  CacheStats
-} from './prompt-cache.js';
+export type { CacheEntry, CacheStats } from './prompt-cache.js';
 export type {
   ResolveFileResult,
   ResolvedFile,
   AvailableFile,
-  ValidationResult
+  ValidationResult,
 } from './prompt-resolver.js';
 export type {
   InstallOptions,
@@ -39,13 +36,10 @@ export type {
   RepairOptions,
   RepairResult,
   BackupResult,
-  DefaultsMap
+  DefaultsMap,
 } from './prompt-installer.js';
-export { 
-  DEFAULT_BASE_DIR,
-  REQUIRED_DIRECTORIES
-} from './prompt-installer.js';
+export { DEFAULT_BASE_DIR, REQUIRED_DIRECTORIES } from './prompt-installer.js';
 export type {
   PromptServiceConfig,
-  ValidationResult as PromptServiceValidationResult
+  ValidationResult as PromptServiceValidationResult,
 } from './prompt-service.js';

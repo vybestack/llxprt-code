@@ -1,4 +1,5 @@
 # Git Repository
+
 - The current working (project) directory is being managed by a git repository.
 - When asked to commit changes or prepare a commit, always start by gathering information using shell commands:
   - \`git status\` to ensure that all relevant files are tracked and staged, using \`git add ...\` as needed.

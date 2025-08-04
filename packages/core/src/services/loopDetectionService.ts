@@ -81,20 +81,24 @@ export class LoopDetectionService {
    */
   private async getLoopDetectionPrompt(): Promise<string> {
     if (!this.promptService) {
-      const baseDir = process.env.LLXPRT_PROMPTS_DIR || 
-                      path.join(os.homedir(), '.llxprt', 'prompts');
-      this.promptService = new PromptService({ 
+      const baseDir =
+        process.env.LLXPRT_PROMPTS_DIR ||
+        path.join(os.homedir(), '.llxprt', 'prompts');
+      this.promptService = new PromptService({
         baseDir,
-        debugMode: process.env.DEBUG === 'true'
+        debugMode: process.env.DEBUG === 'true',
       });
       await this.promptService.initialize();
     }
-    
+
     try {
       return await this.promptService.loadPrompt('services/loop-detection.md');
     } catch (error) {
       // Fall back to default if file loading fails
-      console.warn('Failed to load loop detection prompt from file, using fallback:', error);
+      console.warn(
+        'Failed to load loop detection prompt from file, using fallback:',
+        error,
+      );
       return this.getFallbackLoopDetectionPrompt();
     }
   }

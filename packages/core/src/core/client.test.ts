@@ -8,7 +8,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock prompts module before imports
 vi.mock('./prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Test system instruction'),
+  getCoreSystemPromptAsync: vi
+    .fn()
+    .mockResolvedValue('Test system instruction'),
   getCompressionPrompt: vi.fn().mockReturnValue('Test compression prompt'),
   initializePromptSystem: vi.fn().mockResolvedValue(undefined),
 }));
@@ -109,7 +111,6 @@ vi.mock('../utils/retry.js', () => ({
 }));
 vi.mock('../ide/ideContext.js');
 
-
 describe('findIndexAfterFraction', () => {
   const history: Content[] = [
     { role: 'user', parts: [{ text: 'This is the first message.' }] }, // JSON length: 66
@@ -174,8 +175,10 @@ describe('Gemini Client (client.ts)', () => {
     vi.resetAllMocks();
 
     // Re-setup prompts mocks after reset
-    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('Test system instruction');
-    
+    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue(
+      'Test system instruction',
+    );
+
     // Re-setup mocks after reset
     vi.mocked(ComplexityAnalyzer).mockImplementation(
       () =>

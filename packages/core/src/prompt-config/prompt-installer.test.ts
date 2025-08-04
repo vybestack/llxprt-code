@@ -1,17 +1,11 @@
 /**
  * Behavioral TDD tests for PromptInstaller
- * 
+ *
  * These tests verify actual behavior, not mocks. They test real file operations
  * using temporary directories to ensure the installer works correctly.
  */
 
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-} from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PromptInstaller, REQUIRED_DIRECTORIES } from './prompt-installer.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -26,7 +20,9 @@ describe('PromptInstaller', () => {
   beforeEach(async () => {
     installer = new PromptInstaller();
     // Create a unique temp directory for each test
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'prompt-installer-test-'));
+    tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'prompt-installer-test-'),
+    );
     testBaseDir = path.join(tempDir, 'prompts');
   });
 
@@ -96,15 +92,15 @@ describe('PromptInstaller', () => {
       'core.md': '# Core Prompt\nDefault content',
       'env/development.md': '# Development Environment',
       'tools/git.md': '# Git Tool Prompt',
-      'providers/openai.md': '# OpenAI Provider'
+      'providers/openai.md': '# OpenAI Provider',
     };
 
     it('should create all required directories', async () => {
       const result = await installer.install(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
       expect(result.errors).toHaveLength(0);
-      
+
       // Verify all directories exist
       for (const dir of REQUIRED_DIRECTORIES) {
         const fullPath = path.join(testBaseDir, dir);
@@ -114,15 +110,18 @@ describe('PromptInstaller', () => {
 
     it('should install all default files', async () => {
       const result = await installer.install(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
       expect(result.installed).toContain('core.md');
       expect(result.installed).toContain('env/development.md');
       expect(result.installed).toContain('tools/git.md');
       expect(result.installed).toContain('providers/openai.md');
-      
+
       // Verify file contents
-      const coreContent = await fs.readFile(path.join(testBaseDir, 'core.md'), 'utf-8');
+      const coreContent = await fs.readFile(
+        path.join(testBaseDir, 'core.md'),
+        'utf-8',
+      );
       expect(coreContent).toBe('# Core Prompt\nDefault content');
     });
 
@@ -131,13 +130,13 @@ describe('PromptInstaller', () => {
       await fs.mkdir(testBaseDir, { recursive: true });
       const existingFile = path.join(testBaseDir, 'core.md');
       await fs.writeFile(existingFile, 'User customized content');
-      
+
       const result = await installer.install(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
       expect(result.skipped).toContain('core.md');
       expect(result.installed).not.toContain('core.md');
-      
+
       // Verify content was preserved
       const content = await fs.readFile(existingFile, 'utf-8');
       expect(content).toBe('User customized content');
@@ -148,52 +147,61 @@ describe('PromptInstaller', () => {
       await fs.mkdir(testBaseDir, { recursive: true });
       const existingFile = path.join(testBaseDir, 'core.md');
       await fs.writeFile(existingFile, 'Old content');
-      
-      const result = await installer.install(testBaseDir, defaultFiles, { force: true });
-      
+
+      const result = await installer.install(testBaseDir, defaultFiles, {
+        force: true,
+      });
+
       expect(result.success).toBe(true);
       expect(result.installed).toContain('core.md');
       expect(result.skipped).not.toContain('core.md');
-      
+
       // Verify content was overwritten
       const content = await fs.readFile(existingFile, 'utf-8');
       expect(content).toBe('# Core Prompt\nDefault content');
     });
 
     it('should perform dry run without writing files', async () => {
-      const result = await installer.install(testBaseDir, defaultFiles, { dryRun: true });
-      
+      const result = await installer.install(testBaseDir, defaultFiles, {
+        dryRun: true,
+      });
+
       expect(result.success).toBe(true);
       expect(result.installed).toHaveLength(4);
-      
+
       // Verify no files were actually written
       expect(existsSync(testBaseDir)).toBe(false);
     });
 
     it('should handle null baseDir by using default', async () => {
-      const result = await installer.install(null, defaultFiles, { dryRun: true });
-      
+      const result = await installer.install(null, defaultFiles, {
+        dryRun: true,
+      });
+
       expect(result.success).toBe(true);
       expect(result.baseDir).toContain('.llxprt/prompts');
     });
 
     it('should reject invalid base directory paths', async () => {
-      const result = await installer.install('../../../etc/passwd', defaultFiles);
-      
+      const result = await installer.install(
+        '../../../etc/passwd',
+        defaultFiles,
+      );
+
       expect(result.success).toBe(false);
       expect(result.errors).toContain('Invalid base directory');
     });
 
     it('should set correct file permissions', async () => {
       const result = await installer.install(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
-      
+
       // Check directory permissions (755)
       const dirStats = await fs.stat(testBaseDir);
       const dirMode = dirStats.mode & parseInt('777', 8);
       expect(dirMode).toBe(parseInt('755', 8));
-      
+
       // Check file permissions (644)
       const fileStats = await fs.stat(path.join(testBaseDir, 'core.md'));
       const fileMode = fileStats.mode & parseInt('777', 8);
@@ -203,9 +211,9 @@ describe('PromptInstaller', () => {
     it('should handle permission errors gracefully', async () => {
       // Create directory with no write permission
       await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
-      
+
       const result = await installer.install(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors[0]).toContain('Permission denied');
@@ -213,11 +221,11 @@ describe('PromptInstaller', () => {
 
     it('should create parent directories for nested files', async () => {
       const nestedFiles = {
-        'deeply/nested/path/file.md': 'Content'
+        'deeply/nested/path/file.md': 'Content',
       };
-      
+
       const result = await installer.install(testBaseDir, nestedFiles);
-      
+
       expect(result.success).toBe(true);
       expect(existsSync(path.join(testBaseDir, 'deeply/nested/path')));
       expect(result.installed).toContain('deeply/nested/path/file.md');
@@ -236,46 +244,50 @@ describe('PromptInstaller', () => {
 
     it('should remove only default files by default', async () => {
       const result = await installer.uninstall(testBaseDir);
-      
+
       expect(result.success).toBe(true);
       expect(result.removed).toContain('core.md');
       expect(result.removed).not.toContain('user-custom.md');
-      
+
       // Verify user file still exists
       expect(existsSync(path.join(testBaseDir, 'user-custom.md'))).toBe(true);
     });
 
     it('should remove all files when removeUserFiles is true', async () => {
-      const result = await installer.uninstall(testBaseDir, { removeUserFiles: true });
-      
+      const result = await installer.uninstall(testBaseDir, {
+        removeUserFiles: true,
+      });
+
       expect(result.success).toBe(true);
       expect(result.removed).toContain('core.md');
       expect(result.removed).toContain('user-custom.md');
-      
+
       // Verify all files are gone
       expect(existsSync(path.join(testBaseDir, 'user-custom.md'))).toBe(false);
     });
 
     it('should remove empty directories after file removal', async () => {
-      const result = await installer.uninstall(testBaseDir, { removeUserFiles: true });
-      
+      const result = await installer.uninstall(testBaseDir, {
+        removeUserFiles: true,
+      });
+
       expect(result.success).toBe(true);
       expect(existsSync(testBaseDir)).toBe(false);
     });
 
     it('should handle dry run without removing files', async () => {
       const result = await installer.uninstall(testBaseDir, { dryRun: true });
-      
+
       expect(result.success).toBe(true);
       expect(result.removed.length).toBeGreaterThan(0);
-      
+
       // Verify files still exist
       expect(existsSync(path.join(testBaseDir, 'core.md'))).toBe(true);
     });
 
     it('should return success when base directory does not exist', async () => {
       const result = await installer.uninstall('/nonexistent/path');
-      
+
       expect(result.success).toBe(true);
       expect(result.removed).toHaveLength(0);
       expect(result.errors).toHaveLength(0);
@@ -283,7 +295,7 @@ describe('PromptInstaller', () => {
 
     it('should handle null baseDir by using default', async () => {
       const result = await installer.uninstall(null, { dryRun: true });
-      
+
       expect(result.success).toBe(true);
     });
   });
@@ -291,16 +303,16 @@ describe('PromptInstaller', () => {
   describe('validate', () => {
     it('should detect missing base directory', async () => {
       const result = await installer.validate(testBaseDir);
-      
+
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Base directory does not exist');
     });
 
     it('should detect missing required directories', async () => {
       await fs.mkdir(testBaseDir, { recursive: true });
-      
+
       const result = await installer.validate(testBaseDir);
-      
+
       expect(result.isValid).toBe(false);
       expect(result.warnings.length).toBeGreaterThan(0);
       expect(result.missing).toContain('env');
@@ -312,9 +324,9 @@ describe('PromptInstaller', () => {
       await fs.mkdir(path.join(testBaseDir, 'env'), { recursive: true });
       await fs.mkdir(path.join(testBaseDir, 'tools'), { recursive: true });
       await fs.mkdir(path.join(testBaseDir, 'providers'), { recursive: true });
-      
+
       const result = await installer.validate(testBaseDir);
-      
+
       expect(result.isValid).toBe(false);
       expect(result.errors).toContain('Missing required core.md');
       expect(result.missing).toContain('core.md');
@@ -326,9 +338,9 @@ describe('PromptInstaller', () => {
       await fs.mkdir(path.join(testBaseDir, 'tools'), { recursive: true });
       await fs.mkdir(path.join(testBaseDir, 'providers'), { recursive: true });
       await fs.writeFile(path.join(testBaseDir, 'core.md'), 'Content');
-      
+
       const result = await installer.validate(testBaseDir);
-      
+
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
       expect(result.missing).toHaveLength(0);
@@ -336,24 +348,24 @@ describe('PromptInstaller', () => {
 
     it('should check directory permissions', async () => {
       await fs.mkdir(testBaseDir, { mode: 0o444, recursive: true });
-      
+
       const result = await installer.validate(testBaseDir);
-      
+
       expect(result.warnings).toContain('Cannot write to directory');
     });
 
     it('should detect empty files that should have content', async () => {
       await fs.mkdir(testBaseDir, { recursive: true });
       await fs.writeFile(path.join(testBaseDir, 'core.md'), '');
-      
+
       const result = await installer.validate(testBaseDir);
-      
+
       expect(result.warnings).toContain('Empty file: core.md');
     });
 
     it('should handle null baseDir by using default', async () => {
       const result = await installer.validate(null);
-      
+
       expect(result.baseDir).toContain('.llxprt/prompts');
     });
   });
@@ -361,19 +373,19 @@ describe('PromptInstaller', () => {
   describe('repair', () => {
     const defaultFiles = {
       'core.md': '# Core Prompt\nDefault content',
-      'env/development.md': '# Development Environment'
+      'env/development.md': '# Development Environment',
     };
 
     it('should fix missing directories', async () => {
       await fs.mkdir(testBaseDir, { recursive: true });
-      
+
       const result = await installer.repair(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
       expect(result.repaired).toContain('env');
       expect(result.repaired).toContain('tools');
       expect(result.repaired).toContain('providers');
-      
+
       // Verify directories were created
       expect(existsSync(path.join(testBaseDir, 'env'))).toBe(true);
       expect(existsSync(path.join(testBaseDir, 'tools'))).toBe(true);
@@ -381,24 +393,29 @@ describe('PromptInstaller', () => {
 
     it('should restore missing default files', async () => {
       await fs.mkdir(path.join(testBaseDir, 'env'), { recursive: true });
-      
+
       const result = await installer.repair(testBaseDir, defaultFiles);
-      
+
       expect(result.repaired).toContain('core.md');
-      
+
       // Verify file was restored
-      const content = await fs.readFile(path.join(testBaseDir, 'core.md'), 'utf-8');
+      const content = await fs.readFile(
+        path.join(testBaseDir, 'core.md'),
+        'utf-8',
+      );
       expect(content).toBe('# Core Prompt\nDefault content');
     });
 
     it('should fix file permissions', async () => {
       await fs.mkdir(testBaseDir, { recursive: true });
-      await fs.writeFile(path.join(testBaseDir, 'core.md'), 'Content', { mode: 0o600 });
-      
+      await fs.writeFile(path.join(testBaseDir, 'core.md'), 'Content', {
+        mode: 0o600,
+      });
+
       const result = await installer.repair(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
-      
+
       // Verify permissions were fixed
       const stats = await fs.stat(path.join(testBaseDir, 'core.md'));
       const mode = stats.mode & parseInt('777', 8);
@@ -411,9 +428,9 @@ describe('PromptInstaller', () => {
       await fs.mkdir(path.join(testBaseDir, 'tools'), { recursive: true });
       await fs.mkdir(path.join(testBaseDir, 'providers'), { recursive: true });
       await fs.writeFile(path.join(testBaseDir, 'core.md'), 'Content');
-      
+
       const result = await installer.repair(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(true);
       expect(result.repaired).toHaveLength(0);
     });
@@ -421,9 +438,9 @@ describe('PromptInstaller', () => {
     it('should report errors that could not be repaired', async () => {
       // Create directory with no write permission
       await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
-      
+
       const result = await installer.repair(testBaseDir, defaultFiles);
-      
+
       expect(result.success).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.stillInvalid.length).toBeGreaterThan(0);
@@ -441,7 +458,7 @@ describe('PromptInstaller', () => {
     it('should create timestamped backup directory', async () => {
       const backupPath = path.join(tempDir, 'backups');
       const result = await installer.backup(testBaseDir, backupPath);
-      
+
       expect(result.success).toBe(true);
       expect(result.backupPath).toMatch(/prompt-backup-\d{8}_\d{6}/);
       expect(existsSync(result.backupPath!)).toBe(true);
@@ -450,16 +467,16 @@ describe('PromptInstaller', () => {
     it('should copy all files to backup', async () => {
       const backupPath = path.join(tempDir, 'backups');
       const result = await installer.backup(testBaseDir, backupPath);
-      
+
       expect(result.success).toBe(true);
       expect(result.fileCount).toBe(2);
-      
+
       // Verify files were copied
       const backupCore = path.join(result.backupPath!, 'core.md');
       const backupEnv = path.join(result.backupPath!, 'env/dev.md');
       expect(existsSync(backupCore)).toBe(true);
       expect(existsSync(backupEnv)).toBe(true);
-      
+
       // Verify content matches
       const content = await fs.readFile(backupCore, 'utf-8');
       expect(content).toBe('Core content');
@@ -468,10 +485,13 @@ describe('PromptInstaller', () => {
     it('should create manifest file with backup details', async () => {
       const backupPath = path.join(tempDir, 'backups');
       const result = await installer.backup(testBaseDir, backupPath);
-      
-      const manifestPath = path.join(result.backupPath!, 'backup-manifest.json');
+
+      const manifestPath = path.join(
+        result.backupPath!,
+        'backup-manifest.json',
+      );
       expect(existsSync(manifestPath)).toBe(true);
-      
+
       const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
       expect(manifest.sourcePath).toBe(testBaseDir);
       expect(manifest.fileCount).toBe(2);
@@ -480,14 +500,14 @@ describe('PromptInstaller', () => {
 
     it('should handle non-existent source directory', async () => {
       const result = await installer.backup('/nonexistent/path', tempDir);
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toBe('Nothing to backup');
     });
 
     it('should handle invalid backup path', async () => {
       const result = await installer.backup(testBaseDir, '');
-      
+
       expect(result.success).toBe(false);
       expect(result.error).toBe('Invalid backup path');
     });
@@ -495,7 +515,7 @@ describe('PromptInstaller', () => {
     it('should calculate total backup size', async () => {
       const backupPath = path.join(tempDir, 'backups');
       const result = await installer.backup(testBaseDir, backupPath);
-      
+
       expect(result.success).toBe(true);
       expect(result.totalSize).toBeGreaterThan(0);
     });
@@ -505,12 +525,14 @@ describe('PromptInstaller', () => {
     it('should handle symbolic links in base directory', async () => {
       const realDir = path.join(tempDir, 'real-prompts');
       const symlinkDir = path.join(tempDir, 'symlink-prompts');
-      
+
       await fs.mkdir(realDir, { recursive: true });
       await fs.symlink(realDir, symlinkDir);
-      
-      const result = await installer.install(symlinkDir, { 'test.md': 'content' });
-      
+
+      const result = await installer.install(symlinkDir, {
+        'test.md': 'content',
+      });
+
       expect(result.success).toBe(true);
       // File should be in the real directory
       expect(existsSync(path.join(realDir, 'test.md'))).toBe(true);
@@ -518,32 +540,32 @@ describe('PromptInstaller', () => {
 
     it('should handle race conditions with idempotent operations', async () => {
       const files = { 'test.md': 'content' };
-      
+
       // Run multiple installs concurrently
       const results = await Promise.all([
         installer.install(testBaseDir, files),
         installer.install(testBaseDir, files),
-        installer.install(testBaseDir, files)
+        installer.install(testBaseDir, files),
       ]);
-      
+
       // All should succeed
-      results.forEach(result => {
+      results.forEach((result) => {
         expect(result.success).toBe(true);
       });
-      
+
       // File should exist only once
       const dirContents = await fs.readdir(testBaseDir);
-      expect(dirContents.filter(f => f === 'test.md')).toHaveLength(1);
+      expect(dirContents.filter((f) => f === 'test.md')).toHaveLength(1);
     });
 
     it('should handle case-sensitive filesystem issues', async () => {
       const files = {
         'Core.md': 'uppercase content',
-        'core.md': 'lowercase content'
+        'core.md': 'lowercase content',
       };
-      
+
       const result = await installer.install(testBaseDir, files);
-      
+
       // On case-insensitive systems, one will be skipped
       expect(result.success).toBe(true);
       expect(result.installed.length + result.skipped.length).toBe(2);
@@ -552,23 +574,23 @@ describe('PromptInstaller', () => {
     it('should clean up temp files on write failure', async () => {
       // Make directory read-only after creation
       await fs.mkdir(testBaseDir, { recursive: true });
-      
+
       // Attempt to write a file that will fail
       const files = { 'test.md': 'content' };
-      
+
       // Make directory read-only
       await fs.chmod(testBaseDir, 0o555);
-      
+
       const result = await installer.install(testBaseDir, files);
-      
+
       expect(result.success).toBe(false);
-      
+
       // Reset permissions to check for temp files
       await fs.chmod(testBaseDir, 0o755);
-      
+
       // No temp files should remain
       const contents = await fs.readdir(testBaseDir);
-      const tempFiles = contents.filter(f => f.includes('.tmp'));
+      const tempFiles = contents.filter((f) => f.includes('.tmp'));
       expect(tempFiles).toHaveLength(0);
     });
   });

@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
 // Template variable schema from specification.md
-export const TemplateVariablesSchema = z.object({
-  TOOL_NAME: z.string().optional(),
-  MODEL: z.string(),
-  PROVIDER: z.string()
-}).passthrough();
+export const TemplateVariablesSchema = z
+  .object({
+    TOOL_NAME: z.string().optional(),
+    MODEL: z.string(),
+    PROVIDER: z.string(),
+  })
+  .passthrough();
 
 export type TemplateVariables = z.infer<typeof TemplateVariablesSchema>;
 

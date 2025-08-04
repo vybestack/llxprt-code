@@ -57,24 +57,24 @@ export class PromptService {
     // Set default configuration
     const defaultBaseDir = path.join(os.homedir(), '.llxprt', 'prompts');
     this.baseDir = this.expandPath(config?.baseDir ?? defaultBaseDir);
-    
+
     this.config = {
       baseDir: this.baseDir,
       maxCacheSizeMB: config?.maxCacheSizeMB ?? 100,
       compressionEnabled: config?.compressionEnabled !== false,
-      debugMode: config?.debugMode ?? false
+      debugMode: config?.debugMode ?? false,
     };
-    
+
     // Initialize components
     this.cache = new PromptCache(this.config.maxCacheSizeMB);
     this.resolver = new PromptResolver();
     this.loader = new PromptLoader(this.baseDir);
     this.templateEngine = new TemplateEngine();
     this.installer = new PromptInstaller();
-    
+
     // Load default content
     this.defaultContent = { ...ALL_DEFAULTS };
-    
+
     // Initialize state
     this.initialized = false;
     this.preloadedFiles = new Map();
@@ -97,27 +97,35 @@ export class PromptService {
       try {
         await fs.mkdir(baseDirParent, { recursive: true });
       } catch (error) {
-        throw new Error(`Cannot create base directory: ${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(
+          `Cannot create base directory: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
     // Run installation
-    const installResult = await this.installer.install(this.baseDir, this.defaultContent, {
-      force: false,
-      dryRun: false,
-      verbose: this.config.debugMode
-    });
+    const installResult = await this.installer.install(
+      this.baseDir,
+      this.defaultContent,
+      {
+        force: false,
+        dryRun: false,
+        verbose: this.config.debugMode,
+      },
+    );
 
     if (!installResult.success) {
-      throw new Error(`Installation failed: ${installResult.errors.join(', ')}`);
+      throw new Error(
+        `Installation failed: ${installResult.errors.join(', ')}`,
+      );
     }
 
     // Validate installation
     const validation = await this.installer.validate(this.baseDir);
     if (!validation.isValid && validation.errors.length > 0) {
       // Check for critical errors
-      const criticalErrors = validation.errors.filter(e => 
-        e.includes('core') || e.includes('missing')
+      const criticalErrors = validation.errors.filter(
+        (e) => e.includes('core') || e.includes('missing'),
       );
       if (criticalErrors.length > 0) {
         throw new Error(`Invalid installation: ${criticalErrors.join(', ')}`);
@@ -131,7 +139,10 @@ export class PromptService {
     // Preload all files into memory
     const allFiles = await this.getAllPromptFiles(this.baseDir);
     for (const file of allFiles) {
-      const loadResult = await this.loader.loadFile(file, this.config.compressionEnabled);
+      const loadResult = await this.loader.loadFile(
+        file,
+        this.config.compressionEnabled,
+      );
       if (loadResult.success && loadResult.content) {
         this.preloadedFiles.set(file, loadResult.content);
       } else if (this.config.debugMode) {
@@ -140,7 +151,9 @@ export class PromptService {
     }
 
     // Detect environment
-    this.detectedEnvironment = await this.loader.detectEnvironment(process.cwd());
+    this.detectedEnvironment = await this.loader.detectEnvironment(
+      process.cwd(),
+    );
 
     this.initialized = true;
   }
@@ -152,7 +165,10 @@ export class PromptService {
    * @returns Assembled prompt string
    * @throws Error if context is invalid or core prompt is missing
    */
-  async getPrompt(context: PromptContext, userMemory?: string | null): Promise<string> {
+  async getPrompt(
+    context: PromptContext,
+    userMemory?: string | null,
+  ): Promise<string> {
     // Ensure initialized
     if (!this.initialized) {
       await this.initialize();
@@ -185,9 +201,15 @@ export class PromptService {
 
     // Resolve files
     const startTime = Date.now();
-    const resolvedFiles = await this.resolver.resolveAllFiles(this.baseDir, context);
+    const resolvedFiles = await this.resolver.resolveAllFiles(
+      this.baseDir,
+      context,
+    );
     if (this.config.debugMode) {
-      console.log('Resolved files:', resolvedFiles.map(f => f.path));
+      console.log(
+        'Resolved files:',
+        resolvedFiles.map((f) => f.path),
+      );
     }
 
     // Load and process files
@@ -195,7 +217,7 @@ export class PromptService {
     const fileMetadata: string[] = [];
 
     // Process core file
-    const coreFile = resolvedFiles.find(f => f.type === 'core');
+    const coreFile = resolvedFiles.find((f) => f.type === 'core');
     if (coreFile) {
       const content = await this.loadAndProcess(coreFile.path, context, null);
       if (content) {
@@ -207,7 +229,7 @@ export class PromptService {
     }
 
     // Process environment files
-    const envFiles = resolvedFiles.filter(f => f.type === 'env');
+    const envFiles = resolvedFiles.filter((f) => f.type === 'env');
     for (const file of envFiles) {
       const content = await this.loadAndProcess(file.path, context, null);
       if (content) {
@@ -217,9 +239,13 @@ export class PromptService {
     }
 
     // Process tool files
-    const toolFiles = resolvedFiles.filter(f => f.type === 'tool');
+    const toolFiles = resolvedFiles.filter((f) => f.type === 'tool');
     for (const file of toolFiles) {
-      const content = await this.loadAndProcess(file.path, context, file.toolName || null);
+      const content = await this.loadAndProcess(
+        file.path,
+        context,
+        file.toolName || null,
+      );
       if (content) {
         processedParts.push(content);
         fileMetadata.push(file.path);
@@ -234,7 +260,7 @@ export class PromptService {
     const metadata = {
       files: fileMetadata,
       assemblyTimeMs: assemblyTime,
-      tokenCount: this.estimateTokens(baseAssembled)
+      tokenCount: this.estimateTokens(baseAssembled),
     };
     this.cache.set(context, baseAssembled, metadata);
 
@@ -260,11 +286,11 @@ export class PromptService {
 
     const fullPath = path.join(this.baseDir, relativePath);
     const result = await this.loader.loadFile(fullPath, false);
-    
+
     if (!result.success) {
       throw new Error(`Failed to load prompt ${relativePath}: ${result.error}`);
     }
-    
+
     return result.content.trim();
   }
 
@@ -284,18 +310,18 @@ export class PromptService {
    */
   getCacheStats(): CacheStats & { totalEntries: number; hitRate: number } {
     const stats = this.cache.getStats();
-    
+
     // Calculate hit rate: total accesses includes initial creation + subsequent hits
     // So hits = totalAccesses (which counts cache hits only, not initial sets)
     const totalRequests = stats.entryCount + stats.totalAccesses;
     const hits = stats.totalAccesses;
     const hitRate = totalRequests > 0 ? (hits / totalRequests) * 100 : 0;
-    
+
     // Add properties expected by tests
     return {
       ...stats,
       totalEntries: stats.entryCount,
-      hitRate
+      hitRate,
     };
   }
 
@@ -356,9 +382,16 @@ export class PromptService {
 
     // Check environment
     if (context.environment) {
-      const booleanKeys = ['isGitRepository', 'isSandboxed', 'hasIdeCompanion'] as const;
+      const booleanKeys = [
+        'isGitRepository',
+        'isSandboxed',
+        'hasIdeCompanion',
+      ] as const;
       for (const key of booleanKeys) {
-        if (key in context.environment && typeof context.environment[key] !== 'boolean') {
+        if (
+          key in context.environment &&
+          typeof context.environment[key] !== 'boolean'
+        ) {
           warnings.push(`${key} should be boolean`);
         }
       }
@@ -367,7 +400,7 @@ export class PromptService {
     return {
       isValid,
       errors,
-      warnings
+      warnings,
     };
   }
 
@@ -391,7 +424,7 @@ export class PromptService {
       // Extract tool names
       const toolNames: string[] = [];
       const files = await fs.readdir(toolsDir);
-      
+
       for (const file of files) {
         if (file.endsWith('.md')) {
           // Remove .md extension
@@ -399,7 +432,7 @@ export class PromptService {
           // Convert from kebab-case to PascalCase
           const pascalCase = baseName
             .split('-')
-            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
             .join('');
           toolNames.push(pascalCase);
         }
@@ -432,14 +465,17 @@ export class PromptService {
   private async loadAndProcess(
     filePath: string,
     context: PromptContext,
-    currentTool: string | null
+    currentTool: string | null,
   ): Promise<string> {
     // Read from memory cache
     let content = this.preloadedFiles.get(filePath);
-    
+
     if (!content) {
       // If not in memory, try loading directly
-      const loadResult = await this.loader.loadFile(filePath, this.config.compressionEnabled);
+      const loadResult = await this.loader.loadFile(
+        filePath,
+        this.config.compressionEnabled,
+      );
       if (!loadResult.success || !loadResult.content) {
         if (this.config.debugMode) {
           console.error(`Failed to load file ${filePath}:`, loadResult.error);
@@ -450,7 +486,10 @@ export class PromptService {
     }
 
     // Create template variables
-    const variables = this.templateEngine.createVariablesFromContext(context, currentTool);
+    const variables = this.templateEngine.createVariablesFromContext(
+      context,
+      currentTool,
+    );
 
     // Process template
     try {
@@ -473,11 +512,15 @@ export class PromptService {
     async function walkDir(dir: string): Promise<void> {
       try {
         const entries = await fs.readdir(dir, { withFileTypes: true });
-        
+
         for (const entry of entries) {
           const fullPath = path.join(dir, entry.name);
-          
-          if (entry.isDirectory() && entry.name !== '.' && entry.name !== '..') {
+
+          if (
+            entry.isDirectory() &&
+            entry.name !== '.' &&
+            entry.name !== '..'
+          ) {
             await walkDir(fullPath);
           } else if (entry.isFile() && entry.name.endsWith('.md')) {
             files.push(fullPath);

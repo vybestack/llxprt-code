@@ -54,17 +54,17 @@ export class PromptResolver {
   resolveFile(
     baseDir: string,
     relativePath: string,
-    context: Partial<PromptContext>
+    context: Partial<PromptContext>,
   ): ResolveFileResult {
     // 1. Validate inputs
     if (!baseDir || !this.isDirectory(baseDir)) {
       return { found: false, path: null, source: null };
     }
-    
+
     if (!relativePath || relativePath.includes('..')) {
       return { found: false, path: null, source: null };
     }
-    
+
     if (!context) {
       context = {};
     }
@@ -75,24 +75,24 @@ export class PromptResolver {
 
     // 3. Build search paths in order (most specific first)
     const searchPaths: string[] = [];
-    
+
     if (provider && model) {
       searchPaths.push(`providers/${provider}/models/${model}/${relativePath}`);
     }
-    
+
     if (provider) {
       searchPaths.push(`providers/${provider}/${relativePath}`);
     }
-    
+
     searchPaths.push(relativePath);
 
     // 4. Search for file
     for (const searchPath of searchPaths) {
       const absolutePath = path.join(baseDir, searchPath);
-      
+
       if (this.fileExists(absolutePath) && this.isRegularFile(absolutePath)) {
         let source: 'model' | 'provider' | 'base';
-        
+
         if (searchPath.includes('/models/')) {
           source = 'model';
         } else if (searchPath.startsWith('providers/')) {
@@ -100,7 +100,7 @@ export class PromptResolver {
         } else {
           source = 'base';
         }
-        
+
         return { found: true, path: absolutePath, source };
       }
     }
@@ -112,10 +112,7 @@ export class PromptResolver {
   /**
    * Resolve all files for a given context
    */
-  resolveAllFiles(
-    baseDir: string,
-    context: PromptContext
-  ): ResolvedFile[] {
+  resolveAllFiles(baseDir: string, context: PromptContext): ResolvedFile[] {
     // 1. Validate inputs
     if (!baseDir || !context) {
       return [];
@@ -134,7 +131,7 @@ export class PromptResolver {
       resolvedFiles.push({
         type: 'core',
         path: coreResult.path,
-        source: coreResult.source
+        source: coreResult.source,
       });
     }
 
@@ -149,52 +146,68 @@ export class PromptResolver {
         resolvedFiles.push({
           type: 'env',
           path: gitResult.path,
-          source: gitResult.source
+          source: gitResult.source,
         });
       }
     }
-    
+
     if (context.environment.isSandboxed) {
       // Check for specific sandbox type first
       if (context.environment.sandboxType === 'macos-seatbelt') {
-        const seatbeltResult = this.resolveFile(baseDir, 'env/macos-seatbelt.md', context);
-        if (seatbeltResult.found && seatbeltResult.path && seatbeltResult.source) {
+        const seatbeltResult = this.resolveFile(
+          baseDir,
+          'env/macos-seatbelt.md',
+          context,
+        );
+        if (
+          seatbeltResult.found &&
+          seatbeltResult.path &&
+          seatbeltResult.source
+        ) {
           resolvedFiles.push({
             type: 'env',
             path: seatbeltResult.path,
-            source: seatbeltResult.source
+            source: seatbeltResult.source,
           });
         }
       } else {
         // Default sandbox
-        const sandboxResult = this.resolveFile(baseDir, 'env/sandbox.md', context);
+        const sandboxResult = this.resolveFile(
+          baseDir,
+          'env/sandbox.md',
+          context,
+        );
         if (sandboxResult.found && sandboxResult.path && sandboxResult.source) {
           resolvedFiles.push({
             type: 'env',
             path: sandboxResult.path,
-            source: sandboxResult.source
+            source: sandboxResult.source,
           });
         }
       }
     } else {
       // Not sandboxed - check for outside-of-sandbox.md
-      const outsideResult = this.resolveFile(baseDir, 'env/outside-of-sandbox.md', context);
+      const outsideResult = this.resolveFile(
+        baseDir,
+        'env/outside-of-sandbox.md',
+        context,
+      );
       if (outsideResult.found && outsideResult.path && outsideResult.source) {
         resolvedFiles.push({
           type: 'env',
           path: outsideResult.path,
-          source: outsideResult.source
+          source: outsideResult.source,
         });
       }
     }
-    
+
     if (context.environment.hasIdeCompanion) {
       const ideResult = this.resolveFile(baseDir, 'env/ide-mode.md', context);
       if (ideResult.found && ideResult.path && ideResult.source) {
         resolvedFiles.push({
           type: 'env',
           path: ideResult.path,
-          source: ideResult.source
+          source: ideResult.source,
         });
       }
     }
@@ -204,13 +217,13 @@ export class PromptResolver {
       const toolFileName = this.convertToKebabCase(tool) + '.md';
       const toolPath = 'tools/' + toolFileName;
       const toolResult = this.resolveFile(baseDir, toolPath, context);
-      
+
       if (toolResult.found && toolResult.path && toolResult.source) {
         resolvedFiles.push({
           type: 'tool',
           path: toolResult.path,
           source: toolResult.source,
-          toolName: tool
+          toolName: tool,
         });
       } else {
         // Log warning "Tool prompt not found: " + tool
@@ -240,13 +253,13 @@ export class PromptResolver {
     // 2. Apply sanitization rules
     // a. Convert to lowercase
     let result = component.toLowerCase();
-    
+
     // b. Replace sequences of non-alphanumeric chars with single hyphen
     result = result.replace(/[^a-z0-9]+/g, '-');
-    
+
     // c. Remove leading and trailing hyphens
     result = result.replace(/^-+|-+$/g, '');
-    
+
     // d. IF result is empty after sanitization
     if (result.length === 0) {
       return 'unknown';
@@ -284,17 +297,17 @@ export class PromptResolver {
     // 3. Convert case - handle special patterns first
     // Replace underscores and dots with hyphens
     const processedName = toolName.replace(/[_.]/g, '-');
-    
+
     // Insert hyphens before uppercase letters that follow lowercase letters
     // or before digits (except at the start)
     let result = '';
     let previousWasLowercase = false;
     let previousWasDigit = false;
-    
+
     for (let i = 0; i < processedName.length; i++) {
       const char = processedName[i];
       const nextChar = i + 1 < processedName.length ? processedName[i + 1] : '';
-      
+
       if (char === '-') {
         // Keep existing hyphens
         result += char;
@@ -303,14 +316,15 @@ export class PromptResolver {
       } else if (/[A-Z]/.test(char)) {
         // Handle uppercase letters
         const nextIsLower = nextChar && /[a-z]/.test(nextChar);
-        const shouldAddHyphen = (previousWasLowercase || 
-                                (previousWasDigit && result.length > 0) ||
-                                (result.length > 0 && nextIsLower && !result.endsWith('-')));
-        
+        const shouldAddHyphen =
+          previousWasLowercase ||
+          (previousWasDigit && result.length > 0) ||
+          (result.length > 0 && nextIsLower && !result.endsWith('-'));
+
         if (shouldAddHyphen) {
           result += '-';
         }
-        
+
         result += char.toLowerCase();
         previousWasLowercase = false;
         previousWasDigit = false;
@@ -333,7 +347,7 @@ export class PromptResolver {
     // 4. Clean up result
     // a. Replace multiple consecutive hyphens with single hyphen
     result = result.replace(/-+/g, '-');
-    
+
     // b. Remove leading and trailing hyphens
     result = result.replace(/^-+|-+$/g, '');
 
@@ -346,14 +360,19 @@ export class PromptResolver {
    */
   listAvailableFiles(
     baseDir: string,
-    fileType: 'core' | 'env' | 'tool' | 'all'
+    fileType: 'core' | 'env' | 'tool' | 'all',
   ): AvailableFile[] {
     // 1. Validate inputs
     if (!baseDir || !this.isDirectory(baseDir)) {
       return [];
     }
-    
-    const validTypes: Array<'core' | 'env' | 'tool' | 'all'> = ['core', 'env', 'tool', 'all'];
+
+    const validTypes: Array<'core' | 'env' | 'tool' | 'all'> = [
+      'core',
+      'env',
+      'tool',
+      'all',
+    ];
     if (!validTypes.includes(fileType)) {
       fileType = 'all';
     }
@@ -370,11 +389,11 @@ export class PromptResolver {
           availableFiles.push({
             path: 'core.md',
             type: 'core',
-            source: 'base'
+            source: 'base',
           });
         }
       }
-      
+
       // b. IF fileType is 'all' or 'env'
       if (fileType === 'all' || fileType === 'env') {
         const envDir = path.join(baseDir, 'env');
@@ -385,13 +404,13 @@ export class PromptResolver {
               availableFiles.push({
                 path: `env/${file}`,
                 type: 'env',
-                source: 'base'
+                source: 'base',
               });
             }
           }
         }
       }
-      
+
       // c. IF fileType is 'all' or 'tool'
       if (fileType === 'all' || fileType === 'tool') {
         const toolsDir = path.join(baseDir, 'tools');
@@ -402,7 +421,7 @@ export class PromptResolver {
               availableFiles.push({
                 path: `tools/${file}`,
                 type: 'tool',
-                source: 'base'
+                source: 'base',
               });
             }
           }
@@ -417,7 +436,12 @@ export class PromptResolver {
           const providerPath = path.join(providersDir, provider);
           if (this.isDirectory(providerPath)) {
             // Scan provider directory recursively
-            this.scanProviderDirectory(providerPath, provider, fileType, availableFiles);
+            this.scanProviderDirectory(
+              providerPath,
+              provider,
+              fileType,
+              availableFiles,
+            );
           }
         }
       }
@@ -432,7 +456,7 @@ export class PromptResolver {
       const typeOrder = { core: 0, env: 1, tool: 2 };
       const typeCompare = typeOrder[a.type] - typeOrder[b.type];
       if (typeCompare !== 0) return typeCompare;
-      
+
       // b. Then by path alphabetically
       return a.path.localeCompare(b.path);
     });
@@ -456,7 +480,7 @@ export class PromptResolver {
       errors.push('Base directory does not exist');
       return { isValid, errors, warnings };
     }
-    
+
     if (!this.isDirectory(baseDir)) {
       isValid = false;
       errors.push('Base path is not a directory');
@@ -486,17 +510,18 @@ export class PromptResolver {
         if (!filePath.endsWith('.md')) {
           warnings.push(`Non-markdown file found: ${relativePath}`);
         }
-        
+
         // Check file size
         try {
           const stats = fs.statSync(filePath);
-          if (stats.size > 10 * 1024 * 1024) { // 10MB
+          if (stats.size > 10 * 1024 * 1024) {
+            // 10MB
             warnings.push(`Large file found: ${relativePath}`);
           }
         } catch {
           // Ignore stat errors
         }
-        
+
         // Check filename for special characters
         const filename = path.basename(filePath);
         if (!/^[\w\-.]+$/.test(filename)) {
@@ -521,7 +546,7 @@ export class PromptResolver {
     return {
       isValid,
       errors,
-      warnings
+      warnings,
     };
   }
 
@@ -565,7 +590,7 @@ export class PromptResolver {
     providerPath: string,
     provider: string,
     fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[]
+    availableFiles: AvailableFile[],
   ): void {
     // Check for core.md at provider level
     if (fileType === 'all' || fileType === 'core') {
@@ -574,7 +599,7 @@ export class PromptResolver {
         availableFiles.push({
           path: `providers/${provider}/core.md`,
           type: 'core',
-          source: 'provider'
+          source: 'provider',
         });
       }
     }
@@ -589,7 +614,7 @@ export class PromptResolver {
             availableFiles.push({
               path: `providers/${provider}/env/${file}`,
               type: 'env',
-              source: 'provider'
+              source: 'provider',
             });
           }
         }
@@ -606,7 +631,7 @@ export class PromptResolver {
             availableFiles.push({
               path: `providers/${provider}/tools/${file}`,
               type: 'tool',
-              source: 'provider'
+              source: 'provider',
             });
           }
         }
@@ -620,7 +645,13 @@ export class PromptResolver {
       for (const model of models) {
         const modelPath = path.join(modelsDir, model);
         if (this.isDirectory(modelPath)) {
-          this.scanModelDirectory(modelPath, provider, model, fileType, availableFiles);
+          this.scanModelDirectory(
+            modelPath,
+            provider,
+            model,
+            fileType,
+            availableFiles,
+          );
         }
       }
     }
@@ -631,7 +662,7 @@ export class PromptResolver {
     provider: string,
     model: string,
     fileType: 'core' | 'env' | 'tool' | 'all',
-    availableFiles: AvailableFile[]
+    availableFiles: AvailableFile[],
   ): void {
     // Check for core.md at model level
     if (fileType === 'all' || fileType === 'core') {
@@ -640,7 +671,7 @@ export class PromptResolver {
         availableFiles.push({
           path: `providers/${provider}/models/${model}/core.md`,
           type: 'core',
-          source: 'model'
+          source: 'model',
         });
       }
     }
@@ -655,7 +686,7 @@ export class PromptResolver {
             availableFiles.push({
               path: `providers/${provider}/models/${model}/env/${file}`,
               type: 'env',
-              source: 'model'
+              source: 'model',
             });
           }
         }
@@ -672,7 +703,7 @@ export class PromptResolver {
             availableFiles.push({
               path: `providers/${provider}/models/${model}/tools/${file}`,
               type: 'tool',
-              source: 'model'
+              source: 'model',
             });
           }
         }
@@ -683,20 +714,20 @@ export class PromptResolver {
   private walkDirectory(
     dirPath: string,
     callback: (filePath: string, relativePath: string) => void,
-    baseDir: string = dirPath
+    baseDir: string = dirPath,
   ): void {
     try {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dirPath, entry.name);
         const relativePath = path.relative(baseDir, fullPath);
-        
+
         // Skip hidden files (starting with .)
         if (entry.name.startsWith('.')) {
           continue;
         }
-        
+
         if (entry.isDirectory()) {
           // Recurse into subdirectory
           this.walkDirectory(fullPath, callback, baseDir);

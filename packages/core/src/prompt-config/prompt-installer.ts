@@ -1,7 +1,7 @@
 /**
  * Prompt Installer - Creates directory structure and installs default prompt files
  * while preserving user customizations.
- * 
+ *
  * This is a TDD stub implementation. All methods throw "Not implemented" errors.
  */
 
@@ -14,17 +14,17 @@ import { existsSync } from 'fs';
 // Constants
 export const DEFAULT_BASE_DIR = '~/.llxprt/prompts';
 export const REQUIRED_DIRECTORIES = [
-  '',           // Base directory
-  'env',       // Environment-specific prompts
-  'tools',     // Tool-specific prompts
-  'providers'  // Provider overrides
+  '', // Base directory
+  'env', // Environment-specific prompts
+  'tools', // Tool-specific prompts
+  'providers', // Provider overrides
 ] as const;
 
 // Types
 export interface InstallOptions {
-  force?: boolean;      // Overwrite existing files
-  dryRun?: boolean;     // Simulate without writing
-  verbose?: boolean;    // Detailed logging
+  force?: boolean; // Overwrite existing files
+  dryRun?: boolean; // Simulate without writing
+  verbose?: boolean; // Detailed logging
 }
 
 export interface InstallResult {
@@ -36,7 +36,7 @@ export interface InstallResult {
 }
 
 export interface UninstallOptions {
-  removeUserFiles?: boolean;  // Remove all files
+  removeUserFiles?: boolean; // Remove all files
   dryRun?: boolean;
 }
 
@@ -91,7 +91,7 @@ export class PromptInstaller {
   async install(
     baseDir: string | null,
     defaults: DefaultsMap,
-    options?: InstallOptions
+    options?: InstallOptions,
   ): Promise<InstallResult> {
     const installed: string[] = [];
     const skipped: string[] = [];
@@ -110,14 +110,14 @@ export class PromptInstaller {
         installed: [],
         skipped: [],
         errors: ['Invalid base directory'],
-        baseDir: expandedBaseDir
+        baseDir: expandedBaseDir,
       };
     }
 
     // Create directory structure
     for (const dir of REQUIRED_DIRECTORIES) {
       const fullPath = path.join(expandedBaseDir, dir);
-      
+
       if (options?.dryRun) {
         if (options?.verbose) {
           console.log('Would create:', fullPath);
@@ -129,8 +129,12 @@ export class PromptInstaller {
             console.log('Created directory:', fullPath);
           }
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          if (errorMsg.includes('EACCES') || errorMsg.includes('permission denied')) {
+          const errorMsg =
+            error instanceof Error ? error.message : String(error);
+          if (
+            errorMsg.includes('EACCES') ||
+            errorMsg.includes('permission denied')
+          ) {
             errors.push(`Permission denied: ${fullPath}`);
           } else {
             errors.push(`Failed to create directory ${fullPath}: ${errorMsg}`);
@@ -149,7 +153,9 @@ export class PromptInstaller {
         try {
           await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
         } catch (error) {
-          errors.push(`Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`);
+          errors.push(
+            `Failed to create directory ${fileDir}: ${error instanceof Error ? error.message : String(error)}`,
+          );
           continue;
         }
       }
@@ -183,7 +189,10 @@ export class PromptInstaller {
             }
           } catch (renameError) {
             // If rename failed because file already exists, it's OK (race condition)
-            const renameMsg = renameError instanceof Error ? renameError.message : String(renameError);
+            const renameMsg =
+              renameError instanceof Error
+                ? renameError.message
+                : String(renameError);
             if (renameMsg.includes('EEXIST') || existsSync(fullPath)) {
               skipped.push(relativePath);
               // Clean up temp file
@@ -193,11 +202,19 @@ export class PromptInstaller {
             }
           }
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
-            errors.push(`Permission denied: ${fullPath}. Try running with elevated permissions or changing the directory ownership.`);
+          const errorMsg =
+            error instanceof Error ? error.message : String(error);
+          if (
+            errorMsg.includes('EACCES') ||
+            errorMsg.includes('Permission denied')
+          ) {
+            errors.push(
+              `Permission denied: ${fullPath}. Try running with elevated permissions or changing the directory ownership.`,
+            );
           } else if (errorMsg.includes('ENOSPC')) {
-            errors.push(`Disk full: Cannot write ${fullPath}. Free up some disk space and try again.`);
+            errors.push(
+              `Disk full: Cannot write ${fullPath}. Free up some disk space and try again.`,
+            );
           } else {
             errors.push(`Failed to write ${fullPath}: ${errorMsg}`);
           }
@@ -216,7 +233,7 @@ export class PromptInstaller {
       try {
         // Set base directory permissions
         await fs.chmod(expandedBaseDir, 0o755);
-        
+
         // Set permissions on all subdirectories
         for (const dir of REQUIRED_DIRECTORIES) {
           if (dir !== '') {
@@ -247,7 +264,7 @@ export class PromptInstaller {
       installed,
       skipped,
       errors,
-      baseDir: expandedBaseDir
+      baseDir: expandedBaseDir,
     };
   }
 
@@ -259,7 +276,7 @@ export class PromptInstaller {
    */
   async uninstall(
     baseDir: string | null,
-    options?: UninstallOptions
+    options?: UninstallOptions,
   ): Promise<UninstallResult> {
     const removed: string[] = [];
     const errors: string[] = [];
@@ -275,19 +292,21 @@ export class PromptInstaller {
       return {
         success: true,
         removed: [],
-        errors: []
+        errors: [],
       };
     }
 
     // Build removal list
     const toRemove: string[] = [];
-    
+
     if (options?.removeUserFiles) {
       // Remove all files
       try {
         await this.collectAllFiles(expandedBaseDir, expandedBaseDir, toRemove);
       } catch (error) {
-        errors.push(`Failed to list files: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(
+          `Failed to list files: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     } else {
       // Remove only default files (core.md and files in standard directories)
@@ -296,9 +315,9 @@ export class PromptInstaller {
         'env/development.md',
         'env/dev.md',
         'tools/git.md',
-        'providers/openai.md'
+        'providers/openai.md',
       ];
-      
+
       for (const filePath of defaultPaths) {
         const fullPath = path.join(expandedBaseDir, filePath);
         if (existsSync(fullPath)) {
@@ -310,7 +329,7 @@ export class PromptInstaller {
     // Remove files
     for (const file of toRemove) {
       const fullPath = path.join(expandedBaseDir, file);
-      
+
       if (options?.dryRun) {
         console.log('Would remove:', fullPath);
         removed.push(file);
@@ -319,10 +338,16 @@ export class PromptInstaller {
           await fs.unlink(fullPath);
           removed.push(file);
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
+          const errorMsg =
+            error instanceof Error ? error.message : String(error);
           if (errorMsg.includes('EBUSY')) {
-            errors.push(`File in use: ${file}. Close any programs using this file and try again.`);
-          } else if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
+            errors.push(
+              `File in use: ${file}. Close any programs using this file and try again.`,
+            );
+          } else if (
+            errorMsg.includes('EACCES') ||
+            errorMsg.includes('Permission denied')
+          ) {
             errors.push(`Permission denied: ${file}`);
           } else if (!errorMsg.includes('ENOENT')) {
             // Ignore "file not found" errors
@@ -335,10 +360,11 @@ export class PromptInstaller {
     // Remove empty directories (in reverse order to remove children first)
     if (!options?.dryRun) {
       const dirsToCheck = [...REQUIRED_DIRECTORIES].reverse();
-      
+
       for (const dir of dirsToCheck) {
-        const fullPath = dir === '' ? expandedBaseDir : path.join(expandedBaseDir, dir);
-        
+        const fullPath =
+          dir === '' ? expandedBaseDir : path.join(expandedBaseDir, dir);
+
         try {
           const contents = await fs.readdir(fullPath);
           if (contents.length === 0) {
@@ -354,20 +380,24 @@ export class PromptInstaller {
     return {
       success: errors.length === 0,
       removed,
-      errors
+      errors,
     };
   }
 
   /**
    * Helper method to recursively collect all files in a directory
    */
-  private async collectAllFiles(baseDir: string, currentDir: string, files: string[]): Promise<void> {
+  private async collectAllFiles(
+    baseDir: string,
+    currentDir: string,
+    files: string[],
+  ): Promise<void> {
     const entries = await fs.readdir(currentDir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
       const relativePath = path.relative(baseDir, fullPath);
-      
+
       if (entry.isDirectory()) {
         await this.collectAllFiles(baseDir, fullPath, files);
       } else if (entry.isFile()) {
@@ -402,14 +432,14 @@ export class PromptInstaller {
         errors,
         warnings,
         missing,
-        baseDir: expandedBaseDir
+        baseDir: expandedBaseDir,
       };
     }
 
     // Check directory structure
     for (const dir of REQUIRED_DIRECTORIES) {
       if (dir === '') continue; // Skip base directory itself
-      
+
       const fullPath = path.join(expandedBaseDir, dir);
       if (!existsSync(fullPath)) {
         missing.push(dir);
@@ -448,7 +478,7 @@ export class PromptInstaller {
         if (stats.size === 0) {
           warnings.push('Empty file: core.md');
         }
-        
+
         // Check if file is readable
         try {
           await fs.access(corePath, fs.constants.R_OK);
@@ -456,7 +486,9 @@ export class PromptInstaller {
           errors.push('Cannot read: core.md');
         }
       } catch (error) {
-        errors.push(`Error checking core.md: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(
+          `Error checking core.md: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -464,7 +496,7 @@ export class PromptInstaller {
     const defaultFiles = [
       'env/development.md',
       'tools/git.md',
-      'providers/openai.md'
+      'providers/openai.md',
     ];
 
     for (const file of defaultFiles) {
@@ -475,7 +507,7 @@ export class PromptInstaller {
           if (stats.size === 0) {
             warnings.push(`Empty file: ${file}`);
           }
-          
+
           // Check if file is readable
           try {
             await fs.access(filePath, fs.constants.R_OK);
@@ -493,7 +525,7 @@ export class PromptInstaller {
       errors,
       warnings,
       missing,
-      baseDir: expandedBaseDir
+      baseDir: expandedBaseDir,
     };
   }
 
@@ -507,7 +539,7 @@ export class PromptInstaller {
   async repair(
     baseDir: string | null,
     defaults: DefaultsMap,
-    options?: RepairOptions
+    options?: RepairOptions,
   ): Promise<RepairResult> {
     // Run validation first
     const validation = await this.validate(baseDir);
@@ -525,12 +557,14 @@ export class PromptInstaller {
           console.log('Created base directory:', expandedBaseDir);
         }
       } catch (error) {
-        errors.push(`Failed to create base directory: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(
+          `Failed to create base directory: ${error instanceof Error ? error.message : String(error)}`,
+        );
         return {
           success: false,
           repaired,
           errors,
-          stillInvalid: validation.errors
+          stillInvalid: validation.errors,
         };
       }
     }
@@ -538,7 +572,11 @@ export class PromptInstaller {
     // Fix missing directories
     for (const missingItem of validation.missing) {
       // Check if it's a directory (from REQUIRED_DIRECTORIES)
-      if (REQUIRED_DIRECTORIES.includes(missingItem as typeof REQUIRED_DIRECTORIES[number])) {
+      if (
+        REQUIRED_DIRECTORIES.includes(
+          missingItem as (typeof REQUIRED_DIRECTORIES)[number],
+        )
+      ) {
         const dirPath = path.join(expandedBaseDir, missingItem);
         try {
           await fs.mkdir(dirPath, { recursive: true, mode: 0o755 });
@@ -547,7 +585,9 @@ export class PromptInstaller {
             console.log('Created directory:', dirPath);
           }
         } catch (error) {
-          errors.push(`Failed to create directory ${missingItem}: ${error instanceof Error ? error.message : String(error)}`);
+          errors.push(
+            `Failed to create directory ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
     }
@@ -558,12 +598,14 @@ export class PromptInstaller {
       if (defaults[missingItem]) {
         const filePath = path.join(expandedBaseDir, missingItem);
         const fileDir = path.dirname(filePath);
-        
+
         // Ensure parent directory exists
         try {
           await fs.mkdir(fileDir, { recursive: true, mode: 0o755 });
         } catch (error) {
-          errors.push(`Failed to create directory for ${missingItem}: ${error instanceof Error ? error.message : String(error)}`);
+          errors.push(
+            `Failed to create directory for ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+          );
           continue;
         }
 
@@ -577,7 +619,9 @@ export class PromptInstaller {
             console.log('Restored file:', filePath);
           }
         } catch (error) {
-          errors.push(`Failed to restore ${missingItem}: ${error instanceof Error ? error.message : String(error)}`);
+          errors.push(
+            `Failed to restore ${missingItem}: ${error instanceof Error ? error.message : String(error)}`,
+          );
           try {
             await fs.unlink(tempPath);
           } catch {
@@ -592,16 +636,18 @@ export class PromptInstaller {
     try {
       // Fix directory permissions
       await fs.chmod(expandedBaseDir, 0o755);
-      
+
       // Fix all file and directory permissions recursively
       await this.fixFilePermissions(expandedBaseDir);
       permissionsFixed = true;
-      
+
       if (options?.verbose) {
         console.log('Fixed file permissions');
       }
     } catch (error) {
-      errors.push(`Failed to fix permissions: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push(
+        `Failed to fix permissions: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
     // If we started with a valid installation, don't report permissions as repaired
@@ -617,7 +663,7 @@ export class PromptInstaller {
       success: finalValidation.isValid && errors.length === 0,
       repaired,
       errors,
-      stillInvalid: finalValidation.errors
+      stillInvalid: finalValidation.errors,
     };
   }
 
@@ -629,7 +675,7 @@ export class PromptInstaller {
    */
   async backup(
     baseDir: string | null,
-    backupPath: string
+    backupPath: string,
   ): Promise<BackupResult> {
     // Validate inputs
     let expandedBaseDir = baseDir;
@@ -640,14 +686,14 @@ export class PromptInstaller {
     if (!existsSync(expandedBaseDir)) {
       return {
         success: false,
-        error: 'Nothing to backup'
+        error: 'Nothing to backup',
       };
     }
 
     if (!backupPath || backupPath.trim() === '') {
       return {
         success: false,
-        error: 'Invalid backup path'
+        error: 'Invalid backup path',
       };
     }
 
@@ -669,7 +715,7 @@ export class PromptInstaller {
       // Copy files
       let fileCount = 0;
       let totalSize = 0;
-      
+
       await this.copyDirectory(expandedBaseDir, backupDir, async (filePath) => {
         fileCount++;
         const stats = await fs.stat(filePath);
@@ -681,29 +727,32 @@ export class PromptInstaller {
         backupDate: new Date().toISOString(),
         sourcePath: expandedBaseDir,
         fileCount,
-        totalSize
+        totalSize,
       };
 
       await fs.writeFile(
         path.join(backupDir, 'backup-manifest.json'),
-        JSON.stringify(manifest, null, 2)
+        JSON.stringify(manifest, null, 2),
       );
 
       // Verify backup
       const verifyCount = await this.countFiles(backupDir);
-      if (verifyCount !== fileCount + 1) { // +1 for manifest
-        console.warn(`Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`);
+      if (verifyCount !== fileCount + 1) {
+        // +1 for manifest
+        console.warn(
+          `Backup verification warning: expected ${fileCount + 1} files, found ${verifyCount}`,
+        );
       }
 
       return {
         success: true,
         backupPath: backupDir,
         fileCount,
-        totalSize
+        totalSize,
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
-      
+
       // Clean up partial backup on error
       try {
         await fs.rm(backupDir, { recursive: true, force: true });
@@ -714,18 +763,22 @@ export class PromptInstaller {
       if (errorMsg.includes('ENOSPC')) {
         return {
           success: false,
-          error: 'Insufficient space: Not enough disk space for backup. Try a different location.'
+          error:
+            'Insufficient space: Not enough disk space for backup. Try a different location.',
         };
-      } else if (errorMsg.includes('EACCES') || errorMsg.includes('Permission denied')) {
+      } else if (
+        errorMsg.includes('EACCES') ||
+        errorMsg.includes('Permission denied')
+      ) {
         return {
           success: false,
-          error: `Permission denied: Cannot write to backup location. Try a different location or check permissions.`
+          error: `Permission denied: Cannot write to backup location. Try a different location or check permissions.`,
         };
       }
 
       return {
         success: false,
-        error: `Backup failed: ${errorMsg}`
+        error: `Backup failed: ${errorMsg}`,
       };
     }
   }
@@ -734,18 +787,18 @@ export class PromptInstaller {
    * Helper method to copy a directory recursively
    */
   private async copyDirectory(
-    source: string, 
-    dest: string, 
-    onFile?: (filePath: string) => Promise<void>
+    source: string,
+    dest: string,
+    onFile?: (filePath: string) => Promise<void>,
   ): Promise<void> {
     await fs.mkdir(dest, { recursive: true });
-    
+
     const entries = await fs.readdir(source, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       const sourcePath = path.join(source, entry.name);
       const destPath = path.join(dest, entry.name);
-      
+
       if (entry.isDirectory()) {
         await this.copyDirectory(sourcePath, destPath, onFile);
       } else if (entry.isFile()) {
@@ -764,7 +817,7 @@ export class PromptInstaller {
   private async countFiles(dir: string): Promise<number> {
     let count = 0;
     const entries = await fs.readdir(dir, { withFileTypes: true });
-    
+
     for (const entry of entries) {
       if (entry.isDirectory()) {
         count += await this.countFiles(path.join(dir, entry.name));
@@ -772,7 +825,7 @@ export class PromptInstaller {
         count++;
       }
     }
-    
+
     return count;
   }
 
@@ -782,10 +835,10 @@ export class PromptInstaller {
   private async fixFilePermissions(dir: string): Promise<void> {
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        
+
         try {
           if (entry.isDirectory()) {
             await fs.chmod(fullPath, 0o755);
@@ -822,10 +875,16 @@ export class PromptInstaller {
     }
 
     // Expand environment variables with curly braces ${VAR}
-    expandedPath = expandedPath.replace(/\$\{([^}]+)\}/g, (match, varName) => process.env[varName] || match);
+    expandedPath = expandedPath.replace(
+      /\$\{([^}]+)\}/g,
+      (match, varName) => process.env[varName] || match,
+    );
 
     // Expand environment variables without curly braces $VAR
-    expandedPath = expandedPath.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (match, varName) => process.env[varName] || match);
+    expandedPath = expandedPath.replace(
+      /\$([A-Za-z_][A-Za-z0-9_]*)/g,
+      (match, varName) => process.env[varName] || match,
+    );
 
     // Resolve to absolute path
     if (!path.isAbsolute(expandedPath)) {

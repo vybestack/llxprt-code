@@ -10,8 +10,10 @@ import { PromptContext } from './types.js';
 
 describe('PromptCache', () => {
   let cache: PromptCache;
-  
-  const createContext = (overrides: Partial<PromptContext> = {}): PromptContext => ({
+
+  const createContext = (
+    overrides: Partial<PromptContext> = {},
+  ): PromptContext => ({
     provider: 'anthropic',
     model: 'claude-3',
     enabledTools: ['read', 'write'],
@@ -23,7 +25,9 @@ describe('PromptCache', () => {
     ...overrides,
   });
 
-  const createMetadata = (overrides: Partial<CacheEntry['metadata']> = {}): CacheEntry['metadata'] => ({
+  const createMetadata = (
+    overrides: Partial<CacheEntry['metadata']> = {},
+  ): CacheEntry['metadata'] => ({
     files: ['test.txt'],
     tokenCount: 100,
     assemblyTimeMs: 50,
@@ -125,10 +129,10 @@ describe('PromptCache', () => {
       const context = createContext();
       const prompt = 'Test prompt content';
       const metadata = createMetadata();
-      
+
       cache.set(context, prompt, metadata);
       const result = cache.get(context);
-      
+
       expect(result).not.toBeNull();
       expect(result!.assembledPrompt).toBe(prompt);
       expect(result!.metadata.files).toEqual(metadata.files);
@@ -146,14 +150,14 @@ describe('PromptCache', () => {
       const context = createContext();
       const prompt = 'Test prompt';
       const metadata = createMetadata();
-      
+
       cache.set(context, prompt, metadata);
-      
+
       // First access
       cache.get(context);
       // Second access
       cache.get(context);
-      
+
       const stats = cache.getStats();
       expect(stats.totalAccesses).toBe(2);
     });
@@ -161,7 +165,7 @@ describe('PromptCache', () => {
     it('should handle null or empty keys in set', () => {
       const prompt = 'Test prompt';
       const metadata = createMetadata();
-      
+
       // Should not throw, but operation should fail
       cache.set(null as unknown as PromptContext, prompt, metadata);
       expect(cache.size()).toBe(0);
@@ -170,7 +174,7 @@ describe('PromptCache', () => {
     it('should handle null content in set', () => {
       const context = createContext();
       const metadata = createMetadata();
-      
+
       cache.set(context, null as unknown as string, metadata);
       expect(cache.has(context)).toBe(false);
     });
@@ -179,7 +183,7 @@ describe('PromptCache', () => {
       const context = createContext();
       const largePrompt = 'x'.repeat(11 * 1024 * 1024); // 11MB
       const metadata = createMetadata();
-      
+
       cache.set(context, largePrompt, metadata);
       expect(cache.has(context)).toBe(false);
     });
@@ -189,10 +193,10 @@ describe('PromptCache', () => {
       const prompt1 = 'First prompt';
       const prompt2 = 'Second prompt';
       const metadata = createMetadata();
-      
+
       cache.set(context, prompt1, metadata);
       cache.set(context, prompt2, metadata);
-      
+
       const result = cache.get(context);
       expect(result!.assembledPrompt).toBe(prompt2);
     });
@@ -218,25 +222,25 @@ describe('PromptCache', () => {
   describe('LRU eviction', () => {
     it('should evict least recently used entries when cache is full', () => {
       const smallCache = new PromptCache(0.001); // 1KB cache
-      
+
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
       const context3 = createContext({ model: 'model3' });
-      
+
       // Each prompt is ~500 bytes
       const prompt = 'x'.repeat(500);
       const metadata = createMetadata();
-      
+
       // Add first two entries
       smallCache.set(context1, prompt, metadata);
       smallCache.set(context2, prompt, metadata);
-      
+
       // Access first entry to make it more recent
       smallCache.get(context1);
-      
+
       // Add third entry - should evict context2
       smallCache.set(context3, prompt, metadata);
-      
+
       expect(smallCache.has(context1)).toBe(true);
       expect(smallCache.has(context2)).toBe(false); // Evicted
       expect(smallCache.has(context3)).toBe(true);
@@ -244,41 +248,41 @@ describe('PromptCache', () => {
 
     it('should handle eviction of multiple entries to make room', () => {
       const smallCache = new PromptCache(0.002); // 2KB cache
-      
+
       // Add several small entries
       for (let i = 0; i < 10; i++) {
         const context = createContext({ model: `model${i}` });
         smallCache.set(context, 'x'.repeat(200), createMetadata());
       }
-      
+
       // Add one large entry that requires evicting multiple entries
       const largeContext = createContext({ model: 'large' });
       smallCache.set(largeContext, 'x'.repeat(1500), createMetadata());
-      
+
       expect(smallCache.has(largeContext)).toBe(true);
       expect(smallCache.size()).toBeLessThan(10); // Some entries were evicted
     });
 
     it('should update access order on get operations', () => {
       const smallCache = new PromptCache(0.001); // 1KB cache
-      
+
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
       const context3 = createContext({ model: 'model3' });
-      
+
       const prompt = 'x'.repeat(400);
       const metadata = createMetadata();
-      
+
       smallCache.set(context1, prompt, metadata);
       smallCache.set(context2, prompt, metadata);
-      
+
       // Access context1 multiple times
       smallCache.get(context1);
       smallCache.get(context1);
-      
+
       // Add context3 - should evict context2, not context1
       smallCache.set(context3, prompt, metadata);
-      
+
       expect(smallCache.has(context1)).toBe(true);
       expect(smallCache.has(context2)).toBe(false);
       expect(smallCache.has(context3)).toBe(true);
@@ -289,10 +293,10 @@ describe('PromptCache', () => {
     it('should remove existing entries', () => {
       const context = createContext();
       cache.set(context, 'Test prompt', createMetadata());
-      
+
       const key = cache.generateKey(context);
       const removed = cache.remove(key);
-      
+
       expect(removed).toBe(true);
       expect(cache.has(context)).toBe(false);
     });
@@ -311,13 +315,13 @@ describe('PromptCache', () => {
       const context = createContext();
       const prompt = 'x'.repeat(1000);
       cache.set(context, prompt, createMetadata());
-      
+
       const statsBefore = cache.getStats();
       expect(statsBefore.totalSizeMB).toBeGreaterThan(0);
-      
+
       const key = cache.generateKey(context);
       cache.remove(key);
-      
+
       const statsAfter = cache.getStats();
       expect(statsAfter.totalSizeMB).toBe(0);
     });
@@ -327,14 +331,14 @@ describe('PromptCache', () => {
     it('should remove all entries', () => {
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
-      
+
       cache.set(context1, 'Prompt 1', createMetadata());
       cache.set(context2, 'Prompt 2', createMetadata());
-      
+
       expect(cache.size()).toBe(2);
-      
+
       cache.clear();
-      
+
       expect(cache.size()).toBe(0);
       expect(cache.has(context1)).toBe(false);
       expect(cache.has(context2)).toBe(false);
@@ -344,9 +348,9 @@ describe('PromptCache', () => {
       const context = createContext();
       cache.set(context, 'Test prompt', createMetadata());
       cache.get(context);
-      
+
       cache.clear();
-      
+
       const stats = cache.getStats();
       expect(stats.entryCount).toBe(0);
       expect(stats.totalSizeMB).toBe(0);
@@ -357,13 +361,13 @@ describe('PromptCache', () => {
   describe('size operation', () => {
     it('should return correct entry count', () => {
       expect(cache.size()).toBe(0);
-      
+
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
-      
+
       cache.set(context1, 'Prompt 1', createMetadata());
       expect(cache.size()).toBe(1);
-      
+
       cache.set(context2, 'Prompt 2', createMetadata());
       expect(cache.size()).toBe(2);
     });
@@ -385,16 +389,16 @@ describe('PromptCache', () => {
     it('should track access patterns correctly', () => {
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
-      
+
       cache.set(context1, 'Prompt 1', createMetadata());
       cache.set(context2, 'Prompt 2', createMetadata());
-      
+
       // Access context1 more times
       cache.get(context1);
       cache.get(context1);
       cache.get(context1);
       cache.get(context2);
-      
+
       const stats = cache.getStats();
       expect(stats.totalAccesses).toBe(4);
       expect(stats.mostAccessedKey).toBe(cache.generateKey(context1));
@@ -404,13 +408,13 @@ describe('PromptCache', () => {
     it('should calculate utilization and average size correctly', () => {
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
-      
+
       const prompt1 = 'x'.repeat(1000); // 1KB
       const prompt2 = 'x'.repeat(2000); // 2KB
-      
+
       cache.set(context1, prompt1, createMetadata());
       cache.set(context2, prompt2, createMetadata());
-      
+
       const stats = cache.getStats();
       expect(stats.entryCount).toBe(2);
       expect(stats.totalSizeMB).toBeCloseTo(0.003, 3);
@@ -426,7 +430,7 @@ describe('PromptCache', () => {
         createContext({ model: 'model2' }),
         createContext({ model: 'model3' }),
       ];
-      
+
       const count = cache.preload(contexts);
       expect(count).toBe(3);
     });
@@ -434,12 +438,12 @@ describe('PromptCache', () => {
     it('should skip already cached contexts', () => {
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
-      
+
       cache.set(context1, 'Already cached', createMetadata());
-      
+
       const contexts = [context1, context2];
       const count = cache.preload(contexts);
-      
+
       expect(count).toBe(1); // Only context2 would be cached
     });
 
@@ -454,7 +458,7 @@ describe('PromptCache', () => {
         null as unknown as PromptContext,
         createContext({ model: 'model2' }),
       ];
-      
+
       const count = cache.preload(contexts);
       expect(count).toBe(2); // Null context is skipped
     });
@@ -464,7 +468,7 @@ describe('PromptCache', () => {
     it('should handle zero-size cache gracefully', () => {
       const zeroCache = new PromptCache(0);
       const context = createContext();
-      
+
       zeroCache.set(context, 'Test', createMetadata());
       expect(zeroCache.has(context)).toBe(false);
       expect(zeroCache.size()).toBe(0);
@@ -474,14 +478,14 @@ describe('PromptCache', () => {
       const smallCache = new PromptCache(0.001); // 1KB
       const context = createContext();
       const prompt = 'x'.repeat(900); // Just under 1KB
-      
+
       smallCache.set(context, prompt, createMetadata());
       expect(smallCache.has(context)).toBe(true);
-      
+
       // Adding another entry should evict the first
       const context2 = createContext({ model: 'model2' });
       smallCache.set(context2, 'Small prompt', createMetadata());
-      
+
       expect(smallCache.has(context)).toBe(false);
       expect(smallCache.has(context2)).toBe(true);
     });
@@ -490,18 +494,18 @@ describe('PromptCache', () => {
       const context1 = createContext({ model: 'model1' });
       const context2 = createContext({ model: 'model2' });
       const context3 = createContext({ model: 'model3' });
-      
+
       cache.set(context1, 'Prompt 1', createMetadata());
       cache.set(context2, 'Prompt 2', createMetadata());
       cache.set(context3, 'Prompt 3', createMetadata());
-      
+
       // Rapidly change access patterns
       for (let i = 0; i < 10; i++) {
         if (i % 3 === 0) cache.get(context1);
         else if (i % 3 === 1) cache.get(context2);
         else cache.get(context3);
       }
-      
+
       const stats = cache.getStats();
       expect(stats.totalAccesses).toBe(10);
     });
@@ -509,13 +513,13 @@ describe('PromptCache', () => {
     it('should maintain metadata immutability', () => {
       const context = createContext();
       const originalMetadata = createMetadata();
-      
+
       cache.set(context, 'Test prompt', originalMetadata);
-      
+
       // Modify original metadata
       originalMetadata.files.push('another-file.txt');
       originalMetadata.tokenCount = 999;
-      
+
       // Retrieved metadata should not be affected
       const result = cache.get(context);
       expect(result!.metadata.files).toEqual(['test.txt']);
@@ -523,21 +527,21 @@ describe('PromptCache', () => {
     });
 
     it('should handle concurrent-like access patterns', () => {
-      const contexts = Array.from({ length: 10 }, (_, i) => 
-        createContext({ model: `model${i}` })
+      const contexts = Array.from({ length: 10 }, (_, i) =>
+        createContext({ model: `model${i}` }),
       );
-      
+
       // Simulate concurrent-like access
       contexts.forEach((ctx, i) => {
         cache.set(ctx, `Prompt ${i}`, createMetadata());
       });
-      
+
       // Random access pattern
       for (let i = 0; i < 50; i++) {
         const randomIndex = Math.floor(Math.random() * contexts.length);
         cache.get(contexts[randomIndex]);
       }
-      
+
       expect(cache.size()).toBe(10);
       const stats = cache.getStats();
       expect(stats.totalAccesses).toBe(50);

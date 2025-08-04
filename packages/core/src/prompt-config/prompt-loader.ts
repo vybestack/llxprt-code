@@ -26,7 +26,10 @@ export interface FileWatcher {
   stop(): void;
 }
 
-export type FileChangeCallback = (eventType: string, relativePath: string) => void;
+export type FileChangeCallback = (
+  eventType: string,
+  relativePath: string,
+) => void;
 
 /**
  * PromptLoader handles file I/O operations for prompt configuration files
@@ -42,7 +45,10 @@ export class PromptLoader {
   /**
    * Load a single file with optional compression
    */
-  async loadFile(filePath: string, shouldCompress: boolean): Promise<LoadFileResult> {
+  async loadFile(
+    filePath: string,
+    shouldCompress: boolean,
+  ): Promise<LoadFileResult> {
     // Step 1: Validate input
     if (filePath === null || filePath === undefined) {
       return { success: false, content: '', error: 'Invalid file path' };
@@ -52,8 +58,11 @@ export class PromptLoader {
     const normalizedPath = path.normalize(filePath);
     const resolvedPath = path.resolve(filePath);
     const resolvedBaseDir = path.resolve(this.baseDir);
-    
-    if (normalizedPath.includes('..') || !resolvedPath.startsWith(resolvedBaseDir)) {
+
+    if (
+      normalizedPath.includes('..') ||
+      !resolvedPath.startsWith(resolvedBaseDir)
+    ) {
       return { success: false, content: '', error: 'Path traversal detected' };
     }
 
@@ -61,11 +70,11 @@ export class PromptLoader {
       // Step 2: Check file size before reading
       // Use lstat to detect symbolic links
       const stats = await fs.lstat(filePath);
-      
+
       if (stats.isSymbolicLink()) {
         return { success: false, content: '', error: 'Not a regular file' };
       }
-      
+
       if (!stats.isFile()) {
         return { success: false, content: '', error: 'Not a regular file' };
       }
@@ -79,10 +88,10 @@ export class PromptLoader {
       try {
         rawContent = await fs.readFile(filePath, 'utf8');
       } catch (readError) {
-        return { 
-          success: false, 
-          content: '', 
-          error: `Failed to read file: ${readError instanceof Error ? readError.message : 'Unknown error'}`
+        return {
+          success: false,
+          content: '',
+          error: `Failed to read file: ${readError instanceof Error ? readError.message : 'Unknown error'}`,
         };
       }
 
@@ -94,18 +103,19 @@ export class PromptLoader {
       }
 
       // Step 5: Apply compression if requested
-      const finalContent = shouldCompress ? this.compressContent(rawContent) : rawContent;
+      const finalContent = shouldCompress
+        ? this.compressContent(rawContent)
+        : rawContent;
 
       return { success: true, content: finalContent, error: null };
-
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         return { success: false, content: '', error: 'File not found' };
       }
-      return { 
-        success: false, 
-        content: '', 
-        error: `Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`
+      return {
+        success: false,
+        content: '',
+        error: `Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
   }
@@ -137,7 +147,7 @@ export class PromptLoader {
     // Step 3: Process each line
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      
+
       // Skip the last empty line if it's from a trailing newline
       if (i === lines.length - 1 && line === '' && content.endsWith('\n')) {
         continue;
@@ -169,13 +179,20 @@ export class PromptLoader {
       compressedLine = compressedLine.replace(/^#{2,}\s+(.+)$/, '# $1');
 
       // Simplify bold list items
-      compressedLine = compressedLine.replace(/^(\s*)-\s+\*\*(.+?)\*\*:\s*(.*)$/, '$1- $2: $3');
+      compressedLine = compressedLine.replace(
+        /^(\s*)-\s+\*\*(.+?)\*\*:\s*(.*)$/,
+        '$1- $2: $3',
+      );
 
       // Remove excessive whitespace
       // For list items, preserve leading spaces (indentation)
-      if (compressedLine.match(/^\s*[-*+]\s/) || compressedLine.match(/^\s*\d+\.\s/)) {
+      if (
+        compressedLine.match(/^\s*[-*+]\s/) ||
+        compressedLine.match(/^\s*\d+\.\s/)
+      ) {
         const leadingSpaces = compressedLine.match(/^\s*/)?.[0] || '';
-        compressedLine = leadingSpaces + compressedLine.trim().replace(/\s+/g, ' ');
+        compressedLine =
+          leadingSpaces + compressedLine.trim().replace(/\s+/g, ' ');
       } else {
         // For non-list items, remove all leading/trailing whitespace
         compressedLine = compressedLine.trim().replace(/\s+/g, ' ');
@@ -204,7 +221,7 @@ export class PromptLoader {
   async loadAllFiles(
     baseDir: string,
     fileList: string[],
-    shouldCompress: boolean
+    shouldCompress: boolean,
   ): Promise<Map<string, string>> {
     // Step 1: Validate inputs
     if (!baseDir || !fileList) {
@@ -217,9 +234,9 @@ export class PromptLoader {
     // Step 3: Process each file
     for (const relativePath of fileList) {
       const absolutePath = path.join(baseDir, relativePath);
-      
+
       const result = await this.loadFile(absolutePath, shouldCompress);
-      
+
       if (result.success) {
         fileContents.set(relativePath, result.content);
       } else {
@@ -238,9 +255,10 @@ export class PromptLoader {
     // Step 1: Detect Git repository
     let isGitRepository = false;
     let currentDir = workingDirectory;
-    
+
     try {
-      while (currentDir !== path.dirname(currentDir)) { // Not at root
+      while (currentDir !== path.dirname(currentDir)) {
+        // Not at root
         if (existsSync(path.join(currentDir, '.git'))) {
           isGitRepository = true;
           break;
@@ -254,10 +272,13 @@ export class PromptLoader {
 
     // Step 2: Detect sandbox environment
     let isSandboxed = false;
-    
+
     if (process.env.SANDBOX === '1' || process.env.SANDBOX === 'true') {
       isSandboxed = true;
-    } else if (process.env.CONTAINER === '1' || process.env.CONTAINER === 'true') {
+    } else if (
+      process.env.CONTAINER === '1' ||
+      process.env.CONTAINER === 'true'
+    ) {
       isSandboxed = true;
     } else if (existsSync('/sandbox') || existsSync('/.dockerenv')) {
       isSandboxed = true;
@@ -265,8 +286,11 @@ export class PromptLoader {
 
     // Step 3: Detect IDE companion
     let hasIdeCompanion = false;
-    
-    if (process.env.IDE_COMPANION === '1' || process.env.IDE_COMPANION === 'true') {
+
+    if (
+      process.env.IDE_COMPANION === '1' ||
+      process.env.IDE_COMPANION === 'true'
+    ) {
       hasIdeCompanion = true;
     } else if (existsSync(path.join(workingDirectory, '.vscode'))) {
       hasIdeCompanion = true;
@@ -277,14 +301,17 @@ export class PromptLoader {
     return {
       isGitRepository,
       isSandboxed,
-      hasIdeCompanion
+      hasIdeCompanion,
     };
   }
 
   /**
    * Watch files for changes
    */
-  watchFiles(baseDir: string, callback: FileChangeCallback): FileWatcher | null {
+  watchFiles(
+    baseDir: string,
+    callback: FileChangeCallback,
+  ): FileWatcher | null {
     // Step 1: Validate inputs
     if (!existsSync(baseDir)) {
       return null;
@@ -295,25 +322,28 @@ export class PromptLoader {
     }
 
     // Step 2: Set up file watcher
-    let watcher: { close(): void; on(event: string, handler: (path: string) => void): void };
+    let watcher: {
+      close(): void;
+      on(event: string, handler: (path: string) => void): void;
+    };
     const timeouts = new Map<string, NodeJS.Timeout>();
-    
+
     try {
       // Try to use chokidar if available
       // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
       const chokidar = require('chokidar');
-      
+
       watcher = chokidar.watch(baseDir, {
         persistent: true,
         recursive: true,
         ignoreInitial: true,
-        ignored: (path: string) => !path.endsWith('.md')
+        ignored: (path: string) => !path.endsWith('.md'),
       });
 
       // Step 3: Handle file change events with debouncing
       const handleChange = (eventType: string, filePath: string) => {
         const relativePath = path.relative(baseDir, filePath);
-        
+
         // Only process .md files
         if (!relativePath.endsWith('.md')) {
           return;
@@ -324,15 +354,22 @@ export class PromptLoader {
           clearTimeout(timeouts.get(relativePath)!);
         }
 
-        timeouts.set(relativePath, setTimeout(() => {
-          callback(eventType, relativePath);
-          timeouts.delete(relativePath);
-        }, 100)); // 100ms debounce
+        timeouts.set(
+          relativePath,
+          setTimeout(() => {
+            callback(eventType, relativePath);
+            timeouts.delete(relativePath);
+          }, 100),
+        ); // 100ms debounce
       };
 
       watcher.on('add', (filePath: string) => handleChange('add', filePath));
-      watcher.on('change', (filePath: string) => handleChange('change', filePath));
-      watcher.on('unlink', (filePath: string) => handleChange('unlink', filePath));
+      watcher.on('change', (filePath: string) =>
+        handleChange('change', filePath),
+      );
+      watcher.on('unlink', (filePath: string) =>
+        handleChange('unlink', filePath),
+      );
 
       // Step 4: Return watcher control object
       return {
@@ -342,35 +379,42 @@ export class PromptLoader {
             clearTimeout(timeout);
           }
           timeouts.clear();
-          
+
           // Close the watcher
           if (watcher && typeof watcher.close === 'function') {
             watcher.close();
           }
-        }
+        },
       };
     } catch {
       // If chokidar is not available, use fs.watch as fallback
       try {
         const fsWatcher = fsSync.watch(baseDir, { recursive: true });
-        
+
         // Note: fs.watch has limitations but works as a fallback
-        fsWatcher.on('change', (eventType: string | null, filename: string | Buffer | null) => {
-          if (filename) {
-            const filenameStr = typeof filename === 'string' ? filename : filename.toString();
-            if (filenameStr.endsWith('.md')) {
-              // Simple debouncing
-              if (timeouts.has(filenameStr)) {
-                clearTimeout(timeouts.get(filenameStr)!);
+        fsWatcher.on(
+          'change',
+          (eventType: string | null, filename: string | Buffer | null) => {
+            if (filename) {
+              const filenameStr =
+                typeof filename === 'string' ? filename : filename.toString();
+              if (filenameStr.endsWith('.md')) {
+                // Simple debouncing
+                if (timeouts.has(filenameStr)) {
+                  clearTimeout(timeouts.get(filenameStr)!);
+                }
+
+                timeouts.set(
+                  filenameStr,
+                  setTimeout(() => {
+                    callback(eventType || 'change', filenameStr);
+                    timeouts.delete(filenameStr);
+                  }, 100),
+                );
               }
-              
-              timeouts.set(filenameStr, setTimeout(() => {
-                callback(eventType || 'change', filenameStr);
-                timeouts.delete(filenameStr);
-              }, 100));
             }
-          }
-        });
+          },
+        );
 
         return {
           stop: () => {
@@ -379,7 +423,7 @@ export class PromptLoader {
             }
             timeouts.clear();
             fsWatcher.close();
-          }
+          },
         };
       } catch {
         return null;

@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+} from 'vitest';
 import { getCoreSystemPromptAsync, initializePromptSystem } from './prompts.js';
 import process from 'node:process';
 import fs from 'node:fs';
@@ -53,14 +61,21 @@ describe('prompts', () => {
     });
 
     it('should handle different models', async () => {
-      const prompt = await getCoreSystemPromptAsync(undefined, 'gemini-1.5-flash');
+      const prompt = await getCoreSystemPromptAsync(
+        undefined,
+        'gemini-1.5-flash',
+      );
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
     });
 
     it('should handle custom tools list', async () => {
       const tools = ['read_file', 'write_file', 'list_directory'];
-      const prompt = await getCoreSystemPromptAsync(undefined, undefined, tools);
+      const prompt = await getCoreSystemPromptAsync(
+        undefined,
+        undefined,
+        tools,
+      );
       expect(prompt).toBeTruthy();
       expect(typeof prompt).toBe('string');
     });
@@ -76,5 +91,4 @@ describe('prompts', () => {
       await expect(initializePromptSystem()).resolves.not.toThrow();
     });
   });
-
 });

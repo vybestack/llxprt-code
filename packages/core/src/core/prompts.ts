@@ -9,13 +9,15 @@ import os from 'node:os';
 import process from 'node:process';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
-import type { PromptContext, PromptEnvironment } from '../prompt-config/types.js';
+import type {
+  PromptContext,
+  PromptEnvironment,
+} from '../prompt-config/types.js';
 
 // Singleton instance of PromptService
 let promptService: PromptService | null = null;
 let promptServiceInitialized = false;
 let promptServiceInitPromise: Promise<void> | null = null;
-
 
 /**
  * Initialize the PromptService singleton
@@ -23,11 +25,12 @@ let promptServiceInitPromise: Promise<void> | null = null;
 async function initializePromptService(): Promise<void> {
   if (!promptServiceInitPromise) {
     promptServiceInitPromise = (async () => {
-      const baseDir = process.env.LLXPRT_PROMPTS_DIR || 
-                      path.join(os.homedir(), '.llxprt', 'prompts');
-      promptService = new PromptService({ 
+      const baseDir =
+        process.env.LLXPRT_PROMPTS_DIR ||
+        path.join(os.homedir(), '.llxprt', 'prompts');
+      promptService = new PromptService({
         baseDir,
-        debugMode: process.env.DEBUG === 'true'
+        debugMode: process.env.DEBUG === 'true',
       });
       await promptService.initialize();
       promptServiceInitialized = true;
@@ -46,25 +49,24 @@ async function getPromptService(): Promise<PromptService> {
   return promptService!;
 }
 
-
 /**
  * Get tool name mapping - lazy initialization to avoid circular dependencies
  */
 function getToolNameMapping(): Record<string, string> {
   return {
-    'list_directory': 'Ls',
-    'replace': 'Edit',
-    'glob': 'Glob',
-    'search_file_content': 'Grep',
-    'read_file': 'ReadFile',
-    'read_many_files': 'ReadManyFiles',
-    'run_shell_command': 'Shell',
-    'write_file': 'WriteFile',
-    'memory': 'Memory',
-    'todo_read': 'TodoRead',
-    'todo_write': 'TodoWrite',
-    'web_fetch': 'WebFetch',
-    'google_web_search': 'WebSearch',
+    list_directory: 'Ls',
+    replace: 'Edit',
+    glob: 'Glob',
+    search_file_content: 'Grep',
+    read_file: 'ReadFile',
+    read_many_files: 'ReadManyFiles',
+    run_shell_command: 'Shell',
+    write_file: 'WriteFile',
+    memory: 'Memory',
+    todo_read: 'TodoRead',
+    todo_write: 'TodoWrite',
+    web_fetch: 'WebFetch',
+    google_web_search: 'WebSearch',
   };
 }
 
@@ -84,7 +86,6 @@ function buildPromptContext(model?: string, tools?: string[]): PromptContext {
   } else if (process.env.SANDBOX) {
     environment.sandboxType = 'generic';
   }
-  
 
   // Add other environment flags
   if (process.env.IDE_COMPANION === 'true') {
@@ -93,16 +94,25 @@ function buildPromptContext(model?: string, tools?: string[]): PromptContext {
 
   // Map tools to PascalCase names
   const toolMapping = getToolNameMapping();
-  const enabledTools = tools?.map(toolName => 
-    toolMapping[toolName] || toolName
-  ) || [];
+  const enabledTools =
+    tools?.map((toolName) => toolMapping[toolName] || toolName) || [];
 
   // Default to all core tools if none specified
   if (enabledTools.length === 0) {
     enabledTools.push(
-      'Ls', 'Edit', 'Glob', 'Grep', 'ReadFile', 
-      'ReadManyFiles', 'Shell', 'WriteFile', 'Memory',
-      'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'
+      'Ls',
+      'Edit',
+      'Glob',
+      'Grep',
+      'ReadFile',
+      'ReadManyFiles',
+      'Shell',
+      'WriteFile',
+      'Memory',
+      'TodoRead',
+      'TodoWrite',
+      'WebFetch',
+      'WebSearch',
     );
   }
 
@@ -120,13 +130,12 @@ function buildPromptContext(model?: string, tools?: string[]): PromptContext {
 export async function getCoreSystemPromptAsync(
   userMemory?: string,
   model?: string,
-  tools?: string[]
+  tools?: string[],
 ): Promise<string> {
   const service = await getPromptService();
   const context = buildPromptContext(model, tools);
   return await service.getPrompt(context, userMemory);
 }
-
 
 /**
  * Initialize the prompt system - call this early in application startup

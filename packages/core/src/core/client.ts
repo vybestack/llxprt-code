@@ -407,7 +407,10 @@ export class GeminiClient {
       if (process.env.DEBUG) {
         console.log('DEBUG [client.startChat]: Model from config:', model);
       }
-      const systemInstruction = await getCoreSystemPromptAsync(userMemory, model);
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        model,
+      );
       if (process.env.DEBUG) {
         console.log(
           'DEBUG [client.startChat]: System instruction includes Flash instructions:',
@@ -685,7 +688,10 @@ export class GeminiClient {
       model || this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = await getCoreSystemPromptAsync(userMemory, modelToUse);
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        modelToUse,
+      );
       const requestConfig = {
         abortSignal,
         ...this.generateContentConfig,
@@ -820,7 +826,10 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = await getCoreSystemPromptAsync(userMemory, modelToUse);
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        modelToUse,
+      );
 
       const requestConfig = {
         abortSignal,

@@ -1,8 +1,12 @@
-import { TemplateVariables, TemplateProcessingOptions, PromptContext } from './types.js';
+import {
+  TemplateVariables,
+  TemplateProcessingOptions,
+  PromptContext,
+} from './types.js';
 
 /**
  * TemplateEngine - Handles variable substitution in prompt templates
- * 
+ *
  * Implements REQ-004: Template Processing requirements
  * - Supports {{VARIABLE_NAME}} syntax
  * - Substitutes TOOL_NAME, MODEL, and PROVIDER variables
@@ -18,59 +22,61 @@ export class TemplateEngine {
    * @returns Processed content with variables substituted
    */
   processTemplate(
-    content: string, 
+    content: string,
     variables: TemplateVariables,
-    options?: TemplateProcessingOptions
+    options?: TemplateProcessingOptions,
   ): string {
     // Step 1: Validate inputs
     if (content === null || content === undefined) {
       return '';
     }
-    
+
     if (typeof content !== 'string') {
       return content;
     }
-    
+
     const vars = variables || {};
-    
+
     // Step 2: Initialize processing state
     let result = '';
     let currentPosition = 0;
     const contentLength = content.length;
-    
+
     // Step 3: Process template
     while (currentPosition < contentLength) {
       // Find position of next "{{"
       const openBracketPos = content.indexOf('{{', currentPosition);
-      
+
       if (openBracketPos === -1) {
         // No more variables, append rest and break
         result += content.substring(currentPosition);
         break;
       }
-      
+
       // Append content before "{{"
       result += content.substring(currentPosition, openBracketPos);
-      
+
       // Find position of next "}}"
       const closeBracketPos = content.indexOf('}}', openBracketPos + 2);
-      
+
       if (closeBracketPos === -1) {
         // No closing brackets, append rest and break
         result += content.substring(openBracketPos);
         break;
       }
-      
+
       // Extract variable name and trim whitespace
-      const variableName = content.substring(openBracketPos + 2, closeBracketPos).trim();
-      
+      const variableName = content
+        .substring(openBracketPos + 2, closeBracketPos)
+        .trim();
+
       // Handle empty variable names - leave as-is
       if (variableName === '') {
         result += content.substring(openBracketPos, closeBracketPos + 2);
         currentPosition = closeBracketPos + 2;
         continue;
       }
-      
+
       // Check if variable name contains brackets (nested variables not supported)
       if (variableName.includes('{{') || variableName.includes('}}')) {
         // Leave the whole pattern as-is and move to next character
@@ -78,7 +84,7 @@ export class TemplateEngine {
         currentPosition = openBracketPos + 2;
         continue;
       }
-      
+
       // Perform substitution
       if (variableName in vars) {
         const variableValue = vars[variableName];
@@ -95,14 +101,13 @@ export class TemplateEngine {
         result += '';
         this.logSubstitution(variableName, '', options);
       }
-      
+
       // Update position to after "}}"
       currentPosition = closeBracketPos + 2;
     }
-    
+
     return result;
   }
-
 
   /**
    * Create template variables from runtime context
@@ -112,20 +117,20 @@ export class TemplateEngine {
    */
   createVariablesFromContext(
     context: PromptContext,
-    currentTool: string | null = null
+    currentTool: string | null = null,
   ): TemplateVariables {
     // Validate context - return minimal valid object if no context
     if (!context) {
       return {
         MODEL: '',
-        PROVIDER: ''
+        PROVIDER: '',
       };
     }
 
     // Initialize variables map with required fields
     const variables: TemplateVariables = {
       MODEL: context.model || '',
-      PROVIDER: context.provider || ''
+      PROVIDER: context.provider || '',
     };
 
     // Add tool-specific variable
@@ -166,11 +171,11 @@ export class TemplateEngine {
   private logSubstitution(
     variable: string,
     value: string,
-    options?: TemplateProcessingOptions
+    options?: TemplateProcessingOptions,
   ): void {
     // Check if debug is enabled via environment variable or options
     const debugEnabled = process.env.DEBUG === '1' || options?.debug === true;
-    
+
     if (debugEnabled) {
       console.log(`Template substitution: ${variable} -> ${value}`);
     }
