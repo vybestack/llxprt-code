@@ -54,7 +54,7 @@ describe('OpenAIProvider Stateful Integration', () => {
   }
 
   // TODO: Revert this before finishing. Forcing test to run for TDD.
-  it(
+  it.skip(
     'should maintain context across multiple turns with a stateful model (o3)',
     async () => {
       if (!apiKey) {

@@ -637,9 +637,11 @@ export async function connectToMcpServer(
 
       // If we didn't get the header from the error string, try to get it from the server
       if (!wwwAuthenticate && mcpServerConfig.url) {
-        console.log(
-          `No www-authenticate header in error, trying to fetch it from server...`,
-        );
+        if (process.env.DEBUG) {
+          console.log(
+            `No www-authenticate header in error, trying to fetch it from server...`,
+          );
+        }
         try {
           const response = await fetch(mcpServerConfig.url, {
             method: 'HEAD',
@@ -652,9 +654,11 @@ export async function connectToMcpServer(
           if (response.status === 401) {
             wwwAuthenticate = response.headers.get('www-authenticate');
             if (wwwAuthenticate) {
-              console.log(
-                `Found www-authenticate header from server: ${wwwAuthenticate}`,
-              );
+              if (process.env.DEBUG) {
+                console.log(
+                  `Found www-authenticate header from server: ${wwwAuthenticate}`,
+                );
+              }
             }
           }
         } catch (fetchError) {
@@ -665,9 +669,11 @@ export async function connectToMcpServer(
       }
 
       if (wwwAuthenticate) {
-        console.log(
-          `Received 401 with www-authenticate header: ${wwwAuthenticate}`,
-        );
+        if (process.env.DEBUG) {
+          console.log(
+            `Received 401 with www-authenticate header: ${wwwAuthenticate}`,
+          );
+        }
 
         // Try automatic OAuth discovery and authentication
         const oauthSuccess = await handleAutomaticOAuth(
@@ -677,9 +683,11 @@ export async function connectToMcpServer(
         );
         if (oauthSuccess) {
           // Retry connection with OAuth token
-          console.log(
-            `Retrying connection to '${mcpServerName}' with OAuth token...`,
-          );
+          if (process.env.DEBUG) {
+            console.log(
+              `Retrying connection to '${mcpServerName}' with OAuth token...`,
+            );
+          }
 
           // Get the valid token - we need to create a proper OAuth config
           // The token should already be available from the authentication process
@@ -786,7 +794,11 @@ export async function connectToMcpServer(
         }
 
         // For SSE servers, try to discover OAuth configuration from the base URL
-        console.log(`🔍 Attempting OAuth discovery for '${mcpServerName}'...`);
+        if (process.env.DEBUG) {
+          console.log(
+            `🔍 Attempting OAuth discovery for '${mcpServerName}'...`,
+          );
+        }
 
         if (mcpServerConfig.url) {
           const sseUrl = new URL(mcpServerConfig.url);
@@ -796,9 +808,11 @@ export async function connectToMcpServer(
             // Try to discover OAuth configuration from the base URL
             const oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
             if (oauthConfig) {
-              console.log(
-                `Discovered OAuth configuration from base URL for server '${mcpServerName}'`,
-              );
+              if (process.env.DEBUG) {
+                console.log(
+                  `Discovered OAuth configuration from base URL for server '${mcpServerName}'`,
+                );
+              }
 
               // Create OAuth configuration for authentication
               const oauthAuthConfig = {
@@ -809,9 +823,11 @@ export async function connectToMcpServer(
               };
 
               // Perform OAuth authentication
-              console.log(
-                `Starting OAuth authentication for server '${mcpServerName}'...`,
-              );
+              if (process.env.DEBUG) {
+                console.log(
+                  `Starting OAuth authentication for server '${mcpServerName}'...`,
+                );
+              }
               await MCPOAuthProvider.authenticate(
                 mcpServerName,
                 oauthAuthConfig,
@@ -982,7 +998,9 @@ export async function createTransport(
 
       if (accessToken) {
         hasOAuthConfig = true;
-        console.log(`Found stored OAuth token for server '${mcpServerName}'`);
+        if (process.env.DEBUG) {
+          console.log(`Found stored OAuth token for server '${mcpServerName}'`);
+        }
       }
     }
   }

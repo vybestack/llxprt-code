@@ -421,9 +421,11 @@ export class GeminiChat {
         }
       });
       if (functionResponseCount > 0) {
-        console.log(
-          `[DEBUG geminiChat] Sending ${functionResponseCount} function response(s) in array`,
-        );
+        if (process.env.DEBUG) {
+          console.log(
+            `[DEBUG geminiChat] Sending ${functionResponseCount} function response(s) in array`,
+          );
+        }
       }
     }
 
