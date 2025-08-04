@@ -3,6 +3,7 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { IMessage } from '../IMessage.js';
+import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
 // Mock the ToolFormatter
 vi.mock('../../tools/ToolFormatter.js', () => ({
@@ -129,7 +130,11 @@ describe('AnthropicProvider', () => {
     vi.clearAllMocks();
 
     // Create provider with test API key
-    provider = new AnthropicProvider('test-api-key');
+    provider = new AnthropicProvider(
+      'test-api-key',
+      undefined,
+      TEST_PROVIDER_CONFIG,
+    );
 
     // Get the mocked Anthropic instance
     const Anthropic = vi.mocked((await import('@anthropic-ai/sdk')).default);

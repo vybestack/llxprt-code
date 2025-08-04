@@ -20,6 +20,7 @@ import { EventEmitter } from 'node:events';
 import { exec as mockExec, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
+import path from 'node:path';
 
 // Mock child_process
 vi.mock('child_process');
@@ -28,8 +29,8 @@ vi.mock('child_process');
 vi.mock('node:fs');
 vi.mock('node:fs/promises');
 
-const CWD = '/test/project';
-const GIT_LOGS_HEAD_PATH = `${CWD}/.git/logs/HEAD`;
+const CWD = process.platform === 'win32' ? '\\test\\project' : '/test/project';
+const GIT_LOGS_HEAD_PATH = path.join(CWD, '.git', 'logs', 'HEAD');
 
 describe('useGitBranchName', () => {
   beforeEach(() => {

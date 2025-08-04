@@ -10,6 +10,12 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
+import { MockFileSystem } from '../../providers/IFileSystem.js';
+import {
+  setFileSystem,
+  resetProviderManager,
+} from '../../providers/providerManagerInstance.js';
+import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
@@ -17,10 +23,24 @@ vi.mock('../../utils/version.js', () => ({
 
 describe('aboutCommand', () => {
   let mockContext: CommandContext;
+  let mockFileSystem: MockFileSystem;
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
+    // Reset provider manager and set up mock file system
+    resetProviderManager();
+    mockFileSystem = new MockFileSystem();
+    setFileSystem(mockFileSystem);
+
+    // Set up mock settings file with controlled content
+    mockFileSystem.setMockFile(
+      USER_SETTINGS_PATH,
+      JSON.stringify({
+        defaultModel: 'gemini-2.5-pro', // Use Gemini's actual default model
+        selectedAuthType: 'test-auth',
+      }),
+    );
     mockContext = createMockCommandContext({
       services: {
         config: {
@@ -54,6 +74,7 @@ describe('aboutCommand', () => {
     });
     process.env = originalEnv;
     vi.clearAllMocks();
+    resetProviderManager();
   });
 
   it('should have the correct name and description', () => {

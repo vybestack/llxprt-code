@@ -7,6 +7,7 @@ import { IMessage } from '../IMessage.js';
 import { retryWithBackoff } from '../../utils/retry.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
+import { IProviderConfig } from '../types/IProviderConfig.js';
 
 export class AnthropicProvider implements IProvider {
   name: string = 'anthropic';
@@ -15,7 +16,9 @@ export class AnthropicProvider implements IProvider {
   toolFormat: ToolFormat = 'anthropic';
   private apiKey: string;
   private baseURL?: string;
+  private config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-latest'; // Default model using latest alias
+  private modelParams?: Record<string, unknown>;
 
   // Model cache for latest resolution
   private modelCache: { models: IModel[]; timestamp: number } | null = null;
@@ -41,13 +44,17 @@ export class AnthropicProvider implements IProvider {
     { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
   ];
 
-  constructor(apiKey: string, baseURL?: string) {
+  constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
+    this.config = config;
+
     this.anthropic = new Anthropic({
-      apiKey,
+      apiKey: apiKey || '',
       baseURL,
+      dangerouslyAllowBrowser: true,
     });
+
     this.toolFormatter = new ToolFormatter();
   }
 
@@ -198,6 +205,7 @@ export class AnthropicProvider implements IProvider {
         messages: anthropicMessages,
         max_tokens: this.getMaxTokensForModel(resolvedModel),
         stream: true,
+        ...this.modelParams,
       };
 
       // Add system message as top-level parameter if present
@@ -347,6 +355,7 @@ export class AnthropicProvider implements IProvider {
     this.anthropic = new Anthropic({
       apiKey,
       baseURL: this.baseURL,
+      dangerouslyAllowBrowser: true,
     });
   }
 
@@ -357,6 +366,7 @@ export class AnthropicProvider implements IProvider {
     this.anthropic = new Anthropic({
       apiKey: this.apiKey,
       baseURL: this.baseURL,
+      dangerouslyAllowBrowser: true,
     });
   }
 
@@ -596,5 +606,25 @@ export class AnthropicProvider implements IProvider {
     _config?: unknown,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by Anthropic provider');
+  }
+
+  /**
+   * Set model parameters that will be merged into API calls
+   * @param params Parameters to merge with existing, or undefined to clear all
+   */
+  setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+    } else {
+      this.modelParams = { ...this.modelParams, ...params };
+    }
+  }
+
+  /**
+   * Get current model parameters
+   * @returns Current parameters or undefined if not set
+   */
+  getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 }

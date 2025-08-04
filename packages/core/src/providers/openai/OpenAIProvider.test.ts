@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
 // Mock OpenAI module
 vi.mock('openai', () => ({
@@ -38,16 +39,24 @@ describe('OpenAIProvider', () => {
     chat: { completions: { create: ReturnType<typeof vi.fn> } };
     models: { list: ReturnType<typeof vi.fn> };
   };
+  let capturedApiParams: unknown;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new OpenAIProvider('test-api-key');
+    provider = new OpenAIProvider(
+      'test-api-key',
+      undefined,
+      TEST_PROVIDER_CONFIG,
+    );
     // Set a model that doesn't use the Responses API
     provider.setModel('gpt-3.5-turbo');
     // Get the mocked OpenAI instance (typed as unknown then cast)
     mockOpenAIInstance = (
       provider as unknown as { openai: typeof mockOpenAIInstance }
     ).openai; // Cast for test
+
+    // Reset captured params
+    capturedApiParams = undefined;
   });
 
   describe('generateChatCompletion with usage tracking', () => {
@@ -68,7 +77,13 @@ describe('OpenAIProvider', () => {
         },
       };
 
-      mockOpenAIInstance.chat.completions.create.mockResolvedValue(mockStream);
+      // Capture the parameters passed to the API
+      mockOpenAIInstance.chat.completions.create.mockImplementation(
+        async (params) => {
+          capturedApiParams = params;
+          return mockStream;
+        },
+      );
 
       const messages = [{ role: ContentGeneratorRole.USER, content: 'Hi' }];
 
@@ -78,13 +93,11 @@ describe('OpenAIProvider', () => {
         results.push(chunk);
       }
 
-      // Verify stream_options was passed
-      expect(mockOpenAIInstance.chat.completions.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          stream: true,
-          stream_options: { include_usage: true },
-        }),
-      );
+      // Test the actual parameters that would be sent to the API
+      expect(capturedApiParams).toBeDefined();
+      const apiParams = capturedApiParams as Record<string, unknown>;
+      expect(apiParams.stream).toBe(true);
+      expect(apiParams.stream_options).toEqual({ include_usage: true });
     });
 
     it('should yield usage data when provided in stream', async () => {
@@ -245,6 +258,369 @@ describe('OpenAIProvider', () => {
       expect((provider as unknown as { baseURL?: string }).baseURL).toBe(
         newUrl,
       );
+    });
+  });
+
+  describe('model parameters functionality', () => {
+    describe('setting and getting model parameters', () => {
+      it('should store model parameters when set', () => {
+        // When I set model parameters
+        provider.setModelParams({ temperature: 0.7 });
+
+        // Then they should be retrievable
+        const params = provider.getModelParams();
+        expect(params).toEqual({ temperature: 0.7 });
+      });
+
+      it('should return undefined when no model parameters are set', () => {
+        // Given a fresh provider with no parameters set
+        const freshProvider = new OpenAIProvider(
+          'test-key',
+          undefined,
+          TEST_PROVIDER_CONFIG,
+        );
+
+        // When I get model parameters
+        const params = freshProvider.getModelParams();
+
+        // Then it should return undefined
+        expect(params).toBeUndefined();
+      });
+
+      it('should merge new parameters with existing ones instead of replacing', () => {
+        // Given I have set some initial parameters
+        provider.setModelParams({ temperature: 0.7, max_tokens: 1000 });
+
+        // When I set additional parameters
+        provider.setModelParams({ top_p: 0.9, temperature: 0.5 });
+
+        // Then all parameters should be merged with new values overriding old
+        const params = provider.getModelParams();
+        expect(params).toEqual({
+          temperature: 0.5, // Updated value
+          max_tokens: 1000, // Retained from first call
+          top_p: 0.9, // New parameter
+        });
+      });
+
+      it('should accept any parameter names without validation', () => {
+        // When I set various parameter types including unknown ones
+        provider.setModelParams({
+          temperature: 0.8,
+          max_tokens: 2048,
+          top_p: 0.95,
+          unknown_param: 'should_work',
+          nested_object: { key: 'value' },
+          numeric_string: '123',
+        });
+
+        // Then all parameters should be stored as-is
+        const params = provider.getModelParams();
+        expect(params).toEqual({
+          temperature: 0.8,
+          max_tokens: 2048,
+          top_p: 0.95,
+          unknown_param: 'should_work',
+          nested_object: { key: 'value' },
+          numeric_string: '123',
+        });
+      });
+    });
+
+    describe('passing parameters to OpenAI API', () => {
+      it('should include model parameters in chat completions API call', async () => {
+        // Given I have set model parameters
+        provider.setModelParams({
+          temperature: 0.7,
+          max_tokens: 2000,
+          top_p: 0.9,
+        });
+
+        // And the API returns a response
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Response' } }],
+            };
+          },
+        };
+
+        // Capture the parameters passed to the API
+        let localCapturedParams: unknown;
+        mockOpenAIInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            localCapturedParams = params;
+            return mockStream;
+          },
+        );
+
+        // When I generate a chat completion
+        const messages = [
+          { role: ContentGeneratorRole.USER, content: 'Hello' },
+        ];
+        const generator = provider.generateChatCompletion(messages);
+        const results: unknown[] = [];
+        for await (const chunk of generator) {
+          results.push(chunk);
+        }
+
+        // Then the API should receive the model parameters
+        expect(localCapturedParams).toBeDefined();
+        const apiParams = localCapturedParams as Record<string, unknown>;
+        expect(apiParams.temperature).toBe(0.7);
+        expect(apiParams.max_tokens).toBe(2000);
+        expect(apiParams.top_p).toBe(0.9);
+        expect(apiParams.model).toBe('gpt-3.5-turbo');
+        expect(apiParams.messages).toEqual(messages);
+        expect(apiParams.stream).toBe(true);
+        expect(apiParams.stream_options).toEqual({ include_usage: true });
+      });
+
+      it('should make API calls without parameters when none are set', async () => {
+        // Given no model parameters are set (fresh provider)
+        const freshProvider = new OpenAIProvider(
+          'test-key',
+          undefined,
+          TEST_PROVIDER_CONFIG,
+        );
+        freshProvider.setModel('gpt-3.5-turbo');
+        const freshMockInstance = (
+          freshProvider as unknown as { openai: typeof mockOpenAIInstance }
+        ).openai;
+
+        // And the API returns a response
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Response' } }],
+            };
+          },
+        };
+
+        // Capture the parameters passed to the API
+        let localCapturedParams: unknown;
+        freshMockInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            localCapturedParams = params;
+            return mockStream;
+          },
+        );
+
+        // When I generate a chat completion
+        const messages = [
+          { role: ContentGeneratorRole.USER, content: 'Hello' },
+        ];
+        const generator = freshProvider.generateChatCompletion(messages);
+        const results: unknown[] = [];
+        for await (const chunk of generator) {
+          results.push(chunk);
+        }
+
+        // Then the API should be called without extra parameters
+        expect(localCapturedParams).toBeDefined();
+        const apiParams = localCapturedParams as Record<string, unknown>;
+        expect(apiParams).not.toHaveProperty('temperature');
+        expect(apiParams).not.toHaveProperty('max_tokens');
+        expect(apiParams).not.toHaveProperty('top_p');
+      });
+
+      it('should pass multiple model parameters correctly to the API', async () => {
+        // Given I have set multiple diverse parameters
+        provider.setModelParams({
+          temperature: 0.5,
+          max_tokens: 4096,
+          top_p: 0.95,
+          presence_penalty: 0.1,
+          frequency_penalty: 0.2,
+          seed: 12345,
+        });
+
+        // And the API returns a response
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Response' } }],
+            };
+          },
+        };
+
+        // Capture the parameters passed to the API
+        let localCapturedParams: unknown;
+        mockOpenAIInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            localCapturedParams = params;
+            return mockStream;
+          },
+        );
+
+        // When I generate a chat completion
+        const messages = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+        const generator = provider.generateChatCompletion(messages);
+        for await (const _chunk of generator) {
+          // consume the generator
+        }
+
+        // Then all parameters should be passed to the API
+        expect(localCapturedParams).toBeDefined();
+        const apiParams = localCapturedParams as Record<string, unknown>;
+        expect(apiParams.temperature).toBe(0.5);
+        expect(apiParams.max_tokens).toBe(4096);
+        expect(apiParams.top_p).toBe(0.95);
+        expect(apiParams.presence_penalty).toBe(0.1);
+        expect(apiParams.frequency_penalty).toBe(0.2);
+        expect(apiParams.seed).toBe(12345);
+      });
+
+      it('should pass unknown parameters through to the API without validation', async () => {
+        // Given I set parameters that might not be standard OpenAI params
+        provider.setModelParams({
+          custom_param: 'custom_value',
+          experimental_feature: true,
+          vendor_specific: { nested: 'data' },
+        });
+
+        // And the API returns a response
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Response' } }],
+            };
+          },
+        };
+
+        // Capture the parameters passed to the API
+        let localCapturedParams: unknown;
+        mockOpenAIInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            localCapturedParams = params;
+            return mockStream;
+          },
+        );
+
+        // When I generate a chat completion
+        const messages = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+        const generator = provider.generateChatCompletion(messages);
+        for await (const _chunk of generator) {
+          // consume the generator
+        }
+
+        // Then unknown parameters should be passed through
+        expect(localCapturedParams).toBeDefined();
+        const apiParams = localCapturedParams as Record<string, unknown>;
+        expect(apiParams.custom_param).toBe('custom_value');
+        expect(apiParams.experimental_feature).toBe(true);
+        expect(apiParams.vendor_specific).toEqual({ nested: 'data' });
+      });
+
+      it('should use model parameters across multiple API calls', async () => {
+        // Given I set model parameters once
+        provider.setModelParams({ temperature: 0.8 });
+
+        // And the API returns responses
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Response' } }],
+            };
+          },
+        };
+
+        // Capture parameters from multiple calls
+        const capturedParamsArray: unknown[] = [];
+        mockOpenAIInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            capturedParamsArray.push(params);
+            return mockStream;
+          },
+        );
+
+        // When I make multiple API calls
+        const messages = [
+          { role: ContentGeneratorRole.USER, content: 'Hello' },
+        ];
+
+        // First call
+        const generator1 = provider.generateChatCompletion(messages);
+        for await (const _chunk of generator1) {
+          // consume
+        }
+
+        // Second call
+        const generator2 = provider.generateChatCompletion(messages);
+        for await (const _chunk of generator2) {
+          // consume
+        }
+
+        // Then both calls should include the parameters
+        expect(capturedParamsArray).toHaveLength(2);
+        const firstCallParams = capturedParamsArray[0] as Record<
+          string,
+          unknown
+        >;
+        const secondCallParams = capturedParamsArray[1] as Record<
+          string,
+          unknown
+        >;
+        expect(firstCallParams.temperature).toBe(0.8);
+        expect(secondCallParams.temperature).toBe(0.8);
+      });
+
+      it('should work correctly with common OpenAI parameters', async () => {
+        // Given I set common OpenAI parameters
+        provider.setModelParams({
+          temperature: 0.7, // Controls randomness
+          max_tokens: 2048, // Maximum response length
+          top_p: 0.9, // Nucleus sampling
+          presence_penalty: 0.5, // Penalize repeated topics
+          frequency_penalty: 0.3, // Penalize repeated tokens
+        });
+
+        // And the API returns a response
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Creative response' } }],
+            };
+          },
+        };
+
+        // Capture the parameters passed to the API
+        let localCapturedParams: unknown;
+        mockOpenAIInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            localCapturedParams = params;
+            return mockStream;
+          },
+        );
+
+        // When I generate a chat completion
+        const messages = [
+          {
+            role: ContentGeneratorRole.USER,
+            content: 'Write something creative',
+          },
+        ];
+        const generator = provider.generateChatCompletion(messages);
+        const results: unknown[] = [];
+        for await (const chunk of generator) {
+          results.push(chunk);
+        }
+
+        // Then the response should be generated with all parameters
+        expect(results[0]).toMatchObject({
+          role: ContentGeneratorRole.ASSISTANT,
+          content: 'Creative response',
+        });
+
+        // And all parameters should have been passed to the API
+        expect(localCapturedParams).toBeDefined();
+        const apiParams = localCapturedParams as Record<string, unknown>;
+        expect(apiParams.temperature).toBe(0.7);
+        expect(apiParams.max_tokens).toBe(2048);
+        expect(apiParams.top_p).toBe(0.9);
+        expect(apiParams.presence_penalty).toBe(0.5);
+        expect(apiParams.frequency_penalty).toBe(0.3);
+      });
     });
   });
 });

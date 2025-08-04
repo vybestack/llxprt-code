@@ -23,13 +23,13 @@ import {
   TelemetryTarget,
   FileFilteringOptions,
   IdeClient,
+  ProfileManager,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
 import { Extension, annotateActiveExtensions } from './extension.js';
 import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
-import { enhanceConfigWithProviders } from '../providers/enhanceConfigWithProviders.js';
 import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 
@@ -72,6 +72,7 @@ export interface CliArgs {
   baseurl: string | undefined;
   proxy: string | undefined;
   includeDirectories: string[] | undefined;
+  profileLoad: string | undefined;
 }
 
 export async function parseArguments(): Promise<CliArgs> {
@@ -85,10 +86,7 @@ export async function parseArguments(): Promise<CliArgs> {
       alias: 'm',
       type: 'string',
       description: `Model`,
-      default:
-        process.env.LLXPRT_DEFAULT_MODEL ||
-        process.env.GEMINI_MODEL ||
-        DEFAULT_GEMINI_MODEL,
+      // Don't set default here, handle it in loadCliConfig
     })
     .option('prompt', {
       alias: 'p',
@@ -207,7 +205,7 @@ export async function parseArguments(): Promise<CliArgs> {
     .option('provider', {
       type: 'string',
       description: 'The provider to use.',
-      default: process.env.LLXPRT_DEFAULT_PROVIDER || 'gemini',
+      // Don't set default here, handle it in loadCliConfig
     })
     .option('ide-mode', {
       type: 'boolean',
@@ -242,6 +240,10 @@ export async function parseArguments(): Promise<CliArgs> {
       coerce: (dirs: string[]) =>
         // Handle comma-separated values
         dirs.flatMap((dir) => dir.split(',').map((d) => d.trim())),
+    })
+    .option('profile-load', {
+      type: 'string',
+      description: 'Load a saved profile configuration on startup',
     })
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
@@ -310,6 +312,50 @@ export async function loadCliConfig(
   sessionId: string,
   argv: CliArgs,
 ): Promise<Config> {
+  // Handle --load flag early to apply profile settings
+  let effectiveSettings = settings;
+  let profileModel: string | undefined;
+  let profileProvider: string | undefined;
+  let profileModelParams: Record<string, unknown> | undefined;
+
+  // Check for profile to load - either from CLI arg or default profile setting
+  const profileToLoad = argv.profileLoad || settings.defaultProfile;
+
+  if (profileToLoad) {
+    try {
+      const profileManager = new ProfileManager();
+      const profile = await profileManager.loadProfile(profileToLoad);
+
+      // Store profile values to apply after Config creation
+      profileProvider = profile.provider;
+      profileModel = profile.model;
+      profileModelParams = profile.modelParams;
+
+      // Merge ephemeral settings into the settings object
+      effectiveSettings = {
+        ...settings,
+        ...profile.ephemeralSettings,
+      } as Settings;
+
+      const tempDebugMode =
+        argv.debug ||
+        [process.env.DEBUG, process.env.DEBUG_MODE].some(
+          (v) => v === 'true' || v === '1',
+        ) ||
+        false;
+
+      if (tempDebugMode) {
+        logger.debug(
+          `Loaded profile '${profileToLoad}' with provider: ${profileProvider}, model: ${profileModel}`,
+        );
+      }
+    } catch (error) {
+      logger.error(`Failed to load profile '${profileToLoad}': ${error}`);
+      // Continue without the profile settings
+    }
+  }
+
+  // Calculate debugMode after profile settings have been applied
   const debugMode =
     argv.debug ||
     [process.env.DEBUG, process.env.DEBUG_MODE].some(
@@ -317,15 +363,15 @@ export async function loadCliConfig(
     ) ||
     false;
 
-  const memoryImportFormat = settings.memoryImportFormat || 'tree';
+  const memoryImportFormat = effectiveSettings.memoryImportFormat || 'tree';
 
   const ideMode =
-    (argv.ideMode ?? settings.ideMode ?? false) &&
+    (argv.ideMode ?? effectiveSettings.ideMode ?? false) &&
     process.env.TERM_PROGRAM === 'vscode' &&
     !process.env.SANDBOX;
 
   const ideModeFeature =
-    (argv.ideModeFeature ?? settings.ideModeFeature ?? false) &&
+    (argv.ideModeFeature ?? effectiveSettings.ideModeFeature ?? false) &&
     !process.env.SANDBOX;
 
   const ideClient = IdeClient.getInstance(ideMode && ideModeFeature);
@@ -343,8 +389,8 @@ export async function loadCliConfig(
   // TODO(b/343434939): This is a bit of a hack. The contextFileName should ideally be passed
   // directly to the Config constructor in core, and have core handle setLlxprtMdFilename.
   // However, loadHierarchicalLlxprtMemory is called *before* createServerConfig.
-  if (settings.contextFileName) {
-    setServerGeminiMdFilename(settings.contextFileName);
+  if (effectiveSettings.contextFileName) {
+    setServerGeminiMdFilename(effectiveSettings.contextFileName);
   } else {
     // Reset to default if not provided in settings.
     setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
@@ -358,7 +404,7 @@ export async function loadCliConfig(
 
   const fileFiltering = {
     ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-    ...settings.fileFiltering,
+    ...effectiveSettings.fileFiltering,
   };
 
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
@@ -366,19 +412,21 @@ export async function loadCliConfig(
     process.cwd(),
     debugMode,
     fileService,
-    settings,
+    effectiveSettings,
     extensionContextFilePaths,
     memoryImportFormat,
     fileFiltering,
   );
 
-  let mcpServers = mergeMcpServers(settings, activeExtensions);
-  const excludeTools = mergeExcludeTools(settings, activeExtensions);
+  let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
+  const excludeTools = mergeExcludeTools(effectiveSettings, activeExtensions);
   const blockedMcpServers: Array<{ name: string; extensionName: string }> = [];
 
   if (!argv.allowedMcpServerNames) {
-    if (settings.allowMCPServers) {
-      const allowedNames = new Set(settings.allowMCPServers.filter(Boolean));
+    if (effectiveSettings.allowMCPServers) {
+      const allowedNames = new Set(
+        effectiveSettings.allowMCPServers.filter(Boolean),
+      );
       if (allowedNames.size > 0) {
         mcpServers = Object.fromEntries(
           Object.entries(mcpServers).filter(([key]) => allowedNames.has(key)),
@@ -386,8 +434,10 @@ export async function loadCliConfig(
       }
     }
 
-    if (settings.excludeMCPServers) {
-      const excludedNames = new Set(settings.excludeMCPServers.filter(Boolean));
+    if (effectiveSettings.excludeMCPServers) {
+      const excludedNames = new Set(
+        effectiveSettings.excludeMCPServers.filter(Boolean),
+      );
       if (excludedNames.size > 0) {
         mcpServers = Object.fromEntries(
           Object.entries(mcpServers).filter(([key]) => !excludedNames.has(key)),
@@ -422,7 +472,23 @@ export async function loadCliConfig(
     }
   }
 
-  const sandboxConfig = await loadSandboxConfig(settings, argv);
+  const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
+
+  // Handle model selection with proper precedence
+  const finalModel =
+    argv.model ||
+    profileModel ||
+    effectiveSettings.defaultModel ||
+    process.env.LLXPRT_DEFAULT_MODEL ||
+    process.env.GEMINI_MODEL ||
+    DEFAULT_GEMINI_MODEL;
+
+  // Handle provider selection with proper precedence
+  const finalProvider =
+    argv.provider ||
+    profileProvider ||
+    process.env.LLXPRT_DEFAULT_PROVIDER ||
+    'gemini';
 
   const config = new Config({
     sessionId,
@@ -433,11 +499,11 @@ export async function loadCliConfig(
     debugMode,
     question: argv.promptInteractive || argv.prompt || '',
     fullContext: argv.allFiles || argv.all_files || false,
-    coreTools: settings.coreTools || undefined,
+    coreTools: effectiveSettings.coreTools || undefined,
     excludeTools,
-    toolDiscoveryCommand: settings.toolDiscoveryCommand,
-    toolCallCommand: settings.toolCallCommand,
-    mcpServerCommand: settings.mcpServerCommand,
+    toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
+    toolCallCommand: effectiveSettings.toolCallCommand,
+    mcpServerCommand: effectiveSettings.mcpServerCommand,
     mcpServers,
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
@@ -445,29 +511,31 @@ export async function loadCliConfig(
     showMemoryUsage:
       argv.showMemoryUsage ||
       argv.show_memory_usage ||
-      settings.showMemoryUsage ||
+      effectiveSettings.showMemoryUsage ||
       false,
-    accessibility: settings.accessibility,
+    accessibility: effectiveSettings.accessibility,
     telemetry: {
-      enabled: argv.telemetry ?? settings.telemetry?.enabled,
+      enabled: argv.telemetry ?? effectiveSettings.telemetry?.enabled,
       target: (argv.telemetryTarget ??
-        settings.telemetry?.target) as TelemetryTarget,
+        effectiveSettings.telemetry?.target) as TelemetryTarget,
       otlpEndpoint:
         argv.telemetryOtlpEndpoint ??
         process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
-        settings.telemetry?.otlpEndpoint,
-      logPrompts: argv.telemetryLogPrompts ?? settings.telemetry?.logPrompts,
-      outfile: argv.telemetryOutfile ?? settings.telemetry?.outfile,
+        effectiveSettings.telemetry?.otlpEndpoint,
+      logPrompts:
+        argv.telemetryLogPrompts ?? effectiveSettings.telemetry?.logPrompts,
+      outfile: argv.telemetryOutfile ?? effectiveSettings.telemetry?.outfile,
     },
-    usageStatisticsEnabled: settings.usageStatisticsEnabled ?? true,
+    usageStatisticsEnabled: effectiveSettings.usageStatisticsEnabled ?? true,
     // Git-aware file filtering settings
     fileFiltering: {
-      respectGitIgnore: settings.fileFiltering?.respectGitIgnore,
-      respectLlxprtIgnore: settings.fileFiltering?.respectLlxprtIgnore,
+      respectGitIgnore: effectiveSettings.fileFiltering?.respectGitIgnore,
+      respectLlxprtIgnore: effectiveSettings.fileFiltering?.respectLlxprtIgnore,
       enableRecursiveFileSearch:
-        settings.fileFiltering?.enableRecursiveFileSearch,
+        effectiveSettings.fileFiltering?.enableRecursiveFileSearch,
     },
-    checkpointing: argv.checkpointing || settings.checkpointing?.enabled,
+    checkpointing:
+      argv.checkpointing || effectiveSettings.checkpointing?.enabled,
     proxy:
       argv.proxy ||
       process.env.HTTPS_PROXY ||
@@ -476,28 +544,60 @@ export async function loadCliConfig(
       process.env.http_proxy,
     cwd: process.cwd(),
     fileDiscoveryService: fileService,
-    bugCommand: settings.bugCommand,
-    model: argv.model || settings.defaultModel || DEFAULT_GEMINI_MODEL,
+    bugCommand: effectiveSettings.bugCommand,
+    model: finalModel,
     extensionContextFilePaths,
-    maxSessionTurns: settings.maxSessionTurns ?? -1,
+    maxSessionTurns: effectiveSettings.maxSessionTurns ?? -1,
     experimentalAcp: argv.experimentalAcp || false,
     listExtensions: argv.listExtensions || false,
     activeExtensions: activeExtensions.map((e) => ({
       name: e.config.name,
       version: e.config.version,
     })),
-    provider: argv.provider,
+    provider: finalProvider,
     extensions: allExtensions,
     blockedMcpServers,
     noBrowser: !!process.env.NO_BROWSER,
-    summarizeToolOutput: settings.summarizeToolOutput,
+    summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
     ideModeFeature,
     ideClient,
   });
 
-  // Enhance the config with provider support
-  return enhanceConfigWithProviders(config);
+  const enhancedConfig = config;
+
+  // Apply ephemeral settings from profile if loaded
+  if (profileToLoad && effectiveSettings) {
+    // Extract ephemeral settings that were merged from the profile
+    const ephemeralKeys = [
+      'auth-key',
+      'auth-keyfile',
+      'context-limit',
+      'compression-threshold',
+      'base-url',
+      'tool-format',
+      'api-version',
+      'custom-headers',
+    ];
+
+    for (const key of ephemeralKeys) {
+      const value = (effectiveSettings as Record<string, unknown>)[key];
+      if (value !== undefined) {
+        enhancedConfig.setEphemeralSetting(key, value);
+      }
+    }
+  }
+
+  // Store profile model params on the config for later application
+  if (profileModelParams) {
+    // Attach profile params to config object with proper typing
+    const configWithProfile = enhancedConfig as Config & {
+      _profileModelParams?: Record<string, unknown>;
+    };
+    configWithProfile._profileModelParams = profileModelParams;
+  }
+
+  return enhancedConfig;
 }
 
 function mergeMcpServers(settings: Settings, extensions: Extension[]) {

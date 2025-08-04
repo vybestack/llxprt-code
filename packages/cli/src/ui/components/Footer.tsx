@@ -33,6 +33,7 @@ interface FooterProps {
   isPaidMode?: boolean;
   nightly: boolean;
   vimMode?: string;
+  contextLimit?: number;
 }
 
 export const Footer: React.FC<FooterProps> = ({
@@ -48,8 +49,9 @@ export const Footer: React.FC<FooterProps> = ({
   isPaidMode,
   nightly,
   vimMode,
+  contextLimit,
 }) => {
-  const limit = tokenLimit(model);
+  const limit = tokenLimit(model, contextLimit);
   const percentage = promptTokenCount / limit;
 
   return (

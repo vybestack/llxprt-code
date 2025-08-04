@@ -12,6 +12,7 @@ import { loadCliConfig, parseArguments, CliArgs } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
+import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import dns from 'node:dns';
 import { spawn } from 'node:child_process';
@@ -45,7 +46,6 @@ import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';
 import {
   setProviderApiKey,
-  setProviderApiKeyFromFile,
   setProviderBaseUrl,
 } from './providers/providerConfigUtils.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
@@ -239,10 +239,100 @@ export async function main() {
         activeProvider.setModel(configModel);
       }
 
+      // Apply profile model params if loaded
+      const configWithProfile = config as Config & {
+        _profileModelParams?: Record<string, unknown>;
+      };
+      if (configWithProfile._profileModelParams && activeProvider) {
+        if (
+          'setModelParams' in activeProvider &&
+          activeProvider.setModelParams
+        ) {
+          activeProvider.setModelParams(configWithProfile._profileModelParams);
+        }
+      }
+
+      // Apply ephemeral settings from profile to the provider
+      const authKey = config.getEphemeralSetting('auth-key') as string;
+      const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
+      const baseUrl = config.getEphemeralSetting('base-url') as string;
+
+      if (authKey && activeProvider.setApiKey) {
+        activeProvider.setApiKey(authKey);
+      } else if (authKeyfile && activeProvider.setApiKey) {
+        // Load API key from file
+        try {
+          const apiKey = (
+            await fs.readFile(authKeyfile.replace(/^~/, os.homedir()), 'utf-8')
+          ).trim();
+          if (apiKey) {
+            activeProvider.setApiKey(apiKey);
+          }
+        } catch (error) {
+          console.error(
+            chalk.red(
+              `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
+        }
+      }
+
+      if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
+        activeProvider.setBaseUrl(baseUrl);
+      }
+
       // No need to set auth type when using a provider
     } catch (e) {
       console.error(chalk.red((e as Error).message));
       process.exit(1);
+    }
+  }
+
+  // Apply ephemeral settings from profile if provider came from profile (not CLI)
+  // This handles the case where profile was loaded via --profile-load
+  if (!argv.provider && (argv.profileLoad || settings.merged.defaultProfile)) {
+    const activeProvider = providerManager.getActiveProvider();
+    if (activeProvider) {
+      // Apply ephemeral settings from profile to the provider
+      const authKey = config.getEphemeralSetting('auth-key') as string;
+      const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
+      const baseUrl = config.getEphemeralSetting('base-url') as string;
+
+      if (authKey && activeProvider.setApiKey) {
+        activeProvider.setApiKey(authKey);
+      } else if (authKeyfile && activeProvider.setApiKey) {
+        // Load API key from file
+        try {
+          const apiKey = (
+            await fs.readFile(authKeyfile.replace(/^~/, os.homedir()), 'utf-8')
+          ).trim();
+          if (apiKey) {
+            activeProvider.setApiKey(apiKey);
+          }
+        } catch (error) {
+          console.error(
+            chalk.red(
+              `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          );
+        }
+      }
+
+      if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
+        activeProvider.setBaseUrl(baseUrl);
+      }
+
+      // Apply profile model params if loaded
+      const configWithProfile = config as Config & {
+        _profileModelParams?: Record<string, unknown>;
+      };
+      if (
+        configWithProfile._profileModelParams &&
+        'setModelParams' in activeProvider &&
+        activeProvider.setModelParams
+      ) {
+        activeProvider.setModelParams(configWithProfile._profileModelParams);
+      }
     }
   }
 
@@ -269,18 +359,40 @@ export async function main() {
 
     // Handle --keyfile
     if (argv.keyfile) {
-      const result = await setProviderApiKeyFromFile(
-        providerManager,
-        settings,
-        argv.keyfile,
-        config,
-      );
-      if (!result.success) {
-        console.error(chalk.red(result.message));
+      try {
+        // Read the API key from file
+        const resolvedPath = argv.keyfile.replace(/^~/, os.homedir());
+        const apiKey = await fs.readFile(resolvedPath, 'utf-8');
+        const trimmedKey = apiKey.trim();
+
+        if (!trimmedKey) {
+          console.error(chalk.red('The specified file is empty'));
+          process.exit(1);
+        }
+
+        const result = await setProviderApiKey(
+          providerManager,
+          settings,
+          trimmedKey,
+          config,
+        );
+
+        if (!result.success) {
+          console.error(chalk.red(result.message));
+          process.exit(1);
+        }
+
+        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
+        if (config.getDebugMode()) {
+          console.debug(message);
+        }
+      } catch (error) {
+        console.error(
+          chalk.red(
+            `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
         process.exit(1);
-      }
-      if (config.getDebugMode()) {
-        console.debug(result.message);
       }
     }
 
@@ -327,6 +439,23 @@ export async function main() {
             throw new Error(err);
           }
           await config.refreshAuth(settings.merged.selectedAuthType);
+
+          // Apply compression settings after authentication
+          const merged = settings.merged as Record<string, unknown>;
+          const contextLimit = merged['context-limit'] as number | undefined;
+          const compressionThreshold = merged['compression-threshold'] as
+            | number
+            | undefined;
+
+          if (contextLimit || compressionThreshold) {
+            const geminiClient = config.getGeminiClient();
+            if (geminiClient) {
+              geminiClient.setCompressionSettings(
+                compressionThreshold,
+                contextLimit,
+              );
+            }
+          }
         } catch (err) {
           console.error('Error authenticating:', err);
           process.exit(1);
@@ -521,14 +650,33 @@ async function loadNonInteractiveConfig(
   finalConfig.setProviderManager(providerManager);
 
   // Activate provider if specified
-  if (argv.provider) {
-    await providerManager.setActiveProvider(argv.provider);
+  if (argv.provider || finalConfig.getProvider()) {
+    const providerToActivate = argv.provider || finalConfig.getProvider();
+    if (providerToActivate) {
+      await providerManager.setActiveProvider(providerToActivate);
+    }
 
     // Set model if specified and provider supports it
-    if (argv.model) {
+    const modelToSet = argv.model || finalConfig.getModel();
+    if (modelToSet) {
       const activeProvider = providerManager.getActiveProvider();
       if (activeProvider && typeof activeProvider.setModel === 'function') {
-        activeProvider.setModel(argv.model);
+        activeProvider.setModel(modelToSet);
+      }
+    }
+
+    // Apply profile model params if loaded
+    const configWithProfile = finalConfig as Config & {
+      _profileModelParams?: Record<string, unknown>;
+    };
+    if (configWithProfile._profileModelParams) {
+      const activeProvider = providerManager.getActiveProvider();
+      if (
+        activeProvider &&
+        'setModelParams' in activeProvider &&
+        activeProvider.setModelParams
+      ) {
+        activeProvider.setModelParams(configWithProfile._profileModelParams);
       }
     }
   }
@@ -556,18 +704,40 @@ async function loadNonInteractiveConfig(
 
     // Handle --keyfile
     if (argv.keyfile) {
-      const result = await setProviderApiKeyFromFile(
-        providerManager,
-        settings,
-        argv.keyfile,
-        finalConfig,
-      );
-      if (!result.success) {
-        console.error(chalk.red(result.message));
+      try {
+        // Read the API key from file
+        const resolvedPath = argv.keyfile.replace(/^~/, os.homedir());
+        const apiKey = await fs.readFile(resolvedPath, 'utf-8');
+        const trimmedKey = apiKey.trim();
+
+        if (!trimmedKey) {
+          console.error(chalk.red('The specified file is empty'));
+          process.exit(1);
+        }
+
+        const result = await setProviderApiKey(
+          providerManager,
+          settings,
+          trimmedKey,
+          finalConfig,
+        );
+
+        if (!result.success) {
+          console.error(chalk.red(result.message));
+          process.exit(1);
+        }
+
+        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
+        if (finalConfig.getDebugMode()) {
+          console.debug(message);
+        }
+      } catch (error) {
+        console.error(
+          chalk.red(
+            `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
         process.exit(1);
-      }
-      if (finalConfig.getDebugMode()) {
-        console.debug(result.message);
       }
     }
 
@@ -592,5 +762,6 @@ async function loadNonInteractiveConfig(
     settings.merged.selectedAuthType,
     settings.merged.useExternalAuth,
     finalConfig,
+    settings,
   );
 }

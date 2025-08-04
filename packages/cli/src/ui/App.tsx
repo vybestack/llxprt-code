@@ -108,8 +108,10 @@ import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
+import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { ProviderDialog } from './components/ProviderDialog.js';
+import { LoadProfileDialog } from './components/LoadProfileDialog.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -345,20 +347,53 @@ const App = (props: AppInternalProps) => {
     await openProviderModelDialogRaw();
   }, [providerManager, openProviderModelDialogRaw]);
 
-  // Update current model when provider or model changes
+  // Watch for model changes from config
   useEffect(() => {
-    const activeProvider = providerManager.getActiveProvider();
-    if (activeProvider) {
-      const providerModel = activeProvider.getCurrentModel?.();
-      if (providerModel && providerModel !== currentModel) {
+    const checkModelChange = () => {
+      const configModel = config.getModel();
+      const activeProvider = providerManager.getActiveProvider();
+
+      // Get the actual current model from provider
+      const providerModel = activeProvider?.getCurrentModel?.() || configModel;
+
+      // Update UI if different from what we're showing
+      if (providerModel !== currentModel) {
+        console.debug(
+          `[Model Update] Updating footer from ${currentModel} to ${providerModel}`,
+        );
         setCurrentModel(providerModel);
       }
-    }
-  }, [providerManager, currentModel]);
+    };
+
+    // Check immediately
+    checkModelChange();
+
+    // Check periodically (every 500ms)
+    const interval = setInterval(checkModelChange, 500);
+
+    return () => clearInterval(interval);
+  }, [config, providerManager, currentModel]); // Include currentModel in dependencies
 
   const toggleCorgiMode = useCallback(() => {
     setCorgiMode((prev) => !prev);
   }, []);
+
+  const {
+    showDialog: isLoadProfileDialogOpen,
+    openDialog: openLoadProfileDialog,
+    handleSelect: handleProfileSelect,
+    closeDialog: exitLoadProfileDialog,
+    profiles,
+  } = useLoadProfileDialog({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+    config,
+    settings,
+  });
 
   const performMemoryRefresh = useCallback(async () => {
     addItem(
@@ -408,21 +443,7 @@ const App = (props: AppInternalProps) => {
     }
   }, [config, addItem, settings.merged]);
 
-  // Watch for model changes (e.g., from Flash fallback)
-  useEffect(() => {
-    const checkModelChange = () => {
-      const configModel = config.getModel();
-      if (configModel !== currentModel) {
-        setCurrentModel(configModel);
-      }
-    };
-
-    // Check immediately and then periodically
-    checkModelChange();
-    const interval = setInterval(checkModelChange, 1000); // Check every second
-
-    return () => clearInterval(interval);
-  }, [config, currentModel]);
+  // Removed - consolidated into single useEffect above
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -444,40 +465,39 @@ const App = (props: AppInternalProps) => {
         if (error && isProQuotaExceededError(error)) {
           if (isPaidTier) {
             message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+⚡ To continue using ${currentModel}, you can use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+⚡ Or you can switch to a different model using the /model command`;
           } else {
             message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
 ⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
 ⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
+⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         } else if (error && isGenericQuotaExceededError(error)) {
           if (isPaidTier) {
             message = `⚡ You have reached your daily quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+⚡ To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+⚡ Or you can switch to a different model using the /model command`;
           } else {
             message = `⚡ You have reached your daily quota limit.
-⚡ Automatically switching from ${currentModel} to ${fallbackModel} for the remainder of this session.
 ⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
 ⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
+⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         } else {
           if (isPaidTier) {
-            // Default fallback message for other cases (like consecutive 429s)
-            message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
-⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
+            // Default message for other cases (like consecutive 429s)
+            message = `⚡ You are experiencing capacity issues with ${currentModel}.
+⚡ Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
+⚡ To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+⚡ Or you can switch to a different model using the /model command`;
           } else {
-            // Default fallback message for other cases (like consecutive 429s)
-            message = `⚡ Automatically switching from ${currentModel} to ${fallbackModel} for faster responses for the remainder of this session.
-⚡ Possible reasons for this are that you have received multiple consecutive capacity errors or you have reached your daily ${currentModel} quota limit
+            // Default message for other cases (like consecutive 429s)
+            message = `⚡ You are experiencing capacity issues with ${currentModel}.
+⚡ Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
 ⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
 ⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth`;
+⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         }
 
@@ -498,14 +518,12 @@ const App = (props: AppInternalProps) => {
         config.setQuotaErrorOccurred(true);
       }
 
-      // Switch model for future use but return false to stop current retry
-      if (fallbackModel) {
-        config.setModel(fallbackModel);
-      }
-      config.setFallbackMode(true);
+      // Don't switch models - let the user decide
+      // Don't set fallback mode either
       const contentGenConfigForEvent = config.getContentGeneratorConfig();
       const authTypeForEvent =
         contentGenConfigForEvent?.authType || AuthType.USE_GEMINI;
+      // Still log the event for telemetry
       logFlashFallback(config, new FlashFallbackEvent(authTypeForEvent));
       return false; // Don't continue with current prompt
     };
@@ -586,6 +604,7 @@ const App = (props: AppInternalProps) => {
     openEditorDialog,
     openProviderDialog,
     openProviderModelDialog,
+    openLoadProfileDialog,
     toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
@@ -1040,6 +1059,14 @@ const App = (props: AppInternalProps) => {
                 onClose={exitProviderModelDialog}
               />
             </Box>
+          ) : isLoadProfileDialogOpen ? (
+            <Box flexDirection="column">
+              <LoadProfileDialog
+                profiles={profiles}
+                onSelect={handleProfileSelect}
+                onClose={exitLoadProfileDialog}
+              />
+            </Box>
           ) : showPrivacyNotice ? (
             <PrivacyNotice onExit={handlePrivacyNoticeExit} config={config} />
           ) : (
@@ -1188,6 +1215,9 @@ const App = (props: AppInternalProps) => {
             promptTokenCount={sessionStats.lastPromptTokenCount}
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}
+            contextLimit={
+              config.getEphemeralSetting('context-limit') as number | undefined
+            }
           />
         </Box>
       </Box>

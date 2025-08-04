@@ -47,6 +47,7 @@ export class OpenAIProvider implements IProvider {
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
   private conversationCache: ConversationCache;
+  private modelParams?: Record<string, unknown>;
 
   constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
     this.apiKey = apiKey;
@@ -55,12 +56,16 @@ export class OpenAIProvider implements IProvider {
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
-    this.openai = new OpenAI({
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      baseURL,
-      // Allow browser environment for tests
-      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
-    });
+      // Allow browser environment if explicitly configured
+      dangerouslyAllowBrowser: config?.allowBrowserEnvironment || false,
+    };
+    // Only include baseURL if it's defined
+    if (baseURL) {
+      clientOptions.baseURL = baseURL;
+    }
+    this.openai = new OpenAI(clientOptions);
   }
 
   private requiresTextToolCallParsing(): boolean {
@@ -201,13 +206,20 @@ export class OpenAIProvider implements IProvider {
     const baseURL = this.baseURL || 'https://api.openai.com/v1';
     const responsesURL = `${baseURL}/responses`;
 
+    // Ensure proper UTF-8 encoding for the request body
+    // This is crucial for handling multibyte characters (e.g., Japanese, Chinese)
+    const requestBody = JSON.stringify(request);
+    const bodyBlob = new Blob([requestBody], {
+      type: 'application/json; charset=utf-8',
+    });
+
     const response = await fetch(responsesURL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json; charset=utf-8',
       },
-      body: JSON.stringify(request),
+      body: bodyBlob,
     });
 
     // Handle errors
@@ -243,13 +255,19 @@ export class OpenAIProvider implements IProvider {
           tool_choice: options?.tool_choice,
         });
 
+        // Ensure proper UTF-8 encoding for retry request as well
+        const retryRequestBody = JSON.stringify(retryRequest);
+        const retryBodyBlob = new Blob([retryRequestBody], {
+          type: 'application/json; charset=utf-8',
+        });
+
         const retryResponse = await fetch(responsesURL, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/json; charset=utf-8',
           },
-          body: JSON.stringify(retryRequest),
+          body: retryBodyBlob,
         });
 
         if (!retryResponse.ok) {
@@ -544,6 +562,7 @@ export class OpenAIProvider implements IProvider {
         | OpenAI.Chat.Completions.ChatCompletionTool[]
         | undefined,
       tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
+      ...this.modelParams,
     });
 
     let fullContent = '';
@@ -557,53 +576,61 @@ export class OpenAIProvider implements IProvider {
         }
       | undefined;
 
+    // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
+    let pendingWhitespace: string | null = null;
+
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta;
 
       if (delta?.content) {
-        fullContent += delta.content;
-
         // Enhanced debug logging to understand streaming behavior
         if (process.env.DEBUG && this.currentModel.includes('qwen')) {
           console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
             content: delta.content,
             contentLength: delta.content.length,
-            fullContentLength: fullContent.length,
+            isWhitespaceOnly: delta.content.trim() === '',
             chunkIndex: chunk.choices[0]?.index,
           });
-          // Check if this chunk contains repeated content
-          const beforeAddition = fullContent.substring(
-            0,
-            fullContent.length - delta.content.length,
-          );
-          if (beforeAddition.endsWith(delta.content)) {
-            console.log(
-              `[OpenAIProvider/${this.currentModel}] WARNING: Chunk appears to be a repeat!`,
-            );
-          }
         }
 
         // For text-based models, don't yield content chunks yet
         if (!parser) {
-          // Skip whitespace-only chunks for Qwen models to prevent extra spacing
-          if (
-            this.currentModel.includes('qwen') &&
-            delta.content &&
-            delta.content.trim() === ''
-          ) {
-            if (process.env.DEBUG) {
-              console.log(
-                `[OpenAIProvider/${this.currentModel}] Skipping whitespace-only chunk: ${JSON.stringify(delta.content)}`,
-              );
+          if (this.currentModel.includes('qwen')) {
+            const isWhitespaceOnly = delta.content.trim() === '';
+            if (isWhitespaceOnly) {
+              // Buffer whitespace-only chunk
+              pendingWhitespace = (pendingWhitespace || '') + delta.content;
+              if (process.env.DEBUG) {
+                console.log(
+                  `[OpenAIProvider/${this.currentModel}] Buffered whitespace-only chunk (len=${delta.content.length}). pendingWhitespace now len=${pendingWhitespace.length}`,
+                );
+              }
+              continue;
+            } else if (pendingWhitespace) {
+              // Flush buffered whitespace before non-empty chunk to preserve spacing
+              if (process.env.DEBUG) {
+                console.log(
+                  `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
+                );
+              }
+              yield {
+                role: ContentGeneratorRole.ASSISTANT,
+                content: pendingWhitespace,
+              };
+              hasStreamedContent = true;
+              fullContent += pendingWhitespace;
+              pendingWhitespace = null;
             }
-            continue;
           }
+
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: delta.content,
           };
           hasStreamedContent = true;
         }
+
+        fullContent += delta.content;
       }
 
       if (delta?.tool_calls) {
@@ -624,6 +651,22 @@ export class OpenAIProvider implements IProvider {
           total_tokens: chunk.usage.total_tokens,
         };
       }
+    }
+
+    // Flush any remaining pending whitespace for Qwen
+    if (pendingWhitespace && this.currentModel.includes('qwen') && !parser) {
+      if (process.env.DEBUG) {
+        console.log(
+          `[OpenAIProvider/${this.currentModel}] Flushing trailing pending whitespace (len=${pendingWhitespace.length}) at stream end`,
+        );
+      }
+      yield {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: pendingWhitespace,
+      };
+      hasStreamedContent = true;
+      fullContent += pendingWhitespace;
+      pendingWhitespace = null;
     }
 
     // After stream ends, parse text-based tool calls if needed
@@ -713,22 +756,30 @@ export class OpenAIProvider implements IProvider {
   setApiKey(apiKey: string): void {
     this.apiKey = apiKey;
     // Create a new OpenAI client with the updated API key
-    this.openai = new OpenAI({
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      baseURL: this.baseURL,
-      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
-    });
+      dangerouslyAllowBrowser: this.config?.allowBrowserEnvironment || false,
+    };
+    // Only include baseURL if it's defined
+    if (this.baseURL) {
+      clientOptions.baseURL = this.baseURL;
+    }
+    this.openai = new OpenAI(clientOptions);
   }
 
   setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
     // Create a new OpenAI client with the updated (or cleared) base URL
-    this.openai = new OpenAI({
+    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey: this.apiKey,
-      baseURL: this.baseURL,
-      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
-    });
+      dangerouslyAllowBrowser: this.config?.allowBrowserEnvironment || false,
+    };
+    // Only include baseURL if it's defined
+    if (this.baseURL) {
+      clientOptions.baseURL = this.baseURL;
+    }
+    this.openai = new OpenAI(clientOptions);
   }
 
   setConfig(config: IProviderConfig): void {
@@ -798,5 +849,25 @@ export class OpenAIProvider implements IProvider {
     _config?: unknown,
   ): Promise<unknown> {
     throw new Error('Server tools not supported by OpenAI provider');
+  }
+
+  /**
+   * Set model parameters to be included in API calls
+   * @param params Parameters to merge with existing, or undefined to clear all
+   */
+  setModelParams(params: Record<string, unknown> | undefined): void {
+    if (params === undefined) {
+      this.modelParams = undefined;
+    } else {
+      this.modelParams = { ...this.modelParams, ...params };
+    }
+  }
+
+  /**
+   * Get current model parameters
+   * @returns Current parameters or undefined if not set
+   */
+  getModelParams(): Record<string, unknown> | undefined {
+    return this.modelParams;
   }
 }

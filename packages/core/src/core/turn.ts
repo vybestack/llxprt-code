@@ -201,6 +201,11 @@ export class Turn {
       console.log('DEBUG: Turn.run typeof req:', typeof req);
       console.log('DEBUG: Turn.run Array.isArray(req):', Array.isArray(req));
     }
+
+    console.log('[DEBUG Turn.run] req type:', typeof req);
+    console.log('[DEBUG Turn.run] req isArray:', Array.isArray(req));
+    console.log('[DEBUG Turn.run] req:', JSON.stringify(req, null, 2));
+
     try {
       const responseStream = await this.chat.sendMessageStream(
         {

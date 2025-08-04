@@ -105,8 +105,14 @@ export async function runNonInteractive(
             console.error(
               `Error executing tool ${fc.name}: ${toolResponse.error.message}`,
             );
-            if (toolResponse.errorType === ToolErrorType.UNHANDLED_EXCEPTION)
+            if (toolResponse.errorType === ToolErrorType.UNHANDLED_EXCEPTION) {
               process.exit(1);
+            }
+          }
+
+          // Emit resultDisplay to stdout exactly as produced when available (string only)
+          if (typeof toolResponse.resultDisplay === 'string') {
+            process.stdout.write(toolResponse.resultDisplay);
           }
 
           if (toolResponse.responseParts) {

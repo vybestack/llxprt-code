@@ -19,7 +19,8 @@ export type AppAction =
         | 'editor'
         | 'providerModel'
         | 'provider'
-        | 'privacy';
+        | 'privacy'
+        | 'loadProfile';
     }
   | {
       type: 'CLOSE_DIALOG';
@@ -29,7 +30,8 @@ export type AppAction =
         | 'editor'
         | 'providerModel'
         | 'provider'
-        | 'privacy';
+        | 'privacy'
+        | 'loadProfile';
     }
   | { type: 'SET_WARNING'; payload: { key: string; message: string } }
   | { type: 'CLEAR_WARNING'; payload: string }
@@ -45,6 +47,7 @@ export interface AppState {
     providerModel: boolean;
     provider: boolean;
     privacy: boolean;
+    loadProfile: boolean;
   };
   warnings: Map<string, string>;
   errors: {
@@ -66,6 +69,7 @@ export const initialAppState: AppState = {
     providerModel: false,
     provider: false,
     privacy: false,
+    loadProfile: false,
   },
   warnings: new Map(),
   errors: {

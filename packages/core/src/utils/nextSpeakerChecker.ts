@@ -130,6 +130,11 @@ export async function checkNextSpeaker(
       `Failed to talk to ${provider} endpoint when seeing if conversation should continue.`,
       error,
     );
-    return null;
+    // Default to user speaking next when the check fails
+    // This prevents the conversation from hanging
+    return {
+      reasoning: 'Next speaker check failed, defaulting to user input',
+      next_speaker: 'user',
+    };
   }
 }

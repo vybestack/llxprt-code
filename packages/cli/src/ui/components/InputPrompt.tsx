@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
@@ -25,6 +25,7 @@ import {
   cleanupOldClipboardImages,
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 export interface InputPromptProps {
   buffer: TextBuffer;
@@ -100,13 +101,25 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
+      // Get the actual value if in secure mode
+      const actualValue = secureInputHandler.isInSecureMode()
+        ? secureInputHandler.getActualValue()
+        : submittedValue;
+
       if (shellModeActive) {
-        shellHistory.addCommandToHistory(submittedValue);
+        // Sanitize for history if it's a secure command
+        const historyValue = secureInputHandler.sanitizeForHistory(actualValue);
+        shellHistory.addCommandToHistory(historyValue);
       }
+
       // Clear the buffer *before* calling onSubmit to prevent potential re-submission
       // if onSubmit triggers a re-render while the buffer still holds the old value.
       buffer.setText('');
-      onSubmit(submittedValue);
+
+      // Reset secure input handler
+      secureInputHandler.reset();
+
+      onSubmit(actualValue);
       resetCompletionState();
       setPasteMessage(null);
       resetReverseSearchCompletionState();
@@ -126,6 +139,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     (newText: string) => {
       buffer.setText(newText);
       setJustNavigatedHistory(true);
+      // Process through secure handler to update its state
+      secureInputHandler.processInput(newText);
     },
     [buffer, setJustNavigatedHistory],
   );
@@ -409,6 +424,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         if (buffer.text.length > 0) {
           buffer.setText('');
           resetCompletionState();
+          secureInputHandler.reset();
           return;
         }
         return;
@@ -445,11 +461,20 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
         // Insert the paste content at cursor position
         buffer.insert(key.sequence);
+
+        // Update secure input handler state after paste
+        // This ensures the handler knows about the pasted content
+        secureInputHandler.processInput(buffer.text);
+
         return;
       }
 
       // Fall back to the text buffer's default input handling for all other keys
       buffer.handleInput(key);
+
+      // Update secure input handler state after any input
+      // This ensures the handler always has the current text
+      secureInputHandler.processInput(buffer.text);
     },
     [
       focus,
@@ -473,7 +498,29 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   useKeypress(handleInput, { isActive: true });
 
-  const linesToRender = buffer.viewportVisualLines;
+  // Process buffer text through secure input handler
+  // This will return masked text if it detects /key command, otherwise returns original text
+  const textToDisplay = useMemo(
+    () => secureInputHandler.processInput(buffer.text),
+    [buffer.text],
+  );
+
+  // Calculate visual lines for the display text
+  const displayLines = useMemo(() => {
+    if (!secureInputHandler.isInSecureMode()) {
+      return buffer.viewportVisualLines;
+    }
+
+    // In secure mode, simply return the masked text as a single line
+    // The issue is that buffer.viewportVisualLines are calculated from buffer.text
+    // but we need to display textToDisplay instead
+
+    // For now, let's just return the masked text as a single visual line
+    // This works for single-line inputs (which is the common case for API keys)
+    return [textToDisplay];
+  }, [buffer.viewportVisualLines, textToDisplay]);
+
+  const linesToRender = displayLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =
     buffer.visualCursor;
   const scrollVisualRow = buffer.visualScrollRow;
@@ -499,7 +546,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           )}
         </Text>
         <Box flexGrow={1} flexDirection="column">
-          {buffer.text.length === 0 && placeholder ? (
+          {textToDisplay.length === 0 && placeholder ? (
             focus ? (
               <Text>
                 {chalk.inverse(placeholder.slice(0, 1))}
@@ -509,47 +556,51 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
               <Text color={Colors.Gray}>{placeholder}</Text>
             )
           ) : (
-            linesToRender.map((lineText, visualIdxInRenderedSet) => {
-              const cursorVisualRow = cursorVisualRowAbsolute - scrollVisualRow;
-              let display = cpSlice(lineText, 0, inputWidth);
-              const currentVisualWidth = stringWidth(display);
-              if (currentVisualWidth < inputWidth) {
-                display = display + ' '.repeat(inputWidth - currentVisualWidth);
-              }
+            linesToRender.map(
+              (lineText: string, visualIdxInRenderedSet: number) => {
+                const cursorVisualRow =
+                  cursorVisualRowAbsolute - scrollVisualRow;
+                let display = cpSlice(lineText, 0, inputWidth);
+                const currentVisualWidth = stringWidth(display);
+                if (currentVisualWidth < inputWidth) {
+                  display =
+                    display + ' '.repeat(inputWidth - currentVisualWidth);
+                }
 
-              if (focus && visualIdxInRenderedSet === cursorVisualRow) {
-                const relativeVisualColForHighlight = cursorVisualColAbsolute;
+                if (focus && visualIdxInRenderedSet === cursorVisualRow) {
+                  const relativeVisualColForHighlight = cursorVisualColAbsolute;
 
-                if (relativeVisualColForHighlight >= 0) {
-                  if (relativeVisualColForHighlight < cpLen(display)) {
-                    const charToHighlight =
-                      cpSlice(
-                        display,
-                        relativeVisualColForHighlight,
-                        relativeVisualColForHighlight + 1,
-                      ) || ' ';
-                    const highlighted = chalk.inverse(charToHighlight);
-                    display =
-                      cpSlice(display, 0, relativeVisualColForHighlight) +
-                      highlighted +
-                      cpSlice(display, relativeVisualColForHighlight + 1);
-                  } else if (
-                    relativeVisualColForHighlight === cpLen(display) &&
-                    cpLen(display) === inputWidth
-                  ) {
-                    display = display + chalk.inverse(' ');
+                  if (relativeVisualColForHighlight >= 0) {
+                    if (relativeVisualColForHighlight < cpLen(display)) {
+                      const charToHighlight =
+                        cpSlice(
+                          display,
+                          relativeVisualColForHighlight,
+                          relativeVisualColForHighlight + 1,
+                        ) || ' ';
+                      const highlighted = chalk.inverse(charToHighlight);
+                      display =
+                        cpSlice(display, 0, relativeVisualColForHighlight) +
+                        highlighted +
+                        cpSlice(display, relativeVisualColForHighlight + 1);
+                    } else if (
+                      relativeVisualColForHighlight === cpLen(display) &&
+                      cpLen(display) === inputWidth
+                    ) {
+                      display = display + chalk.inverse(' ');
+                    }
                   }
                 }
-              }
-              return (
-                <Text
-                  color={Colors.Foreground}
-                  key={`line-${visualIdxInRenderedSet}`}
-                >
-                  {display}
-                </Text>
-              );
-            })
+                return (
+                  <Text
+                    color={Colors.Foreground}
+                    key={`line-${visualIdxInRenderedSet}`}
+                  >
+                    {display}
+                  </Text>
+                );
+              },
+            )
           )}
         </Box>
       </Box>
@@ -561,7 +612,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
             isLoading={completion.isLoadingSuggestions}
             width={suggestionsWidth}
             scrollOffset={completion.visibleStartIndex}
-            userInput={buffer.text}
+            userInput={textToDisplay}
           />
         </Box>
       )}
