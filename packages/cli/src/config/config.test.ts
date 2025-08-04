@@ -1114,8 +1114,7 @@ describe('--profile-load flag functionality', () => {
       'openai',
     ];
     const argv = await parseArguments();
-    const settings: Settings = {
-    };
+    const settings: Settings = {};
 
     const config = await loadCliConfig(settings, [], 'test-session', argv);
 
@@ -1143,8 +1142,7 @@ describe('--profile-load flag functionality', () => {
         'non-existent-profile',
       ];
       const argv = await parseArguments();
-      const settings: Settings = {
-      };
+      const settings: Settings = {};
 
       // Should not throw, but continue with default settings
       const config = await loadCliConfig(settings, [], 'test-session', argv);

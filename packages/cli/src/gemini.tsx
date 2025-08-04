@@ -243,7 +243,11 @@ export async function main() {
       const configWithProfile = config as Config & {
         _profileModelParams?: Record<string, unknown>;
       };
-      if (!argv.provider && configWithProfile._profileModelParams && activeProvider) {
+      if (
+        !argv.provider &&
+        configWithProfile._profileModelParams &&
+        activeProvider
+      ) {
         if (
           'setModelParams' in activeProvider &&
           activeProvider.setModelParams
@@ -255,7 +259,9 @@ export async function main() {
       // Apply ephemeral settings from profile ONLY if provider was NOT specified via CLI
       if (!argv.provider) {
         const authKey = config.getEphemeralSetting('auth-key') as string;
-        const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
+        const authKeyfile = config.getEphemeralSetting(
+          'auth-keyfile',
+        ) as string;
         const baseUrl = config.getEphemeralSetting('base-url') as string;
 
         // Only apply profile auth settings if no CLI auth args were provided
