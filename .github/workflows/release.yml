@@ -134,6 +134,7 @@ jobs:
         run: |
           rm -rf packages/*/dist
           npm run build:packages
+          npm run bundle
           npm run prepare:package
 
       - name: Configure npm for publishing
