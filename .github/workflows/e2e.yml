@@ -80,8 +80,6 @@ jobs:
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
           LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
           LLXPRT_DEFAULT_PROVIDER: openai
-          # Also provide Gemini API key if available
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}

@@ -139,6 +139,8 @@ export class TestRig {
         outfile: telemetryPath,
       },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
+      authType: 'none', // Explicitly set auth type to none for tests
+      provider: env.LLXPRT_DEFAULT_PROVIDER || 'openai', // Use OpenAI provider by default
       ...options.settings, // Allow tests to override/add settings
     };
     writeFileSync(
@@ -168,7 +170,23 @@ export class TestRig {
   run(promptOrOptions, ...args) {
     // Properly quote the bundle path for Windows
     const quotedBundlePath = `"${this.bundlePath}"`;
-    let command = `node ${quotedBundlePath} --yolo`;
+    // Add provider and model flags from environment or defaults
+    const provider = env.LLXPRT_DEFAULT_PROVIDER || 'openai';
+    const model = env.LLXPRT_DEFAULT_MODEL || 'google/gemini-2.5-flash';
+    const baseUrl = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const apiKey = env.OPENAI_API_KEY;
+    
+    let command = `node ${quotedBundlePath} --yolo --provider ${provider} --model "${model}"`;
+    
+    // Add baseurl if using openai provider
+    if (provider === 'openai' && baseUrl) {
+      command += ` --baseurl "${baseUrl}"`;
+    }
+    
+    // Add API key if available
+    if (apiKey) {
+      command += ` --key "${apiKey}"`;
+    }
     const execOptions = {
       cwd: this.testDir,
       encoding: 'utf-8',
