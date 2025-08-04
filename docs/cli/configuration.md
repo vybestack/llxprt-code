@@ -376,6 +376,11 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
   - Your API key for Anthropic services.
   - Used when provider is set to anthropic.
   - Example: `export ANTHROPIC_API_KEY="sk-ant-..."`
+- **`LLXPRT_PROMPTS_DIR`**:
+  - Specifies a custom directory for prompt configuration files.
+  - Default: `~/.llxprt/prompts`
+  - Example: `export LLXPRT_PROMPTS_DIR="/path/to/custom/prompts"`
+  - See the [Prompt Configuration Guide](../prompt-configuration.md) for details
 
 ## Command-Line Arguments
 

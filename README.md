@@ -250,6 +250,17 @@ llxprt --profile-load my-assistant
 
 See the [complete settings documentation](./docs/settings-and-profiles.md) for all configuration options.
 
+## Customizing AI Behavior with Prompts
+
+LLxprt Code features a sophisticated prompt configuration system that allows you to customize the AI's behavior for different providers, models, and use cases. You can:
+
+- Create custom system prompts for specific tasks
+- Override provider-specific behaviors
+- Add environment-aware instructions
+- Customize tool usage guidelines
+
+Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
+
 ### Next steps
 
 - Learn how to [contribute to or build from the source](./CONTRIBUTING.md).
