@@ -1,0 +1,2 @@
+- Use the available tools (e.g., '${EditTool.Name}', '${WriteFileTool.Name}' '${ShellTool.Name}' ...) to act on the plan, strictly adhering to the project's established conventions (detailed under 'Core Mandates').
+- When asked to modify files, use the '${EditTool.Name}' tool

@@ -23,7 +23,7 @@ import {
 } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPrompt, getCompressionPrompt } from './prompts.js';
+import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { checkNextSpeaker } from '../utils/nextSpeakerChecker.js';
@@ -407,7 +407,7 @@ export class GeminiClient {
       if (process.env.DEBUG) {
         console.log('DEBUG [client.startChat]: Model from config:', model);
       }
-      const systemInstruction = getCoreSystemPrompt(userMemory, model);
+      const systemInstruction = await getCoreSystemPromptAsync(userMemory, model);
       if (process.env.DEBUG) {
         console.log(
           'DEBUG [client.startChat]: System instruction includes Flash instructions:',
@@ -685,7 +685,7 @@ export class GeminiClient {
       model || this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
+      const systemInstruction = await getCoreSystemPromptAsync(userMemory, modelToUse);
       const requestConfig = {
         abortSignal,
         ...this.generateContentConfig,
@@ -820,7 +820,7 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
+      const systemInstruction = await getCoreSystemPromptAsync(userMemory, modelToUse);
 
       const requestConfig = {
         abortSignal,
