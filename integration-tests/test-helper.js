@@ -5,7 +5,6 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { parse } from 'shell-quote';
 import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -139,7 +138,7 @@ export class TestRig {
         outfile: telemetryPath,
       },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
-      authType: 'none', // Explicitly set auth type to none for tests
+      selectedAuthType: 'none', // Explicitly set auth type to none for tests
       provider: env.LLXPRT_DEFAULT_PROVIDER || 'openai', // Use OpenAI provider by default
       ...options.settings, // Allow tests to override/add settings
     };
@@ -168,53 +167,69 @@ export class TestRig {
   }
 
   run(promptOrOptions, ...args) {
-    // Properly quote the bundle path for Windows
-    const quotedBundlePath = `"${this.bundlePath}"`;
     // Add provider and model flags from environment or defaults
     const provider = env.LLXPRT_DEFAULT_PROVIDER || 'openai';
     const model = env.LLXPRT_DEFAULT_MODEL || 'google/gemini-2.5-flash';
     const baseUrl = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
     const apiKey = env.OPENAI_API_KEY;
 
-    let command = `node ${quotedBundlePath} --yolo --provider ${provider} --model "${model}"`;
+    // Build command args array directly instead of parsing a string
+    // This avoids Windows-specific command line parsing issues
+    const commandArgs = [
+      'node',
+      this.bundlePath,
+      '--yolo',
+      '--provider',
+      provider,
+      '--model',
+      model,
+    ];
 
     // Add baseurl if using openai provider
     if (provider === 'openai' && baseUrl) {
-      command += ` --baseurl "${baseUrl}"`;
+      commandArgs.push('--baseurl', baseUrl);
     }
 
     // Add API key if available
     if (apiKey) {
-      command += ` --key "${apiKey}"`;
+      commandArgs.push('--key', apiKey);
     }
+
     const execOptions = {
       cwd: this.testDir,
       encoding: 'utf-8',
-      env: process.env,
+      env: {
+        ...process.env,
+        // Ensure browser launch is suppressed in tests
+        NO_BROWSER: 'true',
+        LLXPRT_NO_BROWSER_AUTH: 'true',
+        CI: 'true',
+      },
     };
 
     if (typeof promptOrOptions === 'string') {
-      command += ` --prompt "${promptOrOptions}"`;
+      commandArgs.push('--prompt', promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        command += ` --prompt "${promptOrOptions.prompt}"`;
+        commandArgs.push('--prompt', promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
       }
     }
 
-    command += ` ${args.join(' ')}`;
+    // Add any additional args
+    commandArgs.push(...args);
 
-    const commandArgs = parse(command);
     const node = commandArgs.shift();
 
     const child = spawn(node, commandArgs, {
       cwd: this.testDir,
       stdio: 'pipe',
+      env: execOptions.env,
     });
 
     let stdout = '';
