@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getCoreSystemPrompt, getCoreSystemPromptAsync, initializePromptSystem } from './prompts.js';
+import { getCoreSystemPrompt, getCoreSystemPromptAsync, initializePromptSystem, resetPromptService } from './prompts.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,6 +20,9 @@ describe('prompts', () => {
     // Create a temporary directory for test prompts
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
     process.env.LLXPRT_PROMPTS_DIR = tempDir;
+    
+    // Reset the prompt service before each test
+    resetPromptService();
     
     // Initialize the prompt system for each test
     await initializePromptSystem();

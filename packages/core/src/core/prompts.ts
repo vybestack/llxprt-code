@@ -138,7 +138,7 @@ export async function getCoreSystemPromptAsync(
 
 export function getCoreSystemPrompt(
   userMemory?: string,
-  _model?: string,
+  model?: string,
   _tools?: string[]
 ): string {
   // This synchronous version is deprecated and should not be used
@@ -171,6 +171,20 @@ export function getCoreSystemPrompt(
     }
   } else {
     prompt += '\n\n' + (CORE_DEFAULTS['env/outside-of-sandbox.md'] || '');
+  }
+
+  // Add flash model specific instructions
+  if (model && model.includes('flash')) {
+    const flashPrompt = `IMPORTANT: You MUST use the provided tools when appropriate. For example:
+- When asked to list files or directories, use the 'Ls' tool
+- When asked to read file contents, use the 'ReadFile' tool
+- When asked to search for patterns in files, use the 'Grep' tool
+- When asked to find files by name, use the 'Glob' tool
+- When asked to create files, use the 'WriteFile' tool
+- When asked to modify files, use the 'Edit' tool
+- When asked to run commands, use the 'Shell' tool
+Do not describe what you would do - actually execute the tool calls.`;
+    prompt += '\n\n' + flashPrompt;
   }
 
   // Append user memory if provided
