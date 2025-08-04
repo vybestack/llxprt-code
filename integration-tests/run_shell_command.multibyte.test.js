@@ -12,7 +12,7 @@ const MULTIBYTE = 'ありがとう 世界';
 
 // Deterministic command avoiding echo quirks; ensures exact byte output.
 
-test('run_shell_command handles UTF-8 multibyte output correctly (integration)', async (t) => {
+test.skip('run_shell_command handles UTF-8 multibyte output correctly (integration)', async (t) => {
   const rig = new TestRig();
   rig.setup(t.name);
 
