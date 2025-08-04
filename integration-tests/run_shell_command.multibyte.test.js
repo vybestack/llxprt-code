@@ -20,7 +20,7 @@ test('run_shell_command handles UTF-8 multibyte output correctly (integration)',
   // Use different command for Windows vs Unix
   const isWindows = process.platform === 'win32';
   const command = isWindows
-    ? `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Write-Host -NoNewline '${MULTIBYTE}'"`
+    ? `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Write-Host '${MULTIBYTE}' -NoNewline"`
     : `printf '${MULTIBYTE}'`;
   const prompt = `Use the run_shell_command tool to execute the following command: ${command}`;
   const result = await rig.run(prompt);
