@@ -12,10 +12,15 @@ import { createMockCommandContext } from '../../test-utils/mockCommandContext.js
 import { type CommandContext } from './types.js';
 
 // Mock the 'fs' module
-vi.mock('fs', () => ({
-  existsSync: vi.fn(),
-  writeFileSync: vi.fn(),
-}));
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    default: actual,
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+  };
+});
 
 describe('initCommand', () => {
   let mockContext: CommandContext;

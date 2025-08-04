@@ -51,6 +51,9 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Create bundle
+        run: npm run bundle
+
       - name: Run type check
         run: npm run typecheck
 
@@ -78,6 +81,9 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+      - name: Create bundle
+        run: npm run bundle
 
       - name: Install dependencies for testing
         run: npm ci # Install fresh dependencies using the downloaded package-lock.json
