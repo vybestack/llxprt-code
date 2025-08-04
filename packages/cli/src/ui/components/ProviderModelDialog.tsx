@@ -190,7 +190,9 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
         visibleGrid
       ) : (
         <Box marginY={1}>
-          <Text color={Colors.Gray}>No models match &quot;{searchTerm}&quot;</Text>
+          <Text color={Colors.Gray}>
+            No models match &quot;{searchTerm}&quot;
+          </Text>
         </Box>
       )}
 
