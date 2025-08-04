@@ -97,7 +97,6 @@ async function getGeminiMdFilePathsInternal(
   const geminiMdFilenames = getAllLlxprtMdFilenames();
 
   for (const geminiMdFilename of geminiMdFilenames) {
-    const resolvedCwd = path.resolve(currentWorkingDirectory);
     const resolvedHome = path.resolve(userHomePath);
     const globalMemoryPath = path.join(
       resolvedHome,
@@ -105,12 +104,7 @@ async function getGeminiMdFilePathsInternal(
       geminiMdFilename,
     );
 
-    if (debugMode)
-      logger.debug(
-        `Searching for ${geminiMdFilename} starting from CWD: ${resolvedCwd}`,
-      );
-    if (debugMode) logger.debug(`User home directory: ${resolvedHome}`);
-
+    // This part that finds the global file always runs.
     try {
       await fs.access(globalMemoryPath, fsSync.constants.R_OK);
       allPaths.add(globalMemoryPath);
@@ -119,102 +113,85 @@ async function getGeminiMdFilePathsInternal(
           `Found readable global ${geminiMdFilename}: ${globalMemoryPath}`,
         );
     } catch {
+      // It's okay if it's not found.
+    }
+
+    // FIX: Only perform the workspace search (upward and downward scans)
+    // if a valid currentWorkingDirectory is provided.
+    if (currentWorkingDirectory) {
+      const resolvedCwd = path.resolve(currentWorkingDirectory);
       if (debugMode)
         logger.debug(
-          `Global ${geminiMdFilename} not found or not readable: ${globalMemoryPath}`,
+          `Searching for ${geminiMdFilename} starting from CWD: ${resolvedCwd}`,
         );
-    }
 
-    const projectRoot = await findProjectRoot(resolvedCwd);
-    if (debugMode)
-      logger.debug(`Determined project root: ${projectRoot ?? 'None'}`);
+      const projectRoot = await findProjectRoot(resolvedCwd);
+      if (debugMode)
+        logger.debug(`Determined project root: ${projectRoot ?? 'None'}`);
 
-    const upwardPaths: string[] = [];
-    let currentDir = resolvedCwd;
-    // Determine the directory that signifies the top of the project or user-specific space.
-    const ultimateStopDir = projectRoot
-      ? path.dirname(projectRoot)
-      : path.dirname(resolvedHome);
+      const upwardPaths: string[] = [];
+      let currentDir = resolvedCwd;
+      const ultimateStopDir = projectRoot
+        ? path.dirname(projectRoot)
+        : path.dirname(resolvedHome);
 
-    while (currentDir && currentDir !== path.dirname(currentDir)) {
-      // Loop until filesystem root or currentDir is empty
-      if (debugMode) {
-        logger.debug(
-          `Checking for ${geminiMdFilename} in (upward scan): ${currentDir}`,
-        );
-      }
-
-      // Skip the global .gemini directory itself during upward scan from CWD,
-      // as global is handled separately and explicitly first.
-      if (currentDir === path.join(resolvedHome, LLXPRT_CONFIG_DIR)) {
+      while (currentDir && currentDir !== path.dirname(currentDir)) {
+        // Loop until filesystem root or currentDir is empty
         if (debugMode) {
           logger.debug(
-            `Upward scan reached global config dir path, stopping upward search here: ${currentDir}`,
+            `Checking for ${geminiMdFilename} in (upward scan): ${currentDir}`,
           );
         }
-        break;
-      }
 
-      const potentialPath = path.join(currentDir, geminiMdFilename);
-      try {
-        await fs.access(potentialPath, fsSync.constants.R_OK);
-        // Add to upwardPaths only if it's not the already added globalMemoryPath
-        if (potentialPath !== globalMemoryPath) {
-          upwardPaths.unshift(potentialPath);
+        // Skip the global .llxprt directory itself during upward scan from CWD,
+        // as global is handled separately and explicitly first.
+        if (currentDir === path.join(resolvedHome, LLXPRT_CONFIG_DIR)) {
           if (debugMode) {
             logger.debug(
-              `Found readable upward ${geminiMdFilename}: ${potentialPath}`,
+              `Upward scan reached global config dir path, stopping upward search here: ${currentDir}`,
             );
           }
+          break;
         }
-      } catch {
-        if (debugMode) {
-          logger.debug(
-            `Upward ${geminiMdFilename} not found or not readable in: ${currentDir}`,
-          );
+
+        const potentialPath = path.join(currentDir, geminiMdFilename);
+        try {
+          await fs.access(potentialPath, fsSync.constants.R_OK);
+          if (potentialPath !== globalMemoryPath) {
+            upwardPaths.unshift(potentialPath);
+          }
+        } catch {
+          // Not found, continue.
         }
+
+        if (currentDir === ultimateStopDir) {
+          break;
+        }
+
+        currentDir = path.dirname(currentDir);
       }
+      upwardPaths.forEach((p) => allPaths.add(p));
 
-      // Stop condition: if currentDir is the ultimateStopDir, break after this iteration.
-      if (currentDir === ultimateStopDir) {
-        if (debugMode)
-          logger.debug(
-            `Reached ultimate stop directory for upward scan: ${currentDir}`,
-          );
-        break;
+      const mergedOptions = {
+        ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+        ...fileFilteringOptions,
+      };
+
+      const downwardPaths = await bfsFileSearch(resolvedCwd, {
+        fileName: geminiMdFilename,
+        maxDirs,
+        debug: debugMode,
+        fileService,
+        fileFilteringOptions: mergedOptions,
+      });
+      downwardPaths.sort();
+      for (const dPath of downwardPaths) {
+        allPaths.add(dPath);
       }
-
-      currentDir = path.dirname(currentDir);
-    }
-    upwardPaths.forEach((p) => allPaths.add(p));
-
-    // Merge options with memory defaults, with options taking precedence
-    const mergedOptions = {
-      ...DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
-      ...fileFilteringOptions,
-    };
-
-    const downwardPaths = await bfsFileSearch(resolvedCwd, {
-      fileName: geminiMdFilename,
-      maxDirs,
-      debug: debugMode,
-      fileService,
-      fileFilteringOptions: mergedOptions, // Pass merged options as fileFilter
-    });
-    downwardPaths.sort(); // Sort for consistent ordering, though hierarchy might be more complex
-    if (debugMode && downwardPaths.length > 0)
-      logger.debug(
-        `Found downward ${geminiMdFilename} files (sorted): ${JSON.stringify(
-          downwardPaths,
-        )}`,
-      );
-    // Add downward paths only if they haven't been included already (e.g. from upward scan)
-    for (const dPath of downwardPaths) {
-      allPaths.add(dPath);
     }
   }
 
-  // Add extension context file paths
+  // Add extension context file paths.
   for (const extensionPath of extensionContextFilePaths) {
     allPaths.add(extensionPath);
   }

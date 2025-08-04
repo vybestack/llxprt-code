@@ -100,7 +100,9 @@ If you want to use Google's Gemini models, including their free tier offerings, 
 
 ### Persisting Environment Variables with `.env` Files
 
-You can create a **`.llxprt/.env`** file in your project directory or in your home directory. Creating a plain **`.env`** file also works, but `.llxprt/.env` is recommended to keep Gemini variables isolated from other tools.
+You can create a **`.llxprt/.env`** file in your project directory or in your home directory. Creating a plain **`.env`** file also works, but `.llxprt/.env` is recommended to keep LLxprt variables isolated from other tools.
+
+**Important:** Some environment variables (like `DEBUG` and `DEBUG_MODE`) are automatically excluded from project `.env` files to prevent interference with llxprt-code behavior. Use `.llxprt/.env` files for llxprt-code specific variables.
 
 LLxprt Code automatically loads environment variables from the **first** `.env` file it finds, using the following search order:
 
