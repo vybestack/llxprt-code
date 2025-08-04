@@ -20,23 +20,27 @@ import { PromptService } from '@vybestack/llxprt-code-core';
  */
 async function getInitCommandPrompt(): Promise<string> {
   try {
-    const baseDir = process.env.LLXPRT_PROMPTS_DIR || 
-                    path.join(os.homedir(), '.llxprt', 'prompts');
-    const promptService = new PromptService({ 
+    const baseDir =
+      process.env.LLXPRT_PROMPTS_DIR ||
+      path.join(os.homedir(), '.llxprt', 'prompts');
+    const promptService = new PromptService({
       baseDir,
-      debugMode: process.env.DEBUG === 'true'
+      debugMode: process.env.DEBUG === 'true',
     });
     await promptService.initialize();
-    
+
     try {
       return await promptService.loadPrompt('commands/init-command.md');
     } catch (error) {
-      console.warn('Failed to load init command prompt from file, using fallback:', error);
+      console.warn(
+        'Failed to load init command prompt from file, using fallback:',
+        error,
+      );
     }
   } catch (error) {
     console.warn('Failed to initialize prompt service, using fallback:', error);
   }
-  
+
   // Fallback to hardcoded prompt
   return getFallbackInitCommandPrompt();
 }

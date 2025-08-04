@@ -121,21 +121,25 @@ llxprt prompts install --custom
 The system automatically includes environment-specific prompts based on your context:
 
 ### Git Repository Context
+
 When working in a Git repository, the system includes `env/git-repository.md`:
 
 ```markdown
 ## Git Repository Guidelines
 
 You are in a Git repository. Please:
+
 - Respect .gitignore patterns
 - Be aware of branch protection rules
 - Use conventional commit messages
 ```
 
 ### Sandbox Context
+
 When running in sandbox mode, additional safety instructions are included from `env/sandbox.md`.
 
 ### IDE Integration
+
 When IDE mode is active, context about open files and cursor position is included from `env/ide-mode.md`.
 
 ## Provider-Specific Customization
@@ -147,7 +151,7 @@ Flash models require explicit reminders about tool usage. Create a custom prompt
 ```bash
 mkdir -p ~/.llxprt/prompts/providers/gemini/models/gemini-2.5-flash/
 cat > ~/.llxprt/prompts/providers/gemini/models/gemini-2.5-flash/core.md << 'EOF'
-IMPORTANT: You MUST use the provided tools when appropriate. 
+IMPORTANT: You MUST use the provided tools when appropriate.
 Do not try to simulate or pretend tool functionality.
 Always use the actual tools for:
 - Reading files: Use read_file tool
@@ -243,6 +247,7 @@ export DEBUG=true
 To see which prompts are being loaded:
 
 1. Enable debug mode:
+
    ```bash
    DEBUG=true llxprt
    ```
@@ -319,11 +324,13 @@ EOF
 ### Prompts Not Loading
 
 1. Check the directory exists:
+
    ```bash
    ls -la ~/.llxprt/prompts/
    ```
 
 2. Verify file permissions:
+
    ```bash
    chmod -R 644 ~/.llxprt/prompts/
    ```
@@ -336,12 +343,14 @@ EOF
 ### Template Variables Not Replaced
 
 Ensure you're using the correct syntax:
+
 - Correct: `{{enabledTools}}`
 - Wrong: `{enabledTools}` or `{{ enabledTools }}`
 
 ### Provider-Specific Prompts Not Working
 
 Check the directory structure matches exactly:
+
 ```bash
 ~/.llxprt/prompts/providers/[provider-name]/core.md
 ```

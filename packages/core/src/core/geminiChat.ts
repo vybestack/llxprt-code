@@ -443,7 +443,7 @@ export class GeminiChat {
     const requestContents = this.getHistory(true).concat(userContent);
 
     // Debug: Log the last few messages to see the function call/response pattern
-    if (requestContents.length > 2) {
+    if (process.env.DEBUG && requestContents.length > 2) {
       const recentContents = requestContents.slice(-3);
       console.log('[DEBUG geminiChat] Recent conversation turns:');
       recentContents.forEach((content, idx) => {
