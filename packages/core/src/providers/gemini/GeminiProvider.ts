@@ -13,7 +13,7 @@ import {
   AuthType,
   ContentGeneratorRole,
   AuthenticationRequiredError,
-  getCoreSystemPrompt,
+  getCoreSystemPromptAsync,
   createCodeAssistContentGenerator,
 } from '@vybestack/llxprt-code-core';
 import type {
@@ -399,7 +399,10 @@ export class GeminiProvider implements IProvider {
         const userMemory = this.config?.getUserMemory
           ? this.config.getUserMemory()
           : '';
-        const systemInstruction = getCoreSystemPrompt(userMemory, oauthModel);
+        const systemInstruction = await getCoreSystemPromptAsync(
+          userMemory,
+          oauthModel,
+        );
 
         // Store tools if provided
         if (tools && tools.length > 0) {
@@ -546,7 +549,10 @@ export class GeminiProvider implements IProvider {
     const userMemory = this.config?.getUserMemory
       ? this.config.getUserMemory()
       : '';
-    const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
+    const systemInstruction = await getCoreSystemPromptAsync(
+      userMemory,
+      modelToUse,
+    );
 
     const request = {
       model: modelToUse,
