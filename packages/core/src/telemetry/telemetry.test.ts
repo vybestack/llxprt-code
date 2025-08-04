@@ -53,16 +53,16 @@ describe('telemetry', () => {
 
   it('should initialize the telemetry service', () => {
     initializeTelemetry(mockConfig);
-    // Telemetry is disabled, so NodeSDK should not be called
-    expect(NodeSDK).not.toHaveBeenCalled();
-    expect(mockNodeSdk.start).not.toHaveBeenCalled();
+    // Telemetry is enabled in the mock config, so NodeSDK should be called
+    expect(NodeSDK).toHaveBeenCalled();
+    expect(mockNodeSdk.start).toHaveBeenCalled();
   });
 
   it('should shutdown the telemetry service', async () => {
     initializeTelemetry(mockConfig);
     await shutdownTelemetry();
 
-    // Telemetry is disabled, so shutdown should not be called
-    expect(mockNodeSdk.shutdown).not.toHaveBeenCalled();
+    // Telemetry is enabled, so shutdown should be called
+    expect(mockNodeSdk.shutdown).toHaveBeenCalled();
   });
 });

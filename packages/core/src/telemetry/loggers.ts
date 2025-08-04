@@ -109,6 +109,10 @@ export function logUserPrompt(config: Config, event: UserPromptEvent): void {
 }
 
 export function logToolCall(config: Config, event: ToolCallEvent): void {
+  if (process.env.VERBOSE === 'true') {
+    console.log(`[TELEMETRY] logToolCall: ${event.function_name}`);
+  }
+
   const uiEvent = {
     ...event,
     'event.name': EVENT_TOOL_CALL,
@@ -117,7 +121,12 @@ export function logToolCall(config: Config, event: ToolCallEvent): void {
   uiTelemetryService.addEvent(uiEvent);
   // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
   // ClearcutLogger.getInstance(config)?.logToolCallEvent(event);
-  if (!isTelemetrySdkInitialized()) return;
+  if (!isTelemetrySdkInitialized()) {
+    if (process.env.VERBOSE === 'true') {
+      console.log(`[TELEMETRY] SDK not initialized, skipping log`);
+    }
+    return;
+  }
 
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),

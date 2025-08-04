@@ -4,44 +4,45 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// TELEMETRY REMOVED: Commented out unused imports for telemetry
+// TELEMETRY: Modified to support local file logging only - no data sent to Google
 import { DiagConsoleLogger, DiagLogLevel, diag } from '@opentelemetry/api';
+// TELEMETRY REMOVED: Network exporters disabled to prevent sending data to Google
 // import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
 // import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-grpc';
 // import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-grpc';
 // import { CompressionAlgorithm } from '@opentelemetry/otlp-exporter-base';
-// import { NodeSDK } from '@opentelemetry/sdk-node';
-// import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-// import { Resource } from '@opentelemetry/resources';
-// import {
-//   BatchSpanProcessor,
-//   ConsoleSpanExporter,
-// } from '@opentelemetry/sdk-trace-node';
-// import {
-//   BatchLogRecordProcessor,
-//   ConsoleLogRecordExporter,
-// } from '@opentelemetry/sdk-logs';
-// import {
-//   ConsoleMetricExporter,
-//   PeriodicExportingMetricReader,
-// } from '@opentelemetry/sdk-metrics';
-// import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { Resource } from '@opentelemetry/resources';
+import {
+  BatchSpanProcessor,
+  ConsoleSpanExporter,
+} from '@opentelemetry/sdk-trace-node';
+import {
+  BatchLogRecordProcessor,
+  ConsoleLogRecordExporter,
+} from '@opentelemetry/sdk-logs';
+import {
+  ConsoleMetricExporter,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
+import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { Config } from '../config/config.js';
-// TELEMETRY REMOVED: Commented out unused imports for telemetry
-// import { SERVICE_NAME } from './constants.js';
-// import { initializeMetrics } from './metrics.js';
+import { SERVICE_NAME } from './constants.js';
+import { initializeMetrics } from './metrics.js';
+// TELEMETRY REMOVED: ClearcutLogger disabled to prevent sending data to Google
 // import { ClearcutLogger } from './clearcut-logger/clearcut-logger.js';
-// import {
-//   FileLogExporter,
-//   FileMetricExporter,
-//   FileSpanExporter,
-// } from './file-exporters.js';
+import {
+  FileLogExporter,
+  FileMetricExporter,
+  FileSpanExporter,
+} from './file-exporters.js';
 
 // For troubleshooting, set the log level to DiagLogLevel.DEBUG
 diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.INFO);
 
-// let sdk: NodeSDK | undefined;
-const telemetryInitialized = false;
+let sdk: NodeSDK | undefined;
+let telemetryInitialized = false;
 
 export function isTelemetrySdkInitialized(): boolean {
   return telemetryInitialized;
@@ -68,12 +69,21 @@ export function isTelemetrySdkInitialized(): boolean {
 //   }
 // }
 
-export function initializeTelemetry(_config: Config): void {
-  // TELEMETRY REMOVED: Disabled telemetry initialization to prevent Google data collection
-  return;
-  /*
+export function initializeTelemetry(config: Config): void {
+  // TELEMETRY: Modified to ONLY support local file logging - network exporters disabled
   if (telemetryInitialized || !config.getTelemetryEnabled()) {
+    if (process.env.VERBOSE === 'true') {
+      console.log(
+        `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
+      );
+    }
     return;
+  }
+
+  if (process.env.VERBOSE === 'true') {
+    console.log(
+      `[TELEMETRY] Initializing with outfile: ${config.getTelemetryOutfile()}`,
+    );
   }
 
   const resource = new Resource({
@@ -82,49 +92,46 @@ export function initializeTelemetry(_config: Config): void {
     'session.id': config.getSessionId(),
   });
 
-  const otlpEndpoint = config.getTelemetryOtlpEndpoint();
-  const grpcParsedEndpoint = parseGrpcEndpoint(otlpEndpoint);
-  const useOtlp = !!grpcParsedEndpoint;
+  // SECURITY: OTLP/network endpoints are completely disabled to prevent data leakage
+  // Only local file or console output is allowed
   const telemetryOutfile = config.getTelemetryOutfile();
 
-  const spanExporter = useOtlp
-    ? new OTLPTraceExporter({
-        url: grpcParsedEndpoint,
-        compression: CompressionAlgorithm.GZIP,
-      })
-    : telemetryOutfile
-      ? new FileSpanExporter(telemetryOutfile)
-      : new ConsoleSpanExporter();
-  const logExporter = useOtlp
-    ? new OTLPLogExporter({
-        url: grpcParsedEndpoint,
-        compression: CompressionAlgorithm.GZIP,
-      })
-    : telemetryOutfile
-      ? new FileLogExporter(telemetryOutfile)
-      : new ConsoleLogRecordExporter();
-  const metricReader = useOtlp
+  const spanExporter = telemetryOutfile
+    ? new FileSpanExporter(telemetryOutfile)
+    : new ConsoleSpanExporter();
+
+  const logExporter = telemetryOutfile
+    ? new FileLogExporter(telemetryOutfile)
+    : new ConsoleLogRecordExporter();
+
+  const metricReader = telemetryOutfile
     ? new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({
-          url: grpcParsedEndpoint,
-          compression: CompressionAlgorithm.GZIP,
-        }),
+        exporter: new FileMetricExporter(telemetryOutfile),
         exportIntervalMillis: 10000,
       })
-    : telemetryOutfile
-      ? new PeriodicExportingMetricReader({
-          exporter: new FileMetricExporter(telemetryOutfile),
-          exportIntervalMillis: 10000,
-        })
-      : new PeriodicExportingMetricReader({
-          exporter: new ConsoleMetricExporter(),
-          exportIntervalMillis: 10000,
-        });
+    : new PeriodicExportingMetricReader({
+        exporter: new ConsoleMetricExporter(),
+        exportIntervalMillis: 10000,
+      });
+
+  // Configure batch processors with shorter delays for faster writes
+  // This ensures telemetry is written promptly, especially important for tests
+  const spanProcessor = new BatchSpanProcessor(spanExporter, {
+    scheduledDelayMillis: 100, // Export every 100ms instead of default 5000ms
+    maxExportBatchSize: 10, // Export after 10 spans instead of default 512
+    exportTimeoutMillis: 5000, // Shorter timeout for faster failure detection
+  });
+
+  const logProcessor = new BatchLogRecordProcessor(logExporter, {
+    scheduledDelayMillis: 100, // Export every 100ms instead of default 1000ms
+    maxExportBatchSize: 10, // Export after 10 logs instead of default 512
+    exportTimeoutMillis: 5000,
+  });
 
   sdk = new NodeSDK({
     resource,
-    spanProcessors: [new BatchSpanProcessor(spanExporter)],
-    logRecordProcessor: new BatchLogRecordProcessor(logExporter),
+    spanProcessors: [spanProcessor],
+    logRecordProcessor: logProcessor,
     metricReader,
     instrumentations: [new HttpInstrumentation()],
   });
@@ -139,23 +146,19 @@ export function initializeTelemetry(_config: Config): void {
 
   process.on('SIGTERM', shutdownTelemetry);
   process.on('SIGINT', shutdownTelemetry);
-  */
 }
 
 export async function shutdownTelemetry(): Promise<void> {
-  // TELEMETRY REMOVED: Disabled telemetry shutdown to prevent Google data collection
-  return;
-  /*
+  // TELEMETRY: Shutdown only affects local file writing
   if (!telemetryInitialized || !sdk) {
     return;
   }
   try {
-    ClearcutLogger.getInstance()?.shutdown();
+    // ClearcutLogger is disabled - no data sent to Google
     await sdk.shutdown();
   } catch (error) {
     console.error('Error shutting down SDK:', error);
   } finally {
     telemetryInitialized = false;
   }
-  */
 }

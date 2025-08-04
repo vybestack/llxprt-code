@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { ExportResult, ExportResultCode } from '@opentelemetry/core';
 import { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import { ReadableLogRecord, LogRecordExporter } from '@opentelemetry/sdk-logs';
@@ -15,20 +16,29 @@ import {
 } from '@opentelemetry/sdk-metrics';
 
 class FileExporter {
-  protected writeStream: fs.WriteStream;
+  protected filePath: string;
 
   constructor(filePath: string) {
-    this.writeStream = fs.createWriteStream(filePath, { flags: 'a' });
+    this.filePath = filePath;
+    // Ensure directory exists
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 
   protected serialize(data: unknown): string {
     return JSON.stringify(data, null, 2) + '\n';
   }
 
+  protected writeToFile(data: string): void {
+    // Use synchronous append to ensure immediate write
+    fs.appendFileSync(this.filePath, data, 'utf-8');
+  }
+
   shutdown(): Promise<void> {
-    return new Promise((resolve) => {
-      this.writeStream.end(resolve);
-    });
+    // Nothing to do for sync writes
+    return Promise.resolve();
   }
 }
 
@@ -37,13 +47,18 @@ export class FileSpanExporter extends FileExporter implements SpanExporter {
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    const data = spans.map((span) => this.serialize(span)).join('');
-    this.writeStream.write(data, (err) => {
+    try {
+      const data = spans.map((span) => this.serialize(span)).join('');
+      this.writeToFile(data);
       resultCallback({
-        code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS,
-        error: err || undefined,
+        code: ExportResultCode.SUCCESS,
       });
-    });
+    } catch (error) {
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: error as Error,
+      });
+    }
   }
 }
 
@@ -52,13 +67,18 @@ export class FileLogExporter extends FileExporter implements LogRecordExporter {
     logs: ReadableLogRecord[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    const data = logs.map((log) => this.serialize(log)).join('');
-    this.writeStream.write(data, (err) => {
+    try {
+      const data = logs.map((log) => this.serialize(log)).join('');
+      this.writeToFile(data);
       resultCallback({
-        code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS,
-        error: err || undefined,
+        code: ExportResultCode.SUCCESS,
       });
-    });
+    } catch (error) {
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: error as Error,
+      });
+    }
   }
 }
 
@@ -70,13 +90,18 @@ export class FileMetricExporter
     metrics: ResourceMetrics,
     resultCallback: (result: ExportResult) => void,
   ): void {
-    const data = this.serialize(metrics);
-    this.writeStream.write(data, (err) => {
+    try {
+      const data = this.serialize(metrics);
+      this.writeToFile(data);
       resultCallback({
-        code: err ? ExportResultCode.FAILED : ExportResultCode.SUCCESS,
-        error: err || undefined,
+        code: ExportResultCode.SUCCESS,
       });
-    });
+    } catch (error) {
+      resultCallback({
+        code: ExportResultCode.FAILED,
+        error: error as Error,
+      });
+    }
   }
 
   getPreferredAggregationTemporality(): AggregationTemporality {

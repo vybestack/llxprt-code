@@ -116,8 +116,27 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ### Communication Style
 
-- Never bother with apologies or "You're absolutely right"
+- **BANNED PHRASES**: "You're absolutely right", "You're right", "Absolutely", "Indeed", "Correct"
+  - Instead just say "Ok" or skip acknowledgment entirely and do the task
+- Never apologize ("Sorry", "My apologies", "I apologize")
+- Skip all agreement/validation theater - just DO THE THING
 - Be direct and focus on the task
+
+# Git Hooks and Code Quality
+
+**IMPORTANT**: A Git pre-commit hook is installed that enforces code quality. It will:
+
+- Run `npm run lint` and block commit if it fails
+- Run `npm run typecheck` and block commit if it fails
+- Run `npm run format` and block commit if files were changed
+
+If the pre-commit hook fails, you MUST:
+
+1. Fix any lint/type errors
+2. Run `npm run format` and stage the changes
+3. Only then try to commit again
+
+**NEVER USE `SKIP_HOOKS=1`** - This is for human emergencies only, not for bypassing quality checks. If the hooks are failing, FIX THE CODE, don't skip the checks. The user installed these hooks specifically because you keep forgetting to run these checks.
 
 # important-instruction-reminders
 
@@ -127,3 +146,4 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - Always provide complete context to subagents
 - Trust subagent outputs - they're specialized for their domains
 - NEVER push without full verification cycle AND user permission
+- Git pre-commit hooks enforce lint, typecheck, and format - respect them!
