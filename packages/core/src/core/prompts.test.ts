@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getCoreSystemPrompt, getCoreSystemPromptAsync, initializePromptSystem, resetPromptService } from './prompts.js';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
+import { getCoreSystemPromptAsync, initializePromptSystem } from './prompts.js';
 import process from 'node:process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,29 +15,30 @@ describe('prompts', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let tempDir: string;
 
-  beforeEach(async () => {
-    originalEnv = { ...process.env };
-    // Create a temporary directory for test prompts
+  // Use a single temp directory for all tests to avoid singleton issues
+  beforeAll(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llxprt-test-'));
     process.env.LLXPRT_PROMPTS_DIR = tempDir;
-    
-    // Reset the prompt service before each test
-    resetPromptService();
-    
-    // Initialize the prompt system for each test
     await initializePromptSystem();
   });
 
-  afterEach(() => {
-    // Restore original environment
-    process.env = originalEnv;
+  afterAll(() => {
     // Clean up temp directory
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
-  describe('getCoreSystemPrompt', () => {
+  beforeEach(async () => {
+    originalEnv = { ...process.env };
+  });
+
+  afterEach(() => {
+    // Restore original environment
+    process.env = originalEnv;
+  });
+
+  describe('getCoreSystemPromptAsync', () => {
     it('should return a valid prompt string', async () => {
       const prompt = await getCoreSystemPromptAsync();
       expect(prompt).toBeTruthy();
@@ -76,13 +77,4 @@ describe('prompts', () => {
     });
   });
 
-  describe('getCoreSystemPrompt (sync version)', () => {
-    it('should return functional fallback prompt', () => {
-      // The sync version is deprecated but provides a functional fallback
-      const syncPrompt = getCoreSystemPrompt();
-      
-      expect(syncPrompt).toContain('You are an interactive CLI agent');
-      expect(syncPrompt).toContain('Core Mandates');
-    });
-  });
 });

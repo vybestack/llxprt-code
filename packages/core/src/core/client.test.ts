@@ -6,6 +6,13 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+// Mock prompts module before imports
+vi.mock('./prompts.js', () => ({
+  getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Test system instruction'),
+  getCompressionPrompt: vi.fn().mockReturnValue('Test compression prompt'),
+  initializePromptSystem: vi.fn().mockResolvedValue(undefined),
+}));
+
 import {
   Chat,
   Content,
@@ -15,6 +22,7 @@ import {
   GoogleGenAI,
 } from '@google/genai';
 import { findIndexAfterFraction, GeminiClient } from './client.js';
+import { getCoreSystemPromptAsync } from './prompts.js';
 import {
   AuthType,
   ContentGenerator,
@@ -25,7 +33,6 @@ import type { ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
 import { Config } from '../config/config.js';
 import { GeminiEventType, Turn } from './turn.js';
-import { getCoreSystemPrompt } from './prompts.js';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
@@ -80,7 +87,6 @@ vi.mock('./turn', () => {
 });
 
 vi.mock('../config/config.js');
-vi.mock('./prompts');
 vi.mock('../utils/getFolderStructure', () => ({
   getFolderStructure: vi.fn().mockResolvedValue('Mock Folder Structure'),
 }));
@@ -102,6 +108,7 @@ vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
 vi.mock('../ide/ideContext.js');
+
 
 describe('findIndexAfterFraction', () => {
   const history: Content[] = [
@@ -166,6 +173,9 @@ describe('Gemini Client (client.ts)', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
 
+    // Re-setup prompts mocks after reset
+    vi.mocked(getCoreSystemPromptAsync).mockResolvedValue('Test system instruction');
+    
     // Re-setup mocks after reset
     vi.mocked(ComplexityAnalyzer).mockImplementation(
       () =>
@@ -445,7 +455,7 @@ describe('Gemini Client (client.ts)', () => {
           model: 'test-model',
           config: {
             abortSignal,
-            systemInstruction: getCoreSystemPrompt(''),
+            systemInstruction: 'Test system instruction',
             temperature: 0.5,
             topP: 1,
           },
@@ -505,7 +515,7 @@ describe('Gemini Client (client.ts)', () => {
         model: 'test-model', // Should use current model from config
         config: {
           abortSignal,
-          systemInstruction: getCoreSystemPrompt(''),
+          systemInstruction: 'Test system instruction',
           temperature: 0,
           topP: 1,
           responseSchema: schema,
@@ -564,7 +574,7 @@ describe('Gemini Client (client.ts)', () => {
         model: customModel,
         config: {
           abortSignal,
-          systemInstruction: getCoreSystemPrompt(''),
+          systemInstruction: 'Test system instruction',
           temperature: 0.9,
           topP: 1, // from default
           topK: 20,

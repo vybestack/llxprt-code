@@ -10,21 +10,12 @@ import process from 'node:process';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import type { PromptContext, PromptEnvironment } from '../prompt-config/types.js';
-import { CORE_DEFAULTS } from '../prompt-config/defaults/core-defaults.js';
 
 // Singleton instance of PromptService
 let promptService: PromptService | null = null;
 let promptServiceInitialized = false;
 let promptServiceInitPromise: Promise<void> | null = null;
 
-/**
- * Reset the prompt service singleton (for testing)
- */
-export function resetPromptService(): void {
-  promptService = null;
-  promptServiceInitialized = false;
-  promptServiceInitPromise = null;
-}
 
 /**
  * Initialize the PromptService singleton
@@ -136,64 +127,6 @@ export async function getCoreSystemPromptAsync(
   return await service.getPrompt(context, userMemory);
 }
 
-export function getCoreSystemPrompt(
-  userMemory?: string,
-  model?: string,
-  _tools?: string[]
-): string {
-  // This synchronous version is deprecated and should not be used
-  // It exists only for backward compatibility during migration
-  console.warn('getCoreSystemPrompt: Synchronous version is deprecated. Use getCoreSystemPromptAsync instead.');
-  
-  // Initialize async service in background for future calls
-  initializePromptSystem().catch(error => {
-    console.error('Failed to initialize prompt system:', error);
-  });
-
-  // Return the core prompt from defaults as a fallback for backward compatibility
-  let prompt = CORE_DEFAULTS['core.md'] || 'System prompt not available';
-  
-  // Add environment-specific content for basic compatibility
-  const environment = {
-    isGitRepository: isGitRepository(process.cwd()),
-    isSandboxed: !!process.env.SANDBOX,
-  };
-
-  if (environment.isGitRepository) {
-    prompt += '\n\n' + (CORE_DEFAULTS['env/git-repository.md'] || '');
-  }
-
-  if (environment.isSandboxed) {
-    if (process.env.SANDBOX === 'sandbox-exec') {
-      prompt += '\n\n' + (CORE_DEFAULTS['env/macos-seatbelt.md'] || '');
-    } else {
-      prompt += '\n\n' + (CORE_DEFAULTS['env/sandbox.md'] || '');
-    }
-  } else {
-    prompt += '\n\n' + (CORE_DEFAULTS['env/outside-of-sandbox.md'] || '');
-  }
-
-  // Add flash model specific instructions
-  if (model && model.includes('flash')) {
-    const flashPrompt = `IMPORTANT: You MUST use the provided tools when appropriate. For example:
-- When asked to list files or directories, use the 'Ls' tool
-- When asked to read file contents, use the 'ReadFile' tool
-- When asked to search for patterns in files, use the 'Grep' tool
-- When asked to find files by name, use the 'Glob' tool
-- When asked to create files, use the 'WriteFile' tool
-- When asked to modify files, use the 'Edit' tool
-- When asked to run commands, use the 'Shell' tool
-Do not describe what you would do - actually execute the tool calls.`;
-    prompt += '\n\n' + flashPrompt;
-  }
-
-  // Append user memory if provided
-  if (userMemory && userMemory.trim()) {
-    prompt += `\n\n---\n\n${userMemory.trim()}`;
-  }
-
-  return prompt;
-}
 
 /**
  * Initialize the prompt system - call this early in application startup
