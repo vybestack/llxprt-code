@@ -899,7 +899,7 @@ export const useGeminiStream = (
         (toolCall) => toolCall.request.prompt_id,
       );
 
-      markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+      // Don't mark as submitted yet - wait until after responses are actually sent
 
       // Don't continue if model was switched due to quota error
       if (modelSwitchedFromQuotaError) {
@@ -932,6 +932,8 @@ export const useGeminiStream = (
           },
           prompt_ids[0],
         );
+        // Mark as submitted after sending
+        markToolsAsSubmitted(callIdsToMarkAsSubmitted);
       } else {
         // Multiple responses - send each one individually as separate turns
         console.log(
@@ -939,6 +941,7 @@ export const useGeminiStream = (
         );
 
         // Send each response as a separate message turn
+        let submittedCount = 0;
         responsesToSend.forEach((response, index) => {
           console.log(
             `[DEBUG] Sending function response ${index + 1}/${responsesToSend.length}:`,
@@ -952,8 +955,14 @@ export const useGeminiStream = (
               {
                 isContinuation: true,
               },
-              prompt_ids[index] || prompt_ids[0], // Use corresponding prompt_id if available
+              prompt_ids[0], // All tool calls from same turn should have same prompt_id
             );
+
+            // Track submissions and mark all as submitted after the last one
+            submittedCount++;
+            if (submittedCount === responsesToSend.length) {
+              markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+            }
           }, index * 100); // 100ms delay between each message
         });
       }
