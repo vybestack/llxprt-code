@@ -65,7 +65,6 @@ export interface CliArgs {
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
   provider: string | undefined;
-  ideMode: boolean | undefined;
   ideModeFeature: boolean | undefined;
   key: string | undefined;
   keyfile: string | undefined;
@@ -365,11 +364,7 @@ export async function loadCliConfig(
     false;
 
   const memoryImportFormat = effectiveSettings.memoryImportFormat || 'tree';
-
-  const ideMode =
-    (argv.ideMode ?? effectiveSettings.ideMode ?? false) &&
-    process.env.TERM_PROGRAM === 'vscode' &&
-    !process.env.SANDBOX;
+  const ideMode = effectiveSettings.ideMode ?? false;
 
   const ideModeFeature =
     (argv.ideModeFeature ?? effectiveSettings.ideModeFeature ?? false) &&
