@@ -372,7 +372,7 @@ export function loadEnvironment(settings?: Settings): void {
 
       const excludedVars =
         resolvedSettings?.excludedProjectEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
-      const isProjectEnvFile = !envFilePath.includes(GEMINI_DIR);
+      const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {
         if (Object.hasOwn(parsedEnv, key)) {
