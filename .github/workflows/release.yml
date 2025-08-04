@@ -88,10 +88,23 @@ jobs:
           IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
           MANUAL_VERSION: ${{ inputs.version }}
 
-      - name: Run Tests
+      - name: Run Preflight Checks
+        if: github.event.inputs.force_skip_tests != 'true'
+        run: node scripts/preflight-ci.js
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
+          LLXPRT_DEFAULT_PROVIDER: openai
+          LLXPRT_AUTH_TYPE: none
+
+      - name: Build Bundle for Integration Tests
+        run: npm run bundle
+
+      - name: Run Integration Tests
         if: github.event.inputs.force_skip_tests != 'true'
         run: |
-          node scripts/preflight-ci.js
           npm run test:integration:sandbox:none
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
