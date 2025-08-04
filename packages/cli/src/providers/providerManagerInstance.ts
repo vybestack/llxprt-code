@@ -79,11 +79,6 @@ export function getProviderManager(
     // Always register GeminiProvider
     const geminiProvider = new GeminiProvider(undefined, undefined, config);
 
-    // Set initial model from settings if available
-    if (userSettings?.defaultModel) {
-      geminiProvider.setModel(userSettings.defaultModel);
-    }
-
     if (config) {
       geminiProvider.setConfig(config);
     }
@@ -131,7 +126,6 @@ export function getProviderManager(
     }
     // Create provider config from user settings
     const openaiProviderConfig = {
-      defaultModel: userSettings?.defaultModel,
       enableTextToolCallParsing: userSettings?.enableTextToolCallParsing,
       textToolCallModels: userSettings?.textToolCallModels,
       providerToolFormatOverrides: userSettings?.providerToolFormatOverrides,
@@ -168,7 +162,6 @@ export function getProviderManager(
     const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;
     // Create provider config from user settings
     const anthropicProviderConfig = {
-      defaultModel: userSettings?.defaultModel,
       allowBrowserEnvironment,
     };
     const anthropicProvider = new AnthropicProvider(

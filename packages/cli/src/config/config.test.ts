@@ -1074,7 +1074,6 @@ describe('--profile-load flag functionality', () => {
     process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
       showMemoryUsage: false,
     };
 
@@ -1116,7 +1115,6 @@ describe('--profile-load flag functionality', () => {
     ];
     const argv = await parseArguments();
     const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
     };
 
     const config = await loadCliConfig(settings, [], 'test-session', argv);
@@ -1146,7 +1144,6 @@ describe('--profile-load flag functionality', () => {
       ];
       const argv = await parseArguments();
       const settings: Settings = {
-        defaultModel: 'gemini-2.5-pro',
       };
 
       // Should not throw, but continue with default settings
@@ -1166,7 +1163,6 @@ describe('--profile-load flag functionality', () => {
     process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
       showMemoryUsage: false,
       // Add some other settings that should be preserved
       telemetry: { enabled: true },

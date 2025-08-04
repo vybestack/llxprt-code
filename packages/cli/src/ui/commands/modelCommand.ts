@@ -53,15 +53,6 @@ export const modelCommand: SlashCommand = {
           context.services.config.setModel(modelName);
         }
 
-        // Persist model selection to user settings
-        if (context.services.settings) {
-          context.services.settings.setValue(
-            SettingScope.User,
-            'defaultModel',
-            modelName,
-          );
-        }
-
         return {
           type: 'message',
           messageType: 'info',

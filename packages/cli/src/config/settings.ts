@@ -123,9 +123,6 @@ export interface Settings {
   /// IDE mode setting configured via slash command toggle.
   ideMode?: boolean;
 
-  // Default model to use when no model is specified
-  defaultModel?: string;
-
   // Setting for disabling auto-update.
   disableAutoUpdate?: boolean;
 
