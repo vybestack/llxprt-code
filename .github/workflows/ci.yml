@@ -32,7 +32,12 @@ jobs:
         run: |
           # Explicitly install the platform-specific rollup package
           # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+        shell: bash
 
       - name: Run formatter check
         run: |
@@ -45,6 +50,9 @@ jobs:
 
       - name: Build project
         run: npm run build
+
+      - name: Create bundle
+        run: npm run bundle
 
       - name: Run type check
         run: npm run typecheck
@@ -59,7 +67,7 @@ jobs:
       pull-requests: write
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: [24.x]
     steps:
       - name: Checkout repository
@@ -74,6 +82,9 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Create bundle
+        run: npm run bundle
+
       - name: Install dependencies for testing
         run: npm ci # Install fresh dependencies using the downloaded package-lock.json
 
@@ -81,7 +92,12 @@ jobs:
         run: |
           # Explicitly install the platform-specific rollup package
           # This is a workaround for https://github.com/npm/cli/issues/4828
-          npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            npm install @rollup/rollup-linux-x64-gnu --no-save || true
+          elif [ "${{ runner.os }}" == "Windows" ]; then
+            npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          fi
+        shell: bash
 
       - name: Run tests and generate reports
         run: npm run test:ci

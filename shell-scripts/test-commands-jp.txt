@@ -1,0 +1,42 @@
+# Commands with Japanese characters to test cp932 encoding:
+
+# 1. Echo Japanese text
+echo こんにちは世界
+echo "日本語のテスト"
+echo 'シングルクォート'
+
+# 2. Create files with Japanese names
+echo test > テストファイル.txt
+echo 内容 > 日本語.txt
+
+# 3. Directory operations with Japanese
+mkdir 新しいフォルダ
+dir *.txt
+dir 日本語*
+
+# 4. Complex commands with Japanese
+echo 始まり & echo 終わり
+echo テスト1 && echo テスト2
+
+# 5. Git with Japanese commit messages (if in a repo)
+git status
+git log --oneline -5
+
+# 6. Environment variables with Japanese
+set MYVAR=日本語変数
+echo %MYVAR%
+
+# 7. Pipe commands with Japanese
+echo 日本語テキスト | findstr "テキスト"
+dir | findstr "日本"
+
+# 8. Path with Japanese (if such folders exist)
+cd "C:\Users\Shadow\ドキュメント"
+dir "C:\テスト フォルダ"
+
+# 9. PowerShell with Japanese
+Write-Host "パワーシェルテスト"
+
+# 10. Special characters and Japanese
+echo "引用符「」と日本語"
+echo 特殊文字：＜＞｜＆％

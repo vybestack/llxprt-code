@@ -608,6 +608,10 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.ToolCallRequest:
+            console.log(
+              '[DEBUG] ToolCallRequest event:',
+              JSON.stringify(event.value, null, 2),
+            );
             toolCallRequests.push(event.value);
             break;
           case ServerGeminiEventType.UserCancelled:
@@ -646,6 +650,10 @@ export const useGeminiStream = (
         }
       }
       if (toolCallRequests.length > 0) {
+        console.log(
+          '[DEBUG] Scheduling tool calls:',
+          toolCallRequests.map((tc) => ({ name: tc.name, callId: tc.callId })),
+        );
         scheduleToolCalls(toolCallRequests, signal);
       }
       return StreamProcessingStatus.Completed;
@@ -875,9 +883,13 @@ export const useGeminiStream = (
         return;
       }
 
-      const responsesToSend: PartListUnion[] = geminiTools.map(
-        (toolCall) => toolCall.response.responseParts,
-      );
+      const responsesToSend: PartListUnion[] = geminiTools.map((toolCall) => {
+        console.log(
+          `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
+          JSON.stringify(toolCall.response.responseParts, null, 2),
+        );
+        return toolCall.response.responseParts;
+      });
 
       const callIdsToMarkAsSubmitted = geminiTools.map(
         (toolCall) => toolCall.request.callId,
@@ -887,34 +899,73 @@ export const useGeminiStream = (
         (toolCall) => toolCall.request.prompt_id,
       );
 
-      markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+      // Don't mark as submitted yet - wait until after responses are actually sent
 
       // Don't continue if model was switched due to quota error
       if (modelSwitchedFromQuotaError) {
         return;
       }
 
-      const mergedResponse = mergePartListUnions(responsesToSend);
-
-      // Debug logging to understand the format
-      if (process.env.DEBUG_TOOL_RESPONSES) {
-        console.log(
-          'Tool responses to send:',
-          JSON.stringify(responsesToSend, null, 2),
-        );
-        console.log(
-          'Merged response:',
-          JSON.stringify(mergedResponse, null, 2),
-        );
-      }
-
-      submitQuery(
-        mergedResponse,
-        {
-          isContinuation: true,
-        },
-        prompt_ids[0],
+      // Debug logging BEFORE merging
+      console.log(
+        '[DEBUG] responsesToSend before merge:',
+        JSON.stringify(responsesToSend, null, 2),
       );
+      console.log('[DEBUG] responsesToSend length:', responsesToSend.length);
+      responsesToSend.forEach((resp, idx) => {
+        console.log(`[DEBUG] responsesToSend[${idx}] type:`, typeof resp);
+        console.log(
+          `[DEBUG] responsesToSend[${idx}] isArray:`,
+          Array.isArray(resp),
+        );
+      });
+
+      // For Gemini, when there are multiple function responses, each must be sent
+      // as a separate user message turn, not as an array in a single turn
+      if (responsesToSend.length === 1) {
+        // Single response - send as-is
+        console.log('[DEBUG] Single function response, sending directly');
+        submitQuery(
+          responsesToSend[0],
+          {
+            isContinuation: true,
+          },
+          prompt_ids[0],
+        );
+        // Mark as submitted after sending
+        markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+      } else {
+        // Multiple responses - send each one individually as separate turns
+        console.log(
+          `[DEBUG] Multiple function responses (${responsesToSend.length}), sending individually`,
+        );
+
+        // Send each response as a separate message turn
+        let submittedCount = 0;
+        responsesToSend.forEach((response, index) => {
+          console.log(
+            `[DEBUG] Sending function response ${index + 1}/${responsesToSend.length}:`,
+            JSON.stringify(response, null, 2),
+          );
+
+          // Use setTimeout to ensure proper ordering and avoid race conditions
+          setTimeout(() => {
+            submitQuery(
+              response,
+              {
+                isContinuation: true,
+              },
+              prompt_ids[0], // All tool calls from same turn should have same prompt_id
+            );
+
+            // Track submissions and mark all as submitted after the last one
+            submittedCount++;
+            if (submittedCount === responsesToSend.length) {
+              markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+            }
+          }, index * 100); // 100ms delay between each message
+        });
+      }
     },
     [
       isResponding,

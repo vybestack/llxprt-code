@@ -6,6 +6,10 @@
 
 // Export config
 export * from './config/config.js';
+export * from './config/profileManager.js';
+
+// Export types
+export * from './types/modelParams.js';
 
 // Export Core Logic
 export * from './core/client.js';
@@ -40,6 +44,8 @@ export * from './utils/shell-utils.js';
 export * from './utils/systemEncoding.js';
 export * from './utils/textUtils.js';
 export * from './utils/formatters.js';
+export * from './utils/sanitization.js';
+export * from './utils/unicodeUtils.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
@@ -62,6 +68,10 @@ export * from './tools/tool-context.js';
 
 // Export prompt logic
 export * from './prompts/mcp-prompts.js';
+
+// Export prompt configuration system
+export * from './prompt-config/prompt-service.js';
+export * from './prompt-config/types.js';
 
 // Export specific tool logic
 export * from './tools/read-file.js';

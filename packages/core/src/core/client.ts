@@ -23,10 +23,9 @@ import {
 } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPrompt, getCompressionPrompt } from './prompts.js';
+import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
-import { checkNextSpeaker } from '../utils/nextSpeakerChecker.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
 import { retryWithBackoff } from '../utils/retry.js';
@@ -43,11 +42,7 @@ import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext } from '../ide/ideContext.js';
-import { logNextSpeakerCheck } from '../telemetry/loggers.js';
-import {
-  MalformedJsonResponseEvent,
-  NextSpeakerCheckEvent,
-} from '../telemetry/types.js';
+import { MalformedJsonResponseEvent } from '../telemetry/types.js';
 import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
@@ -122,12 +117,16 @@ export class GeminiClient {
    * Threshold for compression token count as a fraction of the model's token limit.
    * If the chat history exceeds this threshold, it will be compressed.
    */
-  private readonly COMPRESSION_TOKEN_THRESHOLD = 0.7;
+  private COMPRESSION_TOKEN_THRESHOLD = 0.7;
   /**
    * The fraction of the latest chat history to keep. A value of 0.3
    * means that only the last 30% of the chat history will be kept after compression.
    */
   private readonly COMPRESSION_PRESERVE_THRESHOLD = 0.3;
+  /**
+   * User-defined context limit override
+   */
+  private userContextLimit?: number;
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
@@ -155,6 +154,22 @@ export class GeminiClient {
       complexitySettings.suggestionCooldownMs ?? 300000;
 
     this.todoReminderService = new TodoReminderService();
+  }
+
+  /**
+   * Set the compression threshold and context limit overrides
+   */
+  setCompressionSettings(compressionThreshold?: number, contextLimit?: number) {
+    if (
+      compressionThreshold !== undefined &&
+      compressionThreshold > 0 &&
+      compressionThreshold <= 1
+    ) {
+      this.COMPRESSION_TOKEN_THRESHOLD = compressionThreshold;
+    }
+    if (contextLimit !== undefined && contextLimit > 0) {
+      this.userContextLimit = contextLimit;
+    }
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -387,7 +402,10 @@ export class GeminiClient {
       if (process.env.DEBUG) {
         console.log('DEBUG [client.startChat]: Model from config:', model);
       }
-      const systemInstruction = getCoreSystemPrompt(userMemory, model);
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        model,
+      );
       if (process.env.DEBUG) {
         console.log(
           'DEBUG [client.startChat]: System instruction includes Flash instructions:',
@@ -602,37 +620,7 @@ export class GeminiClient {
         return turn;
       }
 
-      // Only check next speaker for Gemini provider
-      const contentGenConfig = this.config.getContentGeneratorConfig();
-      const providerManager = contentGenConfig?.providerManager;
-      const providerName = providerManager?.getActiveProviderName() || 'gemini';
-      if (providerName === 'gemini') {
-        const nextSpeakerCheck = await checkNextSpeaker(
-          this.getChat(),
-          this,
-          signal,
-        );
-        logNextSpeakerCheck(
-          this.config,
-          new NextSpeakerCheckEvent(
-            prompt_id,
-            turn.finishReason?.toString() || '',
-            nextSpeakerCheck?.next_speaker || '',
-          ),
-        );
-        if (nextSpeakerCheck?.next_speaker === 'model') {
-          const nextRequest = [{ text: 'Please continue.' }];
-          // This recursive call's events will be yielded out, but the final
-          // turn object will be from the top-level call.
-          yield* this.sendMessageStream(
-            nextRequest,
-            signal,
-            prompt_id,
-            boundedTurns - 1,
-            initialModel,
-          );
-        }
-      }
+      // nextSpeakerChecker disabled
     }
     return turn;
   }
@@ -650,7 +638,10 @@ export class GeminiClient {
       model || this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        modelToUse,
+      );
       const requestConfig = {
         abortSignal,
         ...this.generateContentConfig,
@@ -706,6 +697,26 @@ export class GeminiClient {
       try {
         // Extract JSON from potential markdown wrapper
         const cleanedText = extractJsonFromMarkdown(text);
+
+        // Special case: Gemini sometimes returns just "user" or "model" for next speaker checks
+        // This happens particularly with non-ASCII content in the conversation
+        if (
+          (cleanedText === 'user' || cleanedText === 'model') &&
+          contents.some((c) =>
+            c.parts?.some(
+              (p) => 'text' in p && p.text?.includes('next_speaker'),
+            ),
+          )
+        ) {
+          console.warn(
+            `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
+          );
+          return {
+            reasoning: 'Gemini returned plain text response',
+            next_speaker: cleanedText,
+          };
+        }
+
         return JSON.parse(cleanedText);
       } catch (parseError) {
         // Log both the original and cleaned text for debugging
@@ -765,7 +776,10 @@ export class GeminiClient {
 
     try {
       const userMemory = this.config.getUserMemory();
-      const systemInstruction = getCoreSystemPrompt(userMemory, modelToUse);
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        modelToUse,
+      );
 
       const requestConfig = {
         abortSignal,
@@ -870,9 +884,10 @@ export class GeminiClient {
     }
 
     // Don't compress if not forced and we are under the limit.
+    const contextLimit = tokenLimit(model, this.userContextLimit);
     if (
       !force &&
-      originalTokenCount < this.COMPRESSION_TOKEN_THRESHOLD * tokenLimit(model)
+      originalTokenCount < this.COMPRESSION_TOKEN_THRESHOLD * contextLimit
     ) {
       return null;
     }

@@ -115,4 +115,11 @@ export interface IProviderConfig {
    * This allows for flexibility when different providers need unique settings.
    */
   providerSpecific?: Record<string, unknown>;
+
+  /**
+   * Whether to allow browser environment for the provider client.
+   * This is typically needed for testing environments that use jsdom.
+   * Defaults to false for security reasons.
+   */
+  allowBrowserEnvironment?: boolean;
 }

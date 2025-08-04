@@ -31,6 +31,7 @@ import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
+import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
@@ -49,6 +50,7 @@ export const useSlashCommandProcessor = (
   openEditorDialog: () => void,
   openProviderDialog: () => void,
   openProviderModelDialog: () => void,
+  openLoadProfileDialog: () => void,
   toggleCorgiMode: () => void,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
@@ -230,8 +232,14 @@ export const useSlashCommandProcessor = (
         }
 
         const userMessageTimestamp = Date.now();
+
+        // Sanitize the command if it contains sensitive data
+        const sanitizedCommand = trimmed.startsWith('/key ')
+          ? secureInputHandler.sanitizeForHistory(trimmed)
+          : trimmed;
+
         addItem(
-          { type: MessageType.USER, text: trimmed },
+          { type: MessageType.USER, text: sanitizedCommand },
           userMessageTimestamp,
         );
 
@@ -358,6 +366,9 @@ export const useSlashCommandProcessor = (
                         return { type: 'handled' };
                       case 'providerModel':
                         openProviderModelDialog();
+                        return { type: 'handled' };
+                      case 'loadProfile':
+                        openLoadProfileDialog();
                         return { type: 'handled' };
                       default: {
                         const unhandled: never = result.dialog;
@@ -493,6 +504,7 @@ export const useSlashCommandProcessor = (
       openEditorDialog,
       openProviderDialog,
       openProviderModelDialog,
+      openLoadProfileDialog,
       setQuittingMessages,
       setShellConfirmationRequest,
       setSessionShellAllowlist,

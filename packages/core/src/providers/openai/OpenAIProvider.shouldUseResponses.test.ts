@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
+import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
 describe('OpenAIProvider.shouldUseResponses', () => {
   let provider: OpenAIProvider;
@@ -8,7 +9,7 @@ describe('OpenAIProvider.shouldUseResponses', () => {
   beforeEach(() => {
     // Reset environment
     process.env = { ...originalEnv };
-    provider = new OpenAIProvider('test-key');
+    provider = new OpenAIProvider('test-key', undefined, TEST_PROVIDER_CONFIG);
   });
 
   afterEach(() => {

@@ -10,6 +10,9 @@ import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
 import { SchemaUnion, Type } from '@google/genai';
+import { PromptService } from '../prompt-config/prompt-service.js';
+import path from 'node:path';
+import os from 'node:os';
 
 const TOOL_CALL_LOOP_THRESHOLD = 10;
 const CONTENT_LOOP_THRESHOLD = 15;
@@ -51,6 +54,7 @@ const MAX_LLM_CHECK_INTERVAL = 15;
 export class LoopDetectionService {
   private readonly config: Config;
   private promptId = '';
+  private promptService: PromptService | null = null;
 
   // Tool call tracking
   private lastToolCallKey: string | null = null;
@@ -70,6 +74,51 @@ export class LoopDetectionService {
 
   constructor(config: Config) {
     this.config = config;
+  }
+
+  /**
+   * Get the loop detection prompt from the prompt service
+   */
+  private async getLoopDetectionPrompt(): Promise<string> {
+    if (!this.promptService) {
+      const baseDir =
+        process.env.LLXPRT_PROMPTS_DIR ||
+        path.join(os.homedir(), '.llxprt', 'prompts');
+      this.promptService = new PromptService({
+        baseDir,
+        debugMode: process.env.DEBUG === 'true',
+      });
+      await this.promptService.initialize();
+    }
+
+    try {
+      return await this.promptService.loadPrompt('services/loop-detection.md');
+    } catch (error) {
+      // Fall back to default if file loading fails
+      console.warn(
+        'Failed to load loop detection prompt from file, using fallback:',
+        error,
+      );
+      return this.getFallbackLoopDetectionPrompt();
+    }
+  }
+
+  /**
+   * Fallback prompt if the prompt service is not available
+   */
+  private getFallbackLoopDetectionPrompt(): string {
+    return `You are a sophisticated AI diagnostic agent specializing in identifying when a conversational AI is stuck in an unproductive state. Your task is to analyze the provided conversation history and determine if the assistant has ceased to make meaningful progress.
+
+An unproductive state is characterized by one or more of the following patterns over the last 5 or more assistant turns:
+
+Repetitive Actions: The assistant repeats the same tool calls or conversational responses a decent number of times. This includes simple loops (e.g., tool_A, tool_A, tool_A) and alternating patterns (e.g., tool_A, tool_B, tool_A, tool_B, ...).
+
+Cognitive Loop: The assistant seems unable to determine the next logical step. It might express confusion, repeatedly ask the same questions, or generate responses that don't logically follow from the previous turns, indicating it's stuck and not advancing the task.
+
+Crucially, differentiate between a true unproductive state and legitimate, incremental progress.
+For example, a series of 'tool_A' or 'tool_B' tool calls that make small, distinct changes to the same file (like adding docstrings to functions one by one) is considered forward progress and is NOT a loop. A loop would be repeatedly replacing the same text with the same content, or cycling between a small set of files with no net change.
+
+Please analyze the conversation history to determine the possibility that the conversation is stuck in a repetitive, non-productive state.`;
   }
 
   private getToolCallKey(toolCall: { name: string; args: object }): string {
@@ -319,18 +368,7 @@ export class LoopDetectionService {
       .getHistory()
       .slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
 
-    const prompt = `You are a sophisticated AI diagnostic agent specializing in identifying when a conversational AI is stuck in an unproductive state. Your task is to analyze the provided conversation history and determine if the assistant has ceased to make meaningful progress.
-
-An unproductive state is characterized by one or more of the following patterns over the last 5 or more assistant turns:
-
-Repetitive Actions: The assistant repeats the same tool calls or conversational responses a decent number of times. This includes simple loops (e.g., tool_A, tool_A, tool_A) and alternating patterns (e.g., tool_A, tool_B, tool_A, tool_B, ...).
-
-Cognitive Loop: The assistant seems unable to determine the next logical step. It might express confusion, repeatedly ask the same questions, or generate responses that don't logically follow from the previous turns, indicating it's stuck and not advancing the task.
-
-Crucially, differentiate between a true unproductive state and legitimate, incremental progress.
-For example, a series of 'tool_A' or 'tool_B' tool calls that make small, distinct changes to the same file (like adding docstrings to functions one by one) is considered forward progress and is NOT a loop. A loop would be repeatedly replacing the same text with the same content, or cycling between a small set of files with no net change.
-
-Please analyze the conversation history to determine the possibility that the conversation is stuck in a repetitive, non-productive state.`;
+    const prompt = await this.getLoopDetectionPrompt();
     const contents = [
       ...recentHistory,
       { role: 'user', parts: [{ text: prompt }] },

@@ -13,6 +13,7 @@ LLxprt Code is a powerful fork of [Google's Gemini CLI](https://github.com/googl
 - **Full Gemini CLI Compatibility**: All original features work seamlessly, including Google authentication via `/auth`
 - **Local Model Support**: Run models locally with LM Studio, llama.cpp, or any OpenAI-compatible server
 - **Flexible Configuration**: Switch providers, models, and API keys on the fly
+- **Advanced Settings & Profiles**: Fine-tune model parameters, manage ephemeral settings, and save configurations for reuse. [Learn more →](./docs/settings-and-profiles.md)
 
 With LLxprt Code you can:
 
@@ -138,8 +139,9 @@ Access 100+ models through OpenRouter:
    ```
    /provider openai
    /baseurl https://openrouter.ai/api/v1/
-   /key sk-or-v1-your-key-here
-   /model anthropic/claude-3.5-sonnet
+   /keyfile ~/.openrouter_key
+   /model qwen/qwen3-coder
+   /profile save qwen3-coder
    ```
 
 ### Using Fireworks
@@ -225,6 +227,39 @@ llxprt
 /model codellama-7b
 > Review this code for security vulnerabilities
 ```
+
+## Control and Shortcuts: Settings and Profiles
+
+LLxprt Code provides powerful configuration options through model parameters and profiles:
+
+```bash
+# Fine-tune model behavior
+/set modelparam temperature 0.8
+/set modelparam max_tokens 4096
+
+# Configure context handling
+/set context-limit 100000
+/set compression-threshold 0.7
+
+# Save your configuration
+/profile save my-assistant
+
+# Load it later
+llxprt --profile-load my-assistant
+```
+
+See the [complete settings documentation](./docs/settings-and-profiles.md) for all configuration options.
+
+## Customizing AI Behavior with Prompts
+
+LLxprt Code features a sophisticated prompt configuration system that allows you to customize the AI's behavior for different providers, models, and use cases. You can:
+
+- Create custom system prompts for specific tasks
+- Override provider-specific behaviors
+- Add environment-aware instructions
+- Customize tool usage guidelines
+
+Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
 
 ### Next steps
 

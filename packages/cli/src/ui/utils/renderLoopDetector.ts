@@ -41,7 +41,7 @@ export function useRenderLoopDetector(
   const renderTimesRef = useRef<number[]>([]);
 
   useEffect(() => {
-    if (process.env.NODE_ENV === 'production') {
+    if (!process.env.DEBUG) {
       return;
     }
 
@@ -129,7 +129,7 @@ export function useWhyDidYouRender(
   const previousProps = useRef<Record<string, unknown>>({});
 
   useEffect(() => {
-    if (process.env.NODE_ENV === 'production') {
+    if (!process.env.DEBUG) {
       return;
     }
 
@@ -201,7 +201,7 @@ export function resetRenderStats() {
 }
 
 // Export for console debugging
-if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
+if (typeof window !== 'undefined' && process.env.DEBUG) {
   // Use global object for Node.js/CLI environment
   const globalObj = typeof globalThis !== 'undefined' ? globalThis : global;
   (globalObj as Record<string, unknown>).__getRenderStats = getRenderStats;

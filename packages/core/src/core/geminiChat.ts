@@ -411,6 +411,22 @@ export class GeminiChat {
     }
     await this.sendPromise;
     const userContent = createUserContent(params.message);
+
+    // Debug: Check if this is a function response submission
+    if (Array.isArray(params.message)) {
+      let functionResponseCount = 0;
+      params.message.forEach((part: Part | string) => {
+        if (part && typeof part === 'object' && 'functionResponse' in part) {
+          functionResponseCount++;
+        }
+      });
+      if (functionResponseCount > 0) {
+        console.log(
+          `[DEBUG geminiChat] Sending ${functionResponseCount} function response(s) in array`,
+        );
+      }
+    }
+
     if (process.env.DEBUG) {
       console.log(
         'DEBUG [geminiChat]: Created userContent:',
@@ -425,6 +441,26 @@ export class GeminiChat {
       );
     }
     const requestContents = this.getHistory(true).concat(userContent);
+
+    // Debug: Log the last few messages to see the function call/response pattern
+    if (process.env.DEBUG && requestContents.length > 2) {
+      const recentContents = requestContents.slice(-3);
+      console.log('[DEBUG geminiChat] Recent conversation turns:');
+      recentContents.forEach((content, idx) => {
+        let summary = `  ${idx}: role=${content.role}, parts=${content.parts?.length || 0}`;
+        content.parts?.forEach((part: Part) => {
+          if ('functionCall' in part && part.functionCall) {
+            summary += ` [functionCall: ${part.functionCall.name}]`;
+          } else if ('functionResponse' in part && part.functionResponse) {
+            summary += ` [functionResponse: ${part.functionResponse.name}]`;
+          } else if ('text' in part && part.text) {
+            summary += ` [text: ${part.text.substring(0, 50)}...]`;
+          }
+        });
+        console.log(summary);
+      });
+    }
+
     if (process.env.DEBUG) {
       console.log(
         'DEBUG: GeminiChat.sendMessageStream requestContents:',

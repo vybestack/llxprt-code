@@ -4,10 +4,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { readFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { ProviderManager, Config, AuthType } from '@vybestack/llxprt-code-core';
-import { LoadedSettings, SettingScope } from '../config/settings.js';
+import {
+  ProviderManager,
+  Config,
+  AuthType,
+  sanitizeForByteString,
+  needsSanitization,
+} from '@vybestack/llxprt-code-core';
+import { LoadedSettings } from '../config/settings.js';
+
+/**
+ * Sanitizes API keys to remove problematic characters that cause ByteString errors.
+ * This handles cases where API key files have encoding issues or contain
+ * Unicode replacement characters (U+FFFD).
+ */
+function sanitizeApiKey(key: string): string {
+  const sanitized = sanitizeForByteString(key);
+
+  if (needsSanitization(key)) {
+    console.warn(
+      '[ProviderConfig] API key contained non-ASCII or control characters that were removed. ' +
+        'Please check your API key file encoding (should be UTF-8 without BOM).',
+    );
+  }
+
+  return sanitized;
+}
 
 export interface ProviderConfigResult {
   success: boolean;
@@ -39,10 +61,7 @@ export async function setProviderApiKey(
       if (activeProvider.setApiKey) {
         activeProvider.setApiKey('');
 
-        // Remove from settings
-        const currentKeys = settings.merged.providerApiKeys || {};
-        delete currentKeys[providerName];
-        settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
+        // Don't need to remove from settings as we no longer save API keys there
 
         // If this is the Gemini provider, we might need to switch auth mode
         const requiresAuthRefresh = providerName === 'gemini' && !!config;
@@ -71,14 +90,12 @@ export async function setProviderApiKey(
       }
     }
 
-    // Update the provider's API key
+    // Update the provider's API key (sanitized)
     if (activeProvider.setApiKey) {
-      activeProvider.setApiKey(apiKey);
+      const sanitizedKey = sanitizeApiKey(apiKey);
+      activeProvider.setApiKey(sanitizedKey);
 
-      // Save to settings
-      const currentKeys = settings.merged.providerApiKeys || {};
-      currentKeys[providerName] = apiKey;
-      settings.setValue(SettingScope.User, 'providerApiKeys', currentKeys);
+      // Don't save API keys to settings - they should only be in profiles or ephemeral
 
       // If this is the Gemini provider, we need to refresh auth to use API key mode
       const requiresAuthRefresh = providerName === 'gemini' && !!config;
@@ -113,54 +130,6 @@ export async function setProviderApiKey(
 }
 
 /**
- * Sets the API key from a file for the active provider
- */
-export async function setProviderApiKeyFromFile(
-  providerManager: ProviderManager,
-  settings: LoadedSettings,
-  filePath: string,
-  config?: Config,
-): Promise<ProviderConfigResult> {
-  try {
-    // Resolve ~ to home directory
-    const resolvedPath = filePath.replace(/^~/, homedir());
-
-    // Read the API key from file
-    const apiKey = (await readFile(resolvedPath, 'utf-8')).trim();
-
-    if (!apiKey) {
-      return {
-        success: false,
-        message: 'The specified file is empty',
-      };
-    }
-
-    // Use the setProviderApiKey function to handle the actual key setting
-    const result = await setProviderApiKey(
-      providerManager,
-      settings,
-      apiKey,
-      config,
-    );
-
-    // Modify the message to indicate it was loaded from a file
-    if (result.success && result.message.includes('API key updated')) {
-      result.message = result.message.replace(
-        'API key updated',
-        `API key loaded from ${resolvedPath}`,
-      );
-    }
-
-    return result;
-  } catch (error) {
-    return {
-      success: false,
-      message: `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-}
-
-/**
  * Sets or clears the base URL for the active provider
  */
 export async function setProviderBaseUrl(
@@ -177,10 +146,7 @@ export async function setProviderBaseUrl(
       if (activeProvider.setBaseUrl) {
         activeProvider.setBaseUrl(undefined);
 
-        // Remove from settings
-        const currentUrls = settings.merged.providerBaseUrls || {};
-        delete currentUrls[providerName];
-        settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+        // Don't need to remove from settings as we no longer save base URLs there
 
         return {
           success: true,
@@ -198,10 +164,7 @@ export async function setProviderBaseUrl(
     if (activeProvider.setBaseUrl) {
       activeProvider.setBaseUrl(baseUrl);
 
-      // Save to settings
-      const currentUrls = settings.merged.providerBaseUrls || {};
-      currentUrls[providerName] = baseUrl;
-      settings.setValue(SettingScope.User, 'providerBaseUrls', currentUrls);
+      // Don't save base URLs to settings - they should only be in profiles or ephemeral
 
       return {
         success: true,

@@ -4,6 +4,61 @@ This guide provides solutions to common issues and debugging tips.
 
 ## Authentication
 
+### Understanding Authentication in LLxprt Code
+
+Authentication in LLxprt Code serves different purposes depending on the provider:
+
+**For Gemini Provider:**
+
+- Authentication options: OAuth, GEMINI_API_KEY, GOOGLE_API_KEY (Vertex AI), or NONE
+- Use `/auth` command to select and store your authentication method in `~/.llxprt/settings.json`
+- OAuth authentication is lazy-loaded (only happens when you first use the Gemini API)
+- Without authentication (NONE), all Gemini operations will fail, including ServerTools (web-search/web-fetch)
+
+**For Other Providers:**
+
+- All non-Gemini providers require API keys
+- No OAuth option available for OpenAI, Anthropic, etc.
+
+### How to Provide API Keys
+
+**Environment Variables:**
+
+```bash
+# Less commonly used but supported
+export OPENAI_API_KEY=your-key-here
+export ANTHROPIC_API_KEY=your-key-here
+export GEMINI_API_KEY=your-key-here
+```
+
+**Command Line:**
+
+```bash
+# Direct key
+llxprt --provider openai --key $YOUR_KEY
+
+# Key from file
+llxprt --provider openai --keyfile ~/.yourkeyfile
+```
+
+**Interactive Mode:**
+
+```
+/key        # Enter key directly
+/keyfile    # Load key from file
+```
+
+### Gemini-Specific Authentication
+
+Gemini is used in two ways in LLxprt Code:
+
+1. **As the main provider** - when set via `/provider` or used by default
+2. **For ServerTools** - provides web-search and web-fetch capabilities even when using other providers
+
+This means if you're using OpenAI as your main provider but want web search, you'll still need Gemini authentication.
+
+### Common Authentication Errors
+
 - **Error: `Failed to login. Message: Request contains an invalid argument`**
   - Users with Google Workspace accounts, or users with Google Cloud accounts
     associated with their Gmail accounts may not be able to activate the free
@@ -13,6 +68,14 @@ This guide provides solutions to common issues and debugging tips.
   - You can also grab an API key from [AI
     Studio](https://aistudio.google.com/app/apikey), which also includes a
     separate free tier.
+
+- **Error: API key not found**
+  - If you specify `--key` without providing a value, or if the environment variable is empty
+  - Solution: Ensure your API key is properly set in the environment or provided via command line
+
+- **Error: Invalid API key**
+  - The provided API key is malformed or revoked
+  - Solution: Check your API key in the provider's dashboard and ensure it's active
 
 ## Frequently asked questions (FAQs)
 
@@ -53,6 +116,11 @@ This guide provides solutions to common issues and debugging tips.
   - **Issue:** The CLI does not enter interactive mode (no prompt appears) if an environment variable starting with `CI_` (e.g., `CI_TOKEN`) is set. This is because the `is-in-ci` package, used by the underlying UI framework, detects these variables and assumes a non-interactive CI environment.
   - **Cause:** The `is-in-ci` package checks for the presence of `CI`, `CONTINUOUS_INTEGRATION`, or any environment variable with a `CI_` prefix. When any of these are found, it signals that the environment is non-interactive, which prevents the CLI from starting in its interactive mode.
   - **Solution:** If the `CI_` prefixed variable is not needed for the CLI to function, you can temporarily unset it for the command. e.g., `env -u CI_TOKEN llxprt`
+
+- **DEBUG mode not working from project .env file**
+  - **Issue:** Setting `DEBUG=true` in a project's `.env` file doesn't enable debug mode for gemini-cli.
+  - **Cause:** The `DEBUG` and `DEBUG_MODE` variables are automatically excluded from project `.env` files to prevent interference with gemini-cli behavior.
+  - **Solution:** Use a `.gemini/.env` file instead, or configure the `excludedProjectEnvVars` setting in your `settings.json` to exclude fewer variables.
 
 ## Debugging Tips
 

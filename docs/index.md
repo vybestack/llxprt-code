@@ -4,7 +4,7 @@ This documentation provides a comprehensive guide to installing, using, and deve
 
 ## Overview
 
-LLxprt Code brings the capabilities of Gemini models to your terminal in an interactive Read-Eval-Print Loop (REPL) environment. LLxprt Code consists of a client-side application (`packages/cli`) that communicates with a local server (`packages/core`), which in turn manages requests to the Gemini API and its AI models. LLxprt Code also contains a variety of tools for tasks such as performing file system operations, running shells, and web fetching, which are managed by `packages/core`.
+LLxprt Code brings the capabilities of large language models to your terminal in an interactive Read-Eval-Print Loop (REPL) environment. LLxprt Code consists of a client-side application (`packages/cli`) that communicates with a local server (`packages/core`), which in turn manages requests to the provider APIs and its AI models. LLxprt Code also contains a variety of tools for tasks such as performing file system operations, running shells, and web fetching, which are managed by `packages/core`.
 
 ## Navigating the documentation
 
@@ -16,6 +16,8 @@ This documentation is organized into the following sections:
   - **[CLI Introduction](./cli/index.md):** Overview of the command-line interface.
   - **[Commands](./cli/commands.md):** Description of available CLI commands.
   - **[Configuration](./cli/configuration.md):** Information on configuring the CLI.
+  - **[Prompt Configuration](./prompt-configuration.md):** How to customize AI behavior with prompts.
+  - **[Settings and Profiles](./settings-and-profiles.md):** How to manage settings and use profiles.
   - **[Checkpointing](./checkpointing.md):** Documentation for the checkpointing feature.
   - **[Extensions](./extension.md):** How to extend the CLI with new functionality.
   - **[Telemetry](./telemetry.md):** Overview of telemetry in the CLI.

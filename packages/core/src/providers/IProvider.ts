@@ -47,6 +47,18 @@ export interface IProvider {
     config?: unknown,
   ): Promise<unknown>;
   // Add other methods as needed, e.g., generateCompletion, getToolDefinitions
+
+  /**
+   * Set model parameters to be included in API calls
+   * @param params Parameters to merge with existing, or undefined to clear all
+   */
+  setModelParams?(params: Record<string, unknown> | undefined): void;
+
+  /**
+   * Get current model parameters
+   * @returns Current parameters or undefined if not set
+   */
+  getModelParams?(): Record<string, unknown> | undefined;
 }
 
 // Re-export the interfaces for convenience

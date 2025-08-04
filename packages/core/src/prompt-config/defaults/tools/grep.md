@@ -1,0 +1,2 @@
+- Use '${GrepTool.Name}' and '${GlobTool.Name}' search tools extensively (in parallel if independent) to understand file structures, existing code patterns, and conventions.
+- When asked to search for patterns in files, use the '${GrepTool.Name}' tool

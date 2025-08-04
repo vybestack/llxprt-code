@@ -59,13 +59,60 @@ export const providerCommand: SlashCommand = {
 
       // Update config if available
       if (context.services.config) {
+        // Clear ephemeral settings when switching providers
+        // Get current ephemeral settings and clear them one by one
+        const ephemeralKeys = [
+          'auth-key',
+          'auth-keyfile',
+          'base-url',
+          'context-limit',
+          'compression-threshold',
+          'tool-format',
+          'api-version',
+          'custom-headers',
+        ];
+        for (const key of ephemeralKeys) {
+          context.services.config.setEphemeralSetting(key, undefined);
+        }
+
+        // Clear model parameters on the new provider
+        const newProvider = providerManager.getActiveProvider();
+        if (newProvider.setModelParams) {
+          newProvider.setModelParams({});
+        }
+
         // Ensure provider manager is set on config
         context.services.config.setProviderManager(providerManager);
 
-        // Update model to match the new provider's default
-        const newModel =
-          providerManager.getActiveProvider().getCurrentModel?.() || '';
-        context.services.config.setModel(newModel);
+        // Update the provider in config
+        context.services.config.setProvider(providerName);
+
+        // Get the active provider and ensure it uses a valid default model
+        const activeProvider = providerManager.getActiveProvider();
+
+        // Determine the correct default model for this provider
+        let defaultModel = '';
+        switch (providerName) {
+          case 'gemini':
+            defaultModel = 'gemini-2.5-pro';
+            break;
+          case 'openai':
+            defaultModel = 'gpt-4.1';
+            break;
+          case 'anthropic':
+            defaultModel = 'claude-sonnet-4-latest';
+            break;
+          default:
+            defaultModel = activeProvider.getCurrentModel?.() || '';
+        }
+
+        // Set the model on both the provider and config
+        if (defaultModel) {
+          if (activeProvider.setModel) {
+            activeProvider.setModel(defaultModel);
+          }
+          context.services.config.setModel(defaultModel);
+        }
 
         // Clear conversation history BEFORE switching to prevent tool call ID mismatches
         const geminiClient = context.services.config.getGeminiClient();

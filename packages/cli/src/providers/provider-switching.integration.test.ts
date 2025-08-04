@@ -21,7 +21,7 @@ describe('Provider Switching Integration', () => {
   });
 
   it('should support switching between providers and back to Gemini', () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Clear any auto-loaded active provider
     if (manager.hasActiveProvider()) {
@@ -56,7 +56,7 @@ describe('Provider Switching Integration', () => {
   });
 
   it('should list gemini as an available option even when not registered', () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Register some providers
     const provider1: IProvider = {
