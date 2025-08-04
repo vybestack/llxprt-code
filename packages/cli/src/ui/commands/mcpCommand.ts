@@ -23,7 +23,6 @@ import {
   Tool,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import open from 'open';
 
 const COLOR_GREEN = '\u001b[32m';
 const COLOR_YELLOW = '\u001b[33m';

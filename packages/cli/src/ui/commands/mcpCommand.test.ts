@@ -14,7 +14,6 @@ import {
   getMCPDiscoveryState,
   DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-core';
-import open from 'open';
 import { MessageActionReturn } from './types.js';
 import { Type, CallableTool } from '@google/genai';
 
