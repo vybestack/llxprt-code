@@ -72,7 +72,18 @@ export function isTelemetrySdkInitialized(): boolean {
 export function initializeTelemetry(config: Config): void {
   // TELEMETRY: Modified to ONLY support local file logging - network exporters disabled
   if (telemetryInitialized || !config.getTelemetryEnabled()) {
+    if (process.env.VERBOSE === 'true') {
+      console.log(
+        `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
+      );
+    }
     return;
+  }
+
+  if (process.env.VERBOSE === 'true') {
+    console.log(
+      `[TELEMETRY] Initializing with outfile: ${config.getTelemetryOutfile()}`,
+    );
   }
 
   const resource = new Resource({
@@ -103,10 +114,24 @@ export function initializeTelemetry(config: Config): void {
         exportIntervalMillis: 10000,
       });
 
+  // Configure batch processors with shorter delays for faster writes
+  // This ensures telemetry is written promptly, especially important for tests
+  const spanProcessor = new BatchSpanProcessor(spanExporter, {
+    scheduledDelayMillis: 100, // Export every 100ms instead of default 5000ms
+    maxExportBatchSize: 10, // Export after 10 spans instead of default 512
+    exportTimeoutMillis: 5000, // Shorter timeout for faster failure detection
+  });
+
+  const logProcessor = new BatchLogRecordProcessor(logExporter, {
+    scheduledDelayMillis: 100, // Export every 100ms instead of default 1000ms
+    maxExportBatchSize: 10, // Export after 10 logs instead of default 512
+    exportTimeoutMillis: 5000,
+  });
+
   sdk = new NodeSDK({
     resource,
-    spanProcessors: [new BatchSpanProcessor(spanExporter)],
-    logRecordProcessor: new BatchLogRecordProcessor(logExporter),
+    spanProcessors: [spanProcessor],
+    logRecordProcessor: logProcessor,
     metricReader,
     instrumentations: [new HttpInstrumentation()],
   });

@@ -123,12 +123,13 @@ export class TestRig {
     // Create a settings file to point the CLI to the local collector
     const llxprtDir = join(this.testDir, '.llxprt');
     mkdirSync(llxprtDir, { recursive: true });
-    // In sandbox mode, use an absolute path for telemetry inside the container
-    // The container mounts the test directory at the same path as the host
+    // Always use an absolute path for telemetry
+    // In sandbox mode, use the test directory
+    // In non-sandbox mode, use the environment variable or fallback to test directory
     const telemetryPath =
       env.GEMINI_SANDBOX && env.GEMINI_SANDBOX !== 'false'
         ? join(this.testDir, 'telemetry.log') // Absolute path in test directory
-        : env.TELEMETRY_LOG_FILE; // Absolute path for non-sandbox
+        : env.TELEMETRY_LOG_FILE || join(this.testDir, '..', 'telemetry.log'); // Absolute path for non-sandbox
 
     const settings = {
       telemetry: {
@@ -573,7 +574,7 @@ export class TestRig {
         // Look for tool call logs
         if (
           logData.attributes &&
-          logData.attributes['event.name'] === 'gemini_cli.tool_call'
+          logData.attributes['event.name'] === 'llxprt_code.tool_call'
         ) {
           const toolName = logData.attributes.function_name;
           logs.push({
