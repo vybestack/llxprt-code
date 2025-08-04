@@ -12,7 +12,6 @@ import {
   CommandKind,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { SettingScope } from '../../config/settings.js';
 
 export const modelCommand: SlashCommand = {
   name: 'model',

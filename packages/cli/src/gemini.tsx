@@ -226,7 +226,7 @@ export async function main() {
   // Load custom themes from settings
   themeManager.loadCustomThemes(settings.merged.customThemes);
 
-  // If a provider is specified via CLI, activate it after initialization
+  // If a provider is specified, activate it after initialization
   const configProvider = config.getProvider();
   if (configProvider) {
     try {
@@ -239,11 +239,11 @@ export async function main() {
         activeProvider.setModel(configModel);
       }
 
-      // Apply profile model params if loaded
+      // Apply profile model params if loaded AND provider was NOT specified via CLI
       const configWithProfile = config as Config & {
         _profileModelParams?: Record<string, unknown>;
       };
-      if (configWithProfile._profileModelParams && activeProvider) {
+      if (!argv.provider && configWithProfile._profileModelParams && activeProvider) {
         if (
           'setModelParams' in activeProvider &&
           activeProvider.setModelParams
@@ -252,33 +252,47 @@ export async function main() {
         }
       }
 
-      // Apply ephemeral settings from profile to the provider
-      const authKey = config.getEphemeralSetting('auth-key') as string;
-      const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
-      const baseUrl = config.getEphemeralSetting('base-url') as string;
+      // Apply ephemeral settings from profile ONLY if provider was NOT specified via CLI
+      if (!argv.provider) {
+        const authKey = config.getEphemeralSetting('auth-key') as string;
+        const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
+        const baseUrl = config.getEphemeralSetting('base-url') as string;
 
-      if (authKey && activeProvider.setApiKey) {
-        activeProvider.setApiKey(authKey);
-      } else if (authKeyfile && activeProvider.setApiKey) {
-        // Load API key from file
-        try {
-          const apiKey = (
-            await fs.readFile(authKeyfile.replace(/^~/, os.homedir()), 'utf-8')
-          ).trim();
-          if (apiKey) {
-            activeProvider.setApiKey(apiKey);
+        // Only apply profile auth settings if no CLI auth args were provided
+        if (!argv.key && !argv.keyfile) {
+          if (authKey && activeProvider.setApiKey) {
+            activeProvider.setApiKey(authKey);
+          } else if (authKeyfile && activeProvider.setApiKey) {
+            // Load API key from file
+            try {
+              const apiKey = (
+                await fs.readFile(
+                  authKeyfile.replace(/^~/, os.homedir()),
+                  'utf-8',
+                )
+              ).trim();
+              if (apiKey) {
+                activeProvider.setApiKey(apiKey);
+              }
+            } catch (error) {
+              console.error(
+                chalk.red(
+                  `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+                ),
+              );
+            }
           }
-        } catch (error) {
-          console.error(
-            chalk.red(
-              `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-          );
         }
-      }
 
-      if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
-        activeProvider.setBaseUrl(baseUrl);
+        // Only apply profile base URL if not overridden by CLI
+        if (
+          !argv.baseurl &&
+          baseUrl &&
+          baseUrl !== 'none' &&
+          activeProvider.setBaseUrl
+        ) {
+          activeProvider.setBaseUrl(baseUrl);
+        }
       }
 
       // No need to set auth type when using a provider
@@ -294,31 +308,44 @@ export async function main() {
     const activeProvider = providerManager.getActiveProvider();
     if (activeProvider) {
       // Apply ephemeral settings from profile to the provider
+      // BUT only if not overridden by CLI arguments
       const authKey = config.getEphemeralSetting('auth-key') as string;
       const authKeyfile = config.getEphemeralSetting('auth-keyfile') as string;
       const baseUrl = config.getEphemeralSetting('base-url') as string;
 
-      if (authKey && activeProvider.setApiKey) {
-        activeProvider.setApiKey(authKey);
-      } else if (authKeyfile && activeProvider.setApiKey) {
-        // Load API key from file
-        try {
-          const apiKey = (
-            await fs.readFile(authKeyfile.replace(/^~/, os.homedir()), 'utf-8')
-          ).trim();
-          if (apiKey) {
-            activeProvider.setApiKey(apiKey);
+      // Only apply profile auth settings if no CLI auth args were provided
+      if (!argv.key && !argv.keyfile) {
+        if (authKey && activeProvider.setApiKey) {
+          activeProvider.setApiKey(authKey);
+        } else if (authKeyfile && activeProvider.setApiKey) {
+          // Load API key from file
+          try {
+            const apiKey = (
+              await fs.readFile(
+                authKeyfile.replace(/^~/, os.homedir()),
+                'utf-8',
+              )
+            ).trim();
+            if (apiKey) {
+              activeProvider.setApiKey(apiKey);
+            }
+          } catch (error) {
+            console.error(
+              chalk.red(
+                `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+            );
           }
-        } catch (error) {
-          console.error(
-            chalk.red(
-              `Failed to load keyfile ${authKeyfile}: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-          );
         }
       }
 
-      if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
+      // Only apply profile base URL if not overridden by CLI
+      if (
+        !argv.baseurl &&
+        baseUrl &&
+        baseUrl !== 'none' &&
+        activeProvider.setBaseUrl
+      ) {
         activeProvider.setBaseUrl(baseUrl);
       }
 
@@ -665,11 +692,11 @@ async function loadNonInteractiveConfig(
       }
     }
 
-    // Apply profile model params if loaded
+    // Apply profile model params if loaded AND provider was NOT specified via CLI
     const configWithProfile = finalConfig as Config & {
       _profileModelParams?: Record<string, unknown>;
     };
-    if (configWithProfile._profileModelParams) {
+    if (!argv.provider && configWithProfile._profileModelParams) {
       const activeProvider = providerManager.getActiveProvider();
       if (
         activeProvider &&

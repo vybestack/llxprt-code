@@ -318,8 +318,9 @@ export async function loadCliConfig(
       const profile = await profileManager.loadProfile(profileToLoad);
 
       // Store profile values to apply after Config creation
-      profileProvider = profile.provider;
-      profileModel = profile.model;
+      // Only use profile provider/model if --provider is not specified
+      profileProvider = argv.provider ? undefined : profile.provider;
+      profileModel = argv.provider ? undefined : profile.model;
       profileModelParams = profile.modelParams;
 
       // Merge ephemeral settings into the settings object
