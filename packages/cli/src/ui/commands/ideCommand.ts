@@ -24,6 +24,9 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     return null;
   }
   const ideClient = config.getIdeClient();
+  if (!ideClient) {
+    return null;
+  }
   const currentIDE = ideClient.getCurrentIde();
   if (!currentIDE || !ideClient.getDetectedIdeDisplayName()) {
     return {
