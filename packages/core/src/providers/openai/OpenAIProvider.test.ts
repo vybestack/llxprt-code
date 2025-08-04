@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
 // Mock OpenAI module
 vi.mock('openai', () => ({
@@ -42,7 +43,11 @@ describe('OpenAIProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new OpenAIProvider('test-api-key');
+    provider = new OpenAIProvider(
+      'test-api-key',
+      undefined,
+      TEST_PROVIDER_CONFIG,
+    );
     // Set a model that doesn't use the Responses API
     provider.setModel('gpt-3.5-turbo');
     // Get the mocked OpenAI instance (typed as unknown then cast)
@@ -269,7 +274,11 @@ describe('OpenAIProvider', () => {
 
       it('should return undefined when no model parameters are set', () => {
         // Given a fresh provider with no parameters set
-        const freshProvider = new OpenAIProvider('test-key');
+        const freshProvider = new OpenAIProvider(
+          'test-key',
+          undefined,
+          TEST_PROVIDER_CONFIG,
+        );
 
         // When I get model parameters
         const params = freshProvider.getModelParams();
@@ -369,7 +378,11 @@ describe('OpenAIProvider', () => {
 
       it('should make API calls without parameters when none are set', async () => {
         // Given no model parameters are set (fresh provider)
-        const freshProvider = new OpenAIProvider('test-key');
+        const freshProvider = new OpenAIProvider(
+          'test-key',
+          undefined,
+          TEST_PROVIDER_CONFIG,
+        );
         freshProvider.setModel('gpt-3.5-turbo');
         const freshMockInstance = (
           freshProvider as unknown as { openai: typeof mockOpenAIInstance }

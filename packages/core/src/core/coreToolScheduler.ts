@@ -154,12 +154,36 @@ export function convertToFunctionResponse(
   }
 
   if (Array.isArray(contentToProcess)) {
-    const functionResponse = createFunctionResponsePart(
+    // If the array contains string elements, join them and create a single function response
+    const stringElements = contentToProcess.filter(
+      (item) => typeof item === 'string',
+    );
+    if (stringElements.length === contentToProcess.length) {
+      // All elements are strings, join them
+      return createFunctionResponsePart(
+        callId,
+        toolName,
+        stringElements.join('\n'),
+      );
+    }
+
+    // If the array contains Part objects, check if any are already function responses
+    const hasFunctionResponse = contentToProcess.some(
+      (part) => typeof part === 'object' && part.functionResponse,
+    );
+
+    if (hasFunctionResponse) {
+      // Already has function response(s), return as-is
+      return contentToProcess;
+    }
+
+    // Otherwise, wrap the parts in a function response
+    return createFunctionResponsePart(
       callId,
       toolName,
-      'Tool execution succeeded.',
+      getResponseTextFromParts(contentToProcess as Part[]) ||
+        'Tool execution succeeded.',
     );
-    return [functionResponse, ...contentToProcess];
   }
 
   // After this point, contentToProcess is a single Part object.

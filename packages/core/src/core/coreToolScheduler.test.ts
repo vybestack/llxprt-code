@@ -325,16 +325,14 @@ describe('convertToFunctionResponse', () => {
       { text: 'Another text part' },
     ];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
-      {
-        functionResponse: {
-          name: toolName,
-          id: callId,
-          response: { output: 'Tool execution succeeded.' },
-        },
+    // When array contains mixed parts, it extracts text and creates a single function response
+    expect(result).toEqual({
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response: { output: 'Some textual descriptionAnother text part' },
       },
-      ...llmContent,
-    ]);
+    });
   });
 
   it('should handle llmContent as an array with a single inlineData Part', () => {
@@ -381,15 +379,14 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as an empty array', () => {
     const llmContent: PartListUnion = [];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual([
-      {
-        functionResponse: {
-          name: toolName,
-          id: callId,
-          response: { output: 'Tool execution succeeded.' },
-        },
+    // Empty array is treated as array of strings (no strings), so returns empty output
+    expect(result).toEqual({
+      functionResponse: {
+        name: toolName,
+        id: callId,
+        response: { output: '' },
       },
-    ]);
+    });
   });
 
   it('should handle llmContent as a Part with undefined inlineData/fileData/text', () => {

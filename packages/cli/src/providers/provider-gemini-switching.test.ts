@@ -10,7 +10,6 @@ import {
   resetProviderManager,
 } from './providerManagerInstance';
 import { IProvider, IModel } from './IProvider';
-import { enhanceConfigWithProviders } from './enhanceConfigWithProviders';
 import { Config } from '@vybestack/llxprt-code-core';
 
 describe('Provider-Gemini Switching', () => {
@@ -44,7 +43,7 @@ describe('Provider-Gemini Switching', () => {
   });
 
   it('should use Gemini when no provider is active', async () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Clear any auto-loaded active provider
     if (manager.hasActiveProvider()) {
@@ -65,9 +64,6 @@ describe('Provider-Gemini Switching', () => {
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
 
-    // Enhance config
-    enhanceConfigWithProviders(config);
-
     // Call refreshAuth
     await config.refreshAuth('test-auth');
 
@@ -76,7 +72,7 @@ describe('Provider-Gemini Switching', () => {
   });
 
   it('should use provider when active', async () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Register and activate provider
     manager.registerProvider(mockProvider);
@@ -101,9 +97,6 @@ describe('Provider-Gemini Switching', () => {
     // Store original refreshAuth
     const originalRefreshAuth = config.refreshAuth;
 
-    // Enhance config
-    enhanceConfigWithProviders(config);
-
     // refreshAuth should remain the same (no wrapping in new implementation)
     expect(config.refreshAuth).toBe(originalRefreshAuth);
 
@@ -115,7 +108,7 @@ describe('Provider-Gemini Switching', () => {
   });
 
   it('should switch back to Gemini when provider is cleared', async () => {
-    const manager = getProviderManager();
+    const manager = getProviderManager(undefined, true);
 
     // Start with active provider
     manager.registerProvider(mockProvider);
@@ -138,9 +131,6 @@ describe('Provider-Gemini Switching', () => {
       getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
       getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
     } as unknown as Config;
-
-    // Enhance config
-    enhanceConfigWithProviders(config);
 
     // Call refreshAuth
     await config.refreshAuth('test-auth');

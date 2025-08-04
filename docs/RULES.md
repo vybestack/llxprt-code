@@ -1,4 +1,4 @@
-# Development Guidelines for Claude
+# Development Guidelines for LLMs
 
 ## CORE PRINCIPLE: TEST-DRIVEN DEVELOPMENT IS MANDATORY
 
@@ -13,7 +13,7 @@
 - Use TypeScript strict mode (no `any`, no type assertions)
 - Work with immutable data only
 - Achieve 100% behavior coverage
-- Update CLAUDE.md with learnings after each session
+- Update your memory with learnings after each session
 
 ### Never Do:
 
@@ -319,7 +319,7 @@ const notifyUser = (email: Email): void => emailService.sendWelcome(email);
 
 ### Start of Session:
 
-1. Read CLAUDE.md for project-specific context
+1. Read your project memory for project-specific context
 2. Understand the current task
 3. Plan the TDD approach
 

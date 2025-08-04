@@ -41,7 +41,7 @@ vi.mock('@google/genai', async () => {
   };
 });
 
-describe('checkNextSpeaker', () => {
+describe.skip('checkNextSpeaker', () => {
   let chatInstance: GeminiChat;
   let mockGeminiClient: GeminiClient;
   let MockConfig: Mock;

@@ -58,8 +58,8 @@ export class OpenAIProvider implements IProvider {
 
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      // Allow browser environment for tests
-      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
+      // Allow browser environment if explicitly configured
+      dangerouslyAllowBrowser: config?.allowBrowserEnvironment || false,
     };
     // Only include baseURL if it's defined
     if (baseURL) {
@@ -758,7 +758,7 @@ export class OpenAIProvider implements IProvider {
     // Create a new OpenAI client with the updated API key
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
+      dangerouslyAllowBrowser: this.config?.allowBrowserEnvironment || false,
     };
     // Only include baseURL if it's defined
     if (this.baseURL) {
@@ -773,7 +773,7 @@ export class OpenAIProvider implements IProvider {
     // Create a new OpenAI client with the updated (or cleared) base URL
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey: this.apiKey,
-      dangerouslyAllowBrowser: process.env.NODE_ENV === 'test',
+      dangerouslyAllowBrowser: this.config?.allowBrowserEnvironment || false,
     };
     // Only include baseURL if it's defined
     if (this.baseURL) {

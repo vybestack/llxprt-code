@@ -1,10 +1,16 @@
-# LLxprt Code Observability Guide (Local Use Only)
+# LLxprt Code Telemetry Guide (Disabled by Default)
 
-**Important:** LLxprt Code does not collect or send telemetry data anywhere by default. The telemetry system described here is for your own local monitoring and debugging purposes only.
+**Important:** LLxprt Code has telemetry disabled by default. No data is collected or sent to Google or any external service. The telemetry system is only available for your own local debugging and monitoring if you explicitly enable it.
 
-When enabled, telemetry provides data about LLxprt Code's performance, health, and usage on your local machine. You can monitor operations, debug issues, and optimize tool usage through traces, metrics, and structured logs.
+## Current Status
 
-LLxprt Code's telemetry system is built on the **[OpenTelemetry] (OTEL)** standard, allowing you to send data to any compatible backend that you control.
+Telemetry is currently **disabled** in the LLxprt Code codebase. The telemetry initialization code has been commented out to ensure no data collection occurs. If you need telemetry for local debugging:
+
+1. Telemetry must be explicitly enabled in your settings
+2. All data stays on your local machine unless you configure an external endpoint
+3. No data is ever sent to Google
+
+The telemetry infrastructure is based on the **[OpenTelemetry] (OTEL)** standard, which would allow you to send data to any compatible backend that you control, if you choose to re-enable it.
 
 [OpenTelemetry]: https://opentelemetry.io/
 
@@ -26,9 +32,9 @@ The following lists the precedence for applying telemetry settings, with items l
 1.  **Environment variables:**
     - `OTEL_EXPORTER_OTLP_ENDPOINT`: Overrides `telemetry.otlpEndpoint`.
 
-1.  **Workspace settings file (`.gemini/settings.json`):** Values from the `telemetry` object in this project-specific file.
+1.  **Workspace settings file (`.llxprt/settings.json`):** Values from the `telemetry` object in this project-specific file.
 
-1.  **User settings file (`~/.gemini/settings.json`):** Values from the `telemetry` object in this global user file.
+1.  **User settings file (`~/.llxprt/settings.json`):** Values from the `telemetry` object in this global user file.
 
 1.  **Defaults:** applied if not set by any of the above.
     - `telemetry.enabled`: `false`
@@ -36,22 +42,22 @@ The following lists the precedence for applying telemetry settings, with items l
     - `telemetry.otlpEndpoint`: `http://localhost:4317`
     - `telemetry.logPrompts`: `true`
 
-**For the `npm run telemetry -- --target=<gcp|local>` script:**
-The `--target` argument to this script _only_ overrides the `telemetry.target` for the duration and purpose of that script (i.e., choosing which collector to start). It does not permanently change your `settings.json`. The script will first look at `settings.json` for a `telemetry.target` to use as its default.
+**Note:** The telemetry scripts (`npm run telemetry`) are provided for development purposes but will not collect any data unless you manually re-enable telemetry in the source code. Even then, the `local` target ensures data stays on your machine, while the `gcp` target would require your own Google Cloud project - LLxprt Code never sends data to Google's telemetry systems.
 
 ### Example settings
 
-The following code can be added to your workspace (`.gemini/settings.json`) or user (`~/.gemini/settings.json`) settings to enable telemetry and send the output to Google Cloud:
+The following code can be added to your workspace (`.llxprt/settings.json`) or user (`~/.llxprt/settings.json`) settings to enable telemetry for local debugging only:
 
 ```json
 {
   "telemetry": {
     "enabled": true,
-    "target": "gcp"
-  },
-  "sandbox": false
+    "target": "local"
+  }
 }
 ```
+
+**Important:** Even with these settings, telemetry will not function unless you modify the source code to re-enable it. This is intentional to ensure no accidental data collection.
 
 ### Exporting to a file
 
@@ -60,7 +66,7 @@ You can export all telemetry data to a file for local inspection.
 To enable file export, use the `--telemetry-outfile` flag with a path to your desired output file. This must be run using `--telemetry-target=local`.
 
 ```bash
-gemini --telemetry --telemetry-target=local --telemetry-outfile=/path/to/telemetry.log "your prompt"
+llxprt --telemetry --telemetry-target=local --telemetry-outfile=/path/to/telemetry.log "your prompt"
 ```
 
 ## Running an OTEL Collector
@@ -74,7 +80,7 @@ Learn more about OTEL exporter standard configuration in [documentation][otel-co
 
 ### Local
 
-Use the `npm run telemetry -- --target=local` command to automate the process of setting up a local telemetry pipeline, including configuring the necessary settings in your `.gemini/settings.json` file. The underlying script installs `otelcol-contrib` (the OpenTelemetry Collector) and `jaeger` (The Jaeger UI for viewing traces). To use it:
+Use the `npm run telemetry -- --target=local` command to set up a local telemetry pipeline for development purposes. Note that telemetry is disabled in the code, so this will not collect any data unless you manually re-enable it. The script installs `otelcol-contrib` (the OpenTelemetry Collector) and `jaeger` (The Jaeger UI for viewing traces) locally. To use it:
 
 1.  **Run the command**:
     Execute the command from the root of the repository:
@@ -94,14 +100,16 @@ Use the `npm run telemetry -- --target=local` command to automate the process of
     Open your web browser and navigate to **http://localhost:16686** to access the Jaeger UI. Here you can inspect detailed traces of LLxprt Code operations.
 
 1.  **Inspect logs and metrics**:
-    The script redirects the OTEL collector output (which includes logs and metrics) to `~/.gemini/tmp/<projectHash>/otel/collector.log`. The script will provide links to view and a command to tail your telemetry data (traces, metrics, logs) locally.
+    The script redirects the OTEL collector output (which includes logs and metrics) to `~/.llxprt/tmp/<projectHash>/otel/collector.log`. The script will provide links to view and a command to tail your telemetry data (traces, metrics, logs) locally.
 
 1.  **Stop the services**:
     Press `Ctrl+C` in the terminal where the script is running to stop the OTEL Collector and Jaeger services.
 
-### Google Cloud
+### Google Cloud (Not Recommended)
 
-Use the `npm run telemetry -- --target=gcp` command to automate setting up a local OpenTelemetry collector that forwards data to your Google Cloud project, including configuring the necessary settings in your `.gemini/settings.json` file. The underlying script installs `otelcol-contrib`. To use it:
+**Important:** LLxprt Code does not send telemetry to Google. The GCP target is only provided if you want to send telemetry to your own Google Cloud project for your own purposes. This is not recommended for normal use.
+
+The `npm run telemetry -- --target=gcp` command sets up a local OpenTelemetry collector that could forward data to your own Google Cloud project. Remember that telemetry is disabled in the code, so no data will be sent unless you manually re-enable it. To use it:
 
 1.  **Prerequisites**:
     - Have a Google Cloud project ID.
@@ -122,7 +130,7 @@ Use the `npm run telemetry -- --target=gcp` command to automate setting up a loc
     The script will:
     - Download the `otelcol-contrib` binary if needed.
     - Start an OTEL collector configured to receive data from LLxprt Code and export it to your specified Google Cloud project.
-    - Automatically enable telemetry and disable sandbox mode in your workspace settings (`.gemini/settings.json`).
+    - Automatically enable telemetry in your workspace settings (`.llxprt/settings.json`).
     - Provide direct links to view traces, metrics, and logs in your Google Cloud Console.
     - On exit (Ctrl+C), it will attempt to restore your original telemetry and sandbox settings.
 
@@ -133,7 +141,7 @@ Use the `npm run telemetry -- --target=gcp` command to automate setting up a loc
     Use the links provided by the script to navigate to the Google Cloud Console and view your traces, metrics, and logs.
 
 1.  **Inspect local collector logs**:
-    The script redirects the local OTEL collector output to `~/.gemini/tmp/<projectHash>/otel/collector-gcp.log`. The script provides links to view and command to tail your collector logs locally.
+    The script redirects the local OTEL collector output to `~/.llxprt/tmp/<projectHash>/otel/collector-gcp.log`. The script provides links to view and command to tail your collector logs locally.
 
 1.  **Stop the service**:
     Press `Ctrl+C` in the terminal where the script is running to stop the OTEL Collector.
@@ -148,7 +156,7 @@ The following section describes the structure of logs and metrics generated for 
 
 Logs are timestamped records of specific events. The following events are logged for LLxprt Code:
 
-- `gemini_cli.config`: This event occurs once at startup with the CLI's configuration.
+- `llxprt_cli.config`: This event occurs once at startup with the CLI's configuration.
   - **Attributes**:
     - `model` (string)
     - `embedding_model` (string)
@@ -163,13 +171,13 @@ Logs are timestamped records of specific events. The following events are logged
     - `debug_mode` (boolean)
     - `mcp_servers` (string)
 
-- `gemini_cli.user_prompt`: This event occurs when a user submits a prompt.
+- `llxprt_cli.user_prompt`: This event occurs when a user submits a prompt.
   - **Attributes**:
     - `prompt_length`
     - `prompt` (this attribute is excluded if `log_prompts_enabled` is configured to be `false`)
     - `auth_type`
 
-- `gemini_cli.tool_call`: This event occurs for each function call.
+- `llxprt_cli.tool_call`: This event occurs for each function call.
   - **Attributes**:
     - `function_name`
     - `function_args`
@@ -179,12 +187,12 @@ Logs are timestamped records of specific events. The following events are logged
     - `error` (if applicable)
     - `error_type` (if applicable)
 
-- `gemini_cli.api_request`: This event occurs when making a request to Gemini API.
+- `llxprt_cli.api_request`: This event occurs when making a request to a provider API.
   - **Attributes**:
     - `model`
     - `request_text` (if applicable)
 
-- `gemini_cli.api_error`: This event occurs if the API request fails.
+- `llxprt_cli.api_error`: This event occurs if the API request fails.
   - **Attributes**:
     - `model`
     - `error`
@@ -193,7 +201,7 @@ Logs are timestamped records of specific events. The following events are logged
     - `duration_ms`
     - `auth_type`
 
-- `gemini_cli.api_response`: This event occurs upon receiving a response from Gemini API.
+- `llxprt_cli.api_response`: This event occurs upon receiving a response from a provider API.
   - **Attributes**:
     - `model`
     - `status_code`
@@ -207,11 +215,11 @@ Logs are timestamped records of specific events. The following events are logged
     - `response_text` (if applicable)
     - `auth_type`
 
-- `gemini_cli.flash_fallback`: This event occurs when LLxprt Code switches to flash as fallback.
+- `llxprt_cli.flash_fallback`: This event occurs when LLxprt Code switches to a fallback model.
   - **Attributes**:
     - `auth_type`
 
-- `gemini_cli.slash_command`: This event occurs when a user executes a slash command.
+- `llxprt_cli.slash_command`: This event occurs when a user executes a slash command.
   - **Attributes**:
     - `command` (string)
     - `subcommand` (string, if applicable)
@@ -220,35 +228,35 @@ Logs are timestamped records of specific events. The following events are logged
 
 Metrics are numerical measurements of behavior over time. The following metrics are collected for LLxprt Code:
 
-- `gemini_cli.session.count` (Counter, Int): Incremented once per CLI startup.
+- `llxprt_cli.session.count` (Counter, Int): Incremented once per CLI startup.
 
-- `gemini_cli.tool.call.count` (Counter, Int): Counts tool calls.
+- `llxprt_cli.tool.call.count` (Counter, Int): Counts tool calls.
   - **Attributes**:
     - `function_name`
     - `success` (boolean)
     - `decision` (string: "accept", "reject", or "modify", if applicable)
 
-- `gemini_cli.tool.call.latency` (Histogram, ms): Measures tool call latency.
+- `llxprt_cli.tool.call.latency` (Histogram, ms): Measures tool call latency.
   - **Attributes**:
     - `function_name`
     - `decision` (string: "accept", "reject", or "modify", if applicable)
 
-- `gemini_cli.api.request.count` (Counter, Int): Counts all API requests.
+- `llxprt_cli.api.request.count` (Counter, Int): Counts all API requests.
   - **Attributes**:
     - `model`
     - `status_code`
     - `error_type` (if applicable)
 
-- `gemini_cli.api.request.latency` (Histogram, ms): Measures API request latency.
+- `llxprt_cli.api.request.latency` (Histogram, ms): Measures API request latency.
   - **Attributes**:
     - `model`
 
-- `gemini_cli.token.usage` (Counter, Int): Counts the number of tokens used.
+- `llxprt_cli.token.usage` (Counter, Int): Counts the number of tokens used.
   - **Attributes**:
     - `model`
     - `type` (string: "input", "output", "thought", "cache", or "tool")
 
-- `gemini_cli.file.operation.count` (Counter, Int): Counts file operations.
+- `llxprt_cli.file.operation.count` (Counter, Int): Counts file operations.
   - **Attributes**:
     - `operation` (string: "create", "read", "update"): The type of file operation.
     - `lines` (Int, if applicable): Number of lines in the file.

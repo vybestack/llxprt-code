@@ -2,7 +2,7 @@
 
 LLxprt Code supports multiple AI providers, each with their own pricing and quota structures. A summary of model usage is available through the `/stats` command and presented on exit at the end of a session.
 
-**Important:** LLxprt Code displays a "Paid Mode" indicator in the lower right corner when it detects you're using a paid service. However, this is a heuristic to help you avoid unexpected costs - always verify with your provider's documentation.
+**Important:** The "Paid Mode" indicator in the lower right corner is specifically for the Gemini provider. It shows whether you're using OAuth authentication (free tier) or your Gemini API key (paid tier). This indicator does not apply to other providers - all non-Gemini providers are always considered paid when using their API keys.
 
 ## Provider-Specific Pricing
 

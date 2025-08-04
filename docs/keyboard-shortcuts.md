@@ -1,6 +1,6 @@
 # Gemini CLI Keyboard Shortcuts
 
-This document lists the available keyboard shortcuts in the Gemini CLI.
+This document lists the available keyboard shortcuts in LLxprt Code.
 
 ## General
 
