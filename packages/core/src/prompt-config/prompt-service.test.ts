@@ -53,14 +53,14 @@ describe('PromptService', () => {
       const stats = await fs.stat(baseDir);
       expect(stats.isDirectory()).toBe(true);
       
-      // Verify subdirectories
-      const corePath = path.join(baseDir, 'core');
-      const envPath = path.join(baseDir, 'env');
-      const toolsPath = path.join(baseDir, 'tools');
+      // Verify files were installed (directories are created as needed)
+      const coreFile = path.join(baseDir, 'core.md');
+      const envGitFile = path.join(baseDir, 'env', 'git-repository.md');
+      const toolsEditFile = path.join(baseDir, 'tools', 'edit.md');
       
-      await expect(fs.stat(corePath)).resolves.toBeTruthy();
-      await expect(fs.stat(envPath)).resolves.toBeTruthy();
-      await expect(fs.stat(toolsPath)).resolves.toBeTruthy();
+      await expect(fs.stat(coreFile)).resolves.toBeTruthy();
+      await expect(fs.stat(envGitFile)).resolves.toBeTruthy();
+      await expect(fs.stat(toolsEditFile)).resolves.toBeTruthy();
     });
 
     it('should install default prompt files on first initialization', async () => {
@@ -70,9 +70,13 @@ describe('PromptService', () => {
       await service.initialize();
       
       // Verify default files were installed
-      const coreDefaultPath = path.join(baseDir, 'core', 'default.md');
+      const coreDefaultPath = path.join(baseDir, 'core.md');
       const stats = await fs.stat(coreDefaultPath);
       expect(stats.isFile()).toBe(true);
+      
+      // Check content is correct
+      const content = await fs.readFile(coreDefaultPath, 'utf-8');
+      expect(content).toContain('You are an interactive CLI agent');
     });
 
     it('should not reinstall files if already initialized', async () => {
@@ -83,7 +87,7 @@ describe('PromptService', () => {
       await service.initialize();
       
       // Modify a file
-      const testFilePath = path.join(baseDir, 'core', 'default.md');
+      const testFilePath = path.join(baseDir, 'core.md');
       const originalContent = await fs.readFile(testFilePath, 'utf-8');
       const modifiedContent = originalContent + '\n# Modified';
       await fs.writeFile(testFilePath, modifiedContent);
@@ -319,9 +323,9 @@ describe('PromptService', () => {
       expect(prompt1).not.toBe(prompt2);
     });
 
-    it('should throw error if core prompt file is missing', async () => {
+    it('should return valid prompt using installed defaults', async () => {
       const baseDir = path.join(tempDir, 'empty-prompts');
-      await fs.mkdir(path.join(baseDir, 'core'), { recursive: true });
+      await fs.mkdir(baseDir, { recursive: true });
       
       const service = new PromptService({ baseDir });
       await service.initialize();
@@ -337,8 +341,9 @@ describe('PromptService', () => {
         }
       };
       
-      await expect(service.getPrompt(context))
-        .rejects.toThrow('Core prompt not found');
+      // Should work because defaults are always installed during initialization
+      const prompt = await service.getPrompt(context);
+      expect(prompt).toContain('You are an interactive CLI agent');
     });
 
     it('should continue if tool prompt is missing and log warning in debug mode', async () => {
@@ -666,50 +671,76 @@ describe('PromptService', () => {
   });
 
   describe('getAvailableTools', () => {
-    it('should return empty array if tools directory does not exist', async () => {
+    it('should return default tools when no custom tools exist', async () => {
       const baseDir = path.join(tempDir, 'prompts');
       const service = new PromptService({ baseDir });
       
       const tools = await service.getAvailableTools();
-      expect(tools).toEqual([]);
+      // Should contain all default tools from TOOL_DEFAULTS
+      expect(tools).toContain('Edit');
+      expect(tools).toContain('Glob');
+      expect(tools).toContain('Grep');
+      expect(tools).toContain('Ls');
+      expect(tools).toContain('Memory');
+      expect(tools).toContain('ReadFile');
+      expect(tools).toContain('ReadManyFiles');
+      expect(tools).toContain('Shell');
+      expect(tools).toContain('TodoRead');
+      expect(tools).toContain('TodoWrite');
+      expect(tools).toContain('WebFetch');
+      expect(tools).toContain('WebSearch');
+      expect(tools).toContain('WriteFile');
     });
 
-    it('should return list of tool names in PascalCase', async () => {
+    it('should return list of tool names in PascalCase including defaults and custom', async () => {
       const baseDir = path.join(tempDir, 'prompts');
-      const toolsDir = path.join(baseDir, 'tools');
-      await fs.mkdir(toolsDir, { recursive: true });
+      const service = new PromptService({ baseDir });
+      await service.initialize();
       
-      // Create tool files
-      await fs.writeFile(path.join(toolsDir, 'read-file.md'), 'ReadFile tool');
-      await fs.writeFile(path.join(toolsDir, 'write-file.md'), 'WriteFile tool');
+      const toolsDir = path.join(baseDir, 'tools');
+      
+      // Create additional custom tool files
       await fs.writeFile(path.join(toolsDir, 'simple-tool.md'), 'SimpleTool');
       await fs.writeFile(path.join(toolsDir, 'complex-tool-name.md'), 'ComplexToolName');
       await fs.writeFile(path.join(toolsDir, 'not-a-tool.txt'), 'Not a tool');
       
-      const service = new PromptService({ baseDir });
       const tools = await service.getAvailableTools();
       
-      expect(tools).toHaveLength(4);
-      expect(tools).toContain('ReadFile');
-      expect(tools).toContain('WriteFile');
+      // Should contain defaults plus custom tools
       expect(tools).toContain('SimpleTool');
       expect(tools).toContain('ComplexToolName');
       expect(tools).not.toContain('not-a-tool');
+      // Should also contain default tools
+      expect(tools).toContain('ReadFile');
+      expect(tools).toContain('WriteFile');
+      expect(tools).toContain('Edit');
     });
 
     it('should return tools sorted alphabetically', async () => {
       const baseDir = path.join(tempDir, 'prompts');
+      const service = new PromptService({ baseDir });
+      await service.initialize();
+      
       const toolsDir = path.join(baseDir, 'tools');
-      await fs.mkdir(toolsDir, { recursive: true });
       
       await fs.writeFile(path.join(toolsDir, 'zebra-tool.md'), 'ZebraTool');
       await fs.writeFile(path.join(toolsDir, 'alpha-tool.md'), 'AlphaTool');
       await fs.writeFile(path.join(toolsDir, 'beta-tool.md'), 'BetaTool');
       
-      const service = new PromptService({ baseDir });
       const tools = await service.getAvailableTools();
       
-      expect(tools).toEqual(['AlphaTool', 'BetaTool', 'ZebraTool']);
+      // Check that custom tools are sorted correctly among all tools
+      const customToolsIndex = {
+        alpha: tools.indexOf('AlphaTool'),
+        beta: tools.indexOf('BetaTool'),
+        zebra: tools.indexOf('ZebraTool')
+      };
+      
+      expect(customToolsIndex.alpha).toBeGreaterThan(-1);
+      expect(customToolsIndex.beta).toBeGreaterThan(-1);
+      expect(customToolsIndex.zebra).toBeGreaterThan(-1);
+      expect(customToolsIndex.alpha).toBeLessThan(customToolsIndex.beta);
+      expect(customToolsIndex.beta).toBeLessThan(customToolsIndex.zebra);
     });
 
     it('should automatically initialize if not already initialized', async () => {
@@ -723,16 +754,20 @@ describe('PromptService', () => {
 
     it('should handle directory read errors gracefully', async () => {
       const baseDir = path.join(tempDir, 'prompts');
-      const toolsDir = path.join(baseDir, 'tools');
+      const toolsConflictDir = path.join(baseDir, 'tools-conflict');
       
-      // Create tools as a file instead of directory
+      // Create a tools-conflict directory as a file instead of directory to test error handling
       await fs.mkdir(baseDir, { recursive: true });
-      await fs.writeFile(toolsDir, 'not a directory');
+      await fs.writeFile(toolsConflictDir, 'not a directory');
       
-      const service = new PromptService({ baseDir });
-      const tools = await service.getAvailableTools();
+      // Create service with a base directory that will have installation conflicts
+      const conflictBaseDir = path.join(tempDir, 'conflict-prompts');
+      await fs.mkdir(conflictBaseDir, { recursive: true });
+      await fs.writeFile(path.join(conflictBaseDir, 'tools'), 'conflict file');
       
-      expect(tools).toEqual([]);
+      const service = new PromptService({ baseDir: conflictBaseDir });
+      // This should handle the error gracefully during initialization
+      await expect(service.initialize()).rejects.toThrow('Installation failed');
     });
   });
 
