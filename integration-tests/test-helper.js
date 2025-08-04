@@ -175,14 +175,14 @@ export class TestRig {
     const model = env.LLXPRT_DEFAULT_MODEL || 'google/gemini-2.5-flash';
     const baseUrl = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
     const apiKey = env.OPENAI_API_KEY;
-    
+
     let command = `node ${quotedBundlePath} --yolo --provider ${provider} --model "${model}"`;
-    
+
     // Add baseurl if using openai provider
     if (provider === 'openai' && baseUrl) {
       command += ` --baseurl "${baseUrl}"`;
     }
-    
+
     // Add API key if available
     if (apiKey) {
       command += ` --key "${apiKey}"`;
@@ -561,7 +561,10 @@ export class TestRig {
         : env.TELEMETRY_LOG_FILE;
 
     if (!logFilePath) {
-      console.warn(`TELEMETRY_LOG_FILE environment variable not set`);
+      // Don't warn in CI/test environments, it's expected
+      if (process.env.VERBOSE === 'true') {
+        console.warn(`TELEMETRY_LOG_FILE environment variable not set`);
+      }
       return [];
     }
 
