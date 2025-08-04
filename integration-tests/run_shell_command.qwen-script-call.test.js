@@ -39,7 +39,7 @@ test('qwen calls a local shell script via run_shell_command and preserves UTF-8 
     'After running it, output exactly what the command prints to stdout, with no additional commentary.',
   ].join('\n');
 
-  const result = rig.run(prompt);
+  const result = await rig.run(prompt);
 
   assert.ok(
     result.includes(MULTIBYTE),

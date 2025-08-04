@@ -18,7 +18,7 @@ test('run_shell_command handles UTF-8 multibyte output correctly (integration)',
 
   // Use single quotes to preserve the space in the multibyte string
   const prompt = `Use the run_shell_command tool to execute the following command: printf '${MULTIBYTE}'`;
-  const result = rig.run(prompt);
+  const result = await rig.run(prompt);
 
   assert.ok(
     result.includes(MULTIBYTE),
