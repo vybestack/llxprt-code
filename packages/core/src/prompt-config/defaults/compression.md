@@ -10,8 +10,10 @@ The structure MUST be as follows:
 
 <state_snapshot>
 <overall_goal>
+
 <!-- A single, concise sentence describing the user's high-level objective. -->
 <!-- Example: "Refactor the authentication service to use a new JWT library." -->
+
 </overall_goal>
 
     <key_knowledge>
