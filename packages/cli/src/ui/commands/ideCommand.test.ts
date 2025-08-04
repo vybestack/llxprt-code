@@ -69,6 +69,7 @@ describe('ideCommand', () => {
     vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
     vi.mocked(mockConfig.getIdeClient).mockReturnValue({
       getCurrentIde: () => DetectedIde.VSCode,
+      getDetectedIdeDisplayName: () => 'VS Code',
     } as ReturnType<Config['getIdeClient']>);
     const command = ideCommand(mockConfig);
     expect(command).not.toBeNull();
@@ -86,6 +87,7 @@ describe('ideCommand', () => {
       vi.mocked(mockConfig.getIdeClient).mockReturnValue({
         getConnectionStatus: mockGetConnectionStatus,
         getCurrentIde: () => DetectedIde.VSCode,
+        getDetectedIdeDisplayName: () => 'VS Code',
       } as unknown as ReturnType<Config['getIdeClient']>);
     });
 
@@ -100,7 +102,7 @@ describe('ideCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: '🟢 Connected',
+        content: '🟢 Connected to VS Code',
       });
     });
 
@@ -159,6 +161,7 @@ describe('ideCommand', () => {
       vi.mocked(mockConfig.getIdeClient).mockReturnValue({
         getCurrentIde: () => DetectedIde.VSCode,
         getConnectionStatus: vi.fn(),
+        getDetectedIdeDisplayName: () => 'VS Code',
       } as unknown as ReturnType<Config['getIdeClient']>);
       vi.mocked(core.getIdeInstaller).mockReturnValue({
         install: mockInstall,
@@ -184,7 +187,7 @@ describe('ideCommand', () => {
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'info',
-          text: `Installing IDE companion extension...`,
+          text: `Installing IDE companion...`,
         }),
         expect.any(Number),
       );
@@ -214,7 +217,7 @@ describe('ideCommand', () => {
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'info',
-          text: `Installing IDE companion extension...`,
+          text: `Installing IDE companion...`,
         }),
         expect.any(Number),
       );
