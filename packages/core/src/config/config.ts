@@ -36,8 +36,8 @@ import { GitService } from '../services/gitService.js';
 import { getProjectTempDir } from '../utils/paths.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import {
-  // TELEMETRY REMOVED: Disabled imports for telemetry
-  // initializeTelemetry,
+  // TELEMETRY: Re-enabled for local file logging only
+  initializeTelemetry,
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
   TelemetryTarget,
@@ -355,12 +355,12 @@ export class Config {
       setLlxprtMdFilename(params.contextFileName);
     }
 
-    // TELEMETRY REMOVED: Disabled telemetry initialization to prevent Google data collection
-    /*
+    // TELEMETRY: Re-enabled for local file logging only - no network endpoints allowed
     if (this.telemetrySettings.enabled) {
       initializeTelemetry(this);
     }
 
+    /* USAGE STATISTICS REMOVED: ClearcutLogger disabled to prevent Google data collection
     if (this.getUsageStatisticsEnabled()) {
       ClearcutLogger.getInstance(this)?.logStartSessionEvent(
         new StartSessionEvent(this),
