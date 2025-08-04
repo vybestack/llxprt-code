@@ -5,7 +5,6 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { parse } from 'shell-quote';
 import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -123,12 +122,13 @@ export class TestRig {
     // Create a settings file to point the CLI to the local collector
     const llxprtDir = join(this.testDir, '.llxprt');
     mkdirSync(llxprtDir, { recursive: true });
-    // In sandbox mode, use an absolute path for telemetry inside the container
-    // The container mounts the test directory at the same path as the host
+    // Always use an absolute path for telemetry
+    // In sandbox mode, use the test directory
+    // In non-sandbox mode, use the environment variable or fallback to test directory
     const telemetryPath =
       env.GEMINI_SANDBOX && env.GEMINI_SANDBOX !== 'false'
         ? join(this.testDir, 'telemetry.log') // Absolute path in test directory
-        : env.TELEMETRY_LOG_FILE; // Absolute path for non-sandbox
+        : env.TELEMETRY_LOG_FILE || join(this.testDir, '..', 'telemetry.log'); // Absolute path for non-sandbox
 
     const settings = {
       telemetry: {
@@ -138,6 +138,8 @@ export class TestRig {
         outfile: telemetryPath,
       },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
+      selectedAuthType: 'none', // Explicitly set auth type to none for tests
+      provider: env.LLXPRT_DEFAULT_PROVIDER || 'openai', // Use OpenAI provider by default
       ...options.settings, // Allow tests to override/add settings
     };
     writeFileSync(
@@ -165,37 +167,69 @@ export class TestRig {
   }
 
   run(promptOrOptions, ...args) {
-    // Properly quote the bundle path for Windows
-    const quotedBundlePath = `"${this.bundlePath}"`;
-    let command = `node ${quotedBundlePath} --yolo`;
+    // Add provider and model flags from environment or defaults
+    const provider = env.LLXPRT_DEFAULT_PROVIDER || 'openai';
+    const model = env.LLXPRT_DEFAULT_MODEL || 'google/gemini-2.5-flash';
+    const baseUrl = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    const apiKey = env.OPENAI_API_KEY;
+
+    // Build command args array directly instead of parsing a string
+    // This avoids Windows-specific command line parsing issues
+    const commandArgs = [
+      'node',
+      this.bundlePath,
+      '--yolo',
+      '--provider',
+      provider,
+      '--model',
+      model,
+    ];
+
+    // Add baseurl if using openai provider
+    if (provider === 'openai' && baseUrl) {
+      commandArgs.push('--baseurl', baseUrl);
+    }
+
+    // Add API key if available
+    if (apiKey) {
+      commandArgs.push('--key', apiKey);
+    }
+
     const execOptions = {
       cwd: this.testDir,
       encoding: 'utf-8',
-      env: process.env,
+      env: {
+        ...process.env,
+        // Ensure browser launch is suppressed in tests
+        NO_BROWSER: 'true',
+        LLXPRT_NO_BROWSER_AUTH: 'true',
+        CI: 'true',
+      },
     };
 
     if (typeof promptOrOptions === 'string') {
-      command += ` --prompt "${promptOrOptions}"`;
+      commandArgs.push('--prompt', promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        command += ` --prompt "${promptOrOptions.prompt}"`;
+        commandArgs.push('--prompt', promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
       }
     }
 
-    command += ` ${args.join(' ')}`;
+    // Add any additional args
+    commandArgs.push(...args);
 
-    const commandArgs = parse(command);
     const node = commandArgs.shift();
 
     const child = spawn(node, commandArgs, {
       cwd: this.testDir,
       stdio: 'pipe',
+      env: execOptions.env,
     });
 
     let stdout = '';
@@ -542,7 +576,10 @@ export class TestRig {
         : env.TELEMETRY_LOG_FILE;
 
     if (!logFilePath) {
-      console.warn(`TELEMETRY_LOG_FILE environment variable not set`);
+      // Don't warn in CI/test environments, it's expected
+      if (process.env.VERBOSE === 'true') {
+        console.warn(`TELEMETRY_LOG_FILE environment variable not set`);
+      }
       return [];
     }
 
@@ -573,7 +610,7 @@ export class TestRig {
         // Look for tool call logs
         if (
           logData.attributes &&
-          logData.attributes['event.name'] === 'gemini_cli.tool_call'
+          logData.attributes['event.name'] === 'llxprt_code.tool_call'
         ) {
           const toolName = logData.attributes.function_name;
           logs.push({

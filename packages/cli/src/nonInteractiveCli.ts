@@ -141,6 +141,10 @@ export async function runNonInteractive(
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
       } else {
         process.stdout.write('\n'); // Ensure a final newline
+        // Ensure telemetry is flushed before exiting
+        if (isTelemetrySdkInitialized()) {
+          await shutdownTelemetry();
+        }
         return;
       }
     }

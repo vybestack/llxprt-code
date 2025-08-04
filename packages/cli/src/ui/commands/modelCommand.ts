@@ -12,7 +12,6 @@ import {
   CommandKind,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { SettingScope } from '../../config/settings.js';
 
 export const modelCommand: SlashCommand = {
   name: 'model',
@@ -51,15 +50,6 @@ export const modelCommand: SlashCommand = {
             `[Model Command] Updating config model to ${modelName}`,
           );
           context.services.config.setModel(modelName);
-        }
-
-        // Persist model selection to user settings
-        if (context.services.settings) {
-          context.services.settings.setValue(
-            SettingScope.User,
-            'defaultModel',
-            modelName,
-          );
         }
 
         return {

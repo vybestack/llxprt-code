@@ -608,10 +608,12 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.ToolCallRequest:
-            console.log(
-              '[DEBUG] ToolCallRequest event:',
-              JSON.stringify(event.value, null, 2),
-            );
+            if (process.env.DEBUG) {
+              console.log(
+                '[DEBUG] ToolCallRequest event:',
+                JSON.stringify(event.value, null, 2),
+              );
+            }
             toolCallRequests.push(event.value);
             break;
           case ServerGeminiEventType.UserCancelled:
@@ -650,10 +652,15 @@ export const useGeminiStream = (
         }
       }
       if (toolCallRequests.length > 0) {
-        console.log(
-          '[DEBUG] Scheduling tool calls:',
-          toolCallRequests.map((tc) => ({ name: tc.name, callId: tc.callId })),
-        );
+        if (process.env.DEBUG) {
+          console.log(
+            '[DEBUG] Scheduling tool calls:',
+            toolCallRequests.map((tc) => ({
+              name: tc.name,
+              callId: tc.callId,
+            })),
+          );
+        }
         scheduleToolCalls(toolCallRequests, signal);
       }
       return StreamProcessingStatus.Completed;
@@ -884,10 +891,12 @@ export const useGeminiStream = (
       }
 
       const responsesToSend: PartListUnion[] = geminiTools.map((toolCall) => {
-        console.log(
-          `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
-          JSON.stringify(toolCall.response.responseParts, null, 2),
-        );
+        if (process.env.DEBUG) {
+          console.log(
+            `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
+            JSON.stringify(toolCall.response.responseParts, null, 2),
+          );
+        }
         return toolCall.response.responseParts;
       });
 
@@ -907,24 +916,28 @@ export const useGeminiStream = (
       }
 
       // Debug logging BEFORE merging
-      console.log(
-        '[DEBUG] responsesToSend before merge:',
-        JSON.stringify(responsesToSend, null, 2),
-      );
-      console.log('[DEBUG] responsesToSend length:', responsesToSend.length);
-      responsesToSend.forEach((resp, idx) => {
-        console.log(`[DEBUG] responsesToSend[${idx}] type:`, typeof resp);
+      if (process.env.DEBUG) {
         console.log(
-          `[DEBUG] responsesToSend[${idx}] isArray:`,
-          Array.isArray(resp),
+          '[DEBUG] responsesToSend before merge:',
+          JSON.stringify(responsesToSend, null, 2),
         );
-      });
+        console.log('[DEBUG] responsesToSend length:', responsesToSend.length);
+        responsesToSend.forEach((resp, idx) => {
+          console.log(`[DEBUG] responsesToSend[${idx}] type:`, typeof resp);
+          console.log(
+            `[DEBUG] responsesToSend[${idx}] isArray:`,
+            Array.isArray(resp),
+          );
+        });
+      }
 
       // For Gemini, when there are multiple function responses, each must be sent
       // as a separate user message turn, not as an array in a single turn
       if (responsesToSend.length === 1) {
         // Single response - send as-is
-        console.log('[DEBUG] Single function response, sending directly');
+        if (process.env.DEBUG) {
+          console.log('[DEBUG] Single function response, sending directly');
+        }
         submitQuery(
           responsesToSend[0],
           {
@@ -936,17 +949,21 @@ export const useGeminiStream = (
         markToolsAsSubmitted(callIdsToMarkAsSubmitted);
       } else {
         // Multiple responses - send each one individually as separate turns
-        console.log(
-          `[DEBUG] Multiple function responses (${responsesToSend.length}), sending individually`,
-        );
+        if (process.env.DEBUG) {
+          console.log(
+            `[DEBUG] Multiple function responses (${responsesToSend.length}), sending individually`,
+          );
+        }
 
         // Send each response as a separate message turn
         let submittedCount = 0;
         responsesToSend.forEach((response, index) => {
-          console.log(
-            `[DEBUG] Sending function response ${index + 1}/${responsesToSend.length}:`,
-            JSON.stringify(response, null, 2),
-          );
+          if (process.env.DEBUG) {
+            console.log(
+              `[DEBUG] Sending function response ${index + 1}/${responsesToSend.length}:`,
+              JSON.stringify(response, null, 2),
+            );
+          }
 
           // Use setTimeout to ensure proper ordering and avoid race conditions
           setTimeout(() => {

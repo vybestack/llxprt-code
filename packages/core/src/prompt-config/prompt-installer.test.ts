@@ -12,6 +12,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { existsSync } from 'fs';
 
+// Helper to check if we're on Windows
+const isWindows = (): boolean => os.platform() === 'win32';
+
 describe('PromptInstaller', () => {
   let installer: PromptInstaller;
   let tempDir: string;
@@ -41,14 +44,16 @@ describe('PromptInstaller', () => {
     it('should expand environment variables in path', () => {
       process.env.TEST_VAR = '/custom/path';
       const result = installer.expandPath('$TEST_VAR/subdir');
-      expect(result).toBe('/custom/path/subdir');
+      const expectedPath = path.normalize('/custom/path/subdir');
+      expect(result).toBe(expectedPath);
       delete process.env.TEST_VAR;
     });
 
     it('should expand environment variables with curly braces', () => {
       process.env.TEST_VAR = '/custom/path';
       const result = installer.expandPath('${TEST_VAR}/subdir');
-      expect(result).toBe('/custom/path/subdir');
+      const expectedPath = path.normalize('/custom/path/subdir');
+      expect(result).toBe(expectedPath);
       delete process.env.TEST_VAR;
     });
 
@@ -56,7 +61,8 @@ describe('PromptInstaller', () => {
       process.env.VAR1 = '/part1';
       process.env.VAR2 = 'part2';
       const result = installer.expandPath('$VAR1/${VAR2}/file');
-      expect(result).toBe('/part1/part2/file');
+      const expectedPath = path.normalize('/part1/part2/file');
+      expect(result).toBe(expectedPath);
       delete process.env.VAR1;
       delete process.env.VAR2;
     });
@@ -179,7 +185,7 @@ describe('PromptInstaller', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.baseDir).toContain('.llxprt/prompts');
+      expect(result.baseDir).toContain(path.join('.llxprt', 'prompts'));
     });
 
     it('should reject invalid base directory paths', async () => {
@@ -193,8 +199,13 @@ describe('PromptInstaller', () => {
     });
 
     it('should set correct file permissions', async () => {
-      const result = await installer.install(testBaseDir, defaultFiles);
+      // Skip this test entirely on Windows
+      if (isWindows()) {
+        expect(true).toBe(true); // Placeholder assertion
+        return;
+      }
 
+      const result = await installer.install(testBaseDir, defaultFiles);
       expect(result.success).toBe(true);
 
       // Check directory permissions (755)
@@ -209,14 +220,22 @@ describe('PromptInstaller', () => {
     });
 
     it('should handle permission errors gracefully', async () => {
-      // Create directory with no write permission
-      await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
+      // Skip permission tests on Windows as chmod has no effect
+      if (isWindows()) {
+        // On Windows, create a scenario that would fail (e.g., invalid path)
+        const result = await installer.install('/invalid:path', defaultFiles);
+        expect(result.success).toBe(false);
+        expect(result.errors.length).toBeGreaterThan(0);
+      } else {
+        // Create directory with no write permission
+        await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
 
-      const result = await installer.install(testBaseDir, defaultFiles);
+        const result = await installer.install(testBaseDir, defaultFiles);
 
-      expect(result.success).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.errors[0]).toContain('Permission denied');
+        expect(result.success).toBe(false);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.errors[0]).toContain('Permission denied');
+      }
     });
 
     it('should create parent directories for nested files', async () => {
@@ -227,7 +246,9 @@ describe('PromptInstaller', () => {
       const result = await installer.install(testBaseDir, nestedFiles);
 
       expect(result.success).toBe(true);
-      expect(existsSync(path.join(testBaseDir, 'deeply/nested/path')));
+      expect(existsSync(path.join(testBaseDir, 'deeply/nested/path'))).toBe(
+        true,
+      );
       expect(result.installed).toContain('deeply/nested/path/file.md');
     });
   });
@@ -347,11 +368,20 @@ describe('PromptInstaller', () => {
     });
 
     it('should check directory permissions', async () => {
-      await fs.mkdir(testBaseDir, { mode: 0o444, recursive: true });
+      // Skip permission tests on Windows as chmod has no effect
+      if (isWindows()) {
+        // On Windows, just create a directory and verify it exists
+        await fs.mkdir(testBaseDir, { recursive: true });
+        const result = await installer.validate(testBaseDir);
+        // Windows directories are generally writable if they exist
+        expect(result.warnings.length).toBeGreaterThanOrEqual(0);
+      } else {
+        await fs.mkdir(testBaseDir, { mode: 0o444, recursive: true });
 
-      const result = await installer.validate(testBaseDir);
+        const result = await installer.validate(testBaseDir);
 
-      expect(result.warnings).toContain('Cannot write to directory');
+        expect(result.warnings).toContain('Cannot write to directory');
+      }
     });
 
     it('should detect empty files that should have content', async () => {
@@ -366,7 +396,7 @@ describe('PromptInstaller', () => {
     it('should handle null baseDir by using default', async () => {
       const result = await installer.validate(null);
 
-      expect(result.baseDir).toContain('.llxprt/prompts');
+      expect(result.baseDir).toContain(path.join('.llxprt', 'prompts'));
     });
   });
 
@@ -416,10 +446,16 @@ describe('PromptInstaller', () => {
 
       expect(result.success).toBe(true);
 
-      // Verify permissions were fixed
-      const stats = await fs.stat(path.join(testBaseDir, 'core.md'));
-      const mode = stats.mode & parseInt('777', 8);
-      expect(mode).toBe(parseInt('644', 8));
+      // Skip permission checks on Windows as chmod has no effect
+      if (!isWindows()) {
+        // Verify permissions were fixed
+        const stats = await fs.stat(path.join(testBaseDir, 'core.md'));
+        const mode = stats.mode & parseInt('777', 8);
+        expect(mode).toBe(parseInt('644', 8));
+      } else {
+        // On Windows, just verify the file exists
+        expect(existsSync(path.join(testBaseDir, 'core.md'))).toBe(true);
+      }
     });
 
     it('should return success immediately if already valid', async () => {
@@ -436,14 +472,22 @@ describe('PromptInstaller', () => {
     });
 
     it('should report errors that could not be repaired', async () => {
-      // Create directory with no write permission
-      await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
+      // Skip permission tests on Windows as chmod has no effect
+      if (isWindows()) {
+        // On Windows, try to create in an invalid location
+        const result = await installer.repair('/invalid:path', defaultFiles);
+        expect(result.success).toBe(false);
+        expect(result.errors.length).toBeGreaterThan(0);
+      } else {
+        // Create directory with no write permission
+        await fs.mkdir(testBaseDir, { recursive: true, mode: 0o555 });
 
-      const result = await installer.repair(testBaseDir, defaultFiles);
+        const result = await installer.repair(testBaseDir, defaultFiles);
 
-      expect(result.success).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(result.stillInvalid.length).toBeGreaterThan(0);
+        expect(result.success).toBe(false);
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.stillInvalid.length).toBeGreaterThan(0);
+      }
     });
   });
 
@@ -577,6 +621,14 @@ describe('PromptInstaller', () => {
 
       // Attempt to write a file that will fail
       const files = { 'test.md': 'content' };
+
+      // Skip permission tests on Windows as chmod has no effect
+      if (isWindows()) {
+        // On Windows, simulate a failure by using an invalid path
+        const result = await installer.install('/invalid:path', files);
+        expect(result.success).toBe(false);
+        return; // Skip temp file check on Windows
+      }
 
       // Make directory read-only
       await fs.chmod(testBaseDir, 0o555);

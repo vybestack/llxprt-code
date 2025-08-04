@@ -9,6 +9,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { PromptLoader } from './prompt-loader.js';
 
+// Helper to check if we're on Windows
+const isWindows = (): boolean => os.platform() === 'win32';
+
 describe('PromptLoader', () => {
   let tempDir: string;
   let loader: PromptLoader;
@@ -120,16 +123,26 @@ describe('PromptLoader', () => {
     it('should handle permission errors gracefully', async () => {
       const filePath = path.join(tempDir, 'no-read.md');
       await fs.writeFile(filePath, 'content', 'utf8');
-      await fs.chmod(filePath, 0o000); // Remove all permissions
 
-      const result = await loader.loadFile(filePath, false);
+      // Skip permission tests on Windows as chmod has no effect
+      if (isWindows()) {
+        // On Windows, test with a file that's locked by another process
+        // Since we can't easily simulate this, just test the file exists and can be read
+        const result = await loader.loadFile(filePath, false);
+        expect(result.success).toBe(true);
+        expect(result.content).toBe('content');
+      } else {
+        await fs.chmod(filePath, 0o000); // Remove all permissions
 
-      expect(result.success).toBe(false);
-      expect(result.content).toBe('');
-      expect(result.error).toContain('Failed to read file');
+        const result = await loader.loadFile(filePath, false);
 
-      // Restore permissions for cleanup
-      await fs.chmod(filePath, 0o644);
+        expect(result.success).toBe(false);
+        expect(result.content).toBe('');
+        expect(result.error).toContain('Failed to read file');
+
+        // Restore permissions for cleanup
+        await fs.chmod(filePath, 0o644);
+      }
     });
 
     it('should return error for null or undefined file path', async () => {
@@ -411,7 +424,10 @@ describe('PromptLoader', () => {
 
     it('should handle permission errors gracefully', () => {
       // Even with an invalid path, should not throw
-      const env = loader.detectEnvironment('/root/no-access');
+      const invalidPath = isWindows()
+        ? 'C:\\System Volume Information'
+        : '/root/no-access';
+      const env = loader.detectEnvironment(invalidPath);
 
       expect(env.isGitRepository).toBe(false);
       expect(env.isSandboxed).toBe(false);

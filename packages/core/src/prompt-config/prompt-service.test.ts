@@ -10,6 +10,9 @@ import { dirname } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Helper to check if we're on Windows
+const isWindows = (): boolean => os.platform() === 'win32';
+
 describe('PromptService', () => {
   let tempDir: string;
   let service: PromptService;
@@ -118,7 +121,10 @@ describe('PromptService', () => {
     });
 
     it('should throw error if parent directory cannot be created', async () => {
-      const baseDir = '/invalid-path/that/cannot/be/created/prompts';
+      // Use platform-specific invalid path
+      const baseDir = isWindows()
+        ? 'Z:\\invalid-path\\that\\cannot\\be\\created\\prompts' // Non-existent drive on Windows
+        : '/invalid-path/that/cannot/be/created/prompts';
       const service = new PromptService({ baseDir });
 
       await expect(service.initialize()).rejects.toThrow();

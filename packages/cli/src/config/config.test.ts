@@ -1074,7 +1074,6 @@ describe('--profile-load flag functionality', () => {
     process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
       showMemoryUsage: false,
     };
 
@@ -1115,9 +1114,7 @@ describe('--profile-load flag functionality', () => {
       'openai',
     ];
     const argv = await parseArguments();
-    const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
-    };
+    const settings: Settings = {};
 
     const config = await loadCliConfig(settings, [], 'test-session', argv);
 
@@ -1127,10 +1124,12 @@ describe('--profile-load flag functionality', () => {
   });
 
   it('should continue without profile if loading fails', async () => {
-    // Save original env var
+    // Save original env vars
     const originalProvider = process.env.LLXPRT_DEFAULT_PROVIDER;
-    // Clear the environment variable that CI sets
+    const originalModel = process.env.LLXPRT_DEFAULT_MODEL;
+    // Clear the environment variables that CI sets
     delete process.env.LLXPRT_DEFAULT_PROVIDER;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
 
     try {
       // Mock profile loading failure
@@ -1145,9 +1144,7 @@ describe('--profile-load flag functionality', () => {
         'non-existent-profile',
       ];
       const argv = await parseArguments();
-      const settings: Settings = {
-        defaultModel: 'gemini-2.5-pro',
-      };
+      const settings: Settings = {};
 
       // Should not throw, but continue with default settings
       const config = await loadCliConfig(settings, [], 'test-session', argv);
@@ -1155,9 +1152,12 @@ describe('--profile-load flag functionality', () => {
       expect(config.getModel()).toBe('gemini-2.5-pro');
       expect(config.getProvider()).toBe('gemini'); // Default provider is 'gemini' not undefined
     } finally {
-      // Restore original env var
+      // Restore original env vars
       if (originalProvider !== undefined) {
         process.env.LLXPRT_DEFAULT_PROVIDER = originalProvider;
+      }
+      if (originalModel !== undefined) {
+        process.env.LLXPRT_DEFAULT_MODEL = originalModel;
       }
     }
   });
@@ -1166,7 +1166,6 @@ describe('--profile-load flag functionality', () => {
     process.argv = ['node', 'script.js', '--profile-load', 'test-profile'];
     const argv = await parseArguments();
     const settings: Settings = {
-      defaultModel: 'gemini-2.5-pro',
       showMemoryUsage: false,
       // Add some other settings that should be preserved
       telemetry: { enabled: true },

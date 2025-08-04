@@ -37,7 +37,6 @@ describe('aboutCommand', () => {
     mockFileSystem.setMockFile(
       USER_SETTINGS_PATH,
       JSON.stringify({
-        defaultModel: 'gemini-2.5-pro', // Use Gemini's actual default model
         selectedAuthType: 'test-auth',
       }),
     );

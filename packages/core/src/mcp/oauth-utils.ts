@@ -154,10 +154,12 @@ export class OAuthUtils {
         if (authServerMetadata) {
           const config = this.metadataToOAuthConfig(authServerMetadata);
           if (authServerMetadata.registration_endpoint) {
-            console.log(
-              'Dynamic client registration is supported at:',
-              authServerMetadata.registration_endpoint,
-            );
+            if (process.env.DEBUG) {
+              console.log(
+                'Dynamic client registration is supported at:',
+                authServerMetadata.registration_endpoint,
+              );
+            }
           }
           return config;
         }
@@ -174,10 +176,12 @@ export class OAuthUtils {
       if (authServerMetadata) {
         const config = this.metadataToOAuthConfig(authServerMetadata);
         if (authServerMetadata.registration_endpoint) {
-          console.log(
-            'Dynamic client registration is supported at:',
-            authServerMetadata.registration_endpoint,
-          );
+          if (process.env.DEBUG) {
+            console.log(
+              'Dynamic client registration is supported at:',
+              authServerMetadata.registration_endpoint,
+            );
+          }
         }
         return config;
       }
@@ -221,9 +225,11 @@ export class OAuthUtils {
       return null;
     }
 
-    console.log(
-      `Found resource metadata URI from www-authenticate header: ${resourceMetadataUri}`,
-    );
+    if (process.env.DEBUG) {
+      console.log(
+        `Found resource metadata URI from www-authenticate header: ${resourceMetadataUri}`,
+      );
+    }
 
     const resourceMetadata =
       await this.fetchProtectedResourceMetadata(resourceMetadataUri);
@@ -242,9 +248,11 @@ export class OAuthUtils {
     );
 
     if (authServerMetadata) {
-      console.log(
-        'OAuth configuration discovered successfully from www-authenticate header',
-      );
+      if (process.env.DEBUG) {
+        console.log(
+          'OAuth configuration discovered successfully from www-authenticate header',
+        );
+      }
       return this.metadataToOAuthConfig(authServerMetadata);
     }
 
