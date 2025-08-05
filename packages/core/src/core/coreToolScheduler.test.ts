@@ -128,6 +128,7 @@ describe('CoreToolScheduler', () => {
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -197,6 +198,7 @@ describe('CoreToolScheduler with payload', () => {
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -500,6 +502,7 @@ describe('CoreToolScheduler edit cancellation', () => {
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.DEFAULT,
+      getEphemeralSettings: () => ({}),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({
@@ -770,6 +773,7 @@ describe('CoreToolScheduler YOLO mode', () => {
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
       getApprovalMode: () => ApprovalMode.YOLO,
+      getEphemeralSettings: () => ({}),
     } as unknown as Config;
 
     const scheduler = new CoreToolScheduler({

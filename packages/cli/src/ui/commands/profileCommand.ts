@@ -90,11 +90,15 @@ const saveCommand: SlashCommand = {
 
       // Get current provider and model
       const providerName = context.services.config.getProvider();
-      const modelName = context.services.config.getModel();
 
       // Get the provider manager and active provider
       const providerManager = context.services.config.getProviderManager();
       const activeProvider = providerManager?.getActiveProvider();
+
+      // Get the model from the provider first (source of truth), fallback to config
+      const providerModel = activeProvider?.getCurrentModel?.();
+      const configModel = context.services.config.getModel();
+      const modelName = providerModel || configModel;
 
       // Get model params from provider
       let modelParams: Record<string, unknown> = {};
@@ -116,6 +120,7 @@ const saveCommand: SlashCommand = {
         'tool-format',
         'api-version',
         'custom-headers',
+        'disabled-tools',
       ];
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};
@@ -267,15 +272,11 @@ const loadCommand: SlashCommand = {
       }
 
       // 2. Set model second
-      console.debug(`[Profile Load] Setting model to ${profile.model}`);
       context.services.config.setModel(profile.model);
 
       // Also set model on the provider
       const activeProviderForModel = providerManager?.getActiveProvider();
       if (activeProviderForModel && activeProviderForModel.setModel) {
-        console.debug(
-          `[Profile Load] Setting model on provider to ${profile.model}`,
-        );
         activeProviderForModel.setModel(profile.model);
       }
 
@@ -289,6 +290,7 @@ const loadCommand: SlashCommand = {
         'tool-format',
         'api-version',
         'custom-headers',
+        'disabled-tools',
       ];
 
       // Clear all known ephemeral settings
@@ -347,10 +349,8 @@ const loadCommand: SlashCommand = {
           if (activeProvider && activeProvider.setBaseUrl) {
             // Handle "none" as clearing the base URL
             if (value === 'none') {
-              console.debug('[Profile] Clearing base URL (value was "none")');
               activeProvider.setBaseUrl(undefined);
             } else {
-              console.debug(`[Profile] Setting base URL to: ${value}`);
               activeProvider.setBaseUrl(value);
             }
           }

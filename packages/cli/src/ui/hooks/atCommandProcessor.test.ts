@@ -64,12 +64,13 @@ describe('handleAtCommand', () => {
         isPathWithinWorkspace: () => true,
         getDirectories: () => [testRootDir],
       }),
+      getEphemeralSettings: () => ({}), // No disabled tools
     } as unknown as Config;
 
     const registry = new ToolRegistry(mockConfig);
     registry.registerTool(new ReadManyFilesTool(mockConfig));
     registry.registerTool(new GlobTool(mockConfig));
-    getToolRegistry.mockReturnValue(registry);
+    getToolRegistry.mockResolvedValue(registry);
   });
 
   afterEach(async () => {
@@ -122,6 +123,13 @@ describe('handleAtCommand', () => {
     expect(mockOnDebugMessage).toHaveBeenCalledWith(
       'Lone @ detected, will be treated as text in the modified query.',
     );
+  });
+
+  it('tool registry should be properly configured', async () => {
+    const registry = await mockConfig.getToolRegistry();
+    expect(registry).toBeDefined();
+    expect(registry.getTool('read_many_files')).toBeDefined();
+    expect(registry.getTool('glob')).toBeDefined();
   });
 
   it('should process a valid text file path', async () => {

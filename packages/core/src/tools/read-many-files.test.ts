@@ -67,6 +67,7 @@ describe('ReadManyFilesTool', () => {
       getTargetDir: () => tempRootDir,
       getWorkspaceDirs: () => [tempRootDir],
       getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+      getEphemeralSettings: () => ({}) as Record<string, unknown>, // Return empty settings for default behavior
     } as Partial<Config> as Config;
     tool = new ReadManyFilesTool(mockConfig);
 
@@ -444,6 +445,7 @@ describe('ReadManyFilesTool', () => {
         }),
         getWorkspaceContext: () => new WorkspaceContext(tempDir1, [tempDir2]),
         getTargetDir: () => tempDir1,
+        getEphemeralSettings: () => ({}) as Record<string, unknown>, // Return empty settings for default behavior
       } as Partial<Config> as Config;
       tool = new ReadManyFilesTool(mockConfig);
 
@@ -475,6 +477,371 @@ describe('ReadManyFilesTool', () => {
 
       fs.rmSync(tempDir1, { recursive: true, force: true });
       fs.rmSync(tempDir2, { recursive: true, force: true });
+    });
+  });
+
+  describe('limits functionality', () => {
+    const createFile = (filePath: string, content = '') => {
+      const fullPath = path.join(tempRootDir, filePath);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, content);
+    };
+
+    describe('file count limits', () => {
+      it('should warn and stop when exceeding file count limit in warn mode', async () => {
+        // Create 60 files (limit is 50 by default)
+        for (let i = 1; i <= 60; i++) {
+          createFile(`file${i}.txt`, `Content of file ${i}`);
+        }
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-count': 50,
+              'read-many-files-truncate-mode': 'warn',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        expect(result.llmContent).toBe(
+          'Found 60 files matching your pattern, but limiting to 50 files. Please use more specific patterns to narrow your search.',
+        );
+        expect(result.returnDisplay).toContain('## File Count Limit Exceeded');
+        expect(result.returnDisplay).toContain('**Matched files:** 60');
+        expect(result.returnDisplay).toContain('**Limit:** 50');
+      });
+
+      it('should truncate files when exceeding limit in truncate mode', async () => {
+        // Create 10 files
+        for (let i = 1; i <= 10; i++) {
+          createFile(`file${i}.txt`, `Content of file ${i}`);
+        }
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-count': 5,
+              'read-many-files-truncate-mode': 'truncate',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        const content = result.llmContent as string[];
+        expect(content.length).toBe(5); // Only 5 files processed
+        expect(result.returnDisplay).toContain(
+          'Successfully read and concatenated content from **5 file(s)**',
+        );
+        expect(result.returnDisplay).toContain('**Skipped 1 item(s):**');
+        expect(result.returnDisplay).toContain(
+          '`5 file(s)` (Reason: truncated to stay within 5 file limit)',
+        );
+      });
+
+      it('should sample files evenly when exceeding limit in sample mode', async () => {
+        // Create 20 files
+        for (let i = 1; i <= 20; i++) {
+          createFile(
+            `file${i.toString().padStart(2, '0')}.txt`,
+            `Content of file ${i}`,
+          );
+        }
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-count': 5,
+              'read-many-files-truncate-mode': 'sample',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        const content = result.llmContent as string[];
+        expect(content.length).toBe(5); // Only 5 files processed
+        expect(result.returnDisplay).toContain(
+          'Successfully read and concatenated content from **5 file(s)**',
+        );
+        expect(result.returnDisplay).toContain('**Skipped 1 item(s):**');
+        expect(result.returnDisplay).toContain(
+          '`15 file(s)` (Reason: sampling to stay within 5 file limit)',
+        );
+
+        // Check that we sampled evenly (should get files 1, 5, 9, 13, 17 approximately)
+        const processedFiles =
+          (result.returnDisplay as string).match(/file\d+\.txt/g) || [];
+        expect(processedFiles.length).toBe(5);
+      });
+    });
+
+    describe('token limits', () => {
+      it('should warn and stop when exceeding token limit in warn mode', async () => {
+        // Create files with enough content to exceed token limit
+        createFile('file1.txt', 'a'.repeat(1000)); // ~250 tokens
+        createFile('file2.txt', 'b'.repeat(1000)); // ~250 tokens
+        createFile('file3.txt', 'c'.repeat(1000)); // ~250 tokens
+        createFile('file4.txt', 'd'.repeat(1000)); // ~250 tokens
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-tokens': 500, // Very low token limit
+              'read-many-files-truncate-mode': 'warn',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        const content = result.llmContent as string[];
+        expect(content.length).toBeLessThan(4); // Should stop before processing all files
+        expect(result.returnDisplay).toContain(
+          'Successfully read and concatenated content from',
+        );
+        expect(result.returnDisplay).toContain('**Skipped');
+        expect(result.returnDisplay).toContain(
+          'would exceed token limit of 500',
+        );
+      });
+
+      it('should truncate content when exceeding token limit in truncate mode', async () => {
+        // Create a file with long content
+        const longContent = 'This is a very long content. '.repeat(200); // ~1600 tokens
+        createFile('file1.txt', longContent);
+        createFile('file2.txt', 'Short content');
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-tokens': 500,
+              'read-many-files-truncate-mode': 'truncate',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        const content = result.llmContent as string[];
+        expect(
+          content.some((c) =>
+            c.includes('[CONTENT TRUNCATED DUE TO TOKEN LIMIT]'),
+          ),
+        ).toBe(true);
+        expect(result.returnDisplay).toContain(
+          'content truncated to fit token limit',
+        );
+      });
+
+      it('should skip files when exceeding token limit in sample mode', async () => {
+        // Create multiple files
+        for (let i = 1; i <= 5; i++) {
+          createFile(`file${i}.txt`, 'Content '.repeat(200)); // ~400 tokens each
+        }
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-tokens': 1000,
+              'read-many-files-truncate-mode': 'sample',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        expect(result.returnDisplay).toContain(
+          'skipped to stay within token limit',
+        );
+        const content = result.llmContent as string[];
+        // Should have processed some files but not all
+        expect(content.length).toBeGreaterThan(0);
+        expect(content.length).toBeLessThan(5);
+      });
+    });
+
+    describe('file size limits', () => {
+      it('should skip files exceeding size limit', async () => {
+        // Create a small file and a large file
+        createFile('small.txt', 'Small content');
+        const largeContent = 'x'.repeat(600 * 1024); // 600KB
+        createFile('large.txt', largeContent);
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-file-size-limit': 524288, // 512KB
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        const content = result.llmContent as string[];
+        expect(content.length).toBe(1); // Only small file processed
+        expect(content[0]).toContain('Small content');
+        expect(result.returnDisplay).toContain(
+          'file size (600KB) exceeds limit (512KB)',
+        );
+      });
+
+      it('should respect custom file size limit from ephemeral settings', async () => {
+        // Create files of various sizes
+        createFile('tiny.txt', 'x'.repeat(10));
+        createFile('medium.txt', 'x'.repeat(200 * 1024)); // 200KB
+        createFile('large.txt', 'x'.repeat(300 * 1024)); // 300KB
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-file-size-limit': 256 * 1024, // 256KB
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        expect(result.returnDisplay).toContain(
+          'Successfully read and concatenated content from **2 file(s)**',
+        );
+        expect(result.returnDisplay).toContain(
+          'file size (300KB) exceeds limit (256KB)',
+        );
+      });
+    });
+
+    describe('combined limits', () => {
+      it('should handle multiple limits simultaneously', async () => {
+        // Create many files with varying sizes
+        for (let i = 1; i <= 10; i++) {
+          const content = 'x'.repeat(i * 100); // Increasing sizes
+          createFile(`file${i}.txt`, content);
+        }
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () =>
+            ({
+              'read-many-files-max-count': 5,
+              'read-many-files-max-tokens': 500,
+              'read-many-files-file-size-limit': 512,
+              'read-many-files-truncate-mode': 'sample',
+            }) as Record<string, unknown>,
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        // Should be limited by multiple factors
+        const content = result.llmContent as string[];
+        expect(content.length).toBeLessThanOrEqual(5); // File count limit
+        expect(result.returnDisplay).toMatch(
+          /Successfully read and concatenated content from \*\*\d+ file\(s\)\*\*/,
+        );
+      });
+    });
+
+    describe('default values', () => {
+      it('should use default limits when ephemeral settings are not provided', async () => {
+        // Create 55 files (default limit is 50)
+        for (let i = 1; i <= 55; i++) {
+          createFile(`file${i}.txt`, `Content ${i}`);
+        }
+
+        const mockConfig = {
+          getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileFilteringOptions: () => ({
+            respectGitIgnore: true,
+            respectLlxprtIgnore: true,
+          }),
+          getTargetDir: () => tempRootDir,
+          getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
+          getEphemeralSettings: () => ({}) as Record<string, unknown>, // Empty settings
+        } as Partial<Config> as Config;
+        tool = new ReadManyFilesTool(mockConfig);
+
+        const params = { paths: ['*.txt'] };
+        const result = await tool.execute(params, new AbortController().signal);
+
+        // Should use default warn mode and stop at 50 files
+        expect(result.llmContent).toContain(
+          'Found 55 files matching your pattern, but limiting to 50 files',
+        );
+      });
     });
   });
 });

@@ -140,6 +140,7 @@ describe('useSlashCommandProcessor', () => {
         vi.fn(), // openProviderDialog
         vi.fn(), // openProviderModelDialog
         vi.fn(), // openLoadProfileDialog
+        vi.fn(), // openToolsDialog
         vi.fn(), // toggleCorgiMode
         mockSetQuittingMessages,
         vi.fn(), // openPrivacyNotice

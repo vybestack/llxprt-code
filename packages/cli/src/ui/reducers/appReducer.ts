@@ -20,7 +20,8 @@ export type AppAction =
         | 'providerModel'
         | 'provider'
         | 'privacy'
-        | 'loadProfile';
+        | 'loadProfile'
+        | 'tools';
     }
   | {
       type: 'CLOSE_DIALOG';
@@ -31,7 +32,8 @@ export type AppAction =
         | 'providerModel'
         | 'provider'
         | 'privacy'
-        | 'loadProfile';
+        | 'loadProfile'
+        | 'tools';
     }
   | { type: 'SET_WARNING'; payload: { key: string; message: string } }
   | { type: 'CLEAR_WARNING'; payload: string }
@@ -48,6 +50,7 @@ export interface AppState {
     provider: boolean;
     privacy: boolean;
     loadProfile: boolean;
+    tools: boolean;
   };
   warnings: Map<string, string>;
   errors: {
@@ -70,6 +73,7 @@ export const initialAppState: AppState = {
     provider: false,
     privacy: false,
     loadProfile: false,
+    tools: false,
   },
   warnings: new Map(),
   errors: {

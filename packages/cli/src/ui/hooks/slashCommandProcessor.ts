@@ -51,6 +51,7 @@ export const useSlashCommandProcessor = (
   openProviderDialog: () => void,
   openProviderModelDialog: () => void,
   openLoadProfileDialog: () => void,
+  openToolsDialog: (action: 'enable' | 'disable') => void,
   toggleCorgiMode: () => void,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
@@ -370,6 +371,16 @@ export const useSlashCommandProcessor = (
                       case 'loadProfile':
                         openLoadProfileDialog();
                         return { type: 'handled' };
+                      case 'tools': {
+                        // Extract the subcommand from the original command
+                        const originalCommand = rawQuery.trim();
+                        const commandParts = originalCommand.split(/\s+/);
+                        const subCommand = commandParts[1] as
+                          | 'enable'
+                          | 'disable';
+                        openToolsDialog(subCommand);
+                        return { type: 'handled' };
+                      }
                       default: {
                         const unhandled: never = result.dialog;
                         throw new Error(
@@ -505,6 +516,7 @@ export const useSlashCommandProcessor = (
       openProviderDialog,
       openProviderModelDialog,
       openLoadProfileDialog,
+      openToolsDialog,
       setQuittingMessages,
       setShellConfirmationRequest,
       setSessionShellAllowlist,

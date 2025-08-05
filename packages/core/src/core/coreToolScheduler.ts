@@ -37,6 +37,7 @@ export type ValidatingToolCall = {
   tool: Tool;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
+  signal?: AbortSignal;
 };
 
 export type ScheduledToolCall = {
@@ -45,6 +46,7 @@ export type ScheduledToolCall = {
   tool: Tool;
   startTime?: number;
   outcome?: ToolConfirmationOutcome;
+  signal?: AbortSignal;
 };
 
 export type ErroredToolCall = {
@@ -266,10 +268,6 @@ interface CoreToolSchedulerOptions {
 export class CoreToolScheduler {
   private toolRegistry: Promise<ToolRegistry>;
   private toolCalls: ToolCall[] = [];
-  private pendingQueue: Array<{
-    request: ToolCallRequestInfo | ToolCallRequestInfo[];
-    signal: AbortSignal;
-  }> = [];
   private outputUpdateHandler?: OutputUpdateHandler;
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -327,6 +325,9 @@ export class CoreToolScheduler {
       // currentCall is a non-terminal state here and should have startTime and tool.
       const existingStartTime = currentCall.startTime;
       const toolInstance = currentCall.tool;
+      const existingSignal = (
+        currentCall as ValidatingToolCall | ScheduledToolCall
+      ).signal;
 
       const outcome = currentCall.outcome;
 
@@ -372,6 +373,7 @@ export class CoreToolScheduler {
             status: 'scheduled',
             startTime: existingStartTime,
             outcome,
+            signal: existingSignal,
           } as ScheduledToolCall;
         case 'cancelled': {
           const durationMs = existingStartTime
@@ -452,22 +454,12 @@ export class CoreToolScheduler {
     });
   }
 
-  private isRunning(): boolean {
-    return this.toolCalls.some(
-      (call) =>
-        call.status === 'executing' || call.status === 'awaiting_approval',
-    );
-  }
-
   async schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
   ): Promise<void> {
-    if (this.isRunning()) {
-      // Queue the request instead of throwing an error
-      this.pendingQueue.push({ request, signal });
-      return;
-    }
+    // Allow unrestricted scheduling - tools can be scheduled anytime
+    // This prevents errors with models like Kimi K2 that send tools in streaming chunks
     const requestsToProcess = Array.isArray(request) ? request : [request];
     const toolRegistry = await this.toolRegistry;
 
@@ -500,6 +492,7 @@ export class CoreToolScheduler {
           request: reqInfo,
           tool: toolInstance,
           startTime: Date.now(),
+          signal,
         };
       },
     );
@@ -678,97 +671,96 @@ export class CoreToolScheduler {
     });
   }
 
-  private attemptExecutionOfScheduledCalls(signal: AbortSignal): void {
-    const allCallsFinalOrScheduled = this.toolCalls.every(
-      (call) =>
-        call.status === 'scheduled' ||
-        call.status === 'cancelled' ||
-        call.status === 'success' ||
-        call.status === 'error',
+  private attemptExecutionOfScheduledCalls(signal?: AbortSignal): void {
+    // In unrestricted parallel mode, execute ALL scheduled tools immediately
+    const callsToExecute = this.toolCalls.filter(
+      (call) => call.status === 'scheduled',
     );
 
-    if (allCallsFinalOrScheduled) {
-      const callsToExecute = this.toolCalls.filter(
-        (call) => call.status === 'scheduled',
-      );
-
-      callsToExecute.forEach((toolCall) => {
-        if (toolCall.status !== 'scheduled') return;
-
-        const scheduledCall = toolCall;
-        const { callId, name: toolName } = scheduledCall.request;
-        this.setStatusInternal(callId, 'executing');
-
-        const liveOutputCallback =
-          scheduledCall.tool.canUpdateOutput && this.outputUpdateHandler
-            ? (outputChunk: string) => {
-                if (this.outputUpdateHandler) {
-                  this.outputUpdateHandler(callId, outputChunk);
-                }
-                this.toolCalls = this.toolCalls.map((tc) =>
-                  tc.request.callId === callId && tc.status === 'executing'
-                    ? { ...tc, liveOutput: outputChunk }
-                    : tc,
-                );
-                this.notifyToolCallsUpdate();
-              }
-            : undefined;
-
-        scheduledCall.tool
-          .execute(scheduledCall.request.args, signal, liveOutputCallback)
-          .then(async (toolResult: ToolResult) => {
-            if (signal.aborted) {
-              this.setStatusInternal(
-                callId,
-                'cancelled',
-                'User cancelled tool execution.',
-              );
-              return;
-            }
-
-            if (toolResult.error === undefined) {
-              const response = convertToFunctionResponse(
-                toolName,
-                callId,
-                toolResult.llmContent,
-              );
-              const successResponse: ToolCallResponseInfo = {
-                callId,
-                responseParts: response,
-                resultDisplay: toolResult.returnDisplay,
-                error: undefined,
-                errorType: undefined,
-              };
-              this.setStatusInternal(callId, 'success', successResponse);
-            } else {
-              // It is a failure
-              const error = new Error(toolResult.error.message);
-              const errorResponse = createErrorResponse(
-                scheduledCall.request,
-                error,
-                toolResult.error.type,
-              );
-              this.setStatusInternal(callId, 'error', errorResponse);
-            }
-          })
-          .catch((executionError: Error) => {
-            this.setStatusInternal(
-              callId,
-              'error',
-              createErrorResponse(
-                scheduledCall.request,
-                executionError instanceof Error
-                  ? executionError
-                  : new Error(String(executionError)),
-                ToolErrorType.UNHANDLED_EXCEPTION,
-              ),
-            );
-          });
-      });
-    }
+    callsToExecute.forEach((toolCall) => {
+      const toolSignal =
+        (toolCall as ScheduledToolCall).signal ||
+        signal ||
+        new AbortController().signal;
+      this.executeToolCall(toolCall, toolSignal);
+    });
   }
 
-  private checkAndNotifyCompletion(): void {
+  private executeToolCall(toolCall: ToolCall, signal: AbortSignal): void {
+    if (toolCall.status !== 'scheduled') return;
+
+    const scheduledCall = toolCall;
+    const { callId, name: toolName } = scheduledCall.request;
+    this.setStatusInternal(callId, 'executing');
+
+    const liveOutputCallback =
+      scheduledCall.tool.canUpdateOutput && this.outputUpdateHandler
+        ? (outputChunk: string) => {
+            if (this.outputUpdateHandler) {
+              this.outputUpdateHandler(callId, outputChunk);
+            }
+            this.toolCalls = this.toolCalls.map((tc) =>
+              tc.request.callId === callId && tc.status === 'executing'
+                ? { ...tc, liveOutput: outputChunk }
+                : tc,
+            );
+            this.notifyToolCallsUpdate();
+          }
+        : undefined;
+
+    scheduledCall.tool
+      .execute(scheduledCall.request.args, signal, liveOutputCallback)
+      .then(async (toolResult: ToolResult) => {
+        if (signal.aborted) {
+          this.setStatusInternal(
+            callId,
+            'cancelled',
+            'User cancelled tool execution.',
+          );
+          return;
+        }
+
+        if (toolResult.error === undefined) {
+          const response = convertToFunctionResponse(
+            toolName,
+            callId,
+            toolResult.llmContent,
+          );
+          const successResponse: ToolCallResponseInfo = {
+            callId,
+            responseParts: response,
+            resultDisplay: toolResult.returnDisplay,
+            error: undefined,
+            errorType: undefined,
+          };
+          this.setStatusInternal(callId, 'success', successResponse);
+        } else {
+          // It is a failure
+          const error = new Error(toolResult.error.message);
+          const errorResponse = createErrorResponse(
+            scheduledCall.request,
+            error,
+            toolResult.error.type,
+          );
+          this.setStatusInternal(callId, 'error', errorResponse);
+        }
+      })
+      .catch((executionError: Error) => {
+        this.setStatusInternal(
+          callId,
+          'error',
+          createErrorResponse(
+            scheduledCall.request,
+            executionError instanceof Error
+              ? executionError
+              : new Error(String(executionError)),
+            ToolErrorType.UNHANDLED_EXCEPTION,
+          ),
+        );
+      });
+  }
+
+  private checkAndNotifyCompletion(_toolJustCompleted = false): void {
     const allCallsAreTerminal = this.toolCalls.every(
       (call) =>
         call.status === 'success' ||
@@ -789,25 +781,10 @@ export class CoreToolScheduler {
       }
       this.notifyToolCallsUpdate();
 
-      // Process any queued requests now that current batch is complete
-      this.processQueue();
+      // No queue processing needed - tools execute immediately in parallel
     }
   }
 
-  private async processQueue(): Promise<void> {
-    if (this.pendingQueue.length === 0 || this.isRunning()) {
-      return;
-    }
-
-    // Take the first item from the queue
-    const nextItem = this.pendingQueue.shift();
-    if (nextItem) {
-      // Schedule it without awaiting to avoid blocking
-      this.schedule(nextItem.request, nextItem.signal).catch((error) => {
-        console.error('Error processing queued tool call:', error);
-      });
-    }
-  }
 
   private notifyToolCallsUpdate(): void {
     if (this.onToolCallsUpdate) {

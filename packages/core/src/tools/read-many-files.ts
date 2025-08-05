@@ -22,6 +22,12 @@ import {
   recordFileOperationMetric,
   FileOperation,
 } from '../telemetry/metrics.js';
+import { stat } from 'fs/promises';
+
+// Simple token estimation - roughly 4 characters per token
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
 
 /**
  * Parameters for the ReadManyFilesTool.
@@ -117,6 +123,12 @@ const DEFAULT_EXCLUDES: string[] = [
 
 const DEFAULT_OUTPUT_SEPARATOR_FORMAT = '--- {filePath} ---';
 
+// Default limits for ReadManyFiles
+const DEFAULT_MAX_FILE_COUNT = 50;
+const DEFAULT_MAX_TOKENS = 50000;
+const DEFAULT_TRUNCATE_MODE = 'warn';
+const DEFAULT_FILE_SIZE_LIMIT = 524288; // 512KB
+
 /**
  * Tool implementation for finding and reading multiple text files from the local filesystem
  * within a specified target directory. The content is concatenated.
@@ -209,7 +221,13 @@ This tool is useful when you need to understand or analyze a collection of files
 - Gathering context from multiple configuration files.
 - When the user asks to "read all files in X directory" or "show me the content of all Y files".
 
-Use this tool when the user's query implies needing the content of several files simultaneously for context, analysis, or summarization. For text files, it uses default UTF-8 encoding and a '--- {filePath} ---' separator between file contents. Ensure paths are relative to the target directory. Glob patterns like 'src/**/*.js' are supported. Avoid using for single files if a more specific single-file reading tool is available, unless the user specifically requests to process a list containing just one file via this tool. Other binary files (not explicitly requested as image/PDF) are generally skipped. Default excludes apply to common non-text files (except for explicitly requested images/PDFs) and large dependency directories unless 'useDefaultExcludes' is false.`,
+Use this tool when the user's query implies needing the content of several files simultaneously for context, analysis, or summarization. For text files, it uses default UTF-8 encoding and a '--- {filePath} ---' separator between file contents. Ensure paths are relative to the target directory. Glob patterns like 'src/**/*.js' are supported. Avoid using for single files if a more specific single-file reading tool is available, unless the user specifically requests to process a list containing just one file via this tool. Other binary files (not explicitly requested as image/PDF) are generally skipped. Default excludes apply to common non-text files (except for explicitly requested images/PDFs) and large dependency directories unless 'useDefaultExcludes' is false.
+
+IMPORTANT LIMITS:
+- Maximum files: 50 (default, configurable via 'read-many-files-max-count' setting)
+- Maximum tokens: 50,000 (default, configurable via 'read-many-files-max-tokens' setting)  
+- Maximum file size: 512KB per file (configurable via 'read-many-files-file-size-limit' setting)
+- If limits are exceeded, the tool will warn and suggest more specific patterns (configurable behavior via 'read-many-files-truncate-mode')`,
       Icon.FileSearch,
       parameterSchema,
     );
@@ -420,10 +438,84 @@ Use this tool when the user's query implies needing the content of several files
 
     const sortedFiles = Array.from(filesToConsider).sort();
 
+    // Get limits from ephemeral settings
+    const ephemeralSettings = this.config.getEphemeralSettings();
+    const maxFileCount =
+      (ephemeralSettings['read-many-files-max-count'] as number | undefined) ??
+      DEFAULT_MAX_FILE_COUNT;
+    const maxTokens =
+      (ephemeralSettings['read-many-files-max-tokens'] as number | undefined) ??
+      DEFAULT_MAX_TOKENS;
+    const truncateMode =
+      (ephemeralSettings['read-many-files-truncate-mode'] as
+        | 'warn'
+        | 'truncate'
+        | 'sample'
+        | undefined) ?? DEFAULT_TRUNCATE_MODE;
+    const fileSizeLimit =
+      (ephemeralSettings['read-many-files-file-size-limit'] as
+        | number
+        | undefined) ?? DEFAULT_FILE_SIZE_LIMIT;
+
+    // Check file count limit
+    if (sortedFiles.length > maxFileCount) {
+      if (truncateMode === 'warn') {
+        const warnMessage = `Found ${sortedFiles.length} files matching your pattern, but limiting to ${maxFileCount} files. Please use more specific patterns to narrow your search.`;
+        return {
+          llmContent: warnMessage,
+          returnDisplay: `## File Count Limit Exceeded\n\n${warnMessage}\n\n**Matched files:** ${sortedFiles.length}\n**Limit:** ${maxFileCount}\n\n**Suggestion:** Use more specific glob patterns or paths to reduce the number of matched files.`,
+        };
+      } else if (truncateMode === 'sample') {
+        // Sample evenly across the files
+        const step = Math.ceil(sortedFiles.length / maxFileCount);
+        const sampledFiles: string[] = [];
+        for (let i = 0; i < sortedFiles.length; i += step) {
+          if (sampledFiles.length < maxFileCount) {
+            sampledFiles.push(sortedFiles[i]);
+          }
+        }
+        const originalCount = sortedFiles.length;
+        sortedFiles.length = 0;
+        sortedFiles.push(...sampledFiles);
+        skippedFiles.push({
+          path: `${originalCount - sampledFiles.length} file(s)`,
+          reason: `sampling to stay within ${maxFileCount} file limit`,
+        });
+      } else {
+        // truncate mode - just limit the array
+        const truncatedCount = sortedFiles.length - maxFileCount;
+        sortedFiles.length = maxFileCount;
+        skippedFiles.push({
+          path: `${truncatedCount} file(s)`,
+          reason: `truncated to stay within ${maxFileCount} file limit`,
+        });
+      }
+    }
+
+    let totalTokens = 0;
+
     for (const filePath of sortedFiles) {
       const relativePathForDisplay = path
         .relative(this.config.getTargetDir(), filePath)
         .replace(/\\/g, '/');
+
+      // Check file size limit
+      try {
+        const stats = await stat(filePath);
+        if (stats.size > fileSizeLimit) {
+          skippedFiles.push({
+            path: relativePathForDisplay,
+            reason: `file size (${Math.round(stats.size / 1024)}KB) exceeds limit (${Math.round(fileSizeLimit / 1024)}KB)`,
+          });
+          continue;
+        }
+      } catch (error) {
+        skippedFiles.push({
+          path: relativePathForDisplay,
+          reason: `stat error: ${getErrorMessage(error)}`,
+        });
+        continue;
+      }
 
       const fileType = await detectFileType(filePath);
 
@@ -458,13 +550,67 @@ Use this tool when the user's query implies needing the content of several files
           reason: `Read error: ${fileReadResult.error}`,
         });
       } else {
+        // Check token limit before adding content
         if (typeof fileReadResult.llmContent === 'string') {
           const separator = DEFAULT_OUTPUT_SEPARATOR_FORMAT.replace(
             '{filePath}',
             filePath,
           );
-          contentParts.push(`${separator}\n\n${fileReadResult.llmContent}\n\n`);
+          const contentToAdd = `${separator}\n\n${fileReadResult.llmContent}\n\n`;
+          const contentTokens = estimateTokens(contentToAdd);
+
+          if (totalTokens + contentTokens > maxTokens) {
+            if (truncateMode === 'warn') {
+              // Stop processing and warn
+              skippedFiles.push({
+                path: `${sortedFiles.length - processedFilesRelativePaths.length} remaining file(s)`,
+                reason: `would exceed token limit of ${maxTokens}`,
+              });
+              break;
+            } else if (truncateMode === 'truncate') {
+              // Truncate the content to fit
+              const remainingTokens = maxTokens - totalTokens;
+              if (remainingTokens > 100) {
+                // Only add if we have reasonable space
+                const truncatedContent = contentToAdd.substring(
+                  0,
+                  remainingTokens * 4,
+                ); // Rough estimate: 4 chars per token
+                contentParts.push(
+                  truncatedContent +
+                    '\n\n[CONTENT TRUNCATED DUE TO TOKEN LIMIT]',
+                );
+                processedFilesRelativePaths.push(relativePathForDisplay);
+                skippedFiles.push({
+                  path: relativePathForDisplay,
+                  reason: 'content truncated to fit token limit',
+                });
+              }
+              break;
+            } else {
+              // sample mode - skip this file and continue
+              skippedFiles.push({
+                path: relativePathForDisplay,
+                reason: 'skipped to stay within token limit',
+              });
+              continue;
+            }
+          }
+
+          totalTokens += contentTokens;
+          contentParts.push(contentToAdd);
         } else {
+          // For non-text content (images/PDFs), estimate token usage
+          // Images typically use ~85 tokens per image
+          const estimatedTokens = 85;
+          if (totalTokens + estimatedTokens > maxTokens) {
+            skippedFiles.push({
+              path: relativePathForDisplay,
+              reason: 'would exceed token limit (non-text content)',
+            });
+            continue;
+          }
+          totalTokens += estimatedTokens;
           contentParts.push(fileReadResult.llmContent); // This is a Part for image/pdf
         }
         processedFilesRelativePaths.push(relativePathForDisplay);
@@ -485,7 +631,11 @@ Use this tool when the user's query implies needing the content of several files
 
     let displayMessage = `### ReadManyFiles Result (Target Dir: \`${this.config.getTargetDir()}\`)\n\n`;
     if (processedFilesRelativePaths.length > 0) {
-      displayMessage += `Successfully read and concatenated content from **${processedFilesRelativePaths.length} file(s)**.\n`;
+      displayMessage += `Successfully read and concatenated content from **${processedFilesRelativePaths.length} file(s)**`;
+      if (totalTokens > 0) {
+        displayMessage += ` (approximately ${totalTokens.toLocaleString()} tokens)`;
+      }
+      displayMessage += `.\n`;
       if (processedFilesRelativePaths.length <= 10) {
         displayMessage += `\n**Processed Files:**\n`;
         processedFilesRelativePaths.forEach(

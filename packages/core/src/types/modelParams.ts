@@ -46,6 +46,16 @@ export interface EphemeralSettings {
   'api-version'?: string;
   /** Custom HTTP headers */
   'custom-headers'?: Record<string, string>;
+  /** Maximum number of files to read in ReadManyFiles (default: 50) */
+  'read-many-files-max-count'?: number;
+  /** Maximum estimated tokens to read in ReadManyFiles (default: 50000) */
+  'read-many-files-max-tokens'?: number;
+  /** How to handle exceeding limits: 'warn' | 'truncate' | 'sample' (default: 'warn') */
+  'read-many-files-truncate-mode'?: 'warn' | 'truncate' | 'sample';
+  /** Maximum size for individual files in ReadManyFiles (default: 524288 bytes = 512KB) */
+  'read-many-files-file-size-limit'?: number;
+  /** List of disabled tool names */
+  'disabled-tools'?: string[];
 }
 
 /**

@@ -350,12 +350,21 @@ export class ToolRegistry {
    * Retrieves the list of tool schemas (FunctionDeclaration array).
    * Extracts the declarations from the ToolListUnion structure.
    * Includes discovered (vs registered) tools if configured.
+   * Filters out disabled tools based on ephemeral settings.
    * @returns An array of FunctionDeclarations.
    */
   getFunctionDeclarations(): FunctionDeclaration[] {
+    // Get disabled tools from ephemeral settings
+    const ephemeralSettings = this.config.getEphemeralSettings() || {};
+    const disabledTools =
+      (ephemeralSettings['disabled-tools'] as string[]) || [];
+
     const declarations: FunctionDeclaration[] = [];
     this.tools.forEach((tool) => {
-      declarations.push(tool.schema);
+      // Skip disabled tools
+      if (!disabledTools.includes(tool.name)) {
+        declarations.push(tool.schema);
+      }
     });
     return declarations;
   }
@@ -367,6 +376,19 @@ export class ToolRegistry {
     return Array.from(this.tools.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
+  }
+
+  /**
+   * Returns an array of enabled tool instances (excludes disabled tools).
+   */
+  getEnabledTools(): Tool[] {
+    const ephemeralSettings = this.config.getEphemeralSettings() || {};
+    const disabledTools =
+      (ephemeralSettings['disabled-tools'] as string[]) || [];
+
+    return Array.from(this.tools.values())
+      .filter((tool) => !disabledTools.includes(tool.name))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
   /**
@@ -389,6 +411,16 @@ export class ToolRegistry {
    */
   getTool(name: string, context?: ToolContext): Tool | undefined {
     const tool = this.tools.get(name);
+
+    // Check if tool is disabled
+    const ephemeralSettings = this.config.getEphemeralSettings() || {};
+    const disabledTools =
+      (ephemeralSettings['disabled-tools'] as string[]) || [];
+
+    if (tool && disabledTools.includes(tool.name)) {
+      return undefined;
+    }
+
     if (tool && context) {
       // Inject context into tool instance
       if ('context' in tool) {

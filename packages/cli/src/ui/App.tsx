@@ -109,9 +109,11 @@ import { getProviderManager } from '../providers/providerManagerInstance.js';
 import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
 import { useProviderDialog } from './hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
+import { useToolsDialog } from './hooks/useToolsDialog.js';
 import { ProviderModelDialog } from './components/ProviderModelDialog.js';
 import { ProviderDialog } from './components/ProviderDialog.js';
 import { LoadProfileDialog } from './components/LoadProfileDialog.js';
+import { ToolsDialog } from './components/ToolsDialog.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -395,6 +397,31 @@ const App = (props: AppInternalProps) => {
     settings,
   });
 
+  const {
+    showDialog: isToolsDialogOpen,
+    openDialog: openToolsDialogRaw,
+    closeDialog: exitToolsDialog,
+    action: toolsDialogAction,
+    availableTools: toolsDialogTools,
+    disabledTools: toolsDialogDisabledTools,
+    handleSelect: handleToolsSelect,
+  } = useToolsDialog({
+    addMessage: (msg) =>
+      addItem(
+        { type: msg.type as MessageType, text: msg.content },
+        msg.timestamp.getTime(),
+      ),
+    appState,
+    config,
+  });
+
+  const openToolsDialog = useCallback(
+    (action: 'enable' | 'disable') => {
+      openToolsDialogRaw(action);
+    },
+    [openToolsDialogRaw],
+  );
+
   const performMemoryRefresh = useCallback(async () => {
     addItem(
       {
@@ -605,6 +632,7 @@ const App = (props: AppInternalProps) => {
     openProviderDialog,
     openProviderModelDialog,
     openLoadProfileDialog,
+    openToolsDialog,
     toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
@@ -852,6 +880,7 @@ const App = (props: AppInternalProps) => {
       !isEditorDialogOpen &&
       !isProviderDialogOpen &&
       !isProviderModelDialogOpen &&
+      !isToolsDialogOpen &&
       !showPrivacyNotice &&
       geminiClient?.isInitialized?.()
     ) {
@@ -867,6 +896,7 @@ const App = (props: AppInternalProps) => {
     isEditorDialogOpen,
     isProviderDialogOpen,
     isProviderModelDialogOpen,
+    isToolsDialogOpen,
     showPrivacyNotice,
     geminiClient,
   ]);
@@ -1065,6 +1095,16 @@ const App = (props: AppInternalProps) => {
                 profiles={profiles}
                 onSelect={handleProfileSelect}
                 onClose={exitLoadProfileDialog}
+              />
+            </Box>
+          ) : isToolsDialogOpen ? (
+            <Box flexDirection="column">
+              <ToolsDialog
+                tools={toolsDialogTools}
+                action={toolsDialogAction}
+                disabledTools={toolsDialogDisabledTools}
+                onSelect={handleToolsSelect}
+                onClose={exitToolsDialog}
               />
             </Box>
           ) : showPrivacyNotice ? (

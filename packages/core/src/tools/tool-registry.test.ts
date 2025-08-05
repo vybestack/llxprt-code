@@ -381,6 +381,87 @@ describe('ToolRegistry', () => {
       );
     });
   });
+
+  describe('disabled tools functionality', () => {
+    it('should filter out disabled tools in getFunctionDeclarations', () => {
+      // Mock ephemeral settings with disabled tools
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+        'disabled-tools': ['test-tool'],
+      });
+
+      const tool1 = new MockTool('test-tool', 'Test Tool');
+      const tool2 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0].name).toBe('another-tool');
+    });
+
+    it('should return all tools when no tools are disabled', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+
+      const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
+      const tool2 = new MockTool(
+        'another-tool',
+        'Another Tool',
+        'Another test tool',
+      );
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations).toHaveLength(2);
+    });
+
+    it('should filter out disabled tools in getEnabledTools', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+        'disabled-tools': ['test-tool', 'disabled-tool'],
+      });
+
+      const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
+      const tool2 = new MockTool(
+        'another-tool',
+        'Another Tool',
+        'Another test tool',
+      );
+      const tool3 = new MockTool(
+        'disabled-tool',
+        'Disabled Tool',
+        'A disabled tool',
+      );
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const enabledTools = toolRegistry.getEnabledTools();
+      expect(enabledTools).toHaveLength(1);
+      expect(enabledTools[0].name).toBe('another-tool');
+    });
+
+    it('should return all tools in getAllTools regardless of disabled status', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+        'disabled-tools': ['test-tool'],
+      });
+
+      const tool1 = new MockTool('test-tool', 'Test Tool', 'A test tool');
+      const tool2 = new MockTool(
+        'another-tool',
+        'Another Tool',
+        'Another test tool',
+      );
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+
+      const allTools = toolRegistry.getAllTools();
+      expect(allTools).toHaveLength(2);
+    });
+  });
 });
 
 describe('sanitizeParameters', () => {

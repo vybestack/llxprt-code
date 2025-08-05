@@ -40,15 +40,9 @@ export const modelCommand: SlashCommand = {
         : 'unknown';
 
       if (activeProvider.setModel) {
-        console.debug(
-          `[Model Command] Setting model to ${modelName} on provider ${activeProvider.name}`,
-        );
         activeProvider.setModel(modelName);
         // Keep config model in sync so /about shows correct model
         if (context.services.config) {
-          console.debug(
-            `[Model Command] Updating config model to ${modelName}`,
-          );
           context.services.config.setModel(modelName);
         }
 

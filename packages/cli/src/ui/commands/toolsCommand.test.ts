@@ -32,6 +32,7 @@ describe('toolsCommand', () => {
       services: {
         config: {
           getToolRegistry: () => Promise.resolve(undefined),
+          getEphemeralSettings: () => ({}),
         },
       },
     });
@@ -54,6 +55,7 @@ describe('toolsCommand', () => {
         config: {
           getToolRegistry: () =>
             Promise.resolve({ getAllTools: () => [] as Tool[] }),
+          getEphemeralSettings: () => ({}),
         },
       },
     });
@@ -75,6 +77,7 @@ describe('toolsCommand', () => {
         config: {
           getToolRegistry: () =>
             Promise.resolve({ getAllTools: () => mockTools }),
+          getEphemeralSettings: () => ({}),
         },
       },
     });
@@ -94,6 +97,7 @@ describe('toolsCommand', () => {
         config: {
           getToolRegistry: () =>
             Promise.resolve({ getAllTools: () => mockTools }),
+          getEphemeralSettings: () => ({}),
         },
       },
     });
@@ -104,5 +108,77 @@ describe('toolsCommand', () => {
     const message = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
     expect(message).toContain('Reads files from the local system.');
     expect(message).toContain('Edits code files.');
+  });
+
+  describe('disable/enable functionality', () => {
+    it('should return dialog action for disable', async () => {
+      const mockContext = createMockCommandContext({
+        services: {
+          config: {
+            getEphemeralSettings: () => ({}),
+            getToolRegistry: () =>
+              Promise.resolve({ getAllTools: () => mockTools }),
+          },
+        },
+      });
+
+      if (!toolsCommand.action) throw new Error('Action not defined');
+      const result = await toolsCommand.action(mockContext, 'disable');
+
+      expect(result).toEqual({
+        type: 'dialog',
+        dialog: 'tools',
+      });
+    });
+
+    it('should return dialog action for enable', async () => {
+      const mockContext = createMockCommandContext({
+        services: {
+          config: {
+            getEphemeralSettings: () => ({ 'disabled-tools': ['file-reader'] }),
+            getToolRegistry: () =>
+              Promise.resolve({ getAllTools: () => mockTools }),
+          },
+        },
+      });
+
+      if (!toolsCommand.action) throw new Error('Action not defined');
+      const result = await toolsCommand.action(mockContext, 'enable');
+
+      expect(result).toEqual({
+        type: 'dialog',
+        dialog: 'tools',
+      });
+    });
+
+    it('should show disabled tools in list', async () => {
+      const mockContext = createMockCommandContext({
+        services: {
+          config: {
+            getEphemeralSettings: () => ({ 'disabled-tools': ['file-reader'] }),
+            getToolRegistry: () =>
+              Promise.resolve({ getAllTools: () => mockTools }),
+          },
+        },
+      });
+
+      if (!toolsCommand.action) throw new Error('Action not defined');
+      await toolsCommand.action(mockContext, '');
+
+      const message = (mockContext.ui.addItem as vi.Mock).mock.calls[0][0].text;
+      expect(message).toContain('[DISABLED]');
+      expect(message).toContain('1 tool(s) disabled');
+    });
+  });
+
+  describe('completion', () => {
+    it('should complete subcommands', async () => {
+      const mockContext = createMockCommandContext({});
+
+      if (!toolsCommand.completion) throw new Error('Completion not defined');
+      const completions = await toolsCommand.completion(mockContext, 'dis');
+
+      expect(completions).toContain('disable');
+    });
   });
 });

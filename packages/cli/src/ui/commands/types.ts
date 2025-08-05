@@ -111,7 +111,8 @@ export interface OpenDialogActionReturn {
     | 'editor'
     | 'privacy'
     | 'provider'
-    | 'providerModel';
+    | 'providerModel'
+    | 'tools';
 }
 
 /**
