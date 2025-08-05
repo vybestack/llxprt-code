@@ -785,7 +785,6 @@ export class CoreToolScheduler {
     }
   }
 
-
   private notifyToolCallsUpdate(): void {
     if (this.onToolCallsUpdate) {
       this.onToolCallsUpdate([...this.toolCalls]);
