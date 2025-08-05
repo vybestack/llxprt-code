@@ -46,6 +46,7 @@ describe('GeminiChat', () => {
       getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
       setQuotaErrorOccurred: vi.fn(),
       flashFallbackHandler: undefined,
+      getEphemeralSettings: vi.fn().mockReturnValue({}),
     } as unknown as Config;
 
     // Disable 429 simulation for tests

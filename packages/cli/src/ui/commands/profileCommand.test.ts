@@ -383,5 +383,87 @@ describe('profileCommand', () => {
         },
       );
     });
+
+    it('should save tool-output settings from ephemeral settings', async () => {
+      context.services.config.getEphemeralSettings = vi.fn().mockReturnValue({
+        'tool-output-max-items': 100,
+        'tool-output-max-tokens': 75000,
+        'tool-output-truncate-mode': 'truncate',
+        'tool-output-item-size-limit': 1048576,
+        'max-prompt-tokens': 150000,
+      });
+
+      await saveCommand.action!(context, 'tool-settings-profile');
+
+      expect(mockProfileManager.saveProfile).toHaveBeenCalledWith(
+        'tool-settings-profile',
+        {
+          version: 1,
+          provider: 'openai',
+          model: 'gpt-4',
+          modelParams: {},
+          ephemeralSettings: {
+            'tool-output-max-items': 100,
+            'tool-output-max-tokens': 75000,
+            'tool-output-truncate-mode': 'truncate',
+            'tool-output-item-size-limit': 1048576,
+            'max-prompt-tokens': 150000,
+          },
+        },
+      );
+    });
+  });
+
+  describe('profile load command with tool-output settings', () => {
+    const loadCommand = profileCommand.subCommands![1];
+
+    it('should load profile with tool-output settings', async () => {
+      mockProfileManager.loadProfile.mockResolvedValue({
+        version: 1,
+        provider: 'openai',
+        model: 'gpt-4',
+        modelParams: {},
+        ephemeralSettings: {
+          'tool-output-max-items': 100,
+          'tool-output-max-tokens': 75000,
+          'tool-output-truncate-mode': 'truncate',
+          'tool-output-item-size-limit': 1048576,
+          'max-prompt-tokens': 150000,
+        },
+      });
+
+      const result = await loadCommand.action!(
+        context,
+        'tool-settings-profile',
+      );
+
+      // Verify ephemeral settings were applied
+      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-max-items',
+        100,
+      );
+      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-max-tokens',
+        75000,
+      );
+      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-truncate-mode',
+        'truncate',
+      );
+      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-item-size-limit',
+        1048576,
+      );
+      expect(context.services.config.setEphemeralSetting).toHaveBeenCalledWith(
+        'max-prompt-tokens',
+        150000,
+      );
+
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: "Profile 'tool-settings-profile' loaded",
+      });
+    });
   });
 });

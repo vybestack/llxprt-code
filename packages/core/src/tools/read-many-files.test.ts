@@ -504,8 +504,8 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-count': 50,
-              'read-many-files-truncate-mode': 'warn',
+              'tool-output-max-items': 50,
+              'tool-output-truncate-mode': 'warn',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -537,8 +537,8 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-count': 5,
-              'read-many-files-truncate-mode': 'truncate',
+              'tool-output-max-items': 5,
+              'tool-output-truncate-mode': 'truncate',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -576,8 +576,8 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-count': 5,
-              'read-many-files-truncate-mode': 'sample',
+              'tool-output-max-items': 5,
+              'tool-output-truncate-mode': 'sample',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -620,8 +620,8 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-tokens': 500, // Very low token limit
-              'read-many-files-truncate-mode': 'warn',
+              'tool-output-max-tokens': 500, // Very low token limit
+              'tool-output-truncate-mode': 'warn',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -656,8 +656,8 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-tokens': 500,
-              'read-many-files-truncate-mode': 'truncate',
+              'tool-output-max-tokens': 500,
+              'tool-output-truncate-mode': 'truncate',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -692,8 +692,8 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-tokens': 1000,
-              'read-many-files-truncate-mode': 'sample',
+              'tool-output-max-tokens': 1000,
+              'tool-output-truncate-mode': 'sample',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -728,7 +728,7 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-file-size-limit': 524288, // 512KB
+              'tool-output-item-size-limit': 524288, // 512KB
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -760,7 +760,7 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-file-size-limit': 256 * 1024, // 256KB
+              'tool-output-item-size-limit': 256 * 1024, // 256KB
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);
@@ -795,10 +795,10 @@ describe('ReadManyFilesTool', () => {
           getWorkspaceContext: () => new WorkspaceContext(tempRootDir),
           getEphemeralSettings: () =>
             ({
-              'read-many-files-max-count': 5,
-              'read-many-files-max-tokens': 500,
-              'read-many-files-file-size-limit': 512,
-              'read-many-files-truncate-mode': 'sample',
+              'tool-output-max-items': 5,
+              'tool-output-max-tokens': 500,
+              'tool-output-item-size-limit': 512,
+              'tool-output-truncate-mode': 'sample',
             }) as Record<string, unknown>,
         } as Partial<Config> as Config;
         tool = new ReadManyFilesTool(mockConfig);

@@ -11,6 +11,10 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
 import { Type } from '@google/genai';
+import {
+  limitOutputTokens,
+  formatLimitedOutput,
+} from '../utils/toolOutputLimiter.js';
 
 /**
  * Parameters for the LS tool
@@ -317,8 +321,21 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
         displayMessage += ` (${ignoredMessages.join(', ')})`;
       }
 
+      // Apply token-based limiting (NOT item limiting - ls just lists entries)
+      const limitedResult = limitOutputTokens(
+        resultMessage,
+        this.config,
+        'list_directory',
+      );
+      const formatted = formatLimitedOutput(limitedResult);
+
+      // If we hit token limits, override the display to be more informative
+      if (limitedResult.wasTruncated && !limitedResult.content) {
+        return formatted;
+      }
+
       return {
-        llmContent: resultMessage,
+        llmContent: formatted.llmContent,
         returnDisplay: displayMessage,
       };
     } catch (error) {

@@ -121,6 +121,11 @@ const saveCommand: SlashCommand = {
         'api-version',
         'custom-headers',
         'disabled-tools',
+        'tool-output-max-items',
+        'tool-output-max-tokens',
+        'tool-output-truncate-mode',
+        'tool-output-item-size-limit',
+        'max-prompt-tokens',
       ];
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};

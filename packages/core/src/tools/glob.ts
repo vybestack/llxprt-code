@@ -12,6 +12,10 @@ import { BaseTool, Icon, ToolResult } from './tools.js';
 import { Type } from '@google/genai';
 import { shortenPath, makeRelative } from '../utils/paths.js';
 import { Config } from '../config/config.js';
+import {
+  limitOutputTokens,
+  formatLimitedOutput,
+} from '../utils/toolOutputLimiter.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
 export interface GlobPath {
@@ -306,8 +310,21 @@ export class GlobTool extends BaseTool<GlobToolParams, ToolResult> {
       }
       resultMessage += `, sorted by modification time (newest first):\n${fileListDescription}`;
 
+      // Apply token-based limiting (NOT item limiting - glob just lists paths)
+      const limitedResult = limitOutputTokens(
+        resultMessage,
+        this.config,
+        'glob',
+      );
+      const formatted = formatLimitedOutput(limitedResult);
+
+      // If we hit token limits, override the display to be more informative
+      if (limitedResult.wasTruncated && !limitedResult.content) {
+        return formatted;
+      }
+
       return {
-        llmContent: resultMessage,
+        llmContent: formatted.llmContent,
         returnDisplay: `Found ${fileCount} matching file(s)`,
       };
     } catch (error) {

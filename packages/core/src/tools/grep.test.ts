@@ -35,6 +35,7 @@ describe('GrepTool', () => {
   const mockConfig = {
     getTargetDir: () => tempRootDir,
     getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+    getEphemeralSettings: () => ({}),
   } as unknown as Config;
 
   beforeEach(async () => {
@@ -242,6 +243,7 @@ describe('GrepTool', () => {
         getTargetDir: () => tempRootDir,
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, [secondDir]),
+        getEphemeralSettings: () => ({}),
       } as unknown as Config;
 
       const multiDirGrepTool = new GrepTool(multiDirConfig);
@@ -291,6 +293,7 @@ describe('GrepTool', () => {
         getTargetDir: () => tempRootDir,
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, [secondDir]),
+        getEphemeralSettings: () => ({}),
       } as unknown as Config;
 
       const multiDirGrepTool = new GrepTool(multiDirConfig);

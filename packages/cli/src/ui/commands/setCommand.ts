@@ -358,6 +358,17 @@ const ephemeralSettingHelp: Record<string, string> = {
   'tool-format': 'Tool format override for the provider',
   'api-version': 'API version to use',
   'custom-headers': 'Custom HTTP headers as JSON object',
+  // Tool output limit settings - apply to all tools that can return large outputs
+  'tool-output-max-items':
+    'Maximum number of items/files/matches returned by tools (default: 50)',
+  'tool-output-max-tokens': 'Maximum tokens in tool output (default: 50000)',
+  'tool-output-truncate-mode':
+    'How to handle exceeding limits: warn, truncate, or sample (default: warn)',
+  'tool-output-item-size-limit':
+    'Maximum size per item/file in bytes (default: 524288 = 512KB)',
+  // Final catch-all to prevent context overflow
+  'max-prompt-tokens':
+    'Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
 };
 
 export const setCommand: SlashCommand = {
@@ -447,6 +458,38 @@ export const setCommand: SlashCommand = {
       }
     }
 
+    // Validate tool output settings
+    if (
+      key === 'tool-output-max-items' ||
+      key === 'tool-output-max-tokens' ||
+      key === 'tool-output-item-size-limit' ||
+      key === 'max-prompt-tokens'
+    ) {
+      const numValue = parsedValue as number;
+      if (
+        typeof numValue !== 'number' ||
+        numValue <= 0 ||
+        !Number.isInteger(numValue)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be a positive integer`,
+        };
+      }
+    }
+
+    if (key === 'tool-output-truncate-mode') {
+      const validModes = ['warn', 'truncate', 'sample'];
+      if (!validModes.includes(parsedValue as string)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be one of: ${validModes.join(', ')}`,
+        };
+      }
+    }
+
     // Get the config to apply settings
     const config = context.services.config;
     if (!config) {
@@ -488,6 +531,18 @@ export const setCommand: SlashCommand = {
       if (parts.length === 1) {
         // Still typing the key
         return ephemeralKeys.filter((key) => key.startsWith(parts[0]));
+      } else if (parts.length === 2) {
+        // User has typed the key and a space, provide value completions for specific keys
+        const key = parts[0];
+
+        // Provide completions for tool-output-truncate-mode
+        if (key === 'tool-output-truncate-mode') {
+          const modes = ['warn', 'truncate', 'sample'];
+          if (parts[1]) {
+            return modes.filter((mode) => mode.startsWith(parts[1]));
+          }
+          return modes;
+        }
       }
     }
 

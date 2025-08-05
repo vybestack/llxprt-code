@@ -855,134 +855,221 @@ export const useGeminiStream = (
         return;
       }
 
-      // If all the tools were cancelled, don't submit a response to Gemini.
-      const allToolsCancelled = geminiTools.every(
-        (tc) => tc.status === 'cancelled',
-      );
+      // Group tools by prompt_id to ensure we send all tools from the same turn together
+      const toolsByPromptId = new Map<string, typeof geminiTools>();
 
-      if (allToolsCancelled) {
-        if (geminiClient) {
-          // We need to manually add the function responses to the history
-          // so the model knows the tools were cancelled.
-          const responsesToAdd = geminiTools.flatMap(
-            (toolCall) => toolCall.response.responseParts,
-          );
-          const combinedParts: Part[] = [];
-          for (const response of responsesToAdd) {
-            if (Array.isArray(response)) {
-              combinedParts.push(...response);
-            } else if (typeof response === 'string') {
-              combinedParts.push({ text: response });
-            } else {
-              combinedParts.push(response);
-            }
+      geminiTools.forEach((tool) => {
+        const promptId = tool.request.prompt_id;
+        if (!toolsByPromptId.has(promptId)) {
+          toolsByPromptId.set(promptId, []);
+        }
+        toolsByPromptId.get(promptId)!.push(tool);
+      });
+
+      // Process each prompt_id group
+      for (const [promptId, toolsInPrompt] of toolsByPromptId) {
+        // Check if we're still waiting for other tools with the same prompt_id
+        // Include both global toolCalls and the current batch to ensure we have all tools
+        const allToolCallsGlobal = toolCalls.filter(
+          (tc: TrackedToolCall) =>
+            !tc.request.isClientInitiated && tc.request.prompt_id === promptId,
+        );
+
+        // Also check if there are other tools in the current batch that we haven't processed yet
+        const allToolsInBatch = geminiTools.filter(
+          (tc) => tc.request.prompt_id === promptId,
+        );
+
+        const pendingTools = allToolCallsGlobal.filter(
+          (tc: TrackedToolCall) =>
+            tc.status !== 'success' &&
+            tc.status !== 'error' &&
+            tc.status !== 'cancelled',
+        );
+
+        if (pendingTools.length > 0) {
+          // Still waiting for other tools in this turn, skip for now
+          if (process.env.DEBUG) {
+            console.log(
+              `[DEBUG] Waiting for ${pendingTools.length} more tools to complete for prompt ${promptId}`,
+              pendingTools.map((t: TrackedToolCall) => t.request.name),
+            );
           }
-          geminiClient.addHistory({
-            role: 'user',
-            parts: combinedParts,
+          continue;
+        }
+
+        // If all tools for this prompt_id in the current batch are complete, use them all
+        // This ensures that if multiple tools complete together, they're processed together
+        const toolsToProcess =
+          allToolsInBatch.length > 0 ? allToolsInBatch : toolsInPrompt;
+
+        // All tools for this prompt_id are complete, process them
+        if (process.env.DEBUG) {
+          console.log(
+            `[DEBUG] All tools complete for prompt ${promptId}, sending ${toolsToProcess.length} responses`,
+          );
+        }
+
+        // If all the tools were cancelled, don't submit a response to Gemini.
+        const allToolsCancelled = toolsToProcess.every(
+          (tc) => tc.status === 'cancelled',
+        );
+
+        if (allToolsCancelled) {
+          if (geminiClient) {
+            // We need to manually add the function responses to the history
+            // so the model knows the tools were cancelled.
+            const responsesToAdd = toolsToProcess.flatMap(
+              (toolCall) => toolCall.response.responseParts,
+            );
+            const combinedParts: Part[] = [];
+            for (const response of responsesToAdd) {
+              if (Array.isArray(response)) {
+                combinedParts.push(...response);
+              } else if (typeof response === 'string') {
+                combinedParts.push({ text: response });
+              } else {
+                combinedParts.push(response);
+              }
+            }
+            geminiClient.addHistory({
+              role: 'user',
+              parts: combinedParts,
+            });
+          }
+
+          const callIdsToMarkAsSubmitted = toolsToProcess.map(
+            (toolCall) => toolCall.request.callId,
+          );
+          markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+          continue;
+        }
+
+        const responsesToSend: PartListUnion[] = toolsToProcess.map(
+          (toolCall) => {
+            if (process.env.DEBUG) {
+              console.log(
+                `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
+                JSON.stringify(toolCall.response.responseParts, null, 2),
+              );
+            }
+            return toolCall.response.responseParts;
+          },
+        );
+
+        const callIdsToMarkAsSubmitted = toolsToProcess.map(
+          (toolCall) => toolCall.request.callId,
+        );
+
+        // Don't mark as submitted yet - wait until after responses are actually sent
+
+        // Don't continue if model was switched due to quota error
+        if (modelSwitchedFromQuotaError) {
+          return;
+        }
+
+        // Debug logging BEFORE merging
+        if (process.env.DEBUG) {
+          console.log(
+            '[DEBUG] responsesToSend before merge:',
+            JSON.stringify(responsesToSend, null, 2),
+          );
+          console.log(
+            '[DEBUG] responsesToSend length:',
+            responsesToSend.length,
+          );
+          responsesToSend.forEach((resp, idx) => {
+            console.log(`[DEBUG] responsesToSend[${idx}] type:`, typeof resp);
+            console.log(
+              `[DEBUG] responsesToSend[${idx}] isArray:`,
+              Array.isArray(resp),
+            );
           });
         }
 
-        const callIdsToMarkAsSubmitted = geminiTools.map(
-          (toolCall) => toolCall.request.callId,
-        );
-        markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-        return;
-      }
-
-      const responsesToSend: PartListUnion[] = geminiTools.map((toolCall) => {
-        if (process.env.DEBUG) {
-          console.log(
-            `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
-            JSON.stringify(toolCall.response.responseParts, null, 2),
+        // For Gemini, when there are multiple function responses, each must be sent
+        // as a separate user message turn, not as an array in a single turn
+        if (responsesToSend.length === 1) {
+          // Single response - send as-is
+          if (process.env.DEBUG) {
+            console.log('[DEBUG] Single function response, sending directly');
+          }
+          submitQuery(
+            responsesToSend[0],
+            {
+              isContinuation: true,
+            },
+            promptId,
           );
-        }
-        return toolCall.response.responseParts;
-      });
-
-      const callIdsToMarkAsSubmitted = geminiTools.map(
-        (toolCall) => toolCall.request.callId,
-      );
-
-      const prompt_ids = geminiTools.map(
-        (toolCall) => toolCall.request.prompt_id,
-      );
-
-      // Don't mark as submitted yet - wait until after responses are actually sent
-
-      // Don't continue if model was switched due to quota error
-      if (modelSwitchedFromQuotaError) {
-        return;
-      }
-
-      // Debug logging BEFORE merging
-      if (process.env.DEBUG) {
-        console.log(
-          '[DEBUG] responsesToSend before merge:',
-          JSON.stringify(responsesToSend, null, 2),
-        );
-        console.log('[DEBUG] responsesToSend length:', responsesToSend.length);
-        responsesToSend.forEach((resp, idx) => {
-          console.log(`[DEBUG] responsesToSend[${idx}] type:`, typeof resp);
-          console.log(
-            `[DEBUG] responsesToSend[${idx}] isArray:`,
-            Array.isArray(resp),
-          );
-        });
-      }
-
-      // For Gemini, when there are multiple function responses, each must be sent
-      // as a separate user message turn, not as an array in a single turn
-      if (responsesToSend.length === 1) {
-        // Single response - send as-is
-        if (process.env.DEBUG) {
-          console.log('[DEBUG] Single function response, sending directly');
-        }
-        submitQuery(
-          responsesToSend[0],
-          {
-            isContinuation: true,
-          },
-          prompt_ids[0],
-        );
-        // Mark as submitted after sending
-        markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-      } else {
-        // Multiple responses - send each one individually as separate turns
-        if (process.env.DEBUG) {
-          console.log(
-            `[DEBUG] Multiple function responses (${responsesToSend.length}), sending individually`,
-          );
-        }
-
-        // Send each response as a separate message turn
-        let submittedCount = 0;
-        responsesToSend.forEach((response, index) => {
+          // Mark as submitted after sending
+          markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+        } else {
+          // Multiple responses - combine them into a single message with multiple parts
           if (process.env.DEBUG) {
             console.log(
-              `[DEBUG] Sending function response ${index + 1}/${responsesToSend.length}:`,
-              JSON.stringify(response, null, 2),
+              `[DEBUG] Multiple function responses (${responsesToSend.length}), combining into single message`,
             );
           }
 
-          // Use setTimeout to ensure proper ordering and avoid race conditions
-          setTimeout(() => {
-            submitQuery(
-              response,
-              {
-                isContinuation: true,
-              },
-              prompt_ids[0], // All tool calls from same turn should have same prompt_id
-            );
+          // Combine all function responses into a single array of parts
+          const combinedParts: Part[] = [];
 
-            // Track submissions and mark all as submitted after the last one
-            submittedCount++;
-            if (submittedCount === responsesToSend.length) {
-              markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+          responsesToSend.forEach((response, index) => {
+            if (process.env.DEBUG) {
+              console.log(
+                `[DEBUG] Processing function response ${index + 1}/${responsesToSend.length}:`,
+                JSON.stringify(response, null, 2),
+              );
             }
-          }, index * 100); // 100ms delay between each message
-        });
-      }
+
+            // Each response can be a Part, Part[], or string
+            if (Array.isArray(response)) {
+              // Spread array of Parts
+              for (const part of response) {
+                if (typeof part === 'string') {
+                  combinedParts.push({ text: part });
+                } else {
+                  combinedParts.push(part as Part);
+                }
+              }
+            } else if (typeof response === 'string') {
+              // This shouldn't happen with function responses, but handle it just in case
+              combinedParts.push({ text: response });
+            } else if (response && typeof response === 'object') {
+              // Single Part object (likely a functionResponse)
+              combinedParts.push(response as Part);
+            }
+          });
+
+          if (process.env.DEBUG) {
+            console.log(
+              '[DEBUG] Combined function responses:',
+              JSON.stringify(combinedParts, null, 2),
+            );
+          }
+
+          // Send all function responses together in a single message
+          // For Gemini 2.5 Pro, we need to ensure the parts are sent as individual elements
+          // not as a nested array
+          if (process.env.DEBUG) {
+            console.log(
+              '[DEBUG] Submitting combined parts as array of',
+              combinedParts.length,
+              'parts',
+            );
+          }
+          submitQuery(
+            combinedParts,
+            {
+              isContinuation: true,
+            },
+            promptId, // All tool calls from same turn should have same prompt_id
+          );
+
+          // Mark all as submitted after sending
+          markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+        }
+      } // End of prompt_id loop
     },
     [
       isResponding,
@@ -991,6 +1078,7 @@ export const useGeminiStream = (
       geminiClient,
       performMemoryRefresh,
       modelSwitchedFromQuotaError,
+      toolCalls,
     ],
   );
 

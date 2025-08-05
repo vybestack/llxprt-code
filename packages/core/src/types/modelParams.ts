@@ -46,14 +46,16 @@ export interface EphemeralSettings {
   'api-version'?: string;
   /** Custom HTTP headers */
   'custom-headers'?: Record<string, string>;
-  /** Maximum number of files to read in ReadManyFiles (default: 50) */
-  'read-many-files-max-count'?: number;
-  /** Maximum estimated tokens to read in ReadManyFiles (default: 50000) */
-  'read-many-files-max-tokens'?: number;
+  /** Maximum number of items/files/matches returned by tools (default: 50) */
+  'tool-output-max-items'?: number;
+  /** Maximum estimated tokens in tool output (default: 50000) */
+  'tool-output-max-tokens'?: number;
   /** How to handle exceeding limits: 'warn' | 'truncate' | 'sample' (default: 'warn') */
-  'read-many-files-truncate-mode'?: 'warn' | 'truncate' | 'sample';
-  /** Maximum size for individual files in ReadManyFiles (default: 524288 bytes = 512KB) */
-  'read-many-files-file-size-limit'?: number;
+  'tool-output-truncate-mode'?: 'warn' | 'truncate' | 'sample';
+  /** Maximum size per item/file in bytes (default: 524288 bytes = 512KB) */
+  'tool-output-item-size-limit'?: number;
+  /** Maximum tokens allowed in any prompt sent to LLM (default: 200000) */
+  'max-prompt-tokens'?: number;
   /** List of disabled tool names */
   'disabled-tools'?: string[];
 }

@@ -64,6 +64,7 @@ describe('LSTool', () => {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       }),
+      getEphemeralSettings: vi.fn().mockReturnValue({}),
     } as unknown as Config;
 
     lsTool = new LSTool(mockConfig);

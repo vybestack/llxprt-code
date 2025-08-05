@@ -224,10 +224,10 @@ This tool is useful when you need to understand or analyze a collection of files
 Use this tool when the user's query implies needing the content of several files simultaneously for context, analysis, or summarization. For text files, it uses default UTF-8 encoding and a '--- {filePath} ---' separator between file contents. Ensure paths are relative to the target directory. Glob patterns like 'src/**/*.js' are supported. Avoid using for single files if a more specific single-file reading tool is available, unless the user specifically requests to process a list containing just one file via this tool. Other binary files (not explicitly requested as image/PDF) are generally skipped. Default excludes apply to common non-text files (except for explicitly requested images/PDFs) and large dependency directories unless 'useDefaultExcludes' is false.
 
 IMPORTANT LIMITS:
-- Maximum files: 50 (default, configurable via 'read-many-files-max-count' setting)
-- Maximum tokens: 50,000 (default, configurable via 'read-many-files-max-tokens' setting)  
-- Maximum file size: 512KB per file (configurable via 'read-many-files-file-size-limit' setting)
-- If limits are exceeded, the tool will warn and suggest more specific patterns (configurable behavior via 'read-many-files-truncate-mode')`,
+- Maximum files: 50 (default, configurable via 'tool-output-max-items' setting)
+- Maximum tokens: 50,000 (default, configurable via 'tool-output-max-tokens' setting)  
+- Maximum file size: 512KB per file (configurable via 'tool-output-item-size-limit' setting)
+- If limits are exceeded, the tool will warn and suggest more specific patterns (configurable behavior via 'tool-output-truncate-mode')`,
       Icon.FileSearch,
       parameterSchema,
     );
@@ -441,19 +441,19 @@ IMPORTANT LIMITS:
     // Get limits from ephemeral settings
     const ephemeralSettings = this.config.getEphemeralSettings();
     const maxFileCount =
-      (ephemeralSettings['read-many-files-max-count'] as number | undefined) ??
+      (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
       DEFAULT_MAX_FILE_COUNT;
     const maxTokens =
-      (ephemeralSettings['read-many-files-max-tokens'] as number | undefined) ??
+      (ephemeralSettings['tool-output-max-tokens'] as number | undefined) ??
       DEFAULT_MAX_TOKENS;
     const truncateMode =
-      (ephemeralSettings['read-many-files-truncate-mode'] as
+      (ephemeralSettings['tool-output-truncate-mode'] as
         | 'warn'
         | 'truncate'
         | 'sample'
         | undefined) ?? DEFAULT_TRUNCATE_MODE;
     const fileSizeLimit =
-      (ephemeralSettings['read-many-files-file-size-limit'] as
+      (ephemeralSettings['tool-output-item-size-limit'] as
         | number
         | undefined) ?? DEFAULT_FILE_SIZE_LIMIT;
 

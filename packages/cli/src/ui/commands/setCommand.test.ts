@@ -85,7 +85,7 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /set temperature <value>\n\nValid ephemeral keys:\n  context-limit: Maximum number of tokens for the context window (e.g., 100000)\n  compression-threshold: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)\n  base-url: Base URL for API requests\n  tool-format: Tool format override for the provider\n  api-version: API version to use\n  custom-headers: Custom HTTP headers as JSON object',
+        'Usage: /set temperature <value>\n\nValid ephemeral keys:\n  context-limit: Maximum number of tokens for the context window (e.g., 100000)\n  compression-threshold: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)\n  base-url: Base URL for API requests\n  tool-format: Tool format override for the provider\n  api-version: API version to use\n  custom-headers: Custom HTTP headers as JSON object\n  tool-output-max-items: Maximum number of items/files/matches returned by tools (default: 50)\n  tool-output-max-tokens: Maximum tokens in tool output (default: 50000)\n  tool-output-truncate-mode: How to handle exceeding limits: warn, truncate, or sample (default: warn)\n  tool-output-item-size-limit: Maximum size per item/file in bytes (default: 524288 = 512KB)\n  max-prompt-tokens: Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
     });
   });
 
@@ -136,7 +136,7 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens',
     });
   });
 
@@ -321,7 +321,7 @@ describe('setCommand', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid setting key: auth-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers',
+          'Invalid setting key: auth-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens',
       });
     });
 
@@ -335,7 +335,7 @@ describe('setCommand', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid setting key: auth-keyfile. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers',
+          'Invalid setting key: auth-keyfile. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens',
       });
     });
 
@@ -364,6 +364,148 @@ describe('setCommand', () => {
         messageType: 'info',
         content:
           'Ephemeral setting \'custom-headers\' set to {"Authorization":"Bearer token","X-Custom":"value"} (session only, use /profile save to persist)',
+      });
+    });
+
+    it('should store tool-output-max-items as ephemeral setting', async () => {
+      const result = await setCommand.action!(
+        context,
+        'tool-output-max-items 100',
+      );
+
+      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-max-items',
+        100,
+      );
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content:
+          "Ephemeral setting 'tool-output-max-items' set to 100 (session only, use /profile save to persist)",
+      });
+    });
+
+    it('should store tool-output-max-tokens as ephemeral setting', async () => {
+      const result = await setCommand.action!(
+        context,
+        'tool-output-max-tokens 75000',
+      );
+
+      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-max-tokens',
+        75000,
+      );
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content:
+          "Ephemeral setting 'tool-output-max-tokens' set to 75000 (session only, use /profile save to persist)",
+      });
+    });
+
+    it('should store tool-output-truncate-mode as ephemeral setting', async () => {
+      const result = await setCommand.action!(
+        context,
+        'tool-output-truncate-mode truncate',
+      );
+
+      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-truncate-mode',
+        'truncate',
+      );
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content:
+          'Ephemeral setting \'tool-output-truncate-mode\' set to "truncate" (session only, use /profile save to persist)',
+      });
+    });
+
+    it('should validate tool-output-truncate-mode values', async () => {
+      const result = await setCommand.action!(
+        context,
+        'tool-output-truncate-mode invalid-mode',
+      );
+
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content:
+          'tool-output-truncate-mode must be one of: warn, truncate, sample',
+      });
+    });
+
+    it('should store tool-output-item-size-limit as ephemeral setting', async () => {
+      const result = await setCommand.action!(
+        context,
+        'tool-output-item-size-limit 1048576',
+      );
+
+      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+        'tool-output-item-size-limit',
+        1048576,
+      );
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content:
+          "Ephemeral setting 'tool-output-item-size-limit' set to 1048576 (session only, use /profile save to persist)",
+      });
+    });
+
+    it('should store max-prompt-tokens as ephemeral setting', async () => {
+      const result = await setCommand.action!(
+        context,
+        'max-prompt-tokens 150000',
+      );
+
+      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
+        'max-prompt-tokens',
+        150000,
+      );
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content:
+          "Ephemeral setting 'max-prompt-tokens' set to 150000 (session only, use /profile save to persist)",
+      });
+    });
+
+    it('should validate numeric tool-output settings', async () => {
+      // Test non-numeric value
+      const result = await setCommand.action!(
+        context,
+        'tool-output-max-items not-a-number',
+      );
+
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'tool-output-max-items must be a positive integer',
+      });
+
+      // Test negative value
+      const result2 = await setCommand.action!(
+        context,
+        'tool-output-max-tokens -100',
+      );
+
+      expect(result2).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'tool-output-max-tokens must be a positive integer',
+      });
+
+      // Test non-integer value
+      const result3 = await setCommand.action!(
+        context,
+        'max-prompt-tokens 100.5',
+      );
+
+      expect(result3).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: 'max-prompt-tokens must be a positive integer',
       });
     });
   });

@@ -618,20 +618,13 @@ describe('useGeminiStream', () => {
 
     await waitFor(() => {
       expect(mockMarkToolsAsSubmitted).toHaveBeenCalledTimes(1);
-      // With the fix, multiple responses are sent individually
-      expect(mockSendMessageStream).toHaveBeenCalledTimes(2);
+      // With the fix for Gemini 2.5 Pro, multiple responses are combined into a single message
+      expect(mockSendMessageStream).toHaveBeenCalledTimes(1);
     });
 
-    // Verify each response was sent individually
-    expect(mockSendMessageStream).toHaveBeenNthCalledWith(
-      1,
-      toolCall1ResponseParts,
-      expect.any(AbortSignal),
-      'prompt-id-2',
-    );
-    expect(mockSendMessageStream).toHaveBeenNthCalledWith(
-      2,
-      toolCall2ResponseParts,
+    // Verify the combined response was sent with both function responses flattened into a single array
+    expect(mockSendMessageStream).toHaveBeenCalledWith(
+      [{ text: 'tool 1 final response' }, { text: 'tool 2 final response' }],
       expect.any(AbortSignal),
       'prompt-id-2',
     );
@@ -731,7 +724,7 @@ describe('useGeminiStream', () => {
         name: 'toolB',
         args: {},
         isClientInitiated: false,
-        prompt_id: 'prompt-id-8',
+        prompt_id: 'prompt-id-7',
       },
       tool: {
         name: 'toolB',
@@ -758,7 +751,12 @@ describe('useGeminiStream', () => {
 
     mockUseReactToolScheduler.mockImplementation((onComplete) => {
       capturedOnComplete = onComplete;
-      return [[], mockScheduleToolCalls, mockMarkToolsAsSubmitted];
+      // Return the cancelled tools in the toolCalls array so the grouping logic can work
+      return [
+        allCancelledTools,
+        mockScheduleToolCalls,
+        mockMarkToolsAsSubmitted,
+      ];
     });
 
     renderHook(() =>
@@ -780,6 +778,8 @@ describe('useGeminiStream', () => {
     );
 
     // Trigger the onComplete callback with multiple cancelled tools
+    // Important: The real useReactToolScheduler would call onComplete once per batch
+    // but we're simulating both tools completing together
     await act(async () => {
       if (capturedOnComplete) {
         await capturedOnComplete(allCancelledTools);

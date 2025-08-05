@@ -17,6 +17,11 @@ import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { Config } from '../config/config.js';
+import {
+  limitOutputTokens,
+  formatLimitedOutput,
+  getOutputLimits,
+} from '../utils/toolOutputLimiter.js';
 
 // --- Interfaces ---
 
@@ -230,39 +235,87 @@ export class GrepTool extends BaseTool<GrepToolParams, ToolResult> {
         return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
       }
 
-      // Group matches by file
-      const matchesByFile = allMatches.reduce(
+      const matchCount = allMatches.length;
+      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+
+      // Get output limits configuration
+      const limits = getOutputLimits(this.config);
+
+      // Check if we should limit by number of matches (using tool-output-max-items)
+      const ephemeralSettings = this.config.getEphemeralSettings();
+      const maxItems = ephemeralSettings['tool-output-max-items'] as
+        | number
+        | undefined;
+
+      let itemsToProcess = allMatches;
+      let itemLimitMessage = '';
+
+      if (maxItems && allMatches.length > maxItems) {
+        if (limits.truncateMode === 'warn') {
+          const warnMsg = `Found ${allMatches.length} matches, but limiting to ${maxItems} items. Please use more specific patterns to narrow your search.`;
+          return {
+            llmContent: warnMsg,
+            returnDisplay: `## Match Limit Exceeded\n\n${warnMsg}`,
+          };
+        } else if (limits.truncateMode === 'sample') {
+          // Sample evenly across matches
+          const step = Math.ceil(allMatches.length / maxItems);
+          itemsToProcess = [];
+          for (let i = 0; i < allMatches.length; i += step) {
+            if (itemsToProcess.length < maxItems) {
+              itemsToProcess.push(allMatches[i]);
+            }
+          }
+          itemLimitMessage = `\n[Sampled ${itemsToProcess.length} of ${allMatches.length} matches]`;
+        } else {
+          // truncate mode
+          itemsToProcess = allMatches.slice(0, maxItems);
+          itemLimitMessage = `\n[Showing first ${maxItems} of ${allMatches.length} matches]`;
+        }
+      }
+
+      // Group the limited matches by file
+      const limitedMatchesByFile = itemsToProcess.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
           if (!acc[fileKey]) {
             acc[fileKey] = [];
           }
           acc[fileKey].push(match);
-          acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
           return acc;
         },
         {} as Record<string, GrepMatch[]>,
       );
 
-      const matchCount = allMatches.length;
-      const matchTerm = matchCount === 1 ? 'match' : 'matches';
-
-      let llmContent = `Found ${matchCount} ${matchTerm} for pattern "${params.pattern}" ${searchLocationDescription}${params.include ? ` (filter: "${params.include}")` : ''}:
+      let llmContent = `Found ${allMatches.length} ${matchTerm} for pattern "${params.pattern}" ${searchLocationDescription}${params.include ? ` (filter: "${params.include}")` : ''}:${itemLimitMessage}
 ---
 `;
 
-      for (const filePath in matchesByFile) {
+      for (const filePath in limitedMatchesByFile) {
         llmContent += `File: ${filePath}\n`;
-        matchesByFile[filePath].forEach((match) => {
+        limitedMatchesByFile[filePath].forEach((match) => {
           const trimmedLine = match.line.trim();
           llmContent += `L${match.lineNumber}: ${trimmedLine}\n`;
         });
         llmContent += '---\n';
       }
 
+      // Apply token-based limiting
+      const limitedResult = limitOutputTokens(
+        llmContent.trim(),
+        this.config,
+        'search_file_content',
+      );
+      const formatted = formatLimitedOutput(limitedResult);
+
+      // If we hit token limits, override the display to be more informative
+      if (limitedResult.wasTruncated && !limitedResult.content) {
+        return formatted;
+      }
+
       return {
-        llmContent: llmContent.trim(),
-        returnDisplay: `Found ${matchCount} ${matchTerm}`,
+        llmContent: formatted.llmContent,
+        returnDisplay: `Found ${allMatches.length} ${matchTerm}${itemLimitMessage}`,
       };
     } catch (error) {
       console.error(`Error during GrepLogic execution: ${error}`);

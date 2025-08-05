@@ -20,6 +20,10 @@ import { getErrorMessage } from '../utils/errors.js';
 import { Type } from '@google/genai';
 import { summarizeToolOutput } from '../utils/summarizer.js';
 import {
+  limitOutputTokens,
+  formatLimitedOutput,
+} from '../utils/toolOutputLimiter.js';
+import {
   ShellExecutionService,
   ShellOutputEvent,
 } from '../services/shellExecutionService.js';
@@ -346,10 +350,24 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
         }
       }
 
+      // Apply token-based limiting first
+      const limitedResult = limitOutputTokens(
+        llmContent,
+        this.config,
+        'run_shell_command',
+      );
+      const formatted = formatLimitedOutput(limitedResult);
+
+      // If we hit token limits and have no content, return the warning
+      if (limitedResult.wasTruncated && !limitedResult.content) {
+        return formatted;
+      }
+
+      // Then check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
       if (summarizeConfig && summarizeConfig[this.name]) {
         const summary = await summarizeToolOutput(
-          llmContent,
+          formatted.llmContent,
           this.config.getGeminiClient(),
           signal,
           summarizeConfig[this.name].tokenBudget,
@@ -361,7 +379,7 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
       }
 
       return {
-        llmContent,
+        llmContent: formatted.llmContent,
         returnDisplay: returnDisplayMessage,
       };
     } finally {

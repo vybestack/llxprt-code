@@ -22,6 +22,7 @@ import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator, AuthType } from './contentGenerator.js';
 import { Config } from '../config/config.js';
+import { estimateTokens } from '../utils/toolOutputLimiter.js';
 import {
   logApiRequest,
   logApiResponse,
@@ -444,6 +445,53 @@ export class GeminiChat {
     }
     const requestContents = this.getHistory(true).concat(userContent);
 
+    // Apply max-prompt-tokens limit if configured
+    const ephemeralSettings = this.config.getEphemeralSettings();
+    const maxPromptTokens = ephemeralSettings['max-prompt-tokens'] as
+      | number
+      | undefined;
+
+    if (maxPromptTokens) {
+      // Estimate tokens in the full request
+      const fullPromptText = JSON.stringify(requestContents);
+      const estimatedTokens = estimateTokens(fullPromptText);
+
+      if (estimatedTokens > maxPromptTokens) {
+        console.warn(
+          `⚠️ Prompt size (${estimatedTokens} tokens) exceeds max-prompt-tokens limit (${maxPromptTokens}). Trimming...`,
+        );
+
+        // Add a warning message to the request that will be visible to the LLM
+        const warningMessage = {
+          role: 'user',
+          parts: [
+            {
+              text: `⚠️ SYSTEM WARNING: The original prompt exceeded the ${maxPromptTokens} token limit (estimated ${estimatedTokens} tokens). Some conversation history and tool outputs have been truncated to fit. This may affect context continuity. Please be aware that some information from earlier in the conversation or from tool outputs may be missing.`,
+            },
+          ],
+        };
+
+        // Strategy: Keep the most recent messages and the current user message
+        // Remove older messages and truncate tool outputs in the middle
+        const trimmedContents = this.trimPromptContents(
+          requestContents,
+          maxPromptTokens,
+        );
+
+        // Add the warning as the first message so LLM knows about the truncation
+        trimmedContents.unshift(warningMessage);
+
+        // Log the trimming action
+        console.log(
+          `✂️ Trimmed prompt from ${estimatedTokens} to ~${estimateTokens(JSON.stringify(trimmedContents))} tokens`,
+        );
+
+        // Use trimmed contents instead
+        requestContents.length = 0;
+        requestContents.push(...trimmedContents);
+      }
+    }
+
     // Debug: Log the last few messages to see the function call/response pattern
     if (process.env.DEBUG && requestContents.length > 2) {
       const recentContents = requestContents.slice(-3);
@@ -815,5 +863,102 @@ export class GeminiChat {
       typeof content.parts[0].thought === 'boolean' &&
       content.parts[0].thought === true
     );
+  }
+
+  /**
+   * Trim prompt contents to fit within token limit
+   * Strategy: Keep the most recent user message, trim older history and tool outputs
+   */
+  private trimPromptContents(
+    contents: Content[],
+    maxTokens: number,
+  ): Content[] {
+    if (contents.length === 0) return contents;
+
+    // Always keep the last message (current user input)
+    const lastMessage = contents[contents.length - 1];
+    const result: Content[] = [];
+
+    // Reserve tokens for the last message and warning
+    const lastMessageTokens = estimateTokens(JSON.stringify(lastMessage));
+    const warningTokens = 200; // Reserve for warning message
+    let remainingTokens = maxTokens - lastMessageTokens - warningTokens;
+
+    if (remainingTokens <= 0) {
+      // Even the last message is too big, truncate it
+      return [this.truncateContent(lastMessage, maxTokens - warningTokens)];
+    }
+
+    // Add messages from most recent to oldest, stopping when we hit the limit
+    for (let i = contents.length - 2; i >= 0; i--) {
+      const content = contents[i];
+      const contentTokens = estimateTokens(JSON.stringify(content));
+
+      if (contentTokens <= remainingTokens) {
+        result.unshift(content);
+        remainingTokens -= contentTokens;
+      } else if (remainingTokens > 100) {
+        // Try to truncate this content to fit
+        const truncated = this.truncateContent(content, remainingTokens);
+        result.unshift(truncated);
+        break;
+      } else {
+        // No room left, stop
+        break;
+      }
+    }
+
+    // Add the last message
+    result.push(lastMessage);
+
+    return result;
+  }
+
+  /**
+   * Truncate a single content to fit within token limit
+   */
+  private truncateContent(content: Content, maxTokens: number): Content {
+    if (!content.parts || content.parts.length === 0) {
+      return content;
+    }
+
+    const truncatedParts: Part[] = [];
+    let currentTokens = 0;
+
+    for (const part of content.parts) {
+      if ('text' in part && part.text) {
+        const partTokens = estimateTokens(part.text);
+        if (currentTokens + partTokens <= maxTokens) {
+          truncatedParts.push(part);
+          currentTokens += partTokens;
+        } else {
+          // Truncate this part
+          const remainingTokens = maxTokens - currentTokens;
+          if (remainingTokens > 10) {
+            const remainingChars = remainingTokens * 4;
+            truncatedParts.push({
+              text:
+                part.text.substring(0, remainingChars) +
+                '\n[...content truncated due to token limit...]',
+            });
+          }
+          break;
+        }
+      } else {
+        // Non-text parts (function calls, responses, etc) - include if we have room
+        const partTokens = estimateTokens(JSON.stringify(part));
+        if (currentTokens + partTokens <= maxTokens) {
+          truncatedParts.push(part);
+          currentTokens += partTokens;
+        } else {
+          break;
+        }
+      }
+    }
+
+    return {
+      role: content.role,
+      parts: truncatedParts,
+    };
   }
 }

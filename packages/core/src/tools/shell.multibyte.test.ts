@@ -52,6 +52,7 @@ describe('ShellTool multibyte handling', () => {
       getTargetDir: vi.fn().mockReturnValue('/work'),
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(undefined),
       getGeminiClient: vi.fn(),
+      getEphemeralSettings: vi.fn().mockReturnValue({}),
     } as unknown as Config;
 
     tool = new ShellTool(config);

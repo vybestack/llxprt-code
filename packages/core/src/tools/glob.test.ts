@@ -25,6 +25,7 @@ describe('GlobTool', () => {
     getFileFilteringRespectGitIgnore: () => true,
     getTargetDir: () => tempRootDir,
     getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+    getEphemeralSettings: () => ({}),
   } as unknown as Config;
 
   beforeEach(async () => {
