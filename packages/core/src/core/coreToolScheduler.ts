@@ -273,6 +273,11 @@ export class CoreToolScheduler {
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
   private getPreferredEditor: () => EditorType | undefined;
   private config: Config;
+  private pendingQueue: Array<{
+    request: ToolCallRequestInfo;
+    signal?: AbortSignal;
+  }> = [];
+  private isProcessingBatch = false;
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -458,9 +463,17 @@ export class CoreToolScheduler {
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
   ): Promise<void> {
-    // Allow unrestricted scheduling - tools can be scheduled anytime
-    // This prevents errors with models like Kimi K2 that send tools in streaming chunks
+    // Queue requests if we're currently processing a batch
     const requestsToProcess = Array.isArray(request) ? request : [request];
+
+    if (this.isProcessingBatch) {
+      // Add to queue for next batch
+      requestsToProcess.forEach((req) => {
+        this.pendingQueue.push({ request: req, signal });
+      });
+      return;
+    }
+
     const toolRegistry = await this.toolRegistry;
 
     const newToolCalls: ToolCall[] = requestsToProcess.map(
@@ -672,10 +685,14 @@ export class CoreToolScheduler {
   }
 
   private attemptExecutionOfScheduledCalls(signal?: AbortSignal): void {
-    // In unrestricted parallel mode, execute ALL scheduled tools immediately
+    // Execute all scheduled tools in the current batch
     const callsToExecute = this.toolCalls.filter(
       (call) => call.status === 'scheduled',
     );
+
+    if (callsToExecute.length > 0) {
+      this.isProcessingBatch = true;
+    }
 
     callsToExecute.forEach((toolCall) => {
       const toolSignal =
@@ -781,7 +798,38 @@ export class CoreToolScheduler {
       }
       this.notifyToolCallsUpdate();
 
-      // No queue processing needed - tools execute immediately in parallel
+      // Batch is complete, process any queued requests
+      this.isProcessingBatch = false;
+      this.processQueue();
+    }
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.pendingQueue.length === 0 || this.isProcessingBatch) {
+      return;
+    }
+
+    // Process all queued requests as the next batch
+    const queuedRequests = [...this.pendingQueue];
+    this.pendingQueue = [];
+
+    // Collect all requests and signals
+    const allRequests: ToolCallRequestInfo[] = [];
+    let commonSignal: AbortSignal | undefined;
+
+    queuedRequests.forEach((item) => {
+      allRequests.push(item.request);
+      if (!commonSignal && item.signal) {
+        commonSignal = item.signal;
+      }
+    });
+
+    if (allRequests.length > 0) {
+      // Schedule the entire batch at once
+      await this.schedule(
+        allRequests,
+        commonSignal || new AbortController().signal,
+      );
     }
   }
 
