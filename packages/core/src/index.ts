@@ -46,6 +46,7 @@ export * from './utils/textUtils.js';
 export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
+export * from './utils/filesearch/fileSearch.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
