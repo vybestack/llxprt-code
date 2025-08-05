@@ -26,16 +26,21 @@ Ephemeral settings are runtime configurations that last only for your current se
 
 ### Available Ephemeral Settings
 
-| Setting                 | Description                        | Example                         |
-| ----------------------- | ---------------------------------- | ------------------------------- |
-| `context-limit`         | Maximum tokens for context window  | `100000`                        |
-| `compression-threshold` | When to compress history (0.0-1.0) | `0.7` (70% of context)          |
-| `auth-key`              | API authentication key             | `sk-ant-api03-...`              |
-| `auth-keyfile`          | Path to file containing API key    | `~/.keys/anthropic.key`         |
-| `base-url`              | Custom API endpoint                | `https://api.anthropic.com`     |
-| `tool-format`           | Tool format override               | `openai`, `anthropic`, `hermes` |
-| `api-version`           | API version (Azure)                | `2024-02-01`                    |
-| `custom-headers`        | HTTP headers as JSON               | `{"X-Custom": "value"}`         |
+| Setting                       | Description                                             | Default  | Example                         |
+| ----------------------------- | ------------------------------------------------------- | -------- | ------------------------------- |
+| `context-limit`               | Maximum tokens for context window                       | -        | `100000`                        |
+| `compression-threshold`       | When to compress history (0.0-1.0)                      | -        | `0.7` (70% of context)          |
+| `auth-key`                    | API authentication key                                  | -        | `sk-ant-api03-...`              |
+| `auth-keyfile`                | Path to file containing API key                         | -        | `~/.keys/anthropic.key`         |
+| `base-url`                    | Custom API endpoint                                     | -        | `https://api.anthropic.com`     |
+| `tool-format`                 | Tool format override                                    | -        | `openai`, `anthropic`, `hermes` |
+| `api-version`                 | API version (Azure)                                     | -        | `2024-02-01`                    |
+| `custom-headers`              | HTTP headers as JSON                                    | -        | `{"X-Custom": "value"}`         |
+| `tool-output-max-items`       | Maximum number of items/files/matches returned by tools | `50`     | `100`                           |
+| `tool-output-max-tokens`      | Maximum tokens in tool output                           | `50000`  | `100000`                        |
+| `tool-output-truncate-mode`   | How to handle exceeding limits                          | `warn`   | `warn`, `truncate`, or `sample` |
+| `tool-output-item-size-limit` | Maximum size per item/file in bytes                     | `524288` | `1048576` (1MB)                 |
+| `max-prompt-tokens`           | Maximum tokens allowed in any prompt sent to LLM        | `200000` | `300000`                        |
 
 ### Setting Ephemeral Values
 
@@ -54,6 +59,13 @@ Ephemeral settings are runtime configurations that last only for your current se
 
 # Set keyfile path (recommended)
 /set auth-keyfile ~/.keys/anthropic.key
+
+# Tool output control settings
+/set tool-output-max-items 100          # Allow up to 100 files/matches
+/set tool-output-max-tokens 100000      # Allow up to 100k tokens in tool output
+/set tool-output-truncate-mode truncate # Truncate instead of warning
+/set tool-output-item-size-limit 1048576 # 1MB per file
+/set max-prompt-tokens 300000           # Increase max prompt size
 ```
 
 ### Unsetting Values
@@ -87,6 +99,7 @@ Different providers support different parameters:
 **Anthropic Specific:**
 
 - `thinking` (for Claude's thinking mode)
+- `enable_thinking` (boolean to enable/disable thinking mode)
 - `top_k`
 
 **Gemini Specific:**
@@ -172,6 +185,27 @@ Profiles are stored in: `~/.llxprt/profiles/<profile-name>.json`
 /profile list
 ```
 
+### Deleting Profiles
+
+```bash
+# Delete a specific profile
+/profile delete old-config
+
+# Profile will be removed from ~/.llxprt/profiles/
+```
+
+### Setting Default Profile
+
+```bash
+# Set a profile to load automatically on startup
+/profile set-default my-default-config
+
+# Clear the default profile
+/profile set-default none
+```
+
+When a default profile is set, it will be automatically loaded each time you start LLxprt Code. This is stored in your user settings (`~/.llxprt/settings.json`).
+
 ### Profile Structure
 
 A profile JSON file looks like:
@@ -238,6 +272,60 @@ llxprt --provider anthropic --model claude-3-5-sonnet-20240620
    export ANTHROPIC_API_KEY="sk-ant-..."
    export OPENAI_API_KEY="sk-..."
    ```
+
+## Tool Output Control
+
+LLxprt Code provides fine-grained control over tool outputs to prevent context overflow and manage large responses. These settings are particularly useful when working with large codebases or extensive file operations.
+
+### Tool Output Settings Explained
+
+**`tool-output-max-items`**: Controls how many items (files, search results, etc.) a tool can return.
+
+- Default: 50
+- Use case: Increase when searching large codebases, decrease to save context
+
+**`tool-output-max-tokens`**: Limits the total tokens in a tool's output.
+
+- Default: 50000
+- Use case: Prevent single tool calls from consuming too much context
+
+**`tool-output-truncate-mode`**: Determines behavior when limits are exceeded.
+
+- `warn` (default): Show warning but include all output
+- `truncate`: Cut off output at the limit
+- `sample`: Intelligently sample from the output
+
+**`tool-output-item-size-limit`**: Maximum size per individual item (in bytes).
+
+- Default: 524288 (512KB)
+- Use case: Control how much of each file is read
+
+**`max-prompt-tokens`**: Final safety limit on prompt size sent to the LLM.
+
+- Default: 200000
+- Use case: Prevent API errors from oversized prompts
+
+### Example Configurations
+
+```bash
+# For large codebase exploration
+/set tool-output-max-items 200
+/set tool-output-max-tokens 150000
+/set tool-output-truncate-mode sample
+/profile save large-codebase
+
+# For focused work with full file contents
+/set tool-output-max-items 20
+/set tool-output-item-size-limit 2097152  # 2MB per file
+/set tool-output-truncate-mode warn
+/profile save detailed-analysis
+
+# For quick searches with minimal context usage
+/set tool-output-max-items 10
+/set tool-output-max-tokens 10000
+/set tool-output-truncate-mode truncate
+/profile save quick-search
+```
 
 ## Examples
 
