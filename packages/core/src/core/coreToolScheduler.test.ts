@@ -558,6 +558,153 @@ describe('CoreToolScheduler edit cancellation', () => {
   });
 });
 
+describe('CoreToolScheduler queue handling', () => {
+  it('should queue tool calls when another is running', async () => {
+    // Arrange
+    const mockTool1 = new MockTool('tool1');
+    const mockTool2 = new MockTool('tool2');
+    let tool1ExecuteResolve: () => void;
+    const tool1ExecutePromise = new Promise<void>((resolve) => {
+      tool1ExecuteResolve = resolve;
+    });
+
+    // Make tool1 take time to execute
+    mockTool1.executeFn.mockImplementation(async () => {
+      await tool1ExecutePromise;
+      return { output: 'Tool 1 result' };
+    });
+
+    mockTool2.executeFn.mockResolvedValue({ output: 'Tool 2 result' });
+
+    const toolRegistry = {
+      getTool: (name: string) => (name === 'tool1' ? mockTool1 : mockTool2),
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {} as any,
+      registerTool: () => {},
+      getToolByName: (name: string) =>
+        name === 'tool1' ? mockTool1 : mockTool2,
+      getToolByDisplayName: () => mockTool1,
+    };
+
+    const completedCalls: any[] = [];
+    const scheduler = new CoreToolScheduler({
+      toolRegistry: Promise.resolve(toolRegistry as any),
+      onAllToolCallsComplete: (calls) => {
+        completedCalls.push(...calls);
+      },
+      getPreferredEditor: () => undefined,
+      config: {
+        getApprovalMode: () => ApprovalMode.YOLO,
+      } as Config,
+    });
+
+    // Act
+    const signal1 = new AbortController().signal;
+    const signal2 = new AbortController().signal;
+
+    // Schedule first tool
+    await scheduler.schedule(
+      {
+        callId: 'call1',
+        name: 'tool1',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'test-prompt',
+      },
+      signal1,
+    );
+
+    // Try to schedule second tool while first is running - should be queued
+    await scheduler.schedule(
+      {
+        callId: 'call2',
+        name: 'tool2',
+        args: {},
+        isClientInitiated: false,
+        prompt_id: 'test-prompt',
+      },
+      signal2,
+    );
+
+    // At this point, tool1 should be executing and tool2 should be queued
+    expect(mockTool1.executeFn).toHaveBeenCalled();
+    expect(mockTool2.executeFn).not.toHaveBeenCalled();
+
+    // Complete tool1
+    tool1ExecuteResolve!();
+
+    // Wait for queue processing
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Assert
+    expect(mockTool2.executeFn).toHaveBeenCalled();
+    expect(completedCalls).toHaveLength(2);
+    expect(completedCalls[0]).toHaveLength(1);
+    expect(completedCalls[0][0].request.callId).toBe('call1');
+    expect(completedCalls[1]).toHaveLength(1);
+    expect(completedCalls[1][0].request.callId).toBe('call2');
+  });
+
+  it('should process multiple queued requests in order', async () => {
+    // Arrange
+    const mockTool = new MockTool();
+    const executionOrder: string[] = [];
+
+    mockTool.executeFn.mockImplementation(async (args: any) => {
+      executionOrder.push(args.id);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { output: `Result for ${args.id}` };
+    });
+
+    const toolRegistry = {
+      getTool: () => mockTool,
+      getFunctionDeclarations: () => [],
+      tools: new Map(),
+      discovery: {} as any,
+      registerTool: () => {},
+      getToolByName: () => mockTool,
+      getToolByDisplayName: () => mockTool,
+    };
+
+    const scheduler = new CoreToolScheduler({
+      toolRegistry: Promise.resolve(toolRegistry as any),
+      getPreferredEditor: () => undefined,
+      config: {
+        getApprovalMode: () => ApprovalMode.YOLO,
+      } as Config,
+    });
+
+    // Act
+    const signal = new AbortController().signal;
+
+    // Schedule multiple tools rapidly
+    const schedulePromises = [];
+    for (let i = 1; i <= 4; i++) {
+      schedulePromises.push(
+        scheduler.schedule(
+          {
+            callId: `call${i}`,
+            name: 'mockTool',
+            args: { id: `tool${i}` },
+            isClientInitiated: false,
+            prompt_id: 'test-prompt',
+          },
+          signal,
+        ),
+      );
+    }
+
+    await Promise.all(schedulePromises);
+
+    // Wait for all to complete
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // Assert - tools should execute in order
+    expect(executionOrder).toEqual(['tool1', 'tool2', 'tool3', 'tool4']);
+  });
+});
+
 describe('CoreToolScheduler YOLO mode', () => {
   it('should execute tool requiring confirmation directly without waiting', async () => {
     // Arrange
