@@ -297,53 +297,57 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toContain('4');
     });
 
-    it.skipIf(skipTests)('should handle tool calls', async () => {
-      if (!apiKey || skipTests) return; // Guard for when test is skipped
-      const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
+    it.skipIf(skipTests)(
+      'should handle tool calls',
+      async () => {
+        if (!apiKey || skipTests) return; // Guard for when test is skipped
+        const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
-      const messages = [
-        {
-          role: ContentGeneratorRole.USER,
-          content:
-            'What is the weather in San Francisco? Use the get_weather function.',
-        },
-      ];
+        const messages = [
+          {
+            role: ContentGeneratorRole.USER,
+            content:
+              'What is the weather in San Francisco? Use the get_weather function.',
+          },
+        ];
 
-      const tools = [
-        {
-          type: 'function' as const,
-          function: {
-            name: 'get_weather',
-            description: 'Get the weather for a location',
-            parameters: {
-              type: 'object',
-              properties: {
-                location: { type: 'string', description: 'The city name' },
+        const tools = [
+          {
+            type: 'function' as const,
+            function: {
+              name: 'get_weather',
+              description: 'Get the weather for a location',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string', description: 'The city name' },
+                },
+                required: ['location'],
               },
-              required: ['location'],
             },
           },
-        },
-      ];
+        ];
 
-      let toolCallReceived = false;
-      const stream = openaiProvider.generateChatCompletion(messages, tools);
+        let toolCallReceived = false;
+        const stream = openaiProvider.generateChatCompletion(messages, tools);
 
-      for await (const message of stream) {
-        if (message.tool_calls && message.tool_calls.length > 0) {
-          toolCallReceived = true;
-          const toolCall = message.tool_calls[0];
-          console.log(`\n✅ Tool call received: ${toolCall.function.name}`);
-          console.log(`   Arguments: ${toolCall.function.arguments}`);
+        for await (const message of stream) {
+          if (message.tool_calls && message.tool_calls.length > 0) {
+            toolCallReceived = true;
+            const toolCall = message.tool_calls[0];
+            console.log(`\n✅ Tool call received: ${toolCall.function.name}`);
+            console.log(`   Arguments: ${toolCall.function.arguments}`);
 
-          expect(toolCall.function.name).toBe('get_weather');
-          const args = JSON.parse(toolCall.function.arguments);
-          expect(args.location.toLowerCase()).toContain('san francisco');
+            expect(toolCall.function.name).toBe('get_weather');
+            const args = JSON.parse(toolCall.function.arguments);
+            expect(args.location.toLowerCase()).toContain('san francisco');
+          }
         }
-      }
 
-      expect(toolCallReceived).toBe(true);
-    });
+        expect(toolCallReceived).toBe(true);
+      },
+      10000,
+    );
   });
 
   describe('Error Handling', () => {
