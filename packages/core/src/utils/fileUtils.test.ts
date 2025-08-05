@@ -441,7 +441,7 @@ describe('fileUtils', () => {
 
       expect(result.llmContent).toContain(expectedContent);
       expect(result.llmContent).toContain(
-        '[File content truncated: showing lines 11-20 of 20 total lines. Use offset/limit parameters to view more.]',
+        '[File content truncated. Showing lines 11-20 of 20. To read the next chunk, use offset: 20, limit: 10.]',
       );
       expect(result.returnDisplay).toBe('Read lines 11-20 of 20 from test.txt');
       expect(result.isTruncated).toBe(true); // This is the key check for the bug

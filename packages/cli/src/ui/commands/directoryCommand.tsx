@@ -8,7 +8,7 @@ import { SlashCommand, CommandContext, CommandKind } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
-import { loadServerHierarchicalMemory } from '@google/gemini-cli-core';
+import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core';
 
 export function expandHomeDir(p: string): string {
   if (!p) {
@@ -108,8 +108,8 @@ export const directoryCommand: SlashCommand = {
                 context.services.settings.merged.memoryDiscoveryMaxDirs,
               );
             config.setUserMemory(memoryContent);
-            config.setGeminiMdFileCount(fileCount);
-            context.ui.setGeminiMdFileCount(fileCount);
+            config.setLlxprtMdFileCount(fileCount);
+            context.ui.setLlxprtMdFileCount(fileCount);
           }
           addItem(
             {

@@ -237,6 +237,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
       // For now, using the internal config loading that has settings.
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
         process.cwd(),
+        config.shouldLoadMemoryFromIncludeDirectories() ? config.getWorkspaceContext().getDirectories() : [],
         config.getDebugMode(),
         config.getFileService(),
         loadSettings(process.cwd()).merged, // Get merged settings object

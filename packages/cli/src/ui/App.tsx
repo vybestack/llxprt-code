@@ -641,7 +641,7 @@ const App = (props: AppInternalProps) => {
     openPrivacyNotice,
     toggleVimEnabled,
     setIsProcessing,
-    setGeminiMdFileCount,
+    setLlxprtMdFileCount,
   );
 
   const {
@@ -762,7 +762,7 @@ const App = (props: AppInternalProps) => {
     if (config) {
       setLlxprtMdFileCount(config.getLlxprtMdFileCount());
     }
-  }, [config, config.getGeminiMdFileCount]);
+  }, [config, config.getLlxprtMdFileCount]);
 
   const logger = useLogger();
   const [userMessages, setUserMessages] = useState<string[]>([]);
