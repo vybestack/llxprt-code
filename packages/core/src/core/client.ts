@@ -243,6 +243,10 @@ export class GeminiClient {
     return this.chat;
   }
 
+  hasChatInitialized(): boolean {
+    return this.chat !== undefined;
+  }
+
   isInitialized(): boolean {
     return this.chat !== undefined && this.contentGenerator !== undefined;
   }
