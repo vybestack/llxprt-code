@@ -433,6 +433,9 @@ const App = (props: AppInternalProps) => {
     try {
       const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
         process.cwd(),
+        settings.merged.loadMemoryFromIncludeDirectories
+          ? config.getWorkspaceContext().getDirectories()
+          : [],
         config.getDebugMode(),
         config.getFileService(),
         settings.merged,
@@ -638,6 +641,7 @@ const App = (props: AppInternalProps) => {
     openPrivacyNotice,
     toggleVimEnabled,
     setIsProcessing,
+    setLlxprtMdFileCount,
   );
 
   const {
@@ -758,7 +762,7 @@ const App = (props: AppInternalProps) => {
     if (config) {
       setLlxprtMdFileCount(config.getLlxprtMdFileCount());
     }
-  }, [config]);
+  }, [config, config.getLlxprtMdFileCount]);
 
   const logger = useLogger();
   const [userMessages, setUserMessages] = useState<string[]>([]);

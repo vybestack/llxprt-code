@@ -121,6 +121,10 @@ describe('SessionController', () => {
       setQuotaErrorOccurred: vi.fn(),
       setModel: vi.fn(),
       getUserTier: vi.fn(() => Promise.resolve(undefined)),
+      shouldLoadMemoryFromIncludeDirectories: vi.fn(() => false),
+      getWorkspaceContext: vi.fn(() => ({
+        getDirectories: vi.fn(() => [process.cwd()]),
+      })),
     };
   });
 
