@@ -605,6 +605,7 @@ describe('CoreToolScheduler queue handling', () => {
       config: {
         getApprovalMode: () => ApprovalMode.YOLO,
       } as Config,
+      onEditorClose: vi.fn(),
     });
 
     // Act
@@ -695,6 +696,7 @@ describe('CoreToolScheduler queue handling', () => {
       config: {
         getApprovalMode: () => ApprovalMode.YOLO,
       } as Config,
+      onEditorClose: vi.fn(),
     });
 
     // Act
