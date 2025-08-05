@@ -266,6 +266,10 @@ interface CoreToolSchedulerOptions {
 export class CoreToolScheduler {
   private toolRegistry: Promise<ToolRegistry>;
   private toolCalls: ToolCall[] = [];
+  private pendingQueue: Array<{
+    request: ToolCallRequestInfo | ToolCallRequestInfo[];
+    signal: AbortSignal;
+  }> = [];
   private outputUpdateHandler?: OutputUpdateHandler;
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -460,9 +464,9 @@ export class CoreToolScheduler {
     signal: AbortSignal,
   ): Promise<void> {
     if (this.isRunning()) {
-      throw new Error(
-        'Cannot schedule new tool calls while other tool calls are actively running (executing or awaiting approval).',
-      );
+      // Queue the request instead of throwing an error
+      this.pendingQueue.push({ request, signal });
+      return;
     }
     const requestsToProcess = Array.isArray(request) ? request : [request];
     const toolRegistry = await this.toolRegistry;
@@ -784,6 +788,24 @@ export class CoreToolScheduler {
         this.onAllToolCallsComplete(completedCalls);
       }
       this.notifyToolCallsUpdate();
+
+      // Process any queued requests now that current batch is complete
+      this.processQueue();
+    }
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.pendingQueue.length === 0 || this.isRunning()) {
+      return;
+    }
+
+    // Take the first item from the queue
+    const nextItem = this.pendingQueue.shift();
+    if (nextItem) {
+      // Schedule it without awaiting to avoid blocking
+      this.schedule(nextItem.request, nextItem.signal).catch((error) => {
+        console.error('Error processing queued tool call:', error);
+      });
     }
   }
 
