@@ -7,12 +7,15 @@
 
 import * as vscode from 'vscode';
 import { IDEServer } from './ide-server';
+import { DiffContentProvider, DiffManager } from './diff-manager';
 import { createLogger } from './utils/logger';
 
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
+export const DIFF_SCHEME = 'llxprt-diff';
 
 let ideServer: IDEServer;
 let logger: vscode.OutputChannel;
+
 let log: (message: string) => void = () => {};
 
 function updateWorkspacePath(context: vscode.ExtensionContext) {
@@ -38,7 +41,40 @@ export async function activate(context: vscode.ExtensionContext) {
 
   updateWorkspacePath(context);
 
-  ideServer = new IDEServer(log);
+  const diffContentProvider = new DiffContentProvider();
+  const diffManager = new DiffManager(logger, diffContentProvider);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument((doc) => {
+      if (doc.uri.scheme === DIFF_SCHEME) {
+        diffManager.cancelDiff(doc.uri);
+      }
+    }),
+    vscode.workspace.registerTextDocumentContentProvider(
+      DIFF_SCHEME,
+      diffContentProvider,
+    ),
+    vscode.commands.registerCommand(
+      'llxprt.diff.accept',
+      (uri?: vscode.Uri) => {
+        const docUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+        if (docUri && docUri.scheme === DIFF_SCHEME) {
+          diffManager.acceptDiff(docUri);
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
+      'llxprt.diff.cancel',
+      (uri?: vscode.Uri) => {
+        const docUri = uri ?? vscode.window.activeTextEditor?.document.uri;
+        if (docUri && docUri.scheme === DIFF_SCHEME) {
+          diffManager.cancelDiff(docUri);
+        }
+      },
+    ),
+  );
+
+  ideServer = new IDEServer(log, diffManager);
   try {
     await ideServer.start(context);
   } catch (err) {

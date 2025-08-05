@@ -32,10 +32,61 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "languages": [
+      {
+        "id": "llxprt-diff-editable"
+      }
+    ],
     "commands": [
+      {
+        "command": "llxprt.diff.accept",
+        "title": "LLxprt Code: Accept Current Diff",
+        "icon": "$(check)"
+      },
+      {
+        "command": "llxprt.diff.cancel",
+        "title": "Cancel",
+        "icon": "$(close)"
+      },
       {
         "command": "llxprt-code.runLLxprtCode",
         "title": "LLxprt Code: Run"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "llxprt.diff.accept",
+          "when": "llxprt.diff.isVisible"
+        },
+        {
+          "command": "llxprt.diff.cancel",
+          "when": "llxprt.diff.isVisible"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "llxprt.diff.accept",
+          "when": "llxprt.diff.isVisible",
+          "group": "navigation"
+        },
+        {
+          "command": "llxprt.diff.cancel",
+          "when": "llxprt.diff.isVisible",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "llxprt.diff.accept",
+        "key": "ctrl+s",
+        "when": "llxprt.diff.isVisible"
+      },
+      {
+        "command": "llxprt.diff.accept",
+        "key": "cmd+s",
+        "when": "llxprt.diff.isVisible"
       }
     ]
   },
