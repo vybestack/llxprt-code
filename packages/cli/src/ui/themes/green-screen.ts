@@ -17,7 +17,7 @@ const greenScreenColors: ColorsTheme = {
   AccentGreen: '#00ff00',
   AccentYellow: '#6a9955',
   AccentRed: '#6a9955',
-  DiffAdded: '#00ff00',
+  DiffAdded: '#6a9955',
   DiffRemoved: '#6a9955',
   Comment: '#6a9955',
   Gray: '#6a9955',
