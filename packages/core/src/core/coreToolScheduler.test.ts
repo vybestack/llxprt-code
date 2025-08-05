@@ -663,7 +663,10 @@ describe('CoreToolScheduler queue handling', () => {
 
     mockTool.executeFn.mockImplementation(async (args: any) => {
       activeExecutions++;
-      maxConcurrentExecutions = Math.max(maxConcurrentExecutions, activeExecutions);
+      maxConcurrentExecutions = Math.max(
+        maxConcurrentExecutions,
+        activeExecutions,
+      );
       executionOrder.push(args.id);
       await new Promise((resolve) => setTimeout(resolve, 50));
       activeExecutions--;
@@ -702,10 +705,10 @@ describe('CoreToolScheduler queue handling', () => {
       },
       signal,
     );
-    
+
     // Wait a bit to ensure first tool is executing
     await new Promise((resolve) => setTimeout(resolve, 10));
-    
+
     // Schedule remaining tools while first is running - they should be queued
     const remainingPromises = [];
     for (let i = 2; i <= 4; i++) {
