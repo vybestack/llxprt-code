@@ -132,6 +132,67 @@ These commands are unique to LLxprt Code and enable multi-provider support:
   - **Example:** `/keyfile ~/.keys/openai.txt`
   - **Note:** The file should contain only the API key as plain text
 
+- **`/set`**
+  - **Description:** Set model parameters or ephemeral settings for the current session.
+  - **Usage:** `/set <key> <value>` or `/set modelparam <key> <value>`
+  - **Sub-commands:**
+    - **`modelparam`**:
+      - **Description:** Set model parameters like temperature, max_tokens, etc.
+      - **Usage:** `/set modelparam <key> <value>`
+      - **Example:** `/set modelparam temperature 0.7`
+      - **Common parameters:** temperature, max_tokens, maxOutputTokens, top_p, top_k, presence_penalty, frequency_penalty, stop_sequences, seed, enable_thinking
+    - **`unset`**:
+      - **Description:** Remove an ephemeral setting or model parameter.
+      - **Usage:** `/set unset <key> [subkey]`
+      - **Examples:** `/set unset context-limit` or `/set unset modelparam temperature`
+  - **Ephemeral settings (session-only, persist with `/profile save`):**
+    - `context-limit`: Maximum number of tokens for the context window (e.g., 100000)
+    - `compression-threshold`: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)
+    - `base-url`: Base URL for API requests
+    - `tool-format`: Tool format override for the provider
+    - `api-version`: API version to use
+    - `custom-headers`: Custom HTTP headers as JSON object
+    - `tool-output-max-items`: Maximum number of items/files/matches returned by tools (default: 50)
+    - `tool-output-max-tokens`: Maximum tokens in tool output (default: 50000)
+    - `tool-output-truncate-mode`: How to handle exceeding limits: warn, truncate, or sample (default: warn)
+    - `tool-output-item-size-limit`: Maximum size per item/file in bytes (default: 524288 = 512KB)
+    - `max-prompt-tokens`: Maximum tokens allowed in any prompt sent to LLM (default: 200000)
+  - **Examples:**
+    - `/set context-limit 100000` - Set context window to 100k tokens
+    - `/set compression-threshold 0.7` - Trigger compression at 70% capacity
+    - `/set tool-output-max-items 100` - Increase tool output items limit
+    - `/set modelparam temperature 0.5` - Set model temperature
+    - `/set unset context-limit` - Remove context limit setting
+
+- **`/profile`**
+  - **Description:** Manage configuration profiles to save and restore session settings.
+  - **Sub-commands:**
+    - **`save`**:
+      - **Description:** Save current configuration to a profile.
+      - **Usage:** `/profile save "<profile-name>"`
+      - **Example:** `/profile save "development"` - Saves current provider, model, model parameters, and ephemeral settings
+    - **`load`**:
+      - **Description:** Load configuration from a saved profile.
+      - **Usage:** `/profile load "<profile-name>"` or `/profile load` (opens interactive dialog)
+      - **Example:** `/profile load "development"` - Restores all settings from the profile
+    - **`delete`**:
+      - **Description:** Delete a saved profile.
+      - **Usage:** `/profile delete "<profile-name>"`
+      - **Example:** `/profile delete "old-config"`
+    - **`set-default`**:
+      - **Description:** Set a profile to load automatically on startup.
+      - **Usage:** `/profile set-default "<profile-name>"` or `/profile set-default none`
+      - **Example:** `/profile set-default "development"` - Auto-loads this profile on startup
+    - **`list`**:
+      - **Description:** List all saved profiles.
+      - **Usage:** `/profile list`
+  - **Note:** Profiles save the complete session state including:
+    - Provider and model selection
+    - Model parameters (temperature, max_tokens, etc.)
+    - Ephemeral settings (context limits, tool output settings, etc.)
+    - API keys or keyfile paths (if set)
+    - Base URL overrides
+
 - **`/about`**
   - **Description:** Show version info. Please share this information when filing issues.
 
