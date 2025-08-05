@@ -32,6 +32,7 @@ import { getCliVersion } from '../utils/version.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import * as dotenv from 'dotenv';
 import * as os from 'node:os';
+import { resolvePath } from '../utils/resolvePath.js';
 
 const LLXPRT_DIR = '.llxprt';
 
@@ -72,6 +73,7 @@ export interface CliArgs {
   proxy: string | undefined;
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
+  loadMemoryFromIncludeDirectories: boolean | undefined;
 }
 
 export async function parseArguments(): Promise<CliArgs> {
@@ -244,6 +246,12 @@ export async function parseArguments(): Promise<CliArgs> {
       type: 'string',
       description: 'Load a saved profile configuration on startup',
     })
+    .option('load-memory-from-include-directories', {
+      type: 'boolean',
+      description:
+        'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
+      default: false,
+    })
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
     .help()
@@ -271,6 +279,7 @@ export async function parseArguments(): Promise<CliArgs> {
 // TODO: Consider if App.tsx should get memory via a server call or if Config should refresh itself.
 export async function loadHierarchicalLlxprtMemory(
   currentWorkingDirectory: string,
+  includeDirectoriesToReadGemini: readonly string[] = [],
   debugMode: boolean,
   fileService: FileDiscoveryService,
   settings: Settings,
@@ -296,6 +305,7 @@ export async function loadHierarchicalLlxprtMemory(
   // Directly call the server function with the corrected path.
   return loadServerHierarchicalMemory(
     effectiveCwd,
+    includeDirectoriesToReadGemini,
     debugMode,
     fileService,
     extensionContextFilePaths,
@@ -403,9 +413,14 @@ export async function loadCliConfig(
     ...effectiveSettings.fileFiltering,
   };
 
+  const includeDirectories = (effectiveSettings.includeDirectories || [])
+    .map(resolvePath)
+    .concat((argv.includeDirectories || []).map(resolvePath));
+
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
   const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
     process.cwd(),
+    effectiveSettings.loadMemoryFromIncludeDirectories || argv.loadMemoryFromIncludeDirectories ? includeDirectories : [],
     debugMode,
     fileService,
     effectiveSettings,
@@ -490,7 +505,11 @@ export async function loadCliConfig(
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
     sandbox: sandboxConfig,
     targetDir: process.cwd(),
-    includeDirectories: argv.includeDirectories,
+    includeDirectories,
+    loadMemoryFromIncludeDirectories:
+      argv.loadMemoryFromIncludeDirectories ||
+      effectiveSettings.loadMemoryFromIncludeDirectories ||
+      false,
     debugMode,
     question: argv.promptInteractive || argv.prompt || '',
     fullContext: argv.allFiles || argv.all_files || false,

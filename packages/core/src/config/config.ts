@@ -211,6 +211,7 @@ export interface ConfigParameters {
   ideMode?: boolean;
   ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
+  loadMemoryFromIncludeDirectories?: boolean;
 }
 
 export class Config {
@@ -285,6 +286,7 @@ export class Config {
     | undefined;
   private readonly experimentalAcp: boolean = false;
   private readonly complexityAnalyzerSettings: ComplexityAnalyzerSettings;
+  private readonly loadMemoryFromIncludeDirectories: boolean = false;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -351,6 +353,8 @@ export class Config {
       minTasksForSuggestion: 3,
       suggestionCooldownMs: 300000, // 5 minutes
     };
+    this.loadMemoryFromIncludeDirectories =
+      params.loadMemoryFromIncludeDirectories ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -435,6 +439,10 @@ export class Config {
 
   getSessionId(): string {
     return this.sessionId;
+  }
+
+  shouldLoadMemoryFromIncludeDirectories(): boolean {
+    return this.loadMemoryFromIncludeDirectories;
   }
 
   getContentGeneratorConfig(): ContentGeneratorConfig | undefined {
@@ -765,6 +773,7 @@ export class Config {
   async refreshMemory(): Promise<{ memoryContent: string; fileCount: number }> {
     const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
       this.getWorkingDir(),
+      this.shouldLoadMemoryFromIncludeDirectories() ? this.getWorkspaceContext().getDirectories() : [],
       this.getDebugMode(),
       this.getFileService(),
       this.getExtensionContextFilePaths(),

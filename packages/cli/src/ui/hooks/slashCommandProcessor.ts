@@ -57,6 +57,7 @@ export const useSlashCommandProcessor = (
   openPrivacyNotice: () => void,
   toggleVimEnabled: () => Promise<boolean>,
   setIsProcessing: (isProcessing: boolean) => void,
+  setGeminiMdFileCount: (count: number) => void,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
@@ -167,6 +168,7 @@ export const useSlashCommandProcessor = (
         setPendingItem: setPendingCompressionItem,
         toggleCorgiMode,
         toggleVimEnabled,
+        setGeminiMdFileCount,
       },
       session: {
         stats: session.stats,
@@ -189,6 +191,7 @@ export const useSlashCommandProcessor = (
       toggleCorgiMode,
       toggleVimEnabled,
       sessionShellAllowlist,
+      setGeminiMdFileCount,
     ],
   );
 
