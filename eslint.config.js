@@ -30,6 +30,7 @@ export default tseslint.config(
     // Global ignores
     ignores: [
       'node_modules/*',
+      '.integration-tests/**',
       'eslint.config.js',
       'packages/cli/dist/**',
       'packages/core/dist/**',
