@@ -32,6 +32,8 @@ describe('copyCommand', () => {
         config: {
           getGeminiClient: () => ({
             getChat: mockGetChat,
+            hasChatInitialized: vi.fn().mockReturnValue(true),
+            getHistory: vi.fn().mockResolvedValue([]),
           }),
         },
       },
@@ -45,14 +47,25 @@ describe('copyCommand', () => {
   it('should return info message when no history is available', async () => {
     if (!copyCommand.action) throw new Error('Command has no action');
 
-    mockGetChat.mockReturnValue(undefined);
+    // Mock no chat initialized
+    mockContext = createMockCommandContext({
+      services: {
+        config: {
+          getGeminiClient: () => ({
+            getChat: mockGetChat,
+            hasChatInitialized: vi.fn().mockReturnValue(false),
+            getHistory: vi.fn().mockResolvedValue([]),
+          }),
+        },
+      },
+    });
 
     const result = await copyCommand.action(mockContext, '');
 
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: 'No output in history',
+      content: 'No chat history available yet',
     });
 
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
@@ -288,7 +301,7 @@ describe('copyCommand', () => {
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: 'No output in history',
+      content: 'No chat history available yet',
     });
 
     expect(mockCopyToClipboard).not.toHaveBeenCalled();

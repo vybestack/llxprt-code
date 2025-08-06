@@ -641,7 +641,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Override the global getHistory mock for this test
       const getHistoryMock = vi.mocked(client.getHistory);
-      getHistoryMock.mockImplementation(() => client.getChat().getHistory());
+      getHistoryMock.mockImplementation(async () =>
+        client.getChat().getHistory(),
+      );
 
       // 1. Get the initial chat instance and verify initial state
       const initialChat = client.getChat();

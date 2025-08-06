@@ -22,6 +22,7 @@ import { summarizeToolOutput } from '../utils/summarizer.js';
 import {
   limitOutputTokens,
   formatLimitedOutput,
+  getOutputLimits,
 } from '../utils/toolOutputLimiter.js';
 import {
   ShellExecutionService,
@@ -356,9 +357,23 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
         this.config,
         'run_shell_command',
       );
-      const formatted = formatLimitedOutput(limitedResult);
 
-      // If we hit token limits and have no content, return the warning
+      // If we hit token limits with warn mode, provide better guidance
+      if (limitedResult.wasTruncated && !limitedResult.content) {
+        const improvedMessage = `Shell command output exceeded token limit (${limitedResult.originalTokens} > ${getOutputLimits(this.config).maxTokens}). The command produced too much output. Please:
+1. Use output redirection or pipes to filter results (e.g., "| head -100", "| grep pattern")
+2. Use more specific commands that produce less output
+3. Write output to a file and read specific parts with the read tool
+4. Use the appropriate tool instead (grep for searching, ls for listing, etc.)
+5. Break the command into smaller, more focused operations`;
+
+        return {
+          llmContent: improvedMessage,
+          returnDisplay: `## Command Output Too Large\n\n${improvedMessage}`,
+        };
+      }
+
+      const formatted = formatLimitedOutput(limitedResult);
       if (limitedResult.wasTruncated && !limitedResult.content) {
         return formatted;
       }

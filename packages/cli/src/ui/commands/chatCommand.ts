@@ -109,15 +109,18 @@ const saveCommand: SlashCommand = {
 
     const { logger, config } = context.services;
     await logger.initialize();
-    const chat = await config?.getGeminiClient()?.getChat();
-    if (!chat) {
+
+    const client = config?.getGeminiClient();
+    // Check if chat is initialized before accessing it
+    if (!client?.hasChatInitialized()) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'No chat client available to save conversation.',
+        content: 'No chat history available to save.',
       };
     }
 
+    const chat = client.getChat();
     const history = chat.getHistory();
     if (history.length > 0) {
       await logger.saveCheckpoint(history, tag);

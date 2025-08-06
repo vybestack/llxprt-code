@@ -363,10 +363,8 @@ Please analyze the conversation history to determine the possibility that the co
   }
 
   private async checkForLoopWithLLM(signal: AbortSignal) {
-    const recentHistory = this.config
-      .getGeminiClient()
-      .getHistory()
-      .slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
+    const fullHistory = await this.config.getGeminiClient().getHistory();
+    const recentHistory = fullHistory.slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
 
     const prompt = await this.getLoopDetectionPrompt();
     const contents = [

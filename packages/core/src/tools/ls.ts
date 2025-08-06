@@ -14,6 +14,7 @@ import { Type } from '@google/genai';
 import {
   limitOutputTokens,
   formatLimitedOutput,
+  getOutputLimits,
 } from '../utils/toolOutputLimiter.js';
 
 /**
@@ -37,6 +38,11 @@ export interface LSToolParams {
     respect_git_ignore?: boolean;
     respect_llxprt_ignore?: boolean;
   };
+
+  /**
+   * Maximum number of entries to return (optional, helps prevent overwhelming output)
+   */
+  max_entries?: number;
 }
 
 /**
@@ -111,6 +117,11 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
                 type: Type.BOOLEAN,
               },
             },
+          },
+          max_entries: {
+            description:
+              'Optional: Maximum number of entries to return. If omitted, returns all entries in the directory. Set a lower number for large directories to avoid overwhelming output.',
+            type: Type.NUMBER,
           },
         },
         required: ['path'],
@@ -298,12 +309,21 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
         return a.name.localeCompare(b.name);
       });
 
+      // Apply max_entries limit if specified
+      let displayEntries = entries;
+      let limitMessage = '';
+      const totalEntries = entries.length;
+      if (params.max_entries && entries.length > params.max_entries) {
+        displayEntries = entries.slice(0, params.max_entries);
+        limitMessage = ` (showing first ${params.max_entries} of ${totalEntries} total)`;
+      }
+
       // Create formatted content for LLM
-      const directoryContent = entries
+      const directoryContent = displayEntries
         .map((entry) => `${entry.isDirectory ? '[DIR] ' : ''}${entry.name}`)
         .join('\n');
 
-      let resultMessage = `Directory listing for ${params.path}:\n${directoryContent}`;
+      let resultMessage = `Directory listing for ${params.path}${limitMessage}:\n${directoryContent}`;
       const ignoredMessages = [];
       if (gitIgnoredCount > 0) {
         ignoredMessages.push(`${gitIgnoredCount} git-ignored`);
@@ -316,7 +336,7 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
         resultMessage += `\n\n(${ignoredMessages.join(', ')})`;
       }
 
-      let displayMessage = `Listed ${entries.length} item(s).`;
+      let displayMessage = `Listed ${displayEntries.length} item(s)${limitMessage}.`;
       if (ignoredMessages.length > 0) {
         displayMessage += ` (${ignoredMessages.join(', ')})`;
       }
@@ -327,9 +347,26 @@ export class LSTool extends BaseTool<LSToolParams, ToolResult> {
         this.config,
         'list_directory',
       );
-      const formatted = formatLimitedOutput(limitedResult);
 
-      // If we hit token limits, override the display to be more informative
+      // If we hit token limits with warn mode, provide better guidance
+      if (
+        limitedResult.wasTruncated &&
+        !limitedResult.content &&
+        !params.max_entries
+      ) {
+        const improvedMessage = `ls output exceeded token limit (${limitedResult.originalTokens} > ${getOutputLimits(this.config).maxTokens}). The directory contains too many files to list. Please:
+1. Use the max_entries parameter to limit results (e.g., max_entries: 100)
+2. Use glob with a specific pattern to find files (e.g., "*.ts", "src/**/*.js")
+3. List subdirectories individually instead of the parent directory
+4. Use grep to search for specific file contents if looking for code`;
+
+        return {
+          llmContent: improvedMessage,
+          returnDisplay: `## Directory Listing Too Large\n\n${improvedMessage}`,
+        };
+      }
+
+      const formatted = formatLimitedOutput(limitedResult);
       if (limitedResult.wasTruncated && !limitedResult.content) {
         return formatted;
       }

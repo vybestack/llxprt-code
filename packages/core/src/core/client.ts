@@ -206,7 +206,7 @@ export class GeminiClient {
     );
 
     // If we have previous history, restore it when creating the chat
-    // This preserves conversation context across auth transitions
+    // This preserves conversation context across auth transitions and chat resumes
     if (this._previousHistory && this._previousHistory.length > 0) {
       // Extract the conversation history after the initial environment setup
       // The first two messages are always the environment context and acknowledgment
@@ -216,9 +216,9 @@ export class GeminiClient {
       this.chat = await this.startChat();
     }
 
-    // Clear pending config and history after successful initialization
+    // Clear pending config after successful initialization
+    // Note: We do NOT clear _previousHistory as it may be needed for the chat context
     this._pendingConfig = undefined;
-    this._previousHistory = undefined;
   }
 
   getContentGenerator(): ContentGenerator {
@@ -233,6 +233,10 @@ export class GeminiClient {
   }
 
   async addHistory(content: Content) {
+    // Ensure chat is initialized before adding history
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
     this.getChat().addHistory(content);
   }
 
@@ -243,22 +247,57 @@ export class GeminiClient {
     return this.chat;
   }
 
+  hasChatInitialized(): boolean {
+    return this.chat !== undefined;
+  }
+
   isInitialized(): boolean {
     return this.chat !== undefined && this.contentGenerator !== undefined;
   }
 
-  getHistory(): Content[] {
-    return this.getChat().getHistory();
+  async getHistory(): Promise<Content[]> {
+    // If we have stored history but no chat, return the stored history
+    if (!this.hasChatInitialized() && this._previousHistory) {
+      return this._previousHistory;
+    }
+
+    // If chat is initialized, get its current history
+    if (this.hasChatInitialized()) {
+      return this.getChat().getHistory();
+    }
+
+    // No history available
+    return [];
   }
 
-  setHistory(history: Content[]) {
-    this.getChat().setHistory(history);
+  async setHistory(history: Content[]): Promise<void> {
+    // Store the history for later use
+    this._previousHistory = history;
+
+    // If chat is already initialized, update it immediately
+    if (this.hasChatInitialized()) {
+      this.getChat().setHistory(history);
+    }
+    // Otherwise, the history will be used when the chat is initialized
+  }
+
+  /**
+   * Store history for later use when the client is initialized.
+   * This is used when resuming a chat before authentication.
+   * The history will be restored when lazyInitialize() is called.
+   */
+  storeHistoryForLaterUse(history: Content[]): void {
+    this._previousHistory = history;
   }
 
   async setTools(): Promise<void> {
     const toolRegistry = await this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
+    // Ensure chat is initialized before setting tools
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
     this.getChat().setTools(tools);
   }
 
