@@ -208,6 +208,7 @@ export interface ConfigParameters {
   noBrowser?: boolean;
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
   ideModeFeature?: boolean;
+  folderTrustFeature?: boolean;
   ideMode?: boolean;
   ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
@@ -257,6 +258,7 @@ export class Config {
   private readonly extensionContextFilePaths: string[];
   private readonly noBrowser: boolean;
   private readonly ideModeFeature: boolean;
+  private readonly folderTrustFeature: boolean;
   private ideMode: boolean;
   private ideClient?: IdeClient;
   private inFallbackMode = false;
@@ -346,6 +348,7 @@ export class Config {
     this.noBrowser = params.noBrowser ?? false;
     this.summarizeToolOutput = params.summarizeToolOutput;
     this.ideModeFeature = params.ideModeFeature ?? false;
+    this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.ideMode = params.ideMode ?? false;
     this.ideClient = params.ideClient;
     this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
@@ -728,6 +731,10 @@ export class Config {
 
   getIdeClient(): IdeClient | undefined {
     return this.ideClient;
+  }
+
+  getFolderTrustFeature(): boolean {
+    return this.folderTrustFeature;
   }
 
   getIdeMode(): boolean {

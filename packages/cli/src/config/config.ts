@@ -385,6 +385,8 @@ export async function loadCliConfig(
 
   const ideClient = IdeClient.getInstance(ideMode && ideModeFeature);
 
+  const folderTrustFeature = settings.folderTrustFeature ?? false;
+
   const allExtensions = annotateActiveExtensions(
     extensions,
     argv.extensions || [],
@@ -582,6 +584,7 @@ export async function loadCliConfig(
     ideMode,
     ideModeFeature,
     ideClient,
+    folderTrustFeature,
   });
 
   const enhancedConfig = config;

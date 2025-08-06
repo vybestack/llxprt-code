@@ -125,6 +125,7 @@ export interface Settings {
 
   // Flag to be removed post-launch.
   ideModeFeature?: boolean;
+  folderTrustFeature?: boolean;
   /// IDE mode setting configured via slash command toggle.
   ideMode?: boolean;
 
