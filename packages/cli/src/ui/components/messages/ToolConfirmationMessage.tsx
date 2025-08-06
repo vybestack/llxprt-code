@@ -41,20 +41,25 @@ export const ToolConfirmationMessage: React.FC<
   const { onConfirm } = confirmationDetails;
   const childWidth = terminalWidth - 2; // 2 for padding
 
-  const handleConfirm = async (outcome: ToolConfirmationOutcome) => {
-    if (confirmationDetails.type === 'edit') {
-      const ideClient = config?.getIdeClient();
-      if (config?.getIdeMode() && config?.getIdeModeFeature()) {
-        const cliOutcome =
-          outcome === ToolConfirmationOutcome.Cancel ? 'rejected' : 'accepted';
-        await ideClient?.resolveDiffFromCli(
-          confirmationDetails.filePath,
-          cliOutcome,
-        );
+  const handleConfirm = useCallback(
+    async (outcome: ToolConfirmationOutcome) => {
+      if (confirmationDetails.type === 'edit') {
+        const ideClient = config?.getIdeClient();
+        if (config?.getIdeMode() && config?.getIdeModeFeature()) {
+          const cliOutcome =
+            outcome === ToolConfirmationOutcome.Cancel
+              ? 'rejected'
+              : 'accepted';
+          await ideClient?.resolveDiffFromCli(
+            confirmationDetails.filePath,
+            cliOutcome,
+          );
+        }
       }
-    }
-    onConfirm(outcome);
-  };
+      onConfirm(outcome);
+    },
+    [confirmationDetails, config, onConfirm],
+  );
 
   useInput((_, key) => {
     if (!isFocused) return;
