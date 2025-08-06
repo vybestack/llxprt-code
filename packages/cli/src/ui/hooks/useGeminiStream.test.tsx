@@ -465,6 +465,8 @@ describe('useGeminiStream', () => {
           () => Promise.resolve(),
           false,
           () => {},
+          () => {},
+          () => {},
         );
       },
       {
@@ -621,6 +623,8 @@ describe('useGeminiStream', () => {
         () => Promise.resolve(),
         false,
         () => {},
+        () => {},
+        () => {},
       ),
     );
 
@@ -692,6 +696,8 @@ describe('useGeminiStream', () => {
         () => {},
         () => Promise.resolve(),
         false,
+        () => {},
+        () => {},
         () => {},
       ),
     );
@@ -803,6 +809,8 @@ describe('useGeminiStream', () => {
         () => Promise.resolve(),
         false,
         () => {},
+        () => {},
+        () => {},
       ),
     );
 
@@ -912,6 +920,8 @@ describe('useGeminiStream', () => {
         () => Promise.resolve(),
         false,
         () => {},
+        () => {},
+        () => {},
       ),
     );
 
@@ -1010,6 +1020,44 @@ describe('useGeminiStream', () => {
 
       // Verify state is reset
       expect(result.current.streamingState).toBe(StreamingState.Idle);
+    });
+
+    it('should call onCancelSubmit handler when escape is pressed', async () => {
+      const cancelSubmitSpy = vi.fn();
+      const mockStream = (async function* () {
+        yield { type: 'content', value: 'Part 1' };
+        // Keep the stream open
+        await new Promise(() => {});
+      })();
+      mockSendMessageStream.mockReturnValue(mockStream);
+
+      const { result } = renderHook(() =>
+        useGeminiStream(
+          mockConfig.getGeminiClient(),
+          [],
+          mockAddItem,
+          mockConfig,
+          mockOnDebugMessage,
+          mockHandleSlashCommand,
+          false,
+          () => 'vscode' as EditorType,
+          () => {},
+          () => Promise.resolve(),
+          false,
+          () => {},
+          () => {},
+          cancelSubmitSpy,
+        ),
+      );
+
+      // Start a query
+      await act(async () => {
+        result.current.submitQuery('test query');
+      });
+
+      simulateEscapeKeyPress();
+
+      expect(cancelSubmitSpy).toHaveBeenCalled();
     });
 
     it('should not do anything if escape is pressed when not responding', () => {
@@ -1272,6 +1320,8 @@ describe('useGeminiStream', () => {
           mockPerformMemoryRefresh,
           false,
           () => {},
+          () => {},
+          () => {},
         ),
       );
 
@@ -1324,6 +1374,8 @@ describe('useGeminiStream', () => {
           () => Promise.resolve(),
           false,
           () => {},
+          () => {},
+          () => {},
         ),
       );
 
@@ -1373,6 +1425,8 @@ describe('useGeminiStream', () => {
           () => Promise.resolve(),
           false,
           () => {},
+          () => {},
+          () => {},
         ),
       );
 
@@ -1419,6 +1473,8 @@ describe('useGeminiStream', () => {
           () => {},
           () => Promise.resolve(),
           false,
+          () => {},
+          () => {},
           () => {},
         ),
       );
@@ -1467,6 +1523,8 @@ describe('useGeminiStream', () => {
           () => {},
           () => Promise.resolve(),
           false,
+          () => {},
+          () => {},
           () => {},
         ),
       );
@@ -1556,6 +1614,8 @@ describe('useGeminiStream', () => {
             () => Promise.resolve(),
             false,
             () => {},
+            () => {},
+            () => {},
           ),
         );
 
@@ -1610,6 +1670,8 @@ describe('useGeminiStream', () => {
           () => {},
           () => Promise.resolve(),
           false,
+          () => {},
+          () => {},
           () => {},
         ),
       );
@@ -1688,6 +1750,8 @@ describe('useGeminiStream', () => {
           () => Promise.resolve(),
           false,
           () => {},
+          () => {},
+          () => {},
         ),
       );
 
@@ -1740,6 +1804,8 @@ describe('useGeminiStream', () => {
           () => {},
           () => Promise.resolve(),
           false,
+          () => {},
+          () => {},
           () => {},
         ),
       );
