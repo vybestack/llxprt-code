@@ -43,6 +43,11 @@ export interface GrepToolParams {
    * File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")
    */
   include?: string;
+
+  /**
+   * Maximum number of matches to return (optional, helps prevent overwhelming output)
+   */
+  max_matches?: number;
 }
 
 /**
@@ -84,6 +89,11 @@ export class GrepTool extends BaseTool<GrepToolParams, ToolResult> {
             description:
               "Optional: A glob pattern to filter which files are searched (e.g., '*.js', '*.{ts,tsx}', 'src/**'). If omitted, searches all files (respecting potential global ignores).",
             type: Type.STRING,
+          },
+          max_matches: {
+            description:
+              'Optional: Maximum number of matches to return. If omitted, uses the configured limit (default 50). Set a lower number if you expect many matches to avoid overwhelming output.',
+            type: Type.NUMBER,
           },
         },
         required: ['pattern'],
@@ -241,18 +251,30 @@ export class GrepTool extends BaseTool<GrepToolParams, ToolResult> {
       // Get output limits configuration
       const limits = getOutputLimits(this.config);
 
-      // Check if we should limit by number of matches (using tool-output-max-items)
+      // Check if we should limit by number of matches
+      // Priority: 1. User-specified max_matches, 2. tool-output-max-items setting, 3. default
       const ephemeralSettings = this.config.getEphemeralSettings();
-      const maxItems = ephemeralSettings['tool-output-max-items'] as
+      const configMaxItems = ephemeralSettings['tool-output-max-items'] as
         | number
         | undefined;
+      const maxItems = params.max_matches ?? configMaxItems ?? 50;
 
       let itemsToProcess = allMatches;
       let itemLimitMessage = '';
 
-      if (maxItems && allMatches.length > maxItems) {
-        if (limits.truncateMode === 'warn') {
-          const warnMsg = `Found ${allMatches.length} matches, but limiting to ${maxItems} items. Please use more specific patterns to narrow your search.`;
+      if (allMatches.length > maxItems) {
+        // If user explicitly set max_matches, always truncate. Otherwise follow configured mode
+        if (params.max_matches) {
+          // User explicitly set a limit, so truncate to that limit
+          itemsToProcess = allMatches.slice(0, maxItems);
+          itemLimitMessage = `\n[Showing first ${maxItems} of ${allMatches.length} matches as requested]`;
+        } else if (limits.truncateMode === 'warn') {
+          const warnMsg = `Found ${allMatches.length} matches exceeding the ${maxItems} item limit. The search completed but results are too numerous to display. To get useful results:
+1. Use the max_matches parameter to increase the limit (e.g., max_matches: 200)
+2. Search for the EXACT function/class/variable name (e.g., "handleCompletedTools" not "completed")
+3. Include the file extension in your search path (e.g., "**/*.ts" not "**/*")
+4. Search in a specific directory (e.g., "packages/cli/src/ui" not ".")
+5. Use more unique search terms that appear less frequently`;
           return {
             llmContent: warnMsg,
             returnDisplay: `## Match Limit Exceeded\n\n${warnMsg}`,

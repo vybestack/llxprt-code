@@ -15,6 +15,7 @@ import { Config } from '../config/config.js';
 import {
   limitOutputTokens,
   formatLimitedOutput,
+  getOutputLimits,
 } from '../utils/toolOutputLimiter.js';
 
 // Subset of 'Path' interface provided by 'glob' that we can implement for testing
@@ -76,6 +77,11 @@ export interface GlobToolParams {
    * Whether to respect .gitignore patterns (optional, defaults to true)
    */
   respect_git_ignore?: boolean;
+
+  /**
+   * Maximum number of files to return (optional, helps prevent overwhelming output)
+   */
+  max_files?: number;
 }
 
 /**
@@ -111,6 +117,11 @@ export class GlobTool extends BaseTool<GlobToolParams, ToolResult> {
             description:
               'Optional: Whether to respect .gitignore patterns when finding files. Only available in git repositories. Defaults to true.',
             type: Type.BOOLEAN,
+          },
+          max_files: {
+            description:
+              'Optional: Maximum number of files to return. If omitted, returns all matching files up to system limits. Set a lower number if you expect many matches to avoid overwhelming output.',
+            type: Type.NUMBER,
           },
         },
         required: ['pattern'],
@@ -293,13 +304,20 @@ export class GlobTool extends BaseTool<GlobToolParams, ToolResult> {
         oneDayInMs,
       );
 
-      const sortedAbsolutePaths = sortedEntries.map((entry) =>
-        entry.fullpath(),
-      );
-      const fileListDescription = sortedAbsolutePaths.join('\n');
-      const fileCount = sortedAbsolutePaths.length;
+      // Apply max_files limit if specified
+      let finalEntries = sortedEntries;
+      let limitMessage = '';
+      if (params.max_files && sortedEntries.length > params.max_files) {
+        finalEntries = sortedEntries.slice(0, params.max_files);
+        limitMessage = ` (showing first ${params.max_files} of ${sortedEntries.length} total matches)`;
+      }
 
-      let resultMessage = `Found ${fileCount} file(s) matching "${params.pattern}"`;
+      const sortedAbsolutePaths = finalEntries.map((entry) => entry.fullpath());
+      const fileListDescription = sortedAbsolutePaths.join('\n');
+      const fileCount = finalEntries.length;
+      const totalCount = sortedEntries.length;
+
+      let resultMessage = `Found ${totalCount} file(s) matching "${params.pattern}"${limitMessage}`;
       if (searchDirectories.length === 1) {
         resultMessage += ` within ${searchDirectories[0]}`;
       } else {
@@ -316,9 +334,27 @@ export class GlobTool extends BaseTool<GlobToolParams, ToolResult> {
         this.config,
         'glob',
       );
-      const formatted = formatLimitedOutput(limitedResult);
 
-      // If we hit token limits, override the display to be more informative
+      // If we hit token limits with warn mode, provide better guidance
+      if (
+        limitedResult.wasTruncated &&
+        !limitedResult.content &&
+        !params.max_files
+      ) {
+        const improvedMessage = `glob output exceeded token limit (${limitedResult.originalTokens} > ${getOutputLimits(this.config).maxTokens}). Too many files matched the pattern. Please:
+1. Use the max_files parameter to limit results (e.g., max_files: 100)
+2. Use a more specific glob pattern (e.g., "src/**/*.ts" instead of "**/*")
+3. Search in a specific subdirectory rather than the entire codebase
+4. Include file extensions in your pattern (e.g., "*.tsx" not "*")
+5. Use multiple smaller searches instead of one broad search`;
+
+        return {
+          llmContent: improvedMessage,
+          returnDisplay: `## File Limit Exceeded\n\n${improvedMessage}`,
+        };
+      }
+
+      const formatted = formatLimitedOutput(limitedResult);
       if (limitedResult.wasTruncated && !limitedResult.content) {
         return formatted;
       }

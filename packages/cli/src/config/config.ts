@@ -420,7 +420,10 @@ export async function loadCliConfig(
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
   const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
     process.cwd(),
-    effectiveSettings.loadMemoryFromIncludeDirectories || argv.loadMemoryFromIncludeDirectories ? includeDirectories : [],
+    effectiveSettings.loadMemoryFromIncludeDirectories ||
+      argv.loadMemoryFromIncludeDirectories
+      ? includeDirectories
+      : [],
     debugMode,
     fileService,
     effectiveSettings,

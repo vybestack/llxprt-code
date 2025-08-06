@@ -109,6 +109,10 @@ export const useGeminiStream = (
   const turnCancelledRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
+  const queuedToolResponsesRef = useRef<TrackedToolCall[]>([]);
+  const handleCompletedToolsRef = useRef<
+    ((tools: TrackedToolCall[]) => Promise<void>) | null
+  >(null);
   const [pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
@@ -218,6 +222,8 @@ export const useGeminiStream = (
       );
       setPendingHistoryItem(null);
       setIsResponding(false);
+      // Clear the queue on cancel - we don't want to process tools after user cancellation
+      queuedToolResponsesRef.current = [];
     }
   });
 
@@ -772,6 +778,22 @@ export const useGeminiStream = (
         }
       } finally {
         setIsResponding(false);
+
+        // Process any queued tool responses after the response completes
+        if (queuedToolResponsesRef.current.length > 0) {
+          const queuedTools = [...queuedToolResponsesRef.current];
+          queuedToolResponsesRef.current = [];
+          if (process.env.DEBUG) {
+            console.log(
+              '[DEBUG] Processing queued tool responses:',
+              queuedTools.map((tc) => tc.request.name),
+            );
+          }
+          // Process the queued tools now that we're not responding
+          if (handleCompletedToolsRef.current) {
+            await handleCompletedToolsRef.current(queuedTools);
+          }
+        }
       }
     },
     [
@@ -797,6 +819,17 @@ export const useGeminiStream = (
   const handleCompletedTools = useCallback(
     async (completedToolCallsFromScheduler: TrackedToolCall[]) => {
       if (isResponding) {
+        // Queue the tools to be processed after the current response completes
+        queuedToolResponsesRef.current = [
+          ...queuedToolResponsesRef.current,
+          ...completedToolCallsFromScheduler,
+        ];
+        if (process.env.DEBUG) {
+          console.log(
+            '[DEBUG] Queuing tool responses while model is responding:',
+            completedToolCallsFromScheduler.map((tc) => tc.request.name),
+          );
+        }
         return;
       }
 
@@ -1081,6 +1114,9 @@ export const useGeminiStream = (
       toolCalls,
     ],
   );
+
+  // Assign the function to the ref so submitQuery can access it
+  handleCompletedToolsRef.current = handleCompletedTools;
 
   const pendingHistoryItems = [
     pendingHistoryItemRef.current,

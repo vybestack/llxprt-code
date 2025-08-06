@@ -773,7 +773,9 @@ export class Config {
   async refreshMemory(): Promise<{ memoryContent: string; fileCount: number }> {
     const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
       this.getWorkingDir(),
-      this.shouldLoadMemoryFromIncludeDirectories() ? this.getWorkspaceContext().getDirectories() : [],
+      this.shouldLoadMemoryFromIncludeDirectories()
+        ? this.getWorkspaceContext().getDirectories()
+        : [],
       this.getDebugMode(),
       this.getFileService(),
       this.getExtensionContextFilePaths(),

@@ -73,7 +73,11 @@ export function limitOutputTokens(
       content: '',
       wasTruncated: true,
       originalTokens,
-      message: `${toolName} output exceeded token limit (${originalTokens} > ${limits.maxTokens}). Please use more specific patterns to reduce output size.`,
+      message: `${toolName} output exceeded token limit (${originalTokens} > ${limits.maxTokens}). The results were found but are too large to display. Please:
+1. Use more specific search patterns or file paths to narrow results
+2. Search for specific function/class names instead of generic terms
+3. Look in specific directories rather than the entire codebase
+4. Use exact match patterns when possible`,
     };
   } else if (limits.truncateMode === 'truncate') {
     // Truncate content to fit within limit
