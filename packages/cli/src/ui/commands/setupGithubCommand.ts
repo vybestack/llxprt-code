@@ -4,6 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import path from 'path';
+
+import { CommandContext } from '../../ui/commands/types.js';
+import {
+  getGitRepoRoot,
+  getLatestGitHubRelease,
+  isGitHubRepository,
+} from '../../utils/gitUtils.js';
+
 import {
   CommandKind,
   SlashCommand,
@@ -44,53 +53,90 @@ To implement this feature:
 For now, you can manually set up GitHub Actions by creating workflows that use llxprt-code.`,
     }),
 
-  /* Original gemini implementation with better error handling - kept for reference:
+  /* Original gemini implementation with GitHub API integration - kept for reference:
+  action: async (
+    context: CommandContext,
+  ): Promise<SlashCommandActionReturn> => {
     if (!isGitHubRepository()) {
       throw new Error(
         'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
       );
     }
 
-    let gitRootRepo: string;
+    // Find the root directory of the repo
+    let gitRepoRoot: string;
     try {
-      gitRootRepo = execSync('git rev-parse --show-toplevel', {
-        encoding: 'utf-8',
-      }).trim();
-    } catch {
+      gitRepoRoot = getGitRepoRoot();
+    } catch (_error) {
+      console.debug(`Failed to get git repo root:`, _error);
       throw new Error(
         'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
       );
     }
 
-    // TODO: Create llxprt-specific workflows
-    const version = 'v0';
-    const workflowBaseUrl = `https://raw.githubusercontent.com/google-github-actions/run-gemini-cli/refs/heads/${version}/workflows/`;
+    // Get the latest release tag from GitHub API
+    // For llxprt, this would call getLatestGitHubRelease() which points to acoliver/run-llxprt-code
+    const proxy = context?.services?.config?.getProxy();
+    const releaseTag = await getLatestGitHubRelease(proxy);
 
+    // TODO: Update these workflow paths for llxprt
     const workflows = [
-      'gemini-cli/gemini-cli.yml',
-      'issue-triage/gemini-issue-automated-triage.yml',
-      'issue-triage/gemini-issue-scheduled-triage.yml',
-      'pr-review/gemini-pr-review.yml',
+      'llxprt-cli/llxprt-cli.yml',
+      'issue-triage/llxprt-issue-automated-triage.yml',
+      'issue-triage/llxprt-issue-scheduled-triage.yml',
+      'pr-review/llxprt-pr-review.yml',
     ];
 
-    const command = [
-      'set -e',
-      `mkdir -p "${gitRootRepo}/.github/workflows"`,
-      ...workflows.map((workflow) => {
-        const fileName = path.basename(workflow);
-        return `curl -fsSL -o "${gitRootRepo}/.github/workflows/${fileName}" "${workflowBaseUrl}/${workflow}"`;
-      }),
-      'echo "Workflows downloaded successfully. Follow steps in https://github.com/google-github-actions/run-gemini-cli/blob/v0/README.md#quick-start (skipping the /setup-github step) to complete setup."',
-      'open https://github.com/google-github-actions/run-gemini-cli/blob/v0/README.md#quick-start',
-    ].join(' && ');
+    const commands = [];
+
+    // Ensure fast exit
+    commands.push(`set -eEuo pipefail`);
+
+    // Make the directory if it doesn't exist
+    commands.push(`mkdir -p "${gitRepoRoot}/.github/workflows"`);
+
+    for (const workflow of workflows) {
+      const fileName = path.basename(workflow);
+      // TODO: Update to use acoliver/run-llxprt-code repository
+      const curlCommand = buildCurlCommand(
+        `https://raw.githubusercontent.com/acoliver/run-llxprt-code/refs/tags/${releaseTag}/examples/workflows/${workflow}`,
+        [`--output "${gitRepoRoot}/.github/workflows/${fileName}"`],
+      );
+      commands.push(curlCommand);
+    }
+
+    commands.push(
+      `echo "Successfully downloaded ${workflows.length} workflows. Follow the steps in https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start (skipping the /setup-github step) to complete setup."`,
+      `open https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start`,
+    );
+
+    const command = `(${commands.join(' && ')})`;
     return {
       type: 'tool',
       toolName: 'run_shell_command',
       toolArgs: {
         description:
-          'Setting up GitHub Actions to triage issues and review PRs with Gemini.',
+          'Setting up GitHub Actions to triage issues and review PRs with llxprt.',
         command,
       },
     };
-    */
+  },
+  */
 };
+
+// buildCurlCommand is a helper for constructing a consistent curl command.
+function buildCurlCommand(u: string, additionalArgs?: string[]): string {
+  const args = [];
+  args.push('--fail');
+  args.push('--location');
+  args.push('--show-error');
+  args.push('--silent');
+
+  for (const val of additionalArgs || []) {
+    args.push(val);
+  }
+
+  args.sort();
+
+  return `curl ${args.join(' ')} "${u}"`;
+}
