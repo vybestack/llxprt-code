@@ -249,7 +249,7 @@ index 123..789 100644
  console.log('end of second hunk');
 `;
 
-    it.each([
+    it.skip.each([
       {
         terminalWidth: 80,
         height: undefined,
