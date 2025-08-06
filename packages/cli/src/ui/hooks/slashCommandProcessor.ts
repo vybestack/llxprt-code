@@ -392,14 +392,18 @@ export const useSlashCommandProcessor = (
                       }
                     }
                   case 'load_history': {
-                    const client = config?.getGeminiClient();
-                    if (client) {
-                      await client.setHistory(result.clientHistory);
-                    }
+                    // Always load the UI history first
                     fullCommandContext.ui.clear();
                     result.history.forEach((item, index) => {
                       fullCommandContext.ui.addItem(item, index);
                     });
+
+                    // Set the client history - it will be stored for later use if not initialized
+                    const client = config?.getGeminiClient();
+                    if (client) {
+                      await client.setHistory(result.clientHistory);
+                    }
+
                     return { type: 'handled' };
                   }
                   case 'quit':

@@ -57,7 +57,7 @@ describe('chatCommand', () => {
 
   beforeEach(() => {
     mockGetHistory = vi.fn().mockReturnValue([]);
-    mockGetChat = vi.fn().mockResolvedValue({
+    mockGetChat = vi.fn().mockReturnValue({
       getHistory: mockGetHistory,
     });
     mockSaveCheckpoint = vi.fn().mockResolvedValue(undefined);
@@ -71,6 +71,8 @@ describe('chatCommand', () => {
           getGeminiClient: () =>
             ({
               getChat: mockGetChat,
+              hasChatInitialized: vi.fn().mockReturnValue(true),
+              getHistory: vi.fn().mockResolvedValue([]),
             }) as unknown as GeminiClient,
         },
         logger: {
