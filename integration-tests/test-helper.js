@@ -208,13 +208,13 @@ export class TestRig {
     };
 
     if (typeof promptOrOptions === 'string') {
-      commandArgs.push('--prompt', promptOrOptions);
+      commandArgs.push('--prompt', JSON.stringify(promptOrOptions));
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        commandArgs.push('--prompt', promptOrOptions.prompt);
+        commandArgs.push('--prompt', JSON.stringify(promptOrOptions.prompt));
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
