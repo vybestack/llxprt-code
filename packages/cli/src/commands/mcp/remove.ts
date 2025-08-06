@@ -39,7 +39,7 @@ export const removeCommand: CommandModule = {
   describe: 'Remove a server',
   builder: (yargs) =>
     yargs
-      .usage('Usage: gemini mcp remove [options] <name>')
+      .usage('Usage: llxprt mcp remove [options] <name>')
       .positional('name', {
         describe: 'Name of the server',
         type: 'string',

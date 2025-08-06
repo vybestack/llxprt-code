@@ -11,7 +11,7 @@ import {
   MCPServerConfig,
   MCPServerStatus,
   createTransport,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { loadExtensions } from '../../config/extension.js';
 
