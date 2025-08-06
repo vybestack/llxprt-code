@@ -406,7 +406,7 @@ export class Config {
     // Save the current conversation history before creating a new client
     let existingHistory: Content[] = [];
     if (this.geminiClient && this.geminiClient.isInitialized()) {
-      existingHistory = this.geminiClient.getHistory();
+      existingHistory = await this.geminiClient.getHistory();
     }
 
     // Create new content generator config

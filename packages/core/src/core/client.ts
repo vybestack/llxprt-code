@@ -233,6 +233,10 @@ export class GeminiClient {
   }
 
   async addHistory(content: Content) {
+    // Ensure chat is initialized before adding history
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
     this.getChat().addHistory(content);
   }
 
@@ -251,11 +255,19 @@ export class GeminiClient {
     return this.chat !== undefined && this.contentGenerator !== undefined;
   }
 
-  getHistory(): Content[] {
+  async getHistory(): Promise<Content[]> {
+    // Ensure chat is initialized before getting history
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
     return this.getChat().getHistory();
   }
 
-  setHistory(history: Content[]) {
+  async setHistory(history: Content[]): Promise<void> {
+    // Ensure chat is initialized before setting history
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
     this.getChat().setHistory(history);
   }
 
@@ -263,6 +275,10 @@ export class GeminiClient {
     const toolRegistry = await this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
+    // Ensure chat is initialized before setting tools
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
     this.getChat().setTools(tools);
   }
 
