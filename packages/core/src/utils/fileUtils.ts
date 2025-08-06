@@ -303,15 +303,7 @@ export async function processSingleFileContent(
         const contentRangeTruncated =
           startLine > 0 || endLine < originalLineCount;
         const isTruncated = contentRangeTruncated || linesWereTruncatedInLength;
-
-        let llmTextContent = '';
-        if (contentRangeTruncated) {
-          const nextOffset = endLine;
-          llmTextContent += `[File content truncated. Showing lines ${actualStartLine + 1}-${endLine} of ${originalLineCount}. To read the next chunk, use offset: ${nextOffset}, limit: ${effectiveLimit}.]\n`;
-        } else if (linesWereTruncatedInLength) {
-          llmTextContent += `[File content partially truncated: some lines exceeded maximum length of ${MAX_LINE_LENGTH_TEXT_FILE} characters.]\n`;
-        }
-        llmTextContent += formattedLines.join('\n');
+        const llmContent = formattedLines.join('\n');
 
         // By default, return nothing to streamline the common case of a successful read_file.
         let returnDisplay = '';
@@ -327,7 +319,7 @@ export async function processSingleFileContent(
         }
 
         return {
-          llmContent: llmTextContent,
+          llmContent,
           returnDisplay,
           isTruncated,
           originalLineCount,
