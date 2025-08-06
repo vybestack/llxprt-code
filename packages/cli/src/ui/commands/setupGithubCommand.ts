@@ -15,7 +15,7 @@ export const setupGithubCommand: SlashCommand = {
   description:
     'Set up GitHub Actions (currently disabled - needs adaptation for llxprt)',
   kind: CommandKind.BUILT_IN,
-  action: (): SlashCommandActionReturn =>
+  action: (): SlashCommandActionReturn => {
     // TODO: Adapt this command for llxprt-code
     // Need to:
     // 1. Create our own GitHub Actions repository (e.g., acoliver/run-llxprt-code or vybestack/run-llxprt-code)
@@ -25,7 +25,7 @@ export const setupGithubCommand: SlashCommand = {
     // 5. Consider including the cherry-picker workflow as part of the setup
 
     // For now, return an informative message
-    ({
+    return {
       type: 'message',
       messageType: 'info',
       content: `The /setup-github command is currently disabled and needs adaptation for llxprt-code.
@@ -42,9 +42,9 @@ To implement this feature:
 3. Update this command to point to the new repository
 
 For now, you can manually set up GitHub Actions by creating workflows that use llxprt-code.`,
-    }),
+    };
 
-  /* Original gemini implementation with better error handling - kept for reference:
+    /* Original gemini implementation with better error handling - kept for reference:
     if (!isGitHubRepository()) {
       throw new Error(
         'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
@@ -93,4 +93,5 @@ For now, you can manually set up GitHub Actions by creating workflows that use l
       },
     };
     */
+  },
 };
