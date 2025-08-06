@@ -16,6 +16,7 @@ import {
   SandboxConfig,
   GeminiClient,
   ideContext,
+  type AuthType,
 } from '@vybestack/llxprt-code-core';
 import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
@@ -84,7 +85,11 @@ interface MockServerConfig {
   getAllLlxprtMdFilenames: Mock<() => string[]>;
   getGeminiClient: Mock<() => GeminiClient | undefined>;
   getUserTier: Mock<() => Promise<string | undefined>>;
+<<<<<<< HEAD
   getEphemeralSetting?: Mock<(key: string) => unknown>;
+=======
+  getIdeClient: Mock<() => { getCurrentIde: Mock<() => string | undefined> }>;
+>>>>>>> 024b8207 (Add hint to enable IDE integration for users running in VS Code (#5610))
 }
 
 // Mock @vybestack/llxprt-code-core and its Config class
@@ -158,7 +163,13 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getWorkspaceContext: vi.fn(() => ({
           getDirectories: vi.fn(() => []),
         })),
+<<<<<<< HEAD
         getEphemeralSetting: vi.fn(() => undefined),
+=======
+        getIdeClient: vi.fn(() => ({
+          getCurrentIde: vi.fn(() => 'vscode'),
+        })),
+>>>>>>> 024b8207 (Add hint to enable IDE integration for users running in VS Code (#5610))
       };
     });
 
@@ -184,6 +195,7 @@ vi.mock('./hooks/useGeminiStream', () => ({
     submitQuery: vi.fn(),
     initError: null,
     pendingHistoryItems: [],
+    thought: null,
   })),
 }));
 
@@ -257,7 +269,7 @@ vi.mock('./utils/updateCheck.js', () => ({
   checkForUpdates: vi.fn(),
 }));
 
-vi.mock('./config/auth.js', () => ({
+vi.mock('../config/auth.js', () => ({
   validateAuthMethod: vi.fn(),
 }));
 
@@ -1049,7 +1061,7 @@ describe('App UI', () => {
       const validateAuthMethodSpy = vi.spyOn(auth, 'validateAuthMethod');
       mockSettings = createMockSettings({
         workspace: {
-          selectedAuthType: 'USE_GEMINI' as AuthType,
+          selectedAuthType: 'USE_PROVIDER' as AuthType,
           useExternalAuth: false,
           theme: 'Default',
         },
@@ -1071,7 +1083,7 @@ describe('App UI', () => {
       const validateAuthMethodSpy = vi.spyOn(auth, 'validateAuthMethod');
       mockSettings = createMockSettings({
         workspace: {
-          selectedAuthType: 'USE_GEMINI' as AuthType,
+          selectedAuthType: 'USE_PROVIDER' as AuthType,
           useExternalAuth: true,
           theme: 'Default',
         },

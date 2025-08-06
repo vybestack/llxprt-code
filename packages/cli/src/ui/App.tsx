@@ -47,7 +47,7 @@ import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
-import { LoadedSettings } from '../config/settings.js';
+import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
 import { registerCleanup } from '../utils/cleanup.js';
@@ -71,6 +71,10 @@ import {
   ideContext,
   type IModel,
 } from '@vybestack/llxprt-code-core';
+import {
+  IdeIntegrationNudge,
+  IdeIntegrationNudgeResult,
+} from './IdeIntegrationNudge.js';
 import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { StreamingContext } from './contexts/StreamingContext.js';
@@ -156,6 +160,15 @@ const App = (props: AppInternalProps) => {
   const { stdout } = useStdout();
   const nightly = version.includes('nightly');
   const { history, addItem, clearItems, loadHistory } = useHistory();
+
+  const [idePromptAnswered, setIdePromptAnswered] = useState(false);
+  const currentIDE = config.getIdeClient()?.getCurrentIde();
+  const shouldShowIdePrompt =
+    config.getIdeModeFeature() &&
+    currentIDE &&
+    !config.getIdeMode() &&
+    !settings.merged.hasSeenIdeIntegrationNudge &&
+    !idePromptAnswered;
 
   useEffect(() => {
     const cleanup = setUpdateHandler(addItem, setUpdateInfo);
@@ -697,6 +710,27 @@ const App = (props: AppInternalProps) => {
     [submitQuery],
   );
 
+  const handleIdePromptComplete = useCallback(
+    (result: IdeIntegrationNudgeResult) => {
+      if (result === 'yes') {
+        handleSlashCommand('/ide install');
+        settings.setValue(
+          SettingScope.User,
+          'hasSeenIdeIntegrationNudge',
+          true,
+        );
+      } else if (result === 'dismiss') {
+        settings.setValue(
+          SettingScope.User,
+          'hasSeenIdeIntegrationNudge',
+          true,
+        );
+      }
+      setIdePromptAnswered(true);
+    },
+    [handleSlashCommand, settings],
+  );
+
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
   const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
   pendingHistoryItems.push(...pendingGeminiHistoryItems);
@@ -933,6 +967,7 @@ const App = (props: AppInternalProps) => {
       </Box>
     );
   }
+
   const mainAreaWidth = Math.floor(terminalWidth * 0.9);
   const debugConsoleMaxHeight = Math.floor(Math.max(terminalHeight * 0.2, 5));
   // Arbitrary threshold to ensure that items in the static area are large
@@ -1025,7 +1060,13 @@ const App = (props: AppInternalProps) => {
             </Box>
           )}
 
-          {shellConfirmationRequest ? (
+          {shouldShowIdePrompt ? (
+            <IdeIntegrationNudge
+              question="Do you want to connect your VS Code editor to LLxprt Code?"
+              description="If you select Yes, we'll install an extension that allows the CLI to access your open files and display diffs directly in VS Code."
+              onComplete={handleIdePromptComplete}
+            />
+          ) : shellConfirmationRequest ? (
             <ShellConfirmationDialog request={shellConfirmationRequest} />
           ) : isThemeDialogOpen ? (
             <Box flexDirection="column">

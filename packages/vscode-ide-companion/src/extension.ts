@@ -10,6 +10,7 @@ import { IDEServer } from './ide-server';
 import { DiffContentProvider, DiffManager } from './diff-manager';
 import { createLogger } from './utils/logger';
 
+const INFO_MESSAGE_SHOWN_KEY = 'llxprtCodeInfoMessageShown';
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
 export const DIFF_SCHEME = 'llxprt-diff';
 
@@ -80,6 +81,25 @@ export async function activate(context: vscode.ExtensionContext) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`Failed to start IDE server: ${message}`);
+  }
+
+  if (!context.globalState.get(INFO_MESSAGE_SHOWN_KEY)) {
+    void vscode.window
+      .showInformationMessage(
+        'LLxprt Code Companion extension successfully installed. Please restart your terminal to enable full IDE integration.',
+        'Re-launch LLxprt Code',
+      )
+      .then(
+        (selection) => {
+          if (selection === 'Re-launch LLxprt Code') {
+            void vscode.commands.executeCommand('llxprt-code.runLLxprtCode');
+          }
+        },
+        (err) => {
+          log(`Failed to show information message: ${String(err)}`);
+        },
+      );
+    context.globalState.update(INFO_MESSAGE_SHOWN_KEY, true);
   }
 
   context.subscriptions.push(

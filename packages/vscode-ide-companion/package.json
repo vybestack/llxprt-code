@@ -40,12 +40,12 @@
     "commands": [
       {
         "command": "llxprt.diff.accept",
-        "title": "LLxprt Code: Accept Current Diff",
+        "title": "LLxprt Code: Accept Diff",
         "icon": "$(check)"
       },
       {
         "command": "llxprt.diff.cancel",
-        "title": "Cancel",
+        "title": "LLxprt Code: Close Diff Editor",
         "icon": "$(close)"
       },
       {
