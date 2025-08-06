@@ -20,7 +20,7 @@ import {
   MCPServerStatus,
   mcpServerRequiresOAuth,
   getErrorMessage,
-  Tool,
+  AnyDeclarativeTool,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 
@@ -90,7 +90,7 @@ const getMcpStatus = async (
   const allTools = toolRegistry.getAllTools();
   for (const serverName of serverNames) {
     const serverTools = allTools.filter(
-      (tool: Tool) =>
+      (tool: AnyDeclarativeTool) =>
         tool instanceof DiscoveredMCPTool && tool.serverName === serverName,
     ) as DiscoveredMCPTool[];
     const promptRegistry = await config.getPromptRegistry();

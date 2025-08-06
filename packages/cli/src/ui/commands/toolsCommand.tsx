@@ -11,7 +11,7 @@ import {
   type SlashCommandActionReturn,
 } from './types.js';
 import { MessageType } from '../types.js';
-import { Tool } from '@vybestack/llxprt-code-core';
+import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 
 export const toolsCommand: SlashCommand = {
   name: 'tools',
@@ -54,7 +54,9 @@ export const toolsCommand: SlashCommand = {
     // Default behavior - list tools
     const tools = toolRegistry.getAllTools();
     // Filter out MCP tools by checking for the absence of a serverName property
-    const geminiTools = tools.filter((tool: Tool) => !('serverName' in tool));
+    const geminiTools = tools.filter(
+      (tool: AnyDeclarativeTool) => !('serverName' in tool),
+    );
 
     // Check if user wants descriptions
     let useShowDescriptions = false;
@@ -65,7 +67,7 @@ export const toolsCommand: SlashCommand = {
     let message = 'Available Gemini CLI tools:\n\n';
 
     if (geminiTools.length > 0) {
-      geminiTools.forEach((tool: Tool) => {
+      geminiTools.forEach((tool: AnyDeclarativeTool) => {
         const isDisabled = disabledTools.includes(tool.name);
         const disabledPrefix = isDisabled ? '[DISABLED] ' : '';
         const disabledColor = isDisabled ? '\u001b[90m' : ''; // Gray color for disabled

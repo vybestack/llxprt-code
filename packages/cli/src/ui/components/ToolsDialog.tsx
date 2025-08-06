@@ -7,11 +7,11 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
-import { Tool } from '@vybestack/llxprt-code-core';
+import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
 import { Colors } from '../colors.js';
 
 interface ToolsDialogProps {
-  tools: Tool[];
+  tools: AnyDeclarativeTool[];
   action: 'enable' | 'disable';
   disabledTools: string[];
   onSelect: (toolName: string) => void;

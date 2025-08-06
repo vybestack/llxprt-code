@@ -150,12 +150,7 @@ describe('ReadFileTool', () => {
           ReadFileToolParams,
           ToolResult
         >;
-
-      const invocation = tool.build(params) as ToolInvocation<
-          ReadFileToolParams,
-          ToolResult
-        >;
-      expect(await invocation.execute(abortSignal)).toEqual({
+        expect(await invocation.execute(abortSignal)).toEqual({
         llmContent: `File not found: ${filePath}`,
         returnDisplay: 'File not found.',
       });
@@ -364,6 +359,15 @@ describe('ReadFileTool', () => {
           ].join('\n'),
           returnDisplay: 'Read lines 6-8 of 20 from paginated.txt',
         });
+      });
+    });
+
+    describe('with .llxprtignore for ignored directory', () => {
+      beforeEach(async () => {
+        await fsp.writeFile(
+          path.join(tempRootDir, '.llxprtignore'),
+          ['foo.*', 'ignored/'].join('\n'),
+        );
       });
 
       it('should throw error if path is in an ignored directory', async () => {

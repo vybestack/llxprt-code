@@ -11,7 +11,6 @@ import {
   ToolCallRequestInfo,
   ToolResult,
   Config,
-  Icon,
   ToolErrorType,
 } from '../index.js';
 import { Part } from '@google/genai';

@@ -387,7 +387,7 @@ export class ToolRegistry {
   /**
    * Returns an array of enabled tool instances (excludes disabled tools).
    */
-  getEnabledTools(): Tool[] {
+  getEnabledTools(): AnyDeclarativeTool[] {
     const ephemeralSettings = this.config.getEphemeralSettings() || {};
     const disabledTools =
       (ephemeralSettings['disabled-tools'] as string[]) || [];
@@ -430,7 +430,7 @@ export class ToolRegistry {
     if (tool && context) {
       // Inject context into tool instance
       if ('context' in tool) {
-        (tool as any).context = context;
+        (tool as unknown as { context: ToolContext }).context = context;
       }
     }
     return tool;

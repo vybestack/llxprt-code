@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useState } from 'react';
-import { Tool, Config } from '@vybestack/llxprt-code-core';
+import { AnyDeclarativeTool, Config } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
@@ -28,7 +28,9 @@ export const useToolsDialog = ({
   const appDispatch = useAppDispatch();
   const showDialog = appState.openDialogs.tools;
   const [action, setAction] = useState<'enable' | 'disable'>('disable');
-  const [availableTools, setAvailableTools] = useState<Tool[]>([]);
+  const [availableTools, setAvailableTools] = useState<AnyDeclarativeTool[]>(
+    [],
+  );
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
 
   const openDialog = useCallback(
@@ -52,19 +54,20 @@ export const useToolsDialog = ({
         // Get all non-MCP tools
         const allTools = toolRegistry.getAllTools();
         const geminiTools = allTools.filter(
-          (tool: Tool) => !('serverName' in tool),
+          (tool: AnyDeclarativeTool) => !('serverName' in tool),
         );
 
         // Filter tools based on the action
-        let tools: Tool[];
+        let tools: AnyDeclarativeTool[];
         if (dialogAction === 'disable') {
           // Show only enabled tools for disabling
           tools = geminiTools.filter(
-            (tool: Tool) => !currentDisabledTools.includes(tool.name),
+            (tool: AnyDeclarativeTool) =>
+              !currentDisabledTools.includes(tool.name),
           );
         } else {
           // Show only disabled tools for enabling
-          tools = geminiTools.filter((tool: Tool) =>
+          tools = geminiTools.filter((tool: AnyDeclarativeTool) =>
             currentDisabledTools.includes(tool.name),
           );
         }
