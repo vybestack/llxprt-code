@@ -44,17 +44,26 @@ To implement this feature:
 For now, you can manually set up GitHub Actions by creating workflows that use llxprt-code.`,
     };
 
-    /* Original gemini implementation - kept for reference:
-    const gitRootRepo = execSync('git rev-parse --show-toplevel', {
-      encoding: 'utf-8',
-    }).trim();
-
+    /* Original gemini implementation with better error handling - kept for reference:
     if (!isGitHubRepository()) {
-      throw new Error('Unable to determine the Git root directory.');
+      throw new Error(
+        'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+      );
+    }
+
+    let gitRootRepo: string;
+    try {
+      gitRootRepo = execSync('git rev-parse --show-toplevel', {
+        encoding: 'utf-8',
+      }).trim();
+    } catch {
+      throw new Error(
+        'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+      );
     }
 
     // TODO: Create llxprt-specific workflows
-    const version = 'main';
+    const version = 'v0';
     const workflowBaseUrl = `https://raw.githubusercontent.com/google-github-actions/run-gemini-cli/refs/heads/${version}/workflows/`;
 
     const workflows = [
