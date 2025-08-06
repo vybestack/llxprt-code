@@ -67,7 +67,6 @@ You have two options to install LLxprt Code.
    ```bash
    llxprt
    ```
-
    - Pick a beautiful theme
    - Choose your provider with `/provider` (defaults to Gemini)
    - Set up authentication as needed

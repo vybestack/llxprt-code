@@ -455,4 +455,3 @@ The `!` prefix lets you interact with your system's shell directly from within L
       - When exited, the UI reverts to its standard appearance and normal LLxprt Code behavior resumes.
 
 - **Caution for all `!` usage:** Commands you execute in shell mode have the same permissions and impact as if you ran them directly in your terminal.
-````
