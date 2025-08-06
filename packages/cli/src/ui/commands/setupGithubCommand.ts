@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import path from 'path';
-
-import { CommandContext } from '../../ui/commands/types.js';
-import {
-  getGitRepoRoot,
-  getLatestGitHubRelease,
-  isGitHubRepository,
-} from '../../utils/gitUtils.js';
+// These imports will be needed when the command is re-enabled
+// import path from 'path';
+// import { CommandContext } from '../../ui/commands/types.js';
+// import {
+//   getGitRepoRoot,
+//   getLatestGitHubRelease,
+//   isGitHubRepository,
+// } from '../../utils/gitUtils.js';
 
 import {
   CommandKind,
@@ -125,18 +125,19 @@ For now, you can manually set up GitHub Actions by creating workflows that use l
 };
 
 // buildCurlCommand is a helper for constructing a consistent curl command.
-function buildCurlCommand(u: string, additionalArgs?: string[]): string {
-  const args = [];
-  args.push('--fail');
-  args.push('--location');
-  args.push('--show-error');
-  args.push('--silent');
-
-  for (const val of additionalArgs || []) {
-    args.push(val);
-  }
-
-  args.sort();
-
-  return `curl ${args.join(' ')} "${u}"`;
-}
+// Commented out until the command is re-enabled
+// function buildCurlCommand(u: string, additionalArgs?: string[]): string {
+//   const args = [];
+//   args.push('--fail');
+//   args.push('--location');
+//   args.push('--show-error');
+//   args.push('--silent');
+//
+//   for (const val of additionalArgs || []) {
+//     args.push(val);
+//   }
+//
+//   args.sort();
+//
+//   return `curl ${args.join(' ')} "${u}"`;
+// }

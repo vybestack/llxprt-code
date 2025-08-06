@@ -61,7 +61,7 @@ export const getLatestGitHubRelease = async (
       setGlobalDispatcher(new ProxyAgent(proxy));
     }
 
-    const endpoint = `https://api.github.com/repos/google-github-actions/run-gemini-cli/releases/latest`;
+    const endpoint = `https://api.github.com/repos/acoliver/run-llxprt-code/releases/latest`;
 
     const response = await fetch(endpoint, {
       method: 'GET',
@@ -85,9 +85,9 @@ export const getLatestGitHubRelease = async (
     }
     return releaseTag;
   } catch (_error) {
-    console.debug(`Failed to determine latest run-gemini-cli release:`, _error);
+    console.debug(`Failed to determine latest run-llxprt-code release:`, _error);
     throw new Error(
-      `Unable to determine the latest run-gemini-cli release on GitHub.`,
+      `Unable to determine the latest run-llxprt-code release on GitHub.`,
     );
   }
 };
