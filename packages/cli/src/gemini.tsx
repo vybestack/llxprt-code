@@ -454,6 +454,18 @@ export async function main() {
     }
   }
 
+  // Verify theme colors at startup for debugging
+  if (process.env.DEBUG_THEME) {
+    const activeTheme = themeManager.getActiveTheme();
+    console.log('Active theme:', activeTheme.name);
+    console.log('Theme colors:', {
+      AccentCyan: activeTheme.colors.AccentCyan,
+      AccentBlue: activeTheme.colors.AccentBlue,
+      AccentGreen: activeTheme.colors.AccentGreen,
+      Gray: activeTheme.colors.Gray,
+    });
+  }
+
   // hop into sandbox if we are outside and sandboxing is enabled
   if (!process.env.SANDBOX) {
     const memoryArgs = settings.merged.autoConfigureMaxOldSpaceSize

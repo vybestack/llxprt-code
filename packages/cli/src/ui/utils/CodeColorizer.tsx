@@ -99,7 +99,11 @@ function highlightAndRenderLine(
         ? lowlight.highlightAuto(line)
         : lowlight.highlight(language, line);
 
-    const renderedNode = renderHastNode(getHighlightedLine(), theme, undefined);
+    const renderedNode = renderHastNode(
+      getHighlightedLine(),
+      theme,
+      theme.defaultColor,
+    );
 
     return renderedNode !== null ? renderedNode : line;
   } catch (_error) {
@@ -111,16 +115,24 @@ export function colorizeLine(
   line: string,
   language: string | null,
   theme?: Theme,
+  overrideColor?: string,
 ): React.ReactNode {
   const activeTheme = theme || themeManager.getActiveTheme();
+  if (overrideColor) {
+    // If there's an override color, we create a simple Text component
+    // instead of going through syntax highlighting
+    return <Text color={overrideColor}>{line}</Text>;
+  }
   return highlightAndRenderLine(line, language, activeTheme);
 }
 
 /**
  * Renders syntax-highlighted code for Ink applications using a selected theme.
  *
- * @param code The code string to highlight.
+ * @param line The line of code to highlight.
  * @param language The language identifier (e.g., 'javascript', 'css', 'html')
+ * @param theme Optional theme to use instead of the active theme
+ * @param overrideColor Optional color to use instead of syntax highlighting
  * @returns A React.ReactNode containing Ink <Text> elements for the highlighted code.
  */
 export function colorizeCode(

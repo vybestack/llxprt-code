@@ -7,7 +7,11 @@
 import { vi, describe, expect, it, afterEach, beforeEach } from 'vitest';
 import * as child_process from 'child_process';
 import { setupGithubCommand } from './setupGithubCommand.js';
-import { CommandContext, ToolActionReturn } from './types.js';
+import {
+  CommandContext,
+  ToolActionReturn,
+  MessageActionReturn,
+} from './types.js';
 
 vi.mock('child_process');
 
@@ -20,7 +24,21 @@ describe('setupGithubCommand', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns a tool action to download github workflows and handles paths', () => {
+  it('returns a message indicating the command is disabled', () => {
+    const result = setupGithubCommand.action?.(
+      {} as CommandContext,
+      '',
+    ) as MessageActionReturn;
+
+    expect(result.type).toBe('message');
+    expect(result.messageType).toBe('info');
+    expect(result.content).toContain('currently disabled');
+    expect(result.content).toContain('llxprt-code');
+    expect(result.content).toContain('multi-provider');
+  });
+
+  // TODO: Re-enable these tests when the command is adapted for llxprt
+  it.skip('returns a tool action to download github workflows and handles paths', () => {
     const fakeRepoRoot = '/github.com/fake/repo/root';
     vi.mocked(child_process.execSync).mockReturnValue(fakeRepoRoot);
 
@@ -43,13 +61,14 @@ describe('setupGithubCommand', () => {
 
     const { command } = result.toolArgs;
 
+    // TODO: Update these expectations for llxprt workflows
     const expectedSubstrings = [
       `mkdir -p "${fakeRepoRoot}/.github/workflows"`,
-      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/gemini-cli.yml"`,
-      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/gemini-issue-automated-triage.yml"`,
-      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/gemini-issue-scheduled-triage.yml"`,
-      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/gemini-pr-review.yml"`,
-      'https://raw.githubusercontent.com/google-github-actions/run-gemini-cli/refs/heads/main/workflows/',
+      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/llxprt-cli.yml"`,
+      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/llxprt-issue-automated-triage.yml"`,
+      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/llxprt-issue-scheduled-triage.yml"`,
+      `curl -fsSL -o "${fakeRepoRoot}/.github/workflows/llxprt-pr-review.yml"`,
+      'https://raw.githubusercontent.com/vybestack/run-llxprt-code/refs/heads/main/workflows/',
     ];
 
     for (const substring of expectedSubstrings) {
@@ -57,10 +76,12 @@ describe('setupGithubCommand', () => {
     }
   });
 
-  it('throws an error if git root cannot be determined', () => {
+  it.skip('throws an error if git root cannot be determined', () => {
     vi.mocked(child_process.execSync).mockReturnValue('');
     expect(() => {
       setupGithubCommand.action?.({} as CommandContext, '');
-    }).toThrow('Unable to determine the Git root directory.');
+    }).toThrow(
+      'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+    );
   });
 });

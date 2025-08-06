@@ -40,6 +40,11 @@ export interface ColorsTheme {
   AccentRed: string;
   DiffAdded: string;
   DiffRemoved: string;
+  // Optional diff colour fields with fallbacks
+  DiffAddedBackground?: string;
+  DiffAddedForeground?: string;
+  DiffRemovedBackground?: string;
+  DiffRemovedForeground?: string;
   Comment: string;
   Gray: string;
   GradientColors?: string[];

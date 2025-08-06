@@ -28,6 +28,9 @@ Slash commands provide meta-level control over the CLI itself.
       - **Usage:** `/chat resume <tag>`
     - **`list`**
       - **Description:** Lists available tags for chat state resumption.
+    - **`delete`**
+      - **Description:** Deletes a saved conversation checkpoint.
+      - **Usage:** `/chat delete <tag>`
 
 - **`/clear`**
   - **Description:** Clear the terminal screen, including the visible session history and scrollback within the CLI. The underlying session data (for history recall) might be preserved depending on the exact implementation, but the visual display is cleared.
@@ -352,7 +355,7 @@ Please generate a Conventional Commit message based on the following git diff:
 
 ```diff
 !{git diff --staged}
-````
+```
 
 """
 
@@ -452,4 +455,3 @@ The `!` prefix lets you interact with your system's shell directly from within L
       - When exited, the UI reverts to its standard appearance and normal LLxprt Code behavior resumes.
 
 - **Caution for all `!` usage:** Commands you execute in shell mode have the same permissions and impact as if you ran them directly in your terminal.
-````

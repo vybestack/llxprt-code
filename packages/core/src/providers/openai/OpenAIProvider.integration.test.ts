@@ -96,7 +96,7 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     console.log('Received full response:', fullContent);
   });
 
-  it('should handle tool calls', async () => {
+  it('should handle tool calls', { timeout: 10000 }, async () => {
     const messages: IMessage[] = [
       {
         role: ContentGeneratorRole.USER,

@@ -664,6 +664,7 @@ const App = (props: AppInternalProps) => {
     performMemoryRefresh,
     modelSwitchedFromQuotaError,
     setModelSwitchedFromQuotaError,
+    refreshStatic,
   );
 
   // Input handling

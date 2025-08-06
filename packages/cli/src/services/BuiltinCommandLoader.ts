@@ -40,7 +40,6 @@ import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import { profileCommand } from '../ui/commands/profileCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
-import { isGitHubRepository } from '../utils/gitUtils.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -90,7 +89,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       setCommand,
       profileCommand,
       diagnosticsCommand,
-      ...(isGitHubRepository() ? [setupGithubCommand] : []),
+      setupGithubCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);

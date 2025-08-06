@@ -137,6 +137,7 @@ describe('CoreToolScheduler', () => {
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
     });
 
     const abortController = new AbortController();
@@ -207,6 +208,7 @@ describe('CoreToolScheduler with payload', () => {
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
     });
 
     const abortController = new AbortController();
@@ -511,6 +513,7 @@ describe('CoreToolScheduler edit cancellation', () => {
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
     });
 
     const abortController = new AbortController();
@@ -602,6 +605,7 @@ describe('CoreToolScheduler queue handling', () => {
       config: {
         getApprovalMode: () => ApprovalMode.YOLO,
       } as Config,
+      onEditorClose: vi.fn(),
     });
 
     // Act
@@ -692,6 +696,7 @@ describe('CoreToolScheduler queue handling', () => {
       config: {
         getApprovalMode: () => ApprovalMode.YOLO,
       } as Config,
+      onEditorClose: vi.fn(),
     });
 
     // Act
@@ -782,6 +787,7 @@ describe('CoreToolScheduler YOLO mode', () => {
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
     });
 
     const abortController = new AbortController();
