@@ -85,11 +85,8 @@ interface MockServerConfig {
   getAllLlxprtMdFilenames: Mock<() => string[]>;
   getGeminiClient: Mock<() => GeminiClient | undefined>;
   getUserTier: Mock<() => Promise<string | undefined>>;
-<<<<<<< HEAD
   getEphemeralSetting?: Mock<(key: string) => unknown>;
-=======
   getIdeClient: Mock<() => { getCurrentIde: Mock<() => string | undefined> }>;
->>>>>>> 024b8207 (Add hint to enable IDE integration for users running in VS Code (#5610))
 }
 
 // Mock @vybestack/llxprt-code-core and its Config class
@@ -163,13 +160,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getWorkspaceContext: vi.fn(() => ({
           getDirectories: vi.fn(() => []),
         })),
-<<<<<<< HEAD
         getEphemeralSetting: vi.fn(() => undefined),
-=======
         getIdeClient: vi.fn(() => ({
           getCurrentIde: vi.fn(() => 'vscode'),
         })),
->>>>>>> 024b8207 (Add hint to enable IDE integration for users running in VS Code (#5610))
       };
     });
 

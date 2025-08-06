@@ -151,120 +151,120 @@ describe('ReadFileTool', () => {
           ToolResult
         >;
         expect(await invocation.execute(abortSignal)).toEqual({
-        llmContent: `File not found: ${filePath}`,
-        returnDisplay: 'File not found.',
+          llmContent: `File not found: ${filePath}`,
+          returnDisplay: 'File not found.',
+        });
       });
-    });
 
-    it('should return success result for a text file', async () => {
-      const filePath = path.join(tempRootDir, 'textfile.txt');
-      const fileContent = 'This is a test file.';
-      await fsp.writeFile(filePath, fileContent, 'utf-8');
-      const params: ReadFileToolParams = { absolute_path: filePath };
-      const invocation = tool.build(params) as ToolInvocation<
+      it('should return success result for a text file', async () => {
+        const filePath = path.join(tempRootDir, 'textfile.txt');
+        const fileContent = 'This is a test file.';
+        await fsp.writeFile(filePath, fileContent, 'utf-8');
+        const params: ReadFileToolParams = { absolute_path: filePath };
+        const invocation = tool.build(params) as ToolInvocation<
           ReadFileToolParams,
           ToolResult
         >;
 
-      expect(await invocation.execute(abortSignal)).toEqual({
-        llmContent: fileContent,
-        returnDisplay: '',
+        expect(await invocation.execute(abortSignal)).toEqual({
+          llmContent: fileContent,
+          returnDisplay: '',
+        });
       });
-    });
 
-    it('should return success result for an image file', async () => {
-      // A minimal 1x1 transparent PNG file.
-      const pngContent = Buffer.from([
-        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
-        1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68, 65,
-        84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73,
-        69, 78, 68, 174, 66, 96, 130,
-      ]);
-      const filePath = path.join(tempRootDir, 'image.png');
-      await fsp.writeFile(filePath, pngContent);
-      const params: ReadFileToolParams = { absolute_path: filePath };
-      const invocation = tool.build(params) as ToolInvocation<
+      it('should return success result for an image file', async () => {
+        // A minimal 1x1 transparent PNG file.
+        const pngContent = Buffer.from([
+          137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
+          1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 10, 73, 68,
+          65, 84, 120, 156, 99, 0, 1, 0, 0, 5, 0, 1, 13, 10, 45, 180, 0, 0, 0,
+          0, 73, 69, 78, 68, 174, 66, 96, 130,
+        ]);
+        const filePath = path.join(tempRootDir, 'image.png');
+        await fsp.writeFile(filePath, pngContent);
+        const params: ReadFileToolParams = { absolute_path: filePath };
+        const invocation = tool.build(params) as ToolInvocation<
           ReadFileToolParams,
           ToolResult
         >;
 
-      expect(await invocation.execute(abortSignal)).toEqual({
-        llmContent: {
-          inlineData: {
-            mimeType: 'image/png',
-            data: pngContent.toString('base64'),
+        expect(await invocation.execute(abortSignal)).toEqual({
+          llmContent: {
+            inlineData: {
+              mimeType: 'image/png',
+              data: pngContent.toString('base64'),
+            },
           },
-        },
-        returnDisplay: `Read image file: image.png`,
+          returnDisplay: `Read image file: image.png`,
+        });
       });
-    });
 
-    it('should treat a non-image file with image extension as an image', async () => {
-      const filePath = path.join(tempRootDir, 'fake-image.png');
-      const fileContent = 'This is not a real png.';
-      await fsp.writeFile(filePath, fileContent, 'utf-8');
-      const params: ReadFileToolParams = { absolute_path: filePath };
-      const invocation = tool.build(params) as ToolInvocation<
+      it('should treat a non-image file with image extension as an image', async () => {
+        const filePath = path.join(tempRootDir, 'fake-image.png');
+        const fileContent = 'This is not a real png.';
+        await fsp.writeFile(filePath, fileContent, 'utf-8');
+        const params: ReadFileToolParams = { absolute_path: filePath };
+        const invocation = tool.build(params) as ToolInvocation<
           ReadFileToolParams,
           ToolResult
         >;
 
-      expect(await invocation.execute(abortSignal)).toEqual({
-        llmContent: {
-          inlineData: {
-            mimeType: 'image/png',
-            data: Buffer.from(fileContent).toString('base64'),
+        expect(await invocation.execute(abortSignal)).toEqual({
+          llmContent: {
+            inlineData: {
+              mimeType: 'image/png',
+              data: Buffer.from(fileContent).toString('base64'),
+            },
           },
-        },
-        returnDisplay: `Read image file: fake-image.png`,
-      });
-    });
-
-    it('should pass offset and limit to read a slice of a text file', async () => {
-      const filePath = path.join(tempRootDir, 'paginated.txt');
-      const fileContent = Array.from(
-        { length: 20 },
-        (_, i) => `Line ${i + 1}`,
-      ).join('\n');
-      await fsp.writeFile(filePath, fileContent, 'utf-8');
-
-      const params: ReadFileToolParams = {
-        absolute_path: filePath,
-        offset: 5, // Start from line 6
-        limit: 3,
-      };
-      const invocation = tool.build(params) as ToolInvocation<
-          ReadFileToolParams,
-          ToolResult
-        >;
-
-      expect(await invocation.execute(abortSignal)).toEqual({
-        llmContent: [
-          '[File content truncated. Showing lines 6-8 of 20. To read the next chunk, use offset: 8, limit: 3.]',
-          'Line 6',
-          'Line 7',
-          'Line 8',
-        ].join('\n'),
-        returnDisplay: 'Read lines 6-8 of 20 from paginated.txt',
-      });
-    });
-
-    describe('with .llxprtignore', () => {
-      beforeEach(async () => {
-        await fsp.writeFile(
-          path.join(tempRootDir, '.llxprtignore'),
-          ['foo.*', 'ignored/'].join('\n'),
-        );
+          returnDisplay: `Read image file: fake-image.png`,
+        });
       });
 
-      it('should throw error if path is ignored by a .llxprtignore pattern', async () => {
-        const ignoredFilePath = path.join(tempRootDir, 'foo.bar');
-        await fsp.writeFile(ignoredFilePath, 'content', 'utf-8');
+      it('should pass offset and limit to read a slice of a text file', async () => {
+        const filePath = path.join(tempRootDir, 'paginated.txt');
+        const fileContent = Array.from(
+          { length: 20 },
+          (_, i) => `Line ${i + 1}`,
+        ).join('\n');
+        await fsp.writeFile(filePath, fileContent, 'utf-8');
+
         const params: ReadFileToolParams = {
-          absolute_path: ignoredFilePath,
+          absolute_path: filePath,
+          offset: 5, // Start from line 6
+          limit: 3,
         };
-        const expectedError = `File path '${ignoredFilePath}' is ignored by .llxprtignore pattern(s).`;
-        expect(() => tool.build(params)).toThrow(expectedError);
+        const invocation = tool.build(params) as ToolInvocation<
+          ReadFileToolParams,
+          ToolResult
+        >;
+
+        expect(await invocation.execute(abortSignal)).toEqual({
+          llmContent: [
+            '[File content truncated. Showing lines 6-8 of 20. To read the next chunk, use offset: 8, limit: 3.]',
+            'Line 6',
+            'Line 7',
+            'Line 8',
+          ].join('\n'),
+          returnDisplay: 'Read lines 6-8 of 20 from paginated.txt',
+        });
+      });
+
+      describe('with .llxprtignore', () => {
+        beforeEach(async () => {
+          await fsp.writeFile(
+            path.join(tempRootDir, '.llxprtignore'),
+            ['foo.*', 'ignored/'].join('\n'),
+          );
+        });
+
+        it('should throw error if path is ignored by a .llxprtignore pattern', async () => {
+          const ignoredFilePath = path.join(tempRootDir, 'foo.bar');
+          await fsp.writeFile(ignoredFilePath, 'content', 'utf-8');
+          const params: ReadFileToolParams = {
+            absolute_path: ignoredFilePath,
+          };
+          const expectedError = `File path '${ignoredFilePath}' is ignored by .llxprtignore pattern(s).`;
+          expect(() => tool.build(params)).toThrow(expectedError);
         });
       });
 

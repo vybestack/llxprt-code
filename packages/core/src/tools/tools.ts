@@ -244,9 +244,12 @@ export type AnyDeclarativeTool = DeclarativeTool<object, ToolResult>;
  * @deprecated Use `DeclarativeTool` for new tools.
  */
 export abstract class BaseTool<
-  TParams extends object = object,
-  TResult extends ToolResult = ToolResult,
-> extends DeclarativeTool<TParams, TResult> implements ContextAwareTool {
+    TParams extends object = object,
+    TResult extends ToolResult = ToolResult,
+  >
+  extends DeclarativeTool<TParams, TResult>
+  implements ContextAwareTool
+{
   /** Tool execution context containing session and agent information */
   context?: ToolContext;
   /**
