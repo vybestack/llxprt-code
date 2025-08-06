@@ -357,15 +357,22 @@ Line 8`;
           ToolResult
         >;
 
-        expect(await invocation.execute(abortSignal)).toEqual({
-          llmContent: [
-            '[File content truncated. Showing lines 6-8 of 20. To read the next chunk, use offset: 8, limit: 3.]',
-            'Line 6',
-            'Line 7',
-            'Line 8',
-          ].join('\n'),
-          returnDisplay: 'Read lines 6-8 of 20 from paginated.txt',
-        });
+        const result = await invocation.execute(abortSignal);
+
+        const expectedLlmContent = `
+IMPORTANT: The file content has been truncated.
+Status: Showing lines 6-8 of 20 total lines.
+Action: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: 8.
+
+--- FILE CONTENT (truncated) ---
+Line 6
+Line 7
+Line 8`;
+
+        expect(result.llmContent).toEqual(expectedLlmContent);
+        expect(result.returnDisplay).toBe(
+          'Read lines 6-8 of 20 from paginated.txt',
+        );
       });
     });
 
