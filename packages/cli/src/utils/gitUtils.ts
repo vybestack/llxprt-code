@@ -85,7 +85,10 @@ export const getLatestGitHubRelease = async (
     }
     return releaseTag;
   } catch (_error) {
-    console.debug(`Failed to determine latest run-llxprt-code release:`, _error);
+    console.debug(
+      `Failed to determine latest run-llxprt-code release:`,
+      _error,
+    );
     throw new Error(
       `Unable to determine the latest run-llxprt-code release on GitHub.`,
     );
