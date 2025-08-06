@@ -5,7 +5,7 @@
  */
 
 import { FunctionDeclaration, Schema, Type } from '@google/genai';
-import { Tool, ToolResult, BaseTool, Icon } from './tools.js';
+import { AnyDeclarativeTool, Icon, ToolResult, BaseTool } from './tools.js';
 import { ToolContext } from './tool-context.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
@@ -126,7 +126,7 @@ Signal: Signal number or \`(none)\` if no signal was received.
 }
 
 export class ToolRegistry {
-  private tools: Map<string, Tool> = new Map();
+  private tools: Map<string, AnyDeclarativeTool> = new Map();
   private config: Config;
 
   constructor(config: Config) {
@@ -137,7 +137,7 @@ export class ToolRegistry {
    * Registers a tool definition.
    * @param tool - The tool object containing schema and execution logic.
    */
-  registerTool(tool: Tool): void {
+  registerTool(tool: AnyDeclarativeTool): void {
     if (this.tools.has(tool.name)) {
       if (tool instanceof DiscoveredMCPTool) {
         tool = tool.asFullyQualifiedTool();
@@ -378,7 +378,7 @@ export class ToolRegistry {
   /**
    * Returns an array of all registered and discovered tool instances.
    */
-  getAllTools(): Tool[] {
+  getAllTools(): AnyDeclarativeTool[] {
     return Array.from(this.tools.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
@@ -400,8 +400,8 @@ export class ToolRegistry {
   /**
    * Returns an array of tools registered from a specific MCP server.
    */
-  getToolsByServer(serverName: string): Tool[] {
-    const serverTools: Tool[] = [];
+  getToolsByServer(serverName: string): AnyDeclarativeTool[] {
+    const serverTools: AnyDeclarativeTool[] = [];
     for (const tool of this.tools.values()) {
       if ((tool as DiscoveredMCPTool)?.serverName === serverName) {
         serverTools.push(tool);
@@ -415,7 +415,7 @@ export class ToolRegistry {
    * @param name The name of the tool to retrieve
    * @param context Optional context to inject into the tool instance
    */
-  getTool(name: string, context?: ToolContext): Tool | undefined {
+  getTool(name: string, context?: ToolContext): AnyDeclarativeTool | undefined {
     const tool = this.tools.get(name);
 
     // Check if tool is disabled
@@ -430,7 +430,7 @@ export class ToolRegistry {
     if (tool && context) {
       // Inject context into tool instance
       if ('context' in tool) {
-        (tool as BaseTool).context = context;
+        (tool as any).context = context;
       }
     }
     return tool;

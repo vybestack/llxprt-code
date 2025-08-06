@@ -381,18 +381,15 @@ export class GeminiClient {
     // Add full file context if the flag is set
     if (this.config.getFullContext()) {
       try {
-        const readManyFilesTool = toolRegistry.getTool(
-          'read_many_files',
-        ) as ReadManyFilesTool;
+        const readManyFilesTool = toolRegistry.getTool('read_many_files');
         if (readManyFilesTool) {
+          const invocation = readManyFilesTool.build({
+            paths: ['**/*'], // Read everything recursively
+            useDefaultExcludes: true, // Use default excludes
+          });
+
           // Read all files in the target directory
-          const result = await readManyFilesTool.execute(
-            {
-              paths: ['**/*'], // Read everything recursively
-              useDefaultExcludes: true, // Use default excludes
-            },
-            AbortSignal.timeout(30000),
-          );
+          const result = await invocation.execute(AbortSignal.timeout(30000));
           if (result.llmContent) {
             initialParts.push({
               text: `\n--- Full File Context ---\n${result.llmContent}`,

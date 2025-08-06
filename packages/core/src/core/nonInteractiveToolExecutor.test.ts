@@ -10,13 +10,12 @@ import {
   ToolRegistry,
   ToolCallRequestInfo,
   ToolResult,
-  Tool,
-  ToolCallConfirmationDetails,
   Config,
   Icon,
   ToolErrorType,
 } from '../index.js';
-import { Part, Type } from '@google/genai';
+import { Part } from '@google/genai';
+import { MockTool } from '../test-utils/tools.js';
 
 const mockConfig = {
   getSessionId: () => 'test-session-id',
@@ -26,36 +25,11 @@ const mockConfig = {
 
 describe('executeToolCall', () => {
   let mockToolRegistry: ToolRegistry;
-  let mockTool: Tool;
+  let mockTool: MockTool;
   let abortController: AbortController;
 
   beforeEach(() => {
-    mockTool = {
-      name: 'testTool',
-      displayName: 'Test Tool',
-      description: 'A tool for testing',
-      icon: Icon.Hammer,
-      schema: {
-        name: 'testTool',
-        description: 'A tool for testing',
-        parameters: {
-          type: Type.OBJECT,
-          properties: {
-            param1: { type: Type.STRING },
-          },
-          required: ['param1'],
-        },
-      },
-      execute: vi.fn(),
-      validateToolParams: vi.fn(() => null),
-      shouldConfirmExecute: vi.fn(() =>
-        Promise.resolve(false as false | ToolCallConfirmationDetails),
-      ),
-      isOutputMarkdown: false,
-      canUpdateOutput: false,
-      getDescription: vi.fn(),
-      toolLocations: vi.fn(() => []),
-    };
+    mockTool = new MockTool();
 
     mockToolRegistry = {
       getTool: vi.fn(),
@@ -78,7 +52,7 @@ describe('executeToolCall', () => {
       returnDisplay: 'Success!',
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.mocked(mockTool.execute).mockResolvedValue(toolResult);
+    vi.spyOn(mockTool, 'buildAndExecute').mockResolvedValue(toolResult);
 
     const response = await executeToolCall(
       mockConfig,
@@ -90,7 +64,7 @@ describe('executeToolCall', () => {
     expect(mockToolRegistry.getTool).toHaveBeenCalledWith('testTool', {
       sessionId: 'test-session-id',
     });
-    expect(mockTool.execute).toHaveBeenCalledWith(
+    expect(mockTool.buildAndExecute).toHaveBeenCalledWith(
       request.args,
       abortController.signal,
     );
@@ -151,7 +125,7 @@ describe('executeToolCall', () => {
     };
     const executionError = new Error('Tool execution failed');
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.mocked(mockTool.execute).mockRejectedValue(executionError);
+    vi.spyOn(mockTool, 'buildAndExecute').mockRejectedValue(executionError);
 
     const response = await executeToolCall(
       mockConfig,
@@ -185,25 +159,27 @@ describe('executeToolCall', () => {
     const cancellationError = new Error('Operation cancelled');
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
 
-    vi.mocked(mockTool.execute).mockImplementation(async (_args, signal) => {
-      if (signal?.aborted) {
-        return Promise.reject(cancellationError);
-      }
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => {
-          reject(cancellationError);
+    vi.spyOn(mockTool, 'buildAndExecute').mockImplementation(
+      async (_args, signal) => {
+        if (signal?.aborted) {
+          return Promise.reject(cancellationError);
+        }
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(cancellationError);
+          });
+          // Simulate work that might happen if not aborted immediately
+          const timeoutId = setTimeout(
+            () =>
+              reject(
+                new Error('Should have been cancelled if not aborted prior'),
+              ),
+            100,
+          );
+          signal?.addEventListener('abort', () => clearTimeout(timeoutId));
         });
-        // Simulate work that might happen if not aborted immediately
-        const timeoutId = setTimeout(
-          () =>
-            reject(
-              new Error('Should have been cancelled if not aborted prior'),
-            ),
-          100,
-        );
-        signal?.addEventListener('abort', () => clearTimeout(timeoutId));
-      });
-    });
+      },
+    );
 
     abortController.abort(); // Abort before calling
     const response = await executeToolCall(
@@ -234,7 +210,7 @@ describe('executeToolCall', () => {
       returnDisplay: 'Image processed',
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.mocked(mockTool.execute).mockResolvedValue(toolResult);
+    vi.spyOn(mockTool, 'buildAndExecute').mockResolvedValue(toolResult);
 
     const response = await executeToolCall(
       mockConfig,

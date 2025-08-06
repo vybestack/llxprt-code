@@ -5,6 +5,7 @@
  */
 
 import {
+  AnyToolInvocation,
   AuthType,
   CompletedToolCall,
   ContentGeneratorConfig,
@@ -437,6 +438,7 @@ describe('loggers', () => {
     });
 
     it('should log a tool call with all fields', () => {
+      const tool = new EditTool(mockConfig);
       const call: CompletedToolCall = {
         status: 'success',
         request: {
@@ -456,7 +458,8 @@ describe('loggers', () => {
           error: undefined,
           errorType: undefined,
         },
-        tool: new EditTool(mockConfig),
+        tool,
+        invocation: {} as AnyToolInvocation,
         durationMs: 100,
         outcome: ToolConfirmationOutcome.ProceedOnce,
       };
@@ -586,6 +589,7 @@ describe('loggers', () => {
         },
         outcome: ToolConfirmationOutcome.ModifyWithEditor,
         tool: new EditTool(mockConfig),
+        invocation: {} as AnyToolInvocation,
         durationMs: 100,
       };
       const event = new ToolCallEvent(call);
@@ -650,6 +654,7 @@ describe('loggers', () => {
           errorType: undefined,
         },
         tool: new EditTool(mockConfig),
+        invocation: {} as AnyToolInvocation,
         durationMs: 100,
       };
       const event = new ToolCallEvent(call);
