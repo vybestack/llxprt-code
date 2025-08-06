@@ -46,7 +46,7 @@ This command would download GitHub Actions workflows for:
 - (Potentially) Automated upstream sync via cherry-picking
 
 To implement this feature:
-1. Fork https://github.com/google-github-actions/run-gemini-cli
+1. Fork https://github.com/acoliver/run-llxprt-code
 2. Adapt it for multi-provider support
 3. Update this command to point to the new repository
 
