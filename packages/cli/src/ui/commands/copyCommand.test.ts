@@ -65,7 +65,7 @@ describe('copyCommand', () => {
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: 'No output in history',
+      content: 'No chat history available yet',
     });
 
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
@@ -301,7 +301,7 @@ describe('copyCommand', () => {
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: 'No output in history',
+      content: 'No chat history available yet',
     });
 
     expect(mockCopyToClipboard).not.toHaveBeenCalled();
