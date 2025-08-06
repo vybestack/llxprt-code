@@ -1070,7 +1070,7 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      expect(validateAuthMethodSpy).toHaveBeenCalledWith('USE_GEMINI');
+      expect(validateAuthMethodSpy).toHaveBeenCalledWith('USE_PROVIDER');
     });
 
     it('should NOT call validateAuthMethod when useExternalAuth is true', async () => {
