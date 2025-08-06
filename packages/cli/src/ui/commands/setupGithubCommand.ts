@@ -44,7 +44,7 @@ To implement this feature:
 For now, you can manually set up GitHub Actions by creating workflows that use llxprt-code.`,
     }),
 
-    /* Original gemini implementation with better error handling - kept for reference:
+  /* Original gemini implementation with better error handling - kept for reference:
     if (!isGitHubRepository()) {
       throw new Error(
         'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
