@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
+import { mcpCommand } from '../commands/mcp.js';
 import {
   Config,
   loadServerHierarchicalMemory,
@@ -252,6 +253,8 @@ export async function parseArguments(): Promise<CliArgs> {
         'If true, when refreshing memory, LLXPRT.md files should be loaded from all directories that are added. If false, LLXPRT.md files should only be loaded from the primary working directory.',
       default: false,
     })
+    // Register MCP subcommands
+    .command(mcpCommand)
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
     .help()
