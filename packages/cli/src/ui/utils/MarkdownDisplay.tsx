@@ -169,17 +169,23 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       const level = headerMatch[1].length;
       const headerText = headerMatch[2];
       let headerNode: React.ReactNode = null;
+
+      // Apply theme colors with fallback to named colors
+      const h1Color = Colors.AccentCyan || 'cyan';
+      const h2Color = Colors.AccentBlue || 'blue';
+      const h4Color = Colors.Gray || 'gray';
+
       switch (level) {
         case 1:
           headerNode = (
-            <Text bold color={Colors.AccentCyan}>
+            <Text bold color={h1Color}>
               <RenderInline text={headerText} />
             </Text>
           );
           break;
         case 2:
           headerNode = (
-            <Text bold color={Colors.AccentBlue}>
+            <Text bold color={h2Color}>
               <RenderInline text={headerText} />
             </Text>
           );
@@ -193,7 +199,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
           break;
         case 4:
           headerNode = (
-            <Text italic color={Colors.Gray}>
+            <Text italic color={h4Color}>
               <RenderInline text={headerText} />
             </Text>
           );

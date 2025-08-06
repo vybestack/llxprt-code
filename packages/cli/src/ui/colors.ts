@@ -45,6 +45,23 @@ export const Colors: ColorsTheme = {
   get DiffRemoved() {
     return themeManager.getActiveTheme().colors.DiffRemoved;
   },
+  // New diff colour getters with fallbacks
+  get DiffAddedBackground() {
+    const theme = themeManager.getActiveTheme().colors;
+    return theme.DiffAddedBackground ?? theme.DiffAdded;
+  },
+  get DiffAddedForeground() {
+    const theme = themeManager.getActiveTheme().colors;
+    return theme.DiffAddedForeground ?? theme.Foreground;
+  },
+  get DiffRemovedBackground() {
+    const theme = themeManager.getActiveTheme().colors;
+    return theme.DiffRemovedBackground ?? theme.DiffRemoved;
+  },
+  get DiffRemovedForeground() {
+    const theme = themeManager.getActiveTheme().colors;
+    return theme.DiffRemovedForeground ?? theme.Foreground;
+  },
   get Comment() {
     return themeManager.getActiveTheme().colors.Comment;
   },

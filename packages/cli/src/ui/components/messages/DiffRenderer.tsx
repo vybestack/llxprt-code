@@ -300,11 +300,26 @@ const renderDiffContent = (
             ) : (
               <Text
                 backgroundColor={
-                  line.type === 'add' ? Colors.DiffAdded : Colors.DiffRemoved
+                  line.type === 'add'
+                    ? Colors.DiffAddedBackground
+                    : Colors.DiffRemovedBackground
+                }
+                color={
+                  line.type === 'add'
+                    ? Colors.DiffAddedForeground
+                    : Colors.DiffRemovedForeground
                 }
                 wrap="wrap"
               >
-                {prefixSymbol} {colorizeLine(displayContent, language)}
+                {prefixSymbol}{' '}
+                {colorizeLine(
+                  displayContent,
+                  language,
+                  undefined,
+                  line.type === 'add'
+                    ? Colors.DiffAddedForeground
+                    : Colors.DiffRemovedForeground,
+                )}
               </Text>
             )}
           </Box>,
