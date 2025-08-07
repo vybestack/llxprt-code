@@ -83,6 +83,10 @@ export interface ComplexityAnalyzerSettings {
   suggestionCooldownMs?: number;
 }
 
+export interface ChatCompressionSettings {
+  contextPercentageThreshold?: number;
+}
+
 export interface TelemetrySettings {
   enabled?: boolean;
   target?: TelemetryTarget;
@@ -213,6 +217,8 @@ export interface ConfigParameters {
   ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
   loadMemoryFromIncludeDirectories?: boolean;
+  chatCompression?: ChatCompressionSettings;
+  interactive?: boolean;
 }
 
 export class Config {
@@ -289,6 +295,9 @@ export class Config {
   private readonly experimentalAcp: boolean = false;
   private readonly complexityAnalyzerSettings: ComplexityAnalyzerSettings;
   private readonly loadMemoryFromIncludeDirectories: boolean = false;
+  private readonly chatCompression: ChatCompressionSettings | undefined;
+  private readonly interactive: boolean;
+  private initialized: boolean = false;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -358,6 +367,8 @@ export class Config {
     };
     this.loadMemoryFromIncludeDirectories =
       params.loadMemoryFromIncludeDirectories ?? false;
+    this.chatCompression = params.chatCompression;
+    this.interactive = params.interactive ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -391,7 +402,14 @@ export class Config {
     // Data collection is disabled
   }
 
+  /**
+   * Must only be called once, throws if called again.
+   */
   async initialize(): Promise<void> {
+    if (this.initialized) {
+      throw Error('Config was already initialized');
+    }
+    this.initialized = true;
     // Initialize centralized FileDiscoveryService
     this.getFileService();
     if (this.getCheckpointingEnabled()) {
@@ -767,6 +785,14 @@ export class Config {
 
   getEphemeralSettings(): Record<string, unknown> {
     return { ...this.ephemeralSettings };
+  }
+
+  isInteractive(): boolean {
+    return this.interactive;
+  }
+
+  getChatCompression(): ChatCompressionSettings | undefined {
+    return this.chatCompression;
   }
 
   async getGitService(): Promise<GitService> {

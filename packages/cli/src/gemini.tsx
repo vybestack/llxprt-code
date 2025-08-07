@@ -8,7 +8,7 @@ import React, { ErrorInfo } from 'react';
 import { render } from 'ink';
 import { AppWrapper } from './ui/App.js';
 import { ErrorBoundary } from './ui/components/ErrorBoundary.js';
-import { loadCliConfig, parseArguments, CliArgs } from './config/config.js';
+import { loadCliConfig, parseArguments } from './config/config.js';
 import { readStdin } from './utils/readStdin.js';
 import { basename } from 'node:path';
 import v8 from 'node:v8';
@@ -28,14 +28,11 @@ import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { loadExtensions, Extension } from './config/extension.js';
+import { loadExtensions } from './config/extension.js';
 import { cleanupCheckpoints, registerCleanup } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
 import {
   Config,
-  EditTool,
-  ShellTool,
-  WriteFileTool,
   sessionId,
   // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
@@ -539,9 +536,6 @@ export async function main() {
   // Check if a provider is already active on startup
   providerManager.getActiveProvider();
 
-  const shouldBeInteractive =
-    !!argv.promptInteractive || (process.stdin.isTTY && !input);
-
   function handleError(error: Error, errorInfo: ErrorInfo) {
     // Log to console for debugging
     console.error('Application Error:', error);
@@ -559,7 +553,7 @@ export async function main() {
   }
 
   // Render UI, passing necessary config values. Check that there is no command line question.
-  if (shouldBeInteractive) {
+  if (config.isInteractive()) {
     const version = await getCliVersion();
     setWindowTitle(basename(workspaceRoot), settings);
 
@@ -629,12 +623,10 @@ export async function main() {
   //   prompt_length: input.length,
   // });
 
-  // Non-interactive mode handled by runNonInteractive
-  const nonInteractiveConfig = await loadNonInteractiveConfig(
+  const nonInteractiveConfig = await validateNonInteractiveAuth(
+    settings.merged.selectedAuthType,
+    settings.merged.useExternalAuth,
     config,
-    extensions,
-    settings,
-    argv,
   );
 
   await runNonInteractive(nonInteractiveConfig, input, prompt_id);
@@ -654,159 +646,4 @@ function setWindowTitle(title: string, settings: LoadedSettings) {
       process.stdout.write(`\x1b]2;\x07`);
     });
   }
-}
-
-async function loadNonInteractiveConfig(
-  config: Config,
-  extensions: Extension[],
-  settings: LoadedSettings,
-  argv: CliArgs,
-) {
-  let finalConfig = config;
-
-  if (!argv.yolo) {
-    // Everything is not allowed, ensure that only read-only tools are configured.
-    const existingExcludeTools = settings.merged.excludeTools || [];
-    const interactiveTools = [
-      ShellTool.Name,
-      EditTool.Name,
-      WriteFileTool.Name,
-    ];
-
-    const newExcludeTools = [
-      ...new Set([...existingExcludeTools, ...interactiveTools]),
-    ];
-
-    const nonInteractiveSettings = {
-      ...settings.merged,
-      excludeTools: newExcludeTools,
-    };
-    finalConfig = await loadCliConfig(
-      nonInteractiveSettings,
-      extensions,
-      config.getSessionId(),
-      argv,
-    );
-    await finalConfig.initialize();
-  }
-
-  // Always set up provider manager for non-interactive mode
-  const providerManager = getProviderManager(finalConfig);
-  finalConfig.setProviderManager(providerManager);
-
-  // Activate provider if specified
-  if (argv.provider || finalConfig.getProvider()) {
-    const providerToActivate = argv.provider || finalConfig.getProvider();
-    if (providerToActivate) {
-      await providerManager.setActiveProvider(providerToActivate);
-    }
-
-    // Set model if specified and provider supports it
-    const modelToSet = argv.model || finalConfig.getModel();
-    if (modelToSet) {
-      const activeProvider = providerManager.getActiveProvider();
-      if (activeProvider && typeof activeProvider.setModel === 'function') {
-        activeProvider.setModel(modelToSet);
-      }
-    }
-
-    // Apply profile model params if loaded AND provider was NOT specified via CLI
-    const configWithProfile = finalConfig as Config & {
-      _profileModelParams?: Record<string, unknown>;
-    };
-    if (!argv.provider && configWithProfile._profileModelParams) {
-      const activeProvider = providerManager.getActiveProvider();
-      if (
-        activeProvider &&
-        'setModelParams' in activeProvider &&
-        activeProvider.setModelParams
-      ) {
-        activeProvider.setModelParams(configWithProfile._profileModelParams);
-      }
-    }
-  }
-
-  // Process CLI-provided credentials (--key, --keyfile, --baseurl)
-  if (argv.key || argv.keyfile || argv.baseurl) {
-    // Provider-specific credentials are now handled directly
-
-    // Handle --key
-    if (argv.key) {
-      const result = await setProviderApiKey(
-        providerManager,
-        settings,
-        argv.key,
-        finalConfig,
-      );
-      if (!result.success) {
-        console.error(chalk.red(result.message));
-        process.exit(1);
-      }
-      if (finalConfig.getDebugMode()) {
-        console.debug(result.message);
-      }
-    }
-
-    // Handle --keyfile
-    if (argv.keyfile) {
-      try {
-        // Read the API key from file
-        const resolvedPath = argv.keyfile.replace(/^~/, os.homedir());
-        const apiKey = await fs.readFile(resolvedPath, 'utf-8');
-        const trimmedKey = apiKey.trim();
-
-        if (!trimmedKey) {
-          console.error(chalk.red('The specified file is empty'));
-          process.exit(1);
-        }
-
-        const result = await setProviderApiKey(
-          providerManager,
-          settings,
-          trimmedKey,
-          finalConfig,
-        );
-
-        if (!result.success) {
-          console.error(chalk.red(result.message));
-          process.exit(1);
-        }
-
-        const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
-        if (finalConfig.getDebugMode()) {
-          console.debug(message);
-        }
-      } catch (error) {
-        console.error(
-          chalk.red(
-            `Failed to process keyfile: ${error instanceof Error ? error.message : String(error)}`,
-          ),
-        );
-        process.exit(1);
-      }
-    }
-
-    // Handle --baseurl
-    if (argv.baseurl) {
-      const result = await setProviderBaseUrl(
-        providerManager,
-        settings,
-        argv.baseurl,
-      );
-      if (!result.success) {
-        console.error(chalk.red(result.message));
-        process.exit(1);
-      }
-      if (finalConfig.getDebugMode()) {
-        console.debug(result.message);
-      }
-    }
-  }
-
-  return await validateNonInteractiveAuth(
-    settings.merged.selectedAuthType,
-    settings.merged.useExternalAuth,
-    finalConfig,
-    settings,
-  );
 }

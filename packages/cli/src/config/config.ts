@@ -25,6 +25,9 @@ import {
   FileFilteringOptions,
   IdeClient,
   ProfileManager,
+  ShellTool,
+  EditTool,
+  WriteFileTool,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -438,7 +441,22 @@ export async function loadCliConfig(
   );
 
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
-  const excludeTools = mergeExcludeTools(effectiveSettings, activeExtensions);
+  const question = argv.promptInteractive || argv.prompt || '';
+  const approvalMode =
+    argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
+  const interactive =
+    !!argv.promptInteractive || (process.stdin.isTTY && question.length === 0);
+  // In non-interactive and non-yolo mode, exclude interactive built in tools.
+  const extraExcludes =
+    !interactive && approvalMode !== ApprovalMode.YOLO
+      ? [ShellTool.Name, EditTool.Name, WriteFileTool.Name]
+      : undefined;
+
+  const excludeTools = mergeExcludeTools(
+    effectiveSettings,
+    activeExtensions,
+    extraExcludes,
+  );
   const blockedMcpServers: Array<{ name: string; extensionName: string }> = [];
 
   if (!argv.allowedMcpServerNames) {
@@ -519,7 +537,7 @@ export async function loadCliConfig(
       effectiveSettings.loadMemoryFromIncludeDirectories ||
       false,
     debugMode,
-    question: argv.promptInteractive || argv.prompt || '',
+    question,
     fullContext: argv.allFiles || argv.all_files || false,
     coreTools: effectiveSettings.coreTools || undefined,
     excludeTools,
@@ -529,7 +547,7 @@ export async function loadCliConfig(
     mcpServers,
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
-    approvalMode: argv.yolo ? ApprovalMode.YOLO : ApprovalMode.DEFAULT,
+    approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage ||
       argv.show_memory_usage ||
@@ -585,6 +603,7 @@ export async function loadCliConfig(
     ideModeFeature,
     ideClient,
     folderTrustFeature,
+    interactive,
   });
 
   const enhancedConfig = config;
@@ -647,8 +666,12 @@ function mergeMcpServers(settings: Settings, extensions: Extension[]) {
 function mergeExcludeTools(
   settings: Settings,
   extensions: Extension[],
+  extraExcludes?: string[] | undefined,
 ): string[] {
-  const allExcludeTools = new Set(settings.excludeTools || []);
+  const allExcludeTools = new Set([
+    ...(settings.excludeTools || []),
+    ...(extraExcludes || []),
+  ]);
   for (const extension of extensions) {
     for (const tool of extension.config.excludeTools || []) {
       allExcludeTools.add(tool);
