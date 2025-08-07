@@ -26,17 +26,37 @@ interface TodoPanelProps {
 
 const formatParameters = (parameters: Record<string, unknown>): string => {
   const paramStrings: string[] = [];
+  const MAX_LENGTH = 40; // Doubled from 20 to be less aggressive
 
   for (const [key, value] of Object.entries(parameters)) {
     if (typeof value === 'string') {
-      // Truncate long strings
-      const displayValue =
-        value.length > 20 ? value.substring(0, 17) + '...' : value;
+      let displayValue = value;
+
+      // Special handling for file paths - show the end part
+      if (
+        key === 'file_path' ||
+        key === 'absolute_path' ||
+        value.includes('/')
+      ) {
+        if (value.length > MAX_LENGTH) {
+          // For paths, show the last part which is more useful
+          displayValue = '...' + value.slice(-(MAX_LENGTH - 3));
+        }
+      } else {
+        // For non-paths, truncate normally but with larger limit
+        displayValue =
+          value.length > MAX_LENGTH
+            ? value.substring(0, MAX_LENGTH - 3) + '...'
+            : value;
+      }
+
       paramStrings.push(`${key}: '${displayValue}'`);
     } else {
       const jsonStr = JSON.stringify(value);
       const displayValue =
-        jsonStr.length > 20 ? jsonStr.substring(0, 17) + '...' : jsonStr;
+        jsonStr.length > MAX_LENGTH
+          ? jsonStr.substring(0, MAX_LENGTH - 3) + '...'
+          : jsonStr;
       paramStrings.push(`${key}: ${displayValue}`);
     }
   }
@@ -134,8 +154,8 @@ const renderTodo = (
     }
   }
 
-  // Group and render all tool calls from memory
-  if (allToolCalls.length > 0) {
+  // Group and render all tool calls from memory (only for in_progress tasks)
+  if (allToolCalls.length > 0 && todo.status === 'in_progress') {
     const grouped = groupToolCalls(allToolCalls);
     grouped.forEach((group, index) => {
       elements.push(renderToolCall(group.toolCall, group.count, '  ', index));

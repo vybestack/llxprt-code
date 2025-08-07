@@ -118,11 +118,8 @@ describe('ToolCallTrackerService', () => {
     );
 
     // Verify we have one executing tool call
-    let executingCalls = ToolCallTrackerService.getAllToolCalls(
-      sessionId,
-      todoId,
-    );
-    expect(executingCalls).toHaveLength(1);
+    let allCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
+    expect(allCalls).toHaveLength(1);
 
     // Complete the tool call tracking
     await ToolCallTrackerService.completeToolCallTracking(
@@ -130,9 +127,9 @@ describe('ToolCallTrackerService', () => {
       toolCallId!,
     );
 
-    // Verify the tool call is no longer executing
-    executingCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
-    expect(executingCalls).toHaveLength(0);
+    // Verify the tool call is still there (now completed)
+    allCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
+    expect(allCalls).toHaveLength(1); // Still 1, but now in completed array
   });
 
   it('should fail tracking of executing tool calls', () => {
