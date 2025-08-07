@@ -252,7 +252,8 @@ describe('GrepTool', () => {
 
       const multiDirGrepTool = new GrepTool(multiDirConfig);
       const params: GrepToolParams = { pattern: 'world' };
-      const result = await multiDirGrepTool.execute(params, abortSignal);
+      const invocation = multiDirGrepTool.build(params);
+      const result = await invocation.execute(abortSignal);
 
       // Should find matches in both directories
       expect(result.llmContent).toContain(
@@ -304,7 +305,8 @@ describe('GrepTool', () => {
 
       // Search only in the 'sub' directory of the first workspace
       const params: GrepToolParams = { pattern: 'world', path: 'sub' };
-      const result = await multiDirGrepTool.execute(params, abortSignal);
+      const invocation = multiDirGrepTool.build(params);
+      const result = await invocation.execute(abortSignal);
 
       // Should only find matches in the specified sub directory
       expect(result.llmContent).toContain(

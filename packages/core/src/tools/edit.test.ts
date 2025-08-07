@@ -27,7 +27,7 @@ vi.mock('../utils/editor.js', () => ({
 }));
 
 import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
-import { EditTool, EditToolParams } from './edit.js';
+import { applyReplacement, EditTool, EditToolParams } from './edit.js';
 import { FileDiff, ToolConfirmationOutcome } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import path from 'path';
@@ -155,33 +155,32 @@ describe('EditTool', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  describe('_applyReplacement', () => {
-    // Access private method for testing
-    // Note: `tool` is initialized in `beforeEach` of the parent describe block
+  describe('applyReplacement', () => {
+    // Test the exported applyReplacement function
     it('should return newString if isNewFile is true', () => {
-      expect((tool as any)._applyReplacement(null, 'old', 'new', true)).toBe(
+      expect(applyReplacement(null, 'old', 'new', true)).toBe(
         'new',
       );
       expect(
-        (tool as any)._applyReplacement('existing', 'old', 'new', true),
+        applyReplacement('existing', 'old', 'new', true),
       ).toBe('new');
     });
 
     it('should return newString if currentContent is null and oldString is empty (defensive)', () => {
-      expect((tool as any)._applyReplacement(null, '', 'new', false)).toBe(
+      expect(applyReplacement(null, '', 'new', false)).toBe(
         'new',
       );
     });
 
     it('should return empty string if currentContent is null and oldString is not empty (defensive)', () => {
-      expect((tool as any)._applyReplacement(null, 'old', 'new', false)).toBe(
+      expect(applyReplacement(null, 'old', 'new', false)).toBe(
         '',
       );
     });
 
     it('should replace oldString with newString in currentContent', () => {
       expect(
-        (tool as any)._applyReplacement(
+        applyReplacement(
           'hello old world old',
           'old',
           'new',
@@ -192,7 +191,7 @@ describe('EditTool', () => {
 
     it('should return currentContent if oldString is empty and not a new file', () => {
       expect(
-        (tool as any)._applyReplacement('hello world', '', 'new', false),
+        applyReplacement('hello world', '', 'new', false),
       ).toBe('hello world');
     });
   });
