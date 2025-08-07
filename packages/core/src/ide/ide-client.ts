@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as fs from 'node:fs';
 import {
   detectIde,
   DetectedIde,
@@ -23,6 +24,8 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 const logger = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   debug: (...args: any[]) => console.debug('[DEBUG] [IDEClient]', ...args),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  error: (...args: any[]) => console.error('[ERROR] [IDEClient]', ...args),
 };
 
 export type IDEConnectionState = {
@@ -34,6 +37,16 @@ export enum IDEConnectionStatus {
   Connected = 'connected',
   Disconnected = 'disconnected',
   Connecting = 'connecting',
+}
+
+function getRealPath(path: string): string {
+  try {
+    return fs.realpathSync(path);
+  } catch (_e) {
+    // If realpathSync fails, it might be because the path doesn't exist.
+    // In that case, we can fall back to the original path.
+    return path;
+  }
 }
 
 /**
@@ -73,7 +86,15 @@ export class IdeClient {
     this.setState(IDEConnectionStatus.Connecting);
 
     if (!this.currentIde || !this.currentIdeDisplayName) {
-      this.setState(IDEConnectionStatus.Disconnected);
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
+          DetectedIde,
+        )
+          .map((ide) => getIdeDisplayName(ide))
+          .join(', ')}`,
+        true,
+      );
       return;
     }
 
@@ -173,10 +194,29 @@ export class IdeClient {
     return this.state;
   }
 
-  private setState(status: IDEConnectionStatus, details?: string) {
-    this.state = { status, details };
+  getDetectedIdeDisplayName(): string | undefined {
+    return this.currentIdeDisplayName;
+  }
+
+  private setState(
+    status: IDEConnectionStatus,
+    details?: string,
+    logToConsole = false,
+  ) {
+    const isAlreadyDisconnected =
+      this.state.status === IDEConnectionStatus.Disconnected &&
+      status === IDEConnectionStatus.Disconnected;
+
+    // Only update details if the state wasn't already disconnected, so that
+    // the first detail message is preserved.
+    if (!isAlreadyDisconnected) {
+      this.state = { status, details };
+    }
 
     if (status === IDEConnectionStatus.Disconnected) {
+      if (logToConsole) {
+        logger.error(details);
+      }
       logger.debug('IDE integration is disconnected. ', details);
       ideContext.clearIdeContext();
     }
@@ -187,7 +227,8 @@ export class IdeClient {
     if (!port) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        'LLxprt Code Companion extension not found. Install via /ide install and restart the CLI in a fresh terminal window.',
+        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. LLxprt Code Companion extension not found. Install via /ide install and restart the CLI in a fresh terminal window.`,
+        true,
       );
       return undefined;
     }
@@ -199,14 +240,16 @@ export class IdeClient {
     if (!ideWorkspacePath) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        'IDE integration requires a single workspace folder to be open in the IDE. Please ensure one folder is open and try again.',
+        `To use this feature, please open a single workspace folder in ${this.currentIdeDisplayName} and try again.`,
+        true,
       );
       return false;
     }
-    if (ideWorkspacePath !== process.cwd()) {
+    if (getRealPath(ideWorkspacePath) !== getRealPath(process.cwd())) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `LLxprt Code is running in a different directory (${process.cwd()}) from the IDE's open workspace (${ideWorkspacePath}). Please run LLxprt Code in the same directory.`,
+        `Directory mismatch. LLxprt Code is running in a different location than the open workspace in ${this.currentIdeDisplayName}. Please run the CLI from the same directory as your project's root folder.`,
+        true,
       );
       return false;
     }
@@ -226,11 +269,19 @@ export class IdeClient {
     );
 
     this.client.onerror = (_error) => {
-      this.setState(IDEConnectionStatus.Disconnected, 'Client error.');
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
+        true,
+      );
     };
 
     this.client.onclose = () => {
-      this.setState(IDEConnectionStatus.Disconnected, 'Connection closed.');
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        `IDE connection error. The connection was lost unexpectedly. Please try reconnecting by running /ide enable`,
+        true,
+      );
     };
     this.client.setNotificationHandler(
       IdeDiffAcceptedNotificationSchema,
@@ -286,7 +337,8 @@ export class IdeClient {
     } catch (error) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `Failed to connect to IDE server: ${error}`,
+        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. Please ensure the extension is running and try refreshing your terminal. To install the extension, run /ide install.`,
+        true,
       );
       if (transport) {
         try {
@@ -326,10 +378,6 @@ export class IdeClient {
 
   dispose() {
     this.client?.close();
-  }
-
-  getDetectedIdeDisplayName(): string | undefined {
-    return this.currentIdeDisplayName;
   }
 
   setDisconnected() {
