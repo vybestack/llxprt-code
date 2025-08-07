@@ -716,15 +716,19 @@ const App = (props: AppInternalProps) => {
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
-        // Clear todos when user submits a new message
-        console.log(
-          '[DEBUG] Clearing todos because user submitted a new message',
-        );
-        updateTodos([]);
         submitQuery(trimmedValue);
       }
     },
-    [submitQuery, updateTodos],
+    [submitQuery],
+  );
+
+  const handleUserInputSubmit = useCallback(
+    (submittedValue: string) => {
+      // Clear todos only when user types and submits
+      updateTodos([]);
+      handleFinalSubmit(submittedValue);
+    },
+    [handleFinalSubmit, updateTodos],
   );
 
   const handleIdePromptComplete = useCallback(
@@ -748,7 +752,7 @@ const App = (props: AppInternalProps) => {
     [handleSlashCommand, settings],
   );
 
-  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
+  const { handleInput: vimHandleInput } = useVim(buffer, handleUserInputSubmit);
   const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
   pendingHistoryItems.push(...pendingGeminiHistoryItems);
 
@@ -1269,7 +1273,7 @@ const App = (props: AppInternalProps) => {
                     buffer={buffer}
                     inputWidth={inputWidth}
                     suggestionsWidth={suggestionsWidth}
-                    onSubmit={handleFinalSubmit}
+                    onSubmit={handleUserInputSubmit}
                     userMessages={userMessages}
                     onClearScreen={handleClearScreen}
                     config={config}
