@@ -45,20 +45,23 @@ test('todo ui integration in interactive mode', async () => {
 
   assert.ok(readToolCall, 'Expected to find a todo_read tool call');
 
-  // In interactive mode, we expect the TodoDisplay to show structured UI
-  // rather than Markdown output from TodoRead
-  // The result should contain task markers like - [→], - [ ], - [x]
-  // but NOT the Markdown headers like ## Todo List
+  // In interactive mode, we expect the TodoPanel to show structured UI
+  // with visual markers rather than Markdown output
+  // The TodoPanel uses different markers: → (in progress), ○ (pending), ✔ (completed)
+  // and shows task content with status indicators
   const hasStructuredUI =
-    (result.includes('- [→]') ||
-      result.includes('- [ ]') ||
-      result.includes('- [x]')) &&
-    !result.includes('## Todo List');
+    (result.includes('→') || result.includes('○') || result.includes('✔')) &&
+    !result.includes('## Todo List') &&
+    (result.includes('in_progress') ||
+      result.includes('pending') ||
+      result.includes('completed'));
 
   if (!hasStructuredUI) {
     printDebugInfo(rig, result, {
       'Has structured UI markers': hasStructuredUI,
-      'Contains task markers': result.includes('- ['),
+      'Contains arrow marker': result.includes('→'),
+      'Contains circle marker': result.includes('○'),
+      'Contains check marker': result.includes('✔'),
       'Contains Markdown headers': result.includes('## Todo List'),
     });
   }
@@ -92,7 +95,7 @@ test('todo ui integration in non-interactive mode', async () => {
 
   assert.ok(writeToolCall, 'Expected to find a todo_write tool call');
 
-  // In non-interactive mode, we expect simplified Markdown output
+  // In non-interactive mode, we expect simplified Markdown output from TodoWrite
   // Should contain task markers like - [→] ← current, - [ ], - [x]
   // and should have a task count in the header
   const hasSimplifiedMarkdown =
@@ -105,7 +108,7 @@ test('todo ui integration in non-interactive mode', async () => {
     printDebugInfo(rig, result, {
       'Has simplified Markdown': hasSimplifiedMarkdown,
       'Contains Markdown headers': result.includes('## Todo List'),
-      'Contains task markers': result.includes('- ['),
+      'Contains checkbox markers': result.includes('- ['),
       'Contains current task marker': result.includes('- [→] ← current'),
     });
   }
