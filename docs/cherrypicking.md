@@ -52,6 +52,7 @@ git cherry-pick <commit-hash>
 - Changes that would break llxprt's multi-provider support
 - Branding changes that would overwrite llxprt branding
 - Auth changes that assume only Google auth (llxprt supports multiple providers)
+- **Next-speaker check functionality** - This feature has been permanently disabled in llxprt and should never be re-enabled
 
 #### Handling Conflicts:
 

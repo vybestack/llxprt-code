@@ -334,7 +334,7 @@ export class IdeClient {
       await this.client.connect(transport);
 
       this.setState(IDEConnectionStatus.Connected);
-    } catch (error) {
+    } catch (_error) {
       this.setState(
         IDEConnectionStatus.Disconnected,
         `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. Please ensure the extension is running and try refreshing your terminal. To install the extension, run /ide install.`,

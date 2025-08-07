@@ -8,7 +8,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as os from 'os';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ShellTool, EditTool, WriteFileTool } from '@vybestack/llxprt-code-core';
+import {
+  ShellTool,
+  EditTool,
+  WriteFileTool,
+} from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments } from './config';
 import { Settings } from './settings';
 import { Extension } from './extension';

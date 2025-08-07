@@ -11,7 +11,6 @@
 //   getGitRepoRoot,
 //   getLatestGitHubRelease,
 //   isGitHubRepository,
-//   getGitHubRepoInfo,
 // } from '../../utils/gitUtils.js';
 
 import {
@@ -20,9 +19,10 @@ import {
   SlashCommandActionReturn,
 } from './types.js';
 import { getUrlOpenCommand } from '../../ui/utils/commandUtils.js';
+import { getGitHubRepoInfo } from '../../utils/gitUtils.js';
 
 // Generate OS-specific commands to open the GitHub pages needed for setup.
-function getOpenUrlsCommands(readmeUrl: string): string[] {
+function _getOpenUrlsCommands(readmeUrl: string): string[] {
   // Determine the OS-specific command to open URLs, ex: 'open', 'xdg-open', etc
   const openCmd = getUrlOpenCommand();
 
