@@ -31,11 +31,11 @@ export function getSystemSettingsPath(): string {
     return process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
   }
   if (platform() === 'darwin') {
-    return '/Library/Application Support/GeminiCli/settings.json';
+    return '/Library/Application Support/LLxprt-Code/settings.json';
   } else if (platform() === 'win32') {
-    return 'C:\\ProgramData\\gemini-cli\\settings.json';
+    return 'C:\\ProgramData\\llxprt-code\\settings.json';
   } else {
-    return '/etc/gemini-cli/settings.json';
+    return '/etc/llxprt-code/settings.json';
   }
 }
 
