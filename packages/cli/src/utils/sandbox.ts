@@ -193,13 +193,6 @@ export async function start_sandbox(
   patcher.patch();
 
   try {
-  const patcher = new ConsolePatcher({
-    debugMode: cliConfig?.getDebugMode() || !!process.env.DEBUG,
-    stderr: true,
-  });
-  patcher.patch();
-
-  try {
     if (config.command === 'sandbox-exec') {
       // disallow BUILD_SANDBOX
       if (process.env.BUILD_SANDBOX) {
@@ -801,6 +794,9 @@ export async function start_sandbox(
         resolve();
       });
     });
+  } catch (error) {
+    console.error('Sandbox error:', error);
+    throw error;
   } finally {
     patcher.cleanup();
   }

@@ -8,10 +8,14 @@ import yargs from 'yargs';
 import { addCommand } from './add.js';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 
-vi.mock('fs/promises', () => ({
-  readFile: vi.fn(),
-  writeFile: vi.fn(),
-}));
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual('fs/promises');
+  return {
+    ...actual,
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+  };
+});
 
 vi.mock('../../config/settings.js', async () => {
   const actual = await vi.importActual('../../config/settings.js');
