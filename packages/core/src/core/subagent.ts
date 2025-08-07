@@ -9,7 +9,7 @@ import { ToolRegistry } from '../tools/tool-registry.js';
 import { Config } from '../config/config.js';
 import { ToolCallRequestInfo } from './turn.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { createContentGenerator, AuthType } from './contentGenerator.js';
+import { createContentGenerator } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import {
   Content,
