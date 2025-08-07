@@ -169,8 +169,8 @@ export class GeminiProvider implements IProvider {
           supportedToolFormats: [],
         },
         {
-          id: 'gemini-2.5-flash-exp',
-          name: 'Gemini 2.5 Flash Experimental',
+          id: 'gemini-2.5-flash-lite',
+          name: 'Gemini 2.5 Flash Lite',
           provider: this.name,
           supportedToolFormats: [],
         },
