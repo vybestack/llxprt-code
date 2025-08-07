@@ -51,6 +51,12 @@ async function createMockConfig(
   await config.initialize();
   await config.refreshAuth(AuthType.USE_PROVIDER);
 
+  // Mock getContentGeneratorConfig to return a valid config
+  vi.spyOn(config, 'getContentGeneratorConfig').mockReturnValue({
+    model: DEFAULT_GEMINI_MODEL,
+    authType: AuthType.USE_PROVIDER,
+  });
+
   // Mock ToolRegistry
   const mockToolRegistry = {
     getTool: vi.fn(),

@@ -9,7 +9,7 @@ import { ToolRegistry } from '../tools/tool-registry.js';
 import { Config } from '../config/config.js';
 import { ToolCallRequestInfo } from './turn.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
-import { createContentGenerator } from './contentGenerator.js';
+import { createContentGenerator, AuthType } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import {
   Content,
@@ -589,6 +589,8 @@ export class SubAgentScope {
 
       const contentGenConfig = this.runtimeContext.getContentGeneratorConfig();
       if (!contentGenConfig) {
+        // In llxprt, when using providers, we may not have a content generator config
+        // but we still need to create one for the subagent
         throw new Error(
           'Content generator config is not available. Please ensure proper initialization.',
         );
