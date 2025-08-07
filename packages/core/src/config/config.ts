@@ -73,6 +73,10 @@ export interface BugCommandSettings {
   urlTemplate: string;
 }
 
+export interface ChatCompressionSettings {
+  contextPercentageThreshold?: number;
+}
+
 export interface SummarizeToolOutputSettings {
   tokenBudget?: number;
 }
@@ -81,10 +85,6 @@ export interface ComplexityAnalyzerSettings {
   complexityThreshold?: number;
   minTasksForSuggestion?: number;
   suggestionCooldownMs?: number;
-}
-
-export interface ChatCompressionSettings {
-  contextPercentageThreshold?: number;
 }
 
 export interface TelemetrySettings {

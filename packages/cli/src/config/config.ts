@@ -604,6 +604,7 @@ export async function loadCliConfig(
     ideMode,
     ideModeFeature,
     ideClient,
+    chatCompression: settings.chatCompression,
     folderTrustFeature,
     interactive,
     folderTrust,

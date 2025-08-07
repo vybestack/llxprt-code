@@ -820,13 +820,17 @@ export class GeminiClient {
       return null;
     }
 
+    const contextPercentageThreshold =
+      this.config.getChatCompression()?.contextPercentageThreshold;
+
     // Don't compress if not forced and we are under the limit.
-    const contextLimit = tokenLimit(model, this.userContextLimit);
-    if (
-      !force &&
-      originalTokenCount < this.COMPRESSION_TOKEN_THRESHOLD * contextLimit
-    ) {
-      return null;
+    if (!force) {
+      const threshold =
+        contextPercentageThreshold ?? this.COMPRESSION_TOKEN_THRESHOLD;
+      const contextLimit = tokenLimit(model, this.userContextLimit);
+      if (originalTokenCount < threshold * contextLimit) {
+        return null;
+      }
     }
 
     let compressBeforeIndex = findIndexAfterFraction(

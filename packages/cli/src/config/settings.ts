@@ -13,6 +13,7 @@ import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
   getErrorMessage,
   BugCommandSettings,
+  ChatCompressionSettings,
   TelemetrySettings,
   AuthType,
 } from '@vybestack/llxprt-code-core';
@@ -151,6 +152,8 @@ export interface Settings {
   includeDirectories?: string[];
 
   loadMemoryFromIncludeDirectories?: boolean;
+
+  chatCompression?: ChatCompressionSettings;
 }
 
 export interface SettingsError {
@@ -215,6 +218,11 @@ export class LoadedSettings {
         ...(user.includeDirectories || []),
         ...(workspace.includeDirectories || []),
       ],
+      chatCompression: {
+        ...(system.chatCompression || {}),
+        ...(user.chatCompression || {}),
+        ...(workspace.chatCompression || {}),
+      },
     };
   }
 
@@ -520,6 +528,19 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
     },
     settingsErrors,
   );
+
+  // Validate chatCompression settings
+  const chatCompression = loadedSettings.merged.chatCompression;
+  const threshold = chatCompression?.contextPercentageThreshold;
+  if (
+    threshold != null &&
+    (typeof threshold !== 'number' || threshold < 0 || threshold > 1)
+  ) {
+    console.warn(
+      `Invalid value for chatCompression.contextPercentageThreshold: "${threshold}". Please use a value between 0 and 1. Using default compression settings.`,
+    );
+    delete loadedSettings.merged.chatCompression;
+  }
 
   // Load environment with merged settings
   loadEnvironment(loadedSettings.merged);
