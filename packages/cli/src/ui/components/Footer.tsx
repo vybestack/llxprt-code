@@ -17,7 +17,7 @@ import process from 'node:process';
 import Gradient from 'ink-gradient';
 import { MemoryUsageDisplay } from './MemoryUsageDisplay.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-
+import { ContextUsageDisplay } from './ContextUsageDisplay.js';
 import { DebugProfiler } from './DebugProfiler.js';
 
 interface FooterProps {
@@ -51,9 +51,6 @@ export const Footer: React.FC<FooterProps> = ({
   vimMode,
   contextLimit,
 }) => {
-  const limit = tokenLimit(model, contextLimit);
-  const percentage = promptTokenCount / limit;
-
   return (
     <Box justifyContent="space-between" width="100%">
       <Box>
@@ -107,9 +104,11 @@ export const Footer: React.FC<FooterProps> = ({
         <Text color={Colors.AccentBlue}>
           {' '}
           {model}{' '}
-          <Text color={Colors.Gray}>
-            ({Math.max(0, Math.round((1 - percentage) * 100))}% context left)
-          </Text>
+          <ContextUsageDisplay
+            promptTokenCount={promptTokenCount}
+            model={model}
+            contextLimit={contextLimit}
+          />
         </Text>
         {isPaidMode !== undefined &&
           (() => {
