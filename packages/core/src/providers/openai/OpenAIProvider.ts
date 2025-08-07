@@ -552,12 +552,23 @@ export class OpenAIProvider implements IProvider {
       ? this.toolFormatter.toProviderFormat(tools, currentToolFormat)
       : undefined;
 
+    // Get stream_options from ephemeral settings (not model params)
+    const streamOptions =
+      this.config?.getEphemeralSettings?.()?.['stream-options'];
+
+    // Default stream_options to { include_usage: true } unless explicitly set
+    const finalStreamOptions =
+      streamOptions !== undefined ? streamOptions : { include_usage: true };
+
+    // Build request params with exact order from original
     const stream = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
       stream: true,
-      stream_options: { include_usage: true },
+      ...(finalStreamOptions !== null
+        ? { stream_options: finalStreamOptions }
+        : {}),
       tools: formattedTools as
         | OpenAI.Chat.Completions.ChatCompletionTool[]
         | undefined,

@@ -127,7 +127,12 @@ export const diagnosticsCommand: SlashCommand = {
         if (otherSettings.length > 0) {
           diagnostics.push('### Other');
           for (const [key, value] of otherSettings) {
-            diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            if (key === 'stream-options') {
+              // Special handling for stream-options to show default
+              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            } else {
+              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            }
           }
         }
       }
@@ -179,6 +184,11 @@ export const diagnosticsCommand: SlashCommand = {
         | undefined;
       diagnostics.push(
         `- tool-output-truncate-mode: ${truncateMode ?? 'warn'} ${!truncateMode ? '(default)' : ''}`,
+      );
+
+      const streamOptions = ephemeralSettings['stream-options'];
+      diagnostics.push(
+        `- stream-options: ${streamOptions !== undefined ? JSON.stringify(streamOptions) : '{ include_usage: true } (default)'}`,
       );
 
       // System information

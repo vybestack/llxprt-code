@@ -225,6 +225,160 @@ describe('OpenAIProvider', () => {
     });
   });
 
+  describe('stream_options ephemeral settings', () => {
+    it('should omit stream_options when set to null via ephemeral settings', async () => {
+      // Create provider with config that returns null for stream-options
+      const configWithNullStreamOptions = {
+        ...TEST_PROVIDER_CONFIG,
+        getEphemeralSettings: () => ({ 'stream-options': null }),
+      };
+      const providerWithNullStreamOptions = new OpenAIProvider(
+        'test-key',
+        undefined,
+        configWithNullStreamOptions,
+      );
+      providerWithNullStreamOptions.setModel('gpt-3.5-turbo');
+
+      const mockInstance = (
+        providerWithNullStreamOptions as unknown as {
+          openai: typeof mockOpenAIInstance;
+        }
+      ).openai;
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [{ delta: { content: 'Hello' } }],
+          };
+        },
+      };
+
+      let localCapturedParams: unknown;
+      mockInstance.chat.completions.create.mockImplementation(
+        async (params) => {
+          localCapturedParams = params;
+          return mockStream;
+        },
+      );
+
+      const messages = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+      const generator =
+        providerWithNullStreamOptions.generateChatCompletion(messages);
+      const results: unknown[] = [];
+      for await (const chunk of generator) {
+        results.push(chunk);
+      }
+
+      // Verify stream_options is NOT included when set to null
+      expect(localCapturedParams).toBeDefined();
+      const apiParams = localCapturedParams as Record<string, unknown>;
+      expect(apiParams.stream).toBe(true);
+      expect(apiParams).not.toHaveProperty('stream_options');
+    });
+
+    it('should use custom stream_options from ephemeral settings', async () => {
+      // Create provider with custom stream_options
+      const configWithCustomStreamOptions = {
+        ...TEST_PROVIDER_CONFIG,
+        getEphemeralSettings: () => ({
+          'stream-options': { include_usage: false, custom_field: true },
+        }),
+      };
+      const providerWithCustomStreamOptions = new OpenAIProvider(
+        'test-key',
+        undefined,
+        configWithCustomStreamOptions,
+      );
+      providerWithCustomStreamOptions.setModel('gpt-3.5-turbo');
+
+      const mockInstance = (
+        providerWithCustomStreamOptions as unknown as {
+          openai: typeof mockOpenAIInstance;
+        }
+      ).openai;
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [{ delta: { content: 'Hello' } }],
+          };
+        },
+      };
+
+      let localCapturedParams: unknown;
+      mockInstance.chat.completions.create.mockImplementation(
+        async (params) => {
+          localCapturedParams = params;
+          return mockStream;
+        },
+      );
+
+      const messages = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+      const generator =
+        providerWithCustomStreamOptions.generateChatCompletion(messages);
+      const results: unknown[] = [];
+      for await (const chunk of generator) {
+        results.push(chunk);
+      }
+
+      // Verify custom stream_options is used
+      expect(localCapturedParams).toBeDefined();
+      const apiParams = localCapturedParams as Record<string, unknown>;
+      expect(apiParams.stream).toBe(true);
+      expect(apiParams.stream_options).toEqual({
+        include_usage: false,
+        custom_field: true,
+      });
+    });
+
+    it('should use default stream_options when ephemeral setting is undefined', async () => {
+      // Create provider with no stream-options in ephemeral settings
+      const configWithoutStreamOptions = {
+        ...TEST_PROVIDER_CONFIG,
+        getEphemeralSettings: () => ({}), // No stream-options key
+      };
+      const providerWithDefaults = new OpenAIProvider(
+        'test-key',
+        undefined,
+        configWithoutStreamOptions,
+      );
+      providerWithDefaults.setModel('gpt-3.5-turbo');
+
+      const mockInstance = (
+        providerWithDefaults as unknown as { openai: typeof mockOpenAIInstance }
+      ).openai;
+
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            choices: [{ delta: { content: 'Hello' } }],
+          };
+        },
+      };
+
+      let localCapturedParams: unknown;
+      mockInstance.chat.completions.create.mockImplementation(
+        async (params) => {
+          localCapturedParams = params;
+          return mockStream;
+        },
+      );
+
+      const messages = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+      const generator = providerWithDefaults.generateChatCompletion(messages);
+      const results: unknown[] = [];
+      for await (const chunk of generator) {
+        results.push(chunk);
+      }
+
+      // Verify default stream_options is used
+      expect(localCapturedParams).toBeDefined();
+      const apiParams = localCapturedParams as Record<string, unknown>;
+      expect(apiParams.stream).toBe(true);
+      expect(apiParams.stream_options).toEqual({ include_usage: true });
+    });
+  });
+
   describe('model management', () => {
     it('should set and get current model', () => {
       // We set it to gpt-3.5-turbo in beforeEach to avoid Responses API

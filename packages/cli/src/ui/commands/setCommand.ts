@@ -358,6 +358,8 @@ const ephemeralSettingHelp: Record<string, string> = {
   'tool-format': 'Tool format override for the provider',
   'api-version': 'API version to use',
   'custom-headers': 'Custom HTTP headers as JSON object',
+  'stream-options':
+    'Stream options for OpenAI API (default: { include_usage: true })',
   // Tool output limit settings - apply to all tools that can return large outputs
   'tool-output-max-items':
     'Maximum number of items/files/matches returned by tools (default: 50)',
