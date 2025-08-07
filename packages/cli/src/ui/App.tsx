@@ -791,6 +791,10 @@ const App = (props: AppInternalProps) => {
     ) {
       setShowIDEContextDetail((prev) => !prev);
     } else if (key.ctrl && (input === 'c' || input === 'C')) {
+      if (isAuthenticating) {
+        // Let AuthInProgress component handle the input.
+        return;
+      }
       handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
     } else if (key.ctrl && (input === 'd' || input === 'D')) {
       if (buffer.text.length > 0) {
