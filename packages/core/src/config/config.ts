@@ -247,6 +247,7 @@ export class Config {
     respectLlxprtIgnore: boolean;
     enableRecursiveFileSearch: boolean;
   };
+  private alwaysAllowedCommands: Set<string> = new Set();
   private fileDiscoveryService: FileDiscoveryService | null = null;
   private gitService: GitService | undefined = undefined;
   private readonly checkpointing: boolean;
@@ -767,6 +768,18 @@ export class Config {
 
   getEphemeralSettings(): Record<string, unknown> {
     return { ...this.ephemeralSettings };
+  }
+
+  addAlwaysAllowedCommand(rootCommand: string): void {
+    this.alwaysAllowedCommands.add(rootCommand);
+  }
+
+  isCommandAlwaysAllowed(rootCommand: string): boolean {
+    return this.alwaysAllowedCommands.has(rootCommand);
+  }
+
+  getAlwaysAllowedCommands(): string[] {
+    return Array.from(this.alwaysAllowedCommands);
   }
 
   async getGitService(): Promise<GitService> {
