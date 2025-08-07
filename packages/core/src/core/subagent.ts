@@ -587,8 +587,15 @@ export class SubAgentScope {
         generationConfig.systemInstruction = systemInstruction;
       }
 
+      const contentGenConfig = this.runtimeContext.getContentGeneratorConfig();
+      if (!contentGenConfig) {
+        throw new Error(
+          'Content generator config is not available. Please ensure proper initialization.',
+        );
+      }
+
       const contentGenerator = await createContentGenerator(
-        this.runtimeContext.getContentGeneratorConfig(),
+        contentGenConfig,
         this.runtimeContext,
         this.runtimeContext.getSessionId(),
       );

@@ -17,7 +17,7 @@ import {
 } from './subagent.js';
 import { Config, ConfigParameters } from '../config/config.js';
 import { GeminiChat } from './geminiChat.js';
-import { createContentGenerator } from './contentGenerator.js';
+import { createContentGenerator, AuthType } from './contentGenerator.js';
 import { getEnvironmentContext } from '../utils/environmentContext.js';
 import { executeToolCall } from './nonInteractiveToolExecutor.js';
 import { ToolRegistry } from '../tools/tool-registry.js';
@@ -49,8 +49,7 @@ async function createMockConfig(
   };
   const config = new Config(configParams);
   await config.initialize();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await config.refreshAuth('test-auth' as any);
+  await config.refreshAuth(AuthType.USE_PROVIDER);
 
   // Mock ToolRegistry
   const mockToolRegistry = {
