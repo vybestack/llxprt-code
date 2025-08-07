@@ -342,7 +342,7 @@ export class GeminiProvider implements IProvider {
     let genAI: InstanceType<typeof GoogleGenAI>;
     const httpOptions = {
       headers: {
-        'User-Agent': `GeminiCLI/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
       },
     };
 
@@ -1045,7 +1045,7 @@ export class GeminiProvider implements IProvider {
       // Create the appropriate client based on auth mode
       const httpOptions = {
         headers: {
-          'User-Agent': `GeminiCLI/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+          'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
         },
       };
 
@@ -1166,7 +1166,7 @@ export class GeminiProvider implements IProvider {
       // Create the appropriate client based on auth mode
       const httpOptions = {
         headers: {
-          'User-Agent': `GeminiCLI/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+          'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
         },
       };
 
