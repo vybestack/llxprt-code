@@ -14,10 +14,10 @@ import {
   Subtask,
   TodoToolCall,
 } from '@vybestack/llxprt-code-core';
+import { groupToolCalls } from './todo-utils.js';
 
 interface Todo extends CoreTodo {
   subtasks?: Subtask[];
-  toolCalls?: TodoToolCall[];
 }
 
 interface TodoPanelProps {
@@ -42,50 +42,6 @@ const formatParameters = (parameters: Record<string, unknown>): string => {
   }
 
   return paramStrings.join(', ');
-};
-
-// Group consecutive identical tool calls
-interface GroupedToolCall {
-  toolCall: TodoToolCall;
-  count: number;
-}
-
-const groupConsecutiveToolCalls = (
-  toolCalls: TodoToolCall[],
-): GroupedToolCall[] => {
-  if (toolCalls.length === 0) return [];
-
-  const grouped: GroupedToolCall[] = [];
-  let currentGroup: GroupedToolCall = {
-    toolCall: toolCalls[0],
-    count: 1,
-  };
-
-  for (let i = 1; i < toolCalls.length; i++) {
-    const current = toolCalls[i];
-    const prev = currentGroup.toolCall;
-
-    // Check if this is the same tool call as the previous one
-    if (
-      current.name === prev.name &&
-      JSON.stringify(current.parameters) === JSON.stringify(prev.parameters)
-    ) {
-      // Increment count for consecutive identical call
-      currentGroup.count++;
-    } else {
-      // Different call, save the current group and start a new one
-      grouped.push(currentGroup);
-      currentGroup = {
-        toolCall: current,
-        count: 1,
-      };
-    }
-  }
-
-  // Don't forget the last group
-  grouped.push(currentGroup);
-
-  return grouped;
 };
 
 const renderToolCall = (
@@ -114,7 +70,7 @@ const renderToolCall = (
 
 const renderTodo = (
   todo: Todo,
-  executingToolCalls: TodoToolCall[],
+  allToolCalls: TodoToolCall[],
 ): React.ReactElement[] => {
   const elements: React.ReactElement[] = [];
 
@@ -168,7 +124,7 @@ const renderTodo = (
       );
 
       if (subtask.toolCalls && subtask.toolCalls.length > 0) {
-        const grouped = groupConsecutiveToolCalls(subtask.toolCalls);
+        const grouped = groupToolCalls(subtask.toolCalls);
         grouped.forEach((group, index) => {
           elements.push(
             renderToolCall(group.toolCall, group.count, '      ', index),
@@ -178,11 +134,9 @@ const renderTodo = (
     }
   }
 
-  // Combine completed and executing tool calls, then group them
-  const allToolCalls = [...(todo.toolCalls || []), ...executingToolCalls];
-
+  // Group and render all tool calls from memory
   if (allToolCalls.length > 0) {
-    const grouped = groupConsecutiveToolCalls(allToolCalls);
+    const grouped = groupToolCalls(allToolCalls);
     grouped.forEach((group, index) => {
       elements.push(renderToolCall(group.toolCall, group.count, '  ', index));
     });
@@ -195,20 +149,19 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
   const { todos } = useTodoContext();
   const { getExecutingToolCalls, subscribe } = useToolCallContext();
   const [, forceUpdate] = useState({});
-  const [todoCount, setTodoCount] = useState(0);
+  const [contentKey, setContentKey] = useState(0);
 
   // Force re-render when todos change
   useEffect(() => {
-    if (todos.length !== todoCount) {
-      setTodoCount(todos.length);
-      forceUpdate({});
-    }
-  }, [todos, todoCount]);
+    forceUpdate({});
+    setContentKey((prev) => prev + 1);
+  }, [todos]);
 
   // Subscribe to tool call updates to re-render when they change
   useEffect(() => {
     const unsubscribe = subscribe(() => {
       forceUpdate({});
+      setContentKey((prev) => prev + 1);
     });
     return unsubscribe;
   }, [subscribe]);
@@ -230,8 +183,8 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
 
   // Add todos
   for (const todo of todos) {
-    const executingToolCalls = getExecutingToolCalls(todo.id);
-    const todoElements = renderTodo(todo, executingToolCalls);
+    const allToolCalls = getExecutingToolCalls(todo.id); // This now gets all tool calls
+    const todoElements = renderTodo(todo, allToolCalls);
     allElements.push(...todoElements);
 
     // Add spacing between todos
@@ -240,6 +193,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
 
   return (
     <Box
+      key={`todo-panel-${contentKey}`} // Force re-render by changing key when content changes
       flexDirection="column"
       width={width}
       borderStyle="round"

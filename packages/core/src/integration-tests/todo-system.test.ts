@@ -24,7 +24,7 @@ describe('Todo Integration Test', () => {
     contextTracker.clearActiveTodo();
 
     // Clear any executing tool calls for this session
-    ToolCallTrackerService.clearExecutingToolCallsForSession(sessionId);
+    ToolCallTrackerService.clearToolCallsForSession(sessionId);
   });
 
   it('should track tool calls associated with active todo', async () => {
@@ -42,16 +42,13 @@ describe('Todo Integration Test', () => {
     // Verify we got a tool call ID
     expect(toolCallId).toBeTruthy();
 
-    // Get executing tool calls for the todo
-    const executingCalls = ToolCallTrackerService.getExecutingToolCalls(
-      sessionId,
-      todoId,
-    );
+    // Get all tool calls for the todo
+    const allCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
 
     // Verify we have one executing tool call
-    expect(executingCalls).toHaveLength(1);
-    expect(executingCalls[0].name).toBe('test_tool');
-    expect(executingCalls[0].parameters).toEqual({ param: 'value' });
+    expect(allCalls).toHaveLength(1);
+    expect(allCalls[0].name).toBe('test_tool');
+    expect(allCalls[0].parameters).toEqual({ param: 'value' });
 
     // Complete the tool call tracking
     await ToolCallTrackerService.completeToolCallTracking(
@@ -59,11 +56,12 @@ describe('Todo Integration Test', () => {
       toolCallId!,
     );
 
-    // Verify the tool call is no longer executing
-    const updatedExecutingCalls = ToolCallTrackerService.getExecutingToolCalls(
+    // Verify the tool call is still there (now completed)
+    const updatedCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,
     );
-    expect(updatedExecutingCalls).toHaveLength(0);
+    expect(updatedCalls).toHaveLength(1);
+    expect(updatedCalls[0].name).toBe('test_tool');
   });
 });

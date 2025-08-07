@@ -40,15 +40,21 @@ export const ToolCallProvider: React.FC<ToolCallProviderProps> = ({
     [executingToolCalls],
   );
 
-  // Update the state with current executing tool calls
+  // Update the state with current tool calls
   const updateExecutingToolCalls = useCallback(() => {
-    // Get all executing tool calls for this session
-    const allCalls = ToolCallTrackerService.getAllExecutingToolCalls(sessionId);
+    // Get all tool calls for this session
+    const allCalls =
+      ToolCallTrackerService.getAllToolCallsForSession(sessionId);
 
     // Convert to the format we want for state
     const newExecutingToolCalls = new Map<string, TodoToolCall[]>();
-    for (const [todoId, todoCalls] of allCalls) {
-      newExecutingToolCalls.set(todoId, Array.from(todoCalls.values()));
+    for (const [todoId] of allCalls) {
+      // Get all tool calls (both executing and completed)
+      const allToolCalls = ToolCallTrackerService.getAllToolCalls(
+        sessionId,
+        todoId,
+      );
+      newExecutingToolCalls.set(todoId, allToolCalls);
     }
 
     setExecutingToolCalls(newExecutingToolCalls);

@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TodoStore } from '../tools/todo-store.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
 import { TodoToolCall } from '../tools/todo-schemas.js';
-import { todoEvents } from '../tools/todo-events.js';
 
-// Map of session ID to map of todo ID to executing tool calls
-// This keeps track of currently executing tool calls in memory (not persisted)
-const executingToolCalls = new Map<
-  string,
-  Map<string, Map<string, TodoToolCall>>
->();
+// Map of session ID to map of todo ID to tool calls
+// This keeps track of both executing and completed tool calls in memory (not persisted)
+interface TodoToolCalls {
+  executing: Map<string, TodoToolCall>;
+  completed: TodoToolCall[];
+}
+
+const toolCallsInMemory = new Map<string, Map<string, TodoToolCalls>>();
 
 // Callbacks for notifying UI of updates
 const updateCallbacks = new Map<string, Set<() => void>>();
@@ -23,99 +23,6 @@ const updateCallbacks = new Map<string, Set<() => void>>();
  * Service to track tool calls and associate them with active todos
  */
 export class ToolCallTrackerService {
-  /**
-   * Records a tool call and associates it with the active todo if there is one
-   */
-  static async recordToolCall(
-    sessionId: string,
-    toolName: string,
-    parameters: Record<string, unknown>,
-  ): Promise<void> {
-    console.log(`[DEBUG] ToolCallTrackerService.recordToolCall called with:`, {
-      sessionId,
-      toolName,
-      parameters,
-    });
-
-    // Don't record todo tools themselves
-    if (toolName === 'todo_write' || toolName === 'todo_read') {
-      console.log(`[DEBUG] Skipping recording for todo tool: ${toolName}`);
-      return;
-    }
-
-    // Get the context tracker for this session
-    const contextTracker = TodoContextTracker.forSession(sessionId);
-    const activeTodoId = contextTracker.getActiveTodoId();
-    console.log(`[DEBUG] Active todo ID: ${activeTodoId}`);
-
-    // If there's no active todo, don't record the tool call
-    if (!activeTodoId) {
-      console.log(`[DEBUG] No active todo, skipping tool call recording`);
-      return;
-    }
-
-    // Create a tool call record
-    const toolCall: TodoToolCall = {
-      id: this.generateId(),
-      name: toolName,
-      parameters,
-      timestamp: new Date(),
-    };
-
-    // Get the todo store for this session
-    const store = new TodoStore(sessionId);
-
-    // Read the current todos
-    const todos = await store.readTodos();
-    console.log(`[DEBUG] Current todos:`, todos);
-
-    // If we couldn't read any todos, don't proceed
-    // This prevents clearing the UI when there's a read error
-    if (!todos || todos.length === 0) {
-      console.log(`[DEBUG] No todos found, skipping tool call recording`);
-      return;
-    }
-
-    // Find the active todo and add the tool call to it
-    let todoFound = false;
-    const updatedTodos = todos.map((todo) => {
-      if (todo.id === activeTodoId) {
-        todoFound = true;
-        // Add the tool call to the todo's toolCalls array
-        const existingCalls = todo.toolCalls || [];
-        return {
-          ...todo,
-          toolCalls: [...existingCalls, toolCall],
-        };
-      }
-      return todo;
-    });
-
-    // If we didn't find the active todo, don't update anything
-    if (!todoFound) {
-      console.log(
-        `[DEBUG] Active todo not found in todo list, skipping tool call recording`,
-      );
-      return;
-    }
-
-    // Write the updated todos back to the store
-    console.log(`[DEBUG] Writing updated todos:`, updatedTodos);
-    await store.writeTodos(updatedTodos);
-
-    // Emit todo update event so UI refreshes
-    console.log(`[DEBUG] Emitting todo update event`);
-    todoEvents.emitTodoUpdated({
-      sessionId,
-      todos: updatedTodos,
-      timestamp: new Date(),
-    });
-
-    // Notify subscribers of the update
-    console.log(`[DEBUG] Notifying subscribers`);
-    this.notifySubscribers(sessionId);
-  }
-
   /**
    * Starts tracking an executing tool call
    */
@@ -148,21 +55,24 @@ export class ToolCallTrackerService {
     };
 
     // Ensure we have a map for this session
-    if (!executingToolCalls.has(sessionId)) {
-      executingToolCalls.set(sessionId, new Map());
+    if (!toolCallsInMemory.has(sessionId)) {
+      toolCallsInMemory.set(sessionId, new Map());
     }
 
-    const sessionCalls = executingToolCalls.get(sessionId)!;
+    const sessionCalls = toolCallsInMemory.get(sessionId)!;
 
     // Ensure we have a map for this todo
     if (!sessionCalls.has(activeTodoId)) {
-      sessionCalls.set(activeTodoId, new Map());
+      sessionCalls.set(activeTodoId, {
+        executing: new Map(),
+        completed: [],
+      });
     }
 
     const todoCalls = sessionCalls.get(activeTodoId)!;
 
-    // Add the tool call to the map
-    todoCalls.set(toolCallId, toolCall);
+    // Add the tool call to the executing map
+    todoCalls.executing.set(toolCallId, toolCall);
 
     // Notify subscribers of the update
     this.notifySubscribers(sessionId);
@@ -171,7 +81,7 @@ export class ToolCallTrackerService {
   }
 
   /**
-   * Marks a tool call as completed and moves it to the todo's toolCalls array
+   * Marks a tool call as completed and moves it to the completed array
    */
   static async completeToolCallTracking(
     sessionId: string,
@@ -182,41 +92,55 @@ export class ToolCallTrackerService {
     const activeTodoId = contextTracker.getActiveTodoId();
 
     if (!activeTodoId) {
-      this.updateToolCallStatus(sessionId, toolCallId);
       return;
     }
 
-    const sessionCalls = executingToolCalls.get(sessionId);
+    const sessionCalls = toolCallsInMemory.get(sessionId);
     if (!sessionCalls) return;
 
     const todoCalls = sessionCalls.get(activeTodoId);
     if (!todoCalls) return;
 
-    const toolCall = todoCalls.get(toolCallId);
+    const toolCall = todoCalls.executing.get(toolCallId);
     if (!toolCall) return;
 
-    // Add to the todo's completed toolCalls
-    await this.recordToolCall(sessionId, toolCall.name, toolCall.parameters);
+    // Move from executing to completed
+    todoCalls.executing.delete(toolCallId);
+    todoCalls.completed.push(toolCall);
 
-    // Remove from executing
-    this.updateToolCallStatus(sessionId, toolCallId);
+    // Notify subscribers of the update
+    this.notifySubscribers(sessionId);
   }
 
   /**
    * Marks a tool call as failed
    */
   static failToolCallTracking(sessionId: string, toolCallId: string): void {
-    this.updateToolCallStatus(sessionId, toolCallId);
+    const contextTracker = TodoContextTracker.forSession(sessionId);
+    const activeTodoId = contextTracker.getActiveTodoId();
+
+    if (!activeTodoId) {
+      return;
+    }
+
+    const sessionCalls = toolCallsInMemory.get(sessionId);
+    if (!sessionCalls) return;
+
+    const todoCalls = sessionCalls.get(activeTodoId);
+    if (!todoCalls) return;
+
+    // Simply remove from executing without moving to completed
+    todoCalls.executing.delete(toolCallId);
+
+    // Notify subscribers of the update
+    this.notifySubscribers(sessionId);
   }
 
   /**
-   * Gets executing tool calls for a specific todo
+   * Gets all tool calls (executing and completed) for a specific todo
    */
-  static getExecutingToolCalls(
-    sessionId: string,
-    todoId: string,
-  ): TodoToolCall[] {
-    const sessionCalls = executingToolCalls.get(sessionId);
+  static getAllToolCalls(sessionId: string, todoId: string): TodoToolCall[] {
+    const sessionCalls = toolCallsInMemory.get(sessionId);
     if (!sessionCalls) {
       return [];
     }
@@ -226,7 +150,11 @@ export class ToolCallTrackerService {
       return [];
     }
 
-    return Array.from(todoCalls.values());
+    // Return both executing and completed calls
+    return [
+      ...Array.from(todoCalls.executing.values()),
+      ...todoCalls.completed,
+    ];
   }
 
   /**
@@ -253,12 +181,12 @@ export class ToolCallTrackerService {
   }
 
   /**
-   * Gets all executing tool calls for testing and debugging purposes
+   * Gets all tool calls for testing and debugging purposes
    */
-  static getAllExecutingToolCalls(
+  static getAllToolCallsForSession(
     sessionId: string,
-  ): Map<string, Map<string, TodoToolCall>> {
-    const sessionCalls = executingToolCalls.get(sessionId);
+  ): Map<string, TodoToolCalls> {
+    const sessionCalls = toolCallsInMemory.get(sessionId);
     if (!sessionCalls) {
       return new Map();
     }
@@ -266,10 +194,10 @@ export class ToolCallTrackerService {
   }
 
   /**
-   * Clears all executing tool calls for a session (for testing purposes)
+   * Clears all tool calls for a session (for testing purposes)
    */
-  static clearExecutingToolCallsForSession(sessionId: string): void {
-    executingToolCalls.delete(sessionId);
+  static clearToolCallsForSession(sessionId: string): void {
+    toolCallsInMemory.delete(sessionId);
     updateCallbacks.delete(sessionId);
   }
 
@@ -281,46 +209,6 @@ export class ToolCallTrackerService {
       Math.random().toString(36).substring(2, 15) +
       Math.random().toString(36).substring(2, 15)
     );
-  }
-
-  /**
-   * Updates tool call status (removes from executing tracking)
-   */
-  private static updateToolCallStatus(
-    sessionId: string,
-    toolCallId: string,
-  ): void {
-    const contextTracker = TodoContextTracker.forSession(sessionId);
-    const activeTodoId = contextTracker.getActiveTodoId();
-
-    if (!activeTodoId) {
-      return;
-    }
-
-    const sessionCalls = executingToolCalls.get(sessionId);
-    if (!sessionCalls) {
-      return;
-    }
-
-    const todoCalls = sessionCalls.get(activeTodoId);
-    if (!todoCalls) {
-      return;
-    }
-
-    // Remove the tool call from executing tracking
-    todoCalls.delete(toolCallId);
-
-    // Clean up empty maps
-    if (todoCalls.size === 0) {
-      sessionCalls.delete(activeTodoId);
-    }
-
-    if (sessionCalls.size === 0) {
-      executingToolCalls.delete(sessionId);
-    }
-
-    // Notify subscribers of the update
-    this.notifySubscribers(sessionId);
   }
 
   /**

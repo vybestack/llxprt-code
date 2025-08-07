@@ -7,30 +7,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ToolCallTrackerService } from '../services/tool-call-tracker-service.js';
 import { TodoContextTracker } from '../services/todo-context-tracker.js';
-import { TodoStore } from '../tools/todo-store.js';
-
-// Mock the file system
-vi.mock('fs', async () => {
-  const actual = await vi.importActual('fs');
-  return {
-    ...(actual as object),
-    promises: {
-      ...(actual as object as { promises: object }).promises,
-      readFile: vi.fn(),
-      writeFile: vi.fn(),
-      mkdir: vi.fn(),
-    },
-    existsSync: vi.fn(),
-  };
-});
-
-// Mock the TodoStore
-vi.mock('../tools/todo-store.js', () => ({
-  TodoStore: vi.fn().mockImplementation(() => ({
-    readTodos: vi.fn(),
-    writeTodos: vi.fn(),
-  })),
-}));
 
 describe('ToolCallTrackerService', () => {
   const sessionId = 'test-session';
@@ -41,7 +17,7 @@ describe('ToolCallTrackerService', () => {
     vi.clearAllMocks();
 
     // Clear any existing executing tool calls for this session
-    ToolCallTrackerService.clearExecutingToolCallsForSession(sessionId);
+    ToolCallTrackerService.clearToolCallsForSession(sessionId);
 
     // Set up the context tracker
     const contextTracker = TodoContextTracker.forSession(sessionId);
@@ -54,76 +30,60 @@ describe('ToolCallTrackerService', () => {
     contextTracker.clearActiveTodo();
 
     // Clear any executing tool calls for this session
-    ToolCallTrackerService.clearExecutingToolCallsForSession(sessionId);
+    ToolCallTrackerService.clearToolCallsForSession(sessionId);
   });
 
-  it('should record a tool call and associate it with the active todo', async () => {
-    // Set up mock data
-    const mockTodos = [
+  it('should track and complete tool calls in memory', async () => {
+    // Start tracking a tool call
+    const toolCallId = ToolCallTrackerService.startTrackingToolCall(
+      sessionId,
+      'test_tool',
       {
-        id: todoId,
-        content: 'Test todo',
-        status: 'in_progress',
-        priority: 'medium',
-        toolCalls: [],
+        param1: 'value1',
+        param2: 42,
       },
-    ];
-
-    const storeInstance = new TodoStore(sessionId);
-    storeInstance.readTodos = vi.fn().mockResolvedValue(mockTodos);
-    storeInstance.writeTodos = vi.fn().mockResolvedValue(undefined);
-
-    // Mock TodoStore constructor to return our instance
-    (TodoStore as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      () => storeInstance,
     );
 
-    // Record a tool call
-    await ToolCallTrackerService.recordToolCall(sessionId, 'test_tool', {
-      param1: 'value1',
-      param2: 42,
-    });
+    // Verify we got a tool call ID
+    expect(toolCallId).toBeTruthy();
 
-    // Verify the store methods were called correctly
-    expect(storeInstance.readTodos).toHaveBeenCalled();
-    expect(storeInstance.writeTodos).toHaveBeenCalled();
+    // Get all tool calls for the todo (should have 1 executing)
+    let allCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
+    expect(allCalls).toHaveLength(1);
+    expect(allCalls[0].name).toBe('test_tool');
 
-    // Verify the updated todos contain the tool call
-    const updatedTodos = (storeInstance.writeTodos as ReturnType<typeof vi.fn>)
-      .mock.calls[0][0];
-    expect(updatedTodos).toHaveLength(1);
-    expect(updatedTodos[0].id).toBe(todoId);
-    expect(updatedTodos[0].toolCalls).toHaveLength(1);
-    expect(updatedTodos[0].toolCalls[0].name).toBe('test_tool');
-    expect(updatedTodos[0].toolCalls[0].parameters).toEqual({
+    // Complete the tool call
+    await ToolCallTrackerService.completeToolCallTracking(
+      sessionId,
+      toolCallId!,
+    );
+
+    // Get all tool calls again (should still have 1, but now completed)
+    allCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
+    expect(allCalls).toHaveLength(1);
+    expect(allCalls[0].name).toBe('test_tool');
+    expect(allCalls[0].parameters).toEqual({
       param1: 'value1',
       param2: 42,
     });
   });
 
-  it('should not record a tool call when there is no active todo', async () => {
+  it('should not track a tool call when there is no active todo', () => {
     // Clear the active todo
     const contextTracker = TodoContextTracker.forSession(sessionId);
     contextTracker.setActiveTodo(null);
 
-    // Set up mock
-    const storeInstance = new TodoStore(sessionId);
-    storeInstance.readTodos = vi.fn().mockResolvedValue([]);
-    storeInstance.writeTodos = vi.fn().mockResolvedValue(undefined);
-
-    // Mock TodoStore constructor to return our instance
-    (TodoStore as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      () => storeInstance,
+    // Try to start tracking a tool call
+    const toolCallId = ToolCallTrackerService.startTrackingToolCall(
+      sessionId,
+      'test_tool',
+      {
+        param1: 'value1',
+      },
     );
 
-    // Record a tool call
-    await ToolCallTrackerService.recordToolCall(sessionId, 'test_tool', {
-      param1: 'value1',
-    });
-
-    // Verify the store methods were not called
-    expect(storeInstance.readTodos).not.toHaveBeenCalled();
-    expect(storeInstance.writeTodos).not.toHaveBeenCalled();
+    // Verify no tool call was tracked
+    expect(toolCallId).toBeNull();
   });
 
   it('should track executing tool calls', () => {
@@ -138,7 +98,7 @@ describe('ToolCallTrackerService', () => {
     expect(toolCallId).toBeTruthy();
 
     // Get executing tool calls for the todo
-    const executingCalls = ToolCallTrackerService.getExecutingToolCalls(
+    const executingCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,
     );
@@ -158,7 +118,7 @@ describe('ToolCallTrackerService', () => {
     );
 
     // Verify we have one executing tool call
-    let executingCalls = ToolCallTrackerService.getExecutingToolCalls(
+    let executingCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,
     );
@@ -171,10 +131,7 @@ describe('ToolCallTrackerService', () => {
     );
 
     // Verify the tool call is no longer executing
-    executingCalls = ToolCallTrackerService.getExecutingToolCalls(
-      sessionId,
-      todoId,
-    );
+    executingCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
     expect(executingCalls).toHaveLength(0);
   });
 
@@ -187,7 +144,7 @@ describe('ToolCallTrackerService', () => {
     );
 
     // Verify we have one executing tool call
-    let executingCalls = ToolCallTrackerService.getExecutingToolCalls(
+    let executingCalls = ToolCallTrackerService.getAllToolCalls(
       sessionId,
       todoId,
     );
@@ -197,10 +154,7 @@ describe('ToolCallTrackerService', () => {
     ToolCallTrackerService.failToolCallTracking(sessionId, toolCallId!);
 
     // Verify the tool call is no longer executing
-    executingCalls = ToolCallTrackerService.getExecutingToolCalls(
-      sessionId,
-      todoId,
-    );
+    executingCalls = ToolCallTrackerService.getAllToolCalls(sessionId, todoId);
     expect(executingCalls).toHaveLength(0);
   });
 });
