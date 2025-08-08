@@ -57,6 +57,7 @@
     "LICENSE"
   ],
   "devDependencies": {
+    "@eslint/js": "^9.32.0",
     "@types/marked": "^5.0.2",
     "@types/micromatch": "^4.0.9",
     "@types/mime-types": "^3.0.1",

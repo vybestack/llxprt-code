@@ -25,7 +25,7 @@ vi.mock('fs', async () => {
 describe('initCommand', () => {
   let mockContext: CommandContext;
   const targetDir = '/test/dir';
-  const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
+  const agentMdPath = path.join(targetDir, 'AGENT.md');
 
   beforeEach(() => {
     // Create a fresh mock context for each test
@@ -43,7 +43,7 @@ describe('initCommand', () => {
     vi.clearAllMocks();
   });
 
-  it('should inform the user if LLXPRT.md already exists', async () => {
+  it('should inform the user if AGENT.md already exists', async () => {
     // Arrange: Simulate that the file exists
     vi.mocked(fs.existsSync).mockReturnValue(true);
 
@@ -55,13 +55,13 @@ describe('initCommand', () => {
       type: 'message',
       messageType: 'info',
       content:
-        'A LLXPRT.md file already exists in this directory. No changes were made.',
+        'An AGENT.md file already exists in this directory. No changes were made.',
     });
     // Assert: Ensure no file was written
     expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 
-  it('should create LLXPRT.md and submit a prompt if it does not exist', async () => {
+  it('should create AGENT.md and submit a prompt if it does not exist', async () => {
     // Arrange: Simulate that the file does not exist
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
@@ -69,13 +69,13 @@ describe('initCommand', () => {
     const result = await initCommand.action!(mockContext, '');
 
     // Assert: Check that writeFileSync was called correctly
-    expect(fs.writeFileSync).toHaveBeenCalledWith(llxprtMdPath, '', 'utf8');
+    expect(fs.writeFileSync).toHaveBeenCalledWith(agentMdPath, '', 'utf8');
 
     // Assert: Check that an informational message was added to the UI
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
         type: 'info',
-        text: 'Empty LLXPRT.md created. Now analyzing the project to populate it.',
+        text: 'Empty AGENT.md created. Now analyzing the project to populate it.',
       },
       expect.any(Number),
     );
@@ -83,7 +83,7 @@ describe('initCommand', () => {
     // Assert: Check that the correct prompt is submitted
     expect(result.type).toBe('submit_prompt');
     expect(result.content).toContain(
-      'You are an AI agent that brings the power of multiple LLM providers',
+      'You are an AI agent designed to create a universal configuration file for AI-powered coding tools',
     );
   });
 
