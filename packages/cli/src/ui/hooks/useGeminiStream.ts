@@ -26,7 +26,6 @@ import {
   UnauthorizedError,
   DEFAULT_GEMINI_FLASH_MODEL,
   AuthType,
-  NotYetImplemented,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -782,20 +781,9 @@ export const useGeminiStream = (
         }
 
         // TODO: Continuation hook integration point - stub implementation
-        // This should trigger todo continuation logic when stream completes
+        // This triggers todo continuation logic when stream completes
         // without tool calls but with active todos
-        try {
-          throw new NotYetImplemented(
-            'Todo continuation integration not yet implemented',
-          );
-          // When implemented, should call:
-          // _handleStreamCompleted(processingResult.hadToolCalls);
-        } catch (error) {
-          // Silently ignore NotYetImplemented for now - this is a stub
-          if (!(error instanceof NotYetImplemented)) {
-            throw error;
-          }
-        }
+        _handleStreamCompleted(processingResult.hadToolCalls);
       } catch (error: unknown) {
         if (error instanceof UnauthorizedError) {
           onAuthError();
@@ -851,6 +839,7 @@ export const useGeminiStream = (
       getPromptCount,
       handleLoopDetectedEvent,
       onDebugMessage,
+      _handleStreamCompleted,
     ],
   );
 

@@ -30,6 +30,7 @@ import {
 import { WebSearchTool } from '../tools/web-search.js';
 import { TodoWrite } from '../tools/todo-write.js';
 import { TodoRead } from '../tools/todo-read.js';
+import { TodoPause } from '../tools/todo-pause.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
@@ -896,6 +897,7 @@ export class Config {
     registerCoreTool(WebSearchTool, this);
     registerCoreTool(TodoWrite);
     registerCoreTool(TodoRead);
+    registerCoreTool(TodoPause);
 
     await registry.discoverAllTools();
     return registry;
