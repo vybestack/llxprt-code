@@ -147,6 +147,9 @@ export interface Settings {
   includeDirectories?: string[];
 
   loadMemoryFromIncludeDirectories?: boolean;
+
+  // Shell replacement setting for allowing command substitution
+  shellReplacement?: boolean;
 }
 
 export interface SettingsError {

@@ -585,6 +585,7 @@ export async function loadCliConfig(
     ideModeFeature,
     ideClient,
     folderTrustFeature,
+    shellReplacement: effectiveSettings.shellReplacement,
   });
 
   const enhancedConfig = config;
@@ -601,6 +602,7 @@ export async function loadCliConfig(
       'tool-format',
       'api-version',
       'custom-headers',
+      'shell-replacement',
     ];
 
     for (const key of ephemeralKeys) {

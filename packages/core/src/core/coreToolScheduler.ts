@@ -677,15 +677,27 @@ export class CoreToolScheduler {
           }
         }
       } catch (error) {
-        this.setStatusInternal(
-          reqInfo.callId,
-          'error',
-          createErrorResponse(
-            reqInfo,
-            error instanceof Error ? error : new Error(String(error)),
-            ToolErrorType.UNHANDLED_EXCEPTION,
-          ),
-        );
+        // Check if the error is due to an aborted signal
+        if (
+          signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
+          this.setStatusInternal(
+            reqInfo.callId,
+            'cancelled',
+            'Tool call was cancelled',
+          );
+        } else {
+          this.setStatusInternal(
+            reqInfo.callId,
+            'error',
+            createErrorResponse(
+              reqInfo,
+              error instanceof Error ? error : new Error(String(error)),
+              ToolErrorType.UNHANDLED_EXCEPTION,
+            ),
+          );
+        }
       }
     }
     this.attemptExecutionOfScheduledCalls(signal);

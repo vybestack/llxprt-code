@@ -41,6 +41,7 @@ Ephemeral settings are runtime configurations that last only for your current se
 | `tool-output-truncate-mode`   | How to handle exceeding limits                          | `warn`   | `warn`, `truncate`, or `sample` |
 | `tool-output-item-size-limit` | Maximum size per item/file in bytes                     | `524288` | `1048576` (1MB)                 |
 | `max-prompt-tokens`           | Maximum tokens allowed in any prompt sent to LLM        | `200000` | `300000`                        |
+| `shell-replacement`           | Allow command substitution ($(), <(), backticks)        | `false`  | `true`                          |
 
 ### Setting Ephemeral Values
 
@@ -59,6 +60,9 @@ Ephemeral settings are runtime configurations that last only for your current se
 
 # Set keyfile path (recommended)
 /set auth-keyfile ~/.keys/anthropic.key
+
+# Enable shell command substitution (use with caution)
+/set shell-replacement true
 
 # Tool output control settings
 /set tool-output-max-items 100          # Allow up to 100 files/matches

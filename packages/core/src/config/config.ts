@@ -213,6 +213,7 @@ export interface ConfigParameters {
   ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
   loadMemoryFromIncludeDirectories?: boolean;
+  shellReplacement?: boolean;
 }
 
 export class Config {
@@ -290,6 +291,7 @@ export class Config {
   private readonly experimentalAcp: boolean = false;
   private readonly complexityAnalyzerSettings: ComplexityAnalyzerSettings;
   private readonly loadMemoryFromIncludeDirectories: boolean = false;
+  private readonly shellReplacement: boolean = false;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -359,6 +361,7 @@ export class Config {
     };
     this.loadMemoryFromIncludeDirectories =
       params.loadMemoryFromIncludeDirectories ?? false;
+    this.shellReplacement = params.shellReplacement ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -780,6 +783,10 @@ export class Config {
 
   getAlwaysAllowedCommands(): string[] {
     return Array.from(this.alwaysAllowedCommands);
+  }
+
+  getShellReplacement(): boolean {
+    return this.shellReplacement;
   }
 
   async getGitService(): Promise<GitService> {

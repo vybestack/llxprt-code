@@ -58,6 +58,8 @@ export interface EphemeralSettings {
   'max-prompt-tokens'?: number;
   /** List of disabled tool names */
   'disabled-tools'?: string[];
+  /** Allow command substitution ($(), <(), backticks) in shell commands */
+  'shell-replacement'?: boolean;
 }
 
 /**
