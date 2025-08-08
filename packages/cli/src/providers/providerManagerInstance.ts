@@ -13,6 +13,8 @@ import {
   sanitizeForByteString,
   needsSanitization,
 } from '@vybestack/llxprt-code-core';
+import { OpenRouterProvider } from '../providers/openrouter/OpenRouterProvider.js';
+import { GroqProvider } from '../providers/groq/GroqProvider.js';
 import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -173,6 +175,14 @@ export function getProviderManager(
       anthropicProviderConfig,
     );
     providerManagerInstance.registerProvider(anthropicProvider);
+
+    // Register OpenRouter provider
+    const openRouterProvider = new OpenRouterProvider(openaiProviderConfig);
+    providerManagerInstance.registerProvider(openRouterProvider);
+
+    // Register Groq provider
+    const groqProvider = new GroqProvider(openaiProviderConfig);
+    providerManagerInstance.registerProvider(groqProvider);
 
     // Set default provider to gemini
     providerManagerInstance.setActiveProvider('gemini');

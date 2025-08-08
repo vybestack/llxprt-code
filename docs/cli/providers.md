@@ -9,11 +9,12 @@ LLxprt Code currently supports the following providers:
 - **Google Gemini** (default) - Google's AI models
 - **OpenAI** - o3, o1, GPT-4.1, GPT-4o, and other OpenAI models
 - **Anthropic** - Claude Opus 4, Claude Sonnet 4, and other Anthropic models
+- **OpenRouter** - Access to 100+ models from various providers
+- **Groq** - High-speed inference with Llama, Mixtral, and other models
 
 Additionally, LLxprt Code supports any OpenAI-compatible API, including:
 
 - **xAI** - Grok models (grok-3, etc.)
-- **OpenRouter** - Access to 100+ models
 - **Fireworks** - Fast inference with open models
 - **Local Models** - LM Studio, llama.cpp, and other local servers
 
@@ -27,6 +28,12 @@ You can switch between providers using the `/provider` command:
 
 # Switch to Anthropic
 /provider anthropic
+
+# Switch to OpenRouter
+/provider openrouter
+
+# Switch to Groq
+/provider groq
 
 # Switch back to Gemini
 /provider gemini
@@ -107,28 +114,23 @@ Each provider offers different models. You can select a specific model using the
 - Supports Gemini Pro and other Google models
 - Native multimodal support
 
-### OpenAI-Compatible Providers
+### Groq
 
-Many providers offer OpenAI-compatible APIs, which can be used by setting the `openai` provider with a custom base URL:
-
-#### xAI (Grok)
-
-To use Grok models:
+To use Groq models:
 
 ```bash
 # Command line configuration
-llxprt --provider openai --baseurl https://api.x.ai/v1/ --model grok-3 --keyfile ~/.mh_key
+llxprt --provider groq --model llama3-70b-8192 --keyfile ~/.groq_key
 
 # Or interactive configuration
-/provider openai
-/baseurl https://api.x.ai/v1/
-/model grok-3
-/keyfile ~/.mh_key
+/provider groq
+/model llama3-70b-8192
+/keyfile ~/.groq_key
 ```
 
-#### Other OpenAI-Compatible Services
+### Other OpenAI-Compatible Services
 
-The same pattern works for OpenRouter, Fireworks, and local models. See the README for detailed examples of each.
+The same pattern works for Fireworks, and local models. See the README for detailed examples of each.
 
 ## Tool Parsing
 

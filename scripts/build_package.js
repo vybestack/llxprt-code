@@ -31,11 +31,11 @@ if (!process.cwd().includes('packages')) {
 // by letting TypeScript regenerate a fresh cache right after the clean.
 // This avoids TS6305 ("output file has not been built") when dist is wiped
 // but the .tsbuildinfo still references old artifacts.
-execSync('tsc --build --clean', { stdio: 'inherit' });
+execSync('npx tsc --build --clean', { stdio: 'inherit' });
 
 // Re-build the project (this creates a new .tsbuildinfo for subsequent
 // fast incremental compilations).
-execSync('tsc --build', { stdio: 'inherit' });
+execSync('npx tsc --build', { stdio: 'inherit' });
 
 // copy .{md,json} files
 execSync('node ../../scripts/copy_files.js', { stdio: 'inherit' });
