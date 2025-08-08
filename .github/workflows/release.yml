@@ -171,6 +171,77 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Generate Release Notes
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        id: release_notes
+        run: |
+          # Get the last release tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous release tag found, using first commit"
+            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          # Save last tag for comparison link
+          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_OUTPUT
+
+          # Get commit messages since last tag
+          echo "Getting commits from $LAST_TAG to HEAD"
+          git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD > commits.txt
+
+          # Generate release notes with LLxprt or fall back to basic format
+          echo "Attempting to generate release notes with LLxprt Code..."
+
+          # Create the prompt in a variable
+          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }} comparing to previous release $LAST_TAG. NO EMOJIS. Include sections: Release Focus, Features, Bug Fixes, Installation. Add comparison link at end. Commits: $(cat commits.txt)"
+
+          # Try LLxprt generation
+          set +e
+          npx @vybestack/llxprt-code@latest \
+            --no-interactive \
+            --provider gemini \
+            --model gemini-2.0-flash-exp \
+            --key "${{ secrets.GEMINI_API_KEY }}" \
+            --prompt "$PROMPT" > generated-notes.md 2>&1
+          LLXPRT_EXIT=$?
+          set -e
+
+          # Check if generation succeeded
+          if [ $LLXPRT_EXIT -eq 0 ] && [ -s generated-notes.md ]; then
+            echo "Using LLxprt-generated release notes"
+            cp generated-notes.md release-notes.md
+          else
+            echo "Falling back to basic release notes"
+            # Write basic release notes
+            echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
+            echo "" >> release-notes.md
+            echo "### Installation & Upgrade" >> release-notes.md
+            echo "" >> release-notes.md
+            echo "#### Install" >> release-notes.md
+            echo '```bash' >> release-notes.md
+            echo "npm install -g @vybestack/llxprt-code" >> release-notes.md
+            echo '```' >> release-notes.md
+            echo "" >> release-notes.md
+            echo "#### Upgrade" >> release-notes.md
+            echo '```bash' >> release-notes.md
+            echo "npm update -g @vybestack/llxprt-code" >> release-notes.md
+            echo '```' >> release-notes.md
+            echo "" >> release-notes.md
+            echo "### Changes" >> release-notes.md
+            echo "" >> release-notes.md
+            cat commits.txt >> release-notes.md
+          fi
+
+          # Add comparison link if we have a real previous tag
+          if [[ "$LAST_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
+            echo "" >> release-notes.md
+            echo "---" >> release-notes.md
+            echo "" >> release-notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ steps.version.outputs.RELEASE_TAG }}" >> release-notes.md
+          fi
+
+          echo "Release notes generated"
+
       - name: Create GitHub Release and Tag
         if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
         env:
@@ -181,7 +252,7 @@ jobs:
             bundle/llxprt.js \
             --target "$RELEASE_BRANCH" \
             --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
-            --generate-notes
+            --notes-file release-notes.md
 
       - name: Create Issue on Failure
         if: failure()

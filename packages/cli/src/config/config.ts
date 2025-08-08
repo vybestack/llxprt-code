@@ -343,9 +343,11 @@ export async function loadCliConfig(
       const profile = await profileManager.loadProfile(profileToLoad);
 
       // Store profile values to apply after Config creation
-      // Only use profile provider/model if --provider is not specified
-      profileProvider = argv.provider ? undefined : profile.provider;
-      profileModel = argv.provider ? undefined : profile.model;
+      // Only use profile provider/model if --provider is not explicitly specified
+      // Check for undefined specifically to avoid issues with empty strings
+      profileProvider =
+        argv.provider !== undefined ? undefined : profile.provider;
+      profileModel = argv.provider !== undefined ? undefined : profile.model;
       profileModelParams = profile.modelParams;
 
       // Merge ephemeral settings into the settings object
@@ -502,11 +504,18 @@ export async function loadCliConfig(
     DEFAULT_GEMINI_MODEL;
 
   // Handle provider selection with proper precedence
-  const finalProvider =
-    argv.provider ||
-    profileProvider ||
-    process.env.LLXPRT_DEFAULT_PROVIDER ||
-    'gemini';
+  // Priority: CLI arg > Profile > Environment > Default
+  let finalProvider: string;
+  if (argv.provider) {
+    finalProvider = argv.provider;
+  } else if (profileProvider && profileProvider.trim() !== '') {
+    // Use profile provider only if it's not empty/whitespace
+    finalProvider = profileProvider;
+  } else if (process.env.LLXPRT_DEFAULT_PROVIDER) {
+    finalProvider = process.env.LLXPRT_DEFAULT_PROVIDER;
+  } else {
+    finalProvider = 'gemini';
+  }
 
   const config = new Config({
     sessionId,
