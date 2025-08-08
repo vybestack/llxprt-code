@@ -171,17 +171,153 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Generate Release Notes with LLxprt Code
+        id: release_notes
+        run: |
+          # Get the last release tag
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            echo "No previous release tag found. Getting initial commit."
+            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          
+          echo "Generating release notes from $LAST_TAG to HEAD"
+          
+          # Get all commits since last tag
+          COMMIT_MESSAGES=$(git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD | head -100)
+          
+          # Get list of modified files for categorization
+          FILES_CHANGED=$(git diff --name-only $LAST_TAG..HEAD | grep -E "\.(ts|js|json|yml)" | head -50)
+          
+          # Count commits by category (simple pattern matching)
+          LLXPRT_COMMITS=$(git log --oneline $LAST_TAG..HEAD | grep -iE "(llxprt|multi-provider|vybestack|qwen|openai|anthropic|groq|cohere|together)" | wc -l)
+          UPSTREAM_COMMITS=$(git log --oneline $LAST_TAG..HEAD | grep -iE "(gemini|google|upstream|sync|merge upstream)" | wc -l)
+          BUG_FIXES=$(git log --oneline $LAST_TAG..HEAD | grep -iE "(fix|bug|error|issue|resolve)" | wc -l)
+          
+          # Generate the release notes using LLxprt Code
+          set +e  # Don't exit on error
+          RELEASE_NOTES=$(npx @vybestack/llxprt-code@latest \
+            --no-interactive \
+            --provider gemini \
+            --model gemini-2.5-pro \
+            --key "${{ secrets.GEMINI_API_KEY }}" \
+            --prompt "$(cat <<'PROMPT_EOF'
+          Generate professional release notes for LLxprt Code ${{ steps.version.outputs.RELEASE_TAG }}. 
+          
+          Context: LLxprt Code is a multi-provider AI code assistant forked from gemini-cli. It supports multiple AI providers (Gemini, OpenAI, Anthropic, Groq, Cohere, Together, Qwen) while gemini-cli only supports Google's Gemini.
+          
+          Commits since last release:
+          $COMMIT_MESSAGES
+          
+          Statistics:
+          - LLxprt-specific commits: $LLXPRT_COMMITS
+          - Upstream sync commits: $UPSTREAM_COMMITS  
+          - Bug fixes: $BUG_FIXES
+          
+          Files changed include:
+          $FILES_CHANGED
+          
+          Create release notes with these sections:
+          
+          ## 🎯 Release Focus
+          [1-2 sentences summarizing the main theme of this release]
+          
+          ## ✨ LLxprt-Specific Features
+          [Bullet points of new features unique to LLxprt, especially multi-provider support enhancements]
+          
+          ## 🐛 Bug Fixes
+          [Bullet points of significant bug fixes]
+          
+          ## 📦 Upstream Updates
+          [Features and fixes incorporated from gemini-cli upstream, if any]
+          
+          ## 📥 Installation & Upgrade
+          
+          ### Install
+          \`\`\`bash
+          npm install -g @vybestack/llxprt-code
+          \`\`\`
+          
+          ### Upgrade
+          \`\`\`bash
+          npm update -g @vybestack/llxprt-code
+          \`\`\`
+          
+          ### Quick Start
+          \`\`\`bash
+          # Configure your preferred provider
+          llxprt config set provider [gemini|openai|anthropic|groq|cohere|together|qwen]
+          llxprt config set key YOUR_API_KEY
+          
+          # Start using LLxprt Code
+          llxprt "help me with my code"
+          \`\`\`
+          
+          Keep it concise but informative. Focus on what matters to users.
+          PROMPT_EOF
+          )" 2>&1)
+          LLXPRT_EXIT_CODE=$?
+          set -e
+          
+          if [ $LLXPRT_EXIT_CODE -ne 0 ] || [ -z "$RELEASE_NOTES" ]; then
+            echo "Failed to generate release notes with LLxprt Code (exit code: $LLXPRT_EXIT_CODE)"
+            echo "Falling back to basic release notes..."
+            
+            # Generate basic fallback release notes
+            RELEASE_NOTES=$(cat <<'FALLBACK_EOF'
+## Release ${{ steps.version.outputs.RELEASE_TAG }}
+
+### Changes since last release
+
+Please see the commit history for changes.
+
+### Installation & Upgrade
+
+#### Install
+```bash
+npm install -g @vybestack/llxprt-code
+```
+
+#### Upgrade
+```bash
+npm update -g @vybestack/llxprt-code
+```
+FALLBACK_EOF
+            )
+          fi
+          
+          # Save release notes to file and output
+          echo "$RELEASE_NOTES" > release-notes.md
+          
+          # Also save to GitHub output for use in release creation
+          {
+            echo 'release_notes<<EOF'
+            echo "$RELEASE_NOTES"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          
+          echo "Release notes generated successfully"
+          
+          # Display release notes in the job summary for dry runs
+          if [[ "${{ steps.vars.outputs.is_dry_run }}" == "true" ]]; then
+            echo "## 📝 Generated Release Notes" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "$RELEASE_NOTES" >> $GITHUB_STEP_SUMMARY
+          fi
+
       - name: Create GitHub Release and Tag
         if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BRANCH: ${{ steps.release_branch.outputs.BRANCH_NAME }}
         run: |
+          # Use the generated release notes
           gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
             bundle/llxprt.js \
             --target "$RELEASE_BRANCH" \
             --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
-            --generate-notes
+            --notes "${{ steps.release_notes.outputs.release_notes }}"
 
       - name: Create Issue on Failure
         if: failure()

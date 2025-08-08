@@ -25,3 +25,6 @@ project-plans/
 package-lock.json
 tsconfig.tsbuildinfo
 research/
+
+# GitHub Actions workflows (contain complex bash scripts)
+.github/workflows/

@@ -1330,6 +1330,41 @@ describe('--profile-load flag functionality', () => {
     expect(config.getTelemetryEnabled()).toBe(true);
     expect(config.getAccessibility()).toEqual({ screenReaderMode: true });
   });
+
+  it('should preserve OpenAI provider from profile when loading', async () => {
+    // Mock a profile with OpenAI provider (like for OpenRouter)
+    const openRouterProfile = {
+      version: 1,
+      provider: 'openai',
+      model: 'qwen/qwen3-coder',
+      modelParams: {},
+      ephemeralSettings: {
+        'base-url': 'https://openrouter.ai/api/v1/',
+        'auth-key': 'test-openrouter-key',
+      },
+    };
+
+    mockProfileManager.loadProfile.mockResolvedValue(openRouterProfile);
+
+    process.argv = [
+      'node',
+      'script.js',
+      '--profile-load',
+      'openrouter-profile',
+    ];
+    const argv = await parseArguments();
+    const settings: Settings = {};
+    const config = await loadCliConfig(settings, [], 'test-session', argv);
+
+    // Verify ProfileManager was called
+    expect(mockProfileManager.loadProfile).toHaveBeenCalledWith(
+      'openrouter-profile',
+    );
+
+    // Verify provider is set correctly from profile (NOT defaulting to gemini)
+    expect(config.getProvider()).toBe('openai');
+    expect(config.getModel()).toBe('qwen/qwen3-coder');
+  });
 });
 
 describe('loadCliConfig with includeDirectories', () => {
