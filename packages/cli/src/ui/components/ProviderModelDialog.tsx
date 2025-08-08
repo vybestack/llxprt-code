@@ -24,7 +24,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   onSelect,
   onClose,
 }) => {
-  const { isNarrow, isWide } = useResponsive();
+  const { isNarrow, isWide, width } = useResponsive();
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(true);
 
@@ -64,12 +64,43 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     (len, m) => Math.max(len, m.id.length),
     0,
   );
-  const columns = isNarrow ? 1 : 3;
-  const colWidth = isWide
-    ? Math.max(longestId + 6, 40) // Even wider columns with more padding in wide mode
-    : isNarrow
-      ? Math.max(longestId + 4, 25) // Single column in narrow mode
-      : Math.max(Math.floor(longestId * 0.75) + 6, 25); // Balanced for standard mode with more padding
+
+  // Calculate optimal layout based on available width and content
+  const calculateLayout = () => {
+    if (isNarrow) {
+      return { columns: 1, colWidth: Math.max(longestId + 4, 25) };
+    }
+
+    const padding = 4; // Account for dialog padding and borders
+    const availableWidth = width - padding;
+    const markerSpace = 2; // Space for "● " or "○ "
+    const minColWidth = Math.max(longestId + markerSpace + 2, 20);
+
+    // Calculate how many columns can fit
+    let optimalColumns = 1;
+    let optimalColWidth = minColWidth;
+
+    for (let cols = 1; cols <= 3; cols++) {
+      const totalWidth = cols * minColWidth + (cols - 1) * 2; // 2 spaces between columns
+      if (totalWidth <= availableWidth) {
+        optimalColumns = cols;
+        // Distribute extra space among columns
+        const extraSpace = Math.max(0, availableWidth - totalWidth);
+        optimalColWidth = minColWidth + Math.floor(extraSpace / cols);
+      } else {
+        break;
+      }
+    }
+
+    // In wide mode, allow slightly more generous column spacing
+    if (isWide && optimalColumns > 1) {
+      optimalColWidth = Math.min(optimalColWidth + 4, 50); // Cap at 50 chars
+    }
+
+    return { columns: optimalColumns, colWidth: optimalColWidth };
+  };
+
+  const { columns, colWidth } = calculateLayout();
   const rows = Math.ceil(filteredModels.length / columns);
 
   const move = (delta: number) => {
@@ -285,6 +316,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
+      width={Math.min(width, 120)} // Constrain maximum width to 120 chars
     >
       {renderContent()}
     </Box>

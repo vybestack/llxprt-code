@@ -237,39 +237,39 @@ export const Footer: React.FC<FooterProps> = ({
         </Box>
       </Box>
 
-      {/* Second Line: Path (branch) and Model */}
+      {/* Second Line: Branch (path) and Model */}
       <Box justifyContent="space-between" width="100%" alignItems="center">
         <Box flexDirection="row" alignItems="center">
-          {/* Path Display */}
+          {/* Branch and Path Display */}
           {nightly ? (
             <Gradient colors={Colors.GradientColors}>
               <Text>
-                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
                 {branchName && (
                   <Text>
-                    {' '}
                     (
                     {branchName.length > maxBranchLength
                       ? truncateMiddle(branchName, maxBranchLength)
                       : branchName}
-                    *)
+                    *){' '}
                   </Text>
                 )}
+                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
               </Text>
             </Gradient>
           ) : (
             <Text color={SemanticColors.text.accent}>
-              {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
               {branchName && (
-                <Text color={SemanticColors.text.secondary}>
-                  {' '}
+                <Text color={SemanticColors.text.accent}>
                   (
                   {branchName.length > maxBranchLength
                     ? truncateMiddle(branchName, maxBranchLength)
                     : branchName}
-                  *)
+                  *){' '}
                 </Text>
               )}
+              <Text color={SemanticColors.text.secondary}>
+                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+              </Text>
             </Text>
           )}
           {debugMode && (

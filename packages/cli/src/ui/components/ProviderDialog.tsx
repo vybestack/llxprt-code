@@ -23,7 +23,7 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
   onSelect,
   onClose,
 }) => {
-  const { isNarrow, isWide } = useResponsive();
+  const { isNarrow, isWide, width } = useResponsive();
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(isNarrow);
 
@@ -251,6 +251,7 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
+      width={Math.min(width, 100)} // Constrain maximum width to 100 chars for provider dialog
     >
       {renderContent()}
     </Box>
