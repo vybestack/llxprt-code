@@ -57,35 +57,35 @@ Do NOT use this tool:
 `;
 
 export const LLXPRT_CONFIG_DIR = '.llxprt';
-export const DEFAULT_CONTEXT_FILENAME = 'LLXPRT.md';
+export const DEFAULT_CONTEXT_FILENAME = 'AGENT.md';
 export const MEMORY_SECTION_HEADER = '## Gemini Added Memories';
 
-// This variable will hold the currently configured filename for LLXPRT.md context files.
-// It defaults to DEFAULT_CONTEXT_FILENAME but can be overridden by setLlxprtMdFilename.
-let currentLlxprtMdFilename: string | string[] = DEFAULT_CONTEXT_FILENAME;
+// This variable will hold the currently configured filename for context files.
+// It defaults to DEFAULT_CONTEXT_FILENAME but can be overridden by setContextFilename.
+let currentContextFilename: string | string[] = DEFAULT_CONTEXT_FILENAME;
 
-export function setLlxprtMdFilename(newFilename: string | string[]): void {
+export function setContextFilename(newFilename: string | string[]): void {
   if (Array.isArray(newFilename)) {
     if (newFilename.length > 0) {
-      currentLlxprtMdFilename = newFilename.map((name) => name.trim());
+      currentContextFilename = newFilename.map((name) => name.trim());
     }
   } else if (newFilename && newFilename.trim() !== '') {
-    currentLlxprtMdFilename = newFilename.trim();
+    currentContextFilename = newFilename.trim();
   }
 }
 
-export function getCurrentLlxprtMdFilename(): string {
-  if (Array.isArray(currentLlxprtMdFilename)) {
-    return currentLlxprtMdFilename[0];
+export function getCurrentContextFilename(): string {
+  if (Array.isArray(currentContextFilename)) {
+    return currentContextFilename[0];
   }
-  return currentLlxprtMdFilename;
+  return currentContextFilename;
 }
 
-export function getAllLlxprtMdFilenames(): string[] {
-  if (Array.isArray(currentLlxprtMdFilename)) {
-    return currentLlxprtMdFilename;
+export function getAllContextFilenames(): string[] {
+  if (Array.isArray(currentContextFilename)) {
+    return currentContextFilename;
   }
-  return [currentLlxprtMdFilename];
+  return [currentContextFilename];
 }
 
 interface SaveMemoryParams {
@@ -95,7 +95,7 @@ interface SaveMemoryParams {
 }
 
 function getGlobalMemoryFilePath(): string {
-  return path.join(homedir(), LLXPRT_CONFIG_DIR, getCurrentLlxprtMdFilename());
+  return path.join(homedir(), LLXPRT_CONFIG_DIR, getCurrentContextFilename());
 }
 
 /**

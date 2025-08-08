@@ -14,7 +14,7 @@ interface TipsProps {
 }
 
 export const Tips: React.FC<TipsProps> = ({ config }) => {
-  const llxprtMdFileCount = config.getLlxprtMdFileCount();
+  const contextFileCount = config.getContextFileCount();
   return (
     <Box flexDirection="column">
       <Text color={Colors.Foreground}>Tips for getting started:</Text>
@@ -24,17 +24,17 @@ export const Tips: React.FC<TipsProps> = ({ config }) => {
       <Text color={Colors.Foreground}>
         2. Be specific for the best results.
       </Text>
-      {llxprtMdFileCount === 0 && (
+      {contextFileCount === 0 && (
         <Text color={Colors.Foreground}>
           3. Create{' '}
           <Text bold color={Colors.AccentPurple}>
-            LLXPRT.md
+            AGENT.md
           </Text>{' '}
-          files to customize your interactions with Gemini.
+          files to customize your interactions with the agent.
         </Text>
       )}
       <Text color={Colors.Foreground}>
-        {llxprtMdFileCount === 0 ? '4.' : '3.'}{' '}
+        {contextFileCount === 0 ? '4.' : '3.'}{' '}
         <Text bold color={Colors.AccentPurple}>
           /help
         </Text>{' '}

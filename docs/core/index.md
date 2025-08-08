@@ -5,14 +5,14 @@ LLxprt Code's core package (`packages/core`) is the backend portion of LLxprt Co
 ## Navigating this section
 
 - **[Core tools API](./tools-api.md):** Information on how tools are defined, registered, and used by the core.
-- **[Memory Import Processor](./memport.md):** Documentation for the modular LLXPRT.md import feature using @file.md syntax.
+- **[Memory Import Processor](./memport.md):** Documentation for the modular AGENT.md import feature using @file.md syntax.
 
 ## Role of the core
 
 While the `packages/cli` portion of LLxprt Code provides the user interface, `packages/core` is responsible for:
 
 - **AI Provider interaction:** Securely communicating with various AI providers (Google Gemini, OpenAI, Anthropic, etc.), sending user prompts, and receiving model responses.
-- **Prompt engineering:** Constructing effective prompts for different AI models, potentially incorporating conversation history, tool definitions, and instructional context from `LLXPRT.md` files.
+- **Prompt engineering:** Constructing effective prompts for different AI models, potentially incorporating conversation history, tool definitions, and instructional context from `AGENT.md` files.
 - **Tool management & orchestration:**
   - Registering available tools (e.g., file system tools, shell command execution).
   - Interpreting tool use requests from the AI model.
@@ -54,8 +54,8 @@ The file discovery service is responsible for finding files in the project that 
 
 ## Memory discovery service
 
-The memory discovery service is responsible for finding and loading the `LLXPRT.md` files that provide context to the model. It searches for these files in a hierarchical manner, starting from the current working directory and moving up to the project root and the user's home directory. It also searches in subdirectories.
+The memory discovery service is responsible for finding and loading the `AGENT.md` files that provide context to the model. It searches for these files in a hierarchical manner, starting from the current working directory and moving up to the project root and the user's home directory. It also searches in subdirectories.
 
 This allows you to have global, project-level, and component-level context files, which are all combined to provide the model with the most relevant information.
 
-You can use the [`/memory` command](../cli/commands.md) to `show`, `add`, and `refresh` the content of loaded `LLXPRT.md` files.
+You can use the [`/memory` command](../cli/commands.md) to `show`, `add`, and `refresh` the content of loaded `AGENT.md` files.

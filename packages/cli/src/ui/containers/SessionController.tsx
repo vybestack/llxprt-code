@@ -16,7 +16,7 @@ import {
   UserTierId,
   getErrorMessage,
 } from '@vybestack/llxprt-code-core';
-import { loadHierarchicalLlxprtMemory } from '../../config/config.js';
+import { loadHierarchicalMemory } from '../../config/config.js';
 import { loadSettings } from '../../config/settings.js';
 import process from 'node:process';
 import {
@@ -226,16 +226,16 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
     addItem(
       {
         type: MessageType.INFO,
-        text: 'Refreshing hierarchical memory (LLXPRT.md or other context files)...',
+        text: 'Refreshing hierarchical memory (AGENT.md or other context files)...',
       },
       Date.now(),
     );
 
     try {
-      // Note: loadHierarchicalLlxprtMemory now requires settings, but SessionController
+      // Note: loadHierarchicalMemory now requires settings, but SessionController
       // doesn't have access to settings. This needs to be refactored.
       // For now, using the internal config loading that has settings.
-      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
+      const { memoryContent, fileCount } = await loadHierarchicalMemory(
         process.cwd(),
         config.shouldLoadMemoryFromIncludeDirectories()
           ? config.getWorkspaceContext().getDirectories()
@@ -246,7 +246,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         config.getExtensionContextFilePaths(),
       );
       config.setUserMemory(memoryContent);
-      config.setLlxprtMdFileCount(fileCount);
+      config.setContextFileCount(fileCount);
 
       addItem(
         {

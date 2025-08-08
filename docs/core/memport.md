@@ -1,17 +1,17 @@
 # Memory Import Processor
 
-The Memory Import Processor is a feature that allows you to modularize your LLXPRT.md files by importing content from other files using the `@file.md` syntax.
+The Memory Import Processor is a feature that allows you to modularize your AGENT.md files by importing content from other files using the `@file.md` syntax.
 
 ## Overview
 
-This feature enables you to break down large LLXPRT.md files into smaller, more manageable components that can be reused across different contexts. The import processor supports both relative and absolute paths, with built-in safety features to prevent circular imports and ensure file access security.
+This feature enables you to break down large AGENT.md files into smaller, more manageable components that can be reused across different contexts. The import processor supports both relative and absolute paths, with built-in safety features to prevent circular imports and ensure file access security.
 
 ## Syntax
 
 Use the `@` symbol followed by the path to the file you want to import:
 
 ```markdown
-# Main LLXPRT.md file
+# Main AGENT.md file
 
 This is the main content.
 
@@ -39,7 +39,7 @@ More content here.
 ### Basic Import
 
 ```markdown
-# My LLXPRT.md
+# My AGENT.md
 
 Welcome to my project!
 
@@ -110,13 +110,13 @@ The import processor uses the `marked` library to detect code blocks and inline 
 
 ## Import Tree Structure
 
-The processor returns an import tree that shows the hierarchy of imported files, similar to Claude's `/memory` feature. This helps users debug problems with their LLXPRT.md files by showing which files were read and their import relationships.
+The processor returns an import tree that shows the hierarchy of imported files, similar to Claude's `/memory` feature. This helps users debug problems with their AGENT.md files by showing which files were read and their import relationships.
 
 Example tree structure:
 
 ```
 Memory Files
- L project: LLXPRT.md
+ L project: AGENT.md
             L a.md
               L b.md
                 L c.md
@@ -138,7 +138,7 @@ Note: The import tree is mainly for clarity during development and has limited r
 
 ### `processImports(content, basePath, debugMode?, importState?)`
 
-Processes import statements in LLXPRT.md content.
+Processes import statements in AGENT.md content.
 
 **Parameters:**
 

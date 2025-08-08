@@ -14,7 +14,7 @@ import {
 
 interface ContextSummaryDisplayProps {
   activeFile?: string;
-  llxprtMdFileCount: number;
+  contextFileCount: number;
   contextFileNames: string[];
   mcpServers?: Record<string, MCPServerConfig>;
   blockedMcpServers?: Array<{ name: string; extensionName: string }>;
@@ -24,7 +24,7 @@ interface ContextSummaryDisplayProps {
 
 export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   activeFile: _activeFile,
-  llxprtMdFileCount,
+  contextFileCount,
   contextFileNames,
   mcpServers,
   blockedMcpServers,
@@ -36,7 +36,7 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   const openFileCount = ideContext?.workspaceState?.openFiles?.length ?? 0;
 
   if (
-    llxprtMdFileCount === 0 &&
+    contextFileCount === 0 &&
     mcpServerCount === 0 &&
     blockedMcpServerCount === 0 &&
     openFileCount === 0
@@ -53,15 +53,13 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
     } (ctrl+e to view)`;
   })();
 
-  const geminiMdText = (() => {
-    if (llxprtMdFileCount === 0) {
+  const contextFileText = (() => {
+    if (contextFileCount === 0) {
       return '';
     }
     const allNamesTheSame = new Set(contextFileNames).size < 2;
     const name = allNamesTheSame ? contextFileNames[0] : 'context';
-    return `${llxprtMdFileCount} ${name} file${
-      llxprtMdFileCount > 1 ? 's' : ''
-    }`;
+    return `${contextFileCount} ${name} file${contextFileCount > 1 ? 's' : ''}`;
   })();
 
   const mcpText = (() => {
@@ -91,8 +89,8 @@ export const ContextSummaryDisplay: React.FC<ContextSummaryDisplayProps> = ({
   if (openFilesText) {
     summaryParts.push(openFilesText);
   }
-  if (geminiMdText) {
-    summaryParts.push(geminiMdText);
+  if (contextFileText) {
+    summaryParts.push(contextFileText);
   }
   if (mcpText) {
     summaryParts.push(mcpText);

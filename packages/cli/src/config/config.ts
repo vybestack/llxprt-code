@@ -14,8 +14,8 @@ import { mcpCommand } from '../commands/mcp.js';
 import {
   Config,
   loadServerHierarchicalMemory,
-  setLlxprtMdFilename as setServerGeminiMdFilename,
-  getCurrentLlxprtMdFilename,
+  setContextFilename as setServerContextFilename,
+  getCurrentContextFilename,
   ApprovalMode,
   DEFAULT_GEMINI_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -280,9 +280,9 @@ export async function parseArguments(): Promise<CliArgs> {
 // This function is now a thin wrapper around the server's implementation.
 // It's kept in the CLI for now as App.tsx directly calls it for memory refresh.
 // TODO: Consider if App.tsx should get memory via a server call or if Config should refresh itself.
-export async function loadHierarchicalLlxprtMemory(
+export async function loadHierarchicalMemory(
   currentWorkingDirectory: string,
-  includeDirectoriesToReadGemini: readonly string[] = [],
+  includeDirectoriesToReadContext: readonly string[] = [],
   debugMode: boolean,
   fileService: FileDiscoveryService,
   settings: Settings,
@@ -308,7 +308,7 @@ export async function loadHierarchicalLlxprtMemory(
   // Directly call the server function with the corrected path.
   return loadServerHierarchicalMemory(
     effectiveCwd,
-    includeDirectoriesToReadGemini,
+    includeDirectoriesToReadContext,
     debugMode,
     fileService,
     extensionContextFilePaths,
@@ -398,13 +398,13 @@ export async function loadCliConfig(
 
   // Set the context filename in the server's memoryTool module BEFORE loading memory
   // TODO(b/343434939): This is a bit of a hack. The contextFileName should ideally be passed
-  // directly to the Config constructor in core, and have core handle setLlxprtMdFilename.
-  // However, loadHierarchicalLlxprtMemory is called *before* createServerConfig.
+  // directly to the Config constructor in core, and have core handle setContextFilename.
+  // However, loadHierarchicalMemory is called *before* createServerConfig.
   if (effectiveSettings.contextFileName) {
-    setServerGeminiMdFilename(effectiveSettings.contextFileName);
+    setServerContextFilename(effectiveSettings.contextFileName);
   } else {
     // Reset to default if not provided in settings.
-    setServerGeminiMdFilename(getCurrentLlxprtMdFilename());
+    setServerContextFilename(getCurrentContextFilename());
   }
 
   const extensionContextFilePaths = activeExtensions.flatMap(
@@ -422,8 +422,8 @@ export async function loadCliConfig(
     .map(resolvePath)
     .concat((argv.includeDirectories || []).map(resolvePath));
 
-  // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
-  const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
+  // Call the (now wrapper) loadHierarchicalMemory which calls the server's version
+  const { memoryContent, fileCount } = await loadHierarchicalMemory(
     process.cwd(),
     effectiveSettings.loadMemoryFromIncludeDirectories ||
       argv.loadMemoryFromIncludeDirectories
@@ -528,7 +528,7 @@ export async function loadCliConfig(
     mcpServerCommand: effectiveSettings.mcpServerCommand,
     mcpServers,
     userMemory: memoryContent,
-    llxprtMdFileCount: fileCount,
+    contextFileCount: fileCount,
     approvalMode: argv.yolo ? ApprovalMode.YOLO : ApprovalMode.DEFAULT,
     showMemoryUsage:
       argv.showMemoryUsage ||

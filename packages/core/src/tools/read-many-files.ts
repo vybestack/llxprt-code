@@ -9,7 +9,7 @@ import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import * as path from 'path';
 import { glob } from 'glob';
-import { getCurrentLlxprtMdFilename } from './memoryTool.js';
+import { getCurrentContextFilename } from './memoryTool.js';
 import {
   detectFileType,
   processSingleFileContent,
@@ -118,7 +118,7 @@ const DEFAULT_EXCLUDES: string[] = [
   '**/*.odp',
   '**/*.DS_Store',
   '**/.env',
-  `**/${getCurrentLlxprtMdFilename()}`,
+  `**/${getCurrentContextFilename()}`,
 ];
 
 const DEFAULT_OUTPUT_SEPARATOR_FORMAT = '--- {filePath} ---';

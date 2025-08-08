@@ -46,7 +46,7 @@ import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
-import { loadHierarchicalLlxprtMemory } from '../config/config.js';
+import { loadHierarchicalMemory } from '../config/config.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
@@ -60,7 +60,7 @@ import process from 'node:process';
 import {
   getErrorMessage,
   type Config,
-  getAllLlxprtMdFilenames,
+  getAllContextFilenames,
   ApprovalMode,
   isEditorAvailable,
   EditorType,
@@ -210,7 +210,7 @@ const App = (props: AppInternalProps) => {
     setStaticKey((prev) => prev + 1);
   }, [setStaticKey, stdout]);
 
-  const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
+  const [contextFileCount, setContextFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
   const [showHelp, setShowHelp] = useState<boolean>(false);
   const [_themeError, _setThemeError] = useState<string | null>(null);
@@ -451,12 +451,12 @@ const App = (props: AppInternalProps) => {
     addItem(
       {
         type: MessageType.INFO,
-        text: 'Refreshing hierarchical memory (LLXPRT.md or other context files)...',
+        text: 'Refreshing hierarchical memory (AGENT.md or other context files)...',
       },
       Date.now(),
     );
     try {
-      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
+      const { memoryContent, fileCount } = await loadHierarchicalMemory(
         process.cwd(),
         settings.merged.loadMemoryFromIncludeDirectories
           ? config.getWorkspaceContext().getDirectories()
@@ -470,8 +470,8 @@ const App = (props: AppInternalProps) => {
       );
 
       config.setUserMemory(memoryContent);
-      config.setLlxprtMdFileCount(fileCount);
-      setLlxprtMdFileCount(fileCount);
+      config.setContextFileCount(fileCount);
+      setContextFileCount(fileCount);
 
       addItem(
         {
@@ -666,7 +666,7 @@ const App = (props: AppInternalProps) => {
     openPrivacyNotice,
     toggleVimEnabled,
     setIsProcessing,
-    setLlxprtMdFileCount,
+    setContextFileCount,
   );
 
   const buffer = useTextBuffer({
@@ -826,9 +826,9 @@ const App = (props: AppInternalProps) => {
 
   useEffect(() => {
     if (config) {
-      setLlxprtMdFileCount(config.getLlxprtMdFileCount());
+      setContextFileCount(config.getContextFileCount());
     }
-  }, [config, config.getLlxprtMdFileCount]);
+  }, [config, config.getContextFileCount]);
 
   const logger = useLogger();
 
@@ -933,7 +933,7 @@ const App = (props: AppInternalProps) => {
     if (fromSettings) {
       return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
     }
-    return getAllLlxprtMdFilenames();
+    return getAllContextFilenames();
   }, [settings.merged.contextFileName]);
 
   const initialPrompt = useMemo(() => config.getQuestion(), [config]);
@@ -1226,7 +1226,7 @@ const App = (props: AppInternalProps) => {
                   ) : (
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
-                      llxprtMdFileCount={llxprtMdFileCount}
+                      contextFileCount={contextFileCount}
                       contextFileNames={contextFileNames}
                       mcpServers={config.getMcpServers()}
                       blockedMcpServers={config.getBlockedMcpServers()}

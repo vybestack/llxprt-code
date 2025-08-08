@@ -264,7 +264,7 @@ export const diagnosticsCommand: SlashCommand = {
         `- User Memory: ${userMemory ? `${userMemory.length} characters` : 'Not loaded'}`,
       );
       diagnostics.push(
-        `- Context Files: ${config.getLlxprtMdFileCount() || 0} files`,
+        `- Context Files: ${config.getContextFileCount() || 0} files`,
       );
 
       // Tool Registry

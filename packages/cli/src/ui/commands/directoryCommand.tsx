@@ -108,8 +108,8 @@ export const directoryCommand: SlashCommand = {
                 context.services.settings.merged.memoryDiscoveryMaxDirs,
               );
             config.setUserMemory(memoryContent);
-            config.setLlxprtMdFileCount(fileCount);
-            context.ui.setLlxprtMdFileCount(fileCount);
+            config.setContextFileCount(fileCount);
+            context.ui.setContextFileCount(fileCount);
           }
           addItem(
             {

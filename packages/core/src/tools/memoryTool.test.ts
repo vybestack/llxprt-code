@@ -7,9 +7,9 @@
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import {
   MemoryTool,
-  setLlxprtMdFilename,
-  getCurrentLlxprtMdFilename,
-  getAllLlxprtMdFilenames,
+  setContextFilename,
+  getCurrentContextFilename,
+  getAllContextFilenames,
   DEFAULT_CONTEXT_FILENAME,
 } from './memoryTool.js';
 import * as fs from 'fs/promises';
@@ -57,31 +57,31 @@ describe('MemoryTool', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    // Reset GEMINI_MD_FILENAME to its original value after each test
-    setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
+    // Reset CONTEXT_FILENAME to its original value after each test
+    setContextFilename(DEFAULT_CONTEXT_FILENAME);
   });
 
-  describe('setLlxprtMdFilename', () => {
-    it('should update currentLlxprtMdFilename when a valid new name is provided', () => {
+  describe('setContextFilename', () => {
+    it('should update currentContextFilename when a valid new name is provided', () => {
       const newName = 'CUSTOM_CONTEXT.md';
-      setLlxprtMdFilename(newName);
-      expect(getCurrentLlxprtMdFilename()).toBe(newName);
+      setContextFilename(newName);
+      expect(getCurrentContextFilename()).toBe(newName);
     });
 
-    it('should not update currentLlxprtMdFilename if the new name is empty or whitespace', () => {
-      const initialName = getCurrentLlxprtMdFilename(); // Get current before trying to change
-      setLlxprtMdFilename('  ');
-      expect(getCurrentLlxprtMdFilename()).toBe(initialName);
+    it('should not update currentContextFilename if the new name is empty or whitespace', () => {
+      const initialName = getCurrentContextFilename(); // Get current before trying to change
+      setContextFilename('  ');
+      expect(getCurrentContextFilename()).toBe(initialName);
 
-      setLlxprtMdFilename('');
-      expect(getCurrentLlxprtMdFilename()).toBe(initialName);
+      setContextFilename('');
+      expect(getCurrentContextFilename()).toBe(initialName);
     });
 
     it('should handle an array of filenames', () => {
       const newNames = ['CUSTOM_CONTEXT.md', 'ANOTHER_CONTEXT.md'];
-      setLlxprtMdFilename(newNames);
-      expect(getCurrentLlxprtMdFilename()).toBe('CUSTOM_CONTEXT.md');
-      expect(getAllLlxprtMdFilenames()).toEqual(newNames);
+      setContextFilename(newNames);
+      expect(getCurrentContextFilename()).toBe('CUSTOM_CONTEXT.md');
+      expect(getAllContextFilenames()).toEqual(newNames);
     });
   });
 
@@ -209,11 +209,11 @@ describe('MemoryTool', () => {
     it('should call performAddMemoryEntry with correct parameters and return success', async () => {
       const params = { fact: 'The sky is blue' };
       const result = await memoryTool.execute(params, mockAbortSignal);
-      // Use getCurrentLlxprtMdFilename for the default expectation before any setLlxprtMdFilename calls in a test
+      // Use getCurrentContextFilename for the default expectation before any setContextFilename calls in a test
       const expectedFilePath = path.join(
         os.homedir(),
         '.llxprt',
-        getCurrentLlxprtMdFilename(), // This will be DEFAULT_CONTEXT_FILENAME unless changed by a test
+        getCurrentContextFilename(), // This will be DEFAULT_CONTEXT_FILENAME unless changed by a test
       );
 
       // For this test, we expect the actual fs methods to be passed
@@ -290,11 +290,11 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       if (result && result.type === 'edit') {
-        const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
+        const expectedPath = path.join('~', '.llxprt', 'AGENT.md');
         expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
         expect(result.fileName).toContain(path.join('mock', 'home', '.llxprt'));
-        expect(result.fileName).toContain('LLXPRT.md');
-        expect(result.fileDiff).toContain('Index: LLXPRT.md');
+        expect(result.fileName).toContain('AGENT.md');
+        expect(result.fileDiff).toContain('Index: AGENT.md');
         expect(result.fileDiff).toContain('+## Gemini Added Memories');
         expect(result.fileDiff).toContain('+- Test fact');
         expect(result.originalContent).toBe('');
@@ -308,7 +308,7 @@ describe('MemoryTool', () => {
       const memoryFilePath = path.join(
         os.homedir(),
         '.llxprt',
-        getCurrentLlxprtMdFilename(),
+        getCurrentContextFilename(),
       );
 
       // Add the memory file to the allowlist
@@ -329,7 +329,7 @@ describe('MemoryTool', () => {
       const memoryFilePath = path.join(
         os.homedir(),
         '.llxprt',
-        getCurrentLlxprtMdFilename(),
+        getCurrentContextFilename(),
       );
 
       const result = await memoryTool.shouldConfirmExecute(
@@ -358,7 +358,7 @@ describe('MemoryTool', () => {
       const memoryFilePath = path.join(
         os.homedir(),
         '.llxprt',
-        getCurrentLlxprtMdFilename(),
+        getCurrentContextFilename(),
       );
 
       const result = await memoryTool.shouldConfirmExecute(
@@ -404,9 +404,9 @@ describe('MemoryTool', () => {
       expect(result).not.toBe(false);
 
       if (result && result.type === 'edit') {
-        const expectedPath = path.join('~', '.llxprt', 'LLXPRT.md');
+        const expectedPath = path.join('~', '.llxprt', 'AGENT.md');
         expect(result.title).toBe(`Confirm Memory Save: ${expectedPath}`);
-        expect(result.fileDiff).toContain('Index: LLXPRT.md');
+        expect(result.fileDiff).toContain('Index: AGENT.md');
         expect(result.fileDiff).toContain('+- New fact');
         expect(result.originalContent).toBe(existingContent);
         expect(result.newContent).toContain('- Old fact');

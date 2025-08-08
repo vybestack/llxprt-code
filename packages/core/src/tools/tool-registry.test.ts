@@ -115,7 +115,7 @@ const baseConfigParams: ConfigParameters = {
   targetDir: '/test/dir',
   debugMode: false,
   userMemory: '',
-  llxprtMdFileCount: 0,
+  contextFileCount: 0,
   approvalMode: ApprovalMode.DEFAULT,
   sessionId: 'test-session-id',
   ideClient: IdeClient.getInstance(false),

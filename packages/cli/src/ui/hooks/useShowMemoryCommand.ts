@@ -24,7 +24,7 @@ export function createShowMemoryAction(
     }
 
     const currentMemory = config.getUserMemory();
-    const fileCount = config.getLlxprtMdFileCount();
+    const fileCount = config.getContextFileCount();
     const contextFileName = settings.merged.contextFileName;
     const contextFileNames = Array.isArray(contextFileName)
       ? contextFileName
@@ -53,8 +53,8 @@ export function createShowMemoryAction(
         type: MessageType.INFO,
         content:
           fileCount > 0
-            ? 'Hierarchical memory (LLXPRT.md or other context files) is loaded but content is empty.'
-            : 'No hierarchical memory (LLXPRT.md or other context files) is currently loaded.',
+            ? 'Hierarchical memory (AGENT.md or other context files) is loaded but content is empty.'
+            : 'No hierarchical memory (AGENT.md or other context files) is currently loaded.',
         timestamp: new Date(),
       });
     }

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { Config, ConfigParameters, SandboxConfig } from './config.js';
 import * as path from 'path';
-import { setLlxprtMdFilename as mockSetGeminiMdFilename } from '../tools/memoryTool.js';
+import { setContextFilename as mockSetContextFilename } from '../tools/memoryTool.js';
 import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
@@ -55,9 +55,9 @@ vi.mock('../tools/web-fetch');
 vi.mock('../tools/read-many-files');
 vi.mock('../tools/memoryTool', () => ({
   MemoryTool: vi.fn(),
-  setLlxprtMdFilename: vi.fn(),
-  getCurrentLlxprtMdFilename: vi.fn(() => 'LLXPRT.md'), // Mock the original filename
-  DEFAULT_CONTEXT_FILENAME: 'LLXPRT.md',
+  setContextFilename: vi.fn(),
+  getCurrentContextFilename: vi.fn(() => 'AGENT.md'), // Mock the new filename
+  DEFAULT_CONTEXT_FILENAME: 'AGENT.md',
   LLXPRT_CONFIG_DIR: '.llxprt',
 }));
 
@@ -285,19 +285,19 @@ describe('Server Config (config.ts)', () => {
     expect(config.getUserMemory()).toBe('');
   });
 
-  it('Config constructor should call setLlxprtMdFilename with contextFileName if provided', () => {
+  it('Config constructor should call setContextFilename with contextFileName if provided', () => {
     const contextFileName = 'CUSTOM_AGENTS.md';
     const paramsWithContextFile: ConfigParameters = {
       ...baseParams,
       contextFileName,
     };
     new Config(paramsWithContextFile);
-    expect(mockSetGeminiMdFilename).toHaveBeenCalledWith(contextFileName);
+    expect(mockSetContextFilename).toHaveBeenCalledWith(contextFileName);
   });
 
-  it('Config constructor should not call setLlxprtMdFilename if contextFileName is not provided', () => {
+  it('Config constructor should not call setContextFilename if contextFileName is not provided', () => {
     new Config(baseParams); // baseParams does not have contextFileName
-    expect(mockSetGeminiMdFilename).not.toHaveBeenCalled();
+    expect(mockSetContextFilename).not.toHaveBeenCalled();
   });
 
   it('should set default file filtering settings when not provided', () => {

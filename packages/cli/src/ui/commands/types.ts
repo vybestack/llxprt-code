@@ -64,7 +64,7 @@ export interface CommandContext {
      * @returns A promise that resolves to the new vim enabled state.
      */
     toggleVimEnabled: () => Promise<boolean>;
-    setLlxprtMdFileCount: (count: number) => void;
+    setContextFileCount: (count: number) => void;
   };
   // Session-specific data
   session: {

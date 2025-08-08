@@ -38,9 +38,9 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 ### Available settings in `settings.json`:
 
 - **`contextFileName`** (string or array of strings):
-  - **Description:** Specifies the filename for context files (e.g., `LLXPRT.md`, `AGENTS.md`). Can be a single filename or a list of accepted filenames.
-  - **Default:** `LLXPRT.md`
-  - **Example:** `"contextFileName": "AGENTS.md"`
+  - **Description:** Specifies the filename for context files (e.g., `AGENT.md`). Can be a single filename or a list of accepted filenames.
+  - **Default:** `AGENT.md`
+  - **Example:** `"contextFileName": "CONTEXT.md"`
 
 - **`bugCommand`** (object):
   - **Description:** Overrides the default URL for the `/bug` command.
@@ -277,7 +277,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     ```
 
 - **`loadMemoryFromIncludeDirectories`** (boolean):
-  - **Description:** Controls the behavior of the `/memory refresh` command. If set to `true`, `GEMINI.md` files should be loaded from all directories that are added. If set to `false`, `GEMINI.md` should only be loaded from the current directory.
+  - **Description:** Controls the behavior of the `/memory refresh` command. If set to `true`, `AGENT.md` files should be loaded from all directories that are added. If set to `false`, `AGENT.md` should only be loaded from the current directory.
   - **Default:** `false`
   - **Example:**
     ```json
@@ -499,11 +499,11 @@ Config file:
 
 ## Context Files (Hierarchical Instructional Context)
 
-While not strictly configuration for the CLI's _behavior_, context files (defaulting to `LLXPRT.md` but configurable via the `contextFileName` setting) are crucial for configuring the _instructional context_ (also referred to as "memory") provided to the Gemini model. This powerful feature allows you to give project-specific instructions, coding style guides, or any relevant background information to the AI, making its responses more tailored and accurate to your needs. The CLI includes UI elements, such as an indicator in the footer showing the number of loaded context files, to keep you informed about the active context.
+While not strictly configuration for the CLI's _behavior_, context files (defaulting to `AGENT.md` but configurable via the `contextFileName` setting) are crucial for configuring the _instructional context_ (also referred to as "memory") provided to the AI model. This powerful feature allows you to give project-specific instructions, coding style guides, or any relevant background information to the AI, making its responses more tailored and accurate to your needs. The CLI includes UI elements, such as an indicator in the footer showing the number of loaded context files, to keep you informed about the active context.
 
-- **Purpose:** These Markdown files contain instructions, guidelines, or context that you want the Gemini model to be aware of during your interactions. The system is designed to manage this instructional context hierarchically.
+- **Purpose:** These Markdown files contain instructions, guidelines, or context that you want the AI model to be aware of during your interactions. The system is designed to manage this instructional context hierarchically.
 
-### Example Context File Content (e.g., `LLXPRT.md`)
+### Example Context File Content (e.g., `AGENT.md`)
 
 Here's a conceptual example of what a context file at the root of a TypeScript project might contain:
 
@@ -538,9 +538,9 @@ Here's a conceptual example of what a context file at the root of a TypeScript p
 
 This example demonstrates how you can provide general project context, specific coding conventions, and even notes about particular files or components. The more relevant and precise your context files are, the better the AI can assist you. Project-specific context files are highly encouraged to establish conventions and context.
 
-- **Hierarchical Loading and Precedence:** The CLI implements a sophisticated hierarchical memory system by loading context files (e.g., `LLXPRT.md`) from several locations. Content from files lower in this list (more specific) typically overrides or supplements content from files higher up (more general). The exact concatenation order and final context can be inspected using the `/memory show` command. The typical loading order is:
+- **Hierarchical Loading and Precedence:** The CLI implements a sophisticated hierarchical memory system by loading context files (e.g., `AGENT.md`) from several locations. Content from files lower in this list (more specific) typically overrides or supplements content from files higher up (more general). The exact concatenation order and final context can be inspected using the `/memory show` command. The typical loading order is:
   1.  **Global Context File:**
-      - Location: `~/.llxprt/<contextFileName>` (e.g., `~/.llxprt/LLXPRT.md` in your user home directory).
+      - Location: `~/.llxprt/<contextFileName>` (e.g., `~/.llxprt/AGENT.md` in your user home directory).
       - Scope: Provides default instructions for all your projects.
   2.  **Project Root & Ancestors Context Files:**
       - Location: The CLI searches for the configured context file in the current working directory and then in each parent directory up to either the project root (identified by a `.git` folder) or your home directory.

@@ -74,15 +74,15 @@ Slash commands provide meta-level control over the CLI itself.
   - **Keyboard Shortcut:** Press **Ctrl+T** at any time to toggle between showing and hiding tool descriptions.
 
 - **`/memory`**
-  - **Description:** Manage the AI's instructional context (hierarchical memory loaded from `LLXPRT.md` files).
+  - **Description:** Manage the AI's instructional context (hierarchical memory loaded from `AGENT.md` files).
   - **Sub-commands:**
     - **`add`**:
       - **Description:** Adds the following text to the AI's memory. Usage: `/memory add <text to remember>`
     - **`show`**:
-      - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `LLXPRT.md` files. This lets you inspect the instructional context being provided to the model.
+      - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `AGENT.md` files. This lets you inspect the instructional context being provided to the model.
     - **`refresh`**:
-      - **Description:** Reload the hierarchical instructional memory from all `LLXPRT.md` files found in the configured locations (global, project/ancestors, and sub-directories). This command updates the model with the latest `LLXPRT.md` content.
-    - **Note:** For more details on how `LLXPRT.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-geminimd-files-hierarchical-instructional-context).
+      - **Description:** Reload the hierarchical instructional memory from all `AGENT.md` files found in the configured locations (global, project/ancestors, and sub-directories). This command updates the model with the latest `AGENT.md` content.
+    - **Note:** For more details on how `AGENT.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-geminimd-files-hierarchical-instructional-context).
 
 - **`/restore`**
   - **Description:** Restores the project files to the state they were in just before a tool was executed. This is particularly useful for undoing file edits made by a tool. If run without a tool call ID, it will list available checkpoints to restore from.
@@ -225,7 +225,7 @@ These commands are unique to LLxprt Code and enable multi-provider support:
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 - **`/init`**
-  - **Description:** To help users easily create a `LLXPRT.md` file, this command analyzes the current directory and generates a tailored context file, making it simpler for them to provide project-specific instructions to the LLxprt Code agent.
+  - **Description:** To help users easily create a `AGENT.md` file, this command analyzes the current directory and generates a tailored context file based on the AGENT.md standard, making it simpler for them to provide project-specific instructions to the LLxprt Code agent.
 
 ### Custom Commands
 

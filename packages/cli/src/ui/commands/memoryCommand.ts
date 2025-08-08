@@ -26,7 +26,7 @@ export const memoryCommand: SlashCommand = {
       kind: CommandKind.BUILT_IN,
       action: async (context) => {
         const memoryContent = context.services.config?.getUserMemory() || '';
-        const fileCount = context.services.config?.getLlxprtMdFileCount() || 0;
+        const fileCount = context.services.config?.getContextFileCount() || 0;
 
         const messageContent =
           memoryContent.length > 0
@@ -100,7 +100,7 @@ export const memoryCommand: SlashCommand = {
                 context.services.settings.merged.memoryDiscoveryMaxDirs,
               );
             config.setUserMemory(memoryContent);
-            config.setLlxprtMdFileCount(fileCount);
+            config.setContextFileCount(fileCount);
 
             const successMessage =
               memoryContent.length > 0

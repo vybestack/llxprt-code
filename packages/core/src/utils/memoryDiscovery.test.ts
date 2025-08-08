@@ -11,7 +11,7 @@ import * as path from 'path';
 import { loadServerHierarchicalMemory } from './memoryDiscovery.js';
 import {
   LLXPRT_CONFIG_DIR,
-  setLlxprtMdFilename,
+  setContextFilename,
   DEFAULT_CONTEXT_FILENAME,
 } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
@@ -59,7 +59,7 @@ describe('loadServerHierarchicalMemory', () => {
 
   afterEach(async () => {
     // Some tests set this to a different value.
-    setLlxprtMdFilename(DEFAULT_CONTEXT_FILENAME);
+    setContextFilename(DEFAULT_CONTEXT_FILENAME);
     // Clean up the temporary directory to prevent resource leaks.
     await fsPromises.rm(testRootDir, { recursive: true, force: true });
   });
@@ -99,7 +99,7 @@ describe('loadServerHierarchicalMemory', () => {
 
   it('should load only the global custom context file if present and filename is changed', async () => {
     const customFilename = 'CUSTOM_AGENTS.md';
-    setLlxprtMdFilename(customFilename);
+    setContextFilename(customFilename);
 
     const customContextFile = await createTestFile(
       path.join(homedir, LLXPRT_CONFIG_DIR, customFilename),
@@ -121,7 +121,7 @@ describe('loadServerHierarchicalMemory', () => {
 
   it('should load context files by upward traversal with custom filename', async () => {
     const customFilename = 'PROJECT_CONTEXT.md';
-    setLlxprtMdFilename(customFilename);
+    setContextFilename(customFilename);
 
     const projectContextFile = await createTestFile(
       path.join(projectRoot, customFilename),
@@ -147,7 +147,7 @@ describe('loadServerHierarchicalMemory', () => {
 
   it('should load context files by downward traversal with custom filename', async () => {
     const customFilename = 'LOCAL_CONTEXT.md';
-    setLlxprtMdFilename(customFilename);
+    setContextFilename(customFilename);
 
     await createTestFile(
       path.join(cwd, 'subdir', customFilename),
@@ -328,7 +328,7 @@ describe('loadServerHierarchicalMemory', () => {
 
   it('should load extension context file paths', async () => {
     const extensionFilePath = await createTestFile(
-      path.join(testRootDir, 'extensions/ext1/LLXPRT.md'),
+      path.join(testRootDir, 'extensions/ext1/AGENT.md'),
       'Extension memory content',
     );
 

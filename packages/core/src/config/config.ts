@@ -24,7 +24,7 @@ import { WebFetchTool } from '../tools/web-fetch.js';
 import { ReadManyFilesTool } from '../tools/read-many-files.js';
 import {
   MemoryTool,
-  setLlxprtMdFilename,
+  setContextFilename,
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
 } from '../tools/memoryTool.js';
 import { WebSearchTool } from '../tools/web-search.js';
@@ -175,7 +175,7 @@ export interface ConfigParameters {
   mcpServerCommand?: string;
   mcpServers?: Record<string, MCPServerConfig>;
   userMemory?: string;
-  llxprtMdFileCount?: number;
+  contextFileCount?: number;
   approvalMode?: ApprovalMode;
   showMemoryUsage?: boolean;
   contextLimit?: number;
@@ -235,7 +235,7 @@ export class Config {
   private readonly mcpServerCommand: string | undefined;
   private readonly mcpServers: Record<string, MCPServerConfig> | undefined;
   private userMemory: string;
-  private llxprtMdFileCount: number;
+  private contextFileCount: number;
   private approvalMode: ApprovalMode;
   private readonly showMemoryUsage: boolean;
   private readonly accessibility: AccessibilitySettings;
@@ -311,7 +311,7 @@ export class Config {
     this.mcpServerCommand = params.mcpServerCommand;
     this.mcpServers = params.mcpServers;
     this.userMemory = params.userMemory ?? '';
-    this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
+    this.contextFileCount = params.contextFileCount ?? 0;
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
     this.showMemoryUsage = params.showMemoryUsage ?? false;
     this.accessibility = params.accessibility ?? {};
@@ -361,7 +361,7 @@ export class Config {
       params.loadMemoryFromIncludeDirectories ?? false;
 
     if (params.contextFileName) {
-      setLlxprtMdFilename(params.contextFileName);
+      setContextFilename(params.contextFileName);
     }
 
     // TELEMETRY: Re-enabled for local file logging only - no network endpoints allowed
@@ -579,12 +579,12 @@ export class Config {
     this.userMemory = newUserMemory;
   }
 
-  getLlxprtMdFileCount(): number {
-    return this.llxprtMdFileCount;
+  getContextFileCount(): number {
+    return this.contextFileCount;
   }
 
-  setLlxprtMdFileCount(count: number): void {
-    this.llxprtMdFileCount = count;
+  setContextFileCount(count: number): void {
+    this.contextFileCount = count;
   }
 
   getApprovalMode(): ApprovalMode {
@@ -802,7 +802,7 @@ export class Config {
     );
 
     this.setUserMemory(memoryContent);
-    this.setLlxprtMdFileCount(fileCount);
+    this.setContextFileCount(fileCount);
 
     return { memoryContent, fileCount };
   }

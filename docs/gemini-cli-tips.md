@@ -12,8 +12,8 @@ If you're using both Gemini CLI and LLxprt Code, you can keep your configuration
 # Link settings file
 ln -s ~/.gemini/settings.json ~/.llxprt/settings.json
 
-# Link context file (GEMINI.md/LLXPRT.md)
-ln -s ~/.gemini/GEMINI.md ~/.llxprt/LLXPRT.md
+# Link context file (AGENT.md)
+ln -s ~/.config/AGENT.md ~/.llxprt/AGENT.md
 
 # Link environment variables
 ln -s ~/.gemini/.env ~/.llxprt/.env
@@ -25,7 +25,7 @@ ln -s ~/.gemini/.env ~/.llxprt/.env
 
 ```bash
 ln -s /data/data/com.termux/files/home/.gemini/settings.json /data/data/com.termux/files/home/.llxprt/settings.json
-ln -s /data/data/com.termux/files/home/.gemini/GEMINI.md /data/data/com.termux/files/home/.llxprt/LLXPRT.md
+ln -s /data/data/com.termux/files/home/.config/AGENT.md /data/data/com.termux/files/home/.llxprt/AGENT.md
 ln -s /data/data/com.termux/files/home/.gemini/.env /data/data/com.termux/files/home/.llxprt/.env
 ```
 
@@ -33,7 +33,7 @@ ln -s /data/data/com.termux/files/home/.gemini/.env /data/data/com.termux/files/
 
 ```bash
 ln -s ~/.gemini/settings.json ~/.llxprt/settings.json
-ln -s ~/.gemini/GEMINI.md ~/.llxprt/LLXPRT.md
+ln -s ~/.config/AGENT.md ~/.llxprt/AGENT.md
 ln -s ~/.gemini/.env ~/.llxprt/.env
 ```
 
