@@ -13,7 +13,7 @@ import {
   getIdeInstaller,
   ideContext,
   IdeClient,
-  File,
+  type File,
 } from '@vybestack/llxprt-code-core';
 import {
   CommandContext,
@@ -83,10 +83,15 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
   switch (connection.status) {
     case IDEConnectionStatus.Connected: {
       let content = `🟢 Connected to ${ideClient.getDetectedIdeDisplayName()}`;
-      const context = ideContext.getIdeContext();
-      const openFiles = context?.workspaceState?.openFiles;
-      if (openFiles && openFiles.length > 0) {
-        content += formatFileList(openFiles);
+      try {
+        const context = await ideContext.getIdeContext();
+        const openFiles = context?.workspaceState?.openFiles;
+
+        if (openFiles && openFiles.length > 0) {
+          content += formatFileList(openFiles);
+        }
+      } catch (_e) {
+        // Ignore
       }
       return {
         messageType: 'info',
@@ -131,8 +136,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
           messageType: 'error',
           content: `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
             DetectedIde,
-          )
-            .map((ide) => getIdeDisplayName(ide))
+          ).map((ide) => getIdeDisplayName(ide))}
             .join(', ')}`,
         }) as const,
     };
@@ -149,33 +153,14 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     name: 'status',
     description: 'check status of IDE integration',
     kind: CommandKind.BUILT_IN,
-    action: (_context: CommandContext): SlashCommandActionReturn => {
-      const connection = ideClient.getConnectionStatus();
-      switch (connection.status) {
-        case IDEConnectionStatus.Connected:
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: `🟢 Connected to ${ideClient.getDetectedIdeDisplayName()}`,
-          } as const;
-        case IDEConnectionStatus.Connecting:
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: `🟡 Connecting...`,
-          } as const;
-        default: {
-          let content = `🔴 Disconnected`;
-          if (connection.details) {
-            content += `: ${connection.details}`;
-          }
-          return {
-            type: 'message',
-            messageType: 'error',
-            content,
-          } as const;
-        }
-      }
+    action: async (): Promise<SlashCommandActionReturn> => {
+      const { messageType, content } =
+        await getIdeStatusMessageWithFiles(ideClient);
+      return {
+        type: 'message',
+        messageType,
+        content,
+      } as const;
     },
   };
 
