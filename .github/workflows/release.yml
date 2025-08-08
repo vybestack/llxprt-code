@@ -178,8 +178,12 @@ jobs:
           # Get the last release tag
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
+            echo "No previous release tag found, using first commit"
             LAST_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
+
+          # Save last tag for comparison link
+          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_OUTPUT
 
           # Get commit messages since last tag
           echo "Getting commits from $LAST_TAG to HEAD"
@@ -189,7 +193,7 @@ jobs:
           echo "Attempting to generate release notes with LLxprt Code..."
 
           # Create the prompt in a variable
-          PROMPT="Generate release notes for LLxprt Code ${{ steps.version.outputs.RELEASE_TAG }}. Include sections: Release Focus, Features, Bug Fixes, Installation. Commits: $(cat commits.txt)"
+          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }} comparing to previous release $LAST_TAG. NO EMOJIS. Include sections: Release Focus, Features, Bug Fixes, Installation. Add comparison link at end. Commits: $(cat commits.txt)"
 
           # Try LLxprt generation
           set +e
@@ -211,7 +215,7 @@ jobs:
             # Write basic release notes
             echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
             echo "" >> release-notes.md
-            echo "### 📥 Installation & Upgrade" >> release-notes.md
+            echo "### Installation & Upgrade" >> release-notes.md
             echo "" >> release-notes.md
             echo "#### Install" >> release-notes.md
             echo '```bash' >> release-notes.md
@@ -223,9 +227,17 @@ jobs:
             echo "npm update -g @vybestack/llxprt-code" >> release-notes.md
             echo '```' >> release-notes.md
             echo "" >> release-notes.md
-            echo "### 📝 Changes" >> release-notes.md
+            echo "### Changes" >> release-notes.md
             echo "" >> release-notes.md
             cat commits.txt >> release-notes.md
+          fi
+
+          # Add comparison link if we have a real previous tag
+          if [[ "$LAST_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
+            echo "" >> release-notes.md
+            echo "---" >> release-notes.md
+            echo "" >> release-notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ steps.version.outputs.RELEASE_TAG }}" >> release-notes.md
           fi
 
           echo "Release notes generated"
