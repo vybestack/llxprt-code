@@ -253,4 +253,85 @@ describe('Footer Responsive Behavior', () => {
       });
     });
   });
+
+  describe('Two-line layout requirement', () => {
+    it('should organize content into logical 2-line structure', () => {
+      const widths = [60, 100, 180];
+
+      widths.forEach((width) => {
+        mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
+        const { lastFrame } = render(<Footer {...defaultProps} />);
+        const output = lastFrame();
+
+        // Should have status info (Memory|Context) separate from path info
+        expect(output).toMatch(/(Mem:|Memory:)/);
+        expect(output).toMatch(/(Ctx:|Context:)/);
+        expect(output).toMatch(/(long-project-name|\/home\/user\/projects)/); // Path (may be truncated)
+        if (width >= 80) {
+          expect(output).toMatch(/gpt-4/); // Model only shown at standard+ widths
+        }
+      });
+    });
+
+    it('should show Memory|Context|Time together when wide', () => {
+      mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const output = lastFrame();
+
+      // Should have Memory, Context, and Time displayed
+      expect(output).toMatch(/Memory:/);
+      expect(output).toMatch(/Context:/);
+      expect(output).toMatch(/\d{2}:\d{2}:\d{2}/); // Timestamp
+
+      // Should also have path and model displayed
+      expect(output).toContain('/home/user/projects');
+      expect(output).toContain('gpt-4');
+    });
+
+    it('should organize Path and Model information appropriately', () => {
+      mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
+
+      const { lastFrame } = render(<Footer {...defaultProps} />);
+      const output = lastFrame();
+
+      // Should contain path and model information
+      expect(output).toContain('/home/user/projects');
+      expect(output).toContain('gpt-4');
+      expect(output).toContain('feature/'); // Branch name
+
+      // Should also have memory and context (they can be on separate logical lines)
+      expect(output).toMatch(/Memory:/);
+      expect(output).toMatch(/Context:/);
+    });
+
+    it('should adapt content appropriately across width breakpoints', () => {
+      // Test narrow width
+      mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
+      let { lastFrame } = render(<Footer {...defaultProps} />);
+      let output = lastFrame();
+
+      expect(output).toMatch(/Mem:/); // Abbreviated
+      expect(output).toMatch(/Ctx:/); // Abbreviated
+      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp at narrow
+
+      // Test standard width
+      mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
+      ({ lastFrame } = render(<Footer {...defaultProps} />));
+      output = lastFrame();
+
+      expect(output).toMatch(/Memory:/); // Full label
+      expect(output).toMatch(/Context:/); // Full label
+      expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp at standard
+
+      // Test wide width
+      mockUseTerminalSize.mockReturnValue({ columns: 180, rows: 20 });
+      ({ lastFrame } = render(<Footer {...defaultProps} />));
+      output = lastFrame();
+
+      expect(output).toMatch(/Memory:/); // Full label
+      expect(output).toMatch(/Context:/); // Full label
+      expect(output).toMatch(/\d{2}:\d{2}:\d{2}/); // Timestamp at wide
+    });
+  });
 });

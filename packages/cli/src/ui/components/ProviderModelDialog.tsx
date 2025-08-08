@@ -66,8 +66,10 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   );
   const columns = isNarrow ? 1 : 3;
   const colWidth = isWide
-    ? Math.max(longestId + 4, 30)
-    : Math.max(longestId + 4, 20);
+    ? Math.max(longestId + 6, 40) // Even wider columns with more padding in wide mode
+    : isNarrow
+      ? Math.max(longestId + 4, 25) // Single column in narrow mode
+      : Math.max(Math.floor(longestId * 0.75) + 6, 25); // Balanced for standard mode with more padding
   const rows = Math.ceil(filteredModels.length / columns);
 
   const move = (delta: number) => {
@@ -114,15 +116,21 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
 
   const renderItem = (m: IModel, i: number) => {
     const selected = i === index;
-    // In wide mode, don't truncate. In standard/narrow, truncate reasonably
-    const displayName = isWide
-      ? m.id
-      : m.id.length > 20
-        ? truncateEnd(m.id, 20)
-        : m.id;
+    // Calculate display name based on breakpoint
+    let displayName: string;
+    if (isWide) {
+      displayName = m.id; // No truncation in wide mode
+    } else if (isNarrow) {
+      displayName = m.id.length > 20 ? truncateEnd(m.id, 20) : m.id; // Truncate at 20 chars in narrow
+    } else {
+      // Standard mode - truncate if longer than column width allows
+      const maxLength = colWidth - 3; // Account for marker and space
+      displayName =
+        m.id.length > maxLength ? truncateEnd(m.id, maxLength) : m.id;
+    }
 
     return (
-      <Box key={m.id} width={isWide ? undefined : colWidth} marginRight={2}>
+      <Box key={m.id} width={colWidth} flexShrink={0}>
         <Text
           color={
             selected
@@ -162,7 +170,11 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       if (i < filteredModels.length)
         rowItems.push(renderItem(filteredModels[i], i));
     }
-    visibleGrid.push(<Box key={r}>{rowItems}</Box>);
+    visibleGrid.push(
+      <Box key={r} flexDirection="row" width="100%">
+        {rowItems}
+      </Box>,
+    );
   }
 
   const renderContent = () => {

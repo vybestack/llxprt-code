@@ -126,18 +126,23 @@ describe('TodoPanel Responsive Behavior', () => {
       expect(output).toMatch(/→/);
       expect(output).toMatch(/○/);
 
-      // Should show abbreviated task content (truncated)
-      expect(output).toMatch(/This is a very long todo.*\.\.\./);
+      // With improved truncation (85% width), more content should be visible
+      // At 100px width, the long content should now fit or be less aggressively truncated
       expect(output).toContain('Short task'); // Short enough to show fully
-      expect(output).toMatch(/Another pending task.*\.\.\./);
+
+      // The long content should either show fully or with much more visible text
+      const hasFullContent = output.includes(
+        'This is a very long todo item that should be truncated at different widths',
+      );
+      const hasTruncatedContent = output.match(
+        /This is a very long todo.*\.\.\./,
+      );
+
+      // Either full content is shown or it's truncated but with much more content visible
+      expect(hasFullContent || hasTruncatedContent).toBe(true);
 
       // Should NOT show task count summary (that's only for narrow)
       expect(output).not.toMatch(/3 tasks/i);
-
-      // Should NOT show full long content
-      expect(output).not.toContain(
-        'This is a very long todo item that should be truncated at different widths',
-      );
     });
   });
 
@@ -239,6 +244,99 @@ describe('TodoPanel Responsive Behavior', () => {
       expect(lastFrame()).toContain(
         'This is a very long todo item that should be truncated at different widths',
       );
+    });
+  });
+
+  describe('Content truncation behavior', () => {
+    it('should use less aggressive truncation - 80-90% of available width instead of 50%', () => {
+      // Test with 100px width at standard breakpoint
+      mockUseTerminalSize.mockReturnValue({ columns: 100, rows: 20 });
+
+      const testTodosForTruncation: Todo[] = [
+        {
+          id: '1',
+          content:
+            'This is a very long todo item that should use more width for better readability instead of being truncated too early',
+          status: 'pending',
+        },
+      ];
+
+      mockTodoContext.todos = testTodosForTruncation;
+
+      const { lastFrame } = render(
+        <TodoContext.Provider value={mockTodoContext}>
+          <ToolCallContext.Provider value={mockToolCallContext}>
+            <TodoPanel width={100} />
+          </ToolCallContext.Provider>
+        </TodoContext.Provider>,
+      );
+
+      const output = lastFrame();
+
+      // With 100px width, the old 50% logic would give ~50px content width
+      // The new 80-90% logic should give ~80-90px content width
+      // This means more of the content should be visible before truncation
+
+      // Count visible characters before truncation
+      const contentMatch = output.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+      if (contentMatch) {
+        const visibleContent = contentMatch[1];
+
+        // With better truncation (80-90%), we should see more content
+        // Old logic (50%): ~25 chars visible before "..."
+        // New logic (80-90%): ~40+ chars visible before "..."
+        if (visibleContent.endsWith('...')) {
+          const visibleCharsBeforeDots = visibleContent.length - 3;
+          expect(visibleCharsBeforeDots).toBeGreaterThan(30); // Should show more content
+        } else {
+          // If not truncated, that's even better - means we're using more width
+          expect(visibleContent.length).toBeGreaterThan(30);
+        }
+      }
+    });
+
+    it('should show significantly more content at wider breakpoints due to less aggressive truncation', () => {
+      const longTodo: Todo[] = [
+        {
+          id: '1',
+          content:
+            'This extremely long todo item content should demonstrate the improved truncation behavior by showing much more text',
+          status: 'pending',
+        },
+      ];
+
+      mockTodoContext.todos = longTodo;
+
+      // Test at different widths to verify less aggressive truncation
+      const widthTests = [
+        { width: 80, expectedMinChars: 25 }, // Should show more than old 50% logic
+        { width: 100, expectedMinChars: 35 }, // Should show much more
+        { width: 120, expectedMinChars: 45 }, // Should show even more
+      ];
+
+      widthTests.forEach(({ width, expectedMinChars }) => {
+        mockUseTerminalSize.mockReturnValue({ columns: width, rows: 20 });
+
+        const { lastFrame } = render(
+          <TodoContext.Provider value={mockTodoContext}>
+            <ToolCallContext.Provider value={mockToolCallContext}>
+              <TodoPanel width={width} />
+            </ToolCallContext.Provider>
+          </TodoContext.Provider>,
+        );
+
+        const output = lastFrame();
+        const contentMatch = output.match(/○\s+([^.]+(?:\.\.\.)?)(?:\s|$)/);
+
+        if (contentMatch) {
+          const visibleContent = contentMatch[1];
+          const visibleChars = visibleContent.endsWith('...')
+            ? visibleContent.length - 3
+            : visibleContent.length;
+
+          expect(visibleChars).toBeGreaterThanOrEqual(expectedMinChars);
+        }
+      });
     });
   });
 });

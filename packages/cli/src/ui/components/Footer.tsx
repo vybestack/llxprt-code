@@ -40,9 +40,27 @@ const ResponsiveMemoryDisplay: React.FC<{
   compact: boolean;
   detailed: boolean;
 }> = ({ compact, detailed }) => {
-  const [memoryUsage, setMemoryUsage] = useState<string>('');
+  // Initialize with immediate value to avoid empty render in tests
+  const initialUsage = process.memoryUsage().rss;
+  const initialPercentage = Math.round(
+    (initialUsage / (4.8 * 1024 * 1024 * 1024)) * 100,
+  );
+
+  let initialText: string;
+  if (detailed) {
+    const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
+    initialText = `Memory: ${initialPercentage}% (${usageGB}GB/4.8GB)`;
+  } else if (compact) {
+    initialText = `Mem: ${initialPercentage}%`;
+  } else {
+    initialText = `Memory: ${initialPercentage}%`;
+  }
+
+  const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
   const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
-    SemanticColors.text.secondary,
+    initialUsage >= 2 * 1024 * 1024 * 1024
+      ? SemanticColors.status.error
+      : SemanticColors.text.secondary,
   );
 
   useEffect(() => {
@@ -69,7 +87,7 @@ const ResponsiveMemoryDisplay: React.FC<{
     };
 
     const intervalId = setInterval(updateMemory, 2000);
-    updateMemory(); // Initial update
+    // Don't call updateMemory immediately since we have initial value
     return () => clearInterval(intervalId);
   }, [compact, detailed]);
 
@@ -112,7 +130,9 @@ const ResponsiveContextDisplay: React.FC<{
 
 // Responsive Timestamp Display
 const ResponsiveTimestamp: React.FC = () => {
-  const [time, setTime] = useState<string>('');
+  // Initialize with immediate value to avoid empty render in tests
+  const initialTime = new Date().toTimeString().slice(0, 8); // HH:MM:SS
+  const [time, setTime] = useState<string>(initialTime);
 
   useEffect(() => {
     const updateTime = () => {
@@ -121,7 +141,7 @@ const ResponsiveTimestamp: React.FC = () => {
     };
 
     const intervalId = setInterval(updateTime, 1000);
-    updateTime(); // Initial update
+    // Don't call updateTime immediately since we have initial value
     return () => clearInterval(intervalId);
   }, []);
 
@@ -161,20 +181,87 @@ export const Footer: React.FC<FooterProps> = ({
   }
 
   return (
-    <Box justifyContent="space-between" width="100%">
-      <Box>
-        {debugMode && <DebugProfiler />}
-        {vimMode && (
-          <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+    <Box flexDirection="column" width="100%">
+      {/* First Line: Memory | Context | Time (when wide) */}
+      <Box justifyContent="space-between" width="100%" alignItems="center">
+        <Box flexDirection="row" alignItems="center">
+          {debugMode && <DebugProfiler />}
+          {vimMode && (
+            <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+          )}
+        </Box>
+
+        {/* Middle Section: Sandbox Info (only show at standard+ widths) */}
+        {!isCompact && (
+          <Box flexGrow={1} justifyContent="center">
+            {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
+              <Text color={SemanticColors.status.success}>
+                {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
+              </Text>
+            ) : process.env.SANDBOX === 'sandbox-exec' ? (
+              <Text color={SemanticColors.status.warning}>
+                macOS Seatbelt{' '}
+                <Text color={SemanticColors.text.secondary}>
+                  ({process.env.SEATBELT_PROFILE})
+                </Text>
+              </Text>
+            ) : (
+              <Text color={SemanticColors.status.error}>
+                no sandbox{' '}
+                <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
+              </Text>
+            )}
+          </Box>
         )}
 
-        {/* Path Display */}
-        {nightly ? (
-          <Gradient colors={Colors.GradientColors}>
-            <Text>
+        {/* Right Section: Status Information - Memory, Context, Time */}
+        <Box flexDirection="row" alignItems="center">
+          <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
+          <Text color={SemanticColors.text.secondary}> | </Text>
+
+          <ResponsiveContextDisplay
+            promptTokenCount={promptTokenCount}
+            model={model}
+            contextLimit={contextLimit}
+            compact={isCompact}
+            detailed={isDetailed}
+          />
+
+          {/* Show timestamp only at wide width */}
+          {showTimestamp && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <ResponsiveTimestamp />
+            </>
+          )}
+        </Box>
+      </Box>
+
+      {/* Second Line: Path (branch) and Model */}
+      <Box justifyContent="space-between" width="100%" alignItems="center">
+        <Box flexDirection="row" alignItems="center">
+          {/* Path Display */}
+          {nightly ? (
+            <Gradient colors={Colors.GradientColors}>
+              <Text>
+                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+                {branchName && (
+                  <Text>
+                    {' '}
+                    (
+                    {branchName.length > maxBranchLength
+                      ? truncateMiddle(branchName, maxBranchLength)
+                      : branchName}
+                    *)
+                  </Text>
+                )}
+              </Text>
+            </Gradient>
+          ) : (
+            <Text color={SemanticColors.text.accent}>
               {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
               {branchName && (
-                <Text>
+                <Text color={SemanticColors.text.secondary}>
                   {' '}
                   (
                   {branchName.length > maxBranchLength
@@ -184,120 +271,57 @@ export const Footer: React.FC<FooterProps> = ({
                 </Text>
               )}
             </Text>
-          </Gradient>
-        ) : (
-          <Text color={SemanticColors.text.accent}>
-            {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-            {branchName && (
-              <Text color={SemanticColors.text.secondary}>
-                {' '}
-                (
-                {branchName.length > maxBranchLength
-                  ? truncateMiddle(branchName, maxBranchLength)
-                  : branchName}
-                *)
-              </Text>
-            )}
-          </Text>
-        )}
-        {debugMode && (
-          <Text color={SemanticColors.status.error}>
-            {' ' + (debugMessage || '--debug')}
-          </Text>
-        )}
-      </Box>
-
-      {/* Middle Section: Sandbox Info (only show at standard+ widths) */}
-      {!isCompact && (
-        <Box
-          flexGrow={1}
-          alignItems="center"
-          justifyContent="center"
-          display="flex"
-        >
-          {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-            <Text color={SemanticColors.status.success}>
-              {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
-            </Text>
-          ) : process.env.SANDBOX === 'sandbox-exec' ? (
-            <Text color={SemanticColors.status.warning}>
-              macOS Seatbelt{' '}
-              <Text color={SemanticColors.text.secondary}>
-                ({process.env.SEATBELT_PROFILE})
-              </Text>
-            </Text>
-          ) : (
+          )}
+          {debugMode && (
             <Text color={SemanticColors.status.error}>
-              no sandbox{' '}
-              <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
+              {' ' + (debugMessage || '--debug')}
             </Text>
           )}
         </Box>
-      )}
 
-      {/* Right Section: Status Information */}
-      <Box alignItems="center" flexWrap="wrap">
-        {/* Always show memory and context */}
-        <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
-        <Text color={SemanticColors.text.secondary}> | </Text>
-
-        <ResponsiveContextDisplay
-          promptTokenCount={promptTokenCount}
-          model={model}
-          contextLimit={contextLimit}
-          compact={isCompact}
-          detailed={isDetailed}
-        />
-
-        {/* Conditionally show model name */}
-        {showModelName && (
-          <>
-            <Text color={SemanticColors.text.secondary}> | </Text>
+        {/* Right Section: Model and other status */}
+        <Box flexDirection="row" alignItems="center">
+          {/* Conditionally show model name */}
+          {showModelName && (
             <Text color={SemanticColors.text.accent}>Model: {model}</Text>
-          </>
-        )}
+          )}
 
-        {/* Show paid/free mode for Gemini provider */}
-        {isPaidMode !== undefined &&
-          (() => {
-            const providerManager = getProviderManager();
-            const activeProvider = providerManager?.getActiveProvider?.();
-            const isGeminiProvider = activeProvider?.name === 'gemini';
+          {/* Show paid/free mode for Gemini provider */}
+          {isPaidMode !== undefined &&
+            (() => {
+              const providerManager = getProviderManager();
+              const activeProvider = providerManager?.getActiveProvider?.();
+              const isGeminiProvider = activeProvider?.name === 'gemini';
 
-            if (isGeminiProvider) {
-              return (
-                <>
-                  <Text color={SemanticColors.text.secondary}> | </Text>
-                  <Text
-                    color={
-                      isPaidMode
-                        ? SemanticColors.status.warning
-                        : SemanticColors.status.success
-                    }
-                  >
-                    {isPaidMode ? 'paid mode' : 'free mode'}
-                  </Text>
-                </>
-              );
-            }
-            return null;
-          })()}
+              if (isGeminiProvider) {
+                return (
+                  <>
+                    {showModelName && (
+                      <Text color={SemanticColors.text.secondary}> | </Text>
+                    )}
+                    <Text
+                      color={
+                        isPaidMode
+                          ? SemanticColors.status.warning
+                          : SemanticColors.status.success
+                      }
+                    >
+                      {isPaidMode ? 'paid mode' : 'free mode'}
+                    </Text>
+                  </>
+                );
+              }
+              return null;
+            })()}
 
-        {/* Show error count */}
-        {!showErrorDetails && errorCount > 0 && (
-          <>
-            <Text color={SemanticColors.text.secondary}> | </Text>
-            <ConsoleSummaryDisplay errorCount={errorCount} />
-          </>
-        )}
-
-        {/* Show timestamp only at wide width */}
-        {showTimestamp && (
-          <>
-            <Text color={SemanticColors.text.secondary}> | </Text>
-            <ResponsiveTimestamp />
-          </>
-        )}
+          {/* Show error count */}
+          {!showErrorDetails && errorCount > 0 && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <ConsoleSummaryDisplay errorCount={errorCount} />
+            </>
+          )}
+        </Box>
       </Box>
     </Box>
   );

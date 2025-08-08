@@ -163,10 +163,10 @@ const renderTodoAbbreviated = (
   }
 
   // Calculate available width for content (minus marker, space, padding, borders)
-  // Be more conservative with truncation for better readability
+  // Use 85% of available width instead of 50% for better readability
   const contentWidth = Math.max(
     20,
-    Math.min(40, Math.floor(availableWidth * 0.5)),
+    Math.min(80, Math.floor(availableWidth * 0.85)),
   );
   const truncatedContent = truncateEnd(todo.content, contentWidth);
 
