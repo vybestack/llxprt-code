@@ -59,49 +59,57 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     setIndex(Math.max(0, currentIndex));
   }, [searchTerm, filteredModels, currentModel]);
 
-  // Responsive layout calculations
-  const longestId = filteredModels.reduce(
-    (len, m) => Math.max(len, m.id.length),
-    0,
-  );
-
   // Calculate optimal layout based on available width and content
   const calculateLayout = () => {
+    // Calculate minimum column width needed
+    const longestModelName = filteredModels.reduce(
+      (len, m) => Math.max(len, m.id.length),
+      0,
+    );
+    
     if (isNarrow) {
-      return { columns: 1, colWidth: Math.max(longestId + 4, 25) };
+      return { columns: 1, colWidth: Math.max(longestModelName + 4, 25) };
     }
 
-    const padding = 4; // Account for dialog padding and borders
-    const availableWidth = width - padding;
-    const markerSpace = 2; // Space for "● " or "○ "
-    const minColWidth = Math.max(longestId + markerSpace + 2, 20);
+    // Step 1: Get actual content width (dialog is constrained to 120)
+    const contentWidth = Math.min(width, 120) - 4; // 4 for padding/borders
 
-    // Calculate how many columns can fit
-    let optimalColumns = 1;
-    let optimalColWidth = minColWidth;
+    // Step 2: Calculate minimum column width needed
+    // In wide mode, be more flexible to allow for better space utilization
+    const baseMinColWidth = longestModelName + 3; // for "● " or "○ " marker
+    const minColWidth = isWide ? Math.min(baseMinColWidth, 45) : baseMinColWidth;
 
-    for (let cols = 1; cols <= 3; cols++) {
-      const totalWidth = cols * minColWidth + (cols - 1) * 2; // 2 spaces between columns
-      if (totalWidth <= availableWidth) {
-        optimalColumns = cols;
-        // Distribute extra space among columns
-        const extraSpace = Math.max(0, availableWidth - totalWidth);
-        optimalColWidth = minColWidth + Math.floor(extraSpace / cols);
-      } else {
+    // Step 3: Determine column count
+    const maxDesiredCols = isNarrow ? 1 : 3;
+    let columns = 1;
+    
+    for (let cols = maxDesiredCols; cols >= 1; cols--) {
+      const totalWidth = (minColWidth * cols) + ((cols - 1) * 2); // 2 spaces between columns
+      if (totalWidth <= contentWidth) {
+        columns = cols;
         break;
       }
     }
 
-    // In wide mode, allow slightly more generous column spacing
-    if (isWide && optimalColumns > 1) {
-      optimalColWidth = Math.min(optimalColWidth + 4, 50); // Cap at 50 chars
+    // Step 4: Calculate actual column width for even distribution
+    const availableWidth = contentWidth - ((columns - 1) * 2);
+    const colWidth = Math.floor(availableWidth / columns);
+
+    // Force reasonable column width limits to ensure truncation in standard mode
+    // But don't constrain in wide mode where we want to show full names
+    let finalColWidth = colWidth;
+    if (!isWide) {
+      const maxReasonableColWidth = contentWidth < 100 ? 35 : 50;
+      finalColWidth = Math.min(colWidth, maxReasonableColWidth);
     }
 
-    return { columns: optimalColumns, colWidth: optimalColWidth };
+    return { columns, colWidth: finalColWidth };
   };
 
-  const { columns, colWidth } = calculateLayout();
+  const layout = calculateLayout();
+  const { columns, colWidth } = layout;
   const rows = Math.ceil(filteredModels.length / columns);
+  const contentWidth = Math.min(width, 120) - 4; // Same as used in calculateLayout
 
   const move = (delta: number) => {
     let next = index + delta;
@@ -177,9 +185,9 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       </Box>
     );
   };
-
-  // Calculate visible rows for scrolling
-  const maxVisibleRows = Math.min(rows, 10); // Show max 10 rows at a time
+  
+  // Calculate visible items for scrolling (limit to reasonable amount)
+  const maxVisibleRows = Math.min(rows, 10);
   const currentRow = Math.floor(index / columns);
   const scrollOffset = Math.max(
     0,
@@ -188,25 +196,19 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       rows - maxVisibleRows,
     ),
   );
+  
+  const startIndex = scrollOffset * columns;
+  const endIndex = Math.min(startIndex + (maxVisibleRows * columns), filteredModels.length);
+  const visibleModels = filteredModels.slice(startIndex, endIndex);
 
-  const visibleGrid: React.ReactNode[] = [];
-  for (
-    let r = scrollOffset;
-    r < Math.min(scrollOffset + maxVisibleRows, rows);
-    r++
-  ) {
-    const rowItems = [];
-    for (let c = 0; c < columns; c++) {
-      const i = r * columns + c;
-      if (i < filteredModels.length)
-        rowItems.push(renderItem(filteredModels[i], i));
-    }
-    visibleGrid.push(
-      <Box key={r} flexDirection="row" width="100%">
-        {rowItems}
-      </Box>,
-    );
-  }
+  // Create the model grid using single flex row that wraps
+  const renderModelGrid = () => (
+    <Box flexDirection="row" flexWrap="wrap" width={contentWidth}>
+      {visibleModels.map((model, i) => 
+        renderItem(model, startIndex + i)
+      )}
+    </Box>
+  );
 
   const renderContent = () => {
     if (isNarrow) {
@@ -235,7 +237,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
 
           {/* Results */}
           {filteredModels.length > 0 ? (
-            visibleGrid
+            renderModelGrid()
           ) : (
             <Box marginY={1}>
               <Text color={SemanticColors.text.secondary}>
@@ -285,7 +287,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
 
         {/* Model grid */}
         {filteredModels.length > 0 ? (
-          visibleGrid
+          renderModelGrid()
         ) : (
           <Box marginY={1}>
             <Text color={SemanticColors.text.secondary}>

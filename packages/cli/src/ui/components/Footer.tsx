@@ -237,44 +237,54 @@ export const Footer: React.FC<FooterProps> = ({
         </Box>
       </Box>
 
-      {/* Second Line: Branch (path) and Model */}
-      <Box justifyContent="space-between" width="100%" alignItems="center">
+      {/* Second Line: Branch */}
+      <Box justifyContent="flex-start" width="100%" alignItems="center">
         <Box flexDirection="row" alignItems="center">
-          {/* Branch and Path Display */}
-          {nightly ? (
-            <Gradient colors={Colors.GradientColors}>
-              <Text>
-                {branchName && (
+          {/* Branch Display */}
+          {branchName && (
+            <>
+              {nightly ? (
+                <Gradient colors={Colors.GradientColors}>
                   <Text>
                     (
                     {branchName.length > maxBranchLength
                       ? truncateMiddle(branchName, maxBranchLength)
                       : branchName}
-                    *){' '}
+                    *)
                   </Text>
-                )}
-                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-              </Text>
-            </Gradient>
-          ) : (
-            <Text color={SemanticColors.text.accent}>
-              {branchName && (
+                </Gradient>
+              ) : (
                 <Text color={SemanticColors.text.accent}>
                   (
                   {branchName.length > maxBranchLength
                     ? truncateMiddle(branchName, maxBranchLength)
                     : branchName}
-                  *){' '}
+                  *)
                 </Text>
               )}
-              <Text color={SemanticColors.text.secondary}>
-                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-              </Text>
-            </Text>
+            </>
           )}
           {debugMode && (
             <Text color={SemanticColors.status.error}>
               {' ' + (debugMessage || '--debug')}
+            </Text>
+          )}
+        </Box>
+      </Box>
+
+      {/* Third Line: Path and Model */}
+      <Box justifyContent="space-between" width="100%" alignItems="center">
+        <Box flexDirection="row" alignItems="center">
+          {/* Path Display */}
+          {nightly ? (
+            <Gradient colors={Colors.GradientColors}>
+              <Text>
+                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+              </Text>
+            </Gradient>
+          ) : (
+            <Text color={SemanticColors.text.secondary}>
+              {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
             </Text>
           )}
         </Box>
