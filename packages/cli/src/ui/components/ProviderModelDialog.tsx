@@ -8,6 +8,8 @@ import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { IModel } from '../../providers/index.js';
+import { useResponsive } from '../hooks/useResponsive.js';
+import { truncateEnd } from '../utils/responsive.js';
 
 interface ProviderModelDialogProps {
   models: IModel[];
@@ -22,6 +24,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   onSelect,
   onClose,
 }) => {
+  const { isNarrow, isWide } = useResponsive();
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(true);
 
@@ -46,26 +49,25 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   const [index, setIndex] = useState(() =>
     Math.max(
       0,
-      filteredModels.findIndex((m) => m.id === currentModel),
+      sortedModels.findIndex((m) => m.id === currentModel),
     ),
   );
 
   // Reset index when search term changes
   React.useEffect(() => {
-    setIndex(0);
-  }, [searchTerm]);
+    const currentIndex = filteredModels.findIndex((m) => m.id === currentModel);
+    setIndex(Math.max(0, currentIndex));
+  }, [searchTerm, filteredModels, currentModel]);
 
-  // Dynamically calculate columns based on terminal width and longest model ID
-  const terminalWidth = process.stdout.columns || 80;
+  // Responsive layout calculations
   const longestId = filteredModels.reduce(
     (len, m) => Math.max(len, m.id.length),
     0,
   );
-  const minColWidth = Math.max(longestId + 4, 24);
-  const padding = 8; // Border + margins
-  const maxColumns = Math.floor((terminalWidth - padding) / minColWidth);
-  const columns = Math.min(Math.max(3, maxColumns), 5); // Between 3-5 columns
-  const colWidth = Math.floor((terminalWidth - padding) / columns);
+  const columns = isNarrow ? 1 : 3;
+  const colWidth = isWide
+    ? Math.max(longestId + 4, 30)
+    : Math.max(longestId + 4, 20);
   const rows = Math.ceil(filteredModels.length / columns);
 
   const move = (delta: number) => {
@@ -111,20 +113,27 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   });
 
   const renderItem = (m: IModel, i: number) => {
-    const selected = i === index && !isSearching;
+    const selected = i === index;
+    // In wide mode, don't truncate. In standard/narrow, truncate reasonably
+    const displayName = isWide
+      ? m.id
+      : m.id.length > 20
+        ? truncateEnd(m.id, 20)
+        : m.id;
+
     return (
-      <Box key={m.id} width={colWidth} marginRight={2}>
+      <Box key={m.id} width={isWide ? undefined : colWidth} marginRight={2}>
         <Text
           color={
             selected
               ? SemanticColors.text.accent
-              : isSearching
+              : isSearching && !isNarrow
                 ? SemanticColors.text.secondary
                 : SemanticColors.text.primary
           }
         >
           {selected ? '● ' : '○ '}
-          {m.id}
+          {displayName}
         </Text>
       </Box>
     );
@@ -156,63 +165,116 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     visibleGrid.push(<Box key={r}>{rowItems}</Box>);
   }
 
-  return (
+  const renderContent = () => {
+    if (isNarrow) {
+      return (
+        <Box flexDirection="column">
+          <Text bold color={SemanticColors.text.primary}>
+            Select Model
+          </Text>
+
+          {/* Search input - prominent for narrow */}
+          <Box marginY={1}>
+            <Text color={SemanticColors.text.primary}>
+              search: <Text color={SemanticColors.text.accent}>▌</Text>
+            </Text>
+            <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
+          </Box>
+
+          <Text color={SemanticColors.text.secondary}>
+            Tab to switch modes, Enter to select, Esc to cancel
+          </Text>
+
+          {/* Model count for narrow */}
+          <Text color={SemanticColors.text.secondary}>
+            {filteredModels.length} models{searchTerm && ` found`}
+          </Text>
+
+          {/* Results */}
+          {filteredModels.length > 0 ? (
+            visibleGrid
+          ) : (
+            <Box marginY={1}>
+              <Text color={SemanticColors.text.secondary}>
+                No models match &quot;{searchTerm}&quot;
+              </Text>
+            </Box>
+          )}
+        </Box>
+      );
+    }
+
+    return (
+      <Box flexDirection="column">
+        <Text bold color={SemanticColors.text.primary}>
+          {isSearching
+            ? 'Search Models'
+            : 'Select Model (Tab to switch modes, Enter to select, Esc to cancel)'}
+        </Text>
+
+        {/* Search input */}
+        <Box marginY={1}>
+          <Text
+            color={
+              isSearching
+                ? SemanticColors.text.primary
+                : SemanticColors.text.secondary
+            }
+          >
+            search:{' '}
+            {isSearching && <Text color={SemanticColors.text.accent}>▌</Text>}
+          </Text>
+          <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
+        </Box>
+
+        {/* Results info - show for standard and wide */}
+        <Text color={SemanticColors.text.secondary}>
+          Found {filteredModels.length} of {sortedModels.length} models
+        </Text>
+
+        {/* Scrolling info for wide layouts */}
+        {isWide && rows > maxVisibleRows && (
+          <Text color={SemanticColors.text.secondary}>
+            Showing {scrollOffset + 1}-
+            {Math.min(scrollOffset + maxVisibleRows, rows)} of {rows} rows
+          </Text>
+        )}
+
+        {/* Model grid */}
+        {filteredModels.length > 0 ? (
+          visibleGrid
+        ) : (
+          <Box marginY={1}>
+            <Text color={SemanticColors.text.secondary}>
+              No models match &quot;{searchTerm}&quot;
+            </Text>
+          </Box>
+        )}
+
+        {/* Current selection - show for non-searching in standard/wide */}
+        {filteredModels.length > 0 && !isSearching && (
+          <Text color={SemanticColors.text.secondary}>
+            Selected: {filteredModels[index].id}
+          </Text>
+        )}
+
+        <Text color={SemanticColors.text.secondary}>Tab to switch modes</Text>
+      </Box>
+    );
+  };
+
+  return isNarrow ? (
+    <Box flexDirection="column" padding={1}>
+      {renderContent()}
+    </Box>
+  ) : (
     <Box
       borderStyle="round"
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
     >
-      <Text bold color={SemanticColors.text.primary}>
-        Select Model (Tab to switch modes, Enter to select, Esc to cancel)
-      </Text>
-
-      {/* Search input */}
-      <Box marginY={1}>
-        <Text
-          color={
-            isSearching
-              ? SemanticColors.text.primary
-              : SemanticColors.text.secondary
-          }
-        >
-          Search:{' '}
-          {isSearching && <Text color={SemanticColors.text.accent}>▌</Text>}
-        </Text>
-        <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
-      </Box>
-
-      {/* Results info */}
-      {searchTerm && (
-        <Text color={SemanticColors.text.secondary}>
-          Found {filteredModels.length} of {sortedModels.length} models
-        </Text>
-      )}
-
-      {rows > maxVisibleRows && (
-        <Text color={SemanticColors.text.secondary}>
-          Showing {scrollOffset + 1}-
-          {Math.min(scrollOffset + maxVisibleRows, rows)} of {rows} rows
-        </Text>
-      )}
-
-      {/* Model grid */}
-      {filteredModels.length > 0 ? (
-        visibleGrid
-      ) : (
-        <Box marginY={1}>
-          <Text color={SemanticColors.text.secondary}>
-            No models match &quot;{searchTerm}&quot;
-          </Text>
-        </Box>
-      )}
-
-      {/* Current selection */}
-      {filteredModels.length > 0 && !isSearching && (
-        <Text color={SemanticColors.text.secondary}>
-          Selected: {filteredModels[index].id}
-        </Text>
-      )}
+      {renderContent()}
     </Box>
   );
 };

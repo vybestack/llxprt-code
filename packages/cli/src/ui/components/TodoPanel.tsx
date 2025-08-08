@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useTodoContext } from '../contexts/TodoContext.js';
 import { useToolCallContext } from '../contexts/ToolCallContext.js';
+import { useResponsive } from '../hooks/useResponsive.js';
 import { SemanticColors } from '../colors.js';
 import {
   Todo as CoreTodo,
@@ -15,6 +16,7 @@ import {
   TodoToolCall,
 } from '@vybestack/llxprt-code-core';
 import { groupToolCalls } from './todo-utils.js';
+import { truncateEnd } from '../utils/responsive.js';
 
 interface Todo extends CoreTodo {
   subtasks?: Subtask[];
@@ -86,6 +88,110 @@ const renderToolCall = (
       </Text>
     </Box>
   );
+};
+
+const renderTodoSummary = (todos: Todo[]): React.ReactElement[] => {
+  const elements: React.ReactElement[] = [];
+  const completed = todos.filter((t) => t.status === 'completed').length;
+  const inProgress = todos.filter((t) => t.status === 'in_progress').length;
+  const pending = todos.filter((t) => t.status === 'pending').length;
+  const total = todos.length;
+
+  // Summary line
+  elements.push(
+    <Box key="summary" flexDirection="row" minHeight={1}>
+      <Text color={SemanticColors.text.primary}>{total} tasks: </Text>
+      <Text color={SemanticColors.status.success}>{completed} completed</Text>
+      <Text color={SemanticColors.text.secondary}>, </Text>
+      <Text color={SemanticColors.status.warning}>
+        {inProgress} in progress
+      </Text>
+      <Text color={SemanticColors.text.secondary}>, </Text>
+      <Text color={SemanticColors.text.secondary}>{pending} pending</Text>
+    </Box>,
+  );
+
+  // Status indicators only
+  elements.push(
+    <Box key="indicators" flexDirection="row" minHeight={1} marginTop={1}>
+      {todos.map((todo) => {
+        let marker = '';
+        let markerColor = SemanticColors.text.primary;
+
+        if (todo.status === 'completed') {
+          marker = '✔';
+          markerColor = SemanticColors.status.success;
+        } else if (todo.status === 'pending') {
+          marker = '○';
+          markerColor = SemanticColors.text.secondary;
+        } else if (todo.status === 'in_progress') {
+          marker = '→';
+          markerColor = SemanticColors.status.warning;
+        }
+
+        return (
+          <Text key={todo.id} color={markerColor} bold>
+            {marker}{' '}
+          </Text>
+        );
+      })}
+    </Box>,
+  );
+
+  return elements;
+};
+
+const renderTodoAbbreviated = (
+  todo: Todo,
+  availableWidth: number,
+): React.ReactElement[] => {
+  const elements: React.ReactElement[] = [];
+
+  // Todo status marker and content
+  let marker = '';
+  let markerColor = SemanticColors.text.primary;
+
+  if (todo.status === 'completed') {
+    marker = '✔';
+    markerColor = SemanticColors.status.success;
+  } else if (todo.status === 'pending') {
+    marker = '○';
+    markerColor = SemanticColors.text.secondary;
+  } else if (todo.status === 'in_progress') {
+    marker = '→';
+    markerColor = SemanticColors.status.warning;
+  }
+
+  // Calculate available width for content (minus marker, space, padding, borders)
+  // Be more conservative with truncation for better readability
+  const contentWidth = Math.max(
+    20,
+    Math.min(40, Math.floor(availableWidth * 0.5)),
+  );
+  const truncatedContent = truncateEnd(todo.content, contentWidth);
+
+  // Main todo line
+  elements.push(
+    <Box key={todo.id} flexDirection="row" minHeight={1}>
+      <Text color={markerColor} bold>
+        {marker}{' '}
+      </Text>
+      <Box flexGrow={1}>
+        <Text
+          color={
+            todo.status === 'in_progress'
+              ? SemanticColors.status.warning
+              : SemanticColors.text.primary
+          }
+          bold={todo.status === 'in_progress'}
+        >
+          {truncatedContent}
+        </Text>
+      </Box>
+    </Box>,
+  );
+
+  return elements;
 };
 
 const renderTodo = (
@@ -171,6 +277,7 @@ const renderTodo = (
 const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
   const { todos } = useTodoContext();
   const { getExecutingToolCalls, subscribe } = useToolCallContext();
+  const { isNarrow, isStandard, isWide } = useResponsive();
   const [, forceUpdate] = useState({});
   const [contentKey, setContentKey] = useState(0);
 
@@ -204,14 +311,28 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
     </Box>,
   );
 
-  // Add todos
-  for (const todo of todos) {
-    const allToolCalls = getExecutingToolCalls(todo.id); // This now gets all tool calls
-    const todoElements = renderTodo(todo, allToolCalls);
-    allElements.push(...todoElements);
-
-    // Add spacing between todos
-    allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
+  // Render different content based on breakpoint
+  if (isNarrow) {
+    // NARROW: Show only task count and status indicators
+    const summaryElements = renderTodoSummary(todos);
+    allElements.push(...summaryElements);
+  } else if (isStandard) {
+    // STANDARD: Show abbreviated task titles
+    for (const todo of todos) {
+      const todoElements = renderTodoAbbreviated(todo, width);
+      allElements.push(...todoElements);
+      // Add spacing between todos
+      allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
+    }
+  } else if (isWide) {
+    // WIDE: Show full task details
+    for (const todo of todos) {
+      const allToolCalls = getExecutingToolCalls(todo.id); // This now gets all tool calls
+      const todoElements = renderTodo(todo, allToolCalls);
+      allElements.push(...todoElements);
+      // Add spacing between todos
+      allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
+    }
   }
 
   return (

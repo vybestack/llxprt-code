@@ -5,14 +5,25 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  type MockedFunction,
+} from 'vitest';
 import { TodoPanel } from './TodoPanel.js';
 import { TodoContext } from '../contexts/TodoContext.js';
 import { ToolCallContext } from '../contexts/ToolCallContext.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
 import { Todo } from '@vybestack/llxprt-code-core';
 import { themeManager } from '../themes/theme-manager.js';
 import { DefaultDark } from '../themes/default.js';
 import { DefaultLight } from '../themes/default-light.js';
+
+vi.mock('../hooks/useTerminalSize.js');
 
 // Mock contexts
 const mockTodoContext = {
@@ -36,9 +47,15 @@ const mockToolCallContext = {
 
 describe('TodoPanel Semantic Colors', () => {
   let originalTheme: string;
+  let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseTerminalSize = useTerminalSize as MockedFunction<
+      typeof useTerminalSize
+    >;
+    // Set wide width to ensure full task details are shown
+    mockUseTerminalSize.mockReturnValue({ columns: 150, rows: 20 });
     originalTheme = themeManager.getActiveTheme().name;
     mockTodoContext.todos = [];
   });
@@ -59,7 +76,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );
@@ -85,7 +102,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );
@@ -106,7 +123,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );
@@ -129,7 +146,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame: darkFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );
@@ -142,7 +159,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame: lightFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );
@@ -161,7 +178,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );
@@ -185,7 +202,7 @@ describe('TodoPanel Semantic Colors', () => {
     const { lastFrame } = render(
       <TodoContext.Provider value={mockTodoContext}>
         <ToolCallContext.Provider value={mockToolCallContext}>
-          <TodoPanel width={50} />
+          <TodoPanel width={150} />
         </ToolCallContext.Provider>
       </TodoContext.Provider>,
     );

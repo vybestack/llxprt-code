@@ -1334,9 +1334,6 @@ const App = (props: AppInternalProps) => {
             debugMessage={debugMessage}
             errorCount={errorCount}
             showErrorDetails={showErrorDetails}
-            showMemoryUsage={
-              config.getDebugMode() || config.getShowMemoryUsage()
-            }
             promptTokenCount={sessionStats.lastPromptTokenCount}
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}

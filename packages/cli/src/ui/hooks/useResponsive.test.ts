@@ -40,15 +40,15 @@ describe('useResponsive', () => {
     expect(result.current.isWide).toBe(false);
   });
 
-  it('should return NARROW breakpoint for width at narrow threshold', () => {
+  it('should return STANDARD breakpoint for width at narrow threshold', () => {
     mockUseTerminalSize.mockReturnValue({ columns: 80, rows: 20 });
 
     const { result } = renderHook(() => useResponsive());
 
     expect(result.current.width).toBe(80);
-    expect(result.current.breakpoint).toBe('NARROW');
+    expect(result.current.breakpoint).toBe('STANDARD');
     expect(result.current.isNarrow).toBe(false);
-    expect(result.current.isStandard).toBe(false);
+    expect(result.current.isStandard).toBe(true);
     expect(result.current.isWide).toBe(false);
   });
 
@@ -127,7 +127,7 @@ describe('useResponsive', () => {
       {
         width: 80,
         expectedNarrow: false,
-        expectedStandard: false,
+        expectedStandard: true,
         expectedWide: false,
       },
       {

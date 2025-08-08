@@ -35,8 +35,8 @@ describe('getBreakpoint', () => {
     expect(getBreakpoint(0)).toBe('NARROW');
   });
 
-  it('should return NARROW for width exactly at narrow threshold', () => {
-    expect(getBreakpoint(80)).toBe('NARROW');
+  it('should return STANDARD for width exactly at narrow threshold', () => {
+    expect(getBreakpoint(80)).toBe('STANDARD');
   });
 
   it('should return STANDARD for widths between narrow and standard', () => {

@@ -13,7 +13,7 @@ export const BREAKPOINTS = {
 export type Breakpoint = keyof typeof BREAKPOINTS;
 
 export function getBreakpoint(width: number): Breakpoint {
-  if (width <= BREAKPOINTS.NARROW) {
+  if (width < BREAKPOINTS.NARROW) {
     return 'NARROW';
   }
   if (width <= BREAKPOINTS.STANDARD) {
