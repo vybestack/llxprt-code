@@ -28,6 +28,7 @@ import {
   ShellTool,
   EditTool,
   WriteFileTool,
+  MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -465,14 +466,11 @@ export async function loadCliConfig(
 
   if (!argv.allowedMcpServerNames) {
     if (effectiveSettings.allowMCPServers) {
-      const allowedNames = new Set(
-        effectiveSettings.allowMCPServers.filter(Boolean),
+      mcpServers = allowedMcpServers(
+        mcpServers,
+        effectiveSettings.allowMCPServers,
+        blockedMcpServers,
       );
-      if (allowedNames.size > 0) {
-        mcpServers = Object.fromEntries(
-          Object.entries(mcpServers).filter(([key]) => allowedNames.has(key)),
-        );
-      }
     }
 
     if (effectiveSettings.excludeMCPServers) {
@@ -488,29 +486,11 @@ export async function loadCliConfig(
   }
 
   if (argv.allowedMcpServerNames) {
-    const allowedNames = new Set(argv.allowedMcpServerNames.filter(Boolean));
-    if (allowedNames.size > 0) {
-      mcpServers = Object.fromEntries(
-        Object.entries(mcpServers).filter(([key, server]) => {
-          const isAllowed = allowedNames.has(key);
-          if (!isAllowed) {
-            blockedMcpServers.push({
-              name: key,
-              extensionName: server.extensionName || '',
-            });
-          }
-          return isAllowed;
-        }),
-      );
-    } else {
-      blockedMcpServers.push(
-        ...Object.entries(mcpServers).map(([key, server]) => ({
-          name: key,
-          extensionName: server.extensionName || '',
-        })),
-      );
-      mcpServers = {};
-    }
+    mcpServers = allowedMcpServers(
+      mcpServers,
+      argv.allowedMcpServerNames,
+      blockedMcpServers,
+    );
   }
 
   const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
@@ -655,6 +635,37 @@ export async function loadCliConfig(
   }
 
   return enhancedConfig;
+}
+
+function allowedMcpServers(
+  mcpServers: { [x: string]: MCPServerConfig },
+  allowMCPServers: string[],
+  blockedMcpServers: Array<{ name: string; extensionName: string }>,
+) {
+  const allowedNames = new Set(allowMCPServers.filter(Boolean));
+  if (allowedNames.size > 0) {
+    mcpServers = Object.fromEntries(
+      Object.entries(mcpServers).filter(([key, server]) => {
+        const isAllowed = allowedNames.has(key);
+        if (!isAllowed) {
+          blockedMcpServers.push({
+            name: key,
+            extensionName: server.extensionName || '',
+          });
+        }
+        return isAllowed;
+      }),
+    );
+  } else {
+    blockedMcpServers.push(
+      ...Object.entries(mcpServers).map(([key, server]) => ({
+        name: key,
+        extensionName: server.extensionName || '',
+      })),
+    );
+    mcpServers = {};
+  }
+  return mcpServers;
 }
 
 function mergeMcpServers(settings: Settings, extensions: Extension[]) {

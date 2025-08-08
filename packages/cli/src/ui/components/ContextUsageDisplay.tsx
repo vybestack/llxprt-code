@@ -5,7 +5,7 @@
  */
 
 import { Text } from 'ink';
-import { Colors } from '../colors.js';
+import { SemanticColors } from '../colors.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core';
 
 export const ContextUsageDisplay = ({
@@ -19,10 +19,19 @@ export const ContextUsageDisplay = ({
 }) => {
   const limit = tokenLimit(model, contextLimit);
   const percentage = promptTokenCount / limit;
+  const remainingPercentage = (1 - percentage) * 100;
+
+  // Use semantic colors based on how much context is left
+  let color: string;
+  if (remainingPercentage < 10) {
+    color = SemanticColors.status.error; // Very low context
+  } else if (remainingPercentage < 25) {
+    color = SemanticColors.status.warning; // Low context
+  } else {
+    color = SemanticColors.text.secondary; // Normal context
+  }
 
   return (
-    <Text color={Colors.Gray}>
-      ({((1 - percentage) * 100).toFixed(0)}% context left)
-    </Text>
+    <Text color={color}>({remainingPercentage.toFixed(0)}% context left)</Text>
   );
 };

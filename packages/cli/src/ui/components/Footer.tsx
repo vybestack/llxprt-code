@@ -4,17 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
-import { shortenPath, tildeifyPath } from '@vybestack/llxprt-code-core';
+import { Colors, SemanticColors } from '../colors.js';
+import {
+  shortenPath,
+  tildeifyPath,
+  tokenLimit,
+} from '@vybestack/llxprt-code-core';
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
 import Gradient from 'ink-gradient';
-import { MemoryUsageDisplay } from './MemoryUsageDisplay.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import { ContextUsageDisplay } from './ContextUsageDisplay.js';
 import { DebugProfiler } from './DebugProfiler.js';
+import { useResponsive } from '../hooks/useResponsive.js';
+import { truncateMiddle } from '../utils/responsive.js';
 
 interface FooterProps {
   model: string;
@@ -24,13 +28,125 @@ interface FooterProps {
   debugMessage: string;
   errorCount: number;
   showErrorDetails: boolean;
-  showMemoryUsage?: boolean;
   promptTokenCount: number;
   isPaidMode?: boolean;
   nightly: boolean;
   vimMode?: string;
   contextLimit?: number;
 }
+
+// Responsive Memory Usage Display
+const ResponsiveMemoryDisplay: React.FC<{
+  compact: boolean;
+  detailed: boolean;
+}> = ({ compact, detailed }) => {
+  // Initialize with immediate value to avoid empty render in tests
+  const initialUsage = process.memoryUsage().rss;
+  const initialPercentage = Math.round(
+    (initialUsage / (4.8 * 1024 * 1024 * 1024)) * 100,
+  );
+
+  let initialText: string;
+  if (detailed) {
+    const usageGB = (initialUsage / (1024 * 1024 * 1024)).toFixed(1);
+    initialText = `Memory: ${initialPercentage}% (${usageGB}GB/4.8GB)`;
+  } else if (compact) {
+    initialText = `Mem: ${initialPercentage}%`;
+  } else {
+    initialText = `Memory: ${initialPercentage}%`;
+  }
+
+  const [memoryUsage, setMemoryUsage] = useState<string>(initialText);
+  const [memoryUsageColor, setMemoryUsageColor] = useState<string>(
+    initialUsage >= 2 * 1024 * 1024 * 1024
+      ? SemanticColors.status.error
+      : SemanticColors.text.secondary,
+  );
+
+  useEffect(() => {
+    const updateMemory = () => {
+      const usage = process.memoryUsage().rss;
+      const totalMemory = 4.8 * 1024 * 1024 * 1024; // 4.8GB total
+      const percentage = Math.round((usage / totalMemory) * 100);
+
+      if (detailed) {
+        const usageGB = (usage / (1024 * 1024 * 1024)).toFixed(1);
+        const totalGB = (totalMemory / (1024 * 1024 * 1024)).toFixed(1);
+        setMemoryUsage(`Memory: ${percentage}% (${usageGB}GB/${totalGB}GB)`);
+      } else if (compact) {
+        setMemoryUsage(`Mem: ${percentage}%`);
+      } else {
+        setMemoryUsage(`Memory: ${percentage}%`);
+      }
+
+      setMemoryUsageColor(
+        usage >= 2 * 1024 * 1024 * 1024
+          ? SemanticColors.status.error
+          : SemanticColors.text.secondary,
+      );
+    };
+
+    const intervalId = setInterval(updateMemory, 2000);
+    // Don't call updateMemory immediately since we have initial value
+    return () => clearInterval(intervalId);
+  }, [compact, detailed]);
+
+  return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
+};
+
+// Responsive Context Usage Display
+const ResponsiveContextDisplay: React.FC<{
+  promptTokenCount: number;
+  model: string;
+  contextLimit?: number;
+  compact: boolean;
+  detailed: boolean;
+}> = ({ promptTokenCount, model, contextLimit, compact, detailed }) => {
+  const limit = tokenLimit(model, contextLimit);
+  const percentage = promptTokenCount / limit;
+  const remainingPercentage = (1 - percentage) * 100;
+
+  // Use semantic colors based on how much context is left
+  let color: string;
+  if (remainingPercentage < 10) {
+    color = SemanticColors.status.error;
+  } else if (remainingPercentage < 25) {
+    color = SemanticColors.status.warning;
+  } else {
+    color = SemanticColors.text.secondary;
+  }
+
+  let displayText: string;
+  if (detailed) {
+    displayText = `Context: ${promptTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
+  } else if (compact) {
+    displayText = `Ctx: ${(promptTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+  } else {
+    displayText = `Context: ${(promptTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+  }
+
+  return <Text color={color}>{displayText}</Text>;
+};
+
+// Responsive Timestamp Display
+const ResponsiveTimestamp: React.FC = () => {
+  // Initialize with immediate value to avoid empty render in tests
+  const initialTime = new Date().toTimeString().slice(0, 8); // HH:MM:SS
+  const [time, setTime] = useState<string>(initialTime);
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setTime(now.toTimeString().slice(0, 8)); // HH:MM:SS
+    };
+
+    const intervalId = setInterval(updateTime, 1000);
+    // Don't call updateTime immediately since we have initial value
+    return () => clearInterval(intervalId);
+  }, []);
+
+  return <Text color={SemanticColors.text.secondary}>{time}</Text>;
+};
 
 export const Footer: React.FC<FooterProps> = ({
   model,
@@ -40,100 +156,181 @@ export const Footer: React.FC<FooterProps> = ({
   debugMessage,
   errorCount,
   showErrorDetails,
-  showMemoryUsage,
   promptTokenCount,
   isPaidMode,
   nightly,
   vimMode,
   contextLimit,
-}) => (
-  <Box justifyContent="space-between" width="100%">
-    <Box>
-      {debugMode && <DebugProfiler />}
-      {vimMode && <Text color={Colors.Gray}>[{vimMode}] </Text>}
-      {nightly ? (
-        <Gradient colors={Colors.GradientColors}>
-          <Text>
-            {shortenPath(tildeifyPath(targetDir), 70)}
-            {branchName && <Text> ({branchName}*)</Text>}
-          </Text>
-        </Gradient>
-      ) : (
-        <Text color={Colors.LightBlue}>
-          {shortenPath(tildeifyPath(targetDir), 70)}
-          {branchName && <Text color={Colors.Gray}> ({branchName}*)</Text>}
-        </Text>
-      )}
-      {debugMode && (
-        <Text color={Colors.AccentRed}>
-          {' ' + (debugMessage || '--debug')}
-        </Text>
-      )}
-    </Box>
+}) => {
+  const { breakpoint } = useResponsive();
 
-    {/* Middle Section: Centered Sandbox Info */}
-    <Box
-      flexGrow={1}
-      alignItems="center"
-      justifyContent="center"
-      display="flex"
-    >
-      {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-        <Text color={Colors.AccentGreen}>
-          {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
-        </Text>
-      ) : process.env.SANDBOX === 'sandbox-exec' ? (
-        <Text color={Colors.AccentYellow}>
-          macOS Seatbelt{' '}
-          <Text color={Colors.Gray}>({process.env.SEATBELT_PROFILE})</Text>
-        </Text>
-      ) : (
-        <Text color={Colors.AccentRed}>
-          no sandbox <Text color={Colors.Gray}>(see /docs)</Text>
-        </Text>
-      )}
-    </Box>
+  // Define what to show at each breakpoint
+  const showTimestamp = breakpoint === 'WIDE';
+  const showModelName = breakpoint !== 'NARROW';
+  const isCompact = breakpoint === 'NARROW';
+  const isDetailed = breakpoint === 'WIDE';
 
-    {/* Right Section: Gemini Label and Console Summary */}
-    <Box alignItems="center">
-      <Text color={Colors.AccentBlue}>
-        {' '}
-        {model}{' '}
-        <ContextUsageDisplay
-          promptTokenCount={promptTokenCount}
-          model={model}
-          contextLimit={contextLimit}
-        />
-      </Text>
-      {isPaidMode !== undefined &&
-        (() => {
-          const providerManager = getProviderManager();
-          const activeProvider = providerManager?.getActiveProvider?.();
-          const isGeminiProvider = activeProvider?.name === 'gemini';
+  // Calculate max length for branch truncation based on breakpoint
+  let maxBranchLength: number;
+  if (isCompact) {
+    maxBranchLength = 15;
+  } else if (breakpoint === 'STANDARD') {
+    maxBranchLength = 35;
+  } else {
+    maxBranchLength = 100; // Don't truncate at wide width
+  }
 
-          // Only show paid/free mode for Gemini provider
-          if (isGeminiProvider) {
-            return (
-              <Text>
-                <Text color={Colors.Gray}> | </Text>
-                <Text
-                  color={isPaidMode ? Colors.AccentYellow : Colors.AccentGreen}
-                >
-                  {isPaidMode ? 'paid mode' : 'free mode'}
+  return (
+    <Box flexDirection="column" width="100%">
+      {/* First Line: Branch (left) | Memory | Context | Time (right) */}
+      <Box justifyContent="space-between" width="100%" alignItems="center">
+        {/* Left: Branch Display */}
+        <Box flexDirection="row" alignItems="center">
+          {branchName && (
+            <>
+              {nightly ? (
+                <Gradient colors={Colors.GradientColors}>
+                  <Text>
+                    (
+                    {branchName.length > maxBranchLength
+                      ? truncateMiddle(branchName, maxBranchLength)
+                      : branchName}
+                    *)
+                  </Text>
+                </Gradient>
+              ) : (
+                <Text color={SemanticColors.text.accent}>
+                  (
+                  {branchName.length > maxBranchLength
+                    ? truncateMiddle(branchName, maxBranchLength)
+                    : branchName}
+                  *)
                 </Text>
+              )}
+            </>
+          )}
+          {debugMode && (
+            <>
+              <DebugProfiler />
+              <Text color={SemanticColors.status.error}>
+                {' ' + (debugMessage || '--debug')}
               </Text>
-            );
-          }
-          return null;
-        })()}
-
-      {!showErrorDetails && errorCount > 0 && (
-        <Box>
-          <Text color={Colors.Gray}>| </Text>
-          <ConsoleSummaryDisplay errorCount={errorCount} />
+            </>
+          )}
+          {vimMode && (
+            <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+          )}
         </Box>
-      )}
-      {showMemoryUsage && <MemoryUsageDisplay />}
+
+        {/* Right: Memory | Context | Time */}
+        <Box flexDirection="row" alignItems="center">
+          <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
+          <Text color={SemanticColors.text.secondary}> | </Text>
+
+          <ResponsiveContextDisplay
+            promptTokenCount={promptTokenCount}
+            model={model}
+            contextLimit={contextLimit}
+            compact={isCompact}
+            detailed={isDetailed}
+          />
+
+          {/* Show timestamp only at wide width */}
+          {showTimestamp && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <ResponsiveTimestamp />
+            </>
+          )}
+        </Box>
+      </Box>
+
+      {/* Second Line: Path (left) | Model (right) */}
+      <Box justifyContent="space-between" width="100%" alignItems="center">
+        {/* Left: Path and Sandbox Info */}
+        <Box flexDirection="row" alignItems="center">
+          {nightly ? (
+            <Gradient colors={Colors.GradientColors}>
+              <Text>
+                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+              </Text>
+            </Gradient>
+          ) : (
+            <Text color={SemanticColors.text.secondary}>
+              {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+            </Text>
+          )}
+
+          {/* Sandbox info (only show at standard+ widths) */}
+          {!isCompact && (
+            <Box marginLeft={2}>
+              {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
+                <Text color={SemanticColors.status.success}>
+                  [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
+                </Text>
+              ) : process.env.SANDBOX === 'sandbox-exec' ? (
+                <Text color={SemanticColors.status.warning}>
+                  [macOS Seatbelt{' '}
+                  <Text color={SemanticColors.text.secondary}>
+                    ({process.env.SEATBELT_PROFILE})
+                  </Text>
+                  ]
+                </Text>
+              ) : (
+                <Text color={SemanticColors.status.error}>
+                  [no sandbox{' '}
+                  <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
+                  ]
+                </Text>
+              )}
+            </Box>
+          )}
+        </Box>
+
+        {/* Right: Model and other status */}
+        <Box flexDirection="row" alignItems="center">
+          {/* Show model name */}
+          {showModelName && (
+            <Text color={SemanticColors.text.accent}>{model}</Text>
+          )}
+
+          {/* Show paid/free mode for Gemini provider */}
+          {isPaidMode !== undefined &&
+            (() => {
+              const providerManager = getProviderManager();
+              const activeProvider = providerManager?.getActiveProvider?.();
+              const isGeminiProvider = activeProvider?.name === 'gemini';
+
+              if (isGeminiProvider) {
+                return (
+                  <>
+                    {showModelName && (
+                      <Text color={SemanticColors.text.secondary}> | </Text>
+                    )}
+                    <Text
+                      color={
+                        isPaidMode
+                          ? SemanticColors.status.warning
+                          : SemanticColors.status.success
+                      }
+                    >
+                      {isPaidMode ? 'paid mode' : 'free mode'}
+                    </Text>
+                  </>
+                );
+              }
+              return null;
+            })()}
+
+          {/* Show error count */}
+          {!showErrorDetails && errorCount > 0 && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <ConsoleSummaryDisplay errorCount={errorCount} />
+            </>
+          )}
+        </Box>
+      </Box>
     </Box>
-  </Box>
-);
+  );
+};

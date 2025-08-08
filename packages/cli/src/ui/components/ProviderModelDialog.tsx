@@ -6,8 +6,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { Colors } from '../colors.js';
+import { SemanticColors } from '../colors.js';
 import { IModel } from '../../providers/index.js';
+import { useResponsive } from '../hooks/useResponsive.js';
+import { truncateStart } from '../utils/responsive.js';
 
 interface ProviderModelDialogProps {
   models: IModel[];
@@ -22,6 +24,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   onSelect,
   onClose,
 }) => {
+  const { isNarrow, isWide, width } = useResponsive();
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(true);
 
@@ -46,27 +49,70 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   const [index, setIndex] = useState(() =>
     Math.max(
       0,
-      filteredModels.findIndex((m) => m.id === currentModel),
+      sortedModels.findIndex((m) => m.id === currentModel),
     ),
   );
 
   // Reset index when search term changes
   React.useEffect(() => {
-    setIndex(0);
-  }, [searchTerm]);
+    const currentIndex = filteredModels.findIndex((m) => m.id === currentModel);
+    setIndex(Math.max(0, currentIndex));
+  }, [searchTerm, filteredModels, currentModel]);
 
-  // Dynamically calculate columns based on terminal width and longest model ID
-  const terminalWidth = process.stdout.columns || 80;
-  const longestId = filteredModels.reduce(
-    (len, m) => Math.max(len, m.id.length),
-    0,
-  );
-  const minColWidth = Math.max(longestId + 4, 24);
-  const padding = 8; // Border + margins
-  const maxColumns = Math.floor((terminalWidth - padding) / minColWidth);
-  const columns = Math.min(Math.max(3, maxColumns), 5); // Between 3-5 columns
-  const colWidth = Math.floor((terminalWidth - padding) / columns);
+  // Calculate optimal layout based on available width and content
+  const calculateLayout = () => {
+    // Calculate minimum column width needed
+    const longestModelName = filteredModels.reduce(
+      (len, m) => Math.max(len, m.id.length),
+      0,
+    );
+
+    if (isNarrow) {
+      return { columns: 1, colWidth: Math.max(longestModelName + 4, 25) };
+    }
+
+    // Step 1: Get actual content width - responsive to screen size
+    // For narrow screens, use full width; for wider screens, use 80% of width
+    const maxDialogWidth = isNarrow ? width : Math.floor(width * 0.8);
+    const contentWidth = maxDialogWidth - 4; // 4 for padding/borders
+
+    // Step 2: Calculate column width needed (model name + marker + small buffer)
+    const markerWidth = 2; // "● " or "○ "
+    const spacingBetweenCols = 4; // Fixed spacing between columns
+    const colWidthNeeded = longestModelName + markerWidth + 1; // +1 for a tiny buffer
+
+    // Step 3: Determine optimal column count
+    // Try to fit as many columns as possible without truncation
+    let optimalColumns = 1;
+
+    for (let cols = 5; cols >= 1; cols--) {
+      // Calculate total width needed for this many columns
+      const totalWidthNeeded =
+        colWidthNeeded * cols + spacingBetweenCols * (cols - 1);
+
+      if (totalWidthNeeded <= contentWidth) {
+        optimalColumns = cols;
+        break;
+      }
+    }
+
+    // If even 1 column doesn't fit, we'll need to truncate
+    const columns = optimalColumns;
+
+    // Step 4: Calculate actual column width
+    if (columns === 1) {
+      // Single column: use all available width
+      return { columns: 1, colWidth: contentWidth };
+    } else {
+      // Multiple columns: use exact width needed + spacing
+      return { columns, colWidth: colWidthNeeded };
+    }
+  };
+
+  const layout = calculateLayout();
+  const { columns, colWidth } = layout;
   const rows = Math.ceil(filteredModels.length / columns);
+  const maxDialogWidth = isNarrow ? width : Math.floor(width * 0.8);
 
   const move = (delta: number) => {
     let next = index + delta;
@@ -110,24 +156,39 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     }
   });
 
-  const renderItem = (m: IModel, i: number) => {
-    const selected = i === index && !isSearching;
+  const renderItem = (m: IModel, i: number, isLastInRow: boolean) => {
+    const selected = i === index;
+    // Calculate display name - truncate from start to preserve model name
+    let displayName: string;
+    const maxLength = colWidth - 3; // Account for marker and space
+
+    if (m.id.length > maxLength) {
+      // Truncate from start to preserve the important model name at the end
+      displayName = truncateStart(m.id, maxLength);
+    } else {
+      displayName = m.id;
+    }
+
     return (
-      <Box key={m.id} width={colWidth} marginRight={2}>
+      <Box key={m.id} width={colWidth} marginRight={isLastInRow ? 0 : 1}>
         <Text
           color={
-            selected ? '#00ff00' : isSearching ? Colors.Gray : Colors.Foreground
+            selected
+              ? SemanticColors.text.accent
+              : isSearching && !isNarrow
+                ? SemanticColors.text.secondary
+                : SemanticColors.text.primary
           }
         >
           {selected ? '● ' : '○ '}
-          {m.id}
+          {displayName}
         </Text>
       </Box>
     );
   };
 
-  // Calculate visible rows for scrolling
-  const maxVisibleRows = Math.min(rows, 10); // Show max 10 rows at a time
+  // Calculate visible items for scrolling (limit to reasonable amount)
+  const maxVisibleRows = Math.min(rows, 10);
   const currentRow = Math.floor(index / columns);
   const scrollOffset = Math.max(
     0,
@@ -137,69 +198,149 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     ),
   );
 
-  const visibleGrid: React.ReactNode[] = [];
-  for (
-    let r = scrollOffset;
-    r < Math.min(scrollOffset + maxVisibleRows, rows);
-    r++
-  ) {
-    const rowItems = [];
-    for (let c = 0; c < columns; c++) {
-      const i = r * columns + c;
-      if (i < filteredModels.length)
-        rowItems.push(renderItem(filteredModels[i], i));
+  const startIndex = scrollOffset * columns;
+  const endIndex = Math.min(
+    startIndex + maxVisibleRows * columns,
+    filteredModels.length,
+  );
+  const visibleModels = filteredModels.slice(startIndex, endIndex);
+
+  // Create the model grid with proper row/column layout
+  const renderModelGrid = () => {
+    const gridRows = [];
+    for (let row = 0; row < maxVisibleRows; row++) {
+      const rowItems = [];
+      for (let col = 0; col < columns; col++) {
+        const idx = row * columns + col;
+        if (idx < visibleModels.length) {
+          const isLastInRow = col === columns - 1;
+          rowItems.push(
+            renderItem(visibleModels[idx], startIndex + idx, isLastInRow),
+          );
+        }
+      }
+      if (rowItems.length > 0) {
+        gridRows.push(
+          <Box key={row} flexDirection="row">
+            {rowItems}
+          </Box>,
+        );
+      }
     }
-    visibleGrid.push(<Box key={r}>{rowItems}</Box>);
-  }
+    return <Box flexDirection="column">{gridRows}</Box>;
+  };
 
-  return (
-    <Box
-      borderStyle="round"
-      borderColor={Colors.Gray}
-      flexDirection="column"
-      padding={1}
-    >
-      <Text bold color={Colors.Foreground}>
-        Select Model (Tab to switch modes, Enter to select, Esc to cancel)
-      </Text>
+  const renderContent = () => {
+    if (isNarrow) {
+      return (
+        <Box flexDirection="column">
+          <Text bold color={SemanticColors.text.primary}>
+            Select Model
+          </Text>
 
-      {/* Search input */}
-      <Box marginY={1}>
-        <Text color={isSearching ? Colors.Foreground : Colors.Gray}>
-          Search: {isSearching && <Text color="#00ff00">▌</Text>}
+          {/* Search input - prominent for narrow */}
+          <Box marginY={1}>
+            <Text color={SemanticColors.text.primary}>
+              search: <Text color={SemanticColors.text.accent}>▌</Text>
+            </Text>
+            <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
+          </Box>
+
+          <Text color={SemanticColors.text.secondary}>
+            Tab to switch modes, Enter to select, Esc to cancel
+          </Text>
+
+          {/* Model count for narrow */}
+          <Text color={SemanticColors.text.secondary}>
+            {filteredModels.length} models{searchTerm && ` found`}
+          </Text>
+
+          {/* Results */}
+          {filteredModels.length > 0 ? (
+            renderModelGrid()
+          ) : (
+            <Box marginY={1}>
+              <Text color={SemanticColors.text.secondary}>
+                No models match &quot;{searchTerm}&quot;
+              </Text>
+            </Box>
+          )}
+        </Box>
+      );
+    }
+
+    return (
+      <Box flexDirection="column">
+        <Text bold color={SemanticColors.text.primary}>
+          {isSearching
+            ? 'Search Models'
+            : 'Select Model (Tab to switch modes, Enter to select, Esc to cancel)'}
         </Text>
-        <Text color={Colors.Foreground}>{searchTerm}</Text>
-      </Box>
 
-      {/* Results info */}
-      {searchTerm && (
-        <Text color={Colors.Gray}>
+        {/* Search input */}
+        <Box marginY={1}>
+          <Text
+            color={
+              isSearching
+                ? SemanticColors.text.primary
+                : SemanticColors.text.secondary
+            }
+          >
+            search:{' '}
+            {isSearching && <Text color={SemanticColors.text.accent}>▌</Text>}
+          </Text>
+          <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
+        </Box>
+
+        {/* Results info - show for standard and wide */}
+        <Text color={SemanticColors.text.secondary}>
           Found {filteredModels.length} of {sortedModels.length} models
         </Text>
-      )}
 
-      {rows > maxVisibleRows && (
-        <Text color={Colors.Gray}>
-          Showing {scrollOffset + 1}-
-          {Math.min(scrollOffset + maxVisibleRows, rows)} of {rows} rows
-        </Text>
-      )}
-
-      {/* Model grid */}
-      {filteredModels.length > 0 ? (
-        visibleGrid
-      ) : (
-        <Box marginY={1}>
-          <Text color={Colors.Gray}>
-            No models match &quot;{searchTerm}&quot;
+        {/* Scrolling info for wide layouts */}
+        {isWide && rows > maxVisibleRows && (
+          <Text color={SemanticColors.text.secondary}>
+            Showing {scrollOffset + 1}-
+            {Math.min(scrollOffset + maxVisibleRows, rows)} of {rows} rows
           </Text>
-        </Box>
-      )}
+        )}
 
-      {/* Current selection */}
-      {filteredModels.length > 0 && !isSearching && (
-        <Text color={Colors.Gray}>Selected: {filteredModels[index].id}</Text>
-      )}
+        {/* Model grid */}
+        {filteredModels.length > 0 ? (
+          renderModelGrid()
+        ) : (
+          <Box marginY={1}>
+            <Text color={SemanticColors.text.secondary}>
+              No models match &quot;{searchTerm}&quot;
+            </Text>
+          </Box>
+        )}
+
+        {/* Current selection - show for non-searching in standard/wide */}
+        {filteredModels.length > 0 && !isSearching && (
+          <Text color={SemanticColors.text.secondary}>
+            Selected: {filteredModels[index].id}
+          </Text>
+        )}
+
+        <Text color={SemanticColors.text.secondary}>Tab to switch modes</Text>
+      </Box>
+    );
+  };
+
+  return isNarrow ? (
+    <Box flexDirection="column" padding={1}>
+      {renderContent()}
+    </Box>
+  ) : (
+    <Box
+      borderStyle="round"
+      borderColor={SemanticColors.border.default}
+      flexDirection="column"
+      padding={1}
+      width={maxDialogWidth} // Responsive width based on screen size
+    >
+      {renderContent()}
     </Box>
   );
 };

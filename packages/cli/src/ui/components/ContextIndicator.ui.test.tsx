@@ -57,9 +57,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show context percentage
-    // 1500 tokens out of 128000 = ~98.8% left
-    expect(lastFrame()).toContain('99% context left');
+    // Should show context in new format: Ctx: 1.0k/128k
+    expect(lastFrame()).toContain('Ctx: 1.0k/128k');
   });
 
   it('should display context percentage when using OpenAI', () => {
@@ -85,8 +84,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show context percentage (current implementation doesn't show remote tokens)
-    expect(lastFrame()).toContain('99% context left');
+    // Should show context in new format: Ctx: 1.0k/128k
+    expect(lastFrame()).toContain('Ctx: 1.0k/128k');
   });
 
   it('should handle high token usage', () => {
@@ -112,8 +111,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show low percentage remaining (current implementation doesn't show remote tokens)
-    expect(lastFrame()).toContain('99% context left');
+    // Should show context in new format: Ctx: 1.0k/128k
+    expect(lastFrame()).toContain('Ctx: 1.0k/128k');
   });
 
   it('should fallback to local calculation on error', () => {
@@ -134,8 +133,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should fallback to local calculation
-    expect(lastFrame()).toContain('99% context left');
+    // Should fallback to local calculation in new format
+    expect(lastFrame()).toContain('Ctx: 1.0k/128k');
     expect(lastFrame()).not.toContain('remote');
   });
 
@@ -157,8 +156,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should use local calculation for non-OpenAI providers
-    expect(lastFrame()).toContain('context left');
+    // Should use local calculation for non-OpenAI providers in new format
+    expect(lastFrame()).toContain('Ctx: 1.0k/1049k');
     expect(lastFrame()).not.toContain('remote');
   });
 
@@ -178,7 +177,7 @@ describe('ContextIndicator UI', () => {
 
     // Should not attempt to get remote context
     expect(mockProvider.estimateContextUsage).not.toHaveBeenCalled();
-    expect(lastFrame()).toContain('99% context left');
+    expect(lastFrame()).toContain('Ctx: 1.0k/128k');
     expect(lastFrame()).not.toContain('remote');
   });
 });
