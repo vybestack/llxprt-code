@@ -51,6 +51,7 @@ import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { setGitStatsService } from '@vybestack/llxprt-code-core';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
+import { SettingsContext } from './ui/contexts/SettingsContext.js';
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -585,12 +586,14 @@ export async function main() {
           // eslint-disable-next-line react/jsx-no-bind
           onError={handleError}
         >
-          <AppWrapper
-            config={config}
-            settings={settings}
-            startupWarnings={startupWarnings}
-            version={version}
-          />
+          <SettingsContext.Provider value={settings}>
+            <AppWrapper
+              config={config}
+              settings={settings}
+              startupWarnings={startupWarnings}
+              version={version}
+            />
+          </SettingsContext.Provider>
         </ErrorBoundary>
       </React.StrictMode>,
       { exitOnCtrlC: false },

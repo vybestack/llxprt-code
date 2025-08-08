@@ -20,6 +20,7 @@ import {
   MaxSizedBox,
   MINIMUM_MAX_HEIGHT,
 } from '../components/shared/MaxSizedBox.js';
+import { LoadedSettings } from '../../config/settings.js';
 
 // Configure theming and parsing utilities.
 const lowlight = createLowlight(common);
@@ -141,9 +142,11 @@ export function colorizeCode(
   availableHeight?: number,
   maxWidth?: number,
   theme?: Theme,
+  settings?: LoadedSettings,
 ): React.ReactNode {
   const codeToHighlight = code.replace(/\n$/, '');
   const activeTheme = theme || themeManager.getActiveTheme();
+  const showLineNumbers = settings?.merged.showLineNumbers ?? true;
 
   try {
     // Render the HAST tree using the adapted theme
@@ -179,12 +182,14 @@ export function colorizeCode(
 
           return (
             <Box key={index}>
-              <Text color={activeTheme.colors.Gray}>
-                {`${String(index + 1 + hiddenLinesCount).padStart(
-                  padWidth,
-                  ' ',
-                )} `}
-              </Text>
+              {showLineNumbers && (
+                <Text color={activeTheme.colors.Gray}>
+                  {`${String(index + 1 + hiddenLinesCount).padStart(
+                    padWidth,
+                    ' ',
+                  )} `}
+                </Text>
+              )}
               <Text color={activeTheme.defaultColor} wrap="wrap">
                 {contentToRender}
               </Text>
@@ -210,9 +215,11 @@ export function colorizeCode(
       >
         {lines.map((line, index) => (
           <Box key={index}>
-            <Text color={activeTheme.defaultColor}>
-              {`${String(index + 1).padStart(padWidth, ' ')} `}
-            </Text>
+            {showLineNumbers && (
+              <Text color={activeTheme.defaultColor}>
+                {`${String(index + 1).padStart(padWidth, ' ')} `}
+              </Text>
+            )}
             <Text color={activeTheme.colors.Gray}>{line}</Text>
           </Box>
         ))}

@@ -157,6 +157,9 @@ export interface Settings {
 
   // Shell replacement setting for allowing command substitution
   shellReplacement?: boolean;
+
+  // Control whether line numbers are shown in code blocks
+  showLineNumbers?: boolean;
 }
 
 export interface SettingsError {
