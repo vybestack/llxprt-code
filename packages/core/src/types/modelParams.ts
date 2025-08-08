@@ -60,6 +60,8 @@ export interface EphemeralSettings {
   'disabled-tools'?: string[];
   /** Allow command substitution ($(), <(), backticks) in shell commands */
   'shell-replacement'?: boolean;
+  /** Enable todo continuation after stream completion (default: true) */
+  'todo-continuation'?: boolean;
 }
 
 /**

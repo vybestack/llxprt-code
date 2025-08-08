@@ -26,6 +26,7 @@ import {
   UnauthorizedError,
   DEFAULT_GEMINI_FLASH_MODEL,
   AuthType,
+  NotYetImplemented,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -55,6 +56,7 @@ import {
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
+import { useTodoContinuation } from './useTodoContinuation.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   const resultParts: Part[] = [];
@@ -81,6 +83,11 @@ enum StreamProcessingStatus {
   Completed,
   UserCancelled,
   Error,
+}
+
+interface StreamProcessingResult {
+  status: StreamProcessingStatus;
+  hadToolCalls: boolean;
 }
 
 /**
@@ -129,6 +136,14 @@ export const useGeminiStream = (
 
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const logger = useLogger();
+
+  // Todo continuation hook integration - stub implementation
+  const { handleStreamCompleted: _handleStreamCompleted } = useTodoContinuation(
+    geminiClient,
+    config,
+    isResponding,
+    onDebugMessage,
+  );
   const gitService = useMemo(() => {
     if (!config.getProjectRoot()) {
       return;
@@ -602,7 +617,7 @@ export const useGeminiStream = (
       stream: AsyncIterable<GeminiEvent>,
       userMessageTimestamp: number,
       signal: AbortSignal,
-    ): Promise<StreamProcessingStatus> => {
+    ): Promise<StreamProcessingResult> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
       for await (const event of stream) {
@@ -673,7 +688,10 @@ export const useGeminiStream = (
         }
         scheduleToolCalls(toolCallRequests, signal);
       }
-      return StreamProcessingStatus.Completed;
+      return {
+        status: StreamProcessingStatus.Completed,
+        hadToolCalls: toolCallRequests.length > 0,
+      };
     },
     [
       handleContentEvent,
@@ -744,13 +762,13 @@ export const useGeminiStream = (
           abortSignal,
           prompt_id!,
         );
-        const processingStatus = await processGeminiStreamEvents(
+        const processingResult = await processGeminiStreamEvents(
           stream,
           userMessageTimestamp,
           abortSignal,
         );
 
-        if (processingStatus === StreamProcessingStatus.UserCancelled) {
+        if (processingResult.status === StreamProcessingStatus.UserCancelled) {
           return;
         }
 
@@ -761,6 +779,22 @@ export const useGeminiStream = (
         if (loopDetectedRef.current) {
           loopDetectedRef.current = false;
           handleLoopDetectedEvent();
+        }
+
+        // TODO: Continuation hook integration point - stub implementation
+        // This should trigger todo continuation logic when stream completes
+        // without tool calls but with active todos
+        try {
+          throw new NotYetImplemented(
+            'Todo continuation integration not yet implemented',
+          );
+          // When implemented, should call:
+          // _handleStreamCompleted(processingResult.hadToolCalls);
+        } catch (error) {
+          // Silently ignore NotYetImplemented for now - this is a stub
+          if (!(error instanceof NotYetImplemented)) {
+            throw error;
+          }
         }
       } catch (error: unknown) {
         if (error instanceof UnauthorizedError) {

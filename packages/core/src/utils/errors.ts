@@ -28,6 +28,12 @@ export function getErrorMessage(error: unknown): string {
 export class ForbiddenError extends Error {}
 export class UnauthorizedError extends Error {}
 export class BadRequestError extends Error {}
+export class NotYetImplemented extends Error {
+  constructor(message = 'This feature is not yet implemented') {
+    super(message);
+    this.name = 'NotYetImplemented';
+  }
+}
 
 interface ResponseData {
   error?: {
