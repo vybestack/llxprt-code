@@ -616,7 +616,13 @@ export class CoreToolScheduler {
           const confirmationDetails =
             await invocation.shouldConfirmExecute(signal);
 
-          if (confirmationDetails) {
+          // Check if this command is already allowed
+          const isAlwaysAllowed =
+            confirmationDetails &&
+            confirmationDetails.type === 'exec' &&
+            this.config.isCommandAlwaysAllowed(confirmationDetails.rootCommand);
+
+          if (confirmationDetails && !isAlwaysAllowed) {
             // Allow IDE to resolve confirmation
             if (
               confirmationDetails.type === 'edit' &&
@@ -662,6 +668,7 @@ export class CoreToolScheduler {
               wrappedConfirmationDetails,
             );
           } else {
+            // Either no confirmation needed or command is always allowed
             this.setToolCallOutcome(
               reqInfo.callId,
               ToolConfirmationOutcome.ProceedAlways,
@@ -701,6 +708,18 @@ export class CoreToolScheduler {
     }
 
     this.setToolCallOutcome(callId, outcome);
+
+    // Store the command if user selected "always allow"
+    if (
+      outcome === ToolConfirmationOutcome.ProceedAlways &&
+      toolCall &&
+      toolCall.status === 'awaiting_approval' &&
+      toolCall.confirmationDetails.type === 'exec'
+    ) {
+      this.config.addAlwaysAllowedCommand(
+        toolCall.confirmationDetails.rootCommand,
+      );
+    }
 
     if (outcome === ToolConfirmationOutcome.Cancel || signal.aborted) {
       this.setStatusInternal(
