@@ -9,7 +9,7 @@ import { Box, Text, useInput } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { IModel } from '../../providers/index.js';
 import { useResponsive } from '../hooks/useResponsive.js';
-import { truncateEnd } from '../utils/responsive.js';
+import { truncateStart } from '../utils/responsive.js';
 
 interface ProviderModelDialogProps {
   models: IModel[];
@@ -71,20 +71,39 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       return { columns: 1, colWidth: Math.max(longestModelName + 4, 25) };
     }
 
-    // Step 1: Get actual content width (dialog is constrained to 120)
-    const contentWidth = Math.min(width, 120) - 4; // 4 for padding/borders
+    // Step 1: Get actual content width - responsive to screen size
+    // For narrow screens, use full width; for wider screens, use 80% of width
+    const maxDialogWidth = isNarrow ? width : Math.floor(width * 0.8);
+    const contentWidth = maxDialogWidth - 4; // 4 for padding/borders
 
     // Step 2: Calculate minimum column width needed
-    // In wide mode, be more flexible to allow for better space utilization
-    const baseMinColWidth = longestModelName + 3; // for "● " or "○ " marker
+    // Add 2 for marker ("● " or "○ ") + at least 2 more for spacing to next column
+    const baseMinColWidth = longestModelName + 2 + 2; // marker + minimum spacing
     const minColWidth = isWide ? Math.min(baseMinColWidth, 45) : baseMinColWidth;
 
-    // Step 3: Determine column count
-    const maxDesiredCols = isNarrow ? 1 : 3;
-    let columns = 1;
+    // Step 3: Determine column count based on available width
+    // Force 1 column if we'd need to truncate model names
+    const needsTruncation = baseMinColWidth > contentWidth / 2;
     
+    let maxDesiredCols = 1;
+    if (needsTruncation) {
+      // If truncation is needed, stick with 1 column for better readability
+      maxDesiredCols = 1;
+    } else if (contentWidth > 200) {
+      maxDesiredCols = 5;
+    } else if (contentWidth > 150) {
+      maxDesiredCols = 4;
+    } else if (contentWidth > 100) {
+      maxDesiredCols = 3;
+    } else if (contentWidth > 60) {
+      maxDesiredCols = 2;
+    }
+    
+    let columns = 1;
     for (let cols = maxDesiredCols; cols >= 1; cols--) {
-      const totalWidth = (minColWidth * cols) + ((cols - 1) * 2); // 2 spaces between columns
+      // Each column needs its width, no extra spacing calculation needed
+      // since we include spacing in the column width itself
+      const totalWidth = minColWidth * cols;
       if (totalWidth <= contentWidth) {
         columns = cols;
         break;
@@ -92,8 +111,8 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
     }
 
     // Step 4: Calculate actual column width for even distribution
-    const availableWidth = contentWidth - ((columns - 1) * 2);
-    const colWidth = Math.floor(availableWidth / columns);
+    // Distribute all available width evenly among columns
+    const colWidth = Math.floor(contentWidth / columns);
 
     // Force reasonable column width limits to ensure truncation in standard mode
     // But don't constrain in wide mode where we want to show full names
@@ -109,7 +128,8 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   const layout = calculateLayout();
   const { columns, colWidth } = layout;
   const rows = Math.ceil(filteredModels.length / columns);
-  const contentWidth = Math.min(width, 120) - 4; // Same as used in calculateLayout
+  const maxDialogWidth = isNarrow ? width : Math.floor(width * 0.8);
+  const contentWidth = maxDialogWidth - 4; // Same as used in calculateLayout
 
   const move = (delta: number) => {
     let next = index + delta;
@@ -155,17 +175,15 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
 
   const renderItem = (m: IModel, i: number) => {
     const selected = i === index;
-    // Calculate display name based on breakpoint
+    // Calculate display name - truncate from start to preserve model name
     let displayName: string;
-    if (isWide) {
-      displayName = m.id; // No truncation in wide mode
-    } else if (isNarrow) {
-      displayName = m.id.length > 20 ? truncateEnd(m.id, 20) : m.id; // Truncate at 20 chars in narrow
+    const maxLength = colWidth - 3; // Account for marker and space
+    
+    if (m.id.length > maxLength) {
+      // Truncate from start to preserve the important model name at the end
+      displayName = truncateStart(m.id, maxLength);
     } else {
-      // Standard mode - truncate if longer than column width allows
-      const maxLength = colWidth - 3; // Account for marker and space
-      displayName =
-        m.id.length > maxLength ? truncateEnd(m.id, maxLength) : m.id;
+      displayName = m.id;
     }
 
     return (
@@ -318,7 +336,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
-      width={Math.min(width, 120)} // Constrain maximum width to 120 chars
+      width={maxDialogWidth} // Responsive width based on screen size
     >
       {renderContent()}
     </Box>

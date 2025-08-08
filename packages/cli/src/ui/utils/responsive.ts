@@ -102,6 +102,24 @@ export function truncateMiddle(text: string, maxLength: number): string {
   return start + ellipsis + end;
 }
 
+export function truncateStart(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  if (maxLength <= 1) {
+    return '.';
+  }
+
+  if (maxLength <= 3) {
+    return '.'.repeat(maxLength);
+  }
+
+  const ellipsis = '...';
+  const endChars = maxLength - ellipsis.length;
+  return ellipsis + text.slice(-endChars);
+}
+
 export function truncateEnd(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
     return text;

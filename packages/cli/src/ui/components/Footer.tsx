@@ -182,65 +182,10 @@ export const Footer: React.FC<FooterProps> = ({
 
   return (
     <Box flexDirection="column" width="100%">
-      {/* First Line: Memory | Context | Time (when wide) */}
+      {/* First Line: Branch (left) | Memory | Context | Time (right) */}
       <Box justifyContent="space-between" width="100%" alignItems="center">
+        {/* Left: Branch Display */}
         <Box flexDirection="row" alignItems="center">
-          {debugMode && <DebugProfiler />}
-          {vimMode && (
-            <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
-          )}
-        </Box>
-
-        {/* Middle Section: Sandbox Info (only show at standard+ widths) */}
-        {!isCompact && (
-          <Box flexGrow={1} justifyContent="center">
-            {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-              <Text color={SemanticColors.status.success}>
-                {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
-              </Text>
-            ) : process.env.SANDBOX === 'sandbox-exec' ? (
-              <Text color={SemanticColors.status.warning}>
-                macOS Seatbelt{' '}
-                <Text color={SemanticColors.text.secondary}>
-                  ({process.env.SEATBELT_PROFILE})
-                </Text>
-              </Text>
-            ) : (
-              <Text color={SemanticColors.status.error}>
-                no sandbox{' '}
-                <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
-              </Text>
-            )}
-          </Box>
-        )}
-
-        {/* Right Section: Status Information - Memory, Context, Time */}
-        <Box flexDirection="row" alignItems="center">
-          <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
-          <Text color={SemanticColors.text.secondary}> | </Text>
-
-          <ResponsiveContextDisplay
-            promptTokenCount={promptTokenCount}
-            model={model}
-            contextLimit={contextLimit}
-            compact={isCompact}
-            detailed={isDetailed}
-          />
-
-          {/* Show timestamp only at wide width */}
-          {showTimestamp && (
-            <>
-              <Text color={SemanticColors.text.secondary}> | </Text>
-              <ResponsiveTimestamp />
-            </>
-          )}
-        </Box>
-      </Box>
-
-      {/* Second Line: Branch */}
-      <Box justifyContent="flex-start" width="100%" alignItems="center">
-        <Box flexDirection="row" alignItems="center">
-          {/* Branch Display */}
           {branchName && (
             <>
               {nightly ? (
@@ -265,17 +210,45 @@ export const Footer: React.FC<FooterProps> = ({
             </>
           )}
           {debugMode && (
-            <Text color={SemanticColors.status.error}>
-              {' ' + (debugMessage || '--debug')}
-            </Text>
+            <>
+              <DebugProfiler />
+              <Text color={SemanticColors.status.error}>
+                {' ' + (debugMessage || '--debug')}
+              </Text>
+            </>
+          )}
+          {vimMode && (
+            <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+          )}
+        </Box>
+
+        {/* Right: Memory | Context | Time */}
+        <Box flexDirection="row" alignItems="center">
+          <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
+          <Text color={SemanticColors.text.secondary}> | </Text>
+
+          <ResponsiveContextDisplay
+            promptTokenCount={promptTokenCount}
+            model={model}
+            contextLimit={contextLimit}
+            compact={isCompact}
+            detailed={isDetailed}
+          />
+
+          {/* Show timestamp only at wide width */}
+          {showTimestamp && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <ResponsiveTimestamp />
+            </>
           )}
         </Box>
       </Box>
 
-      {/* Third Line: Path and Model */}
+      {/* Second Line: Path (left) | Model (right) */}
       <Box justifyContent="space-between" width="100%" alignItems="center">
+        {/* Left: Path and Sandbox Info */}
         <Box flexDirection="row" alignItems="center">
-          {/* Path Display */}
           {nightly ? (
             <Gradient colors={Colors.GradientColors}>
               <Text>
@@ -287,13 +260,36 @@ export const Footer: React.FC<FooterProps> = ({
               {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
             </Text>
           )}
+          
+          {/* Sandbox info (only show at standard+ widths) */}
+          {!isCompact && (
+            <Box marginLeft={2}>
+              {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
+                <Text color={SemanticColors.status.success}>
+                  [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
+                </Text>
+              ) : process.env.SANDBOX === 'sandbox-exec' ? (
+                <Text color={SemanticColors.status.warning}>
+                  [macOS Seatbelt{' '}
+                  <Text color={SemanticColors.text.secondary}>
+                    ({process.env.SEATBELT_PROFILE})
+                  </Text>]
+                </Text>
+              ) : (
+                <Text color={SemanticColors.status.error}>
+                  [no sandbox{' '}
+                  <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
+                </Text>
+              )}
+            </Box>
+          )}
         </Box>
 
-        {/* Right Section: Model and other status */}
+        {/* Right: Model and other status */}
         <Box flexDirection="row" alignItems="center">
-          {/* Conditionally show model name */}
+          {/* Show model name */}
           {showModelName && (
-            <Text color={SemanticColors.text.accent}>Model: {model}</Text>
+            <Text color={SemanticColors.text.accent}>{model}</Text>
           )}
 
           {/* Show paid/free mode for Gemini provider */}
