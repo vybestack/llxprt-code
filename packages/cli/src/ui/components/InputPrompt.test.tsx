@@ -1289,4 +1289,41 @@ describe('InputPrompt', () => {
       unmount();
     });
   });
+
+  describe('newline insertion', () => {
+    it('should insert a newline on Alt+Enter (Option+Enter)', async () => {
+      mockBuffer.text = 'Line 1';
+      mockBuffer.cursor = [0, 6];
+      mockBuffer.lines = ['Line 1'];
+
+      const { stdin, unmount } = render(<InputPrompt {...props} />);
+
+      // Send Alt+Enter (Meta+Return) using the escape sequence
+      stdin.write('\x1B\r');
+      await wait();
+
+      expect(mockBuffer.newline).toHaveBeenCalled();
+      expect(props.onSubmit).not.toHaveBeenCalled();
+      unmount();
+    });
+
+    // Note: Testing Ctrl+Enter is challenging with ink-testing-library
+    // The actual implementation in InputPrompt.tsx checks for key.ctrl && key.name === 'return'
+    // which requires proper key event handling that the testing library doesn't fully support
+
+    it('should submit on regular Enter without modifiers', async () => {
+      mockBuffer.text = 'echo hello';
+      mockBuffer.cursor = [0, 10];
+      mockBuffer.lines = ['echo hello'];
+
+      const { stdin, unmount } = render(<InputPrompt {...props} />);
+
+      stdin.write('\r');
+      await wait();
+
+      expect(mockBuffer.newline).not.toHaveBeenCalled();
+      expect(props.onSubmit).toHaveBeenCalledWith('echo hello');
+      unmount();
+    });
+  });
 });

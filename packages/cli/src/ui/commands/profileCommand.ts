@@ -126,6 +126,7 @@ const saveCommand: SlashCommand = {
         'tool-output-truncate-mode',
         'tool-output-item-size-limit',
         'max-prompt-tokens',
+        'shell-replacement',
       ];
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};

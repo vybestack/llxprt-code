@@ -87,6 +87,7 @@
     "yargs": "^18.0.0"
   },
   "dependencies": {
+    "@vybestack/llxprt-code-core": "^0.1.18",
     "execa": "^9.6.0",
     "fast-uri": "^3.0.6",
     "openai": "^5.10.1",

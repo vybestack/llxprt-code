@@ -212,8 +212,24 @@ export function checkCommandPermissions(
   blockReason?: string;
   isHardDenial?: boolean;
 } {
-  // Disallow command substitution for security.
-  if (detectCommandSubstitution(command)) {
+  // Check if shell replacement is allowed via ephemeral setting or config
+  const ephemeralValue = config.getEphemeralSetting?.('shell-replacement');
+  const configValue = config.getShellReplacement?.();
+
+  // Debug logging when VERBOSE is set
+  if (process.env.VERBOSE === 'true') {
+    console.log('[SHELL-UTILS] Shell replacement check:', {
+      ephemeralValue,
+      configValue,
+      command: command.substring(0, 50) + (command.length > 50 ? '...' : ''),
+    });
+  }
+
+  const shellReplacementAllowed =
+    ephemeralValue === true || configValue === true;
+
+  // Disallow command substitution for security unless explicitly allowed
+  if (!shellReplacementAllowed && detectCommandSubstitution(command)) {
     return {
       allAllowed: false,
       disallowedCommands: [command],

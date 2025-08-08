@@ -220,6 +220,7 @@ export interface ConfigParameters {
   loadMemoryFromIncludeDirectories?: boolean;
   chatCompression?: ChatCompressionSettings;
   interactive?: boolean;
+  shellReplacement?: boolean;
 }
 
 export class Config {
@@ -301,6 +302,7 @@ export class Config {
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private initialized: boolean = false;
+  private readonly shellReplacement: boolean = false;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -373,6 +375,7 @@ export class Config {
       params.loadMemoryFromIncludeDirectories ?? false;
     this.chatCompression = params.chatCompression;
     this.interactive = params.interactive ?? false;
+    this.shellReplacement = params.shellReplacement ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -813,6 +816,10 @@ export class Config {
 
   getAlwaysAllowedCommands(): string[] {
     return Array.from(this.alwaysAllowedCommands);
+  }
+
+  getShellReplacement(): boolean {
+    return this.shellReplacement;
   }
 
   async getGitService(): Promise<GitService> {

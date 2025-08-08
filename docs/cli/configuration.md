@@ -108,6 +108,12 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Default:** `false`
   - **Example:** `"vimMode": true`
 
+- **`shellReplacement`** (boolean):
+  - **Description:** Allows command substitution patterns (`$()`, `<()`, and backticks) in shell commands. When enabled, you can use nested command execution within shell commands. This setting is disabled by default for security reasons.
+  - **Default:** `false`
+  - **Example:** `"shellReplacement": true`
+  - **Security Note:** Enabling this feature allows execution of nested commands, which can be a security risk if running untrusted commands. Only enable if you understand the implications. See [Shell Command Substitution](../shell-replacement.md) for more details.
+
 - **`sandbox`** (boolean or string):
   - **Description:** Controls whether and how to use sandboxing for tool execution. If set to `true`, LLxprt Code uses a pre-built `gemini-cli-sandbox` Docker image. For more information, see [Sandboxing](#sandboxing).
   - **Default:** `false`

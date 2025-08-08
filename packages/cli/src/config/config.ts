@@ -608,6 +608,7 @@ export async function loadCliConfig(
     folderTrustFeature,
     interactive,
     folderTrust,
+    shellReplacement: effectiveSettings.shellReplacement,
   });
 
   const enhancedConfig = config;
@@ -624,6 +625,7 @@ export async function loadCliConfig(
       'tool-format',
       'api-version',
       'custom-headers',
+      'shell-replacement',
     ];
 
     for (const key of ephemeralKeys) {
