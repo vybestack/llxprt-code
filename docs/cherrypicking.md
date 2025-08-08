@@ -2,6 +2,13 @@
 
 This guide documents the process for cherry-picking changes from the upstream gemini-cli repository while maintaining llxprt's multi-provider architecture and customizations.
 
+## Current Sync Status
+
+**Last synced upstream commit:** `60362e03` (August 7, 2025)
+- MCP servers fix: Fixed issue where MCP servers allowed in settings do not show up in /mcp command
+
+**Branch:** `20250808-gmerge`
+
 ## Overview
 
 LLxprt Code is a fork of gemini-cli that adds multi-provider support (OpenAI, Anthropic, etc.) along with other enhancements. We regularly cherry-pick improvements from upstream while preserving our unique features.
