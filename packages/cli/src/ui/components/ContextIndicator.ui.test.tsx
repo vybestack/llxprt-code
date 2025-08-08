@@ -84,7 +84,7 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show context in new format: Ctx: 1.0k/128k  
+    // Should show context in new format: Ctx: 1.0k/128k
     expect(lastFrame()).toContain('Ctx: 1.0k/128k');
   });
 

@@ -260,7 +260,7 @@ export const Footer: React.FC<FooterProps> = ({
               {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
             </Text>
           )}
-          
+
           {/* Sandbox info (only show at standard+ widths) */}
           {!isCompact && (
             <Box marginLeft={2}>
@@ -273,12 +273,14 @@ export const Footer: React.FC<FooterProps> = ({
                   [macOS Seatbelt{' '}
                   <Text color={SemanticColors.text.secondary}>
                     ({process.env.SEATBELT_PROFILE})
-                  </Text>]
+                  </Text>
+                  ]
                 </Text>
               ) : (
                 <Text color={SemanticColors.status.error}>
                   [no sandbox{' '}
-                  <Text color={SemanticColors.text.secondary}>(see /docs)</Text>]
+                  <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
+                  ]
                 </Text>
               )}
             </Box>

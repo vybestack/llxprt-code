@@ -135,7 +135,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Should show model name
       expect(output).toContain('gpt-4');
-      expect(output).toMatch(/Model:/);
+      // Model name shows without 'Model:' prefix now
     });
 
     it('should NOT show timestamp at standard width', () => {
@@ -174,7 +174,7 @@ describe('Footer Responsive Behavior', () => {
 
       // Should show model name
       expect(output).toContain('gpt-4');
-      expect(output).toMatch(/Model:/);
+      // Model name shows without 'Model:' prefix now
     });
 
     it('should show timestamp at wide width', () => {
