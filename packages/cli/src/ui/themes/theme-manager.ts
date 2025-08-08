@@ -26,6 +26,8 @@ import {
 import { ANSI } from './ansi.js';
 import { ANSILight } from './ansi-light.js';
 import { NoColorTheme } from './no-color.js';
+import { SemanticColors } from './semantic-tokens.js';
+import { resolveSemanticColors } from './semantic-resolver.js';
 import process from 'node:process';
 
 export interface ThemeDisplay {
@@ -40,6 +42,7 @@ class ThemeManager {
   private readonly availableThemes: Theme[];
   private activeTheme: Theme;
   private customThemes: Map<string, Theme> = new Map();
+  private semanticColorsCache: SemanticColors | null = null;
 
   constructor() {
     this.availableThemes = [
@@ -67,6 +70,8 @@ class ThemeManager {
    */
   loadCustomThemes(customThemesSettings?: Record<string, CustomTheme>): void {
     this.customThemes.clear();
+    // Invalidate semantic colors cache when custom themes change
+    this.semanticColorsCache = null;
 
     if (!customThemesSettings) {
       return;
@@ -118,6 +123,8 @@ class ThemeManager {
       return false;
     }
     this.activeTheme = theme;
+    // Invalidate semantic colors cache when theme changes
+    this.semanticColorsCache = null;
     return true;
   }
 
@@ -134,6 +141,19 @@ class ThemeManager {
       this.activeTheme = DEFAULT_THEME;
     }
     return this.activeTheme;
+  }
+
+  /**
+   * Gets semantic colors for the currently active theme.
+   * Results are cached for performance until the theme changes.
+   * @returns Semantic colors for the active theme.
+   */
+  getSemanticColors(): SemanticColors {
+    if (this.semanticColorsCache === null) {
+      const activeTheme = this.getActiveTheme();
+      this.semanticColorsCache = resolveSemanticColors(activeTheme.colors);
+    }
+    return this.semanticColorsCache;
   }
 
   /**

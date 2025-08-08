@@ -6,6 +6,7 @@
 
 import { themeManager } from './themes/theme-manager.js';
 import { ColorsTheme } from './themes/theme.js';
+import { SemanticColors as SemanticColorsInterface } from './themes/semantic-tokens.js';
 import chalk from 'chalk';
 
 export const Colors: ColorsTheme = {
@@ -70,6 +71,58 @@ export const Colors: ColorsTheme = {
   },
   get GradientColors() {
     return themeManager.getActiveTheme().colors.GradientColors;
+  },
+};
+
+/**
+ * Semantic color tokens that provide meaningful color abstractions
+ */
+export const SemanticColors: SemanticColorsInterface = {
+  get text() {
+    return {
+      get primary() {
+        return themeManager.getSemanticColors().text.primary;
+      },
+      get secondary() {
+        return themeManager.getSemanticColors().text.secondary;
+      },
+      get accent() {
+        return themeManager.getSemanticColors().text.accent;
+      },
+    };
+  },
+  get status() {
+    return {
+      get success() {
+        return themeManager.getSemanticColors().status.success;
+      },
+      get warning() {
+        return themeManager.getSemanticColors().status.warning;
+      },
+      get error() {
+        return themeManager.getSemanticColors().status.error;
+      },
+    };
+  },
+  get background() {
+    return {
+      get primary() {
+        return themeManager.getSemanticColors().background.primary;
+      },
+      get secondary() {
+        return themeManager.getSemanticColors().background.secondary;
+      },
+    };
+  },
+  get border() {
+    return {
+      get default() {
+        return themeManager.getSemanticColors().border.default;
+      },
+      get focused() {
+        return themeManager.getSemanticColors().border.focused;
+      },
+    };
   },
 };
 

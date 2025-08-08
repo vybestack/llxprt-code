@@ -6,7 +6,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { Colors } from '../colors.js';
+import { SemanticColors } from '../colors.js';
 import { IModel } from '../../providers/index.js';
 
 interface ProviderModelDialogProps {
@@ -116,7 +116,11 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
       <Box key={m.id} width={colWidth} marginRight={2}>
         <Text
           color={
-            selected ? '#00ff00' : isSearching ? Colors.Gray : Colors.Foreground
+            selected
+              ? SemanticColors.text.accent
+              : isSearching
+                ? SemanticColors.text.secondary
+                : SemanticColors.text.primary
           }
         >
           {selected ? '● ' : '○ '}
@@ -155,31 +159,38 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={Colors.Gray}
+      borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
     >
-      <Text bold color={Colors.Foreground}>
+      <Text bold color={SemanticColors.text.primary}>
         Select Model (Tab to switch modes, Enter to select, Esc to cancel)
       </Text>
 
       {/* Search input */}
       <Box marginY={1}>
-        <Text color={isSearching ? Colors.Foreground : Colors.Gray}>
-          Search: {isSearching && <Text color="#00ff00">▌</Text>}
+        <Text
+          color={
+            isSearching
+              ? SemanticColors.text.primary
+              : SemanticColors.text.secondary
+          }
+        >
+          Search:{' '}
+          {isSearching && <Text color={SemanticColors.text.accent}>▌</Text>}
         </Text>
-        <Text color={Colors.Foreground}>{searchTerm}</Text>
+        <Text color={SemanticColors.text.primary}>{searchTerm}</Text>
       </Box>
 
       {/* Results info */}
       {searchTerm && (
-        <Text color={Colors.Gray}>
+        <Text color={SemanticColors.text.secondary}>
           Found {filteredModels.length} of {sortedModels.length} models
         </Text>
       )}
 
       {rows > maxVisibleRows && (
-        <Text color={Colors.Gray}>
+        <Text color={SemanticColors.text.secondary}>
           Showing {scrollOffset + 1}-
           {Math.min(scrollOffset + maxVisibleRows, rows)} of {rows} rows
         </Text>
@@ -190,7 +201,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
         visibleGrid
       ) : (
         <Box marginY={1}>
-          <Text color={Colors.Gray}>
+          <Text color={SemanticColors.text.secondary}>
             No models match &quot;{searchTerm}&quot;
           </Text>
         </Box>
@@ -198,7 +209,9 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
 
       {/* Current selection */}
       {filteredModels.length > 0 && !isSearching && (
-        <Text color={Colors.Gray}>Selected: {filteredModels[index].id}</Text>
+        <Text color={SemanticColors.text.secondary}>
+          Selected: {filteredModels[index].id}
+        </Text>
       )}
     </Box>
   );

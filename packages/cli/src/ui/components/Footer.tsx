@@ -6,7 +6,7 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { Colors, SemanticColors } from '../colors.js';
 import { shortenPath, tildeifyPath } from '@vybestack/llxprt-code-core';
 import { ConsoleSummaryDisplay } from './ConsoleSummaryDisplay.js';
 import process from 'node:process';
@@ -50,7 +50,9 @@ export const Footer: React.FC<FooterProps> = ({
   <Box justifyContent="space-between" width="100%">
     <Box>
       {debugMode && <DebugProfiler />}
-      {vimMode && <Text color={Colors.Gray}>[{vimMode}] </Text>}
+      {vimMode && (
+        <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+      )}
       {nightly ? (
         <Gradient colors={Colors.GradientColors}>
           <Text>
@@ -61,11 +63,13 @@ export const Footer: React.FC<FooterProps> = ({
       ) : (
         <Text color={Colors.LightBlue}>
           {shortenPath(tildeifyPath(targetDir), 70)}
-          {branchName && <Text color={Colors.Gray}> ({branchName}*)</Text>}
+          {branchName && (
+            <Text color={SemanticColors.text.secondary}> ({branchName}*)</Text>
+          )}
         </Text>
       )}
       {debugMode && (
-        <Text color={Colors.AccentRed}>
+        <Text color={SemanticColors.status.error}>
           {' ' + (debugMessage || '--debug')}
         </Text>
       )}
@@ -79,24 +83,27 @@ export const Footer: React.FC<FooterProps> = ({
       display="flex"
     >
       {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-        <Text color={Colors.AccentGreen}>
+        <Text color={SemanticColors.status.success}>
           {process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}
         </Text>
       ) : process.env.SANDBOX === 'sandbox-exec' ? (
-        <Text color={Colors.AccentYellow}>
+        <Text color={SemanticColors.status.warning}>
           macOS Seatbelt{' '}
-          <Text color={Colors.Gray}>({process.env.SEATBELT_PROFILE})</Text>
+          <Text color={SemanticColors.text.secondary}>
+            ({process.env.SEATBELT_PROFILE})
+          </Text>
         </Text>
       ) : (
-        <Text color={Colors.AccentRed}>
-          no sandbox <Text color={Colors.Gray}>(see /docs)</Text>
+        <Text color={SemanticColors.status.error}>
+          no sandbox{' '}
+          <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
         </Text>
       )}
     </Box>
 
     {/* Right Section: Gemini Label and Console Summary */}
     <Box alignItems="center">
-      <Text color={Colors.AccentBlue}>
+      <Text color={SemanticColors.text.accent}>
         {' '}
         {model}{' '}
         <ContextUsageDisplay
@@ -115,9 +122,13 @@ export const Footer: React.FC<FooterProps> = ({
           if (isGeminiProvider) {
             return (
               <Text>
-                <Text color={Colors.Gray}> | </Text>
+                <Text color={SemanticColors.text.secondary}> | </Text>
                 <Text
-                  color={isPaidMode ? Colors.AccentYellow : Colors.AccentGreen}
+                  color={
+                    isPaidMode
+                      ? SemanticColors.status.warning
+                      : SemanticColors.status.success
+                  }
                 >
                   {isPaidMode ? 'paid mode' : 'free mode'}
                 </Text>
@@ -129,7 +140,7 @@ export const Footer: React.FC<FooterProps> = ({
 
       {!showErrorDetails && errorCount > 0 && (
         <Box>
-          <Text color={Colors.Gray}>| </Text>
+          <Text color={SemanticColors.text.secondary}>| </Text>
           <ConsoleSummaryDisplay errorCount={errorCount} />
         </Box>
       )}

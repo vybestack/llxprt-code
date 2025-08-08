@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { Colors } from '../colors.js';
+import { SemanticColors } from '../colors.js';
 
 interface ProviderDialogProps {
   providers: string[];
@@ -53,7 +53,11 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
     const selected = i === index;
     return (
       <Box key={name} width={colWidth} marginRight={2}>
-        <Text color={selected ? '#00ff00' : Colors.Foreground}>
+        <Text
+          color={
+            selected ? SemanticColors.text.accent : SemanticColors.text.primary
+          }
+        >
           {selected ? '● ' : '○ '}
           {name}
         </Text>
@@ -74,11 +78,11 @@ export const ProviderDialog: React.FC<ProviderDialogProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={Colors.Gray}
+      borderColor={SemanticColors.border.default}
       flexDirection="column"
       padding={1}
     >
-      <Text bold color={Colors.Foreground}>
+      <Text bold color={SemanticColors.text.primary}>
         Select Provider (←/→/↑/↓, Enter to choose, Esc to cancel)
       </Text>
       {grid}

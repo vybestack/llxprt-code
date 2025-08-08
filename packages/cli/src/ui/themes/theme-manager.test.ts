@@ -12,6 +12,7 @@ if (process.env.NO_COLOR !== undefined) {
 import { describe, it, expect, beforeEach } from 'vitest';
 import { themeManager, DEFAULT_THEME } from './theme-manager.js';
 import { CustomTheme } from './theme.js';
+import { SemanticColors } from './semantic-tokens.js';
 
 const validCustomTheme: CustomTheme = {
   type: 'custom',
@@ -104,5 +105,82 @@ describe('ThemeManager', () => {
     } else {
       process.env.NO_COLOR = original;
     }
+  });
+
+  describe('getSemanticColors', () => {
+    it('should return semantic colors for the active theme', () => {
+      themeManager.setActiveTheme('Ayu');
+      const semanticColors = themeManager.getSemanticColors();
+
+      expect(semanticColors).toEqual({
+        text: {
+          primary: expect.any(String),
+          secondary: expect.any(String),
+          accent: expect.any(String),
+        },
+        status: {
+          success: expect.any(String),
+          warning: expect.any(String),
+          error: expect.any(String),
+        },
+        background: {
+          primary: expect.any(String),
+          secondary: expect.any(String),
+        },
+        border: {
+          default: expect.any(String),
+          focused: expect.any(String),
+        },
+      } satisfies SemanticColors);
+    });
+
+    it('should return semantic colors for custom themes', () => {
+      themeManager.loadCustomThemes({ MyCustomTheme: validCustomTheme });
+      themeManager.setActiveTheme('MyCustomTheme');
+
+      const semanticColors = themeManager.getSemanticColors();
+
+      expect(semanticColors.text.primary).toBe('#ffffff');
+      expect(semanticColors.background.primary).toBe('#000000');
+      expect(semanticColors.status.success).toBe('#3CA84B');
+      expect(semanticColors.status.warning).toBe('yellow');
+      expect(semanticColors.status.error).toBe('red');
+    });
+
+    it('should update semantic colors when theme is switched', () => {
+      // Start with default theme
+      const defaultSemanticColors = themeManager.getSemanticColors();
+
+      // Switch to a different theme
+      themeManager.setActiveTheme('Ayu');
+      const ayuSemanticColors = themeManager.getSemanticColors();
+
+      // Semantic colors should be different
+      expect(defaultSemanticColors.text.primary).not.toBe(
+        ayuSemanticColors.text.primary,
+      );
+      expect(defaultSemanticColors.background.primary).not.toBe(
+        ayuSemanticColors.background.primary,
+      );
+    });
+
+    it('should cache semantic colors for performance', () => {
+      const semanticColors1 = themeManager.getSemanticColors();
+      const semanticColors2 = themeManager.getSemanticColors();
+
+      // Should return the same object reference (cached)
+      expect(semanticColors1).toBe(semanticColors2);
+    });
+
+    it('should invalidate cache when theme is switched', () => {
+      const semanticColors1 = themeManager.getSemanticColors();
+
+      // Switch theme to invalidate cache
+      themeManager.setActiveTheme('Ayu');
+      const semanticColors2 = themeManager.getSemanticColors();
+
+      // Should return different object references
+      expect(semanticColors1).not.toBe(semanticColors2);
+    });
   });
 });

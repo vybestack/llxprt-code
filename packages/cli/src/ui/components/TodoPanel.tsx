@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { useTodoContext } from '../contexts/TodoContext.js';
 import { useToolCallContext } from '../contexts/ToolCallContext.js';
-import { Colors } from '../colors.js';
+import { SemanticColors } from '../colors.js';
 import {
   Todo as CoreTodo,
   Subtask,
@@ -80,7 +80,7 @@ const renderToolCall = (
       flexDirection="row"
       minHeight={1}
     >
-      <Text color={Colors.Gray}>
+      <Text color={SemanticColors.text.secondary}>
         {indent}↳ {toolText}
         {countText}
       </Text>
@@ -96,17 +96,17 @@ const renderTodo = (
 
   // Todo status marker and content
   let marker = '';
-  let markerColor = Colors.Foreground;
+  let markerColor = SemanticColors.text.primary;
 
   if (todo.status === 'completed') {
     marker = '✔';
-    markerColor = Colors.AccentGreen;
+    markerColor = SemanticColors.status.success;
   } else if (todo.status === 'pending') {
     marker = '○';
-    markerColor = Colors.Gray;
+    markerColor = SemanticColors.text.secondary;
   } else if (todo.status === 'in_progress') {
     marker = '→';
-    markerColor = Colors.AccentYellow;
+    markerColor = SemanticColors.status.warning;
   }
 
   // Main todo line
@@ -119,15 +119,15 @@ const renderTodo = (
         <Text
           color={
             todo.status === 'in_progress'
-              ? Colors.AccentYellow
-              : Colors.Foreground
+              ? SemanticColors.status.warning
+              : SemanticColors.text.primary
           }
           bold={todo.status === 'in_progress'}
           wrap="wrap"
         >
           {todo.content}
           {todo.status === 'in_progress' && (
-            <Text color={Colors.AccentYellow}> ← current</Text>
+            <Text color={SemanticColors.status.warning}> ← current</Text>
           )}
         </Text>
       </Box>
@@ -139,7 +139,10 @@ const renderTodo = (
     for (const subtask of todo.subtasks) {
       elements.push(
         <Box key={`${todo.id}-subtask-${subtask.content}`}>
-          <Text color={Colors.Gray}> • {subtask.content}</Text>
+          <Text color={SemanticColors.text.secondary}>
+            {' '}
+            • {subtask.content}
+          </Text>
         </Box>,
       );
 
@@ -195,7 +198,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
   // Add header
   allElements.push(
     <Box key="header" minHeight={1} marginBottom={1}>
-      <Text color={Colors.AccentBlue} bold>
+      <Text color={SemanticColors.text.accent} bold>
         Todo Progress
       </Text>
     </Box>,
@@ -217,7 +220,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
       flexDirection="column"
       width={width}
       borderStyle="round"
-      borderColor={Colors.AccentBlue}
+      borderColor={SemanticColors.text.accent}
       paddingX={1}
       paddingY={1}
     >
