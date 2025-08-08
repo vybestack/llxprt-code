@@ -5,6 +5,7 @@ This guide documents the process for cherry-picking changes from the upstream ge
 ## Current Sync Status
 
 **Last synced upstream commit:** `60362e03` (August 7, 2025)
+
 - MCP servers fix: Fixed issue where MCP servers allowed in settings do not show up in /mcp command
 
 **Branch:** `20250808-gmerge`
