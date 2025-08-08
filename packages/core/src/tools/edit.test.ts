@@ -158,41 +158,28 @@ describe('EditTool', () => {
   describe('applyReplacement', () => {
     // Test the exported applyReplacement function
     it('should return newString if isNewFile is true', () => {
-      expect(applyReplacement(null, 'old', 'new', true)).toBe(
-        'new',
-      );
-      expect(
-        applyReplacement('existing', 'old', 'new', true),
-      ).toBe('new');
+      expect(applyReplacement(null, 'old', 'new', true)).toBe('new');
+      expect(applyReplacement('existing', 'old', 'new', true)).toBe('new');
     });
 
     it('should return newString if currentContent is null and oldString is empty (defensive)', () => {
-      expect(applyReplacement(null, '', 'new', false)).toBe(
-        'new',
-      );
+      expect(applyReplacement(null, '', 'new', false)).toBe('new');
     });
 
     it('should return empty string if currentContent is null and oldString is not empty (defensive)', () => {
-      expect(applyReplacement(null, 'old', 'new', false)).toBe(
-        '',
-      );
+      expect(applyReplacement(null, 'old', 'new', false)).toBe('');
     });
 
     it('should replace oldString with newString in currentContent', () => {
-      expect(
-        applyReplacement(
-          'hello old world old',
-          'old',
-          'new',
-          false,
-        ),
-      ).toBe('hello new world new');
+      expect(applyReplacement('hello old world old', 'old', 'new', false)).toBe(
+        'hello new world new',
+      );
     });
 
     it('should return currentContent if oldString is empty and not a new file', () => {
-      expect(
-        applyReplacement('hello world', '', 'new', false),
-      ).toBe('hello world');
+      expect(applyReplacement('hello world', '', 'new', false)).toBe(
+        'hello world',
+      );
     });
   });
 

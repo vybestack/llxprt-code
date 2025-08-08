@@ -218,14 +218,15 @@ class GlobToolInvocation extends BaseToolInvocation<
       // Apply max_files limit if specified (LLxprt feature)
       let finalEntries = sortedEntries;
       let limitMessage = '';
-      if (this.params.max_files && sortedEntries.length > this.params.max_files) {
+      if (
+        this.params.max_files &&
+        sortedEntries.length > this.params.max_files
+      ) {
         finalEntries = sortedEntries.slice(0, this.params.max_files);
         limitMessage = ` (showing first ${this.params.max_files} of ${sortedEntries.length} total matches)`;
       }
 
-      const sortedAbsolutePaths = finalEntries.map((entry) =>
-        entry.fullpath(),
-      );
+      const sortedAbsolutePaths = finalEntries.map((entry) => entry.fullpath());
       const fileListDescription = sortedAbsolutePaths.join('\n');
       const fileCount = finalEntries.length;
       const totalCount = sortedEntries.length;

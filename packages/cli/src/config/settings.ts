@@ -154,7 +154,7 @@ export interface Settings {
   loadMemoryFromIncludeDirectories?: boolean;
 
   chatCompression?: ChatCompressionSettings;
-  
+
   // Shell replacement setting for allowing command substitution
   shellReplacement?: boolean;
 }

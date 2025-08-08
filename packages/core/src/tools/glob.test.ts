@@ -293,7 +293,7 @@ describe('GlobTool', () => {
 
     it('should provide clear error messages when path is outside workspace', () => {
       const invalidPath = { pattern: '*.ts', path: '/etc' };
-      
+
       expect(() => globTool.build(invalidPath)).toThrow(
         /resolves outside the allowed workspace directories/,
       );
