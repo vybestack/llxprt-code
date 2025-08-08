@@ -266,6 +266,7 @@ Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
 - Explore the available **[CLI Commands](./docs/cli/commands.md)**.
 - If you encounter any issues, review the **[troubleshooting guide](./docs/troubleshooting.md)**.
 - For more comprehensive documentation, see the [full documentation](./docs/index.md).
+- **Migrating from Gemini CLI?** Check out our [tips for Gemini CLI users](./docs/gemini-cli-tips.md).
 - Take a look at some [popular tasks](#popular-tasks) for more inspiration.
 - Check out our **[Official Roadmap](./ROADMAP.md)**
 

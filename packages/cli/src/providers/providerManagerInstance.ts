@@ -131,6 +131,9 @@ export function getProviderManager(
       providerToolFormatOverrides: userSettings?.providerToolFormatOverrides,
       openaiResponsesEnabled: userSettings?.openaiResponsesEnabled,
       allowBrowserEnvironment,
+      getEphemeralSettings: config
+        ? () => config.getEphemeralSettings()
+        : undefined,
     };
     const openaiProvider = new OpenAIProvider(
       openaiApiKey || '',

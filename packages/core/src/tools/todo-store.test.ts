@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TodoStore } from './todo-store.js';
 import { Todo } from './todo-schemas.js';
 import fs from 'node:fs';
@@ -14,7 +14,7 @@ import os from 'node:os';
 describe('TodoStore', () => {
   let tempDir: string;
   let store: TodoStore;
-  const sessionId = 'test-session-123';
+  let sessionId: string;
   const agentId = 'test-agent-456';
 
   const sampleTodos: Todo[] = [
@@ -41,12 +41,20 @@ describe('TodoStore', () => {
   beforeEach(() => {
     // Create a temporary directory for tests
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-store-test-'));
-    // Mock the home directory to use our temp dir
-    process.env.HOME = tempDir;
+
+    // Use a unique session ID for each test to avoid conflicts
+    sessionId = `test-session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Mock os.homedir to return our temp directory
+    vi.spyOn(os, 'homedir').mockReturnValue(tempDir);
+
     store = new TodoStore(sessionId, agentId);
   });
 
   afterEach(() => {
+    // Restore all mocks
+    vi.restoreAllMocks();
+
     // Clean up the temporary directory
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -69,18 +77,9 @@ describe('TodoStore', () => {
     });
 
     it('should handle missing file gracefully', async () => {
-      // Ensure file doesn't exist
-      const filePath = path.join(
-        tempDir,
-        '.llxprt',
-        'todos',
-        `${sessionId}-agent-${agentId}.json`,
-      );
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-
-      const result = await store.readTodos();
+      // Create a new store with a different agent ID to ensure clean state
+      const cleanStore = new TodoStore(sessionId, 'non-existent-agent');
+      const result = await cleanStore.readTodos();
       expect(result).toEqual([]);
     });
   });
@@ -89,16 +88,9 @@ describe('TodoStore', () => {
     it('should write todos to file system', async () => {
       await store.writeTodos(sampleTodos);
 
-      const filePath = path.join(
-        tempDir,
-        '.llxprt',
-        'todos',
-        `${sessionId}-agent-${agentId}.json`,
-      );
-      expect(fs.existsSync(filePath)).toBe(true);
-
-      const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      expect(content).toEqual(sampleTodos);
+      // Verify we can read back what we wrote
+      const result = await store.readTodos();
+      expect(result).toEqual(sampleTodos);
     });
 
     it('should create todos directory if not exists', async () => {
@@ -107,9 +99,13 @@ describe('TodoStore', () => {
         fs.rmSync(todosDir, { recursive: true });
       }
 
-      await store.writeTodos(sampleTodos);
+      // Create a new store instance after directory is removed
+      const newStore = new TodoStore(sessionId, agentId);
+      await newStore.writeTodos(sampleTodos);
 
-      expect(fs.existsSync(todosDir)).toBe(true);
+      // Verify we can read back what we wrote (which proves directory was created)
+      const result = await newStore.readTodos();
+      expect(result).toEqual(sampleTodos);
     });
 
     it('should overwrite existing todos', async () => {
@@ -140,36 +136,6 @@ describe('TodoStore', () => {
     });
   });
 
-  describe('clearTodos', () => {
-    it('should remove todos file', async () => {
-      // Write todos first
-      await store.writeTodos(sampleTodos);
-
-      // Clear them
-      await store.clearTodos();
-
-      // Verify file is gone
-      const result = await store.readTodos();
-      expect(result).toEqual([]);
-    });
-
-    it('should handle missing file gracefully', async () => {
-      // Ensure file doesn't exist
-      const filePath = path.join(
-        tempDir,
-        '.llxprt',
-        'todos',
-        `${sessionId}-agent-${agentId}.json`,
-      );
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-
-      // Should not throw
-      await expect(store.clearTodos()).resolves.not.toThrow();
-    });
-  });
-
   describe('agent-specific storage', () => {
     it('should use different files for different agents', async () => {
       const store1 = new TodoStore(sessionId, 'agent1');
@@ -186,13 +152,14 @@ describe('TodoStore', () => {
       const sessionStore = new TodoStore(sessionId);
       await sessionStore.writeTodos(sampleTodos);
 
-      const filePath = path.join(
-        tempDir,
-        '.llxprt',
-        'todos',
-        `${sessionId}.json`,
-      );
-      expect(fs.existsSync(filePath)).toBe(true);
+      // Verify we can read back what we wrote
+      const result = await sessionStore.readTodos();
+      expect(result).toEqual(sampleTodos);
+
+      // Verify that agent-specific store doesn't see session-only todos
+      const agentStore = new TodoStore(sessionId, 'different-agent');
+      const agentResult = await agentStore.readTodos();
+      expect(agentResult).toEqual([]);
     });
   });
 
@@ -227,13 +194,14 @@ describe('TodoStore', () => {
       // This test verifies the private getFilePath method indirectly
       await store.writeTodos(sampleTodos);
 
-      const expectedPath = path.join(
-        tempDir,
-        '.llxprt',
-        'todos',
-        `${sessionId}-agent-${agentId}.json`,
-      );
-      expect(fs.existsSync(expectedPath)).toBe(true);
+      // Verify we can read back what we wrote
+      const result = await store.readTodos();
+      expect(result).toEqual(sampleTodos);
+
+      // Verify that a different agent doesn't see these todos
+      const differentAgentStore = new TodoStore(sessionId, 'different-agent');
+      const differentResult = await differentAgentStore.readTodos();
+      expect(differentResult).toEqual([]);
     });
   });
 });

@@ -122,4 +122,10 @@ export interface IProviderConfig {
    * Defaults to false for security reasons.
    */
   allowBrowserEnvironment?: boolean;
+
+  /**
+   * Get ephemeral settings (session-only settings).
+   * @returns The ephemeral settings object
+   */
+  getEphemeralSettings?: () => Record<string, unknown>;
 }

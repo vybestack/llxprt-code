@@ -147,3 +147,4 @@ If the pre-commit hook fails, you MUST:
 - Trust subagent outputs - they're specialized for their domains
 - NEVER push without full verification cycle AND user permission
 - Git pre-commit hooks enforce lint, typecheck, and format - respect them!
+- We do not send pull requests to gemnini-cli. This is a perminant fork downstream.
