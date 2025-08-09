@@ -211,9 +211,7 @@ describe('ShellTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toBe(
-        'Command cannot be empty.',
-      );
+      expect(result.llmContent).toBe('Command cannot be empty.');
       expect(result.returnDisplay).toBe('Command cannot be empty.');
       // Validation errors don't set error property in upstream
     });

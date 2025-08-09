@@ -157,7 +157,8 @@ describe('ReadFileTool', () => {
             message: `File not found: ${filePath}`,
             type: 'file_not_found',
           },
-          llmContent: 'Could not read file because no file was found at the specified path.',
+          llmContent:
+            'Could not read file because no file was found at the specified path.',
           returnDisplay: 'File not found.',
         });
       });
