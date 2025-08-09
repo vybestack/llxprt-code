@@ -567,7 +567,7 @@ describe('Logger', () => {
     let taggedFilePath: string;
 
     beforeEach(() => {
-      taggedFilePath = path.join(TEST_GEMINI_DIR, `checkpoint-${tag}.json`);
+      taggedFilePath = path.join(TEST_LLXPRT_DIR, `checkpoint-${tag}.json`);
     });
 
     it('should return true if the checkpoint file exists', async () => {

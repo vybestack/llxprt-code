@@ -476,12 +476,6 @@ export const useSlashCommandProcessor = (
                       new Set(approvedCommands),
                     );
                   }
-                  default: {
-                    const unhandled: never = result;
-                    throw new Error(
-                      `Unhandled slash command result: ${unhandled}`,
-                    );
-                  }
                   case 'confirm_action': {
                     const { confirmed } = await new Promise<{
                       confirmed: boolean;
