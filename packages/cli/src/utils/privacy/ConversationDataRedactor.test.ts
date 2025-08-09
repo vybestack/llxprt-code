@@ -342,7 +342,9 @@ describe('Conversation Data Redaction', () => {
       'I cannot store API keys for security reasons',
     ); // Unchanged
     // File paths are not redacted by default since redactFilePaths is false
-    expect(redacted[2].content).toBe('Please read /home/john/.ssh/id_rsa for me');
+    expect(redacted[2].content).toBe(
+      'Please read /home/john/.ssh/id_rsa for me',
+    );
     expect(redacted[3].content).toBe(
       'I cannot access SSH keys or other sensitive files',
     ); // Unchanged
@@ -394,7 +396,9 @@ describe('Conversation Data Redaction', () => {
     // File path redaction in message content is not currently implemented in the main redaction flow
     // The redactSensitivePaths method exists but is not called from redactContent
     // File path redaction currently only works in tool parameters, not general message content
-    expect(redacted.content).toBe('Read these files: /home/alice/.ssh/id_rsa, /Users/bob/.env, /home/charlie/secrets/key.pem');
+    expect(redacted.content).toBe(
+      'Read these files: /home/alice/.ssh/id_rsa, /Users/bob/.env, /home/charlie/secrets/key.pem',
+    );
   });
 
   /**
@@ -416,7 +420,7 @@ describe('Conversation Data Redaction', () => {
     // Email redaction works via the global patterns
     expect(redacted.content).toContain('[REDACTED-EMAIL]');
     expect(redacted.content).not.toContain('john.doe@example.com');
-    
+
     // Phone and credit card numbers are handled by the redactPersonalInfo method
     // but this method is not called from the main redactContent flow
     // So phone numbers and credit cards are not currently redacted in message content

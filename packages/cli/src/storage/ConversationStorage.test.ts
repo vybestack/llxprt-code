@@ -231,7 +231,7 @@ describe('Conversation Log Storage Management', () => {
     const mediumEntry = createLargeConversationEntry(600 * 1024); // 600KB
     await storage.writeConversationEntry(mediumEntry);
     expect(await storage.getCurrentLogSize()).toBeLessThan(1024 * 1024);
-    
+
     // Now add another entry that would exceed the 1MB limit (600KB + 600KB > 1MB)
     const anotherEntry = createLargeConversationEntry(600 * 1024); // 600KB
     await storage.writeConversationEntry(anotherEntry);

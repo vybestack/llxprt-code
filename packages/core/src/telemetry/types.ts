@@ -134,6 +134,7 @@ export class ToolCallEvent {
   error?: string;
   error_type?: string;
   prompt_id: string;
+  metadata?: Record<string, unknown>;
 
   constructor(call: CompletedToolCall) {
     this['event.name'] = 'tool_call';

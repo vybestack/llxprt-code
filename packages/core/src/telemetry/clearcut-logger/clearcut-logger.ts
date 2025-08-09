@@ -51,6 +51,11 @@ export interface LogResponse {
   nextRequestWaitMs?: number;
 }
 
+export interface LogEventEntry {
+  event_time_ms: number;
+  source_extension_json: string;
+}
+
 // TELEMETRY REMOVED: This class has been modified to disable all Google data collection
 // Singleton class for batch posting log events to Clearcut. When a new event comes in, the elapsed time
 // is checked and events are flushed to Clearcut if at least a minute has passed since the last flush.
@@ -58,9 +63,27 @@ export class ClearcutLogger {
   private static instance: ClearcutLogger;
   private config?: Config;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
-  private readonly events: any = [];
+  private readonly events: any = {
+    items: [] as LogEventEntry[][],
+    toArray: function() { return this.items; },
+    get size() { return this.items.length; },
+    push: function(item: LogEventEntry[]) { 
+      this.items.push(item); 
+      if (this.items.length > 1000) { // max_events
+        this.items.shift();
+      }
+    },
+    splice: function(start: number, deleteCount: number) { 
+      return this.items.splice(start, deleteCount); 
+    },
+    unshift: function(item: LogEventEntry[]) { 
+      this.items.unshift(item); 
+    }
+  };
   private last_flush_time: number = Date.now();
   private flush_interval_ms: number = 1000 * 60; // Wait at least a minute before flushing events.
+  private max_events: number = 1000; // Maximum number of events to keep in memory
+  private max_retry_events: number = 100; // Maximum number of events to retry
 
   private constructor(config?: Config) {
     this.config = config;
@@ -77,6 +100,11 @@ export class ClearcutLogger {
     }
     return ClearcutLogger.instance;
     */
+  }
+
+  static clearInstance(): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (ClearcutLogger as any).instance;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
@@ -130,7 +158,7 @@ export class ClearcutLogger {
     if (this.config?.getDebugMode()) {
       console.log('Flushing log events to Clearcut.');
     }
-    const eventsToSend = [...this.events];
+    const eventsToSend = [...this.events.items];
     if (eventsToSend.length === 0) {
       return {};
     }
@@ -624,6 +652,18 @@ export class ClearcutLogger {
       return new HttpsProxyAgent(proxyUrl);
     } else {
       throw new Error('Unsupported proxy type');
+    }
+  }
+
+  private requeueFailedEvents(failedEvents: LogEventEntry[][]): void {
+    const availableSpace = this.max_events - this.events.size;
+    const eventsToRequeue = Math.min(failedEvents.length, availableSpace, this.max_retry_events);
+    
+    if (eventsToRequeue > 0) {
+      const startIndex = Math.max(0, failedEvents.length - eventsToRequeue);
+      for (let i = failedEvents.length - 1; i >= startIndex; i--) {
+        this.events.unshift(failedEvents[i]);
+      }
     }
   }
 

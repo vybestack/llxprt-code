@@ -32,6 +32,7 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
+import { runExitCleanup } from '../../utils/cleanup.js';
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
@@ -426,6 +427,7 @@ export const useSlashCommandProcessor = (
                 case 'quit':
                   setQuittingMessages(result.messages);
                   setTimeout(() => {
+                    runExitCleanup();
                     process.exit(0);
                   }, 100);
                   return { type: 'handled' };
