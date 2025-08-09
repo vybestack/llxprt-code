@@ -16,6 +16,12 @@ export const validateAuthMethod = (authMethod: string): string | null => {
     return null;
   }
 
+  // Handle legacy auth types for backward compatibility
+  if (authMethod === 'oauth_gemini' || authMethod === 'oauth-gemini') {
+    // Map to LOGIN_WITH_GOOGLE for backward compatibility
+    return null;
+  }
+
   if (
     authMethod === AuthType.LOGIN_WITH_GOOGLE ||
     authMethod === AuthType.CLOUD_SHELL

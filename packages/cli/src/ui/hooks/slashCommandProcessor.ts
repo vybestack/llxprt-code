@@ -329,14 +329,13 @@ export const useSlashCommandProcessor = (
               };
             }
 
-            try {
-              const result = await commandToExecute.action(
-                fullCommandContext,
-                args,
-              );
+            const result = await commandToExecute.action(
+              fullCommandContext,
+              args,
+            );
 
-              if (result) {
-                switch (result.type) {
+            if (result) {
+              switch (result.type) {
                   case 'tool':
                     return {
                       type: 'schedule_tool',
@@ -513,18 +512,9 @@ export const useSlashCommandProcessor = (
                     );
                   }
               }
-
-              return { type: 'handled' };
-            } catch (e) {
-              addItem(
-                {
-                  type: MessageType.ERROR,
-                  text: e instanceof Error ? e.message : String(e),
-                },
-                Date.now(),
-              );
-              return { type: 'handled' };
             }
+
+            return { type: 'handled' };
           } else if (commandToExecute.subCommands) {
             const helpText = `Command '/${commandToExecute.name}' requires a subcommand. Available:\n${commandToExecute.subCommands
               .map((sc) => `  - ${sc.name}: ${sc.description || ''}`)
