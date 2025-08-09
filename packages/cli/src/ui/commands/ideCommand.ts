@@ -23,35 +23,6 @@ import {
 } from './types.js';
 import { SettingScope } from '../../config/settings.js';
 
-function getIdeStatusMessage(ideClient: IdeClient): {
-  messageType: 'info' | 'error';
-  content: string;
-} {
-  const connection = ideClient.getConnectionStatus();
-  switch (connection.status) {
-    case IDEConnectionStatus.Connected:
-      return {
-        messageType: 'info',
-        content: `🟢 Connected to ${ideClient.getDetectedIdeDisplayName()}`,
-      };
-    case IDEConnectionStatus.Connecting:
-      return {
-        messageType: 'info',
-        content: `🟡 Connecting...`,
-      };
-    default: {
-      let content = `🔴 Disconnected`;
-      if (connection?.details) {
-        content += `: ${connection.details}`;
-      }
-      return {
-        messageType: 'error',
-        content,
-      };
-    }
-  }
-}
-
 function formatFileList(openFiles: File[]): string {
   const basenameCounts = new Map<string, number>();
   for (const file of openFiles) {

@@ -336,181 +336,181 @@ export const useSlashCommandProcessor = (
 
             if (result) {
               switch (result.type) {
-                  case 'tool':
-                    return {
-                      type: 'schedule_tool',
-                      toolName: result.toolName,
-                      toolArgs: result.toolArgs,
-                    };
-                  case 'message':
+                case 'tool':
+                  return {
+                    type: 'schedule_tool',
+                    toolName: result.toolName,
+                    toolArgs: result.toolArgs,
+                  };
+                case 'message':
+                  addItem(
+                    {
+                      type:
+                        result.messageType === 'error'
+                          ? MessageType.ERROR
+                          : MessageType.INFO,
+                      text: result.content,
+                    },
+                    Date.now(),
+                  );
+                  return { type: 'handled' };
+                case 'dialog':
+                  switch (result.dialog) {
+                    case 'help':
+                      setShowHelp(true);
+                      return { type: 'handled' };
+                    case 'auth':
+                      openAuthDialog();
+                      return { type: 'handled' };
+                    case 'theme':
+                      openThemeDialog();
+                      return { type: 'handled' };
+                    case 'editor':
+                      openEditorDialog();
+                      return { type: 'handled' };
+                    case 'privacy':
+                      openPrivacyNotice();
+                      return { type: 'handled' };
+                    case 'provider':
+                      openProviderDialog();
+                      return { type: 'handled' };
+                    case 'providerModel':
+                      openProviderModelDialog();
+                      return { type: 'handled' };
+                    case 'loadProfile':
+                      openLoadProfileDialog();
+                      return { type: 'handled' };
+                    case 'tools': {
+                      // Extract the subcommand from the original command
+                      const originalCommand = rawQuery.trim();
+                      const commandParts = originalCommand.split(/\s+/);
+                      const subCommand = commandParts[1] as
+                        | 'enable'
+                        | 'disable';
+                      openToolsDialog(subCommand);
+                      return { type: 'handled' };
+                    }
+                    case 'logging': {
+                      // For now, show the log entries as text since dialog system is not fully implemented
+                      const dialogData = result.dialogData as {
+                        entries?: unknown[];
+                      };
+                      if (dialogData && dialogData.entries) {
+                        // This would open the LoggingDialog when the dialog system is ready
+                        // For now, the command handles displaying the logs
+                      }
+                      return { type: 'handled' };
+                    }
+                    default: {
+                      const unhandled: never = result.dialog;
+                      throw new Error(
+                        `Unhandled slash command result: ${unhandled}`,
+                      );
+                    }
+                  }
+                case 'load_history': {
+                  // Always load the UI history first
+                  fullCommandContext.ui.clear();
+                  result.history.forEach((item, index) => {
+                    fullCommandContext.ui.addItem(item, index);
+                  });
+
+                  // Set the client history - it will be stored for later use if not initialized
+                  const client = config?.getGeminiClient();
+                  if (client) {
+                    await client.setHistory(result.clientHistory);
+                  }
+
+                  return { type: 'handled' };
+                }
+                case 'quit':
+                  setQuittingMessages(result.messages);
+                  setTimeout(() => {
+                    process.exit(0);
+                  }, 100);
+                  return { type: 'handled' };
+
+                case 'submit_prompt':
+                  return {
+                    type: 'submit_prompt',
+                    content: result.content,
+                  };
+                case 'confirm_shell_commands': {
+                  const { outcome, approvedCommands } = await new Promise<{
+                    outcome: ToolConfirmationOutcome;
+                    approvedCommands?: string[];
+                  }>((resolve) => {
+                    setShellConfirmationRequest({
+                      commands: result.commandsToConfirm,
+                      onConfirm: (
+                        resolvedOutcome,
+                        resolvedApprovedCommands,
+                      ) => {
+                        setShellConfirmationRequest(null); // Close the dialog
+                        resolve({
+                          outcome: resolvedOutcome,
+                          approvedCommands: resolvedApprovedCommands,
+                        });
+                      },
+                    });
+                  });
+
+                  if (
+                    outcome === ToolConfirmationOutcome.Cancel ||
+                    !approvedCommands ||
+                    approvedCommands.length === 0
+                  ) {
+                    return { type: 'handled' };
+                  }
+
+                  if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+                    setSessionShellAllowlist(
+                      (prev) => new Set([...prev, ...approvedCommands]),
+                    );
+                  }
+
+                  return await handleSlashCommand(
+                    result.originalInvocation.raw,
+                    // Pass the approved commands as a one-time grant for this execution.
+                    new Set(approvedCommands),
+                  );
+                }
+                case 'confirm_action': {
+                  const { confirmed } = await new Promise<{
+                    confirmed: boolean;
+                  }>((resolve) => {
+                    setConfirmationRequest({
+                      prompt: result.prompt,
+                      onConfirm: (resolvedConfirmed) => {
+                        setConfirmationRequest(null);
+                        resolve({ confirmed: resolvedConfirmed });
+                      },
+                    });
+                  });
+
+                  if (!confirmed) {
                     addItem(
                       {
-                        type:
-                          result.messageType === 'error'
-                            ? MessageType.ERROR
-                            : MessageType.INFO,
-                        text: result.content,
+                        type: MessageType.INFO,
+                        text: 'Operation cancelled.',
                       },
                       Date.now(),
                     );
                     return { type: 'handled' };
-                  case 'dialog':
-                    switch (result.dialog) {
-                      case 'help':
-                        setShowHelp(true);
-                        return { type: 'handled' };
-                      case 'auth':
-                        openAuthDialog();
-                        return { type: 'handled' };
-                      case 'theme':
-                        openThemeDialog();
-                        return { type: 'handled' };
-                      case 'editor':
-                        openEditorDialog();
-                        return { type: 'handled' };
-                      case 'privacy':
-                        openPrivacyNotice();
-                        return { type: 'handled' };
-                      case 'provider':
-                        openProviderDialog();
-                        return { type: 'handled' };
-                      case 'providerModel':
-                        openProviderModelDialog();
-                        return { type: 'handled' };
-                      case 'loadProfile':
-                        openLoadProfileDialog();
-                        return { type: 'handled' };
-                      case 'tools': {
-                        // Extract the subcommand from the original command
-                        const originalCommand = rawQuery.trim();
-                        const commandParts = originalCommand.split(/\s+/);
-                        const subCommand = commandParts[1] as
-                          | 'enable'
-                          | 'disable';
-                        openToolsDialog(subCommand);
-                        return { type: 'handled' };
-                      }
-                      case 'logging': {
-                        // For now, show the log entries as text since dialog system is not fully implemented
-                        const dialogData = result.dialogData as {
-                          entries?: unknown[];
-                        };
-                        if (dialogData && dialogData.entries) {
-                          // This would open the LoggingDialog when the dialog system is ready
-                          // For now, the command handles displaying the logs
-                        }
-                        return { type: 'handled' };
-                      }
-                      default: {
-                        const unhandled: never = result.dialog;
-                        throw new Error(
-                          `Unhandled slash command result: ${unhandled}`,
-                        );
-                      }
-                    }
-                  case 'load_history': {
-                    // Always load the UI history first
-                    fullCommandContext.ui.clear();
-                    result.history.forEach((item, index) => {
-                      fullCommandContext.ui.addItem(item, index);
-                    });
-
-                    // Set the client history - it will be stored for later use if not initialized
-                    const client = config?.getGeminiClient();
-                    if (client) {
-                      await client.setHistory(result.clientHistory);
-                    }
-
-                    return { type: 'handled' };
                   }
-                  case 'quit':
-                    setQuittingMessages(result.messages);
-                    setTimeout(() => {
-                      process.exit(0);
-                    }, 100);
-                    return { type: 'handled' };
 
-                  case 'submit_prompt':
-                    return {
-                      type: 'submit_prompt',
-                      content: result.content,
-                    };
-                  case 'confirm_shell_commands': {
-                    const { outcome, approvedCommands } = await new Promise<{
-                      outcome: ToolConfirmationOutcome;
-                      approvedCommands?: string[];
-                    }>((resolve) => {
-                      setShellConfirmationRequest({
-                        commands: result.commandsToConfirm,
-                        onConfirm: (
-                          resolvedOutcome,
-                          resolvedApprovedCommands,
-                        ) => {
-                          setShellConfirmationRequest(null); // Close the dialog
-                          resolve({
-                            outcome: resolvedOutcome,
-                            approvedCommands: resolvedApprovedCommands,
-                          });
-                        },
-                      });
-                    });
-
-                    if (
-                      outcome === ToolConfirmationOutcome.Cancel ||
-                      !approvedCommands ||
-                      approvedCommands.length === 0
-                    ) {
-                      return { type: 'handled' };
-                    }
-
-                    if (outcome === ToolConfirmationOutcome.ProceedAlways) {
-                      setSessionShellAllowlist(
-                        (prev) => new Set([...prev, ...approvedCommands]),
-                      );
-                    }
-
-                    return await handleSlashCommand(
-                      result.originalInvocation.raw,
-                      // Pass the approved commands as a one-time grant for this execution.
-                      new Set(approvedCommands),
-                    );
-                  }
-                  case 'confirm_action': {
-                    const { confirmed } = await new Promise<{
-                      confirmed: boolean;
-                    }>((resolve) => {
-                      setConfirmationRequest({
-                        prompt: result.prompt,
-                        onConfirm: (resolvedConfirmed) => {
-                          setConfirmationRequest(null);
-                          resolve({ confirmed: resolvedConfirmed });
-                        },
-                      });
-                    });
-
-                    if (!confirmed) {
-                      addItem(
-                        {
-                          type: MessageType.INFO,
-                          text: 'Operation cancelled.',
-                        },
-                        Date.now(),
-                      );
-                      return { type: 'handled' };
-                    }
-
-                    return await handleSlashCommand(
-                      result.originalInvocation.raw,
-                      undefined,
-                      true,
-                    );
-                  }
-                  default: {
-                    const unhandled: never = result;
-                    throw new Error(
-                      `Unhandled slash command result: ${unhandled}`,
-                    );
-                  }
+                  return await handleSlashCommand(
+                    result.originalInvocation.raw,
+                    undefined,
+                    true,
+                  );
+                }
+                default: {
+                  const unhandled: never = result;
+                  throw new Error(
+                    `Unhandled slash command result: ${unhandled}`,
+                  );
+                }
               }
             }
 
