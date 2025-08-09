@@ -785,7 +785,7 @@ export class Config {
       ...this.telemetrySettings,
       ...settings,
     };
-    
+
     // If we have a provider manager, update its config to trigger re-wrapping
     if (this.providerManager) {
       this.providerManager.setConfig(this);

@@ -21,7 +21,7 @@ export class GitStatsServiceImpl implements IGitStatsService {
   async trackFileEdit(
     filePath: string,
     oldContent: string,
-    newContent: string
+    newContent: string,
   ): Promise<GitStats | null> {
     return this.tracker.trackFileEdit(filePath, oldContent, newContent);
   }

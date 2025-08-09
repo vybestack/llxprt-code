@@ -13,8 +13,12 @@ export class ConversationFileWriter {
   private currentLogFile: string;
 
   constructor(logPath?: string) {
-    this.logPath = logPath || path.join(os.homedir(), '.llxprt', 'conversations');
-    this.currentLogFile = path.join(this.logPath, `conversation-${new Date().toISOString().split('T')[0]}.jsonl`);
+    this.logPath =
+      logPath || path.join(os.homedir(), '.llxprt', 'conversations');
+    this.currentLogFile = path.join(
+      this.logPath,
+      `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
+    );
     this.ensureLogDirectory();
   }
 
@@ -24,11 +28,11 @@ export class ConversationFileWriter {
     }
   }
 
-  writeEntry(entry: any): void {
+  writeEntry(entry: Record<string, unknown>): void {
     try {
       const logEntry = {
         timestamp: new Date().toISOString(),
-        ...entry
+        ...entry,
       };
       const line = JSON.stringify(logEntry) + '\n';
       fs.appendFileSync(this.currentLogFile, line);
@@ -37,30 +41,42 @@ export class ConversationFileWriter {
     }
   }
 
-  writeRequest(provider: string, messages: any[], context?: any): void {
+  writeRequest(
+    provider: string,
+    messages: unknown[],
+    context?: Record<string, unknown>,
+  ): void {
     this.writeEntry({
       type: 'request',
       provider,
       messages,
-      context
+      context,
     });
   }
 
-  writeResponse(provider: string, response: any, metadata?: any): void {
+  writeResponse(
+    provider: string,
+    response: unknown,
+    metadata?: Record<string, unknown>,
+  ): void {
     this.writeEntry({
       type: 'response',
       provider,
       response,
-      metadata
+      metadata,
     });
   }
 
-  writeToolCall(provider: string, toolName: string, context?: any): void {
+  writeToolCall(
+    provider: string,
+    toolName: string,
+    context?: Record<string, unknown>,
+  ): void {
     this.writeEntry({
       type: 'tool_call',
       provider,
       tool: toolName,
-      ...context
+      ...context,
     });
   }
 }
@@ -68,7 +84,9 @@ export class ConversationFileWriter {
 // Singleton instance
 let fileWriter: ConversationFileWriter | null = null;
 
-export function getConversationFileWriter(logPath?: string): ConversationFileWriter {
+export function getConversationFileWriter(
+  logPath?: string,
+): ConversationFileWriter {
   if (!fileWriter) {
     fileWriter = new ConversationFileWriter(logPath);
   }

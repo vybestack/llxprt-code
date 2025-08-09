@@ -355,7 +355,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
             gitStats = await gitStatsService.trackFileEdit(
               this.params.file_path,
               editData.currentContent || '',
-              editData.newContent
+              editData.newContent,
             );
           } catch (error) {
             // Don't fail the edit if git stats tracking fails

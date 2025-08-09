@@ -30,6 +30,7 @@ When enabled, LLxprt logs conversations locally to help with debugging, analysis
 When conversation logging is enabled, the following data is stored locally:
 
 #### Request Data
+
 - User prompts and messages
 - Provider selection (e.g., "openai", "anthropic", "gemini")
 - Model parameters and configuration
@@ -37,12 +38,14 @@ When conversation logging is enabled, the following data is stored locally:
 - Timestamp and session information
 
 #### Response Data
+
 - AI assistant responses
 - Tool call results
 - Token usage statistics
 - Response metadata (model, provider, timing)
 
 #### Metadata
+
 - Session identifiers
 - Performance metrics
 - Error information (when applicable)
@@ -71,6 +74,7 @@ Shows the current state of conversation logging.
 ```
 
 **Example Output:**
+
 ```
 Conversation Logging: Disabled
 ```
@@ -84,6 +88,7 @@ Enables conversation logging with automatic local storage.
 ```
 
 **Example Output:**
+
 ```
 Conversation logging enabled. Data stored locally only.
 ```
@@ -99,6 +104,7 @@ Disables conversation logging. No future conversations will be logged.
 ```
 
 **Example Output:**
+
 ```
 Conversation logging disabled. No conversation data will be collected.
 ```
@@ -114,6 +120,7 @@ Displays the last N log entries from your conversation history (default: 50).
 ```
 
 **Example Output:**
+
 ```
 Conversation Logs (3 entries):
 ────────────────────────────────────────────────────────────
@@ -134,6 +141,7 @@ Configure what types of data get automatically redacted from logs.
 ```
 
 **Example Output:**
+
 ```
 Current Redaction Settings:
   • API Keys: Enabled
@@ -155,14 +163,16 @@ To modify settings:
 ```
 
 **Available Options:**
+
 - `--api-keys=true/false`: Redact API keys and authentication tokens
-- `--credentials=true/false`: Redact passwords and credentials  
+- `--credentials=true/false`: Redact passwords and credentials
 - `--file-paths=true/false`: Redact local file system paths
 - `--urls=true/false`: Redact URLs with sensitive parameters
 - `--emails=true/false`: Redact email addresses
 - `--personal-info=true/false`: Redact phone numbers, SSNs, and PII
 
 **Example Output:**
+
 ```
 Redaction settings updated:
   • redactFilePaths: enabled
@@ -199,17 +209,20 @@ Add telemetry configuration to your `~/.llxprt/settings.json` or workspace `.llx
 ### Configuration Options Reference
 
 #### Core Logging Settings
+
 - `logConversations` (boolean): Enable conversation logging (default: `false`)
-- `logResponses` (boolean): Include full AI responses in logs (default: `false`) 
+- `logResponses` (boolean): Include full AI responses in logs (default: `false`)
 - `conversationLogPath` (string): Directory for log files (default: `~/.llxprt/conversations`)
 
 #### Data Retention Settings
+
 - `retentionDays` (number): Days to keep log files (default: `30`)
 - `maxLogFiles` (number): Maximum number of log files to keep (default: `5`)
 - `maxLogSizeMB` (number): Maximum size of each log file in MB (default: `10`)
 - `maxConversationsStored` (number): Maximum conversations to store (default: `1000`)
 
 #### Privacy and Redaction Settings
+
 - `redactSensitiveData` (boolean): Enable API key/credential redaction (default: `true`)
 - `redactFilePaths` (boolean): Redact local file paths (default: `false`)
 - `redactUrls` (boolean): Redact URLs with parameters (default: `true`)
@@ -242,13 +255,14 @@ During testing and development, LLxprt uses local-only telemetry configuration:
 ```javascript
 // Integration tests use local telemetry target
 const telemetryConfig = {
-  target: "local",
+  target: 'local',
   enabled: true,
-  logConversations: true
+  logConversations: true,
 };
 ```
 
 This ensures that:
+
 - No test data leaves your development machine
 - Test telemetry is isolated from production usage
 - Integration tests can verify logging functionality safely
@@ -297,12 +311,14 @@ cat ~/.llxprt/conversations/conversation-*.jsonl | jq -r '.provider' | sort | un
 LLxprt fundamentally differs from the original Google Gemini CLI in its approach to telemetry:
 
 ### Upstream Gemini CLI (What We Don't Do)
+
 - May send telemetry data to Google services
 - Has different privacy policies and data handling
 - May collect usage statistics for Google's analysis
 - Telemetry configuration optimized for Google's needs
 
 ### LLxprt Privacy-First Approach
+
 - **Zero external transmission**: All data stays local by default
 - **Disabled by default**: No telemetry or logging without explicit user consent
 - **Complete user control**: Users manage all aspects of data collection
@@ -312,18 +328,21 @@ LLxprt fundamentally differs from the original Google Gemini CLI in its approach
 ## Best Practices
 
 ### For Daily Use
+
 1. **Start with logging disabled**: Only enable when you need debugging information
 2. **Configure redaction**: Enable redaction for all sensitive data types in your workflow
 3. **Regular cleanup**: Periodically review and clean old log files
 4. **Check settings**: Verify your privacy settings match your comfort level
 
 ### For Development
+
 1. **Local testing only**: Use local telemetry targets for all development work
 2. **Sensitive data awareness**: Be mindful of API keys and credentials in test scenarios
 3. **Log analysis**: Use standard JSON tools to analyze conversation patterns
 4. **Documentation**: Document any privacy-related configuration for your team
 
 ### For Team Environments
+
 1. **Consistent settings**: Share redaction configurations across team members
 2. **No shared logs**: Never share raw conversation log files (they may contain sensitive data)
 3. **Privacy policies**: Establish team policies for conversation logging
@@ -348,6 +367,7 @@ A: Remove the entire conversation log directory: `rm -rf ~/.llxprt/conversations
 ### Getting Help
 
 For privacy-related questions or concerns:
+
 1. Check this documentation first
 2. Review your current settings with `/logging status` and `/logging redaction`
 3. Examine log files to understand what data is being stored

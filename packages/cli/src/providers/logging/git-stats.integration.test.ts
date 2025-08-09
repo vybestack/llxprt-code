@@ -33,8 +33,8 @@ describe('Git Stats Integration', () => {
       model: 'gemini-flash',
       telemetry: {
         logConversations: true,
-        conversationLogPath: conversationLogDir
-      }
+        conversationLogPath: conversationLogDir,
+      },
     });
 
     tracker = new GitStatsTracker(config);
@@ -53,13 +53,19 @@ describe('Git Stats Integration', () => {
   it('should track stats during actual file edits', async () => {
     const testFile = join(tempDir, 'test.ts');
     const initialContent = 'function hello() {\n  console.log("Hello");\n}';
-    const modifiedContent = initialContent + '\n\n// Added comment\nfunction goodbye() {\n  console.log("Goodbye");\n}';
+    const modifiedContent =
+      initialContent +
+      '\n\n// Added comment\nfunction goodbye() {\n  console.log("Goodbye");\n}';
 
     // Create the initial file
     await fs.writeFile(testFile, initialContent, 'utf8');
 
     // Track the edit from initial to modified content
-    const stats = await tracker.trackFileEdit(testFile, initialContent, modifiedContent);
+    const stats = await tracker.trackFileEdit(
+      testFile,
+      initialContent,
+      modifiedContent,
+    );
 
     expect(stats).not.toBeNull();
     expect(stats!.linesAdded).toBe(4); // blank line + comment + function with 3 lines
@@ -73,16 +79,18 @@ describe('Git Stats Integration', () => {
 
   it('should persist stats to conversation log file', async () => {
     const testFile = join(tempDir, 'example.js');
-    
+
     // Perform multiple file edits
-    await tracker.trackFileEdit(testFile, 
+    await tracker.trackFileEdit(
+      testFile,
       'const x = 1;',
-      'const x = 1;\nconst y = 2;\nconst z = x + y;'
+      'const x = 1;\nconst y = 2;\nconst z = x + y;',
     );
-    
-    await tracker.trackFileEdit(join(tempDir, 'another.ts'),
+
+    await tracker.trackFileEdit(
+      join(tempDir, 'another.ts'),
       'let data: string;',
-      'let data: string = "updated";'
+      'let data: string = "updated";',
     );
 
     // Force write to log file (in real implementation, this would happen automatically)
@@ -90,35 +98,45 @@ describe('Git Stats Integration', () => {
     expect(logEntry).not.toBeNull();
 
     // Write a sample conversation log entry
-    const logFile = join(conversationLogDir, `conversation-${config.getSessionId()}.jsonl`);
+    const logFile = join(
+      conversationLogDir,
+      `conversation-${config.getSessionId()}.jsonl`,
+    );
     const logData = {
       timestamp: new Date().toISOString(),
       session_id: config.getSessionId(),
-      git_stats: tracker.getSummary()
+      git_stats: tracker.getSummary(),
     };
-    
+
     await fs.writeFile(logFile, JSON.stringify(logData) + '\n', 'utf8');
 
     // Verify log file was created and contains stats
-    const logExists = await fs.access(logFile).then(() => true).catch(() => false);
+    const logExists = await fs
+      .access(logFile)
+      .then(() => true)
+      .catch(() => false);
     expect(logExists).toBe(true);
 
     const logContent = await fs.readFile(logFile, 'utf8');
     const parsedLog = JSON.parse(logContent.trim());
-    
+
     expect(parsedLog.git_stats).toMatchObject({
       filesChanged: 2,
       totalLinesAdded: expect.any(Number),
       totalLinesRemoved: 0,
-      sessionId: config.getSessionId()
+      sessionId: config.getSessionId(),
     });
   });
 
   it('should display stats in /logging show command simulation', async () => {
     const testFiles = [
       { path: 'src/main.ts', old: 'main code', new: 'main code\n// updated' },
-      { path: 'src/utils.ts', old: 'utils', new: 'utilities with more content' },
-      { path: 'package.json', old: '{}', new: '{\n  "name": "test"\n}' }
+      {
+        path: 'src/utils.ts',
+        old: 'utils',
+        new: 'utilities with more content',
+      },
+      { path: 'package.json', old: '{}', new: '{\n  "name": "test"\n}' },
     ];
 
     // Track edits for multiple files
@@ -128,12 +146,12 @@ describe('Git Stats Integration', () => {
 
     // Get summary that would be displayed in logging show
     const summary = tracker.getSummary();
-    
+
     expect(summary).toMatchObject({
       sessionId: expect.any(String),
       filesChanged: 3,
       totalLinesAdded: expect.any(Number),
-      totalLinesRemoved: expect.any(Number)
+      totalLinesRemoved: expect.any(Number),
     });
 
     // Verify the summary contains reasonable data
@@ -145,7 +163,7 @@ describe('Git Stats Integration', () => {
       'Files Modified': summary.filesChanged,
       'Lines Added': summary.totalLinesAdded,
       'Lines Removed': summary.totalLinesRemoved,
-      'Session ID': summary.sessionId.substring(0, 8) + '...' // Truncated for display
+      'Session ID': summary.sessionId.substring(0, 8) + '...', // Truncated for display
     };
 
     expect(displayFormat['Files Modified']).toBe(3);
@@ -156,18 +174,18 @@ describe('Git Stats Integration', () => {
     const concurrentEdits = Array.from({ length: 10 }, (_, i) => ({
       path: `concurrent-${i}.ts`,
       old: `// File ${i}`,
-      new: `// File ${i}\nconst value${i} = ${i};`
+      new: `// File ${i}\nconst value${i} = ${i};`,
     }));
 
     // Execute all edits concurrently
     const results = await Promise.all(
-      concurrentEdits.map(edit => 
-        tracker.trackFileEdit(edit.path, edit.old, edit.new)
-      )
+      concurrentEdits.map((edit) =>
+        tracker.trackFileEdit(edit.path, edit.old, edit.new),
+      ),
     );
 
     // All results should be successful
-    results.forEach(result => {
+    results.forEach((result) => {
       expect(result).not.toBeNull();
       expect(result!.linesAdded).toBe(1);
       expect(result!.linesRemoved).toBe(0);
@@ -185,15 +203,15 @@ describe('Git Stats Integration', () => {
     // Initial edits with first tracker
     await tracker.trackFileEdit('file1.ts', 'old', 'new content');
     const firstSummary = tracker.getSummary();
-    
+
     expect(firstSummary.filesChanged).toBe(1);
 
     // Create new tracker with same config (simulating app restart)
     const newTracker = new GitStatsTracker(config);
-    
+
     // Should start fresh (stats are session-scoped, not persistent across restarts)
     expect(newTracker.getSummary().filesChanged).toBe(0);
-    
+
     // New edits should work normally
     await newTracker.trackFileEdit('file2.ts', 'another', 'another file');
     expect(newTracker.getSummary().filesChanged).toBe(1);
@@ -203,22 +221,21 @@ describe('Git Stats Integration', () => {
     // Test with read-only directory (if possible to create)
     const readOnlyDir = join(tempDir, 'readonly');
     await fs.mkdir(readOnlyDir);
-    
+
     try {
       // Make directory read-only
       await fs.chmod(readOnlyDir, 0o444);
-      
+
       // Attempt to track file in read-only directory
       const stats = await tracker.trackFileEdit(
         join(readOnlyDir, 'readonly-file.ts'),
         'original',
-        'modified'
+        'modified',
       );
-      
+
       // Should still track stats even if file system operations fail
       expect(stats).not.toBeNull();
       expect(stats!.linesAdded).toBeGreaterThan(0);
-      
     } finally {
       // Restore permissions for cleanup
       await fs.chmod(readOnlyDir, 0o755).catch(() => {});
@@ -227,52 +244,68 @@ describe('Git Stats Integration', () => {
 
   it('should work with large files in real filesystem', async () => {
     const largeFile = join(tempDir, 'large-file.ts');
-    
+
     // Generate large content (1000 lines)
-    const generateContent = (lines: number, prefix: string) => 
-      Array.from({ length: lines }, (_, i) => `${prefix}${i}: console.log('Line ${i}');`).join('\n');
-    
+    const generateContent = (lines: number, prefix: string) =>
+      Array.from(
+        { length: lines },
+        (_, i) => `${prefix}${i}: console.log('Line ${i}');`,
+      ).join('\n');
+
     const originalContent = generateContent(1000, 'original_');
-    const modifiedContent = originalContent + '\n' + generateContent(100, 'added_');
-    
+    const modifiedContent =
+      originalContent + '\n' + generateContent(100, 'added_');
+
     // Write the large file to disk
     await fs.writeFile(largeFile, originalContent, 'utf8');
-    
+
     // Track the edit
     const startTime = process.hrtime.bigint();
-    const stats = await tracker.trackFileEdit(largeFile, originalContent, modifiedContent);
+    const stats = await tracker.trackFileEdit(
+      largeFile,
+      originalContent,
+      modifiedContent,
+    );
     const endTime = process.hrtime.bigint();
-    
+
     const durationMs = Number(endTime - startTime) / 1_000_000;
-    
+
     // Verify stats are correct
     expect(stats).not.toBeNull();
     expect(stats!.linesAdded).toBe(101); // 1 blank line + 100 added lines
     expect(stats!.linesRemoved).toBe(0);
     expect(stats!.filesChanged).toBe(1);
-    
+
     // Should complete in reasonable time even with large files
     expect(durationMs).toBeLessThan(500); // Less than 500ms
-    
+
     // Verify file still exists and can be read
-    const fileExists = await fs.access(largeFile).then(() => true).catch(() => false);
+    const fileExists = await fs
+      .access(largeFile)
+      .then(() => true)
+      .catch(() => false);
     expect(fileExists).toBe(true);
-    
+
     const fileContent = await fs.readFile(largeFile, 'utf8');
     expect(fileContent).toBe(originalContent); // File shouldn't be modified by tracking
   });
 
   it('should handle special characters and encoding', async () => {
     const testFile = join(tempDir, 'unicode-test.ts');
-    
+
     // Content with various encodings and special characters
     const unicodeContent = {
       original: '// Original: Hello 世界\nconst emoji = "🚀";',
-      modified: '// Modified: Hello 世界 🌍\nconst emoji = "🚀";\nconst symbols = "αβγδε";'
+      modified:
+        '// Modified: Hello 世界 🌍\nconst emoji = "🚀";\nconst symbols = "αβγδε";',
     };
-    
-    await tracker.trackFileEdit(testFile, unicodeContent.original, unicodeContent.modified);
-    
+
+    await tracker.trackFileEdit(
+      testFile,
+      unicodeContent.original,
+      unicodeContent.modified,
+    );
+
     const summary = tracker.getSummary();
     expect(summary.filesChanged).toBe(1);
     expect(summary.totalLinesAdded).toBe(1); // Added one line with symbols
@@ -283,24 +316,24 @@ describe('Git Stats Integration', () => {
     const originalFetch = global.fetch;
     const fetchSpy = vi.fn();
     global.fetch = fetchSpy;
-    
+
     try {
       // Perform various operations that could potentially make network calls
-      await tracker.trackFileEdit('network-test.ts', 
-        'import api from "external";', 
-        'import api from "external";\napi.call();'
+      await tracker.trackFileEdit(
+        'network-test.ts',
+        'import api from "external";',
+        'import api from "external";\napi.call();',
       );
-      
+
       const summary = tracker.getSummary();
       const logEntry = tracker.getLogEntry();
-      
+
       // Verify operations completed successfully
       expect(summary.filesChanged).toBe(1);
       expect(logEntry).not.toBeNull();
-      
+
       // Most important: verify no network calls were made
       expect(fetchSpy).not.toHaveBeenCalled();
-      
     } finally {
       // Restore original fetch
       global.fetch = originalFetch;

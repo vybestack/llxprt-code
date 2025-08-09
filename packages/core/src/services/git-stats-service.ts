@@ -25,7 +25,7 @@ export interface IGitStatsService {
   trackFileEdit(
     filePath: string,
     oldContent: string,
-    newContent: string
+    newContent: string,
   ): Promise<GitStats | null>;
 }
 

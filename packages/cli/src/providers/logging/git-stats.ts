@@ -47,7 +47,7 @@ export class GitStatsTracker {
     } catch (error) {
       this.enabled = false;
     }
-    
+
     this.sessionStats = {
       filesChanged: new Set<string>(),
       totalLinesAdded: 0,
@@ -58,7 +58,7 @@ export class GitStatsTracker {
   async trackFileEdit(
     filePath: string,
     oldContent: string,
-    newContent: string
+    newContent: string,
   ): Promise<GitStats | null> {
     // Check current config state for each call (runtime toggle support)
     if (!this.isEnabled()) {
@@ -80,7 +80,7 @@ export class GitStatsTracker {
 
     // Calculate diff statistics
     const stats = this.calculateStats(oldContent, newContent);
-    
+
     // Update session stats
     this.sessionStats.filesChanged.add(filePath);
     this.sessionStats.totalLinesAdded += stats.linesAdded;
@@ -98,24 +98,24 @@ export class GitStatsTracker {
     if (oldContent === '' && newContent === '') {
       return { linesAdded: 0, linesRemoved: 0 };
     }
-    
+
     // Split content into lines, treating empty string as no lines
     const oldLines = oldContent === '' ? [] : oldContent.split('\n');
     const newLines = newContent === '' ? [] : newContent.split('\n');
-    
+
     // If same content, no changes
     if (oldContent === newContent) {
       return { linesAdded: 0, linesRemoved: 0 };
     }
-    
+
     // Count changes line by line and calculate adds/removes
     let added = 0;
     let removed = 0;
-    
+
     // Find common lines and differences
     const maxLength = Math.max(oldLines.length, newLines.length);
     const minLength = Math.min(oldLines.length, newLines.length);
-    
+
     // Count changed lines in the common range
     for (let i = 0; i < minLength; i++) {
       if (oldLines[i] !== newLines[i]) {
@@ -124,17 +124,17 @@ export class GitStatsTracker {
         removed++;
       }
     }
-    
+
     // Add extra lines (if new is longer)
     if (newLines.length > oldLines.length) {
       added += newLines.length - oldLines.length;
     }
-    
-    // Remove missing lines (if old is longer) 
+
+    // Remove missing lines (if old is longer)
     if (oldLines.length > newLines.length) {
       removed += oldLines.length - newLines.length;
     }
-    
+
     return {
       linesAdded: added,
       linesRemoved: removed,
@@ -180,7 +180,7 @@ export class GitStatsTracker {
     } catch (error) {
       sessionId = '';
     }
-    
+
     return {
       filesChanged: this.sessionStats.filesChanged.size,
       totalLinesAdded: this.sessionStats.totalLinesAdded,

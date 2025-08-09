@@ -64,7 +64,7 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
     if (redactedTool.function.parameters && tool.function.name) {
       const redactedParams = this.redactContent(
         JSON.stringify(redactedTool.function.parameters),
-        'global'
+        'global',
       );
       try {
         redactedTool.function.parameters = JSON.parse(redactedParams);
@@ -179,7 +179,8 @@ export class LoggingProviderWrapper implements IProvider {
     redactor?: ConversationDataRedactor,
   ) {
     this.conversationId = this.generateConversationId();
-    this.redactor = redactor || new ConfigBasedRedactor(config.getRedactionConfig());
+    this.redactor =
+      redactor || new ConfigBasedRedactor(config.getRedactionConfig());
   }
 
   /**
@@ -245,7 +246,9 @@ export class LoggingProviderWrapper implements IProvider {
       const redactedMessages = messages.map((msg) =>
         this.redactor.redactMessage(msg, this.wrapped.name),
       );
-      const redactedTools = tools?.map((tool) => this.redactor.redactToolCall(tool));
+      const redactedTools = tools?.map((tool) =>
+        this.redactor.redactToolCall(tool),
+      );
 
       const event = new ConversationRequestEvent(
         this.wrapped.name,
@@ -258,9 +261,11 @@ export class LoggingProviderWrapper implements IProvider {
       );
 
       logConversationRequest(this.config, event);
-      
+
       // Also write to disk
-      const fileWriter = getConversationFileWriter(this.config.getConversationLogPath());
+      const fileWriter = getConversationFileWriter(
+        this.config.getConversationLogPath(),
+      );
       fileWriter.writeRequest(this.wrapped.name, redactedMessages, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
@@ -312,7 +317,7 @@ export class LoggingProviderWrapper implements IProvider {
     }
 
     const obj = chunk as Record<string, unknown>;
-    
+
     // Try common content paths
     if (obj.choices && Array.isArray(obj.choices)) {
       const choice = obj.choices[0] as Record<string, unknown>;
@@ -352,9 +357,11 @@ export class LoggingProviderWrapper implements IProvider {
       );
 
       logConversationResponse(this.config, event);
-      
+
       // Also write to disk
-      const fileWriter = getConversationFileWriter(this.config.getConversationLogPath());
+      const fileWriter = getConversationFileWriter(
+        this.config.getConversationLogPath(),
+      );
       fileWriter.writeResponse(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
@@ -367,7 +374,6 @@ export class LoggingProviderWrapper implements IProvider {
       console.warn('Failed to log conversation response:', logError);
     }
   }
-
 
   private generateConversationId(): string {
     return `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -388,17 +394,18 @@ export class LoggingProviderWrapper implements IProvider {
     try {
       const endTime = Date.now();
       const duration = endTime - startTime;
-      
+
       // Extract git stats from result metadata if available
       let gitStats = null;
       if (result && typeof result === 'object' && 'metadata' in result) {
-        const metadata = (result as any).metadata;
+        const metadata = (result as { metadata?: { gitStats?: unknown } })
+          .metadata;
         if (metadata && metadata.gitStats) {
           gitStats = metadata.gitStats;
         }
       }
 
-      const entry = {
+      const _entry = {
         type: 'tool_call',
         tool: toolName,
         timestamp: new Date(startTime).toISOString(),
@@ -412,13 +419,15 @@ export class LoggingProviderWrapper implements IProvider {
       };
 
       // Write to disk
-      const fileWriter = getConversationFileWriter(this.config.getConversationLogPath());
+      const fileWriter = getConversationFileWriter(
+        this.config.getConversationLogPath(),
+      );
       fileWriter.writeToolCall(this.wrapped.name, toolName, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
-        params: this.redactor.redactToolCall({ 
+        params: this.redactor.redactToolCall({
           type: 'function',
-          function: { name: toolName, parameters: params as object }
+          function: { name: toolName, parameters: params as object },
         }).function.parameters,
         result,
         duration,
@@ -481,15 +490,19 @@ export class LoggingProviderWrapper implements IProvider {
     config?: unknown,
   ): Promise<unknown> {
     const startTime = Date.now();
-    
+
     try {
-      const result = await this.wrapped.invokeServerTool(toolName, params, config);
-      
+      const result = await this.wrapped.invokeServerTool(
+        toolName,
+        params,
+        config,
+      );
+
       // Log tool call if logging is enabled and result has metadata
       if (this.config.getConversationLoggingEnabled()) {
         await this.logToolCall(toolName, params, result, startTime, true);
       }
-      
+
       return result;
     } catch (error) {
       // Log failed tool call if logging is enabled

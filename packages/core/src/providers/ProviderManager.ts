@@ -38,37 +38,39 @@ export class ProviderManager implements IProviderManager {
   }
 
   setConfig(config: Config): void {
-    const oldLoggingEnabled = this.config?.getConversationLoggingEnabled() ?? false;
+    const oldLoggingEnabled =
+      this.config?.getConversationLoggingEnabled() ?? false;
     const newLoggingEnabled = config.getConversationLoggingEnabled();
-    
+
     this.config = config;
-    
+
     // If logging state changed, update provider wrapping
     if (oldLoggingEnabled !== newLoggingEnabled) {
       this.updateProviderWrapping();
     }
   }
-  
+
   private updateProviderWrapping(): void {
     // Re-wrap all providers based on current logging state
-    const loggingEnabled = this.config?.getConversationLoggingEnabled() ?? false;
+    const loggingEnabled =
+      this.config?.getConversationLoggingEnabled() ?? false;
     const providers = new Map(this.providers);
-    
+
     for (const [name, provider] of providers) {
       // Unwrap if it's already wrapped
       let baseProvider = provider;
-      if ((provider as any).wrapped) {
-        baseProvider = (provider as any).wrapped;
+      if ('wrappedProvider' in provider && provider.wrappedProvider) {
+        baseProvider = provider.wrappedProvider as IProvider;
       }
-      
+
       // Re-wrap based on current logging state
       let finalProvider = baseProvider;
       if (loggingEnabled) {
         finalProvider = new LoggingProviderWrapper(baseProvider, this.config!);
       }
-      
+
       this.providers.set(name, finalProvider);
-      
+
       // Update server tools provider reference if needed
       if (this.serverToolsProvider && this.serverToolsProvider.name === name) {
         this.serverToolsProvider = finalProvider;

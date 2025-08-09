@@ -5,9 +5,9 @@
  */
 
 import { Config } from '@vybestack/llxprt-code-core';
-import { 
-  CommandKind, 
-  SlashCommand, 
+import {
+  CommandKind,
+  SlashCommand,
   CommandContext,
   MessageActionReturn,
   OpenDialogActionReturn,
@@ -23,6 +23,40 @@ export interface LoggingCommandContext {
 }
 
 export type CommandResult = MessageActionReturn | OpenDialogActionReturn;
+
+// Type guard for log entries
+interface LogEntryBase {
+  timestamp: string;
+  type: string;
+  provider: string;
+}
+
+interface RequestLogEntry extends LogEntryBase {
+  type: 'request';
+  messages?: Array<{
+    content: string;
+  }>;
+}
+
+interface ResponseLogEntry extends LogEntryBase {
+  type: 'response';
+  response?: string;
+}
+
+type LogEntry = RequestLogEntry | ResponseLogEntry;
+
+function isLogEntry(obj: unknown): obj is LogEntry {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'timestamp' in obj &&
+    'type' in obj &&
+    'provider' in obj &&
+    typeof (obj as LogEntry).timestamp === 'string' &&
+    typeof (obj as LogEntry).type === 'string' &&
+    typeof (obj as LogEntry).provider === 'string'
+  );
+}
 
 export async function handleLoggingCommand(
   args: string[],
@@ -59,7 +93,8 @@ async function handleLoggingStatus(
   context: LoggingCommandContext,
 ): Promise<CommandResult> {
   // Read directly from settings, not from cached Config
-  const isLoggingEnabled = context.settings.merged.telemetry?.logConversations ?? false;
+  const isLoggingEnabled =
+    context.settings.merged.telemetry?.logConversations ?? false;
 
   const status = `Conversation Logging: ${isLoggingEnabled ? 'Enabled' : 'Disabled'}`;
 
@@ -112,7 +147,8 @@ async function handleDisableLogging(
   return {
     type: 'message',
     messageType: 'info',
-    content: 'Conversation logging disabled. No conversation data will be collected.',
+    content:
+      'Conversation logging disabled. No conversation data will be collected.',
   };
 }
 
@@ -122,7 +158,7 @@ async function handleShowLogs(
 ): Promise<CommandResult> {
   // Parse number of lines from args (default to 50)
   const numLines = args[0] ? parseInt(args[0], 10) : 50;
-  
+
   if (isNaN(numLines) || numLines < 1) {
     return {
       type: 'message',
@@ -139,7 +175,7 @@ async function handleShowLogs(
     // Find all log files
     const files = await fs.readdir(expandedPath);
     const logFiles = files
-      .filter(file => file.endsWith('.jsonl'))
+      .filter((file) => file.endsWith('.jsonl'))
       .sort()
       .reverse();
 
@@ -152,20 +188,20 @@ async function handleShowLogs(
     }
 
     // Read and parse log entries from all recent files
-    const allEntries: Array<any> = [];
+    const allEntries: unknown[] = [];
     let remainingLines = numLines;
-    
+
     for (const logFile of logFiles) {
       if (remainingLines <= 0) break;
-      
+
       const filePath = path.join(expandedPath, logFile);
       const content = await fs.readFile(filePath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim());
-      
+      const lines = content.split('\n').filter((line) => line.trim());
+
       // Read from the end of the file
       const startIndex = Math.max(0, lines.length - remainingLines);
       const fileLines = lines.slice(startIndex);
-      
+
       for (const line of fileLines) {
         try {
           const parsed = JSON.parse(line);
@@ -174,7 +210,7 @@ async function handleShowLogs(
           // Skip invalid JSON lines
         }
       }
-      
+
       remainingLines -= fileLines.length;
     }
 
@@ -265,7 +301,8 @@ async function handleRedactionSettings(
     return {
       type: 'message',
       messageType: 'error',
-      content: 'No valid redaction settings provided. Use format: --api-keys=true',
+      content:
+        'No valid redaction settings provided. Use format: --api-keys=true',
     };
   }
 
@@ -444,7 +481,8 @@ const showCommand: SlashCommand = {
       );
     } else if (result.type === 'dialog') {
       // Format the log entries as text for now until dialog system is implemented
-      const entries = (result.dialogData as any)?.entries || [];
+      const entries =
+        (result.dialogData as { entries?: unknown[] })?.entries || [];
       if (entries.length === 0) {
         context.ui.addItem(
           {
@@ -455,28 +493,31 @@ const showCommand: SlashCommand = {
         );
       } else {
         // Format entries for display
-        const formattedEntries = entries.map((entry: any, index: number) => {
-          const timestamp = new Date(entry.timestamp).toLocaleTimeString();
-          const typeIcon = entry.type === 'request' ? '→' : '←';
-          let content = '';
-          
-          if (entry.type === 'request' && entry.messages) {
-            const lastMessage = entry.messages[entry.messages.length - 1];
-            if (lastMessage) {
-              content = lastMessage.content.substring(0, 100);
-              if (lastMessage.content.length > 100) content += '...';
+        const formattedEntries = entries
+          .filter(isLogEntry)
+          .map((entry: LogEntry, index: number) => {
+            const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+            const typeIcon = entry.type === 'request' ? '→' : '←';
+            let content = '';
+
+            if (entry.type === 'request' && entry.messages) {
+              const lastMessage = entry.messages[entry.messages.length - 1];
+              if (lastMessage) {
+                content = lastMessage.content.substring(0, 100);
+                if (lastMessage.content.length > 100) content += '...';
+              }
+            } else if (entry.type === 'response' && entry.response) {
+              content = entry.response.substring(0, 100);
+              if (entry.response.length > 100) content += '...';
             }
-          } else if (entry.type === 'response' && entry.response) {
-            content = entry.response.substring(0, 100);
-            if (entry.response.length > 100) content += '...';
-          }
-          
-          return `[${index + 1}] ${timestamp} ${typeIcon} ${entry.provider}: ${content}`;
-        }).join('\n');
-        
+
+            return `[${index + 1}] ${timestamp} ${typeIcon} ${entry.provider}: ${content}`;
+          })
+          .join('\n');
+
         context.ui.addItem(
           {
-            type: 'info', 
+            type: 'info',
             text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
           },
           Date.now(),
@@ -492,7 +533,13 @@ export const loggingCommand: SlashCommand = {
   name: 'logging',
   description: 'manage conversation logging settings',
   kind: CommandKind.BUILT_IN,
-  subCommands: [statusCommand, enableCommand, disableCommand, redactionCommand, showCommand],
+  subCommands: [
+    statusCommand,
+    enableCommand,
+    disableCommand,
+    redactionCommand,
+    showCommand,
+  ],
   action: async (context: CommandContext, args: string) => {
     // Default action shows status when no subcommand provided
     if (!args || args.trim() === '') {
