@@ -7,11 +7,29 @@
 import { IProvider } from './IProvider.js';
 import { IModel } from './IModel.js';
 import { IProviderManager } from './IProviderManager.js';
+import { Config } from '../config/config.js';
+import { LoggingProviderWrapper } from './LoggingProviderWrapper.js';
+import {
+  logProviderSwitch,
+  logProviderCapability,
+} from '../telemetry/loggers.js';
+import {
+  ProviderSwitchEvent,
+  ProviderCapabilityEvent,
+} from '../telemetry/types.js';
+import type {
+  ProviderCapabilities,
+  ProviderContext,
+  ProviderComparison,
+} from './types.js';
 
 export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
   private activeProviderName: string;
   private serverToolsProvider: IProvider | null;
+  private config?: Config;
+  private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
+  private currentConversationId?: string;
 
   constructor() {
     this.providers = new Map<string, IProvider>();
@@ -19,8 +37,66 @@ export class ProviderManager implements IProviderManager {
     this.serverToolsProvider = null;
   }
 
+  setConfig(config: Config): void {
+    const oldLoggingEnabled = this.config?.getConversationLoggingEnabled() ?? false;
+    const newLoggingEnabled = config.getConversationLoggingEnabled();
+    
+    this.config = config;
+    
+    // If logging state changed, update provider wrapping
+    if (oldLoggingEnabled !== newLoggingEnabled) {
+      this.updateProviderWrapping();
+    }
+  }
+  
+  private updateProviderWrapping(): void {
+    // Re-wrap all providers based on current logging state
+    const loggingEnabled = this.config?.getConversationLoggingEnabled() ?? false;
+    const providers = new Map(this.providers);
+    
+    for (const [name, provider] of providers) {
+      // Unwrap if it's already wrapped
+      let baseProvider = provider;
+      if ((provider as any).wrapped) {
+        baseProvider = (provider as any).wrapped;
+      }
+      
+      // Re-wrap based on current logging state
+      let finalProvider = baseProvider;
+      if (loggingEnabled) {
+        finalProvider = new LoggingProviderWrapper(baseProvider, this.config!);
+      }
+      
+      this.providers.set(name, finalProvider);
+      
+      // Update server tools provider reference if needed
+      if (this.serverToolsProvider && this.serverToolsProvider.name === name) {
+        this.serverToolsProvider = finalProvider;
+      }
+    }
+  }
+
   registerProvider(provider: IProvider): void {
-    this.providers.set(provider.name, provider);
+    // Wrap provider with logging if conversation logging is enabled
+    let finalProvider = provider;
+    if (this.config?.getConversationLoggingEnabled()) {
+      finalProvider = new LoggingProviderWrapper(provider, this.config);
+    }
+
+    this.providers.set(provider.name, finalProvider);
+
+    // Capture provider capabilities
+    const capabilities = this.captureProviderCapabilities(provider);
+    this.providerCapabilities.set(provider.name, capabilities);
+
+    // Log provider capability information if logging enabled
+    if (this.config?.getConversationLoggingEnabled()) {
+      const context = this.createProviderContext(provider, capabilities);
+      logProviderCapability(
+        this.config,
+        new ProviderCapabilityEvent(provider.name, capabilities, context),
+      );
+    }
 
     // If this is the default provider and no provider is active, set it as active
     if (provider.isDefault && !this.activeProviderName) {
@@ -56,6 +132,23 @@ export class ProviderManager implements IProviderManager {
           previousProvider.clearState();
         }
       }
+    }
+
+    // Log provider switch if conversation logging enabled
+    if (
+      this.config?.getConversationLoggingEnabled() &&
+      previousProviderName &&
+      previousProviderName !== name
+    ) {
+      logProviderSwitch(
+        this.config,
+        new ProviderSwitchEvent(
+          previousProviderName,
+          name,
+          this.generateConversationId(),
+          this.isContextPreserved(previousProviderName, name),
+        ),
+      );
     }
 
     this.activeProviderName = name;
@@ -141,5 +234,209 @@ export class ProviderManager implements IProviderManager {
 
   setServerToolsProvider(provider: IProvider | null): void {
     this.serverToolsProvider = provider;
+  }
+
+  private generateConversationId(): string {
+    // Generate unique conversation ID for session
+    return `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private isContextPreserved(
+    fromProvider: string,
+    toProvider: string,
+  ): boolean {
+    // Analyze whether context can be preserved between providers
+    const fromCapabilities = this.providerCapabilities.get(fromProvider);
+    const toCapabilities = this.providerCapabilities.get(toProvider);
+
+    if (!fromCapabilities || !toCapabilities) {
+      return false; // Can't analyze without capabilities
+    }
+
+    // Context is better preserved between providers with similar capabilities
+    const capabilityScore = this.calculateCapabilityCompatibility(
+      fromCapabilities,
+      toCapabilities,
+    );
+
+    // Context is considered preserved if compatibility is high
+    return capabilityScore > 0.7;
+  }
+
+  private captureProviderCapabilities(
+    provider: IProvider,
+  ): ProviderCapabilities {
+    return {
+      supportsStreaming: true, // All current providers support streaming
+      supportsTools: provider.getServerTools().length > 0,
+      supportsVision: this.detectVisionSupport(provider),
+      maxTokens: this.getProviderMaxTokens(provider),
+      supportedFormats: this.getSupportedToolFormats(provider),
+      hasModelSelection: typeof provider.setModel === 'function',
+      hasApiKeyConfig: typeof provider.setApiKey === 'function',
+      hasBaseUrlConfig: typeof provider.setBaseUrl === 'function',
+      supportsPaidMode: typeof provider.isPaidMode === 'function',
+    };
+  }
+
+  private detectVisionSupport(provider: IProvider): boolean {
+    // Provider-specific vision detection logic
+    switch (provider.name) {
+      case 'gemini': {
+        return true;
+      }
+      case 'openai': {
+        const model = provider.getCurrentModel?.() || '';
+        return model.includes('vision') || model.includes('gpt-4');
+      }
+      case 'anthropic': {
+        const claudeModel = provider.getCurrentModel?.() || '';
+        return claudeModel.includes('claude-3');
+      }
+      default:
+        return false;
+    }
+  }
+
+  private getProviderMaxTokens(provider: IProvider): number {
+    const model = provider.getCurrentModel?.() || '';
+
+    switch (provider.name) {
+      case 'gemini':
+        if (model.includes('pro')) return 32768;
+        if (model.includes('flash')) return 8192;
+        return 8192;
+      case 'openai':
+        if (model.includes('gpt-4')) return 8192;
+        if (model.includes('gpt-3.5')) return 4096;
+        return 4096;
+      case 'anthropic':
+        if (model.includes('claude-3')) return 200000;
+        return 100000;
+      default:
+        return 4096;
+    }
+  }
+
+  private getSupportedToolFormats(provider: IProvider): string[] {
+    switch (provider.name) {
+      case 'gemini':
+        return ['function_calling', 'gemini_tools'];
+      case 'openai':
+        return ['function_calling', 'json_schema', 'hermes'];
+      case 'anthropic':
+        return ['xml_tools', 'anthropic_tools'];
+      default:
+        return [];
+    }
+  }
+
+  private createProviderContext(
+    provider: IProvider,
+    capabilities: ProviderCapabilities,
+  ): ProviderContext {
+    return {
+      providerName: provider.name,
+      currentModel: provider.getCurrentModel?.() || 'unknown',
+      toolFormat: provider.getToolFormat?.() || 'unknown',
+      isPaidMode: provider.isPaidMode?.() || false,
+      capabilities,
+      sessionStartTime: Date.now(),
+    };
+  }
+
+  private calculateCapabilityCompatibility(
+    from: ProviderCapabilities,
+    to: ProviderCapabilities,
+  ): number {
+    let score = 0;
+    let totalChecks = 0;
+
+    // Check tool support compatibility
+    totalChecks++;
+    if (from.supportsTools === to.supportsTools) score++;
+
+    // Check vision support compatibility
+    totalChecks++;
+    if (from.supportsVision === to.supportsVision) score++;
+
+    // Check streaming compatibility (all providers support streaming currently)
+    totalChecks++;
+    if (from.supportsStreaming === to.supportsStreaming) score++;
+
+    // Check tool format compatibility
+    totalChecks++;
+    const hasCommonFormats = from.supportedFormats.some((format) =>
+      to.supportedFormats.includes(format),
+    );
+    if (hasCommonFormats) score++;
+
+    return score / totalChecks;
+  }
+
+  // Public API methods for provider capabilities
+
+  getCurrentConversationId(): string {
+    if (!this.currentConversationId) {
+      this.currentConversationId = this.generateConversationId();
+    }
+    return this.currentConversationId;
+  }
+
+  resetConversationContext(): void {
+    this.currentConversationId = this.generateConversationId();
+  }
+
+  getProviderCapabilities(
+    providerName?: string,
+  ): ProviderCapabilities | undefined {
+    const name = providerName || this.activeProviderName;
+    return this.providerCapabilities.get(name);
+  }
+
+  compareProviders(provider1: string, provider2: string): ProviderComparison {
+    const cap1 = this.providerCapabilities.get(provider1);
+    const cap2 = this.providerCapabilities.get(provider2);
+
+    if (!cap1 || !cap2) {
+      throw new Error('Cannot compare providers: capabilities not available');
+    }
+
+    return {
+      provider1,
+      provider2,
+      capabilities: {
+        [provider1]: cap1,
+        [provider2]: cap2,
+      },
+      compatibility: this.calculateCapabilityCompatibility(cap1, cap2),
+      recommendation: this.generateProviderRecommendation(
+        provider1,
+        provider2,
+        cap1,
+        cap2,
+      ),
+    };
+  }
+
+  private generateProviderRecommendation(
+    provider1: string,
+    provider2: string,
+    cap1: ProviderCapabilities,
+    cap2: ProviderCapabilities,
+  ): string {
+    if (cap1.maxTokens > cap2.maxTokens) {
+      return `${provider1} supports longer contexts (${cap1.maxTokens} vs ${cap2.maxTokens} tokens)`;
+    }
+
+    if (cap1.supportsVision && !cap2.supportsVision) {
+      return `${provider1} supports vision capabilities`;
+    }
+
+    if (cap1.supportedFormats.length > cap2.supportedFormats.length) {
+      return `${provider1} supports more tool formats`;
+    }
+
+    return 'Providers have similar capabilities';
   }
 }

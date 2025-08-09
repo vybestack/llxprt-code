@@ -113,7 +113,9 @@ export interface OpenDialogActionReturn {
     | 'privacy'
     | 'provider'
     | 'providerModel'
-    | 'tools';
+    | 'tools'
+    | 'logging';
+  dialogData?: any;
 }
 
 /**

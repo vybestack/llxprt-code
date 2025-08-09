@@ -62,6 +62,12 @@ git cherry-pick <commit-hash>
 - Auth changes that assume only Google auth (llxprt supports multiple providers)
 - **Next-speaker check functionality** - This feature has been permanently disabled in llxprt and should never be re-enabled
 
+#### Features Reimplemented (Don't Cherry-pick):
+
+These upstream features have been reimplemented in llxprt with our own approach:
+
+- **Conversation Logging (commit `36f58a34`)** - Reimplemented as privacy-first, multi-provider conversation logging via `/logging` command with local storage, granular controls, and sensitive data redaction
+
 #### Handling Conflicts:
 
 When conflicts occur, preserve llxprt's:

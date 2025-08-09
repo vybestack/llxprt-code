@@ -6,11 +6,16 @@
 
 import { IProvider } from './IProvider.js';
 import { IModel } from './IModel.js';
+import { Config } from '../config/config.js';
 
 /**
  * Manager for handling multiple providers
  */
 export interface IProviderManager {
+  /**
+   * Set the configuration for the provider manager
+   */
+  setConfig(config: Config): void;
   /**
    * Register a provider
    */

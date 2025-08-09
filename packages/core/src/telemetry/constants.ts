@@ -15,6 +15,12 @@ export const EVENT_CLI_CONFIG = 'llxprt_code.config';
 export const EVENT_FLASH_FALLBACK = 'llxprt_code.flash_fallback';
 export const EVENT_NEXT_SPEAKER_CHECK = 'llxprt_code.next_speaker_check';
 export const EVENT_SLASH_COMMAND = 'llxprt_code.slash_command';
+export const EVENT_CONVERSATION_REQUEST = 'llxprt_code.conversation_request';
+export const EVENT_CONVERSATION_RESPONSE = 'llxprt_code.conversation_response';
+export const EVENT_ENHANCED_CONVERSATION_RESPONSE =
+  'llxprt_code.enhanced_conversation_response';
+export const EVENT_PROVIDER_SWITCH = 'llxprt_code.provider_switch';
+export const EVENT_PROVIDER_CAPABILITY = 'llxprt_code.provider_capability';
 
 export const METRIC_TOOL_CALL_COUNT = 'llxprt_code.tool.call.count';
 export const METRIC_TOOL_CALL_LATENCY = 'llxprt_code.tool.call.latency';

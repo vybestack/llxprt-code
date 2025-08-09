@@ -289,6 +289,7 @@ describe('WebSearchTool', () => {
       mockConfig.getContentGeneratorConfig = vi.fn(() => ({
         model: 'test-model',
         providerManager: {
+          setConfig: vi.fn(),
           registerProvider: vi.fn(),
           setActiveProvider: vi.fn(),
           clearActiveProvider: vi.fn(),

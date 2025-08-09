@@ -384,6 +384,15 @@ export const useSlashCommandProcessor = (
                         openToolsDialog(subCommand);
                         return { type: 'handled' };
                       }
+                      case 'logging': {
+                        // For now, show the log entries as text since dialog system is not fully implemented
+                        const dialogData = result.dialogData as any;
+                        if (dialogData && dialogData.entries) {
+                          // This would open the LoggingDialog when the dialog system is ready
+                          // For now, the command handles displaying the logs
+                        }
+                        return { type: 'handled' };
+                      }
                       default: {
                         const unhandled: never = result.dialog;
                         throw new Error(

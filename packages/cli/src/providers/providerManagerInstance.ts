@@ -76,6 +76,11 @@ export function getProviderManager(
       // Failed to load user settings, that's OK
     }
 
+    // Set config BEFORE registering providers so logging wrapper works
+    if (config) {
+      providerManagerInstance.setConfig(config);
+    }
+
     // Always register GeminiProvider
     const geminiProvider = new GeminiProvider(undefined, undefined, config);
 

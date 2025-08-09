@@ -31,6 +31,10 @@ import {
   NextSpeakerCheckEvent,
   LoopDetectedEvent,
   SlashCommandEvent,
+  ConversationRequestEvent,
+  ConversationResponseEvent,
+  ProviderSwitchEvent,
+  ProviderCapabilityEvent,
 } from './types.js';
 import {
   recordApiErrorMetrics,
@@ -372,4 +376,104 @@ export function logSlashCommand(
     attributes,
   };
   logger.emit(logRecord);
+}
+
+// Generic function to log telemetry events to the configured system
+function logTelemetryEvent(config: Config, event: unknown): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const eventObj = event as Record<string, unknown>;
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': eventObj['event.name'] as string,
+    'event.timestamp': eventObj['event.timestamp'] as string,
+  };
+
+  // Add other event properties, ensuring they are compatible with LogAttributes
+  Object.keys(eventObj).forEach((key) => {
+    if (
+      key !== 'event.name' &&
+      key !== 'event.timestamp' &&
+      eventObj[key] !== undefined
+    ) {
+      const value = eventObj[key];
+      // Convert complex objects to strings to ensure compatibility with LogAttributes
+      if (typeof value === 'object' && value !== null) {
+        attributes[key] = JSON.stringify(value);
+      } else if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        attributes[key] = value;
+      }
+    }
+  });
+
+  const logRecord: LogRecord = {
+    body: `Telemetry event: ${eventObj['event.name']}`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logConversationRequest(
+  config: Config,
+  event: ConversationRequestEvent,
+): void {
+  if (!config.getConversationLoggingEnabled()) {
+    return;
+  }
+
+  try {
+    logTelemetryEvent(config, event);
+  } catch (error) {
+    console.warn('Failed to log conversation request:', error);
+  }
+}
+
+export function logConversationResponse(
+  config: Config,
+  event: ConversationResponseEvent,
+): void {
+  if (!config.getConversationLoggingEnabled()) {
+    return;
+  }
+
+  try {
+    logTelemetryEvent(config, event);
+  } catch (error) {
+    console.warn('Failed to log conversation response:', error);
+  }
+}
+
+export function logProviderSwitch(
+  config: Config,
+  event: ProviderSwitchEvent,
+): void {
+  if (!config.getConversationLoggingEnabled()) {
+    return;
+  }
+
+  try {
+    logTelemetryEvent(config, event);
+  } catch (error) {
+    console.warn('Failed to log provider switch:', error);
+  }
+}
+
+export function logProviderCapability(
+  config: Config,
+  event: ProviderCapabilityEvent,
+): void {
+  if (!config.getConversationLoggingEnabled()) {
+    return;
+  }
+
+  try {
+    logTelemetryEvent(config, event);
+  } catch (error) {
+    console.warn('Failed to log provider capability:', error);
+  }
 }
