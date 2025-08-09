@@ -29,6 +29,7 @@ import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { getGitStatsService } from '../services/git-stats-service.js';
 
 export function applyReplacement(
   currentContent: string | null,
@@ -340,6 +341,24 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       this.ensureParentDirectoriesExist(this.params.file_path);
       fs.writeFileSync(this.params.file_path, editData.newContent, 'utf8');
 
+      // Track git stats if logging is enabled and service is available
+      let gitStats = null;
+      if (this.config.getConversationLoggingEnabled()) {
+        const gitStatsService = getGitStatsService();
+        if (gitStatsService) {
+          try {
+            gitStats = await gitStatsService.trackFileEdit(
+              this.params.file_path,
+              editData.currentContent || '',
+              editData.newContent
+            );
+          } catch (error) {
+            // Don't fail the edit if git stats tracking fails
+            console.warn('Failed to track git stats:', error);
+          }
+        }
+      }
+
       let displayResult: ToolResultDisplay;
       if (editData.isNewFile) {
         displayResult = `Created ${shortenPath(makeRelative(this.params.file_path, this.config.getTargetDir()))}`;
@@ -374,10 +393,20 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
         );
       }
 
-      return {
+      const result: ToolResult = {
         llmContent: llmSuccessMessageParts.join(' '),
         returnDisplay: displayResult,
       };
+
+      // Include git stats in metadata if available
+      if (gitStats) {
+        result.metadata = {
+          ...result.metadata,
+          gitStats,
+        };
+      }
+
+      return result;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return {

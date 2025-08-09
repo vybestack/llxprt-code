@@ -54,6 +54,15 @@ export class ConversationFileWriter {
       metadata
     });
   }
+
+  writeToolCall(provider: string, toolName: string, context?: any): void {
+    this.writeEntry({
+      type: 'tool_call',
+      provider,
+      tool: toolName,
+      ...context
+    });
+  }
 }
 
 // Singleton instance

@@ -48,6 +48,8 @@ import {
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
+import { setGitStatsService } from '@vybestack/llxprt-code-core';
+import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
 
 export function validateDnsResolutionOrder(
@@ -169,6 +171,12 @@ export async function main() {
 
   const providerManager = getProviderManager(config);
   config.setProviderManager(providerManager);
+
+  // Initialize git stats service for tracking file changes when logging is enabled
+  if (config.getConversationLoggingEnabled()) {
+    const gitStatsService = new GitStatsServiceImpl(config);
+    setGitStatsService(gitStatsService);
+  }
 
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
   const serverToolsProvider = providerManager.getServerToolsProvider();

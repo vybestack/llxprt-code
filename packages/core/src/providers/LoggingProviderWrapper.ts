@@ -377,6 +377,60 @@ export class LoggingProviderWrapper implements IProvider {
     return `prompt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  private async logToolCall(
+    toolName: string,
+    params: unknown,
+    result: unknown,
+    startTime: number,
+    success: boolean,
+    error?: unknown,
+  ): Promise<void> {
+    try {
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      
+      // Extract git stats from result metadata if available
+      let gitStats = null;
+      if (result && typeof result === 'object' && 'metadata' in result) {
+        const metadata = (result as any).metadata;
+        if (metadata && metadata.gitStats) {
+          gitStats = metadata.gitStats;
+        }
+      }
+
+      const entry = {
+        type: 'tool_call',
+        tool: toolName,
+        timestamp: new Date(startTime).toISOString(),
+        duration,
+        success,
+        conversationId: this.conversationId,
+        turnNumber: this.turnNumber,
+        // Include git stats if present
+        gitStats,
+        error: error ? String(error) : undefined,
+      };
+
+      // Write to disk
+      const fileWriter = getConversationFileWriter(this.config.getConversationLogPath());
+      fileWriter.writeToolCall(this.wrapped.name, toolName, {
+        conversationId: this.conversationId,
+        turnNumber: this.turnNumber,
+        params: this.redactor.redactToolCall({ 
+          type: 'function',
+          function: { name: toolName, parameters: params as object }
+        }).function.parameters,
+        result,
+        duration,
+        success,
+        error: error ? String(error) : undefined,
+        gitStats,
+      });
+    } catch (logError) {
+      console.warn('Failed to log tool call:', logError);
+    }
+  }
+
   // All other methods are simple passthroughs to wrapped provider
   setModel?(modelId: string): void {
     this.wrapped.setModel?.(modelId);
@@ -426,7 +480,24 @@ export class LoggingProviderWrapper implements IProvider {
     params: unknown,
     config?: unknown,
   ): Promise<unknown> {
-    return this.wrapped.invokeServerTool(toolName, params, config);
+    const startTime = Date.now();
+    
+    try {
+      const result = await this.wrapped.invokeServerTool(toolName, params, config);
+      
+      // Log tool call if logging is enabled and result has metadata
+      if (this.config.getConversationLoggingEnabled()) {
+        await this.logToolCall(toolName, params, result, startTime, true);
+      }
+      
+      return result;
+    } catch (error) {
+      // Log failed tool call if logging is enabled
+      if (this.config.getConversationLoggingEnabled()) {
+        await this.logToolCall(toolName, params, null, startTime, false, error);
+      }
+      throw error;
+    }
   }
 
   setModelParams?(params: Record<string, unknown> | undefined): void {

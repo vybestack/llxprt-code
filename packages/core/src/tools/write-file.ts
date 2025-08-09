@@ -33,6 +33,7 @@ import {
   FileOperation,
 } from '../telemetry/metrics.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { getGitStatsService } from '../services/git-stats-service.js';
 
 /**
  * Parameters for the WriteFile tool
@@ -270,6 +271,24 @@ export class WriteFileTool
 
       fs.writeFileSync(params.file_path, fileContent, 'utf8');
 
+      // Track git stats if logging is enabled and service is available
+      let gitStats = null;
+      if (this.config.getConversationLoggingEnabled()) {
+        const gitStatsService = getGitStatsService();
+        if (gitStatsService) {
+          try {
+            gitStats = await gitStatsService.trackFileEdit(
+              params.file_path,
+              originalContent || '',
+              fileContent
+            );
+          } catch (error) {
+            // Don't fail the write if git stats tracking fails
+            console.warn('Failed to track git stats:', error);
+          }
+        }
+      }
+
       // Generate diff for display result
       const fileName = path.basename(params.file_path);
       // If there was a readError, originalContent in correctedContentResult is '',
@@ -327,10 +346,20 @@ export class WriteFileTool
         );
       }
 
-      return {
+      const result: ToolResult = {
         llmContent: llmSuccessMessageParts.join(' '),
         returnDisplay: displayResult,
       };
+
+      // Include git stats in metadata if available
+      if (gitStats) {
+        result.metadata = {
+          ...result.metadata,
+          gitStats,
+        };
+      }
+
+      return result;
     } catch (error) {
       const errorMsg = `Error writing to file: ${error instanceof Error ? error.message : String(error)}`;
       return {

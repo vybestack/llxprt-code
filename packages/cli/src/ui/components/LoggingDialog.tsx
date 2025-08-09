@@ -13,7 +13,7 @@ import { truncateEnd, truncateStart } from '../utils/responsive.js';
 
 interface LogEntry {
   timestamp: string;
-  type: 'request' | 'response';
+  type: 'request' | 'response' | 'tool_call';
   provider: string;
   model?: string;
   conversationId?: string;
@@ -27,6 +27,15 @@ interface LogEntry {
     output?: number;
   };
   error?: string;
+  // Tool call specific fields
+  tool?: string;
+  duration?: number;
+  success?: boolean;
+  gitStats?: {
+    linesAdded: number;
+    linesRemoved: number;
+    filesChanged: number;
+  };
 }
 
 interface LoggingDialogProps {
@@ -144,10 +153,12 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
   const renderEntry = (entry: LogEntry, index: number, isSelected: boolean) => {
     const globalIndex = scrollOffset + index;
     const timestamp = formatTimestamp(entry.timestamp, isNarrow);
-    const typeIcon = entry.type === 'request' ? '→' : '←';
+    const typeIcon = entry.type === 'request' ? '→' : entry.type === 'tool_call' ? '🔧' : '←';
     const typeColor = entry.type === 'request' 
       ? SemanticColors.text.accent 
-      : SemanticColors.status.success;
+      : entry.type === 'tool_call' 
+        ? SemanticColors.status.warning
+        : SemanticColors.status.success;
     
     // Calculate available width for content
     const metadataWidth = timestamp.length + entry.provider.length + 10; // Icons, spacing
@@ -162,6 +173,21 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
       }
     } else if (entry.type === 'response' && entry.response) {
       mainContent = formatContent(entry.response, contentWidth);
+    } else if (entry.type === 'tool_call') {
+      // Format tool call content
+      let toolContent = `${entry.tool || 'Unknown tool'}`;
+      if (entry.duration) {
+        toolContent += ` (${entry.duration}ms)`;
+      }
+      if (entry.success === false) {
+        toolContent += ' FAILED';
+      }
+      // Add git stats if present
+      if (entry.gitStats) {
+        const { linesAdded, linesRemoved, filesChanged } = entry.gitStats;
+        toolContent += ` [+${linesAdded} -${linesRemoved} in ${filesChanged} files]`;
+      }
+      mainContent = formatContent(toolContent, contentWidth);
     } else if (entry.error) {
       mainContent = `Error: ${entry.error}`;
     }
