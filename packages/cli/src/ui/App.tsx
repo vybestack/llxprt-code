@@ -247,6 +247,7 @@ const App = (props: AppInternalProps) => {
   const [ideContextState, setIdeContextState] = useState<
     IdeContext | undefined
   >();
+  const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
 
@@ -282,6 +283,11 @@ const App = (props: AppInternalProps) => {
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
   }, []);
+
+  const handleEscapePromptChange = useCallback((showPrompt: boolean) => {
+    setShowEscapePrompt(showPrompt);
+  }, []);
+
   const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
@@ -1291,6 +1297,8 @@ const App = (props: AppInternalProps) => {
                     <Text color={Colors.AccentYellow}>
                       Press Ctrl+D again to exit.
                     </Text>
+                  ) : showEscapePrompt ? (
+                    <Text color={Colors.Gray}>Press Esc again to clear.</Text>
                   ) : (
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
@@ -1342,6 +1350,7 @@ const App = (props: AppInternalProps) => {
                     commandContext={commandContext}
                     shellModeActive={shellModeActive}
                     setShellModeActive={setShellModeActive}
+                    onEscapePromptChange={handleEscapePromptChange}
                     focus={isFocused}
                     vimHandleInput={vimHandleInput}
                     placeholder={placeholder}
