@@ -115,7 +115,7 @@ export interface OpenDialogActionReturn {
     | 'providerModel'
     | 'tools'
     | 'logging';
-  dialogData?: any;
+  dialogData?: unknown;
 }
 
 /**

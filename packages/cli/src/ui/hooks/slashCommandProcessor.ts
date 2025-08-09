@@ -386,7 +386,9 @@ export const useSlashCommandProcessor = (
                       }
                       case 'logging': {
                         // For now, show the log entries as text since dialog system is not fully implemented
-                        const dialogData = result.dialogData as any;
+                        const dialogData = result.dialogData as {
+                          entries?: unknown[];
+                        };
                         if (dialogData && dialogData.entries) {
                           // This would open the LoggingDialog when the dialog system is ready
                           // For now, the command handles displaying the logs

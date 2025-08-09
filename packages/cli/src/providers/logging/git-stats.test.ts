@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GitStatsTracker } from './git-stats';
 import { Config } from '@vybestack/llxprt-code-core';
 
@@ -210,7 +210,7 @@ describe('Git Statistics Tracking', () => {
       });
       const tracker = new GitStatsTracker(config);
 
-      const stats = await tracker.trackFileEdit(
+      const _stats = await tracker.trackFileEdit(
         'file.ts',
         'old',
         'new\ncontent',
@@ -416,8 +416,8 @@ describe('Git Statistics Tracking', () => {
       for (const testCase of cases) {
         const stats = await tracker.trackFileEdit(
           'file.ts',
-          testCase.old as any,
-          testCase.new as any,
+          testCase.old as string,
+          testCase.new as string,
         );
 
         // Should either return valid stats or null, never throw
@@ -449,7 +449,7 @@ describe('Git Statistics Tracking', () => {
       ];
 
       for (const path of invalidPaths) {
-        const stats = await tracker.trackFileEdit(path as any, 'old', 'new');
+        const stats = await tracker.trackFileEdit(path as string, 'old', 'new');
 
         // Should handle gracefully, either track or return null
         if (stats !== null) {
@@ -462,7 +462,7 @@ describe('Git Statistics Tracking', () => {
 
     it('should handle configuration errors gracefully', async () => {
       // Test with malformed config
-      const invalidConfig = {} as any;
+      const invalidConfig = {} as Config;
 
       expect(() => {
         new GitStatsTracker(invalidConfig);

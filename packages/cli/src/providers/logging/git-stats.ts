@@ -44,7 +44,7 @@ export class GitStatsTracker {
     // Handle invalid config gracefully
     try {
       this.enabled = this.config?.getConversationLoggingEnabled?.() ?? false;
-    } catch (error) {
+    } catch (_error) {
       this.enabled = false;
     }
 
@@ -113,7 +113,7 @@ export class GitStatsTracker {
     let removed = 0;
 
     // Find common lines and differences
-    const maxLength = Math.max(oldLines.length, newLines.length);
+    const _maxLength = Math.max(oldLines.length, newLines.length);
     const minLength = Math.min(oldLines.length, newLines.length);
 
     // Count changed lines in the common range
@@ -145,7 +145,7 @@ export class GitStatsTracker {
     // Update enabled state based on current config
     try {
       this.enabled = this.config?.getConversationLoggingEnabled?.() ?? false;
-    } catch (error) {
+    } catch (_error) {
       this.enabled = false;
     }
     return this.enabled;
@@ -177,7 +177,7 @@ export class GitStatsTracker {
     let sessionId = '';
     try {
       sessionId = this.config?.getSessionId?.() ?? '';
-    } catch (error) {
+    } catch (_error) {
       sessionId = '';
     }
 

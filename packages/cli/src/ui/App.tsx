@@ -177,6 +177,12 @@ const App = (props: AppInternalProps) => {
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
+  useEffect(() => {
+    const ideClient = config.getIdeClient();
+    if (ideClient) {
+      registerCleanup(() => ideClient.disconnect());
+    }
+  }, [config]);
   const shouldShowIdePrompt =
     config.getIdeModeFeature() &&
     currentIDE &&
