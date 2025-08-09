@@ -4,11 +4,12 @@ This guide documents the process for cherry-picking changes from the upstream ge
 
 ## Current Sync Status
 
-**Last synced upstream commit:** `60362e03` (August 7, 2025)
+**Last synced upstream commit:** `b8084ba8` (August 9, 2025)
 
-- MCP servers fix: Fixed issue where MCP servers allowed in settings do not show up in /mcp command
+- Centralized key binding logic and refactoring
+- All valuable commits from August 7-9, 2025 have been cherry-picked
 
-**Branch:** `20250808-gmerge`
+**Branch:** `20250808b-gmerge`
 
 ## Overview
 
