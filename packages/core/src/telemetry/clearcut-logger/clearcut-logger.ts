@@ -62,23 +62,35 @@ export interface LogEventEntry {
 export class ClearcutLogger {
   private static instance: ClearcutLogger;
   private config?: Config;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Clearcut expects this format.
-  private readonly events: any = {
+  // Telemetry is disabled - this is just a stub to maintain API compatibility
+  private readonly events: {
+    items: LogEventEntry[][];
+    toArray: () => LogEventEntry[][];
+    size: number;
+    push: (item: LogEventEntry[]) => void;
+    splice: (start: number, deleteCount: number) => LogEventEntry[][];
+    unshift: (item: LogEventEntry[]) => void;
+  } = {
     items: [] as LogEventEntry[][],
-    toArray: function() { return this.items; },
-    get size() { return this.items.length; },
-    push: function(item: LogEventEntry[]) { 
-      this.items.push(item); 
-      if (this.items.length > 1000) { // max_events
+    toArray() {
+      return this.items;
+    },
+    get size() {
+      return this.items.length;
+    },
+    push(item: LogEventEntry[]) {
+      this.items.push(item);
+      if (this.items.length > 1000) {
+        // max_events
         this.items.shift();
       }
     },
-    splice: function(start: number, deleteCount: number) { 
-      return this.items.splice(start, deleteCount); 
+    splice(start: number, deleteCount: number) {
+      return this.items.splice(start, deleteCount);
     },
-    unshift: function(item: LogEventEntry[]) { 
-      this.items.unshift(item); 
-    }
+    unshift(item: LogEventEntry[]) {
+      this.items.unshift(item);
+    },
   };
   private last_flush_time: number = Date.now();
   private flush_interval_ms: number = 1000 * 60; // Wait at least a minute before flushing events.
@@ -657,8 +669,12 @@ export class ClearcutLogger {
 
   private requeueFailedEvents(failedEvents: LogEventEntry[][]): void {
     const availableSpace = this.max_events - this.events.size;
-    const eventsToRequeue = Math.min(failedEvents.length, availableSpace, this.max_retry_events);
-    
+    const eventsToRequeue = Math.min(
+      failedEvents.length,
+      availableSpace,
+      this.max_retry_events,
+    );
+
     if (eventsToRequeue > 0) {
       const startIndex = Math.max(0, failedEvents.length - eventsToRequeue);
       for (let i = failedEvents.length - 1; i >= startIndex; i--) {

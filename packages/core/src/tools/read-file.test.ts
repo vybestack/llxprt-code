@@ -29,6 +29,7 @@ describe('ReadFileTool', () => {
       getFileService: () => new FileDiscoveryService(tempRootDir),
       getTargetDir: () => tempRootDir,
       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+      getConversationLoggingEnabled: () => false,
     } as unknown as Config;
     tool = new ReadFileTool(mockConfigInstance);
   });

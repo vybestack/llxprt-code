@@ -74,6 +74,7 @@ const mockConfigInternal = {
   setUserMemory: vi.fn(),
   getLlxprtMdFileCount: () => 0,
   setLlxprtMdFileCount: vi.fn(),
+  getConversationLoggingEnabled: () => false,
   getToolRegistry: () =>
     ({
       registerTool: vi.fn(),

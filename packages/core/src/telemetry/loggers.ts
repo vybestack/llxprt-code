@@ -140,11 +140,12 @@ export function logToolCall(config: Config, event: ToolCallEvent): void {
     'event.timestamp': new Date().toISOString(),
     function_args: safeJsonStringify(event.function_args, 2),
   };
-  
+
   // Handle metadata separately to ensure proper typing
   if (metadata) {
     for (const [key, value] of Object.entries(metadata)) {
-      attributes[`metadata.${key}`] = typeof value === 'object' ? safeJsonStringify(value) : String(value);
+      attributes[`metadata.${key}`] =
+        typeof value === 'object' ? safeJsonStringify(value) : String(value);
     }
   }
   if (event.error) {

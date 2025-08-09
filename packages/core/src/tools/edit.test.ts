@@ -81,6 +81,7 @@ describe('EditTool', () => {
       setUserMemory: vi.fn(),
       getLlxprtMdFileCount: () => 0,
       setLlxprtMdFileCount: vi.fn(),
+      getConversationLoggingEnabled: () => false,
       getToolRegistry: () => ({}) as any, // Minimal mock for ToolRegistry
     } as unknown as Config;
 

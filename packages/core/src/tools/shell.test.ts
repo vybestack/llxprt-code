@@ -57,6 +57,7 @@ describe('ShellTool', () => {
       getWorkspaceContext: () => createMockWorkspaceContext('.'),
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getConversationLoggingEnabled: () => false,
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -426,6 +427,7 @@ describe('ShellTool', () => {
         getSummarizeToolOutputConfig: () => ({}),
         getEphemeralSettings: () => ({}),
         getWorkspaceContext: () => createMockWorkspaceContext('.'),
+        getConversationLoggingEnabled: () => false,
       } as unknown as Config;
       const testShellTool = new ShellTool(testConfig);
 
@@ -457,6 +459,7 @@ describe('ShellTool', () => {
       const testShellTool = new ShellTool({
         getCoreTools: () => ['run_shell_command'],
         getExcludeTools: () => [],
+        getConversationLoggingEnabled: () => false,
       } as unknown as Config);
       const result = await testShellTool.shouldConfirmExecute({
         command: 'git status && git log',
