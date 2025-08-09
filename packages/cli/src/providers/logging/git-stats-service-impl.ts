@@ -4,9 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IGitStatsService, GitStats } from '@vybestack/llxprt-code-core';
+import {
+  IGitStatsService,
+  GitStats,
+  Config,
+} from '@vybestack/llxprt-code-core';
 import { GitStatsTracker } from './git-stats.js';
-import { Config } from '@vybestack/llxprt-code-core';
 
 /**
  * Implementation of IGitStatsService using GitStatsTracker

@@ -37,6 +37,7 @@ import {
   // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
   getOauthClient,
+  setGitStatsService,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
@@ -48,7 +49,6 @@ import {
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
-import { setGitStatsService } from '@vybestack/llxprt-code-core';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
 import { SettingsContext } from './ui/contexts/SettingsContext.js';

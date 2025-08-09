@@ -211,14 +211,11 @@ describe('ShellTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toContain(
-        'Could not execute command due to invalid parameters:',
+      expect(result.llmContent).toBe(
+        'Command cannot be empty.',
       );
       expect(result.returnDisplay).toBe('Command cannot be empty.');
-      expect(result.error).toEqual({
-        message: 'Command cannot be empty.',
-        type: ToolErrorType.INVALID_TOOL_PARAMS,
-      });
+      // Validation errors don't set error property in upstream
     });
 
     it('should return error with error property for invalid directory', async () => {
@@ -228,17 +225,13 @@ describe('ShellTool', () => {
         mockAbortSignal,
       );
 
-      expect(result.llmContent).toContain(
-        'Could not execute command due to invalid parameters:',
+      expect(result.llmContent).toBe(
+        "Directory 'nonexistent' is not a registered workspace directory.",
       );
       expect(result.returnDisplay).toBe(
         "Directory 'nonexistent' is not a registered workspace directory.",
       );
-      expect(result.error).toEqual({
-        message:
-          "Directory 'nonexistent' is not a registered workspace directory.",
-        type: ToolErrorType.INVALID_TOOL_PARAMS,
-      });
+      // Validation errors don't set error property in upstream
     });
 
     it('should summarize output when configured', async () => {

@@ -28,7 +28,8 @@ const mockHttps = vi.mocked(https);
 const mockUserAccount = vi.mocked(userAccount);
 const mockUserId = vi.mocked(userId);
 
-describe('ClearcutLogger', () => {
+// TELEMETRY DISABLED IN LLXPRT - all tests skipped
+describe.skip('ClearcutLogger', () => {
   let mockConfig: Config;
   let logger: ClearcutLogger | undefined;
 

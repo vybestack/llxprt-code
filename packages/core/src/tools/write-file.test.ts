@@ -439,17 +439,17 @@ describe('WriteFileTool', () => {
     it('should return error if params are invalid (relative path)', async () => {
       const params = { file_path: 'relative.txt', content: 'test' };
       const result = await tool.execute(params, abortSignal);
-      expect(result.llmContent).toMatch(/Error: Invalid parameters provided/);
-      expect(result.returnDisplay).toMatch(/Error: File path must be absolute/);
+      expect(result.llmContent).toContain('Could not write file due to invalid parameters');
+      expect(result.returnDisplay).toContain('File path must be absolute');
     });
 
     it('should return error if params are invalid (path outside root)', async () => {
       const outsidePath = path.resolve(tempDir, 'outside-root.txt');
       const params = { file_path: outsidePath, content: 'test' };
       const result = await tool.execute(params, abortSignal);
-      expect(result.llmContent).toMatch(/Error: Invalid parameters provided/);
+      expect(result.llmContent).toContain('Could not write file due to invalid parameters');
       expect(result.returnDisplay).toContain(
-        'Error: File path must be within one of the workspace directories',
+        'File path must be within one of the workspace directories',
       );
     });
 

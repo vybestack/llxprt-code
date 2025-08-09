@@ -914,6 +914,15 @@ const App = (props: AppInternalProps) => {
     refreshStatic();
   }, [clearItems, clearConsoleMessagesState, refreshStatic]);
 
+  const handleConfirmationSelect = useCallback(
+    (value: boolean) => {
+      if (confirmationRequest) {
+        confirmationRequest.onConfirm(value);
+      }
+    },
+    [confirmationRequest],
+  );
+
   const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
 
@@ -1139,9 +1148,7 @@ const App = (props: AppInternalProps) => {
                     { label: 'Yes', value: true },
                     { label: 'No', value: false },
                   ]}
-                  onSelect={(value: boolean) => {
-                    confirmationRequest.onConfirm(value);
-                  }}
+                  onSelect={handleConfirmationSelect}
                 />
               </Box>
             </Box>
