@@ -88,15 +88,20 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
   ): AsyncIterableIterator<unknown> {
     // This should log the conversation request when logging is enabled
     if (this.config.getConversationLoggingEnabled?.()) {
-      const redactedMessages = messages.map((msg) =>
-        this.redactor.redactMessage(msg, this.provider.name),
-      );
+      try {
+        const redactedMessages = messages.map((msg) =>
+          this.redactor.redactMessage(msg, this.provider.name),
+        );
 
-      telemetryLoggers.logConversationRequest(this.config, {
-        provider_name: this.provider.name,
-        redacted_messages: redactedMessages,
-        timestamp: new Date().toISOString(),
-      });
+        telemetryLoggers.logConversationRequest(this.config, {
+          provider_name: this.provider.name,
+          redacted_messages: redactedMessages,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (_error) {
+        // Silently catch logging errors to ensure provider operation continues
+        // In real implementation, this would be properly logged to a fallback system
+      }
     }
 
     // Delegate to wrapped provider
@@ -367,7 +372,7 @@ describe('Multi-Provider Conversation Logging', () => {
   it('should preserve async iterator behavior while logging', async () => {
     const streamingProvider: IProvider = {
       name: 'streaming',
-      getModels: jest.fn().mockResolvedValue([]),
+      getModels: vi.fn().mockResolvedValue([]),
       async *generateChatCompletion() {
         yield { content: 'Chunk 1', role: 'assistant' };
         yield { content: 'Chunk 2', role: 'assistant' };

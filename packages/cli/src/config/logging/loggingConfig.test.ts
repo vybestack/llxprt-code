@@ -87,7 +87,12 @@ class MockExtendedConfig implements ExtendedConfig {
     logConversations?: boolean;
     conversationLogPath?: string;
   }): void {
-    this.cliFlags = { ...this.cliFlags, ...flags };
+    // If no flags provided, clear all CLI flags
+    if (Object.keys(flags).length === 0) {
+      this.cliFlags = {};
+    } else {
+      this.cliFlags = { ...this.cliFlags, ...flags };
+    }
   }
 
   updateSettings(settings: {
@@ -150,15 +155,18 @@ class MockExtendedConfig implements ExtendedConfig {
   }
 
   getLogRetentionDays(): number {
-    return this.telemetrySettings.logRetentionDays ?? 30;
+    const value = this.telemetrySettings.logRetentionDays ?? 30;
+    return value > 0 ? value : 30; // Return default if invalid
   }
 
   getMaxLogSizeMB(): number {
-    return this.telemetrySettings.maxLogSizeMB ?? 10;
+    const value = this.telemetrySettings.maxLogSizeMB ?? 10;
+    return value > 0 ? value : 10; // Return default if invalid
   }
 
   getMaxLogFiles(): number {
-    return this.telemetrySettings.maxLogFiles ?? 5;
+    const value = this.telemetrySettings.maxLogFiles ?? 5;
+    return value > 0 ? value : 5; // Return default if invalid
   }
 }
 

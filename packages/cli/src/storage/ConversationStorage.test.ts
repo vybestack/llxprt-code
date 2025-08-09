@@ -94,28 +94,27 @@ class MockConversationStorage implements ConversationStorage {
   }
 
   async rotateLogIfNeeded(): Promise<void> {
-    if (this.currentLogSize >= this.config.maxLogSizeMB * 1024 * 1024) {
-      // Generate new log file name with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const newLogFile = path.join(
-        this.config.logPath,
-        `conversations-${timestamp}.log`,
-      );
+    // Always rotate when called (since we already checked the condition)
+    // Generate new log file name with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const newLogFile = path.join(
+      this.config.logPath,
+      `conversations-${timestamp}.log`,
+    );
 
-      // Archive current log
-      const currentFile = this.getCurrentLogPath();
-      const fileInfo = this.logFiles.get(currentFile);
-      if (fileInfo) {
-        this.logFiles.set(newLogFile, { ...fileInfo });
-      }
-
-      // Create new current log
-      this.currentLogFile = path.join(this.config.logPath, 'conversations.log');
-      this.currentLogSize = 0;
-
-      // Remove excess log files if needed
-      await this.enforceMaxLogFiles();
+    // Archive current log
+    const currentFile = this.getCurrentLogPath();
+    const fileInfo = this.logFiles.get(currentFile);
+    if (fileInfo) {
+      this.logFiles.set(newLogFile, { ...fileInfo });
     }
+
+    // Create new current log
+    this.currentLogFile = path.join(this.config.logPath, 'conversations.log');
+    this.currentLogSize = 0;
+
+    // Remove excess log files if needed
+    await this.enforceMaxLogFiles();
   }
 
   private async enforceMaxLogFiles(): Promise<void> {
@@ -228,13 +227,20 @@ describe('Conversation Log Storage Management', () => {
    * @and Total log files does not exceed maxLogFiles
    */
   it('should rotate log files when size limit is exceeded', async () => {
-    const largeEntry = createLargeConversationEntry(2 * 1024 * 1024); // 2MB
+    // First, add a medium-sized entry to partially fill the log
+    const mediumEntry = createLargeConversationEntry(600 * 1024); // 600KB
+    await storage.writeConversationEntry(mediumEntry);
+    expect(await storage.getCurrentLogSize()).toBeLessThan(1024 * 1024);
+    
+    // Now add another entry that would exceed the 1MB limit (600KB + 600KB > 1MB)
+    const anotherEntry = createLargeConversationEntry(600 * 1024); // 600KB
+    await storage.writeConversationEntry(anotherEntry);
 
-    await storage.writeConversationEntry(largeEntry);
-
+    // After rotation, we should have multiple log files and the current size should be just the new entry
     const logFiles = await storage.getLogFiles();
+    expect(logFiles.length).toBeGreaterThan(1); // Rotation should have occurred
     expect(logFiles.length).toBeLessThanOrEqual(3);
-    expect(await storage.getCurrentLogSize()).toBeLessThan(1024 * 1024); // New file < 1MB
+    expect(await storage.getCurrentLogSize()).toBeLessThan(1024 * 1024); // Current file should have just the new entry
   });
 
   /**
