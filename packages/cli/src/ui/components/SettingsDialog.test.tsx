@@ -307,7 +307,7 @@ describe('SettingsDialog', () => {
       const { unmount } = render(
         <SettingsDialog
           settings={settings}
-          onSelect={() => {}}
+          onSelect={vi.fn()}
           onRestartRequest={onRestartRequest}
         />,
       );
@@ -326,7 +326,7 @@ describe('SettingsDialog', () => {
       const { stdin, unmount } = render(
         <SettingsDialog
           settings={settings}
-          onSelect={() => {}}
+          onSelect={vi.fn()}
           onRestartRequest={onRestartRequest}
         />,
       );
@@ -813,7 +813,7 @@ describe('SettingsDialog', () => {
       const { stdin, unmount } = render(
         <SettingsDialog
           settings={settings}
-          onSelect={() => {}}
+          onSelect={vi.fn()}
           onRestartRequest={onRestartRequest}
         />,
       );

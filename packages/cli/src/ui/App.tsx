@@ -806,6 +806,10 @@ const App = (props: AppInternalProps) => {
     [handleSlashCommand],
   );
 
+  const handleSettingsRestart = useCallback(() => {
+    handleSlashCommand('/quit');
+  }, [handleSlashCommand]);
+
   const handleGlobalKeypress = useCallback(
     (key: Key) => {
       let enteringConstrainHeightMode = false;
@@ -1195,8 +1199,8 @@ const App = (props: AppInternalProps) => {
             <Box flexDirection="column">
               <SettingsDialog
                 settings={settings}
-                onSelect={() => closeSettingsDialog()}
-                onRestartRequest={() => process.exit(0)}
+                onSelect={closeSettingsDialog}
+                onRestartRequest={handleSettingsRestart}
               />
             </Box>
           ) : isAuthenticating ? (
