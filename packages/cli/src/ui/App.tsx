@@ -1039,9 +1039,17 @@ const App = (props: AppInternalProps) => {
   // Arbitrary threshold to ensure that items in the static area are large
   // enough but not too large to make the terminal hard to use.
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
+
+  // Detect PowerShell for file reference syntax tip
+  const isPowerShell =
+    process.env.PSModulePath !== undefined ||
+    process.env.PSVERSION !== undefined;
+
   const placeholder = vimModeEnabled
     ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
-    : '  Type your message or @path/to/file';
+    : isPowerShell
+      ? '  Type your message, @path/to/file or +path/to/file'
+      : '  Type your message or @path/to/file';
 
   return (
     <StreamingContext.Provider value={streamingState}>
