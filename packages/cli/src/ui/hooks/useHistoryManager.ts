@@ -8,10 +8,6 @@ import { useState, useRef, useCallback } from 'react';
 import { HistoryItem } from '../types.js';
 import { ConversationContext } from '../../utils/ConversationContext.js';
 
-// Maximum history items to keep in memory to prevent unbounded growth
-// This prevents OOM errors when conversations get very long
-const MAX_HISTORY_ITEMS = 500;
-
 // Type for the updater function passed to updateHistoryItem
 type HistoryItemUpdater = (
   prevItem: HistoryItem,
@@ -66,24 +62,7 @@ export function useHistory(): UseHistoryManagerReturn {
             return prevHistory; // Don't add the duplicate
           }
         }
-        let updatedHistory = [...prevHistory, newItem];
-        // Trim old history items to prevent unbounded memory growth
-        // Keep the most recent items and preserve conversation flow
-        if (updatedHistory.length > MAX_HISTORY_ITEMS) {
-          // Keep a bit of context from the beginning of the conversation
-          const contextItems = 5; // Keep first few items for context
-          const recentItems = MAX_HISTORY_ITEMS - contextItems;
-          updatedHistory = [
-            ...updatedHistory.slice(0, contextItems),
-            {
-              type: 'info',
-              text: '... (older messages trimmed for memory) ...',
-              id: -1,
-            } as HistoryItem,
-            ...updatedHistory.slice(-recentItems),
-          ];
-        }
-        return updatedHistory;
+        return [...prevHistory, newItem];
       });
       return id; // Return the generated ID (even if not added, to keep signature)
     },
