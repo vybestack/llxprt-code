@@ -951,7 +951,12 @@ describe('App UI', () => {
       />,
     );
     currentUnmount = unmount;
-    expect(lastFrame()).toMatchSnapshot();
+    const output = lastFrame();
+    // Check the structure without exact memory percentage
+    expect(output).toContain('The first rule of Fight Club');
+    expect(output).toMatch(/Mem: \d+%/);
+    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toContain('/test/dir');
   });
 
   it('should render correctly with the prompt input box', () => {
@@ -971,7 +976,12 @@ describe('App UI', () => {
       />,
     );
     currentUnmount = unmount;
-    expect(lastFrame()).toMatchSnapshot();
+    const output = lastFrame();
+    // Check the structure without exact memory percentage
+    expect(output).toContain('Type your message or @path/to/file');
+    expect(output).toMatch(/Mem: \d+%/);
+    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toContain('/test/dir');
   });
 
   describe('with initial prompt from --prompt-interactive', () => {

@@ -4,18 +4,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GitStatsTracker } from './git-stats';
 import { Config } from '@vybestack/llxprt-code-core';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 describe('Git Statistics Tracking', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    // Create a unique temp directory for each test
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-stats-test-'));
+  });
+
+  afterEach(() => {
+    // Clean up temp directory
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
   describe('Privacy-First Behavior', () => {
     it('should NOT track anything when logging is disabled', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: false },
       });
@@ -33,9 +49,9 @@ describe('Git Statistics Tracking', () => {
     it('should track stats locally when logging is enabled', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -58,9 +74,9 @@ describe('Git Statistics Tracking', () => {
       // Mock any external calls to ensure they never happen
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: {
           logConversations: true,
@@ -82,9 +98,9 @@ describe('Git Statistics Tracking', () => {
     it('should correctly count added lines', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -102,9 +118,9 @@ describe('Git Statistics Tracking', () => {
     it('should correctly count removed lines', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -122,9 +138,9 @@ describe('Git Statistics Tracking', () => {
     it('should handle mixed additions and removals', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -143,9 +159,9 @@ describe('Git Statistics Tracking', () => {
     it('should handle empty content correctly', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -178,9 +194,9 @@ describe('Git Statistics Tracking', () => {
     it('should handle identical content', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -202,9 +218,9 @@ describe('Git Statistics Tracking', () => {
     it('should include stats in conversation logs', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -231,9 +247,9 @@ describe('Git Statistics Tracking', () => {
     it('should aggregate stats across multiple edits', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -250,9 +266,9 @@ describe('Git Statistics Tracking', () => {
     it('should provide session-level aggregation', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -275,9 +291,9 @@ describe('Git Statistics Tracking', () => {
     it('should not create log entries when logging disabled', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: false },
       });
@@ -294,9 +310,9 @@ describe('Git Statistics Tracking', () => {
     it('should have binary control - no fine-grained settings', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -312,9 +328,9 @@ describe('Git Statistics Tracking', () => {
     it('should respect runtime toggle', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: false },
       });
@@ -334,9 +350,9 @@ describe('Git Statistics Tracking', () => {
     it('should maintain state consistency across toggles', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -363,9 +379,9 @@ describe('Git Statistics Tracking', () => {
     it('should validate configuration simplicity', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -397,9 +413,9 @@ describe('Git Statistics Tracking', () => {
     it('should handle malformed content gracefully', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -432,9 +448,9 @@ describe('Git Statistics Tracking', () => {
     it('should handle invalid file paths', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
@@ -482,9 +498,9 @@ describe('Git Statistics Tracking', () => {
     it('should have minimal overhead when disabled', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: false },
       });
@@ -511,9 +527,9 @@ describe('Git Statistics Tracking', () => {
     it('should scale reasonably with file size', async () => {
       const config = new Config({
         sessionId: 'test-session',
-        targetDir: '/tmp/test',
+        targetDir: tempDir,
         debugMode: false,
-        cwd: '/tmp/test',
+        cwd: tempDir,
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
