@@ -10,6 +10,11 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Prevent infinite recursion when npm install triggers postinstall
+if (process.env.LLXPRT_POSTINSTALL_RUNNING === 'true') {
+  process.exit(0);
+}
+
 // Check if bundle already exists (npm packages include it)
 const bundlePath = path.join(__dirname, '..', 'bundle', 'llxprt.js');
 const hasBundle = fs.existsSync(bundlePath);
@@ -29,11 +34,15 @@ if (hasSourceFiles && !hasBundle) {
   console.log('Building llxprt bundle for GitHub installation...');
 
   try {
-    // Install dependencies in workspaces first
+    // Set env var to prevent recursion
+    process.env.LLXPRT_POSTINSTALL_RUNNING = 'true';
+
+    // Install dependencies in workspaces first (with --ignore-scripts to prevent recursion)
     console.log('Installing workspace dependencies...');
-    execSync('npm install --workspaces --if-present', {
+    execSync('npm install --workspaces --if-present --ignore-scripts', {
       stdio: 'inherit',
       cwd: path.join(__dirname, '..'),
+      env: { ...process.env, LLXPRT_POSTINSTALL_RUNNING: 'true' },
     });
 
     // Build the packages
@@ -41,6 +50,7 @@ if (hasSourceFiles && !hasBundle) {
     execSync('npm run build', {
       stdio: 'inherit',
       cwd: path.join(__dirname, '..'),
+      env: { ...process.env, LLXPRT_POSTINSTALL_RUNNING: 'true' },
     });
 
     // Create the bundle
@@ -48,6 +58,7 @@ if (hasSourceFiles && !hasBundle) {
     execSync('npm run bundle', {
       stdio: 'inherit',
       cwd: path.join(__dirname, '..'),
+      env: { ...process.env, LLXPRT_POSTINSTALL_RUNNING: 'true' },
     });
 
     console.log('✓ LLxprt Code bundle built successfully!');
