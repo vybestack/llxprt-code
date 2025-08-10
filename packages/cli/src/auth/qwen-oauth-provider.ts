@@ -36,7 +36,7 @@ export class QwenOAuthProvider implements OAuthProvider {
       `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
     // Display user instructions
-    console.log('\n🔐 Qwen OAuth Authentication');
+    console.log('\nQwen OAuth Authentication');
     console.log('─'.repeat(40));
 
     // Try to open browser if appropriate
