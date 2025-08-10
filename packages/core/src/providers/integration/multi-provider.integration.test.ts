@@ -378,7 +378,7 @@ describe('Multi-Provider Integration Tests', () => {
     it('should handle missing API key', async () => {
       const provider = new OpenAIProvider('');
       await expect(provider.getModels()).rejects.toThrow(
-        'OpenAI API key is required to fetch models',
+        'No authentication method available for openai provider',
       );
     });
   });

@@ -322,27 +322,22 @@ export class GeminiClient {
     const toolRegistry = await this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
-    const history: Content[] = [
-      {
-        role: 'user',
-        parts: envParts,
-      },
-      {
-        role: 'model',
-        parts: [{ text: 'Got it. Thanks for the context!' }],
-      },
-      ...(extraHistory ?? []),
-    ];
+    const history: Content[] = [...(extraHistory ?? [])];
     try {
       const userMemory = this.config.getUserMemory();
       const model = this.config.getModel();
       if (process.env.DEBUG) {
         console.log('DEBUG [client.startChat]: Model from config:', model);
       }
-      const systemInstruction = await getCoreSystemPromptAsync(
-        userMemory,
-        model,
-      );
+      let systemInstruction = await getCoreSystemPromptAsync(userMemory, model);
+
+      // Add environment context to system instruction
+      const envContextText = envParts
+        .map((part) => ('text' in part ? part.text : ''))
+        .join('\n');
+      if (envContextText) {
+        systemInstruction = `${envContextText}\n\n${systemInstruction}`;
+      }
       if (process.env.DEBUG) {
         console.log(
           'DEBUG [client.startChat]: System instruction includes Flash instructions:',

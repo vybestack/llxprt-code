@@ -316,6 +316,8 @@ describe('subagent.ts', () => {
 
         // Check temperature override
         expect(generationConfig.temperature).toBe(defaultModelConfig.temp);
+        // Environment context should be prepended to the system instruction
+        expect(generationConfig.systemInstruction).toContain('Env Context');
         expect(generationConfig.systemInstruction).toContain(
           'Hello Agent, your task is Testing.',
         );
@@ -323,15 +325,9 @@ describe('subagent.ts', () => {
           'Important Rules:',
         );
 
-        // Check History (should include environment context)
+        // Check History (should be empty since environment context is now in system instruction)
         const history = callArgs[3];
-        expect(history).toEqual([
-          { role: 'user', parts: [{ text: 'Env Context' }] },
-          {
-            role: 'model',
-            parts: [{ text: 'Got it. Thanks for the context!' }],
-          },
-        ]);
+        expect(history).toEqual([]);
       });
 
       it('should include output instructions in the system prompt when outputs are defined', async () => {
@@ -400,15 +396,10 @@ describe('subagent.ts', () => {
         const generationConfig = getGenerationConfigFromMock();
         const history = callArgs[3];
 
-        expect(generationConfig.systemInstruction).toBeUndefined();
-        expect(history).toEqual([
-          { role: 'user', parts: [{ text: 'Env Context' }] },
-          {
-            role: 'model',
-            parts: [{ text: 'Got it. Thanks for the context!' }],
-          },
-          ...initialMessages,
-        ]);
+        // Environment context should now be in system instruction, not undefined
+        expect(generationConfig.systemInstruction).toBe('Env Context');
+        // History should only contain initialMessages, not environment context
+        expect(history).toEqual([...initialMessages]);
       });
 
       it('should throw an error if template variables are missing', async () => {

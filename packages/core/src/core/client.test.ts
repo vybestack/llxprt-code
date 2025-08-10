@@ -817,11 +817,12 @@ describe('Gemini Client (client.ts)', () => {
       expect(newChat).not.toBe(initialChat);
 
       // 1. standard start context message
-      // 2. standard canned user start message
-      // 3. compressed summary message
-      // 4. standard canned user summary message
-      // 5. The last user message (not the last 3 because that would start with a function response)
-      expect(newChat.getHistory().length).toEqual(5);
+      // After compression, we should have:
+      // 1. compressed summary message
+      // 2. standard canned user summary message
+      // 3. The last user message (not the last 3 because that would start with a function response)
+      // (No more environment context messages since they're in system instruction now)
+      expect(newChat.getHistory().length).toEqual(3);
     });
 
     it('should always trigger summarization when force is true, regardless of token count', async () => {

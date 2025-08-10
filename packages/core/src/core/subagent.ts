@@ -561,19 +561,23 @@ export class SubAgentScope {
     }
 
     const envParts = await getEnvironmentContext(this.runtimeContext);
-    const envHistory: Content[] = [
-      { role: 'user', parts: envParts },
-      { role: 'model', parts: [{ text: 'Got it. Thanks for the context!' }] },
-    ];
 
-    const start_history = [
-      ...envHistory,
-      ...(this.promptConfig.initialMessages ?? []),
-    ];
+    // Extract environment context text
+    const envContextText = envParts
+      .map((part) => ('text' in part ? part.text : ''))
+      .join('\n');
 
-    const systemInstruction = this.promptConfig.systemPrompt
+    const start_history = [...(this.promptConfig.initialMessages ?? [])];
+
+    // Build system instruction with environment context
+    let systemInstruction = this.promptConfig.systemPrompt
       ? this.buildChatSystemPrompt(context)
-      : undefined;
+      : envContextText;
+
+    // If we have both env context and system prompt, combine them
+    if (this.promptConfig.systemPrompt && envContextText) {
+      systemInstruction = `${envContextText}\n\n${systemInstruction}`;
+    }
 
     try {
       const generationConfig: GenerateContentConfig & {
