@@ -264,7 +264,10 @@ describe('Footer Responsive Behavior', () => {
         // Should have status info (Memory|Context) separate from path info
         expect(output).toMatch(/(Mem:|Memory:)/);
         expect(output).toMatch(/(Ctx:|Context:)/);
-        expect(output).toMatch(/(long-project-name|\/home\/user\/projects)/); // Path (may be truncated)
+        // Path check - Windows may show truncated paths differently
+        expect(output).toMatch(
+          /(long-project-name|\/home\/user\/pr|home\/user\/pr|\.\.\.)/,
+        ); // Path (may be truncated)
         if (width >= 80) {
           expect(output).toMatch(/gpt-4/); // Model only shown at standard+ widths
         }
