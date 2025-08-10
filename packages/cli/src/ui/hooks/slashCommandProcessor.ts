@@ -406,8 +406,6 @@ export const useSlashCommandProcessor = (
                     case 'settings':
                       openSettingsDialog();
                       return { type: 'handled' };
-                    case 'help':
-                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(

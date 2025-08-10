@@ -237,13 +237,13 @@ export const SETTINGS_SCHEMA = {
         description: 'Respect .gitignore files when searching',
         showInDialog: true,
       },
-      respectGeminiIgnore: {
+      respectLlxprtIgnore: {
         type: 'boolean',
-        label: 'Respect .geminiignore',
+        label: 'Respect .llxprtignore',
         category: 'File Filtering',
         requiresRestart: true,
         default: true,
-        description: 'Respect .geminiignore files when searching',
+        description: 'Respect .llxprtignore files when searching',
         showInDialog: true,
       },
       enableRecursiveFileSearch: {
@@ -551,46 +551,6 @@ export const SETTINGS_SCHEMA = {
     showInDialog: false,
   },
   
-  // LLxprt file filtering settings
-  fileFiltering: {
-    type: 'object',
-    label: 'File Filtering',
-    category: 'Advanced',
-    requiresRestart: false,
-    default: {},
-    description: 'Git-aware file filtering settings.',
-    showInDialog: false,
-    properties: {
-      respectGitIgnore: {
-        type: 'boolean',
-        label: 'Respect Git Ignore',
-        category: 'Advanced',
-        requiresRestart: false,
-        default: true,
-        description: 'Respect .gitignore files when filtering.',
-        showInDialog: true,
-      },
-      respectLlxprtIgnore: {
-        type: 'boolean',
-        label: 'Respect LLxprt Ignore',
-        category: 'Advanced',
-        requiresRestart: false,
-        default: true,
-        description: 'Respect .llxprtignore files when filtering.',
-        showInDialog: true,
-      },
-      enableRecursiveFileSearch: {
-        type: 'boolean',
-        label: 'Enable Recursive File Search',
-        category: 'Advanced',
-        requiresRestart: false,
-        default: true,
-        description: 'Enable recursive file search.',
-        showInDialog: true,
-      },
-    },
-  },
-  
   // Text-based tool call parsing settings
   enableTextToolCallParsing: {
     type: 'boolean',
@@ -619,6 +579,17 @@ export const SETTINGS_SCHEMA = {
     requiresRestart: false,
     default: false,
     description: 'Enable OpenAI Responses API compatibility.',
+    showInDialog: false,
+  },
+  
+  // Shell replacement setting
+  shellReplacement: {
+    type: 'boolean',
+    label: 'Shell Replacement',
+    category: 'Advanced',
+    requiresRestart: false,
+    default: false,
+    description: 'Allow command substitution in shell commands.',
     showInDialog: false,
   },
 } as const;

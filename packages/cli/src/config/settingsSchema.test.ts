@@ -116,7 +116,7 @@ describe('SettingsSchema', () => {
         SETTINGS_SCHEMA.fileFiltering.properties?.respectGitIgnore,
       ).toBeDefined();
       expect(
-        SETTINGS_SCHEMA.fileFiltering.properties?.respectGeminiIgnore,
+        SETTINGS_SCHEMA.fileFiltering.properties?.respectLlxprtIgnore,
       ).toBeDefined();
       expect(
         SETTINGS_SCHEMA.fileFiltering.properties?.enableRecursiveFileSearch,

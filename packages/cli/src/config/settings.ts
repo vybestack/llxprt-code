@@ -9,13 +9,8 @@ import * as path from 'path';
 import { homedir, platform } from 'os';
 import * as dotenv from 'dotenv';
 import {
-  MCPServerConfig,
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
   getErrorMessage,
-  BugCommandSettings,
-  ChatCompressionSettings,
-  TelemetrySettings,
-  AuthType,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';

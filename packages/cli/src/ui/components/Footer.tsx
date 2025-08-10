@@ -28,6 +28,7 @@ interface FooterProps {
   debugMessage: string;
   errorCount: number;
   showErrorDetails: boolean;
+  showMemoryUsage?: boolean;
   promptTokenCount: number;
   isPaidMode?: boolean;
   nightly: boolean;
@@ -156,6 +157,7 @@ export const Footer: React.FC<FooterProps> = ({
   debugMessage,
   errorCount,
   showErrorDetails,
+  showMemoryUsage,
   promptTokenCount,
   isPaidMode,
   nightly,
@@ -224,8 +226,12 @@ export const Footer: React.FC<FooterProps> = ({
 
         {/* Right: Memory | Context | Time */}
         <Box flexDirection="row" alignItems="center">
-          <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
-          <Text color={SemanticColors.text.secondary}> | </Text>
+          {showMemoryUsage && (
+            <>
+              <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
+              <Text color={SemanticColors.text.secondary}> | </Text>
+            </>
+          )}
 
           <ResponsiveContextDisplay
             promptTokenCount={promptTokenCount}
