@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
 import {
@@ -241,14 +241,14 @@ export function SettingsDialog({
   // Scope selector items
   const scopeItems = getScopeItems();
 
-  const handleScopeHighlight = (scope: SettingScope) => {
+  const handleScopeHighlight = useCallback((scope: SettingScope) => {
     setSelectedScope(scope);
-  };
+  }, []);
 
-  const handleScopeSelect = (scope: SettingScope) => {
-    handleScopeHighlight(scope);
+  const handleScopeSelect = useCallback((scope: SettingScope) => {
+    setSelectedScope(scope);
     setFocusSection('settings');
-  };
+  }, []);
 
   // Scroll logic for settings
   const visibleItems = items.slice(scrollOffset, scrollOffset + maxItemsToShow);
