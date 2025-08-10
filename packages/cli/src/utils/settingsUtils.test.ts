@@ -335,7 +335,7 @@ describe('SettingsUtils', () => {
 
         // Should include nested settings marked for dialog
         expect(dialogKeys).toContain('fileFiltering.respectGitIgnore');
-        expect(dialogKeys).toContain('fileFiltering.respectGeminiIgnore');
+        expect(dialogKeys).toContain('fileFiltering.respectLlxprtIgnore');
         expect(dialogKeys).toContain('fileFiltering.enableRecursiveFileSearch');
 
         // Should NOT include settings marked as hidden
