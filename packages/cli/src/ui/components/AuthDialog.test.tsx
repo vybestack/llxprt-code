@@ -62,7 +62,7 @@ describe('AuthDialog', () => {
   });
 
   describe('GEMINI_API_KEY environment variable', () => {
-    it('should detect GEMINI_API_KEY environment variable', () => {
+    it('should show OAuth dialog even when GEMINI_API_KEY is set', () => {
       process.env.GEMINI_API_KEY = 'foobar';
 
       const settings: LoadedSettings = new LoadedSettings(
@@ -90,12 +90,13 @@ describe('AuthDialog', () => {
         <AuthDialog onSelect={mockOnSelect} settings={settings} />,
       );
 
-      expect(lastFrame()).toContain(
-        'Existing API key detected (GEMINI_API_KEY)',
-      );
+      // OAuth-only dialog shows regardless of API key presence
+      expect(lastFrame()).toContain('OAuth Authentication');
+      expect(lastFrame()).toContain('Gemini (Google OAuth)');
+      expect(lastFrame()).toContain('Qwen (OAuth)');
     });
 
-    it('should not show the GEMINI_API_KEY message if GEMINI_DEFAULT_AUTH_TYPE is set to something else', () => {
+    it('should show OAuth options regardless of GEMINI_DEFAULT_AUTH_TYPE', () => {
       process.env.GEMINI_API_KEY = 'foobar';
       process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.LOGIN_WITH_GOOGLE;
 
@@ -123,12 +124,14 @@ describe('AuthDialog', () => {
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
+      // OAuth-only implementation doesn't show API key messages
       expect(lastFrame()).not.toContain(
         'Existing API key detected (GEMINI_API_KEY)',
       );
+      expect(lastFrame()).toContain('OAuth Authentication');
     });
 
-    it('should show the GEMINI_API_KEY message if GEMINI_DEFAULT_AUTH_TYPE is set to use api key', () => {
+    it('should show OAuth dialog even when GEMINI_DEFAULT_AUTH_TYPE is set to use api key', () => {
       process.env.GEMINI_API_KEY = 'foobar';
       process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.USE_GEMINI;
 
@@ -156,9 +159,12 @@ describe('AuthDialog', () => {
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
-      expect(lastFrame()).toContain(
+      // OAuth-only dialog shows, API key message not shown
+      expect(lastFrame()).not.toContain(
         'Existing API key detected (GEMINI_API_KEY)',
       );
+      expect(lastFrame()).toContain('OAuth Authentication');
+      expect(lastFrame()).toContain('Note: You can also use API keys');
     });
   });
 
@@ -190,8 +196,8 @@ describe('AuthDialog', () => {
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
-      // This is a bit brittle, but it's the best way to check which item is selected.
-      expect(lastFrame()).toContain('● 1. Login with Google');
+      // OAuth-only implementation always shows first option selected by default
+      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
     });
 
     it('should fall back to default if GEMINI_DEFAULT_AUTH_TYPE is not set', () => {
@@ -219,8 +225,8 @@ describe('AuthDialog', () => {
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
-      // Default is LOGIN_WITH_GOOGLE
-      expect(lastFrame()).toContain('● 1. Login with Google');
+      // OAuth-only implementation defaults to Gemini OAuth
+      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
     });
 
     it('should show an error and fall back to default if GEMINI_DEFAULT_AUTH_TYPE is invalid', () => {
@@ -250,12 +256,13 @@ describe('AuthDialog', () => {
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
-      expect(lastFrame()).toContain(
-        'Invalid value for GEMINI_DEFAULT_AUTH_TYPE: "invalid-auth-type"',
+      // OAuth-only implementation doesn't validate GEMINI_DEFAULT_AUTH_TYPE anymore
+      expect(lastFrame()).not.toContain(
+        'Invalid value for GEMINI_DEFAULT_AUTH_TYPE',
       );
 
-      // Default is LOGIN_WITH_GOOGLE
-      expect(lastFrame()).toContain('● 1. Login with Google');
+      // OAuth-only implementation defaults to Gemini OAuth
+      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
     });
   });
 

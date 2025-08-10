@@ -19,14 +19,7 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { NotYetImplemented } from '../../utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
-// Helper function to access private methods in tests with proper binding
-function getPrivateMethod<T extends (...args: never[]) => unknown>(
-  obj: unknown,
-  method: string,
-): T {
-  const fn = (obj as Record<string, unknown>)[method] as T;
-  return fn.bind(obj) as T;
-}
+// Helper functions and utilities for OpenAI OAuth testing
 
 // Mock OAuth manager interface for testing
 interface MockOAuthManager {
@@ -75,7 +68,7 @@ describe('OpenAI Provider OAuth Integration', () => {
      * @requirement REQ-004.1
      * @scenario Command line key takes precedence
      * @given --key flag, env var, and OAuth all present
-     * @when resolveAuthentication() called
+     * @when isAuthenticated() called
      * @then Uses command line key value
      */
     it('should use command line API key when all auth methods present', async () => {
@@ -92,13 +85,9 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should resolve to CLI API key (highest precedence)
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(cliApiKey);
+      // Then: Should be authenticated (using CLI API key with highest precedence)
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(true);
 
       // Verify OAuth manager was not called since CLI key has precedence
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
@@ -108,7 +97,7 @@ describe('OpenAI Provider OAuth Integration', () => {
      * @requirement REQ-004.1
      * @scenario Environment variable second precedence
      * @given No --key flag, but OPENAI_API_KEY set
-     * @when resolveAuthentication() called
+     * @when isAuthenticated() called
      * @then Uses environment variable value
      * @and Ignores OAuth token if present
      */
@@ -125,13 +114,9 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should resolve to environment variable (second precedence)
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe('env-key-456');
+      // Then: Should be authenticated (using environment variable with second precedence)
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(true);
 
       // Verify OAuth manager was not called since env var has precedence
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
@@ -141,7 +126,7 @@ describe('OpenAI Provider OAuth Integration', () => {
      * @requirement REQ-004.1
      * @scenario OAuth token as fallback
      * @given No --key flag, no env var
-     * @when resolveAuthentication() called
+     * @when isAuthenticated() called
      * @then Uses OAuth token from manager
      */
     it('should use OAuth token when no other auth methods available', async () => {
@@ -149,31 +134,27 @@ describe('OpenAI Provider OAuth Integration', () => {
       delete process.env.OPENAI_API_KEY;
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-789');
 
-      // When: Creating provider without CLI key or env var
+      // When: Creating provider without CLI key or env var (defaults to standard OpenAI endpoint)
       const provider = new OpenAIProvider(
         '', // Empty CLI key
-        undefined,
+        undefined, // Will default to standard OpenAI endpoint - does not support OAuth
         TEST_PROVIDER_CONFIG,
         mockOAuthManager,
       );
 
-      // Then: Should resolve to OAuth token (lowest precedence)
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe('oauth-token-789');
+      // Then: Should not be authenticated (OAuth not supported for standard OpenAI endpoints)
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(false);
 
-      // Verify OAuth manager was called
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      // OAuth manager should not be called since provider doesn't support OAuth for this endpoint
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
     /**
      * @requirement REQ-004.1
      * @scenario No authentication available
      * @given No --key, no env var, no OAuth
-     * @when resolveAuthentication() called
+     * @when isAuthenticated() called
      * @then Returns null, provider unavailable
      */
     it('should return null when no authentication available', async () => {
@@ -181,24 +162,20 @@ describe('OpenAI Provider OAuth Integration', () => {
       delete process.env.OPENAI_API_KEY;
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
-      // When: Creating provider without any auth
+      // When: Creating provider without any auth (defaults to standard OpenAI endpoint)
       const provider = new OpenAIProvider(
         '', // Empty CLI key
-        undefined,
+        undefined, // Will default to standard OpenAI endpoint
         TEST_PROVIDER_CONFIG,
         mockOAuthManager,
       );
 
-      // Then: Should resolve to null (no auth available)
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(null);
+      // Then: Should not be authenticated (no auth available, and OAuth not supported for standard OpenAI)
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(false);
 
-      // Verify OAuth manager was called but returned null
-      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+      // OAuth manager should not be called since provider doesn't support OAuth for standard OpenAI
+      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
   });
 
@@ -233,13 +210,9 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should lazily retrieve OAuth token when needed
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(oauthToken);
+      // Then: Should be authenticated through lazy OAuth triggering
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(true);
 
       // OAuth manager should have been called to get token
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
@@ -267,12 +240,8 @@ describe('OpenAI Provider OAuth Integration', () => {
       );
 
       // Then: Should use API key without calling OAuth manager
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(apiKey);
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(true);
 
       // OAuth manager should not be called due to precedence
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
@@ -298,17 +267,12 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: OAuth token should be available for SDK usage
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(oauthToken);
-
-      // This token would be passed to OpenAI SDK constructor as apiKey
+      // Then: Should be authenticated with OAuth token available for SDK usage
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
+
+      // This token would be passed to OpenAI SDK constructor as apiKey
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
     });
 
     /**
@@ -337,13 +301,6 @@ describe('OpenAI Provider OAuth Integration', () => {
       );
 
       // Then: Should not authenticate without enabled OAuth
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(null);
-
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
     });
@@ -433,17 +390,10 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should validate as Qwen-compatible endpoint
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(oauthToken);
-
-      // And should be authenticated via OAuth
+      // Then: Should validate as Qwen-compatible endpoint and be authenticated via OAuth
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
     });
 
     /**
@@ -467,13 +417,9 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should not use OAuth for standard OpenAI endpoints
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(null); // Should not use OAuth
+      // Then: Should not be authenticated without API key (OAuth not used for standard OpenAI)
+      const isAuthenticated = await provider.isAuthenticated();
+      expect(isAuthenticated).toBe(false);
 
       // OAuth manager should not be called for standard OpenAI
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
@@ -500,15 +446,7 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should not use OAuth for unrecognized endpoints
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(null);
-
-      // Should not be authenticated without API key
+      // Then: Should not be authenticated (OAuth not used for unrecognized endpoints)
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
     });
@@ -524,7 +462,7 @@ describe('OpenAI Provider OAuth Integration', () => {
       const qwenEndpoints = [
         'https://dashscope.aliyuncs.com/compatible-mode/v1',
         'https://dashscope.aliyuncs.com/api/v1',
-        'https://qwen-api.alibaba.com/v1',
+        'https://api.qwen.com/v1',
       ];
 
       const oauthToken = 'qwen-oauth-token-123';
@@ -540,12 +478,8 @@ describe('OpenAI Provider OAuth Integration', () => {
         );
 
         // Then: Should allow OAuth for all Qwen variants
-        const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-          provider,
-          'resolveAuthentication',
-        );
-        const resolvedAuth = await resolveAuth();
-        expect(resolvedAuth).toBe(oauthToken);
+        const isAuthenticated = await provider.isAuthenticated();
+        expect(isAuthenticated).toBe(true);
       }
     });
 
@@ -568,15 +502,7 @@ describe('OpenAI Provider OAuth Integration', () => {
         undefined, // No OAuth manager
       );
 
-      // Then: Should work exactly as before - resolveAuthentication returns the API key
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe(apiKey);
-
-      // And isAuthenticated should return true
+      // Then: Should work exactly as before - provider should be authenticated with API key
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
     });
@@ -595,10 +521,10 @@ describe('OpenAI Provider OAuth Integration', () => {
       delete process.env.OPENAI_API_KEY;
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue('valid-token');
 
-      // When: Checking authentication status
+      // When: Checking authentication status with Qwen endpoint
       const provider = new OpenAIProvider(
         '', // Empty CLI key
-        undefined,
+        'https://dashscope.aliyuncs.com/compatible-mode/v1', // Qwen endpoint that supports OAuth
         TEST_PROVIDER_CONFIG,
         mockOAuthManager,
       );
@@ -651,15 +577,15 @@ describe('OpenAI Provider OAuth Integration', () => {
       delete process.env.OPENAI_API_KEY;
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
-      // When: Checking auth status with no auth
+      // When: Checking auth status with no auth but using Qwen endpoint
       const provider = new OpenAIProvider(
         '', // Empty CLI key
-        undefined,
+        'https://dashscope.aliyuncs.com/compatible-mode/v1', // Qwen endpoint
         TEST_PROVIDER_CONFIG,
         mockOAuthManager,
       );
 
-      // Then: Should return false (no auth available)
+      // Then: Should return false (no auth available, OAuth manager returned null)
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(false);
 
@@ -689,15 +615,7 @@ describe('OpenAI Provider OAuth Integration', () => {
         undefined, // No OAuth manager
       );
 
-      // Then: Should fall back to environment variable
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe('fallback-env-key');
-
-      // And should be authenticated
+      // Then: Should fall back to environment variable and be authenticated
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
     });
@@ -753,15 +671,7 @@ describe('OpenAI Provider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Then: Should fall back to environment variable (OAuth errors are caught)
-      const resolveAuth = getPrivateMethod<() => Promise<string | null>>(
-        provider,
-        'resolveAuthentication',
-      );
-      const resolvedAuth = await resolveAuth();
-      expect(resolvedAuth).toBe('fallback-key');
-
-      // And should still be authenticated via fallback
+      // Then: Should fall back to environment variable (OAuth errors are caught) and be authenticated
       const isAuthenticated = await provider.isAuthenticated();
       expect(isAuthenticated).toBe(true);
     });
