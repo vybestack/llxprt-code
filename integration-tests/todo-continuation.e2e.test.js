@@ -231,7 +231,9 @@ test('setting toggle disables continuation', async () => {
   assert.ok(writeToolCall, 'Expected to find a todo_write tool call');
 
   // Send message that would normally trigger continuation
-  const result = await rig.run('I need to think about this documentation approach');
+  const result = await rig.run(
+    'I need to think about this documentation approach',
+  );
 
   // Verify NO continuation prompt appears when disabled
   const hasContinuationPrompt =
