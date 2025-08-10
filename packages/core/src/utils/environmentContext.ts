@@ -61,7 +61,7 @@ export async function getEnvironmentContext(config: Config): Promise<Part[]> {
   const directoryContext = await getDirectoryContextString(config);
 
   const context = `
-This is the Gemini CLI. We are setting up the context for our chat.
+This is LLxprt Code. We are setting up the context for our chat.
 Today's date is ${today}.
 My operating system is: ${platform}
 ${directoryContext}
