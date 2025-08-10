@@ -4,12 +4,15 @@ This guide documents the process for cherry-picking changes from the upstream ge
 
 ## Current Sync Status
 
-**Last synced upstream commit:** `b8084ba8` (August 9, 2025)
+**Last synced upstream commit:** `0157eae3` (August 10, 2025)
 
-- Centralized key binding logic and refactoring
-- All valuable commits from August 7-9, 2025 have been cherry-picked
+- Added /settings command and UI panel
+- Enhanced input UX with double ESC clear
+- Fixed duplicate key bindings
+- Enabled default usage statistics collection
+- All valuable commits from August 7-10, 2025 have been cherry-picked
 
-**Branch:** `20250808b-gmerge`
+**Branch:** `20250810-gmerge`
 
 ## Overview
 
