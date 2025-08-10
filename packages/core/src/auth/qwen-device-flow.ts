@@ -106,12 +106,6 @@ export class QwenDeviceFlow {
         if (response.ok) {
           const data = await response.json();
 
-          // Debug: Log the full response to see if there's an api_key field
-          console.log(
-            'Qwen OAuth token response:',
-            JSON.stringify(data, null, 2),
-          );
-
           // Validate response with Zod schema
           const validatedResponse = TokenResponseSchema.parse(data);
 

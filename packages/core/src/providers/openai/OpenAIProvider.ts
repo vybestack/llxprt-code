@@ -125,9 +125,6 @@ export class OpenAIProvider extends BaseProvider {
    */
   private async updateClientWithResolvedAuth(): Promise<void> {
     const resolvedKey = await this.getAuthToken();
-    console.log(
-      `[OpenAI] updateClientWithResolvedAuth - resolved key: ${resolvedKey?.substring(0, 20)}...`,
-    );
     if (!resolvedKey) {
       // Provide specific error message based on endpoint validation
       const endpoint = this.baseURL || 'https://api.openai.com/v1';
@@ -177,9 +174,6 @@ export class OpenAIProvider extends BaseProvider {
       this._cachedClientKey !== resolvedKey ||
       this.baseURL !== effectiveBaseURL
     ) {
-      console.log(
-        `[OpenAI] Creating new OpenAI client with baseURL: ${effectiveBaseURL}, apiKey: ${resolvedKey?.substring(0, 20)}...`,
-      );
       const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
         apiKey: resolvedKey,
         // Allow browser environment if explicitly configured
@@ -197,10 +191,6 @@ export class OpenAIProvider extends BaseProvider {
       if (effectiveBaseURL !== this.baseURL) {
         this.baseURL = effectiveBaseURL;
       }
-    } else {
-      console.log(
-        `[OpenAI] Using cached client with baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 20)}...`,
-      );
     }
   }
 

@@ -7,6 +7,8 @@ import {
   OAuthToken,
   QwenDeviceFlow,
   DeviceFlowConfig,
+  openBrowserSecurely,
+  shouldLaunchBrowser,
 } from '@vybestack/llxprt-code-core';
 
 export class QwenOAuthProvider implements OAuthProvider {
@@ -28,18 +30,31 @@ export class QwenOAuthProvider implements OAuthProvider {
     // Start device flow
     const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
 
+    // Construct the authorization URL
+    const authUrl =
+      deviceCodeResponse.verification_uri_complete ||
+      `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
+
     // Display user instructions
     console.log('\n🔐 Qwen OAuth Authentication');
     console.log('─'.repeat(40));
 
-    // If we have a complete URL with the code, show that
-    if (deviceCodeResponse.verification_uri_complete) {
-      console.log(`Visit this URL to authorize:`);
-      console.log(`${deviceCodeResponse.verification_uri_complete}`);
+    // Try to open browser if appropriate
+    if (shouldLaunchBrowser()) {
+      console.log('Opening browser for authentication...');
+      console.log('If the browser does not open, please visit:');
+      console.log(authUrl);
+
+      try {
+        await openBrowserSecurely(authUrl);
+      } catch (_error) {
+        // If browser fails to open, just show the URL
+        console.log('Failed to open browser automatically.');
+      }
     } else {
-      // Fallback to showing URL and code separately
-      console.log(`1. Visit: ${deviceCodeResponse.verification_uri}`);
-      console.log(`2. Enter code: ${deviceCodeResponse.user_code}`);
+      // In non-interactive environments, just show the URL
+      console.log('Visit this URL to authorize:');
+      console.log(authUrl);
     }
 
     console.log('─'.repeat(40));

@@ -15,3 +15,7 @@ export {
   DeviceFlowConfig,
 } from './src/auth/qwen-device-flow.js';
 export { MultiProviderTokenStore } from './src/auth/token-store.js';
+export {
+  openBrowserSecurely,
+  shouldLaunchBrowser,
+} from './src/utils/secure-browser-launcher.js';
