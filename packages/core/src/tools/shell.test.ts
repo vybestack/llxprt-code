@@ -25,7 +25,6 @@ vi.mock('../utils/summarizer.js');
 
 import { isCommandAllowed } from '../utils/shell-utils.js';
 import { ShellTool } from './shell.js';
-import { ToolErrorType } from './tool-error.js';
 import { type Config } from '../config/config.js';
 import {
   type ShellExecutionResult,
