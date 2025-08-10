@@ -157,6 +157,9 @@ export interface Settings {
 
   // Shell replacement setting for allowing command substitution
   shellReplacement?: boolean;
+
+  // OAuth enablement configuration per provider
+  oauthEnabledProviders?: Record<string, boolean>;
 }
 
 export interface SettingsError {

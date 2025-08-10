@@ -102,6 +102,25 @@ export const useAuthCommand = (
 
   const handleAuthSelect = useCallback(
     async (authType: AuthType | undefined, scope: SettingScope) => {
+      // Handle OAuth provider selections
+      if (
+        authType === AuthType.OAUTH_GEMINI ||
+        authType === AuthType.OAUTH_QWEN
+      ) {
+        // Close the dialog
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
+        appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
+
+        // Trigger the OAuth flow via the /auth command
+        const provider = authType === AuthType.OAUTH_GEMINI ? 'gemini' : 'qwen';
+        console.log(`Starting OAuth authentication for ${provider}...`);
+        console.log(`Please run: /auth ${provider}`);
+
+        // TODO: Directly trigger OAuth flow here instead of requiring /auth command
+        return;
+      }
+
+      // Handle legacy auth types (for backward compatibility)
       if (authType) {
         await clearCachedCredentialFile();
 

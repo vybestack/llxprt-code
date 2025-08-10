@@ -10,6 +10,11 @@ import { loadEnvironment } from './settings.js';
 export const validateAuthMethod = (authMethod: string): string | null => {
   loadEnvironment();
 
+  // Handle OAuth provider selections
+  if (authMethod === 'oauth_gemini' || authMethod === 'oauth_qwen') {
+    return null; // OAuth providers are always valid
+  }
+
   if (authMethod === AuthType.USE_PROVIDER) {
     // Provider-specific auth is handled by the provider itself
     // No validation needed at this level

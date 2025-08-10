@@ -350,18 +350,33 @@ export async function loadCliConfig(
       profileModel = argv.provider !== undefined ? undefined : profile.model;
       profileModelParams = profile.modelParams;
 
-      // Merge ephemeral settings into the settings object
-      effectiveSettings = {
-        ...settings,
-        ...profile.ephemeralSettings,
-      } as Settings;
-
+      // Check debug mode for logging
       const tempDebugMode =
         argv.debug ||
         [process.env.DEBUG, process.env.DEBUG_MODE].some(
           (v) => v === 'true' || v === '1',
         ) ||
         false;
+
+      // Merge ephemeral settings into the settings object
+      // But skip ALL ephemeral settings if --provider is explicitly specified
+      // since profiles are provider-specific configurations
+      if (argv.provider !== undefined) {
+        // When --provider is specified, don't load ANY profile ephemeral settings
+        // to avoid conflicts with the explicitly chosen provider
+        effectiveSettings = settings;
+
+        if (tempDebugMode) {
+          logger.debug(
+            `Skipping profile ephemeral settings because --provider was specified`,
+          );
+        }
+      } else {
+        effectiveSettings = {
+          ...settings,
+          ...profile.ephemeralSettings,
+        } as Settings;
+      }
 
       if (tempDebugMode) {
         logger.debug(
@@ -603,7 +618,8 @@ export async function loadCliConfig(
   const enhancedConfig = config;
 
   // Apply ephemeral settings from profile if loaded
-  if (profileToLoad && effectiveSettings) {
+  // BUT skip ALL profile ephemeral settings if --provider was explicitly specified
+  if (profileToLoad && effectiveSettings && argv.provider === undefined) {
     // Extract ephemeral settings that were merged from the profile
     const ephemeralKeys = [
       'auth-key',

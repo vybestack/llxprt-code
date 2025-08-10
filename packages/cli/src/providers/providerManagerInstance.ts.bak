@@ -88,12 +88,20 @@ export function getProviderManager(
     const tokenStore = new MultiProviderTokenStore();
     // Create LoadedSettings from user settings for OAuth manager
     const loadedSettings = userSettings
-      ? new LoadedSettings(
-          { path: '', settings: {} }, // system
-          { path: USER_SETTINGS_PATH, settings: userSettings }, // user
-          { path: '', settings: {} }, // workspace
-          [], // errors
-        )
+      ? ({
+          system: {},
+          user: userSettings,
+          workspace: {},
+          merged: userSettings,
+          errors: [],
+          systemPath: '',
+          userPath: USER_SETTINGS_PATH,
+          workspacePath: '',
+          profilesPath: '',
+          profiles: new Map(),
+          isCodespaces: false,
+          userAgent: '',
+        } as LoadedSettings)
       : undefined;
 
     const oauthManager = new OAuthManager(tokenStore, loadedSettings);
@@ -167,29 +175,12 @@ export function getProviderManager(
         : undefined,
     };
     const openaiProvider = new OpenAIProvider(
-      openaiApiKey || undefined, // Pass undefined, not empty string, to allow OAuth fallback
+      openaiApiKey || '',
       openaiBaseUrl,
       openaiProviderConfig,
       oauthManager,
     );
     providerManagerInstance.registerProvider(openaiProvider);
-
-    // Register qwen as an alias to OpenAI provider with OAuth
-    // When user selects "--provider qwen", we create a separate OpenAI instance for Qwen
-    const qwenProvider = new OpenAIProvider(
-      undefined, // No API key - force OAuth
-      undefined, // No base URL - will be set from OAuth token's resource_url
-      openaiProviderConfig,
-      oauthManager,
-    );
-    // Override the name to 'qwen' so it can be selected
-    Object.defineProperty(qwenProvider, 'name', {
-      value: 'qwen',
-      writable: false,
-      enumerable: true,
-      configurable: true,
-    });
-    providerManagerInstance.registerProvider(qwenProvider);
 
     // Always register Anthropic provider
     // Priority: Environment variable > keyfile (skip keyfile in test)

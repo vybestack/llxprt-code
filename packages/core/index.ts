@@ -10,3 +10,8 @@ export {
   DEFAULT_GEMINI_FLASH_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
 } from './src/config/models.js';
+export {
+  QwenDeviceFlow,
+  DeviceFlowConfig,
+} from './src/auth/qwen-device-flow.js';
+export { MultiProviderTokenStore } from './src/auth/token-store.js';

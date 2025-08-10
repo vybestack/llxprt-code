@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { IProvider } from '../IProvider.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
@@ -36,28 +35,66 @@ import {
   parseErrorResponse,
 } from './parseResponsesStream.js';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
+import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import {
+  isQwenEndpoint,
+  generateOAuthEndpointMismatchError,
+} from '../../config/endpoints.js';
+import { OAuthManager } from '../../auth/precedence.js';
 
-export class OpenAIProvider implements IProvider {
-  name: string = 'openai';
+export class OpenAIProvider extends BaseProvider {
   private openai: OpenAI;
   private currentModel: string = 'gpt-4.1';
-  private apiKey: string;
   private baseURL?: string;
-  private config?: IProviderConfig;
+  private providerConfig?: IProviderConfig;
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
   private conversationCache: ConversationCache;
   private modelParams?: Record<string, unknown>;
+  private _cachedClient?: OpenAI;
+  private _cachedClientKey?: string;
 
-  constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
-    this.apiKey = apiKey;
+  constructor(
+    apiKey: string | undefined,
+    baseURL?: string,
+    config?: IProviderConfig,
+    oauthManager?: OAuthManager,
+  ) {
+    // Initialize base provider with auth configuration
+    // Check if we should enable OAuth for Qwen
+    // Enable OAuth if: 1) we have an oauth manager, and 2) either the baseURL is a Qwen endpoint OR no baseURL/apiKey is provided
+    const shouldEnableQwenOAuth =
+      !!oauthManager &&
+      (isQwenEndpoint(baseURL || '') ||
+        (!baseURL && (!apiKey || apiKey === '')) ||
+        baseURL === 'https://portal.qwen.ai/v1');
+
+    if (process.env.DEBUG) {
+      console.log(
+        `[OpenAI Constructor] baseURL: ${baseURL}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, oauthManager: ${!!oauthManager}, shouldEnableQwenOAuth: ${shouldEnableQwenOAuth}`,
+      );
+    }
+
+    const baseConfig: BaseProviderConfig = {
+      name: 'openai',
+      apiKey,
+      baseURL,
+      cliKey: !apiKey || apiKey === '' ? undefined : apiKey, // Don't set cliKey if no API key to allow OAuth
+      envKeyNames: ['OPENAI_API_KEY'],
+      isOAuthEnabled: shouldEnableQwenOAuth,
+      oauthProvider: shouldEnableQwenOAuth ? 'qwen' : undefined,
+      oauthManager,
+    };
+
+    super(baseConfig);
+
     this.baseURL = baseURL;
-    this.config = config;
+    this.providerConfig = config;
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      apiKey,
+      apiKey: apiKey || 'placeholder', // OpenAI client requires a string, use placeholder if OAuth will be used
       // Allow browser environment if explicitly configured
       dangerouslyAllowBrowser: config?.allowBrowserEnvironment || false,
     };
@@ -66,10 +103,109 @@ export class OpenAIProvider implements IProvider {
       clientOptions.baseURL = baseURL;
     }
     this.openai = new OpenAI(clientOptions);
+    this._cachedClientKey = apiKey; // Track the initial key used
+  }
+
+  /**
+   * Implementation of BaseProvider abstract method
+   * Determines if this provider supports OAuth authentication
+   */
+  protected supportsOAuth(): boolean {
+    // Only support Qwen OAuth for Qwen endpoints
+    // Use baseProviderConfig.baseURL if this.baseURL not set yet (during constructor)
+    const baseURL =
+      this.baseURL ||
+      this.baseProviderConfig.baseURL ||
+      'https://api.openai.com/v1';
+    return isQwenEndpoint(baseURL);
+  }
+
+  /**
+   * Update the OpenAI client with resolved authentication if needed
+   */
+  private async updateClientWithResolvedAuth(): Promise<void> {
+    const resolvedKey = await this.getAuthToken();
+    console.log(
+      `[OpenAI] updateClientWithResolvedAuth - resolved key: ${resolvedKey?.substring(0, 20)}...`,
+    );
+    if (!resolvedKey) {
+      // Provide specific error message based on endpoint validation
+      const endpoint = this.baseURL || 'https://api.openai.com/v1';
+      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
+        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
+      }
+      throw new Error('No authentication available for OpenAI API calls');
+    }
+
+    // Check if we're using Qwen OAuth and need to update the baseURL
+    let effectiveBaseURL = this.baseURL;
+
+    // Debug logging
+    if (process.env.DEBUG) {
+      console.log(
+        `[OpenAI] updateClientWithResolvedAuth - OAuth enabled: ${this.isOAuthEnabled()}, OAuth provider: ${this.baseProviderConfig.oauthProvider}, baseURL: ${this.baseURL}, resolvedKey: ${resolvedKey?.substring(0, 10)}...`,
+      );
+    }
+
+    if (
+      this.isOAuthEnabled() &&
+      this.baseProviderConfig.oauthProvider === 'qwen'
+    ) {
+      // Get the OAuth token to check for resource_url
+      const oauthManager = this.baseProviderConfig.oauthManager;
+      if (oauthManager?.getOAuthToken) {
+        const oauthToken = await oauthManager.getOAuthToken('qwen');
+        if (process.env.DEBUG) {
+          console.log(
+            `[OpenAI] OAuth token retrieved, resource_url: ${oauthToken?.resource_url}, access_token: ${oauthToken?.access_token?.substring(0, 10)}...`,
+          );
+        }
+        if (oauthToken?.resource_url) {
+          // Use the resource_url from the OAuth token
+          effectiveBaseURL = `https://${oauthToken.resource_url}/v1`;
+          if (process.env.DEBUG) {
+            console.log(
+              `[OpenAI] Using Qwen OAuth endpoint: ${effectiveBaseURL}`,
+            );
+          }
+        }
+      }
+    }
+
+    // Only update client if the key or URL has changed
+    if (
+      this._cachedClientKey !== resolvedKey ||
+      this.baseURL !== effectiveBaseURL
+    ) {
+      console.log(
+        `[OpenAI] Creating new OpenAI client with baseURL: ${effectiveBaseURL}, apiKey: ${resolvedKey?.substring(0, 20)}...`,
+      );
+      const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
+        apiKey: resolvedKey,
+        // Allow browser environment if explicitly configured
+        dangerouslyAllowBrowser:
+          this.providerConfig?.allowBrowserEnvironment || false,
+      };
+      // Only include baseURL if it's defined
+      if (effectiveBaseURL) {
+        clientOptions.baseURL = effectiveBaseURL;
+      }
+
+      this.openai = new OpenAI(clientOptions);
+      this._cachedClientKey = resolvedKey;
+      // Update the baseURL to track changes
+      if (effectiveBaseURL !== this.baseURL) {
+        this.baseURL = effectiveBaseURL;
+      }
+    } else {
+      console.log(
+        `[OpenAI] Using cached client with baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 20)}...`,
+      );
+    }
   }
 
   private requiresTextToolCallParsing(): boolean {
-    if (this.config?.enableTextToolCallParsing === false) {
+    if (this.providerConfig?.enableTextToolCallParsing === false) {
       return false;
     }
 
@@ -80,7 +216,7 @@ export class OpenAIProvider implements IProvider {
       return true;
     }
 
-    const configuredModels = this.config?.textToolCallModels || [];
+    const configuredModels = this.providerConfig?.textToolCallModels || [];
     return configuredModels.includes(this.currentModel);
   }
 
@@ -91,8 +227,10 @@ export class OpenAIProvider implements IProvider {
     }
 
     // Check for settings override
-    if (this.config?.providerToolFormatOverrides?.[this.name]) {
-      return this.config.providerToolFormatOverrides[this.name] as ToolFormat;
+    if (this.providerConfig?.providerToolFormatOverrides?.[this.name]) {
+      return this.providerConfig.providerToolFormatOverrides[
+        this.name
+      ] as ToolFormat;
     }
 
     // Auto-detect tool format based on model or base URL
@@ -116,7 +254,7 @@ export class OpenAIProvider implements IProvider {
     }
 
     // Check settings override - if explicitly set to false, always respect that
-    if (this.config?.openaiResponsesEnabled === false) {
+    if (this.providerConfig?.openaiResponsesEnabled === false) {
       return false;
     }
 
@@ -143,8 +281,13 @@ export class OpenAIProvider implements IProvider {
       stateful?: boolean;
     },
   ): Promise<AsyncIterableIterator<IMessage>> {
-    // Check if API key is available
-    if (!this.apiKey || this.apiKey.trim() === '') {
+    // Check if API key is available (using resolved authentication)
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      const endpoint = this.baseURL || 'https://api.openai.com/v1';
+      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
+        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
+      }
       throw new Error('OpenAI API key is required to make API calls');
     }
 
@@ -216,7 +359,7 @@ export class OpenAIProvider implements IProvider {
     const response = await fetch(responsesURL, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json; charset=utf-8',
       },
       body: bodyBlob,
@@ -264,7 +407,7 @@ export class OpenAIProvider implements IProvider {
         const retryResponse = await fetch(responsesURL, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${this.apiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json; charset=utf-8',
           },
           body: retryBodyBlob,
@@ -438,12 +581,20 @@ export class OpenAIProvider implements IProvider {
   }
 
   async getModels(): Promise<IModel[]> {
-    // Check if API key is available
-    if (!this.apiKey || this.apiKey.trim() === '') {
+    // Check if API key is available (using resolved authentication)
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      const endpoint = this.baseURL || 'https://api.openai.com/v1';
+      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
+        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
+      }
       throw new Error('OpenAI API key is required to fetch models');
     }
 
     try {
+      // Get resolved authentication and update client if needed
+      await this.updateClientWithResolvedAuth();
+
       const response = await this.openai.models.list();
       const models: IModel[] = [];
 
@@ -469,6 +620,19 @@ export class OpenAIProvider implements IProvider {
         console.error('Error fetching models from OpenAI:', error);
       }
       // Return a hardcoded list as fallback
+      // Check if this is a Qwen endpoint
+      if (isQwenEndpoint(this.baseURL || '')) {
+        return [
+          {
+            id: 'qwen3-coder-plus',
+            name: 'qwen3-coder-plus',
+            provider: 'openai',
+            supportedToolFormats: ['openai'],
+          },
+        ];
+      }
+
+      // Default OpenAI models
       return [
         {
           id: 'gpt-4o',
@@ -503,8 +667,13 @@ export class OpenAIProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
-    // Check if API key is available
-    if (!this.apiKey || this.apiKey.trim() === '') {
+    // Check if API key is available (using resolved authentication)
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      const endpoint = this.baseURL || 'https://api.openai.com/v1';
+      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
+        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
+      }
       throw new Error('OpenAI API key is required to generate completions');
     }
 
@@ -554,11 +723,20 @@ export class OpenAIProvider implements IProvider {
 
     // Get stream_options from ephemeral settings (not model params)
     const streamOptions =
-      this.config?.getEphemeralSettings?.()?.['stream-options'];
+      this.providerConfig?.getEphemeralSettings?.()?.['stream-options'];
 
     // Default stream_options to { include_usage: true } unless explicitly set
     const finalStreamOptions =
       streamOptions !== undefined ? streamOptions : { include_usage: true };
+
+    // Get resolved authentication and update client if needed
+    await this.updateClientWithResolvedAuth();
+
+    if (process.env.DEBUG) {
+      console.log(
+        `[OpenAI] About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}...`,
+      );
+    }
 
     // Build request params with exact order from original
     const stream = await this.openai.chat.completions.create({
@@ -765,36 +943,61 @@ export class OpenAIProvider implements IProvider {
   }
 
   setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
+    // Call base provider implementation
+    super.setApiKey?.(apiKey);
+
     // Create a new OpenAI client with the updated API key
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey,
-      dangerouslyAllowBrowser: this.config?.allowBrowserEnvironment || false,
+      dangerouslyAllowBrowser:
+        this.providerConfig?.allowBrowserEnvironment || false,
     };
     // Only include baseURL if it's defined
     if (this.baseURL) {
       clientOptions.baseURL = this.baseURL;
     }
     this.openai = new OpenAI(clientOptions);
+    this._cachedClientKey = apiKey; // Update cached key
   }
 
   setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+
+    // Update OAuth configuration based on endpoint validation
+    // Enable OAuth for Qwen endpoints if we have an OAuth manager
+    const shouldEnableQwenOAuth =
+      !!this.baseProviderConfig.oauthManager &&
+      (isQwenEndpoint(this.baseURL || '') ||
+        this.baseURL === 'https://portal.qwen.ai/v1');
+
+    this.updateOAuthConfig(
+      shouldEnableQwenOAuth,
+      shouldEnableQwenOAuth ? 'qwen' : undefined,
+      this.baseProviderConfig.oauthManager, // Pass the existing OAuth manager
+    );
+
+    // Call base provider implementation
+    super.setBaseUrl?.(baseUrl);
+
     // Create a new OpenAI client with the updated (or cleared) base URL
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      apiKey: this.apiKey,
-      dangerouslyAllowBrowser: this.config?.allowBrowserEnvironment || false,
+      // Use existing key or empty string as placeholder
+      apiKey: this._cachedClientKey || 'placeholder',
+      dangerouslyAllowBrowser:
+        this.providerConfig?.allowBrowserEnvironment || false,
     };
     // Only include baseURL if it's defined
     if (this.baseURL) {
       clientOptions.baseURL = this.baseURL;
     }
     this.openai = new OpenAI(clientOptions);
+    // Clear cached key to force re-resolution on next API call
+    this._cachedClientKey = undefined;
   }
 
   setConfig(config: IProviderConfig): void {
-    this.config = config;
+    this.providerConfig = config;
   }
 
   setToolFormatOverride(format: ToolFormat | null): void {
@@ -880,5 +1083,13 @@ export class OpenAIProvider implements IProvider {
    */
   getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
+  }
+
+  /**
+   * Check if the provider is authenticated using any available method
+   * Uses the base provider's isAuthenticated implementation
+   */
+  async isAuthenticated(): Promise<boolean> {
+    return super.isAuthenticated();
   }
 }

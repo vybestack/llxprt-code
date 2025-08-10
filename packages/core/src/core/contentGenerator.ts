@@ -49,6 +49,8 @@ export enum AuthType {
   CLOUD_SHELL = 'cloud-shell',
   USE_PROVIDER = 'provider',
   USE_NONE = 'none',
+  OAUTH_GEMINI = 'oauth_gemini',
+  OAUTH_QWEN = 'oauth_qwen',
 }
 
 export type ContentGeneratorConfig = {

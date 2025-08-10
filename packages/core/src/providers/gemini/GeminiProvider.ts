@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider } from '../IProvider.js';
 import { IModel } from '../IModel.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
@@ -22,6 +21,8 @@ import type {
   Schema,
   GenerateContentParameters,
 } from '@google/genai';
+import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import { OAuthManager } from '../../auth/precedence.js';
 
 /**
  * Represents the default Gemini provider.
@@ -33,11 +34,9 @@ import type {
  */
 type GeminiAuthMode = 'oauth' | 'gemini-api-key' | 'vertex-ai' | 'none';
 
-export class GeminiProvider implements IProvider {
-  readonly name: string = 'gemini';
-  private apiKey?: string;
+export class GeminiProvider extends BaseProvider {
   private authMode: GeminiAuthMode = 'none';
-  private config?: Config;
+  private geminiConfig?: Config;
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
   private authDetermined: boolean = false;
@@ -52,59 +51,107 @@ export class GeminiProvider implements IProvider {
         }>;
       }>
     | undefined;
+  private geminiOAuthManager?: OAuthManager;
 
-  constructor(apiKey?: string, baseURL?: string, config?: Config) {
-    // For consistency with other providers
-    this.apiKey = apiKey;
-    // baseURL is not used by Gemini but kept for consistent interface
-    this.config = config;
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: Config,
+    oauthManager?: OAuthManager,
+  ) {
+    // Initialize base provider with auth configuration
+    // Check if OAuth is enabled for Gemini
+    let oauthEnabled = false;
+    if (oauthManager) {
+      // Cast to specific interface with isOAuthEnabled method
+      const manager = oauthManager as OAuthManager & {
+        isOAuthEnabled?(provider: string): boolean;
+      };
+      if (
+        manager.isOAuthEnabled &&
+        typeof manager.isOAuthEnabled === 'function'
+      ) {
+        oauthEnabled = manager.isOAuthEnabled('gemini');
+      }
+    }
+
+    const baseConfig: BaseProviderConfig = {
+      name: 'gemini',
+      apiKey,
+      baseURL,
+      cliKey: apiKey, // CLI --key argument
+      envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      isOAuthEnabled: oauthEnabled, // Check if OAuth is enabled
+      oauthProvider: 'gemini',
+      oauthManager, // Keep the manager for checking enablement
+    };
+
+    super(baseConfig);
+
+    // Store Gemini-specific configuration
+    this.geminiConfig = config;
+    this.baseURL = baseURL;
+    this.geminiOAuthManager = oauthManager;
+
     // Do not determine auth mode on instantiation.
     // This will be done lazily when a chat completion is requested.
   }
 
   /**
    * Determines the best available authentication method based on environment variables
-   * and existing configuration. Follows the hierarchy: Vertex AI → Gemini API key → OAuth
+   * and existing configuration. Now uses lazy evaluation with proper precedence chain.
    */
-  private determineBestAuth(): void {
-    // Skip if already determined
-    if (this.authDetermined) {
-      return;
-    }
+  private async determineBestAuth(): Promise<string> {
+    // Use the base provider's auth precedence resolution
+    try {
+      const token = await this.getAuthToken();
 
-    // Mark as determined early to prevent concurrent determinations
-    this.authDetermined = true;
-
-    // Check if user explicitly selected USE_NONE via the content generator config
-    const authType = this.config?.getContentGeneratorConfig()?.authType;
-    if (authType === AuthType.USE_NONE) {
-      this.authMode = 'none';
-      return;
-    }
-
-    // If authType is USE_PROVIDER and no credentials exist, fall back to OAuth
-    if (authType === AuthType.USE_PROVIDER) {
-      if (!this.hasVertexAICredentials() && !this.hasGeminiAPIKey()) {
+      // Check for special OAuth signal
+      if (token === 'USE_LOGIN_WITH_GOOGLE') {
         this.authMode = 'oauth';
-        return;
+        this.authDetermined = true;
+        return token; // Return the magic token
       }
-    }
 
-    // Check for Vertex AI credentials first
-    if (this.hasVertexAICredentials()) {
-      this.authMode = 'vertex-ai';
-      this.setupVertexAIAuth();
+      // Determine auth mode based on resolved authentication method
+      const authMethodName = await this.getAuthMethodName();
+
+      if (authMethodName?.startsWith('oauth-')) {
+        this.authMode = 'oauth';
+      } else if (this.hasVertexAICredentials()) {
+        this.authMode = 'vertex-ai';
+        this.setupVertexAIAuth();
+      } else if (this.hasGeminiAPIKey() || authMethodName?.includes('key')) {
+        this.authMode = 'gemini-api-key';
+      } else {
+        this.authMode = 'none';
+      }
+
+      this.authDetermined = true;
+      return token;
+    } catch (error) {
+      // Handle case where no auth is available
+      const authType = this.geminiConfig?.getContentGeneratorConfig()?.authType;
+      if (authType === AuthType.USE_NONE) {
+        this.authMode = 'none';
+        this.authDetermined = true;
+        throw new AuthenticationRequiredError(
+          'Authentication is set to USE_NONE but no credentials are available',
+          this.authMode,
+          ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+        );
+      }
+      throw error;
     }
-    // Check for Gemini API key second
-    else if (this.hasGeminiAPIKey()) {
-      this.authMode = 'gemini-api-key';
-      // API key is already in environment, no additional setup needed
-    }
-    // Fall back to OAuth (will prompt user if needed)
-    else {
-      this.authMode = 'oauth';
-      // OAuth will be handled by the existing auth system
-    }
+  }
+
+  /**
+   * Implementation of BaseProvider abstract method
+   * Determines if this provider supports OAuth authentication
+   */
+  protected supportsOAuth(): boolean {
+    // Gemini always supports Google OAuth
+    return true;
   }
 
   /**
@@ -121,7 +168,7 @@ export class GeminiProvider implements IProvider {
    * Checks if Gemini API key is available
    */
   private hasGeminiAPIKey(): boolean {
-    return !!this.apiKey || !!process.env.GEMINI_API_KEY;
+    return !!process.env.GEMINI_API_KEY;
   }
 
   /**
@@ -136,7 +183,7 @@ export class GeminiProvider implements IProvider {
    * Sets the config instance for reading OAuth credentials
    */
   setConfig(config: Config): void {
-    this.config = config;
+    this.geminiConfig = config;
 
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
@@ -146,10 +193,16 @@ export class GeminiProvider implements IProvider {
       this.currentModel = configModel;
     }
 
+    // Update OAuth configuration based on config
+    const authType = config.getContentGeneratorConfig()?.authType;
+    this.updateOAuthConfig(
+      authType === AuthType.LOGIN_WITH_GOOGLE,
+      'gemini',
+      this.geminiOAuthManager,
+    );
+
     // Clear auth cache when config changes to allow re-determination
     this.authDetermined = false;
-    // Re-determine auth after config is set
-    this.determineBestAuth();
   }
 
   async getModels(): Promise<IModel[]> {
@@ -179,7 +232,7 @@ export class GeminiProvider implements IProvider {
 
     // For API key modes (gemini-api-key or vertex-ai), try to fetch real models
     if (this.authMode === 'gemini-api-key' || this.authMode === 'vertex-ai') {
-      const apiKey = this.apiKey || process.env.GEMINI_API_KEY;
+      const apiKey = (await this.getAuthToken()) || process.env.GEMINI_API_KEY;
       if (apiKey) {
         try {
           const url = this.baseURL
@@ -282,58 +335,24 @@ export class GeminiProvider implements IProvider {
         );
       }
     }
-    // Check if we need to re-determine auth
-    const oauthValid = await this.isOAuthValid();
-    if (!oauthValid) {
-      this.authDetermined = false;
-    }
-
     // Lazily determine the best auth method now that it's needed.
-    this.determineBestAuth();
-
-    // Early authentication validation - check if we have the required credentials
-    // for the determined auth mode BEFORE processing messages
-
-    switch (this.authMode) {
-      case 'gemini-api-key':
-        if (!this.apiKey && !process.env.GEMINI_API_KEY) {
-          throw new AuthenticationRequiredError(
-            'Gemini API key required but not found. Please set GEMINI_API_KEY environment variable or use /auth to login with Google OAuth.',
-            this.authMode,
-            ['GEMINI_API_KEY'],
-          );
-        }
-        break;
-
-      case 'vertex-ai':
-        if (!process.env.GOOGLE_API_KEY) {
-          throw new AuthenticationRequiredError(
-            'Google API key required for Vertex AI. Please set GOOGLE_API_KEY environment variable or use /auth to login with Google OAuth.',
-            this.authMode,
-            ['GOOGLE_API_KEY', 'GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'],
-          );
-        }
-        break;
-
-      case 'oauth':
-        // OAuth auth will be validated when creating the content generator
-        break;
-
-      case 'none':
-        // In 'none' mode, check if ANY credentials are available
-        if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
-          throw new AuthenticationRequiredError(
-            'No authentication credentials found. Please use /auth to login with Google OAuth, set GEMINI_API_KEY, or configure Vertex AI credentials.',
-            this.authMode,
-            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-          );
-        }
-        break;
-
-      default:
-        // For any other auth mode, proceed without validation
-        break;
+    // This implements lazy OAuth triggering - OAuth is only triggered when making API calls
+    let authToken: string;
+    try {
+      authToken = await this.determineBestAuth();
+    } catch (error) {
+      if (error instanceof AuthenticationRequiredError) {
+        throw error;
+      }
+      throw new AuthenticationRequiredError(
+        'Failed to resolve authentication for Gemini provider',
+        this.authMode,
+        ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+      );
     }
+
+    // Authentication has already been resolved by determineBestAuth()
+    // No need for additional validation since the auth token is already obtained
 
     // Import the necessary modules dynamically to avoid circular dependencies
     const { GoogleGenAI } = await import('@google/genai');
@@ -348,11 +367,8 @@ export class GeminiProvider implements IProvider {
 
     switch (this.authMode) {
       case 'gemini-api-key':
-        if (!this.apiKey && !process.env.GEMINI_API_KEY) {
-          throw new Error('Gemini API key required but not found');
-        }
         genAI = new GoogleGenAI({
-          apiKey: this.apiKey || process.env.GEMINI_API_KEY,
+          apiKey: authToken,
           httpOptions: this.baseURL
             ? {
                 ...httpOptions,
@@ -363,11 +379,8 @@ export class GeminiProvider implements IProvider {
         break;
 
       case 'vertex-ai':
-        if (!process.env.GOOGLE_API_KEY) {
-          throw new Error('Google API key required for Vertex AI');
-        }
         genAI = new GoogleGenAI({
-          apiKey: process.env.GOOGLE_API_KEY,
+          apiKey: authToken,
           vertexai: true,
           httpOptions: this.baseURL
             ? {
@@ -383,7 +396,7 @@ export class GeminiProvider implements IProvider {
         const contentGenerator = await createCodeAssistContentGenerator(
           httpOptions,
           AuthType.LOGIN_WITH_GOOGLE,
-          this.config!,
+          this.geminiConfig!,
           this.baseURL,
         );
 
@@ -391,13 +404,13 @@ export class GeminiProvider implements IProvider {
         // Use config model in OAuth mode to ensure synchronization
         const oauthModel = this.modelExplicitlySet
           ? this.currentModel
-          : this.config?.getModel() || this.currentModel;
+          : this.geminiConfig?.getModel() || this.currentModel;
 
         // Generate systemInstruction using getCoreSystemPrompt
 
         // Get user memory from config if available
-        const userMemory = this.config?.getUserMemory
-          ? this.config.getUserMemory()
+        const userMemory = this.geminiConfig?.getUserMemory
+          ? this.geminiConfig.getUserMemory()
           : '';
         const systemInstruction = await getCoreSystemPromptAsync(
           userMemory,
@@ -432,7 +445,7 @@ export class GeminiProvider implements IProvider {
         // Use the content generator stream
         const streamResult = await contentGenerator.generateContentStream(
           request,
-          this.config?.getSessionId() || 'default',
+          this.geminiConfig?.getSessionId() || 'default',
         );
 
         // Convert the stream to our format
@@ -482,34 +495,17 @@ export class GeminiProvider implements IProvider {
       }
 
       case 'none':
-        // For 'none' mode, check what credentials are available
-        if (this.hasGeminiAPIKey()) {
-          genAI = new GoogleGenAI({
-            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
-            httpOptions: this.baseURL
-              ? {
-                  ...httpOptions,
-                  baseUrl: this.baseURL,
-                }
-              : httpOptions,
-          });
-        } else if (this.hasVertexAICredentials()) {
-          this.setupVertexAIAuth();
-          genAI = new GoogleGenAI({
-            apiKey: process.env.GOOGLE_API_KEY!,
-            vertexai: true,
-            httpOptions: this.baseURL
-              ? {
-                  ...httpOptions,
-                  baseUrl: this.baseURL,
-                }
-              : httpOptions,
-          });
-        } else {
-          throw new Error(
-            'No authentication credentials found. Please use /auth to login with Google OAuth, set GEMINI_API_KEY, or configure Vertex AI credentials.',
-          );
-        }
+        // For 'none' mode, use the resolved auth token
+        genAI = new GoogleGenAI({
+          apiKey: authToken,
+          vertexai: this.hasVertexAICredentials(),
+          httpOptions: this.baseURL
+            ? {
+                ...httpOptions,
+                baseUrl: this.baseURL,
+              }
+            : httpOptions,
+        });
         break;
 
       default:
@@ -536,7 +532,7 @@ export class GeminiProvider implements IProvider {
     // Use explicit model if set, otherwise fall back to config model
     const modelToUse = this.modelExplicitlySet
       ? this.currentModel
-      : this.config?.getModel() || this.currentModel;
+      : this.geminiConfig?.getModel() || this.currentModel;
 
     // For Flash models, always include tools if available
     if (modelToUse.includes('flash') && !geminiTools && this.toolSchemas) {
@@ -546,8 +542,8 @@ export class GeminiProvider implements IProvider {
     // Generate systemInstruction using getCoreSystemPrompt
 
     // Get user memory from config if available
-    const userMemory = this.config?.getUserMemory
-      ? this.config.getUserMemory()
+    const userMemory = this.geminiConfig?.getUserMemory
+      ? this.geminiConfig.getUserMemory()
       : '';
     const systemInstruction = await getCoreSystemPromptAsync(
       userMemory,
@@ -916,14 +912,14 @@ export class GeminiProvider implements IProvider {
   }
 
   setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
+    // Call base provider implementation
+    super.setApiKey?.(apiKey);
+
     // Set the API key as an environment variable so it can be used by the core library
     process.env.GEMINI_API_KEY = apiKey;
 
     // Clear auth cache when API key changes
     this.authDetermined = false;
-    // Re-determine auth after API key is set
-    this.determineBestAuth();
   }
 
   setBaseUrl(baseUrl?: string): void {
@@ -970,8 +966,8 @@ export class GeminiProvider implements IProvider {
 
     // Always update config if available, not just in OAuth mode
     // This ensures the model is properly synchronized
-    if (this.config) {
-      this.config.setModel(modelId);
+    if (this.geminiConfig) {
+      this.geminiConfig.setModel(modelId);
     }
   }
 
@@ -1051,13 +1047,13 @@ export class GeminiProvider implements IProvider {
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
+      // Get authentication token lazily
+      const authToken = await this.determineBestAuth();
+
       switch (this.authMode) {
         case 'gemini-api-key': {
-          if (!this.apiKey && !process.env.GEMINI_API_KEY) {
-            throw new Error('Gemini API key required for web search');
-          }
           genAI = new GoogleGenAI({
-            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
+            apiKey: authToken,
             httpOptions: this.baseURL
               ? {
                   ...httpOptions,
@@ -1088,11 +1084,8 @@ export class GeminiProvider implements IProvider {
         }
 
         case 'vertex-ai': {
-          if (!process.env.GOOGLE_API_KEY) {
-            throw new Error('Google API key required for web search');
-          }
           genAI = new GoogleGenAI({
-            apiKey: process.env.GOOGLE_API_KEY,
+            apiKey: authToken,
             vertexai: true,
             httpOptions: this.baseURL
               ? {
@@ -1128,7 +1121,7 @@ export class GeminiProvider implements IProvider {
           const oauthContentGenerator = await createCodeAssistContentGenerator(
             httpOptions,
             AuthType.LOGIN_WITH_GOOGLE,
-            this.config!,
+            this.geminiConfig!,
           );
 
           // For web search, always use gemini-2.5-flash regardless of the active model
@@ -1146,7 +1139,7 @@ export class GeminiProvider implements IProvider {
           };
           const result = await oauthContentGenerator.generateContent(
             oauthRequest,
-            this.config?.getSessionId() || 'default',
+            this.geminiConfig?.getSessionId() || 'default',
           );
           return result;
         }
@@ -1172,13 +1165,13 @@ export class GeminiProvider implements IProvider {
 
       let genAI: InstanceType<typeof GoogleGenAI>;
 
+      // Get authentication token lazily
+      const authToken = await this.determineBestAuth();
+
       switch (this.authMode) {
         case 'gemini-api-key': {
-          if (!this.apiKey && !process.env.GEMINI_API_KEY) {
-            throw new Error('Gemini API key required for web fetch');
-          }
           genAI = new GoogleGenAI({
-            apiKey: this.apiKey || process.env.GEMINI_API_KEY,
+            apiKey: authToken,
             httpOptions: this.baseURL
               ? {
                   ...httpOptions,
@@ -1209,11 +1202,8 @@ export class GeminiProvider implements IProvider {
         }
 
         case 'vertex-ai': {
-          if (!process.env.GOOGLE_API_KEY) {
-            throw new Error('Google API key required for web fetch');
-          }
           genAI = new GoogleGenAI({
-            apiKey: process.env.GOOGLE_API_KEY,
+            apiKey: authToken,
             vertexai: true,
             httpOptions: this.baseURL
               ? {
@@ -1249,7 +1239,7 @@ export class GeminiProvider implements IProvider {
           const oauthContentGenerator = await createCodeAssistContentGenerator(
             httpOptions,
             AuthType.LOGIN_WITH_GOOGLE,
-            this.config!,
+            this.geminiConfig!,
           );
 
           // For web fetch, always use gemini-2.5-flash regardless of the active model
@@ -1267,7 +1257,7 @@ export class GeminiProvider implements IProvider {
           };
           const result = await oauthContentGenerator.generateContent(
             oauthRequest,
-            this.config?.getSessionId() || 'default',
+            this.geminiConfig?.getSessionId() || 'default',
           );
           return result;
         }

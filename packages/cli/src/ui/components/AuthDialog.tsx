@@ -10,7 +10,7 @@ import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
-import { validateAuthMethod } from '../../config/auth.js';
+import { validateAuthMethod as _validateAuthMethod } from '../../config/auth.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: AuthType | undefined, scope: SettingScope) => void;
@@ -18,7 +18,7 @@ interface AuthDialogProps {
   initialErrorMessage?: string | null;
 }
 
-function parseDefaultAuthType(
+function _parseDefaultAuthType(
   defaultAuthType: string | undefined,
 ): AuthType | null {
   if (
@@ -35,84 +35,31 @@ export function AuthDialog({
   settings,
   initialErrorMessage,
 }: AuthDialogProps): React.JSX.Element {
-  const [errorMessage, setErrorMessage] = useState<string | null>(() => {
-    if (initialErrorMessage) {
-      return initialErrorMessage;
-    }
-
-    const defaultAuthType = parseDefaultAuthType(
-      process.env.GEMINI_DEFAULT_AUTH_TYPE,
-    );
-
-    if (process.env.GEMINI_DEFAULT_AUTH_TYPE && defaultAuthType === null) {
-      return (
-        `Invalid value for GEMINI_DEFAULT_AUTH_TYPE: "${process.env.GEMINI_DEFAULT_AUTH_TYPE}". ` +
-        `Valid values are: ${Object.values(AuthType).join(', ')}.`
-      );
-    }
-
-    if (
-      process.env.GEMINI_API_KEY &&
-      (!defaultAuthType || defaultAuthType === AuthType.USE_GEMINI)
-    ) {
-      return 'Existing API key detected (GEMINI_API_KEY). Select "Gemini API Key" option to use it.';
-    }
-    return null;
-  });
+  const [errorMessage, setErrorMessage] = useState<string | null>(
+    initialErrorMessage || null,
+  );
   const items = [
     {
-      label: 'Login with Google',
-      value: AuthType.LOGIN_WITH_GOOGLE,
+      label: 'Gemini (Google OAuth)',
+      value: 'oauth_gemini',
     },
-    ...(process.env.CLOUD_SHELL === 'true'
-      ? [
-          {
-            label: 'Use Cloud Shell user credentials',
-            value: AuthType.CLOUD_SHELL,
-          },
-        ]
-      : []),
     {
-      label: 'Gemini API Key (AI Studio)',
-      value: AuthType.USE_GEMINI,
-    },
-    { label: 'Vertex AI', value: AuthType.USE_VERTEX_AI },
-    {
-      label: 'None (use environment variables or keyfile)',
-      value: AuthType.USE_NONE,
+      label: 'Qwen (OAuth)',
+      value: 'oauth_qwen',
     },
   ];
 
-  const initialAuthIndex = items.findIndex((item) => {
-    if (settings.merged.selectedAuthType) {
-      return item.value === settings.merged.selectedAuthType;
-    }
-
-    const defaultAuthType = parseDefaultAuthType(
-      process.env.GEMINI_DEFAULT_AUTH_TYPE,
-    );
-    if (defaultAuthType) {
-      return item.value === defaultAuthType;
-    }
-
-    if (process.env.GEMINI_API_KEY) {
-      return item.value === AuthType.USE_GEMINI;
-    }
-
-    return item.value === AuthType.LOGIN_WITH_GOOGLE;
-  });
+  // Default to first item (Gemini OAuth)
+  const initialAuthIndex = 0;
 
   // Ensure we have a valid initial index (default to 0 if not found)
   const safeInitialIndex = initialAuthIndex >= 0 ? initialAuthIndex : 0;
   const handleAuthSelect = useCallback(
-    (authMethod: AuthType) => {
-      const error = validateAuthMethod(authMethod);
-      if (error) {
-        setErrorMessage(error);
-      } else {
-        setErrorMessage(null);
-        onSelect(authMethod, SettingScope.User);
-      }
+    (authMethod: string) => {
+      // For OAuth providers, we don't need the old validation
+      // Just pass the selection to the handler
+      setErrorMessage(null);
+      onSelect(authMethod as AuthType, SettingScope.User);
     },
     [onSelect],
   );
@@ -143,9 +90,15 @@ export function AuthDialog({
       padding={1}
       width="100%"
     >
-      <Text bold>Get started</Text>
+      <Text bold>OAuth Authentication</Text>
       <Box marginTop={1}>
-        <Text>How would you like to authenticate for this project?</Text>
+        <Text>Select an OAuth provider to authenticate:</Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>
+          Note: You can also use API keys via /key, /keyfile, --key, --keyfile,
+          or environment variables
+        </Text>
       </Box>
       <Box marginTop={1}>
         <RadioButtonSelect

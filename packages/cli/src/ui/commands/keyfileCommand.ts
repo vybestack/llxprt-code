@@ -76,20 +76,31 @@ export const keyfileCommand: SlashCommand = {
       if (filePath === 'none') {
         const removedPath =
           context.services.settings.getProviderKeyfile(providerName);
+
+        // Clear the API key from the provider
+        if (activeProvider.setApiKey) {
+          activeProvider.setApiKey('');
+        }
+
+        // Clear from ephemeral settings
+        if (context.services.config) {
+          context.services.config.setEphemeralSetting(
+            'auth-keyfile',
+            undefined,
+          );
+          context.services.config.setEphemeralSetting('auth-key', undefined);
+        }
+
+        // Remove from saved settings
         if (removedPath) {
           context.services.settings.removeProviderKeyfile(providerName);
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: `Removed keyfile path for provider '${providerName}'`,
-          };
-        } else {
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: `No keyfile path was set for provider '${providerName}'`,
-          };
         }
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Cleared keyfile and API key for provider '${providerName}'`,
+        };
       }
 
       // Verify keyfile exists and read the key
