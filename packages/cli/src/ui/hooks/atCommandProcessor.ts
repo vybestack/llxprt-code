@@ -21,6 +21,17 @@ import {
 } from '../types.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 
+// Detect if running in PowerShell to handle @ symbol conflicts
+// PowerShell's IntelliSense treats @ as hashtable start and causes severe lag
+const isPowerShell =
+  process.env.PSModulePath !== undefined ||
+  process.env.PSVERSION !== undefined ||
+  (process.platform === 'win32' &&
+    process.env.ComSpec?.toLowerCase().includes('powershell'));
+
+// Track if we've shown the PowerShell tip
+let powershellTipShown = false;
+
 interface HandleAtCommandParams {
   query: string;
   config: Config;
@@ -43,8 +54,17 @@ interface AtCommandPart {
 /**
  * Parses a query string to find all '@<path>' commands and text segments.
  * Handles \ escaped spaces within paths.
+ * Also supports '+' prefix as alternative to '@' for PowerShell compatibility.
  */
 function parseAllAtCommands(query: string): AtCommandPart[] {
+  // In PowerShell, also support '+' prefix as alternative to '@'
+  // This avoids PowerShell's hashtable completion interference
+  if (isPowerShell) {
+    // Replace '+' with '@' for consistent processing when it's followed by a path
+    // We look for + followed by non-whitespace to avoid replacing arithmetic
+    query = query.replace(/\+(?=\S)/g, '@');
+  }
+
   const parts: AtCommandPart[] = [];
   let currentIndex = 0;
 
@@ -131,6 +151,14 @@ export async function handleAtCommand({
   messageId: userMessageTimestamp,
   signal,
 }: HandleAtCommandParams): Promise<HandleAtCommandResult> {
+  // Show PowerShell tip on first use if detected
+  if (isPowerShell && query.includes('@') && !powershellTipShown) {
+    powershellTipShown = true;
+    onDebugMessage(
+      '💡 PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
+    );
+  }
+
   const commandParts = parseAllAtCommands(query);
   const atPathCommandParts = commandParts.filter(
     (part) => part.type === 'atPath',

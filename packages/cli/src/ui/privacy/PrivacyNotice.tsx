@@ -43,20 +43,26 @@ const PrivacyNoticeText = ({
 }) => {
   const authType = config.getContentGeneratorConfig()?.authType;
 
-  // Check if we're using a non-Gemini provider
+  // Check if we're using a non-Gemini provider or llxprt multi-provider
   const providerManager = config.getProviderManager?.();
   const activeProvider = providerManager?.getActiveProvider?.();
   const isNonGeminiProvider =
     activeProvider && activeProvider.name !== 'gemini';
 
-  // Don't show Gemini-specific privacy notices for non-Gemini providers
-  if (authType === AuthType.USE_PROVIDER && isNonGeminiProvider) {
-    return (
-      <NonGeminiProviderNotice
-        providerName={activeProvider.name}
-        onExit={onExit}
-      />
-    );
+  // For llxprt multi-provider or when content generator is not initialized,
+  // show the basic Gemini privacy notice
+  if (!authType || authType === AuthType.USE_PROVIDER || isNonGeminiProvider) {
+    // If we have a specific non-Gemini provider, show its notice
+    if (isNonGeminiProvider) {
+      return (
+        <NonGeminiProviderNotice
+          providerName={activeProvider.name}
+          onExit={onExit}
+        />
+      );
+    }
+    // Otherwise show basic Gemini API terms
+    return <GeminiPrivacyNotice onExit={onExit} />;
   }
 
   switch (authType) {

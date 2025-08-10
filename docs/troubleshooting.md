@@ -88,6 +88,32 @@ This means if you're using OpenAI as your main provider but want web search, you
 - **Q: Why don't I see cached token counts in my stats output?**
   - A: Cached token information is only displayed when cached tokens are being used. This feature is available for API key users (Gemini API key or Vertex AI) but not for OAuth users (Google Personal/Enterprise accounts) at this time, as the Code Assist API does not support cached content creation. You can still view your total token usage with the `/stats` command.
 
+## PowerShell @ Symbol Issues
+
+### Problem
+
+When using LLxprt Code in PowerShell, typing the `@` symbol to reference files (e.g., `@example.txt`) causes severe input lag and performance issues.
+
+### Cause
+
+PowerShell's IntelliSense treats `@` as the start of a hashtable literal, triggering tab completion and causing the terminal to freeze or lag significantly. This is a known issue with PowerShell that affects any CLI tool using `@` for file references.
+
+### Solution
+
+LLxprt Code automatically detects when running in PowerShell and provides an alternative `+` prefix for file references:
+
+```powershell
+# Instead of:
+@path/to/file.txt
+
+# Use:
++path/to/file.txt
+```
+
+Both syntaxes work in PowerShell, but `+` avoids the IntelliSense interference. The CLI will show a helpful tip on first use and update the placeholder text accordingly.
+
+**Note:** This workaround is only active in PowerShell environments. In other shells (bash, zsh, etc.), continue using the standard `@` prefix.
+
 ## Common error messages and solutions
 
 - **Error: `EADDRINUSE` (Address already in use) when starting an MCP server.**

@@ -302,6 +302,14 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     }
     ```
 
+- **`showLineNumbers`** (boolean):
+  - **Description:** Controls whether line numbers are displayed in code blocks in the CLI output.
+  - **Default:** `true`
+  - **Example:**
+    ```json
+    "showLineNumbers": false
+    ```
+
 ### Example `settings.json`:
 
 ```json

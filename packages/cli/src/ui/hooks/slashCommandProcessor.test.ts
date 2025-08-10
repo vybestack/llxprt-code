@@ -60,6 +60,14 @@ vi.mock('../contexts/SessionContext.js', () => ({
   useSessionStats: vi.fn(() => ({ stats: {} })),
 }));
 
+const { mockRunExitCleanup } = vi.hoisted(() => ({
+  mockRunExitCleanup: vi.fn(),
+}));
+
+vi.mock('../../utils/cleanup.js', () => ({
+  runExitCleanup: mockRunExitCleanup,
+}));
+
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
@@ -144,6 +152,7 @@ describe('useSlashCommandProcessor', () => {
         vi.fn(), // toggleCorgiMode
         mockSetQuittingMessages,
         vi.fn(), // openPrivacyNotice
+        vi.fn(), // openSettingsDialog
         vi.fn(), // toggleVimEnabled
         setIsProcessing,
       ),
@@ -406,6 +415,37 @@ describe('useSlashCommandProcessor', () => {
 
           expect(mockSetQuittingMessages).toHaveBeenCalledWith([]);
           expect(mockProcessExit).toHaveBeenCalledWith(0);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('should call runExitCleanup when handling a "quit" action', async () => {
+        const quitAction = vi
+          .fn()
+          .mockResolvedValue({ type: 'quit', messages: [] });
+        const command = createTestCommand({
+          name: 'exit',
+          action: quitAction,
+        });
+        const result = setupProcessorHook([command]);
+
+        await waitFor(() =>
+          expect(result.current.slashCommands).toHaveLength(1),
+        );
+
+        vi.useFakeTimers();
+
+        try {
+          await act(async () => {
+            await result.current.handleSlashCommand('/exit');
+          });
+
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(200);
+          });
+
+          expect(mockRunExitCleanup).toHaveBeenCalledTimes(1);
         } finally {
           vi.useRealTimers();
         }
@@ -834,7 +874,8 @@ describe('useSlashCommandProcessor', () => {
           vi.fn(), // toggleCorgiMode
           mockSetQuittingMessages,
           vi.fn(), // openPrivacyNotice
-          vi.fn(), // toggleVimEnabled
+          vi.fn(), // openSettingsDialog
+          vi.fn().mockResolvedValue(false), // toggleVimEnabled
           vi.fn(), // setIsProcessing
         ),
       );

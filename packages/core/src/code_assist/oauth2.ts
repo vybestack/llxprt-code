@@ -392,7 +392,8 @@ async function cacheCredentials(credentials: Credentials) {
 
   try {
     const credString = JSON.stringify(credentials, null, 2);
-    await fs.writeFile(filePath, credString);
+    // Restrict file permissions to owner read/write only (0o600)
+    await fs.writeFile(filePath, credString, { mode: 0o600 });
   } catch (error) {
     console.error('Failed to cache OAuth credentials:', error);
     // Don't throw - allow OAuth to continue without caching

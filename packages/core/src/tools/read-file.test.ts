@@ -29,6 +29,7 @@ describe('ReadFileTool', () => {
       getFileService: () => new FileDiscoveryService(tempRootDir),
       getTargetDir: () => tempRootDir,
       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
+      getConversationLoggingEnabled: () => false,
     } as unknown as Config;
     tool = new ReadFileTool(mockConfigInstance);
   });
@@ -150,8 +151,14 @@ describe('ReadFileTool', () => {
           ReadFileToolParams,
           ToolResult
         >;
-        expect(await invocation.execute(abortSignal)).toEqual({
-          llmContent: `File not found: ${filePath}`,
+        const result = await invocation.execute(abortSignal);
+        expect(result).toEqual({
+          error: {
+            message: `File not found: ${filePath}`,
+            type: 'file_not_found',
+          },
+          llmContent:
+            'Could not read file because no file was found at the specified path.',
           returnDisplay: 'File not found.',
         });
       });

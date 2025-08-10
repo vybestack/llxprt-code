@@ -4,11 +4,15 @@ This guide documents the process for cherry-picking changes from the upstream ge
 
 ## Current Sync Status
 
-**Last synced upstream commit:** `60362e03` (August 7, 2025)
+**Last synced upstream commit:** `0157eae3` (August 10, 2025)
 
-- MCP servers fix: Fixed issue where MCP servers allowed in settings do not show up in /mcp command
+- Added /settings command and UI panel
+- Enhanced input UX with double ESC clear
+- Fixed duplicate key bindings
+- Enabled default usage statistics collection
+- All valuable commits from August 7-10, 2025 have been cherry-picked
 
-**Branch:** `20250808-gmerge`
+**Branch:** `20250810-gmerge`
 
 ## Overview
 
@@ -53,6 +57,9 @@ git cherry-pick <commit-hash>
 - New features that don't conflict with multi-provider support
 - Tool improvements
 - UI/UX enhancements
+- **IDE integration features** - llxprt has full IDE support, always cherry-pick IDE improvements
+- Security fixes and permission improvements
+- MCP (Model Context Protocol) improvements
 
 #### What to Skip:
 
@@ -61,6 +68,16 @@ git cherry-pick <commit-hash>
 - Branding changes that would overwrite llxprt branding
 - Auth changes that assume only Google auth (llxprt supports multiple providers)
 - **Next-speaker check functionality** - This feature has been permanently disabled in llxprt and should never be re-enabled
+- **Tool scheduler queue changes** - llxprt has superior parallel batching for multi-provider support
+- **CLI argument removals** - Preserve backward compatibility unless there's a strong reason
+- Gemini-specific release commits
+
+#### Features Reimplemented (Don't Cherry-pick):
+
+These upstream features have been reimplemented in llxprt with our own approach:
+
+- **Conversation Logging (commit `36f58a34`)** - Reimplemented as privacy-first, multi-provider conversation logging via `/logging` command with local storage, granular controls, and sensitive data redaction
+- **Tool Scheduler Request Queue (commit `69322e12`)** - llxprt has superior parallel batching that queues and processes multiple requests in parallel for better multi-provider performance, while upstream processes serially
 
 #### Handling Conflicts:
 
@@ -193,6 +210,8 @@ LLxprt may use different error structures:
 3. **Test thoroughly** - Especially provider switching and authentication flows
 4. **Document conflicts** - Help future maintainers understand decisions
 5. **Keep commits atomic** - One cherry-pick per commit for easy tracking
+6. **Always verify code changes** - Don't just check commit messages; verify actual code was cherry-picked
+7. **IDE features are important** - llxprt has full IDE integration, don't skip IDE-related commits
 
 ## Merge Strategy
 

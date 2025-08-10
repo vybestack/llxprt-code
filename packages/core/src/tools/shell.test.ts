@@ -56,6 +56,7 @@ describe('ShellTool', () => {
       getWorkspaceContext: () => createMockWorkspaceContext('.'),
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getConversationLoggingEnabled: () => false,
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -201,6 +202,33 @@ describe('ShellTool', () => {
       // The final llmContent should contain the user's command, not the wrapper
       expect(result.llmContent).toContain('Error: wrapped command failed');
       expect(result.llmContent).not.toContain('pgrep');
+    });
+
+    it('should return error with error property for invalid parameters', async () => {
+      const result = await shellTool.execute(
+        { command: '' }, // Empty command is invalid
+        mockAbortSignal,
+      );
+
+      expect(result.llmContent).toBe('Command cannot be empty.');
+      expect(result.returnDisplay).toBe('Command cannot be empty.');
+      // Validation errors don't set error property in upstream
+    });
+
+    it('should return error with error property for invalid directory', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      const result = await shellTool.execute(
+        { command: 'ls', directory: 'nonexistent' },
+        mockAbortSignal,
+      );
+
+      expect(result.llmContent).toBe(
+        "Directory 'nonexistent' is not a registered workspace directory.",
+      );
+      expect(result.returnDisplay).toBe(
+        "Directory 'nonexistent' is not a registered workspace directory.",
+      );
+      // Validation errors don't set error property in upstream
     });
 
     it('should summarize output when configured', async () => {
@@ -389,6 +417,7 @@ describe('ShellTool', () => {
         getSummarizeToolOutputConfig: () => ({}),
         getEphemeralSettings: () => ({}),
         getWorkspaceContext: () => createMockWorkspaceContext('.'),
+        getConversationLoggingEnabled: () => false,
       } as unknown as Config;
       const testShellTool = new ShellTool(testConfig);
 
@@ -420,6 +449,7 @@ describe('ShellTool', () => {
       const testShellTool = new ShellTool({
         getCoreTools: () => ['run_shell_command'],
         getExcludeTools: () => [],
+        getConversationLoggingEnabled: () => false,
       } as unknown as Config);
       const result = await testShellTool.shouldConfirmExecute({
         command: 'git status && git log',

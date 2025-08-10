@@ -20,8 +20,6 @@ import {
   Text,
   useStdin,
   useStdout,
-  useInput,
-  type Key as InkKeyType,
 } from 'ink';
 import { StreamingState, type HistoryItem, MessageType } from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
@@ -29,6 +27,7 @@ import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
+import { useFolderTrust } from './hooks/useFolderTrust.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
@@ -43,7 +42,9 @@ import { ThemeDialog } from './components/ThemeDialog.js';
 import { AuthDialog } from './components/AuthDialog.js';
 import { AuthInProgress } from './components/AuthInProgress.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
+import { FolderTrustDialog } from './components/FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
+import { RadioButtonSelect } from './components/shared/RadioButtonSelect.js';
 import { Colors } from './colors.js';
 import { Help } from './components/Help.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
@@ -54,7 +55,6 @@ import { registerCleanup } from '../utils/cleanup.js';
 import { DetailedMessagesDisplay } from './components/DetailedMessagesDisplay.js';
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
-import { IDEContextDetailDisplay } from './components/IDEContextDetailDisplay.js';
 import { useHistory } from './hooks/useHistoryManager.js';
 import process from 'node:process';
 import {
@@ -88,6 +88,8 @@ import { useBracketedPaste } from './hooks/useBracketedPaste.js';
 import { useTextBuffer } from './components/shared/text-buffer.js';
 import { useVimMode, VimModeProvider } from './contexts/VimModeContext.js';
 import { useVim } from './hooks/vim.js';
+import { useKeypress, Key } from './hooks/useKeypress.js';
+import { keyMatchers, Command } from './keyMatchers.js';
 import * as fs from 'fs';
 import {
   appReducer,
@@ -107,6 +109,8 @@ import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
+import { useSettingsCommand } from './hooks/useSettingsCommand.js';
+import { SettingsDialog } from './components/SettingsDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
@@ -175,6 +179,12 @@ const App = (props: AppInternalProps) => {
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
+  useEffect(() => {
+    const ideClient = config.getIdeClient();
+    if (ideClient) {
+      registerCleanup(() => ideClient.disconnect());
+    }
+  }, [config]);
   const shouldShowIdePrompt =
     config.getIdeModeFeature() &&
     currentIDE &&
@@ -223,8 +233,7 @@ const App = (props: AppInternalProps) => {
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
-  const [showIDEContextDetail, setShowIDEContextDetail] =
-    useState<boolean>(false);
+
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
     HistoryItem[] | null
@@ -240,6 +249,7 @@ const App = (props: AppInternalProps) => {
   const [ideContextState, setIdeContextState] = useState<
     IdeContext | undefined
   >();
+  const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
 
@@ -275,6 +285,11 @@ const App = (props: AppInternalProps) => {
   const openPrivacyNotice = useCallback(() => {
     setShowPrivacyNotice(true);
   }, []);
+
+  const handleEscapePromptChange = useCallback((showPrompt: boolean) => {
+    setShowEscapePrompt(showPrompt);
+  }, []);
+
   const initialPromptSubmitted = useRef(false);
 
   const errorCount = useMemo(
@@ -291,6 +306,12 @@ const App = (props: AppInternalProps) => {
     handleThemeSelect,
     handleThemeHighlight,
   } = useThemeCommand(settings, appState, addItem);
+
+  const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
+    useSettingsCommand();
+
+  const { isFolderTrustDialogOpen, handleFolderTrustSelect } =
+    useFolderTrust(settings);
 
   const {
     isAuthDialogOpen,
@@ -645,6 +666,7 @@ const App = (props: AppInternalProps) => {
     pendingHistoryItems: pendingSlashCommandHistoryItems,
     commandContext,
     shellConfirmationRequest,
+    confirmationRequest,
   } = useSlashCommandProcessor(
     config,
     settings,
@@ -664,6 +686,7 @@ const App = (props: AppInternalProps) => {
     toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
+    openSettingsDialog,
     toggleVimEnabled,
     setIsProcessing,
     setLlxprtMdFileCount,
@@ -783,50 +806,75 @@ const App = (props: AppInternalProps) => {
     [handleSlashCommand],
   );
 
-  useInput((input: string, key: InkKeyType) => {
-    let enteringConstrainHeightMode = false;
-    if (!constrainHeight) {
-      // Automatically re-enter constrain height mode if the user types
-      // anything. When constrainHeight==false, the user will experience
-      // significant flickering so it is best to disable it immediately when
-      // the user starts interacting with the app.
-      enteringConstrainHeightMode = true;
-      setConstrainHeight(true);
-    }
+  const handleSettingsRestart = useCallback(() => {
+    handleSlashCommand('/quit');
+  }, [handleSlashCommand]);
 
-    if (key.ctrl && input === 'o') {
-      setShowErrorDetails((prev) => !prev);
-    } else if (key.ctrl && input === 't') {
-      const newValue = !showToolDescriptions;
-      setShowToolDescriptions(newValue);
+  const handleGlobalKeypress = useCallback(
+    (key: Key) => {
+      let enteringConstrainHeightMode = false;
+      if (!constrainHeight) {
+        enteringConstrainHeightMode = true;
+        setConstrainHeight(true);
+      }
 
-      const mcpServers = config.getMcpServers();
-      if (Object.keys(mcpServers || {}).length > 0) {
-        handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
+      if (keyMatchers[Command.SHOW_ERROR_DETAILS](key)) {
+        setShowErrorDetails((prev) => !prev);
+      } else if (keyMatchers[Command.TOGGLE_TOOL_DESCRIPTIONS](key)) {
+        const newValue = !showToolDescriptions;
+        setShowToolDescriptions(newValue);
+
+        const mcpServers = config.getMcpServers();
+        if (Object.keys(mcpServers || {}).length > 0) {
+          handleSlashCommand(newValue ? '/mcp desc' : '/mcp nodesc');
+        }
+      } else if (
+        keyMatchers[Command.TOGGLE_IDE_CONTEXT_DETAIL](key) &&
+        config.getIdeMode() &&
+        ideContextState
+      ) {
+        // Show IDE status when in IDE mode and context is available.
+        handleSlashCommand('/ide status');
+      } else if (keyMatchers[Command.QUIT](key)) {
+        // When authenticating, let AuthInProgress component handle Ctrl+C.
+        if (isAuthenticating) {
+          return;
+        }
+        handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
+      } else if (keyMatchers[Command.EXIT](key)) {
+        if (buffer.text.length > 0) {
+          return;
+        }
+        handleExit(ctrlDPressedOnce, setCtrlDPressedOnce, ctrlDTimerRef);
+      } else if (
+        keyMatchers[Command.SHOW_MORE_LINES](key) &&
+        !enteringConstrainHeightMode
+      ) {
+        setConstrainHeight(false);
       }
-    } else if (
-      key.ctrl &&
-      input === 'e' &&
-      config.getIdeMode() &&
-      ideContextState
-    ) {
-      setShowIDEContextDetail((prev) => !prev);
-    } else if (key.ctrl && (input === 'c' || input === 'C')) {
-      if (isAuthenticating) {
-        // Let AuthInProgress component handle the input.
-        return;
-      }
-      handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
-    } else if (key.ctrl && (input === 'd' || input === 'D')) {
-      if (buffer.text.length > 0) {
-        // Do nothing if there is text in the input.
-        return;
-      }
-      handleExit(ctrlDPressedOnce, setCtrlDPressedOnce, ctrlDTimerRef);
-    } else if (key.ctrl && input === 's' && !enteringConstrainHeightMode) {
-      setConstrainHeight(false);
-    }
-  });
+    },
+    [
+      constrainHeight,
+      setConstrainHeight,
+      setShowErrorDetails,
+      showToolDescriptions,
+      setShowToolDescriptions,
+      config,
+      ideContextState,
+      handleExit,
+      ctrlCPressedOnce,
+      setCtrlCPressedOnce,
+      ctrlCTimerRef,
+      buffer.text.length,
+      ctrlDPressedOnce,
+      setCtrlDPressedOnce,
+      ctrlDTimerRef,
+      handleSlashCommand,
+      isAuthenticating,
+    ],
+  );
+
+  useKeypress(handleGlobalKeypress, { isActive: true });
 
   useEffect(() => {
     if (config) {
@@ -881,6 +929,15 @@ const App = (props: AppInternalProps) => {
     console.clear();
     refreshStatic();
   }, [clearItems, clearConsoleMessagesState, refreshStatic]);
+
+  const handleConfirmationSelect = useCallback(
+    (value: boolean) => {
+      if (confirmationRequest) {
+        confirmationRequest.onConfirm(value);
+      }
+    },
+    [confirmationRequest],
+  );
 
   const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
@@ -998,9 +1055,17 @@ const App = (props: AppInternalProps) => {
   // Arbitrary threshold to ensure that items in the static area are large
   // enough but not too large to make the terminal hard to use.
   const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
+
+  // Detect PowerShell for file reference syntax tip
+  const isPowerShell =
+    process.env.PSModulePath !== undefined ||
+    process.env.PSVERSION !== undefined;
+
   const placeholder = vimModeEnabled
     ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
-    : '  Type your message or @path/to/file';
+    : isPowerShell
+      ? '  Type your message, @path/to/file or +path/to/file'
+      : '  Type your message or @path/to/file';
 
   return (
     <StreamingContext.Provider value={streamingState}>
@@ -1094,8 +1159,23 @@ const App = (props: AppInternalProps) => {
               description="If you select Yes, we'll install an extension that allows the CLI to access your open files and display diffs directly in VS Code."
               onComplete={handleIdePromptComplete}
             />
+          ) : isFolderTrustDialogOpen ? (
+            <FolderTrustDialog onSelect={handleFolderTrustSelect} />
           ) : shellConfirmationRequest ? (
             <ShellConfirmationDialog request={shellConfirmationRequest} />
+          ) : confirmationRequest ? (
+            <Box flexDirection="column">
+              {confirmationRequest.prompt}
+              <Box paddingY={1}>
+                <RadioButtonSelect
+                  items={[
+                    { label: 'Yes', value: true },
+                    { label: 'No', value: false },
+                  ]}
+                  onSelect={handleConfirmationSelect}
+                />
+              </Box>
+            </Box>
           ) : isThemeDialogOpen ? (
             <Box flexDirection="column">
               {_themeError && (
@@ -1113,6 +1193,14 @@ const App = (props: AppInternalProps) => {
                     : undefined
                 }
                 terminalWidth={mainAreaWidth}
+              />
+            </Box>
+          ) : isSettingsDialogOpen ? (
+            <Box flexDirection="column">
+              <SettingsDialog
+                settings={settings}
+                onSelect={closeSettingsDialog}
+                onRestartRequest={handleSettingsRestart}
               />
             </Box>
           ) : isAuthenticating ? (
@@ -1227,6 +1315,8 @@ const App = (props: AppInternalProps) => {
                     <Text color={Colors.AccentYellow}>
                       Press Ctrl+D again to exit.
                     </Text>
+                  ) : showEscapePrompt ? (
+                    <Text color={Colors.Gray}>Press Esc again to clear.</Text>
                   ) : (
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
@@ -1248,14 +1338,7 @@ const App = (props: AppInternalProps) => {
                   {shellModeActive && <ShellModeIndicator />}
                 </Box>
               </Box>
-              {showIDEContextDetail && (
-                <IDEContextDetailDisplay
-                  ideContext={ideContextState}
-                  detectedIdeDisplay={config
-                    .getIdeClient()
-                    ?.getDetectedIdeDisplayName()}
-                />
-              )}
+
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
@@ -1285,6 +1368,7 @@ const App = (props: AppInternalProps) => {
                     commandContext={commandContext}
                     shellModeActive={shellModeActive}
                     setShellModeActive={setShellModeActive}
+                    onEscapePromptChange={handleEscapePromptChange}
                     focus={isFocused}
                     vimHandleInput={vimHandleInput}
                     placeholder={placeholder}
@@ -1334,6 +1418,9 @@ const App = (props: AppInternalProps) => {
             debugMessage={debugMessage}
             errorCount={errorCount}
             showErrorDetails={showErrorDetails}
+            showMemoryUsage={
+              config.getDebugMode() || settings.merged.showMemoryUsage || false
+            }
             promptTokenCount={sessionStats.lastPromptTokenCount}
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}

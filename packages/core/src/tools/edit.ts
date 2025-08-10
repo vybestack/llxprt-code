@@ -25,10 +25,11 @@ import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
 import { ensureCorrectEdit } from '../utils/editCorrector.js';
-import { DEFAULT_DIFF_OPTIONS } from './diffOptions.js';
+import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
+import { getGitStatsService } from '../services/git-stats-service.js';
 
 export function applyReplacement(
   currentContent: string | null,
@@ -79,6 +80,11 @@ export interface EditToolParams {
    * Whether the edit was modified manually by the user.
    */
   modified_by_user?: boolean;
+
+  /**
+   * Initially proposed string.
+   */
+  ai_proposed_string?: string;
 }
 
 interface CalculatedEdit {
@@ -340,6 +346,24 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       this.ensureParentDirectoriesExist(this.params.file_path);
       fs.writeFileSync(this.params.file_path, editData.newContent, 'utf8');
 
+      // Track git stats if logging is enabled and service is available
+      let gitStats = null;
+      if (this.config.getConversationLoggingEnabled()) {
+        const gitStatsService = getGitStatsService();
+        if (gitStatsService) {
+          try {
+            gitStats = await gitStatsService.trackFileEdit(
+              this.params.file_path,
+              editData.currentContent || '',
+              editData.newContent,
+            );
+          } catch (error) {
+            // Don't fail the edit if git stats tracking fails
+            console.warn('Failed to track git stats:', error);
+          }
+        }
+      }
+
       let displayResult: ToolResultDisplay;
       if (editData.isNewFile) {
         displayResult = `Created ${shortenPath(makeRelative(this.params.file_path, this.config.getTargetDir()))}`;
@@ -355,11 +379,20 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
           'Proposed',
           DEFAULT_DIFF_OPTIONS,
         );
+        const originallyProposedContent =
+          this.params.ai_proposed_string || this.params.new_string;
+        const diffStat = getDiffStat(
+          fileName,
+          editData.currentContent ?? '',
+          originallyProposedContent,
+          this.params.new_string,
+        );
         displayResult = {
           fileDiff,
           fileName,
           originalContent: editData.currentContent,
           newContent: editData.newContent,
+          diffStat,
         };
       }
 
@@ -374,10 +407,20 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
         );
       }
 
-      return {
+      const result: ToolResult = {
         llmContent: llmSuccessMessageParts.join(' '),
         returnDisplay: displayResult,
       };
+
+      // Include git stats in metadata if available
+      if (gitStats) {
+        result.metadata = {
+          ...result.metadata,
+          gitStats,
+        };
+      }
+
+      return result;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       return {
@@ -515,12 +558,16 @@ Expectation for required parameters:
         oldContent: string,
         modifiedProposedContent: string,
         originalParams: EditToolParams,
-      ): EditToolParams => ({
-        ...originalParams,
-        old_string: oldContent,
-        new_string: modifiedProposedContent,
-        modified_by_user: true,
-      }),
+      ): EditToolParams => {
+        const content = originalParams.new_string;
+        return {
+          ...originalParams,
+          ai_proposed_string: content,
+          old_string: oldContent,
+          new_string: modifiedProposedContent,
+          modified_by_user: true,
+        };
+      },
     };
   }
 }

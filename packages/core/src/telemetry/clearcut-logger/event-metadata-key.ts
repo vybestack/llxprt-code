@@ -190,6 +190,22 @@ export enum EventMetadataKey {
 
   // Logs the model that produced the malformed JSON response.
   GEMINI_CLI_MALFORMED_JSON_RESPONSE_MODEL = 45,
+
+  // ==========================================================================
+  // Diff Statistics Event Keys
+  // ===========================================================================
+
+  // Logs the number of lines added by AI.
+  GEMINI_CLI_AI_ADDED_LINES = 46,
+
+  // Logs the number of lines removed by AI.
+  GEMINI_CLI_AI_REMOVED_LINES = 47,
+
+  // Logs the number of lines added by user.
+  GEMINI_CLI_USER_ADDED_LINES = 48,
+
+  // Logs the number of lines removed by user.
+  GEMINI_CLI_USER_REMOVED_LINES = 49,
 }
 
 export function getEventMetadataKey(

@@ -4,16 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { themeManager } from './theme-manager.js';
 import { SemanticColors } from './semantic-tokens.js';
 import { getColorMigrationMapping } from './theme-compat.js';
 import { Colors } from '../colors.js';
 
 describe('semantic tokens system', () => {
+  const originalNoColor = process.env.NO_COLOR;
+
   beforeEach(() => {
+    // Ensure NO_COLOR doesn't interfere with tests
+    delete process.env.NO_COLOR;
     // Reset to default theme for consistent testing
     themeManager.setActiveTheme('Green Screen');
+  });
+
+  afterEach(() => {
+    // Restore original NO_COLOR value
+    if (originalNoColor !== undefined) {
+      process.env.NO_COLOR = originalNoColor;
+    } else {
+      delete process.env.NO_COLOR;
+    }
   });
 
   describe('integration with built-in themes', () => {

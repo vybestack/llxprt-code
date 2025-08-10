@@ -19,3 +19,52 @@ export interface ProviderToolCall {
     arguments: string;
   };
 }
+
+// Enhanced provider capability types
+export interface ProviderCapabilities {
+  supportsStreaming: boolean;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  maxTokens: number;
+  supportedFormats: string[];
+  hasModelSelection?: boolean;
+  hasApiKeyConfig?: boolean;
+  hasBaseUrlConfig?: boolean;
+  supportsPaidMode?: boolean;
+}
+
+export interface ProviderContext {
+  providerName: string;
+  currentModel: string;
+  toolFormat: string;
+  isPaidMode: boolean;
+  capabilities: ProviderCapabilities;
+  sessionStartTime: number;
+}
+
+export interface ToolCall {
+  provider: string;
+  name: string;
+  arguments: unknown;
+  id: string;
+}
+
+export interface ProviderPerformanceMetrics {
+  providerName: string;
+  totalRequests: number;
+  totalTokens: number;
+  averageLatency: number;
+  timeToFirstToken: number | null;
+  tokensPerSecond: number;
+  chunksReceived: number;
+  errorRate: number;
+  errors: Array<{ timestamp: number; duration: number; error: string }>;
+}
+
+export interface ProviderComparison {
+  provider1: string;
+  provider2: string;
+  capabilities: Record<string, ProviderCapabilities>;
+  compatibility: number;
+  recommendation: string;
+}

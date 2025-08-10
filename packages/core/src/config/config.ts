@@ -60,6 +60,22 @@ import type { Content } from '@google/genai';
 export type { MCPOAuthConfig };
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 
+// Import privacy-related types
+export interface RedactionConfig {
+  redactApiKeys: boolean;
+  redactCredentials: boolean;
+  redactFilePaths: boolean;
+  redactUrls: boolean;
+  redactEmails: boolean;
+  redactPersonalInfo: boolean;
+  customPatterns?: Array<{
+    name: string;
+    pattern: RegExp;
+    replacement: string;
+    enabled: boolean;
+  }>;
+}
+
 export enum ApprovalMode {
   DEFAULT = 'default',
   AUTO_EDIT = 'autoEdit',
@@ -94,6 +110,29 @@ export interface TelemetrySettings {
   otlpEndpoint?: string;
   logPrompts?: boolean;
   outfile?: string;
+  logConversations?: boolean;
+  logResponses?: boolean;
+  redactSensitiveData?: boolean;
+  maxConversationHistory?: number;
+  conversationLogPath?: string;
+  maxLogFiles?: number;
+  maxLogSizeMB?: number;
+  retentionDays?: number;
+  // Privacy-related settings
+  redactFilePaths?: boolean;
+  redactUrls?: boolean;
+  redactEmails?: boolean;
+  redactPersonalInfo?: boolean;
+  customRedactionPatterns?: Array<{
+    name: string;
+    pattern: RegExp;
+    replacement: string;
+    enabled: boolean;
+  }>;
+  enableDataRetention?: boolean;
+  conversationExpirationDays?: number;
+  maxConversationsStored?: number;
+  remoteConsentGiven?: boolean;
 }
 
 export interface GeminiCLIExtension {
@@ -248,7 +287,7 @@ export class Config {
   private approvalMode: ApprovalMode;
   private readonly showMemoryUsage: boolean;
   private readonly accessibility: AccessibilitySettings;
-  private readonly telemetrySettings: TelemetrySettings;
+  private telemetrySettings: TelemetrySettings;
   private readonly usageStatisticsEnabled: boolean;
   private geminiClient!: GeminiClient;
   private readonly fileFiltering: {
@@ -335,6 +374,13 @@ export class Config {
       otlpEndpoint: params.telemetry?.otlpEndpoint ?? DEFAULT_OTLP_ENDPOINT,
       logPrompts: params.telemetry?.logPrompts ?? true,
       outfile: params.telemetry?.outfile,
+      logConversations: params.telemetry?.logConversations ?? false,
+      logResponses: params.telemetry?.logResponses ?? false,
+      redactSensitiveData: params.telemetry?.redactSensitiveData ?? true,
+      redactFilePaths: params.telemetry?.redactFilePaths ?? false,
+      redactUrls: params.telemetry?.redactUrls ?? false,
+      redactEmails: params.telemetry?.redactEmails ?? false,
+      redactPersonalInfo: params.telemetry?.redactPersonalInfo ?? false,
     };
     this.usageStatisticsEnabled = params.usageStatisticsEnabled ?? true;
 
@@ -646,6 +692,111 @@ export class Config {
 
   getTelemetryOutfile(): string | undefined {
     return this.telemetrySettings.outfile;
+  }
+
+  // Conversation logging configuration methods
+  getConversationLoggingEnabled(): boolean {
+    // Check CLI flags first - placeholder for future CLI implementation
+    // For now, check environment variables and settings file
+
+    // Check environment variables
+    const envVar = process.env.LLXPRT_LOG_CONVERSATIONS;
+    if (envVar !== undefined) {
+      return envVar.toLowerCase() === 'true';
+    }
+
+    // Check settings file
+    return this.telemetrySettings.logConversations ?? false;
+  }
+
+  getResponseLoggingEnabled(): boolean {
+    return this.telemetrySettings.logResponses ?? false;
+  }
+
+  getConversationLogPath(): string {
+    // Check environment variable first
+    const envPath = process.env.LLXPRT_CONVERSATION_LOG_PATH;
+    if (envPath) {
+      return this.expandPath(envPath);
+    }
+
+    // Check settings file
+    if (this.telemetrySettings.conversationLogPath) {
+      return this.expandPath(this.telemetrySettings.conversationLogPath);
+    }
+
+    // Default path
+    return this.expandPath('~/.llxprt/conversations/');
+  }
+
+  getMaxConversationHistory(): number {
+    return this.telemetrySettings.maxConversationHistory ?? 50;
+  }
+
+  getConversationRetentionDays(): number {
+    return this.telemetrySettings.retentionDays ?? 30;
+  }
+
+  getMaxLogFiles(): number {
+    return this.telemetrySettings.maxLogFiles ?? 10;
+  }
+
+  getMaxLogSizeMB(): number {
+    return this.telemetrySettings.maxLogSizeMB ?? 100;
+  }
+
+  // Privacy configuration methods
+  getRedactionConfig(): RedactionConfig {
+    return {
+      redactApiKeys: this.telemetrySettings.redactSensitiveData ?? true,
+      redactCredentials: this.telemetrySettings.redactSensitiveData ?? true,
+      redactFilePaths: this.telemetrySettings.redactFilePaths ?? false,
+      redactUrls: this.telemetrySettings.redactUrls ?? false,
+      redactEmails: this.telemetrySettings.redactEmails ?? false,
+      redactPersonalInfo: this.telemetrySettings.redactPersonalInfo ?? false,
+      customPatterns: this.telemetrySettings.customRedactionPatterns,
+    };
+  }
+
+  getDataRetentionEnabled(): boolean {
+    return this.telemetrySettings.enableDataRetention ?? true;
+  }
+
+  getConversationExpirationDays(): number {
+    return this.telemetrySettings.conversationExpirationDays ?? 30;
+  }
+
+  getMaxConversationsStored(): number {
+    return this.telemetrySettings.maxConversationsStored ?? 1000;
+  }
+
+  getTelemetrySettings(): TelemetrySettings & {
+    remoteConsentGiven?: boolean;
+    [key: string]: unknown;
+  } {
+    return {
+      ...this.telemetrySettings,
+      remoteConsentGiven: this.telemetrySettings.remoteConsentGiven,
+    };
+  }
+
+  updateTelemetrySettings(settings: Partial<TelemetrySettings>): void {
+    this.telemetrySettings = {
+      ...this.telemetrySettings,
+      ...settings,
+    };
+
+    // If we have a provider manager, update its config to trigger re-wrapping
+    if (this.providerManager) {
+      this.providerManager.setConfig(this);
+    }
+  }
+
+  private expandPath(path: string): string {
+    if (path.startsWith('~/')) {
+      return path.replace('~', process.env.HOME || '');
+    }
+    return path;
   }
 
   getGeminiClient(): GeminiClient {

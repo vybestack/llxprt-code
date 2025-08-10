@@ -37,6 +37,7 @@ import {
   // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
   getOauthClient,
+  setGitStatsService,
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
@@ -48,7 +49,9 @@ import {
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
+import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { appEvents, AppEvent } from './utils/events.js';
+import { SettingsContext } from './ui/contexts/SettingsContext.js';
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -169,6 +172,12 @@ export async function main() {
 
   const providerManager = getProviderManager(config);
   config.setProviderManager(providerManager);
+
+  // Initialize git stats service for tracking file changes when logging is enabled
+  if (config.getConversationLoggingEnabled()) {
+    const gitStatsService = new GitStatsServiceImpl(config);
+    setGitStatsService(gitStatsService);
+  }
 
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
   const serverToolsProvider = providerManager.getServerToolsProvider();
@@ -577,12 +586,14 @@ export async function main() {
           // eslint-disable-next-line react/jsx-no-bind
           onError={handleError}
         >
-          <AppWrapper
-            config={config}
-            settings={settings}
-            startupWarnings={startupWarnings}
-            version={version}
-          />
+          <SettingsContext.Provider value={settings}>
+            <AppWrapper
+              config={config}
+              settings={settings}
+              startupWarnings={startupWarnings}
+              version={version}
+            />
+          </SettingsContext.Provider>
         </ErrorBoundary>
       </React.StrictMode>,
       { exitOnCtrlC: false },

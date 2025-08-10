@@ -13,6 +13,9 @@ import {
 } from 'react';
 import { ConsoleMessageItem } from '../types.js';
 
+// Maximum console messages to keep in memory to prevent unbounded growth
+const MAX_CONSOLE_MESSAGES = 1000;
+
 export interface UseConsoleMessagesReturn {
   consoleMessages: ConsoleMessageItem[];
   handleNewMessage: (message: ConsoleMessageItem) => void;
@@ -46,6 +49,11 @@ function consoleMessagesReducer(
         } else {
           newMessages.push({ ...queuedMessage, count: 1 });
         }
+      }
+      // Trim to max size to prevent unbounded memory growth
+      if (newMessages.length > MAX_CONSOLE_MESSAGES) {
+        // Keep the most recent messages
+        return newMessages.slice(-MAX_CONSOLE_MESSAGES);
       }
       return newMessages;
     }

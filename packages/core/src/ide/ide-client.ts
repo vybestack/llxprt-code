@@ -179,7 +179,14 @@ export class IdeClient {
     }
   }
 
-  disconnect() {
+  async disconnect() {
+    if (this.state.status === IDEConnectionStatus.Disconnected) {
+      return;
+    }
+    for (const filePath of this.diffResponses.keys()) {
+      await this.closeDiff(filePath);
+    }
+    this.diffResponses.clear();
     this.setState(
       IDEConnectionStatus.Disconnected,
       'IDE integration disabled. To enable it again, run /ide enable.',
@@ -207,17 +214,17 @@ export class IdeClient {
       this.state.status === IDEConnectionStatus.Disconnected &&
       status === IDEConnectionStatus.Disconnected;
 
-    // Only update details if the state wasn't already disconnected, so that
-    // the first detail message is preserved.
+    // Only update details & log to console if the state wasn't already
+    // disconnected, so that the first detail message is preserved.
     if (!isAlreadyDisconnected) {
       this.state = { status, details };
-    }
-
-    if (status === IDEConnectionStatus.Disconnected) {
       if (logToConsole) {
         logger.error(details);
       }
-      logger.debug('IDE integration is disconnected. ', details);
+    }
+
+    if (status === IDEConnectionStatus.Disconnected) {
+      logger.debug(details);
       ideContext.clearIdeContext();
     }
   }
@@ -326,7 +333,7 @@ export class IdeClient {
       });
 
       transport = new StreamableHTTPClientTransport(
-        new URL(`http://localhost:${port}/mcp`),
+        new URL(`http://${getIdeServerHost()}:${port}/mcp`),
       );
 
       this.registerClientHandlers();
@@ -383,4 +390,13 @@ export class IdeClient {
   setDisconnected() {
     this.setState(IDEConnectionStatus.Disconnected);
   }
+}
+
+function getIdeServerHost() {
+  const isInContainer =
+    fs.existsSync('/.dockerenv') ||
+    fs.existsSync('/run/.containerenv') ||
+    !!process.env.SANDBOX ||
+    !!process.env.container;
+  return isInContainer ? 'host.docker.internal' : 'localhost';
 }

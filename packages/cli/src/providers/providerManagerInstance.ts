@@ -102,6 +102,11 @@ export function getProviderManager(
     oauthManager.registerProvider(new GeminiOAuthProvider());
     oauthManager.registerProvider(new QwenOAuthProvider());
 
+    // Set config BEFORE registering providers so logging wrapper works
+    if (config) {
+      providerManagerInstance.setConfig(config);
+    }
+
     // Always register GeminiProvider with OAuth manager
     const geminiProvider = new GeminiProvider(
       undefined,

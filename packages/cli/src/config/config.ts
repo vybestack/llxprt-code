@@ -571,6 +571,13 @@ export async function loadCliConfig(
       logPrompts:
         argv.telemetryLogPrompts ?? effectiveSettings.telemetry?.logPrompts,
       outfile: argv.telemetryOutfile ?? effectiveSettings.telemetry?.outfile,
+      logConversations: effectiveSettings.telemetry?.logConversations,
+      logResponses: effectiveSettings.telemetry?.logResponses,
+      redactSensitiveData: effectiveSettings.telemetry?.redactSensitiveData,
+      redactFilePaths: effectiveSettings.telemetry?.redactFilePaths,
+      redactUrls: effectiveSettings.telemetry?.redactUrls,
+      redactEmails: effectiveSettings.telemetry?.redactEmails,
+      redactPersonalInfo: effectiveSettings.telemetry?.redactPersonalInfo,
     },
     usageStatisticsEnabled: effectiveSettings.usageStatisticsEnabled ?? true,
     // Git-aware file filtering settings

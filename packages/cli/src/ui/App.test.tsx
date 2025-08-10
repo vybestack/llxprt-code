@@ -327,10 +327,13 @@ describe('App UI', () => {
     if (!mockConfig.getShowMemoryUsage) {
       mockConfig.getShowMemoryUsage = vi.fn(() => false);
     }
-    mockConfig.getShowMemoryUsage.mockReturnValue(false); // Default for most tests
+    mockConfig.getShowMemoryUsage.mockReturnValue(true); // Enable memory display for tests
 
     // Ensure a theme is set so the theme dialog does not appear.
-    mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
+    // Enable showMemoryUsage for tests that need memory display
+    mockSettings = createMockSettings({
+      workspace: { theme: 'Default', showMemoryUsage: true },
+    });
 
     // Ensure getWorkspaceContext is available if not added by the constructor
     if (!mockConfig.getWorkspaceContext) {
@@ -951,7 +954,12 @@ describe('App UI', () => {
       />,
     );
     currentUnmount = unmount;
-    expect(lastFrame()).toMatchSnapshot();
+    const output = lastFrame();
+    // Check the structure without exact memory percentage
+    expect(output).toContain('The first rule of Fight Club');
+    expect(output).toMatch(/Mem: \d+%/);
+    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toContain('/test/dir');
   });
 
   it('should render correctly with the prompt input box', () => {
@@ -971,7 +979,16 @@ describe('App UI', () => {
       />,
     );
     currentUnmount = unmount;
-    expect(lastFrame()).toMatchSnapshot();
+    const output = lastFrame();
+    // Check the structure without exact memory percentage
+    // Handle both regular and PowerShell placeholder text
+    expect(
+      output.includes('Type your message or @path/to/file') ||
+        output.includes('Type your message, @path/to/file or +path/to/file'),
+    ).toBe(true);
+    expect(output).toMatch(/Mem: \d+%/);
+    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toContain('/test/dir');
   });
 
   describe('with initial prompt from --prompt-interactive', () => {

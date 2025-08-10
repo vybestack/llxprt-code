@@ -8,6 +8,9 @@
 export * from './config/config.js';
 export * from './config/profileManager.js';
 
+// Export services
+export * from './services/git-stats-service.js';
+
 // Export types
 export * from './types/modelParams.js';
 

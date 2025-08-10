@@ -35,6 +35,12 @@ describe('Provider-Gemini Switching', () => {
       setModel(model: string) {
         console.log(`Provider model set to: ${model}`);
       },
+      getServerTools() {
+        return [];
+      },
+      async invokeServerTool() {
+        return {};
+      },
     };
   });
 
