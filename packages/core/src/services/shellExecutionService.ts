@@ -12,6 +12,10 @@ import { getSystemEncoding } from '../utils/systemEncoding.js';
 import { isBinary } from '../utils/textUtils.js';
 
 const SIGKILL_TIMEOUT_MS = 200;
+// Maximum output size to keep in memory (10MB) to prevent OOM errors
+const MAX_OUTPUT_SIZE = 10 * 1024 * 1024;
+// Maximum string accumulation (5MB) to prevent string concatenation OOM
+const MAX_STRING_SIZE = 5 * 1024 * 1024;
 
 /** A structured result from a shell command execution. */
 export interface ShellExecutionResult {
@@ -74,6 +78,8 @@ export class ShellExecutionService {
       let stdout = '';
       let stderr = '';
       const outputChunks: Buffer[] = [];
+      let totalOutputSize = 0;
+      let outputTruncated = false;
       let error: Error | null = null;
       let exited = false;
 
@@ -82,7 +88,22 @@ export class ShellExecutionService {
       let sniffedBytes = 0;
 
       const handleOutput = (data: Buffer, stream: 'stdout' | 'stderr') => {
+        // Check if we've exceeded max output size
+        if (totalOutputSize + data.length > MAX_OUTPUT_SIZE) {
+          outputTruncated = true;
+          // Only keep data up to the limit
+          const remainingSpace = MAX_OUTPUT_SIZE - totalOutputSize;
+          if (remainingSpace > 0) {
+            data = data.slice(0, remainingSpace);
+            outputChunks.push(data);
+            totalOutputSize += data.length;
+          }
+          // Stop processing more output
+          return;
+        }
+
         outputChunks.push(data);
+        totalOutputSize += data.length;
 
         if (isStreamingRawContent && sniffedBytes < MAX_SNIFF_SIZE) {
           const sniffBuffer = Buffer.concat(outputChunks.slice(0, 20));
@@ -99,8 +120,14 @@ export class ShellExecutionService {
             : stderrDecoder.decode(data, { stream: true });
         const strippedChunk = stripAnsi(decodedChunk);
 
-        if (stream === 'stdout') stdout += strippedChunk;
-        else stderr += strippedChunk;
+        // Prevent string concatenation OOM
+        if (stream === 'stdout' && stdout.length < MAX_STRING_SIZE) {
+          const remaining = MAX_STRING_SIZE - stdout.length;
+          stdout += strippedChunk.slice(0, remaining);
+        } else if (stream === 'stderr' && stderr.length < MAX_STRING_SIZE) {
+          const remaining = MAX_STRING_SIZE - stderr.length;
+          stderr += strippedChunk.slice(0, remaining);
+        }
 
         if (isStreamingRawContent) {
           onOutputEvent({ type: 'data', stream, chunk: strippedChunk });
@@ -169,14 +196,27 @@ export class ShellExecutionService {
       function cleanup() {
         exited = true;
         abortSignal.removeEventListener('abort', abortHandler);
-        if (stdoutDecoder) {
-          stdout += stripAnsi(stdoutDecoder.decode());
+        if (stdoutDecoder && stdout.length < MAX_STRING_SIZE) {
+          const decoded = stripAnsi(stdoutDecoder.decode());
+          const remaining = MAX_STRING_SIZE - stdout.length;
+          stdout += decoded.slice(0, remaining);
         }
-        if (stderrDecoder) {
-          stderr += stripAnsi(stderrDecoder.decode());
+        if (stderrDecoder && stderr.length < MAX_STRING_SIZE) {
+          const decoded = stripAnsi(stderrDecoder.decode());
+          const remaining = MAX_STRING_SIZE - stderr.length;
+          stderr += decoded.slice(0, remaining);
         }
 
         const finalBuffer = Buffer.concat(outputChunks);
+
+        // Add truncation warning if output was truncated
+        if (outputTruncated) {
+          const warning =
+            '\n... (output truncated to prevent memory overflow) ...';
+          if (stdout.length < MAX_STRING_SIZE) {
+            stdout += warning;
+          }
+        }
 
         return { stdout, stderr, finalBuffer };
       }
