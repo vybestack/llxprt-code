@@ -503,7 +503,7 @@ export const SETTINGS_SCHEMA = {
     description: 'Show line numbers in the chat.',
     showInDialog: true,
   },
-  
+
   // LLxprt-specific provider settings
   defaultProfile: {
     type: 'string',
@@ -550,7 +550,7 @@ export const SETTINGS_SCHEMA = {
     description: 'Keyfile paths for different providers.',
     showInDialog: false,
   },
-  
+
   // Text-based tool call parsing settings
   enableTextToolCallParsing: {
     type: 'boolean',
@@ -570,7 +570,7 @@ export const SETTINGS_SCHEMA = {
     description: 'Models that support text-based tool call parsing.',
     showInDialog: false,
   },
-  
+
   // OpenAI Responses API settings
   openaiResponsesEnabled: {
     type: 'boolean',
@@ -581,7 +581,7 @@ export const SETTINGS_SCHEMA = {
     description: 'Enable OpenAI Responses API compatibility.',
     showInDialog: false,
   },
-  
+
   // Shell replacement setting
   shellReplacement: {
     type: 'boolean',

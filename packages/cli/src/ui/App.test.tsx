@@ -327,10 +327,13 @@ describe('App UI', () => {
     if (!mockConfig.getShowMemoryUsage) {
       mockConfig.getShowMemoryUsage = vi.fn(() => false);
     }
-    mockConfig.getShowMemoryUsage.mockReturnValue(false); // Default for most tests
+    mockConfig.getShowMemoryUsage.mockReturnValue(true); // Enable memory display for tests
 
     // Ensure a theme is set so the theme dialog does not appear.
-    mockSettings = createMockSettings({ workspace: { theme: 'Default' } });
+    // Enable showMemoryUsage for tests that need memory display
+    mockSettings = createMockSettings({
+      workspace: { theme: 'Default', showMemoryUsage: true },
+    });
 
     // Ensure getWorkspaceContext is available if not added by the constructor
     if (!mockConfig.getWorkspaceContext) {

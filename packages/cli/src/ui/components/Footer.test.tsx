@@ -54,6 +54,7 @@ describe('Footer', () => {
     debugMessage: '',
     errorCount: 0,
     showErrorDetails: false,
+    showMemoryUsage: true,
     promptTokenCount: 1000,
     isPaidMode: false,
     nightly: false,

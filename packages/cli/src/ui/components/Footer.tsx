@@ -228,7 +228,10 @@ export const Footer: React.FC<FooterProps> = ({
         <Box flexDirection="row" alignItems="center">
           {showMemoryUsage && (
             <>
-              <ResponsiveMemoryDisplay compact={isCompact} detailed={isDetailed} />
+              <ResponsiveMemoryDisplay
+                compact={isCompact}
+                detailed={isDetailed}
+              />
               <Text color={SemanticColors.text.secondary}> | </Text>
             </>
           )}
