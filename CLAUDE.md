@@ -107,7 +107,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ### Never Declare Done Without Full Verification
 
 - **NEVER** declare something done unless it has compiled, tested, and linted
-- **NEVER** push without: compile → test → lint → format
+- **NEVER** push without: test → lint → format → `git add -A` → build → commit
+- **CRITICAL**: After running `npm run format`, ALWAYS run `git add -A` to stage the formatted changes before committing
 - **ANY** code changes require restarting the entire verification cycle
 - If you compile, test, lint and get an error and change code, you MUST compile, test, lint again
 - You may commit locally before risky changes, but NEVER push until the whole cycle passes
