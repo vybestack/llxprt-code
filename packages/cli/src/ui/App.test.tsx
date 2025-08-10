@@ -978,7 +978,11 @@ describe('App UI', () => {
     currentUnmount = unmount;
     const output = lastFrame();
     // Check the structure without exact memory percentage
-    expect(output).toContain('Type your message or @path/to/file');
+    // Handle both regular and PowerShell placeholder text
+    expect(
+      output.includes('Type your message or @path/to/file') ||
+        output.includes('Type your message, @path/to/file or +path/to/file'),
+    ).toBe(true);
     expect(output).toMatch(/Mem: \d+%/);
     expect(output).toContain('Ctx: 0.0k/1049k');
     expect(output).toContain('/test/dir');
