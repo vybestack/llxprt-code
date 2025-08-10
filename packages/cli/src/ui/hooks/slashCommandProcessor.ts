@@ -56,6 +56,7 @@ export const useSlashCommandProcessor = (
   toggleCorgiMode: () => void,
   setQuittingMessages: (message: HistoryItem[]) => void,
   openPrivacyNotice: () => void,
+  openSettingsDialog: () => void,
   toggleVimEnabled: () => Promise<boolean>,
   setIsProcessing: (isProcessing: boolean) => void,
   setLlxprtMdFileCount: (count: number) => void,
@@ -402,6 +403,11 @@ export const useSlashCommandProcessor = (
                       }
                       return { type: 'handled' };
                     }
+                    case 'settings':
+                      openSettingsDialog();
+                      return { type: 'handled' };
+                    case 'help':
+                      return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
                       throw new Error(
@@ -565,6 +571,7 @@ export const useSlashCommandProcessor = (
       openLoadProfileDialog,
       openToolsDialog,
       setQuittingMessages,
+      openSettingsDialog,
       setShellConfirmationRequest,
       setSessionShellAllowlist,
       setIsProcessing,

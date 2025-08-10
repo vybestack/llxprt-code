@@ -109,6 +109,8 @@ import ansiEscapes from 'ansi-escapes';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
+import { useSettingsCommand } from './hooks/useSettingsCommand.js';
+import { SettingsDialog } from './components/SettingsDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
@@ -304,6 +306,9 @@ const App = (props: AppInternalProps) => {
     handleThemeSelect,
     handleThemeHighlight,
   } = useThemeCommand(settings, appState, addItem);
+
+  const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
+    useSettingsCommand();
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect } =
     useFolderTrust(settings);
@@ -681,6 +686,7 @@ const App = (props: AppInternalProps) => {
     toggleCorgiMode,
     setQuittingMessages,
     openPrivacyNotice,
+    openSettingsDialog,
     toggleVimEnabled,
     setIsProcessing,
     setLlxprtMdFileCount,
@@ -1185,6 +1191,14 @@ const App = (props: AppInternalProps) => {
                 terminalWidth={mainAreaWidth}
               />
             </Box>
+          ) : isSettingsDialogOpen ? (
+            <Box flexDirection="column">
+              <SettingsDialog
+                settings={settings}
+                onSelect={() => closeSettingsDialog()}
+                onRestartRequest={() => process.exit(0)}
+              />
+            </Box>
           ) : isAuthenticating ? (
             <>
               <AuthInProgress onTimeout={handleAuthTimeout} />
@@ -1400,6 +1414,9 @@ const App = (props: AppInternalProps) => {
             debugMessage={debugMessage}
             errorCount={errorCount}
             showErrorDetails={showErrorDetails}
+            showMemoryUsage={
+              config.getDebugMode() || settings.merged.showMemoryUsage || false
+            }
             promptTokenCount={sessionStats.lastPromptTokenCount}
             nightly={nightly}
             vimMode={vimModeEnabled ? vimMode : undefined}

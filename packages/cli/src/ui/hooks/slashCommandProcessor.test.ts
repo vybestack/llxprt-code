@@ -152,6 +152,7 @@ describe('useSlashCommandProcessor', () => {
         vi.fn(), // toggleCorgiMode
         mockSetQuittingMessages,
         vi.fn(), // openPrivacyNotice
+        vi.fn(), // openSettingsDialog
         vi.fn(), // toggleVimEnabled
         setIsProcessing,
       ),
@@ -873,7 +874,8 @@ describe('useSlashCommandProcessor', () => {
           vi.fn(), // toggleCorgiMode
           mockSetQuittingMessages,
           vi.fn(), // openPrivacyNotice
-          vi.fn(), // toggleVimEnabled
+          vi.fn(), // openSettingsDialog
+          vi.fn().mockResolvedValue(false), // toggleVimEnabled
           vi.fn(), // setIsProcessing
         ),
       );
