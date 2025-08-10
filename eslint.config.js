@@ -245,6 +245,26 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+  // Settings for CommonJS scripts
+  {
+    files: ['./scripts/**/*.cjs'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        process: 'readonly',
+        console: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        require: 'readonly',
+        module: 'readonly',
+        exports: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-var-requires': 'off',
+    },
+  },
   // Prettier config must be last
   prettierConfig,
   // extra settings for scripts that we run directly with node

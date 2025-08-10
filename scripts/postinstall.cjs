@@ -5,7 +5,7 @@
  * This enables `npx github:acoliver/llxprt-code` to work properly
  */
 
-/* eslint-disable @typescript-eslint/no-require-imports */
+/* eslint-env node */
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
