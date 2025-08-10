@@ -377,6 +377,7 @@ describe('Multi-Provider Integration Tests', () => {
 
     it('should handle missing API key', async () => {
       const provider = new OpenAIProvider('');
+      // With OAuth support, the error message is different
       await expect(provider.getModels()).rejects.toThrow(
         'No authentication method available for openai provider',
       );
