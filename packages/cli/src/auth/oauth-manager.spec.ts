@@ -302,7 +302,7 @@ describe('OAuthManager with OAuth Enablement and Lazy Authentication', () => {
       manager.registerProvider(geminiProvider);
 
       // Mock OAuth as enabled for both
-      const mockIsEnabled = vi.fn().mockResolvedValue(true);
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
       (
         manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
       ).isOAuthEnabled = mockIsEnabled;
@@ -327,6 +327,12 @@ describe('OAuthManager with OAuth Enablement and Lazy Authentication', () => {
      */
     it('should automatically refresh expiring tokens', async () => {
       manager.registerProvider(qwenProvider);
+
+      // Mock OAuth as enabled
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
+      (
+        manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
+      ).isOAuthEnabled = mockIsEnabled;
 
       // First authenticate to get a token
       await manager.authenticate('qwen');
@@ -362,7 +368,7 @@ describe('OAuthManager with OAuth Enablement and Lazy Authentication', () => {
       manager.registerProvider(qwenProvider);
 
       // Mock OAuth as disabled
-      const mockIsEnabled = vi.fn().mockResolvedValue(false);
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
       (
         manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
       ).isOAuthEnabled = mockIsEnabled;
@@ -391,7 +397,7 @@ describe('OAuthManager with OAuth Enablement and Lazy Authentication', () => {
       // Mock OAuth enabled for qwen, disabled for gemini
       const mockIsEnabled = vi
         .fn()
-        .mockImplementation((provider) => Promise.resolve(provider === 'qwen'));
+        .mockImplementation((provider) => provider === 'qwen');
       (
         manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
       ).isOAuthEnabled = mockIsEnabled;
@@ -445,7 +451,7 @@ describe('OAuthManager with OAuth Enablement and Lazy Authentication', () => {
       // Mock mixed OAuth enablement states
       const mockIsEnabled = vi
         .fn()
-        .mockImplementation((provider) => Promise.resolve(provider === 'qwen'));
+        .mockImplementation((provider) => provider === 'qwen');
       (
         manager as unknown as { isOAuthEnabled: typeof mockIsEnabled }
       ).isOAuthEnabled = mockIsEnabled;
@@ -497,10 +503,9 @@ describe('OAuthManager with OAuth Enablement and Lazy Authentication', () => {
      * @when getToken('unknown') called
      * @then Throws provider not found error
      */
-    it('should throw error for unknown provider token request', async () => {
-      await expect(manager.getToken('unknown')).rejects.toThrow(
-        'Unknown provider: unknown',
-      );
+    it('should return null for unknown provider token request', async () => {
+      const token = await manager.getToken('unknown');
+      expect(token).toBeNull();
     });
 
     /**

@@ -14,6 +14,7 @@ const mockOAuthManager = {
   registerProvider: vi.fn(),
   toggleOAuthEnabled: vi.fn(),
   isOAuthEnabled: vi.fn(),
+  isAuthenticated: vi.fn(),
   getAuthStatus: vi.fn(),
   getToken: vi.fn(),
   getSupportedProviders: vi.fn().mockReturnValue(['gemini', 'qwen']),
@@ -64,16 +65,41 @@ describe('AuthCommandExecutor OAuth Support', () => {
   });
 
   describe('@requirement REQ-005: Direct provider OAuth enablement', () => {
-    it('@given user enters /auth gemini @when provider specified @then toggles OAuth enablement for Gemini', async () => {
+    it('@given user enters /auth gemini @when provider specified without action @then shows provider status', async () => {
+      // Given: OAuth is enabled and authenticated for gemini
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
+      const mockIsAuthenticated = vi.fn().mockResolvedValue(true);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      // When: User enters /auth gemini (without action)
+      const result = await executor.execute(mockContext, 'gemini');
+
+      // Then: Should show provider status
+      expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'OAuth for gemini: ENABLED (authenticated)',
+      });
+    });
+
+    it('@given user enters /auth gemini enable @when provider specified with action @then toggles OAuth enablement for Gemini', async () => {
       // Given: OAuth currently disabled, no higher priority auth
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth gemini
-      const result = await executor.execute(mockContext, 'gemini');
+      // When: User enters /auth gemini enable
+      const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should toggle OAuth enablement and return success
       expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
@@ -84,16 +110,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given user enters /auth qwen @when provider specified @then toggles OAuth enablement for Qwen', async () => {
-      // Given: OAuth currently enabled, toggle will disable
+    it('@given user enters /auth qwen disable @when provider specified with action @then disables OAuth for Qwen', async () => {
+      // Given: OAuth currently enabled, disable will toggle it off
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockToggleOAuth = vi.fn().mockResolvedValue(false);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User enters /auth qwen
-      const result = await executor.execute(mockContext, 'qwen');
+      // When: User enters /auth qwen disable
+      const result = await executor.execute(mockContext, 'qwen disable');
 
       // Then: Should toggle OAuth enablement and return success
       expect(mockToggleOAuth).toHaveBeenCalledWith('qwen');
@@ -104,23 +132,38 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given user enters /auth with whitespace @when provider has spaces @then trims and processes', async () => {
-      // Given: OAuth manager will toggle successfully
-      const mockToggleOAuth = vi.fn().mockResolvedValue(true);
+    it('@given user enters /auth with whitespace @when provider has spaces @then shows status for provider', async () => {
+      // Given: OAuth manager will return status successfully
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
+      const mockIsAuthenticated = vi.fn().mockResolvedValue(false);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
-      (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.isAuthenticated as unknown) = mockIsAuthenticated;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
       // When: User enters /auth with leading/trailing spaces
       const result = await executor.execute(mockContext, '  gemini  ');
 
-      // Then: Should trim and process provider
-      expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
+      // Then: Should trim and show provider status
+      expect(mockIsEnabled).toHaveBeenCalledWith('gemini');
+      expect(mockIsAuthenticated).toHaveBeenCalledWith('gemini');
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: 'OAuth enabled for gemini',
+        content: 'OAuth for gemini: DISABLED',
+      });
+    });
+
+    it('@given user enters /auth gemini invalid @when invalid action specified @then returns error', async () => {
+      // When: User enters invalid action
+      const result = await executor.execute(mockContext, 'gemini invalid');
+
+      // Then: Should return error message
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'error',
+        content: "Invalid action: invalid. Use 'enable' or 'disable'",
       });
     });
   });
@@ -180,16 +223,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
   });
 
   describe('OAuth enablement toggle behavior', () => {
-    it('@given OAuth disabled for provider @when toggling @then enables OAuth', async () => {
+    it('@given OAuth disabled for provider @when enabling @then enables OAuth', async () => {
       // Given: OAuth currently disabled
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: Toggle OAuth enablement
-      const result = await executor.execute(mockContext, 'gemini');
+      // When: Enable OAuth
+      const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should enable OAuth and show success message
       expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
@@ -200,16 +245,18 @@ describe('AuthCommandExecutor OAuth Support', () => {
       });
     });
 
-    it('@given OAuth enabled for provider @when toggling @then disables OAuth', async () => {
+    it('@given OAuth enabled for provider @when disabling @then disables OAuth', async () => {
       // Given: OAuth currently enabled
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockToggleOAuth = vi.fn().mockResolvedValue(false);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: Toggle OAuth enablement
-      const result = await executor.execute(mockContext, 'qwen');
+      // When: Disable OAuth
+      const result = await executor.execute(mockContext, 'qwen disable');
 
       // Then: Should disable OAuth and show success message
       expect(mockToggleOAuth).toHaveBeenCalledWith('qwen');
@@ -219,19 +266,59 @@ describe('AuthCommandExecutor OAuth Support', () => {
         content: 'OAuth disabled for qwen',
       });
     });
+
+    it('@given OAuth already enabled @when trying to enable @then shows already enabled message', async () => {
+      // Given: OAuth already enabled for provider
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      // When: Try to enable already enabled OAuth
+      const result = await executor.execute(mockContext, 'gemini enable');
+
+      // Then: Should show already enabled message
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'OAuth for gemini is already enabled',
+      });
+    });
+
+    it('@given OAuth already disabled @when trying to disable @then shows already disabled message', async () => {
+      // Given: OAuth already disabled for provider
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
+      const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
+      (mockOAuthManager.getHigherPriorityAuth as unknown) =
+        mockGetHigherPriority;
+
+      // When: Try to disable already disabled OAuth
+      const result = await executor.execute(mockContext, 'qwen disable');
+
+      // Then: Should show already disabled message
+      expect(result).toEqual({
+        type: 'message',
+        messageType: 'info',
+        content: 'OAuth for qwen is already disabled',
+      });
+    });
   });
 
   describe('Higher priority auth warnings', () => {
     it('@given API key present @when enabling OAuth @then shows warning about precedence', async () => {
-      // Given: API key has higher precedence
+      // Given: API key has higher precedence and OAuth is currently disabled
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue('API Key');
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
       // When: Enabling OAuth with higher priority auth present
-      const result = await executor.execute(mockContext, 'gemini');
+      const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should show warning about precedence
       expect(result).toEqual({
@@ -246,16 +333,16 @@ describe('AuthCommandExecutor OAuth Support', () => {
   describe('OAuth enablement persistence', () => {
     it('@given OAuth enablement toggled @when checking status later @then reflects saved state', async () => {
       // Given: OAuth can be enabled and status retrieved
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi.fn().mockResolvedValue(true);
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
-      const mockIsOAuthEnabled = vi.fn().mockResolvedValue(true);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
-      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsOAuthEnabled;
 
       // When: Enable OAuth for provider
-      await executor.execute(mockContext, 'gemini');
+      await executor.execute(mockContext, 'gemini enable');
 
       // Then: OAuth manager should save the enabled state
       expect(mockToggleOAuth).toHaveBeenCalledWith('gemini');
@@ -310,49 +397,53 @@ describe('AuthCommandExecutor OAuth Support', () => {
   describe('Error handling patterns', () => {
     it('@given toggle fails @when OAuth enablement attempted @then handles error gracefully', async () => {
       // Given: OAuth manager will fail
+      const mockIsEnabled = vi.fn().mockReturnValue(false);
       const mockToggleOAuth = vi
         .fn()
         .mockRejectedValue(new Error('Toggle failed'));
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User attempts OAuth toggle
-      const result = await executor.execute(mockContext, 'gemini');
+      // When: User attempts OAuth enable
+      const result = await executor.execute(mockContext, 'gemini enable');
 
       // Then: Should return error message
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Failed to toggle OAuth for gemini: Toggle failed',
+        content: 'Failed to enable OAuth for gemini: Toggle failed',
       });
     });
 
-    it('@given storage error @when OAuth enablement toggle attempted @then provides user-friendly message', async () => {
+    it('@given storage error @when OAuth enablement disable attempted @then provides user-friendly message', async () => {
       // Given: OAuth manager will fail with storage error
+      const mockIsEnabled = vi.fn().mockReturnValue(true);
       const mockToggleOAuth = vi
         .fn()
         .mockRejectedValue(new Error('Cannot save configuration'));
       const mockGetHigherPriority = vi.fn().mockResolvedValue(null);
+      (mockOAuthManager.isOAuthEnabled as unknown) = mockIsEnabled;
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      // When: User attempts OAuth toggle
-      const result = await executor.execute(mockContext, 'qwen');
+      // When: User attempts OAuth disable
+      const result = await executor.execute(mockContext, 'qwen disable');
 
       // Then: Should return user-friendly error message
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: 'Failed to toggle OAuth for qwen: Cannot save configuration',
+        content: 'Failed to disable OAuth for qwen: Cannot save configuration',
       });
     });
   });
 
   describe('Command interface compliance', () => {
-    it('@given auth command @when checking properties @then has correct OAuth toggle description', async () => {
+    it('@given auth command @when checking properties @then has correct OAuth description', async () => {
       // Import the actual command to test its properties
       const { authCommand } = await import('./authCommand.js');
       expect(authCommand.name).toBe('auth');
