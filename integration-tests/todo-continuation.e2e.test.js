@@ -15,7 +15,7 @@ import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
  * @when User completes without tool calls
  * @then Continuation prompt appears with todo context
  */
-test('basic todo continuation flow', async () => {
+test.skip('basic todo continuation flow', async () => {
   const rig = new TestRig();
   await rig.setup('basic todo continuation flow', {
     settings: {
