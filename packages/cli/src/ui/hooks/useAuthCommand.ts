@@ -123,29 +123,21 @@ export const useAuthCommand = (
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
         appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
 
-        // Import necessary modules for OAuth
-        const { OAuthManager } = await import('../../auth/oauth-manager.js');
-        const { MultiProviderTokenStore } = await import(
-          '@vybestack/llxprt-code-core'
+        // Get the existing OAuth manager from provider manager
+        const { getOAuthManager } = await import(
+          '../../providers/providerManagerInstance.js'
         );
-        const { GeminiOAuthProvider } = await import(
-          '../../auth/gemini-oauth-provider.js'
-        );
-        const { QwenOAuthProvider } = await import(
-          '../../auth/qwen-oauth-provider.js'
-        );
-        const { AnthropicOAuthProvider } = await import(
-          '../../auth/anthropic-oauth-provider.js'
-        );
+        const oauthManager = getOAuthManager();
 
-        // Initialize OAuth manager
-        const tokenStore = new MultiProviderTokenStore();
-        const oauthManager = new OAuthManager(tokenStore, settings);
-
-        // Register OAuth providers
-        oauthManager.registerProvider(new GeminiOAuthProvider());
-        oauthManager.registerProvider(new QwenOAuthProvider());
-        oauthManager.registerProvider(new AnthropicOAuthProvider());
+        if (!oauthManager) {
+          console.error('OAuth manager not initialized');
+          appDispatch({
+            type: 'SET_AUTH_ERROR',
+            payload:
+              'OAuth system not initialized. Please restart the application.',
+          });
+          return;
+        }
 
         // Trigger authentication
         try {
@@ -154,25 +146,11 @@ export const useAuthCommand = (
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-
-          // Check if we need to show the OAuth code dialog
-          if (errorMessage === 'OAUTH_CODE_NEEDED') {
-            // Open the OAuth code input dialog
-            appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
-            // Store the provider for the dialog
-            (
-              global as unknown as { __oauth_provider: string }
-            ).__oauth_provider = provider;
-            (
-              global as unknown as { __oauth_manager: typeof oauthManager }
-            ).__oauth_manager = oauthManager;
-          } else {
-            console.error(`Authentication failed: ${errorMessage}`);
-            appDispatch({
-              type: 'SET_AUTH_ERROR',
-              payload: `Failed to authenticate with ${provider}: ${errorMessage}`,
-            });
-          }
+          console.error(`Authentication failed: ${errorMessage}`);
+          appDispatch({
+            type: 'SET_AUTH_ERROR',
+            payload: `Failed to authenticate with ${provider}: ${errorMessage}`,
+          });
         }
 
         return;

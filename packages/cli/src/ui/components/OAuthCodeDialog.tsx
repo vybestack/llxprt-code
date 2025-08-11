@@ -7,7 +7,6 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
-import TextInput from 'ink-text-input';
 
 interface OAuthCodeDialogProps {
   provider: string;
@@ -22,18 +21,47 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
 }) => {
   const [code, setCode] = useState('');
 
-  useInput((_, key) => {
+  useInput((input, key) => {
     if (key.escape) {
       onClose();
+      return;
+    }
+
+    if (key.return) {
+      if (code.trim()) {
+        // Strip bracketed paste sequences before submitting
+        const cleanCode = code
+          .replace(/\[200~/g, '')
+          .replace(/\[201~/g, '')
+          .replace(/~\[200~/g, '')
+          .replace(/~\[201~/g, '')
+          .trim();
+
+        if (cleanCode) {
+          onSubmit(cleanCode);
+          onClose();
+        }
+      }
+      return;
+    }
+
+    if (key.backspace || key.delete) {
+      setCode((prev) => prev.slice(0, -1));
+      return;
+    }
+
+    // Handle regular input (including paste)
+    if (input) {
+      // Strip bracketed paste mode indicators
+      const cleanInput = input
+        .replace(/\[200~/g, '')
+        .replace(/\[201~/g, '')
+        .replace(/~\[200~/g, '')
+        .replace(/~\[201~/g, '');
+
+      setCode((prev) => prev + cleanInput);
     }
   });
-
-  const handleSubmit = () => {
-    if (code.trim()) {
-      onSubmit(code.trim());
-      onClose();
-    }
-  };
 
   return (
     <Box
@@ -57,12 +85,7 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
       </Text>
       <Box marginTop={1}>
         <Text color={Colors.AccentCyan}>Code: </Text>
-        <TextInput
-          value={code}
-          onChange={setCode}
-          onSubmit={handleSubmit}
-          placeholder="Paste authorization code here..."
-        />
+        <Text color={Colors.Foreground}>{code || '(paste code here)'}</Text>
       </Box>
       <Box marginTop={1}>
         <Text dimColor>Press Enter to submit or Escape to cancel</Text>

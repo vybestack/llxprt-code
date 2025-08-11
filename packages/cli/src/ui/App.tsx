@@ -351,6 +351,25 @@ const App = (props: AppInternalProps) => {
     }
   }, [config, isAuthenticating]);
 
+  // Check for OAuth code needed flag
+  useEffect(() => {
+    const checkOAuthFlag = setInterval(() => {
+      if (
+        (global as unknown as { __oauth_needs_code?: boolean })
+          .__oauth_needs_code
+      ) {
+        // Clear the flag
+        (
+          global as unknown as { __oauth_needs_code?: boolean }
+        ).__oauth_needs_code = false;
+        // Open the OAuth code dialog
+        appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+      }
+    }, 100); // Check every 100ms
+
+    return () => clearInterval(checkOAuthFlag);
+  }, [appDispatch]);
+
   const {
     isEditorDialogOpen,
     openEditorDialog,
@@ -650,6 +669,17 @@ const App = (props: AppInternalProps) => {
     // NEVER automatically open auth dialog - user must use /auth
   }, [setAuthError]);
 
+  const onOAuthCodeNeeded = useCallback(
+    (provider: string) => {
+      // Store provider for the dialog
+      (global as unknown as { __oauth_provider: string }).__oauth_provider =
+        provider;
+      // Open the OAuth code input dialog
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+    },
+    [appDispatch],
+  );
+
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
     cancelAuthentication();
@@ -722,17 +752,23 @@ const App = (props: AppInternalProps) => {
   }, [appDispatch]);
 
   const handleOAuthCodeSubmit = useCallback(async (code: string) => {
-    const provider = (global as unknown as { __oauth_provider?: string }).__oauth_provider;
-    const oauthManager = (global as unknown as { __oauth_manager?: any }).__oauth_manager;
-    
-    if (provider === 'anthropic' && oauthManager) {
-      const anthropicProvider = oauthManager.providers.get('anthropic');
-      if (anthropicProvider) {
-        try {
-          await anthropicProvider.completeAuth(code);
-          console.log('Successfully authenticated with Anthropic!');
-        } catch (error) {
-          console.error('Failed to complete authentication:', error);
+    const provider = (global as unknown as { __oauth_provider?: string })
+      .__oauth_provider;
+
+    if (provider === 'anthropic') {
+      // Get the OAuth manager from provider manager
+      const { getOAuthManager } = await import(
+        '../providers/providerManagerInstance.js'
+      );
+      const oauthManager = getOAuthManager();
+
+      if (oauthManager) {
+        const anthropicProvider = oauthManager.getProvider('anthropic');
+        if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
+          // This will resolve the promise in initiateAuth
+          (
+            anthropicProvider as { submitAuthCode: (code: string) => void }
+          ).submitAuthCode(code);
         }
       }
     }
@@ -760,6 +796,7 @@ const App = (props: AppInternalProps) => {
     setModelSwitchedFromQuotaError,
     refreshStatic,
     handleUserCancel,
+    onOAuthCodeNeeded,
   );
 
   // Input handling

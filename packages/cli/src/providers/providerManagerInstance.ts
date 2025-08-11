@@ -48,6 +48,7 @@ function sanitizeApiKey(key: string): string {
 
 let providerManagerInstance: ProviderManager | null = null;
 let fileSystemInstance: IFileSystem | null = null;
+let oauthManagerInstance: OAuthManager | null = null;
 
 /**
  * Set a custom file system implementation (mainly for testing).
@@ -98,6 +99,7 @@ export function getProviderManager(
       : undefined;
 
     const oauthManager = new OAuthManager(tokenStore, loadedSettings);
+    oauthManagerInstance = oauthManager;
 
     // Register OAuth providers
     oauthManager.registerProvider(new GeminiOAuthProvider());
@@ -241,6 +243,11 @@ export function getProviderManager(
 export function resetProviderManager(): void {
   providerManagerInstance = null;
   fileSystemInstance = null;
+  oauthManagerInstance = null;
+}
+
+export function getOAuthManager(): OAuthManager | null {
+  return oauthManagerInstance;
 }
 
 export { getProviderManager as providerManager };

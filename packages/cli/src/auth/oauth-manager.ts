@@ -79,6 +79,15 @@ export class OAuthManager {
   }
 
   /**
+   * Get a registered OAuth provider
+   * @param name - Provider name
+   * @returns OAuth provider or undefined if not registered
+   */
+  getProvider(name: string): OAuthProvider | undefined {
+    return this.providers.get(name);
+  }
+
+  /**
    * Authenticate with a specific provider
    * @param providerName - Name of the provider to authenticate with
    */

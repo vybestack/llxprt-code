@@ -16,6 +16,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private currentToken: OAuthToken | null = null;
   private authCodeResolver?: (code: string) => void;
   private authCodeRejecter?: (error: Error) => void;
+  private pendingAuthPromise?: Promise<string>;
 
   constructor() {
     this.deviceFlow = new AnthropicDeviceFlow();
@@ -86,9 +87,34 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     console.log('─'.repeat(40));
 
+    // Store the provider name globally so the dialog knows which provider
+    (global as unknown as { __oauth_provider: string }).__oauth_provider =
+      'anthropic';
+
+    // Create a promise that will resolve when the code is entered
+    this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
+      this.authCodeResolver = resolve;
+      this.authCodeRejecter = reject;
+
+      // Set a timeout to prevent hanging forever
+      setTimeout(
+        () => {
+          reject(new Error('OAuth authentication timed out'));
+        },
+        5 * 60 * 1000,
+      ); // 5 minute timeout
+    });
+
     // Signal that we need the OAuth code dialog
-    // This is handled by the UI hook
-    throw new Error('OAUTH_CODE_NEEDED');
+    // This needs to be caught by the UI to open the dialog
+    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
+      true;
+
+    // Wait for the code to be entered
+    const authCode = await this.pendingAuthPromise;
+
+    // Exchange the code for tokens
+    await this.completeAuth(authCode);
   }
 
   /**
