@@ -76,8 +76,10 @@ export class MultiProviderTokenStore implements TokenStore {
         mode: 0o600,
       });
 
-      // Set secure permissions explicitly
-      await fs.chmod(tempPath, 0o600);
+      // Set secure permissions explicitly (skip on Windows)
+      if (process.platform !== 'win32') {
+        await fs.chmod(tempPath, 0o600);
+      }
 
       // Atomic rename to final location
       await fs.rename(tempPath, tokenPath);
@@ -165,12 +167,14 @@ export class MultiProviderTokenStore implements TokenStore {
     try {
       await fs.mkdir(this.basePath, { recursive: true, mode: 0o700 });
 
-      // Ensure permissions are correct even if directory already existed
-      await fs.chmod(this.basePath, 0o700);
+      // Ensure permissions are correct even if directory already existed (skip on Windows)
+      if (process.platform !== 'win32') {
+        await fs.chmod(this.basePath, 0o700);
 
-      // Also ensure parent .llxprt directory has secure permissions
-      const parentDir = join(homedir(), '.llxprt');
-      await fs.chmod(parentDir, 0o700);
+        // Also ensure parent .llxprt directory has secure permissions
+        const parentDir = join(homedir(), '.llxprt');
+        await fs.chmod(parentDir, 0o700);
+      }
     } catch (error) {
       // If chmod fails because directory doesn't exist, that's fine
       if (

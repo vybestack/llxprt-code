@@ -36,19 +36,26 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
     // Create temporary directory for testing
     tempDir = await fs.mkdtemp(join(tmpdir(), 'token-store-test-'));
 
-    // Mock HOME environment to point to temp directory
-    originalHome = process.env.HOME;
+    // Mock HOME/USERPROFILE environment to point to temp directory
+    // Save both for cross-platform compatibility
+    originalHome = process.env.HOME || process.env.USERPROFILE;
     process.env.HOME = tempDir;
+    process.env.USERPROFILE = tempDir; // For Windows
 
     tokenStore = new MultiProviderTokenStore();
   });
 
   afterEach(async () => {
-    // Restore original HOME environment
+    // Restore original HOME/USERPROFILE environment
     if (originalHome) {
-      process.env.HOME = originalHome;
+      if (process.platform === 'win32') {
+        process.env.USERPROFILE = originalHome;
+      } else {
+        process.env.HOME = originalHome;
+      }
     } else {
       delete process.env.HOME;
+      delete process.env.USERPROFILE;
     }
 
     // Clean up temp directory
@@ -74,8 +81,13 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
       // Verify expected behavior when implemented:
       const tokenPath = join(tempDir, '.llxprt', 'oauth', 'qwen.json');
       await fs.access(tokenPath); // File exists
-      const stats = await fs.stat(tokenPath);
-      expect(stats.mode & 0o777).toBe(0o600); // File permissions are 0600
+
+      // Skip permission check on Windows as it handles permissions differently
+      if (process.platform !== 'win32') {
+        const stats = await fs.stat(tokenPath);
+        expect(stats.mode & 0o777).toBe(0o600); // File permissions are 0600
+      }
+
       const content = JSON.parse(await fs.readFile(tokenPath, 'utf8'));
       expect(content).toEqual(validQwenToken);
     });
@@ -200,14 +212,22 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
      * @when saveToken creates file
      * @then File has 0600 (owner read/write only)
      */
-    it('should create token files with secure 0600 permissions', async () => {
-      await tokenStore.saveToken('security-test', validQwenToken);
-      const tokenPath = join(tempDir, '.llxprt', 'oauth', 'security-test.json');
-      const stats = await fs.stat(tokenPath);
-      expect(stats.mode & 0o777).toBe(0o600);
-      expect(stats.mode & 0o044).toBe(0); // No group/other read
-      expect(stats.mode & 0o022).toBe(0); // No group/other write
-    });
+    it.skipIf(process.platform === 'win32')(
+      'should create token files with secure 0600 permissions',
+      async () => {
+        await tokenStore.saveToken('security-test', validQwenToken);
+        const tokenPath = join(
+          tempDir,
+          '.llxprt',
+          'oauth',
+          'security-test.json',
+        );
+        const stats = await fs.stat(tokenPath);
+        expect(stats.mode & 0o777).toBe(0o600);
+        expect(stats.mode & 0o044).toBe(0); // No group/other read
+        expect(stats.mode & 0o022).toBe(0); // No group/other write
+      },
+    );
 
     /**
      * @requirement REQ-003.4
@@ -231,16 +251,19 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
      * @when first token is saved
      * @then Directory is created with appropriate permissions
      */
-    it('should create oauth directory structure with secure permissions', async () => {
-      await tokenStore.saveToken('dir-test', validQwenToken);
-      const oauthDir = join(tempDir, '.llxprt', 'oauth');
-      const llxprtDir = join(tempDir, '.llxprt');
-      const oauthStats = await fs.stat(oauthDir);
-      const llxprtStats = await fs.stat(llxprtDir);
-      expect(oauthStats.isDirectory()).toBe(true);
-      expect(llxprtStats.isDirectory()).toBe(true);
-      expect(oauthStats.mode & 0o777).toBe(0o700); // Directory should be 0700
-    });
+    it.skipIf(process.platform === 'win32')(
+      'should create oauth directory structure with secure permissions',
+      async () => {
+        await tokenStore.saveToken('dir-test', validQwenToken);
+        const oauthDir = join(tempDir, '.llxprt', 'oauth');
+        const llxprtDir = join(tempDir, '.llxprt');
+        const oauthStats = await fs.stat(oauthDir);
+        const llxprtStats = await fs.stat(llxprtDir);
+        expect(oauthStats.isDirectory()).toBe(true);
+        expect(llxprtStats.isDirectory()).toBe(true);
+        expect(oauthStats.mode & 0o777).toBe(0o700); // Directory should be 0700
+      },
+    );
   });
 
   describe('Error Handling', () => {
@@ -294,16 +317,19 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
      * @when attempting to save token
      * @then Throws appropriate error
      */
-    it('should handle filesystem permission errors appropriately', async () => {
-      // Create directory with no write permissions
-      const restrictedDir = join(tempDir, '.llxprt');
-      await fs.mkdir(restrictedDir, { recursive: true });
-      await fs.chmod(restrictedDir, 0o444); // Read-only
-      await expect(
-        tokenStore.saveToken('permission-test', validQwenToken),
-      ).rejects.toThrow();
-      await fs.chmod(restrictedDir, 0o755); // Restore permissions for cleanup
-    });
+    it.skipIf(process.platform === 'win32')(
+      'should handle filesystem permission errors appropriately',
+      async () => {
+        // Create directory with no write permissions
+        const restrictedDir = join(tempDir, '.llxprt');
+        await fs.mkdir(restrictedDir, { recursive: true });
+        await fs.chmod(restrictedDir, 0o444); // Read-only
+        await expect(
+          tokenStore.saveToken('permission-test', validQwenToken),
+        ).rejects.toThrow();
+        await fs.chmod(restrictedDir, 0o755); // Restore permissions for cleanup
+      },
+    );
   });
 
   describe('Token Updates', () => {
@@ -339,24 +365,27 @@ describe('MultiProviderTokenStore - Behavioral Tests', () => {
      * @when token is updated
      * @then File permissions remain 0600
      */
-    it('should preserve secure file permissions when updating tokens', async () => {
-      const _updatedToken: OAuthToken = {
-        access_token: 'permission-update-token',
-        expiry: Math.floor(Date.now() / 1000) + 900, // 15 minutes
-        token_type: 'Bearer' as const,
-      };
+    it.skipIf(process.platform === 'win32')(
+      'should preserve secure file permissions when updating tokens',
+      async () => {
+        const _updatedToken: OAuthToken = {
+          access_token: 'permission-update-token',
+          expiry: Math.floor(Date.now() / 1000) + 900, // 15 minutes
+          token_type: 'Bearer' as const,
+        };
 
-      await tokenStore.saveToken('permission-update', validQwenToken);
-      await tokenStore.saveToken('permission-update', _updatedToken);
-      const tokenPath = join(
-        tempDir,
-        '.llxprt',
-        'oauth',
-        'permission-update.json',
-      );
-      const stats = await fs.stat(tokenPath);
-      expect(stats.mode & 0o777).toBe(0o600);
-    });
+        await tokenStore.saveToken('permission-update', validQwenToken);
+        await tokenStore.saveToken('permission-update', _updatedToken);
+        const tokenPath = join(
+          tempDir,
+          '.llxprt',
+          'oauth',
+          'permission-update.json',
+        );
+        const stats = await fs.stat(tokenPath);
+        expect(stats.mode & 0o777).toBe(0o600);
+      },
+    );
 
     /**
      * @requirement REQ-003.1
