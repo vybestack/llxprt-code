@@ -17,6 +17,7 @@ import {
   AuthPrecedenceConfig,
   OAuthManager,
 } from '../auth/precedence.js';
+import { UnauthorizedError } from '../utils/errors.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -105,7 +106,7 @@ export abstract class BaseProvider implements IProvider {
               `Use /key <your-api-key> to set it.`,
           );
         }
-        throw new Error(
+        throw new UnauthorizedError(
           `No API key found and OAuth is available but not authenticated for ${this.name} provider. ` +
             `Please authenticate using OAuth or provide an API key.`,
         );

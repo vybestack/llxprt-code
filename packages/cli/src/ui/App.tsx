@@ -41,6 +41,7 @@ import { Footer } from './components/Footer.js';
 import { ThemeDialog } from './components/ThemeDialog.js';
 import { AuthDialog } from './components/AuthDialog.js';
 import { AuthInProgress } from './components/AuthInProgress.js';
+import { OAuthCodeDialog } from './components/OAuthCodeDialog.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { FolderTrustDialog } from './components/FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
@@ -168,7 +169,14 @@ interface AppInternalProps extends AppProps {
 }
 
 const App = (props: AppInternalProps) => {
-  const { config, settings, startupWarnings = [], version, appState } = props;
+  const {
+    config,
+    settings,
+    startupWarnings = [],
+    version,
+    appState,
+    appDispatch,
+  } = props;
   const isFocused = useFocus();
   useBracketedPaste();
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
@@ -710,6 +718,10 @@ const App = (props: AppInternalProps) => {
     }
   }, [buffer, userMessages]);
 
+  const handleOAuthCodeDialogClose = useCallback(() => {
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+  }, [appDispatch]);
+
   const {
     streamingState,
     submitQuery,
@@ -1227,6 +1239,16 @@ const App = (props: AppInternalProps) => {
                 onSelect={handleAuthSelect}
                 settings={settings}
                 initialErrorMessage={authError}
+              />
+            </Box>
+          ) : appState.openDialogs.oauthCode ? (
+            <Box flexDirection="column">
+              <OAuthCodeDialog
+                provider={
+                  (global as unknown as { __oauth_provider?: string })
+                    .__oauth_provider || 'anthropic'
+                }
+                onClose={handleOAuthCodeDialogClose}
               />
             </Box>
           ) : isEditorDialogOpen ? (

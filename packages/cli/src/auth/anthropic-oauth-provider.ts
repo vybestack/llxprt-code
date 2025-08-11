@@ -14,9 +14,43 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   name = 'anthropic';
   private deviceFlow: AnthropicDeviceFlow;
   private currentToken: OAuthToken | null = null;
+  private authCodeResolver?: (code: string) => void;
+  private authCodeRejecter?: (error: Error) => void;
 
   constructor() {
     this.deviceFlow = new AnthropicDeviceFlow();
+  }
+
+  /**
+   * Wait for authorization code from UI dialog
+   */
+  waitForAuthCode(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.authCodeResolver = resolve;
+      this.authCodeRejecter = reject;
+    });
+  }
+
+  /**
+   * Submit authorization code from UI dialog
+   */
+  submitAuthCode(code: string): void {
+    if (this.authCodeResolver) {
+      this.authCodeResolver(code);
+      this.authCodeResolver = undefined;
+      this.authCodeRejecter = undefined;
+    }
+  }
+
+  /**
+   * Cancel OAuth flow
+   */
+  cancelAuth(): void {
+    if (this.authCodeRejecter) {
+      this.authCodeRejecter(new Error('OAuth authentication cancelled'));
+      this.authCodeResolver = undefined;
+      this.authCodeRejecter = undefined;
+    }
   }
 
   async initiateAuth(): Promise<void> {
@@ -51,14 +85,24 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     }
 
     console.log('─'.repeat(40));
-    console.log('Waiting for authorization...\n');
 
-    // Poll for token
-    this.currentToken = await this.deviceFlow.pollForToken(
-      deviceCodeResponse.device_code,
-    );
+    // Signal that we need the OAuth code dialog
+    // This is handled by the UI hook
+    throw new Error('OAUTH_CODE_NEEDED');
+  }
 
-    console.log('✅ Successfully authenticated with Anthropic Claude!');
+  /**
+   * Complete authentication with the authorization code
+   */
+  async completeAuth(authCode: string): Promise<void> {
+    if (!authCode) {
+      throw new Error('No authorization code provided');
+    }
+
+    // Exchange the authorization code for tokens
+    this.currentToken = await this.deviceFlow.exchangeCodeForToken(authCode);
+
+    console.log('Successfully authenticated with Anthropic Claude!');
   }
 
   async getToken(): Promise<OAuthToken | null> {

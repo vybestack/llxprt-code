@@ -108,11 +108,7 @@ export const useAuthCommand = (
         authType === AuthType.OAUTH_QWEN ||
         authType === AuthType.OAUTH_ANTHROPIC
       ) {
-        // Close the dialog
-        appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
-        appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
-
-        // Trigger the OAuth flow via the /auth command
+        // Trigger the OAuth flow directly
         let provider: string;
         if (authType === AuthType.OAUTH_GEMINI) {
           provider = 'gemini';
@@ -121,10 +117,63 @@ export const useAuthCommand = (
         } else {
           provider = 'anthropic';
         }
-        console.log(`Starting OAuth authentication for ${provider}...`);
-        console.log(`Please run: /auth ${provider}`);
 
-        // TODO: Directly trigger OAuth flow here instead of requiring /auth command
+        // Close the dialog first
+        appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
+        appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
+
+        // Import necessary modules for OAuth
+        const { OAuthManager } = await import('../../auth/oauth-manager.js');
+        const { MultiProviderTokenStore } = await import(
+          '@vybestack/llxprt-code-core'
+        );
+        const { GeminiOAuthProvider } = await import(
+          '../../auth/gemini-oauth-provider.js'
+        );
+        const { QwenOAuthProvider } = await import(
+          '../../auth/qwen-oauth-provider.js'
+        );
+        const { AnthropicOAuthProvider } = await import(
+          '../../auth/anthropic-oauth-provider.js'
+        );
+
+        // Initialize OAuth manager
+        const tokenStore = new MultiProviderTokenStore();
+        const oauthManager = new OAuthManager(tokenStore, settings);
+
+        // Register OAuth providers
+        oauthManager.registerProvider(new GeminiOAuthProvider());
+        oauthManager.registerProvider(new QwenOAuthProvider());
+        oauthManager.registerProvider(new AnthropicOAuthProvider());
+
+        // Trigger authentication
+        try {
+          await oauthManager.authenticate(provider);
+          console.log(`Successfully authenticated with ${provider}!`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+
+          // Check if we need to show the OAuth code dialog
+          if (errorMessage === 'OAUTH_CODE_NEEDED') {
+            // Open the OAuth code input dialog
+            appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+            // Store the provider for the dialog
+            (
+              global as unknown as { __oauth_provider: string }
+            ).__oauth_provider = provider;
+            (
+              global as unknown as { __oauth_manager: typeof oauthManager }
+            ).__oauth_manager = oauthManager;
+          } else {
+            console.error(`Authentication failed: ${errorMessage}`);
+            appDispatch({
+              type: 'SET_AUTH_ERROR',
+              payload: `Failed to authenticate with ${provider}: ${errorMessage}`,
+            });
+          }
+        }
+
         return;
       }
 

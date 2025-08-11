@@ -123,7 +123,11 @@ describe('AnthropicProvider OAuth Integration', () => {
 
     it('should indicate OAuth support when provider supports OAuth', () => {
       // This test expects the provider to implement supportsOAuth method
-      expect((provider as AnthropicProvider & { supportsOAuth: () => boolean }).supportsOAuth()).toBe(true);
+      expect(
+        (
+          provider as AnthropicProvider & { supportsOAuth: () => boolean }
+        ).supportsOAuth(),
+      ).toBe(true);
     });
   });
 
@@ -194,7 +198,7 @@ describe('AnthropicProvider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      // Mock successful streaming response  
+      // Mock successful streaming response
       const mockStream = {
         async *[Symbol.asyncIterator]() {
           yield {
@@ -234,7 +238,9 @@ describe('AnthropicProvider OAuth Integration', () => {
 
       expect(models).toHaveLength(2); // 1 actual model + 1 latest alias
       expect(models.some((m) => m.id === 'claude-sonnet-4-latest')).toBe(true);
-      expect(models.some((m) => m.id === 'claude-sonnet-4-20250514')).toBe(true);
+      expect(models.some((m) => m.id === 'claude-sonnet-4-20250514')).toBe(
+        true,
+      );
 
       // Should have attempted to get OAuth token
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
@@ -271,7 +277,7 @@ describe('AnthropicProvider OAuth Integration', () => {
   describe('setApiKey method', () => {
     it('should update API key and clear auth cache', () => {
       provider.setApiKey('new-api-key');
-      
+
       // The setApiKey method should exist (inherited from BaseProvider)
       expect(provider.setApiKey).toBeDefined();
     });

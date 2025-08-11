@@ -6,6 +6,7 @@
  */
 
 import { DeviceCodeResponse, OAuthToken } from './types.js';
+import { createHash, randomBytes } from 'crypto';
 
 /**
  * Configuration for Anthropic device flow authentication
@@ -23,11 +24,13 @@ interface AnthropicFlowConfig {
  */
 export class AnthropicDeviceFlow {
   private config: AnthropicFlowConfig;
+  private codeVerifier?: string;
+  private codeChallenge?: string;
 
   constructor(config?: Partial<AnthropicFlowConfig>) {
     const defaultConfig: AnthropicFlowConfig = {
       clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e', // Anthropic's public OAuth client ID
-      authorizationEndpoint: 'https://console.anthropic.com/oauth/device/code',
+      authorizationEndpoint: 'https://console.anthropic.com/oauth/authorize',
       tokenEndpoint: 'https://console.anthropic.com/v1/oauth/token',
       scopes: ['org:create_api_key', 'user:profile', 'user:inference'],
     };
@@ -36,37 +39,88 @@ export class AnthropicDeviceFlow {
   }
 
   /**
-   * Initiates the device flow by requesting a device code from Anthropic.
+   * Generates PKCE code verifier and challenge using S256 method
+   */
+  private generatePKCE(): { verifier: string; challenge: string } {
+    // Generate a random code verifier (43-128 characters)
+    const verifier = randomBytes(32).toString('base64url');
+    this.codeVerifier = verifier;
+
+    // Generate code challenge using S256 (SHA256 hash)
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    this.codeChallenge = challenge;
+
+    return { verifier, challenge };
+  }
+
+  /**
+   * Initiates the OAuth flow by constructing the authorization URL.
+   * Since Anthropic doesn't have a device flow, we simulate it with authorization code flow.
    */
   async initiateDeviceFlow(): Promise<DeviceCodeResponse> {
-    const response = await fetch(this.config.authorizationEndpoint, {
+    // Generate PKCE parameters
+    const { verifier, challenge } = this.generatePKCE();
+
+    // Generate a unique state for this auth session
+    const state = verifier; // Use verifier as state for tracking
+
+    // Build authorization URL with PKCE parameters
+    const params = new URLSearchParams({
+      code: 'true',
+      client_id: this.config.clientId,
+      response_type: 'code',
+      redirect_uri: 'https://console.anthropic.com/oauth/code/callback',
+      scope: this.config.scopes.join(' '),
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      state,
+    });
+
+    const authUrl = `${this.config.authorizationEndpoint}?${params.toString()}`;
+
+    // Return a simulated device code response with the authorization URL
+    // The user will need to manually visit this URL and authorize
+    return {
+      device_code: state, // Use state as a tracking ID
+      user_code: 'ANTHROPIC', // Display code for user
+      verification_uri: 'https://console.anthropic.com/oauth/authorize',
+      verification_uri_complete: authUrl,
+      expires_in: 1800, // 30 minutes
+      interval: 5, // 5 seconds polling interval
+    };
+  }
+
+  /**
+   * Exchange authorization code for access token (PKCE flow)
+   */
+  async exchangeCodeForToken(authCode: string): Promise<OAuthToken> {
+    if (!this.codeVerifier) {
+      throw new Error(
+        'No PKCE code verifier found - OAuth flow not initialized',
+      );
+    }
+
+    const response = await fetch(this.config.tokenEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: authCode,
         client_id: this.config.clientId,
-        scope: this.config.scopes.join(' '),
+        redirect_uri: 'https://console.anthropic.com/oauth/code/callback',
+        code_verifier: this.codeVerifier,
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Failed to initiate Anthropic device flow: ${error}`);
+      throw new Error(`Failed to exchange authorization code: ${error}`);
     }
 
     const data = await response.json();
-
-    // Map Anthropic's response to our standard format
-    return {
-      device_code: data.device_code,
-      user_code: data.user_code,
-      verification_uri:
-        data.verification_uri || 'https://console.anthropic.com/oauth/device',
-      verification_uri_complete: data.verification_uri_complete,
-      expires_in: data.expires_in || 1800, // 30 minutes default
-      interval: data.interval || 5, // 5 seconds default polling interval
-    };
+    return this.mapTokenResponse(data);
   }
 
   /**

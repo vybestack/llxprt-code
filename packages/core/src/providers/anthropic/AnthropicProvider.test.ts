@@ -71,11 +71,14 @@ vi.mock('../../utils/retry.js', () => ({
   }),
 }));
 
+// Create a shared mock instance for messages.create
+const mockMessagesCreate = vi.fn();
+
 // Mock the Anthropic SDK
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
     messages: {
-      create: vi.fn(),
+      create: mockMessagesCreate,
     },
     beta: {
       models: {
@@ -125,7 +128,7 @@ describe('AnthropicProvider', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockAnthropicInstance: any;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     // Clear all mocks before each test
     vi.clearAllMocks();
 
@@ -136,9 +139,12 @@ describe('AnthropicProvider', () => {
       TEST_PROVIDER_CONFIG,
     );
 
-    // Get the mocked Anthropic instance
-    const Anthropic = vi.mocked((await import('@anthropic-ai/sdk')).default);
-    mockAnthropicInstance = Anthropic.mock.results[0].value;
+    // Use the shared mock instance
+    mockAnthropicInstance = {
+      messages: {
+        create: mockMessagesCreate,
+      },
+    };
   });
 
   describe('getModels', () => {

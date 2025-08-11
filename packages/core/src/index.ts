@@ -50,6 +50,7 @@ export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
 export * from './utils/filesearch/fileSearch.js';
+export * from './utils/secure-browser-launcher.js';
 
 // Export auth system
 export * from './auth/token-store.js';

@@ -191,7 +191,8 @@ export class AuthCommandExecutor {
 
 export const authCommand: SlashCommand = {
   name: 'auth',
-  description: 'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
+  description:
+    'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
     // Initialize OAuth manager with token store and settings

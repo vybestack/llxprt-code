@@ -11,7 +11,11 @@ export const validateAuthMethod = (authMethod: string): string | null => {
   loadEnvironment();
 
   // Handle OAuth provider selections
-  if (authMethod === 'oauth_gemini' || authMethod === 'oauth_qwen' || authMethod === 'oauth_anthropic') {
+  if (
+    authMethod === 'oauth_gemini' ||
+    authMethod === 'oauth_qwen' ||
+    authMethod === 'oauth_anthropic'
+  ) {
     return null; // OAuth providers are always valid
   }
 
