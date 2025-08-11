@@ -96,7 +96,7 @@ export class OpenAIProvider extends BaseProvider {
     // Set appropriate default model based on the provider
     if (shouldEnableQwenOAuth || isQwenEndpoint(baseURL || '')) {
       // Default to Qwen model when using Qwen endpoints
-      this.currentModel = 'qwen-plus';
+      this.currentModel = 'qwen3-coder-plus';
     }
 
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {

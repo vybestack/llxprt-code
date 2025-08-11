@@ -104,7 +104,7 @@ export const providerCommand: SlashCommand = {
             defaultModel = 'claude-sonnet-4-latest';
             break;
           case 'qwen':
-            defaultModel = 'qwen-plus';
+            defaultModel = 'qwen3-coder-plus';
             baseUrl = 'https://portal.qwen.ai/v1';
             break;
           default:
