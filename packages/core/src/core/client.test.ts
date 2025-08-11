@@ -519,7 +519,7 @@ describe('Gemini Client (client.ts)', () => {
           systemInstruction: 'Test system instruction',
           temperature: 0,
           topP: 1,
-          responseSchema: schema,
+          responseJsonSchema: schema,
           responseMimeType: 'application/json',
         },
         contents,
@@ -579,7 +579,7 @@ describe('Gemini Client (client.ts)', () => {
           temperature: 0.9,
           topP: 1, // from default
           topK: 20,
-          responseSchema: schema,
+          responseJsonSchema: schema,
           responseMimeType: 'application/json',
         },
         contents,
