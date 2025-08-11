@@ -346,10 +346,17 @@ export class OpenAIProvider extends BaseProvider {
       ? this.toolFormatter.toResponsesTool(tools)
       : undefined;
 
+    // Patch messages to include synthetic responses for cancelled tools
+    const { SyntheticToolResponseHandler } = await import(
+      './syntheticToolResponses.js'
+    );
+    const patchedMessages =
+      SyntheticToolResponseHandler.patchMessageHistory(messages);
+
     // Build the request
     const request = buildResponsesRequest({
       model: this.currentModel,
-      messages,
+      messages: patchedMessages,
       tools: formattedTools,
       stream: options?.stream ?? true,
       conversationId: options?.conversationId,

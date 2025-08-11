@@ -324,7 +324,7 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
     // Verify the request was made
     expect(capturedRequest).toBeTruthy();
 
-    // Check that there are NO function_call_output items since we didn't provide tool responses
+    // Check that there IS a synthetic function_call_output for the missing tool response
     const functionCallOutputs =
       capturedRequest!.body.input?.filter(
         (item) => item.type === 'function_call_output',
@@ -334,7 +334,15 @@ describe('OpenAIProvider - Responses API Tool Calls', () => {
       'Function call outputs in edge case:',
       functionCallOutputs.length,
     );
-    expect(functionCallOutputs.length).toBe(0);
+    // Should have 1 synthetic response for the missing tool response
+    expect(functionCallOutputs.length).toBe(1);
+
+    // Verify it's a synthetic cancellation response
+    const syntheticOutput = functionCallOutputs[0];
+    expect(syntheticOutput.call_id).toBe('call_missing');
+    const outputContent = JSON.parse(syntheticOutput.output || '{}');
+    expect(outputContent.status).toBe('cancelled');
+    expect(outputContent.message).toBe('Tool execution cancelled by user');
   });
 
   test('should include function_call_output in responses API format', async () => {

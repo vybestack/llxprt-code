@@ -477,15 +477,24 @@ export const useGeminiStream = (
       if (turnCancelledRef.current) {
         return;
       }
+      // Track cancelled tool IDs for synthetic response generation
+      const cancelledToolIds: string[] = [];
+
       if (pendingHistoryItemRef.current) {
         if (pendingHistoryItemRef.current.type === 'tool_group') {
           const updatedTools = pendingHistoryItemRef.current.tools.map(
-            (tool) =>
-              tool.status === ToolCallStatus.Pending ||
-              tool.status === ToolCallStatus.Confirming ||
-              tool.status === ToolCallStatus.Executing
-                ? { ...tool, status: ToolCallStatus.Canceled }
-                : tool,
+            (tool) => {
+              if (
+                tool.status === ToolCallStatus.Pending ||
+                tool.status === ToolCallStatus.Confirming ||
+                tool.status === ToolCallStatus.Executing
+              ) {
+                // Track the cancelled tool ID
+                cancelledToolIds.push(tool.callId);
+                return { ...tool, status: ToolCallStatus.Canceled };
+              }
+              return tool;
+            },
           );
           const pendingItem: HistoryItemToolGroup = {
             ...pendingHistoryItemRef.current,
@@ -497,8 +506,17 @@ export const useGeminiStream = (
         }
         setPendingHistoryItem(null);
       }
+
+      // Log cancelled tool IDs for debugging
+      if (cancelledToolIds.length > 0 && process.env.DEBUG) {
+        console.log('[ESC] Cancelled tool IDs:', cancelledToolIds);
+      }
+
       addItem(
-        { type: MessageType.INFO, text: 'User cancelled the request.' },
+        {
+          type: MessageType.INFO,
+          text: `User cancelled the request${cancelledToolIds.length > 0 ? ` (${cancelledToolIds.length} tool${cancelledToolIds.length > 1 ? 's' : ''} cancelled)` : ''}.`,
+        },
         userMessageTimestamp,
       );
       setIsResponding(false);
