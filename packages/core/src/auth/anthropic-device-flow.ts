@@ -166,7 +166,7 @@ export class AnthropicDeviceFlow {
         Math.floor(Date.now() / 1000) + ((data.expires_in as number) || 3600),
       refresh_token: data.refresh_token as string | undefined,
       scope: data.scope as string | undefined,
-      token_type: (data.token_type as string) || 'Bearer',
+      token_type: 'Bearer',
     };
   }
 }
