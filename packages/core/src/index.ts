@@ -55,6 +55,7 @@ export * from './utils/filesearch/fileSearch.js';
 export * from './auth/token-store.js';
 export * from './auth/types.js';
 export * from './auth/qwen-device-flow.js';
+export * from './auth/anthropic-device-flow.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';

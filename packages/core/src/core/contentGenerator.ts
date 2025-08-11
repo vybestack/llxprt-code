@@ -51,6 +51,7 @@ export enum AuthType {
   USE_NONE = 'none',
   OAUTH_GEMINI = 'oauth_gemini',
   OAUTH_QWEN = 'oauth_qwen',
+  OAUTH_ANTHROPIC = 'oauth_anthropic',
 }
 
 export type ContentGeneratorConfig = {

@@ -105,14 +105,22 @@ export const useAuthCommand = (
       // Handle OAuth provider selections
       if (
         authType === AuthType.OAUTH_GEMINI ||
-        authType === AuthType.OAUTH_QWEN
+        authType === AuthType.OAUTH_QWEN ||
+        authType === AuthType.OAUTH_ANTHROPIC
       ) {
         // Close the dialog
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
         appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
 
         // Trigger the OAuth flow via the /auth command
-        const provider = authType === AuthType.OAUTH_GEMINI ? 'gemini' : 'qwen';
+        let provider: string;
+        if (authType === AuthType.OAUTH_GEMINI) {
+          provider = 'gemini';
+        } else if (authType === AuthType.OAUTH_QWEN) {
+          provider = 'qwen';
+        } else {
+          provider = 'anthropic';
+        }
         console.log(`Starting OAuth authentication for ${provider}...`);
         console.log(`Please run: /auth ${provider}`);
 
