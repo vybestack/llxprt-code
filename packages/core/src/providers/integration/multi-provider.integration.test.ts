@@ -376,11 +376,28 @@ describe('Multi-Provider Integration Tests', () => {
     });
 
     it('should handle missing API key', async () => {
-      const provider = new OpenAIProvider('');
-      // With OAuth support, the error message is different
-      await expect(provider.getModels()).rejects.toThrow(
-        'No authentication method available for openai provider',
-      );
+      // Save and clear any existing OPENAI_API_KEY to ensure no auth is available
+      const savedApiKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        // Explicitly create provider with no auth methods available
+        const provider = new OpenAIProvider(
+          undefined, // No API key
+          undefined, // Default baseURL (no OAuth support for standard OpenAI)
+          undefined, // No config
+          undefined, // No OAuth manager
+        );
+        // Should throw error when no authentication is available
+        await expect(provider.getModels()).rejects.toThrow(
+          'No authentication method available for openai provider',
+        );
+      } finally {
+        // Restore the original API key if it existed
+        if (savedApiKey) {
+          process.env.OPENAI_API_KEY = savedApiKey;
+        }
+      }
     });
   });
 });

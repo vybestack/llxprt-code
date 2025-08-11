@@ -50,6 +50,9 @@ describe('OpenAI Provider OAuth Integration', () => {
     vi.clearAllMocks();
     originalEnv = { ...process.env };
 
+    // Clear OPENAI_API_KEY for OAuth tests to work properly
+    delete process.env.OPENAI_API_KEY;
+
     // Create a fresh mock OAuth manager for each test
     mockOAuthManager = {
       getToken: vi.fn(),
