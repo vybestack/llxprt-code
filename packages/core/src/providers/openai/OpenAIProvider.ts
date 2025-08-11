@@ -93,6 +93,12 @@ export class OpenAIProvider extends BaseProvider {
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
+    // Set appropriate default model based on the provider
+    if (shouldEnableQwenOAuth || isQwenEndpoint(baseURL || '')) {
+      // Default to Qwen model when using Qwen endpoints
+      this.currentModel = 'qwen-plus';
+    }
+
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
       apiKey: apiKey || 'placeholder', // OpenAI client requires a string, use placeholder if OAuth will be used
       // Allow browser environment if explicitly configured
@@ -118,6 +124,19 @@ export class OpenAIProvider extends BaseProvider {
       this.baseProviderConfig.baseURL ||
       'https://api.openai.com/v1';
     return isQwenEndpoint(baseURL);
+  }
+
+  /**
+   * Helper method to determine if we're using Qwen (via OAuth or direct endpoint)
+   */
+  private isUsingQwen(): boolean {
+    return (
+      this.currentModel.includes('qwen') ||
+      this.baseURL?.includes('qwen') ||
+      this.baseURL?.includes('dashscope.aliyuncs.com') ||
+      (this.isOAuthEnabled() &&
+        this.baseProviderConfig.oauthProvider === 'qwen')
+    );
   }
 
   /**
@@ -230,9 +249,12 @@ export class OpenAIProvider extends BaseProvider {
     ) {
       return 'deepseek';
     }
-    if (this.currentModel.includes('qwen') || this.baseURL?.includes('qwen')) {
+
+    // Check for Qwen - including OAuth authenticated Qwen
+    if (this.isUsingQwen()) {
       return 'qwen';
     }
+
     // Default to OpenAI format
     return 'openai';
   }
@@ -763,7 +785,7 @@ export class OpenAIProvider extends BaseProvider {
 
       if (delta?.content) {
         // Enhanced debug logging to understand streaming behavior
-        if (process.env.DEBUG && this.currentModel.includes('qwen')) {
+        if (process.env.DEBUG && this.isUsingQwen()) {
           console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
             content: delta.content,
             contentLength: delta.content.length,
@@ -774,7 +796,7 @@ export class OpenAIProvider extends BaseProvider {
 
         // For text-based models, don't yield content chunks yet
         if (!parser) {
-          if (this.currentModel.includes('qwen')) {
+          if (this.isUsingQwen()) {
             const isWhitespaceOnly = delta.content.trim() === '';
             if (isWhitespaceOnly) {
               // Buffer whitespace-only chunk
@@ -833,7 +855,7 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     // Flush any remaining pending whitespace for Qwen
-    if (pendingWhitespace && this.currentModel.includes('qwen') && !parser) {
+    if (pendingWhitespace && this.isUsingQwen() && !parser) {
       if (process.env.DEBUG) {
         console.log(
           `[OpenAIProvider/${this.currentModel}] Flushing trailing pending whitespace (len=${pendingWhitespace.length}) at stream end`,
@@ -880,7 +902,7 @@ export class OpenAIProvider extends BaseProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
-        if (process.env.DEBUG && this.currentModel.includes('qwen')) {
+        if (process.env.DEBUG && this.isUsingQwen()) {
           console.log(
             `[OpenAIProvider/${this.currentModel}] Final message with tool calls:`,
             {
@@ -894,8 +916,7 @@ export class OpenAIProvider extends BaseProvider {
           );
         }
         // For Qwen models, don't duplicate content if we've already streamed it
-        const shouldOmitContent =
-          hasStreamedContent && this.currentModel.includes('qwen');
+        const shouldOmitContent = hasStreamedContent && this.isUsingQwen();
         if (shouldOmitContent) {
           // Only yield tool calls with empty content to avoid duplication
           yield {
