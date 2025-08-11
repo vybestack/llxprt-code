@@ -38,6 +38,7 @@ import {
   AuthType,
   getOauthClient,
   setGitStatsService,
+  // IDE connection logging removed - telemetry disabled in llxprt
 } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
@@ -228,6 +229,14 @@ export async function main() {
   setMaxSizedBoxDebugging(config.getDebugMode());
 
   await config.initialize();
+
+  if (config.getIdeMode() && config.getIdeModeFeature()) {
+    const ideClient = config.getIdeClient();
+    if (ideClient) {
+      await ideClient.connect();
+      // IDE connection logging removed - telemetry disabled in llxprt
+    }
+  }
 
   // Load custom themes from settings
   themeManager.loadCustomThemes(settings.merged.customThemes);

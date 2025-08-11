@@ -415,7 +415,9 @@ export class Config {
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
     this.ideMode = params.ideMode ?? false;
-    this.ideClient = params.ideClient;
+    this.ideClient =
+      params.ideClient ||
+      IdeClient.getInstance(this.ideMode && this.ideModeFeature);
     this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
       complexityThreshold: 0.6,
       minTasksForSuggestion: 3,

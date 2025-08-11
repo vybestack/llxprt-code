@@ -33,3 +33,4 @@ export type {
   EventUnsubscribe,
 } from './src/settings/types.js';
 export type { TelemetrySettings as SettingsTelemetrySettings } from './src/settings/types.js';
+// IDE connection telemetry exports removed - telemetry disabled in llxprt
