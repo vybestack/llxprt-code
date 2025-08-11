@@ -87,11 +87,12 @@ export const useAuthCommand = (
 
         console.log(`Authenticated via "${authType}".`);
       } catch (e) {
+        const errorMessage = getErrorMessage(e);
         appDispatch({
           type: 'SET_AUTH_ERROR',
-          payload: `Failed to login. Message: ${getErrorMessage(e)}`,
+          payload: `Failed to login. Message: ${errorMessage}`,
         });
-        openAuthDialog();
+        // NEVER automatically open auth dialog - user must use /auth command
       } finally {
         setIsAuthenticating(false);
       }

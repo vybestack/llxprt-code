@@ -334,7 +334,7 @@ const App = (props: AppInternalProps) => {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
       if (error) {
         setAuthError(error);
-        openAuthDialog();
+        // Don't automatically open auth dialog - user must use /auth command
       }
     }
   }, [
@@ -721,6 +721,23 @@ const App = (props: AppInternalProps) => {
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
   }, [appDispatch]);
+
+  const handleOAuthCodeSubmit = useCallback(async (code: string) => {
+    const provider = (global as unknown as { __oauth_provider?: string }).__oauth_provider;
+    const oauthManager = (global as unknown as { __oauth_manager?: any }).__oauth_manager;
+    
+    if (provider === 'anthropic' && oauthManager) {
+      const anthropicProvider = oauthManager.providers.get('anthropic');
+      if (anthropicProvider) {
+        try {
+          await anthropicProvider.completeAuth(code);
+          console.log('Successfully authenticated with Anthropic!');
+        } catch (error) {
+          console.error('Failed to complete authentication:', error);
+        }
+      }
+    }
+  }, []);
 
   const {
     streamingState,
@@ -1249,6 +1266,7 @@ const App = (props: AppInternalProps) => {
                     .__oauth_provider || 'anthropic'
                 }
                 onClose={handleOAuthCodeDialogClose}
+                onSubmit={handleOAuthCodeSubmit}
               />
             </Box>
           ) : isEditorDialogOpen ? (

@@ -1,27 +1,39 @@
 /**
  * OAuth Code Input Dialog Component
  *
- * Prompts users to continue OAuth flow in the auth command
+ * Allows users to paste authorization code from browser
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { Colors } from '../colors.js';
+import TextInput from 'ink-text-input';
 
 interface OAuthCodeDialogProps {
   provider: string;
   onClose: () => void;
+  onSubmit: (code: string) => void;
 }
 
 export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
   provider,
   onClose,
+  onSubmit,
 }) => {
+  const [code, setCode] = useState('');
+
   useInput((_, key) => {
-    if (key.escape || key.return) {
+    if (key.escape) {
       onClose();
     }
   });
+
+  const handleSubmit = () => {
+    if (code.trim()) {
+      onSubmit(code.trim());
+      onClose();
+    }
+  };
 
   return (
     <Box
@@ -38,13 +50,22 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         Authentication
       </Text>
       <Text color={Colors.Foreground}>
-        Please check your browser to complete the authorization.
+        Please check your browser and authorize the application.
       </Text>
       <Text color={Colors.Foreground}>
-        After authorizing, you&apos;ll need to paste the code in the next step.
+        After authorizing, paste the authorization code below:
       </Text>
       <Box marginTop={1}>
-        <Text dimColor>Press Enter or Escape to continue</Text>
+        <Text color={Colors.AccentCyan}>Code: </Text>
+        <TextInput
+          value={code}
+          onChange={setCode}
+          onSubmit={handleSubmit}
+          placeholder="Paste authorization code here..."
+        />
+      </Box>
+      <Box marginTop={1}>
+        <Text dimColor>Press Enter to submit or Escape to cancel</Text>
       </Box>
     </Box>
   );
