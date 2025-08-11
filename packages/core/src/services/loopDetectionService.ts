@@ -228,7 +228,7 @@ Please analyze the conversation history to determine the possibility that the co
     const wasInCodeBlock = this.inCodeBlock;
     this.inCodeBlock =
       numFences % 2 === 0 ? this.inCodeBlock : !this.inCodeBlock;
-    if (wasInCodeBlock) {
+    if (wasInCodeBlock || this.inCodeBlock) {
       return false;
     }
 
