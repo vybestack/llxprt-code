@@ -340,7 +340,6 @@ const App = (props: AppInternalProps) => {
   }, [
     settings.merged.selectedAuthType,
     settings.merged.useExternalAuth,
-    openAuthDialog,
     setAuthError,
   ]);
 
@@ -648,14 +647,14 @@ const App = (props: AppInternalProps) => {
 
   const onAuthError = useCallback(() => {
     setAuthError('reauth required');
-    openAuthDialog();
-  }, [openAuthDialog, setAuthError]);
+    // NEVER automatically open auth dialog - user must use /auth
+  }, [setAuthError]);
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
     cancelAuthentication();
-    openAuthDialog();
-  }, [setAuthError, cancelAuthentication, openAuthDialog]);
+    // NEVER automatically open auth dialog - user must use /auth
+  }, [setAuthError, cancelAuthentication]);
 
   const handlePrivacyNoticeExit = useCallback(() => {
     setShowPrivacyNotice(false);
