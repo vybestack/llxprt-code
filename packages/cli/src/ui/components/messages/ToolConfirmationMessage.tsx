@@ -208,7 +208,7 @@ export const ToolConfirmationMessage: React.FC<
     );
     if (config?.getIdeMode() && config?.getIdeModeFeature()) {
       options.push({
-        label: 'No',
+        label: 'No (esc)',
         value: ToolConfirmationOutcome.Cancel,
       });
     } else {
