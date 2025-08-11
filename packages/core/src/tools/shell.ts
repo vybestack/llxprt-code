@@ -15,9 +15,9 @@ import {
   ToolExecuteConfirmationDetails,
   Icon,
 } from './tools.js';
+import { ToolErrorType } from './tool-error.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { Type } from '@google/genai';
 import { summarizeToolOutput } from '../utils/summarizer.js';
 import {
   limitOutputTokens,
@@ -64,24 +64,24 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
       'Execute a shell command within a secure sandboxed environment',
       Icon.Terminal,
       {
+        type: 'object',
         properties: {
           command: {
-            description: 'The shell command to execute',
-            type: Type.STRING,
+            type: 'string',
+            description: 'Exact bash command to execute as `bash -c <command>`',
           },
           description: {
+            type: 'string',
             description:
               'Optional description of what this command does, used for confirmation prompts',
-            type: Type.STRING,
           },
           directory: {
+            type: 'string',
             description:
               'Optional directory to execute the command in, relative to the target directory',
-            type: Type.STRING,
           },
         },
         required: ['command'],
-        type: Type.OBJECT,
       },
       true,
     );
@@ -112,14 +112,12 @@ export class ShellTool extends BaseTool<ShellToolParams, ToolResult> {
       }
       return commandCheck.reason;
     }
-
-    const schemaValidationResult = SchemaValidator.validate(
-      this.parameterSchema as Record<string, unknown>,
+    const errors = SchemaValidator.validate(
+      this.schema.parametersJsonSchema,
       params,
     );
-
-    if (schemaValidationResult !== null) {
-      return `Parameters failed schema validation.`;
+    if (errors) {
+      return errors;
     }
 
     if (!params.command.trim()) {

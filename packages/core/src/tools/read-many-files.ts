@@ -16,7 +16,7 @@ import {
   DEFAULT_ENCODING,
   getSpecificMimeType,
 } from '../utils/fileUtils.js';
-import { PartListUnion, Schema, Type } from '@google/genai';
+import { PartListUnion } from '@google/genai';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
 import {
   recordFileOperationMetric,
@@ -143,47 +143,47 @@ export class ReadManyFilesTool extends BaseTool<
   private readonly llxprtIgnorePatterns: string[] = [];
 
   constructor(private config: Config) {
-    const parameterSchema: Schema = {
-      type: Type.OBJECT,
+    const parameterSchema = {
+      type: 'object',
       properties: {
         paths: {
-          type: Type.ARRAY,
+          type: 'array',
           items: {
-            type: Type.STRING,
-            minLength: '1',
+            type: 'string',
+            minLength: 1,
           },
-          minItems: '1',
+          minItems: 1,
           description:
             "Required. An array of glob patterns or paths relative to the tool's target directory. Examples: ['src/**/*.ts'], ['README.md', 'docs/']",
         },
         include: {
-          type: Type.ARRAY,
+          type: 'array',
           items: {
-            type: Type.STRING,
-            minLength: '1',
+            type: 'string',
+            minLength: 1,
           },
           description:
             'Optional. Additional glob patterns to include. These are merged with `paths`. Example: ["*.test.ts"] to specifically add test files if they were broadly excluded.',
           default: [],
         },
         exclude: {
-          type: Type.ARRAY,
+          type: 'array',
           items: {
-            type: Type.STRING,
-            minLength: '1',
+            type: 'string',
+            minLength: 1,
           },
           description:
             'Optional. Glob patterns for files/directories to exclude. Added to default excludes if useDefaultExcludes is true. Example: ["**/*.log", "temp/"]',
           default: [],
         },
         recursive: {
-          type: Type.BOOLEAN,
+          type: 'boolean',
           description:
             'Optional. Whether to search recursively (primarily controlled by `**` in glob patterns). Defaults to true.',
           default: true,
         },
         useDefaultExcludes: {
-          type: Type.BOOLEAN,
+          type: 'boolean',
           description:
             'Optional. Whether to apply a list of default exclusion patterns (e.g., node_modules, .git, binary files). Defaults to true.',
           default: true,
@@ -191,17 +191,17 @@ export class ReadManyFilesTool extends BaseTool<
         file_filtering_options: {
           description:
             'Whether to respect ignore patterns from .gitignore or .llxprtignore',
-          type: Type.OBJECT,
+          type: 'object',
           properties: {
             respect_git_ignore: {
               description:
                 'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
-              type: Type.BOOLEAN,
+              type: 'boolean',
             },
             respect_llxprt_ignore: {
               description:
                 'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
-              type: Type.BOOLEAN,
+              type: 'boolean',
             },
           },
         },
@@ -237,7 +237,10 @@ IMPORTANT LIMITS:
   }
 
   validateParams(params: ReadManyFilesParams): string | null {
-    const errors = SchemaValidator.validate(this.schema.parameters, params);
+    const errors = SchemaValidator.validate(
+      this.schema.parametersJsonSchema,
+      params,
+    );
     if (errors) {
       return errors;
     }

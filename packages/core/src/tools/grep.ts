@@ -17,7 +17,6 @@ import {
   ToolInvocation,
   ToolResult,
 } from './tools.js';
-import { Type } from '@google/genai';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
@@ -620,26 +619,26 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
           pattern: {
             description:
               "The regular expression (regex) pattern to search for within file contents. Special characters like ( ) [ ] { } . * + ? ^ $ \\ | must be escaped with a backslash. Examples: 'openModelDialog\\(' to find 'openModelDialog(', 'function\\s+myFunction' to find function declarations, '\\.test\\.' to find '.test.' in filenames.",
-            type: Type.STRING,
+            type: 'string',
           },
           path: {
             description:
               'Optional: The absolute path to the directory to search within. If omitted, searches the current working directory.',
-            type: Type.STRING,
+            type: 'string',
           },
           include: {
             description:
               "Optional: A glob pattern to filter which files are searched (e.g., '*.js', '*.{ts,tsx}', 'src/**'). If omitted, searches all files (respecting potential global ignores).",
-            type: Type.STRING,
+            type: 'string',
           },
           max_matches: {
             description:
               'Optional: Maximum number of matches to return. If omitted, uses the configured limit (default 50). Set a lower number if you expect many matches to avoid overwhelming output.',
-            type: Type.NUMBER,
+            type: 'number',
           },
         },
         required: ['pattern'],
-        type: Type.OBJECT,
+        type: 'object',
       },
     );
   }
@@ -691,7 +690,10 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
    * @returns An error message string if invalid, null otherwise
    */
   validateToolParams(params: GrepToolParams): string | null {
-    const errors = SchemaValidator.validate(this.schema.parameters, params);
+    const errors = SchemaValidator.validate(
+      this.schema.parametersJsonSchema,
+      params,
+    );
     if (errors) {
       return errors;
     }
