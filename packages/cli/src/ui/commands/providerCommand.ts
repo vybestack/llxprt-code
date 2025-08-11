@@ -92,6 +92,7 @@ export const providerCommand: SlashCommand = {
 
         // Determine the correct default model for this provider
         let defaultModel = '';
+        let baseUrl: string | undefined;
         switch (providerName) {
           case 'gemini':
             defaultModel = 'gemini-2.5-pro';
@@ -102,8 +103,27 @@ export const providerCommand: SlashCommand = {
           case 'anthropic':
             defaultModel = 'claude-sonnet-4-latest';
             break;
+          case 'qwen':
+            defaultModel = 'qwen-plus';
+            baseUrl = 'https://portal.qwen.ai/v1';
+            break;
           default:
             defaultModel = activeProvider.getCurrentModel?.() || '';
+        }
+
+        // Set the base URL if needed (for qwen)
+        if (baseUrl) {
+          context.services.config.setEphemeralSetting('base-url', baseUrl);
+          // Also set it directly on the provider if it has the method
+          if (
+            'setBaseUrl' in activeProvider &&
+            typeof activeProvider.setBaseUrl === 'function'
+          ) {
+            const providerWithSetBaseUrl = activeProvider as {
+              setBaseUrl: (url: string) => void;
+            };
+            providerWithSetBaseUrl.setBaseUrl(baseUrl);
+          }
         }
 
         // Set the model on both the provider and config
