@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Stream } from '@anthropic-ai/sdk/streaming';
-import { IProvider } from '../IProvider.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
@@ -8,13 +7,13 @@ import { retryWithBackoff } from '../../utils/retry.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
+import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import { OAuthManager } from '../../auth/precedence.js';
 
-export class AnthropicProvider implements IProvider {
-  name: string = 'anthropic';
+export class AnthropicProvider extends BaseProvider {
   private anthropic: Anthropic;
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
-  private apiKey: string;
   private baseURL?: string;
   private config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-latest'; // Default model using latest alias
@@ -44,13 +43,31 @@ export class AnthropicProvider implements IProvider {
     { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
   ];
 
-  constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
-    this.apiKey = apiKey;
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: IProviderConfig,
+    oauthManager?: OAuthManager,
+  ) {
+    // Initialize base provider with auth configuration
+    const baseConfig: BaseProviderConfig = {
+      name: 'anthropic',
+      apiKey,
+      baseURL,
+      cliKey: !apiKey || apiKey === '' ? undefined : apiKey,
+      envKeyNames: ['ANTHROPIC_API_KEY'],
+      isOAuthEnabled: !!oauthManager,
+      oauthProvider: oauthManager ? 'anthropic' : undefined,
+      oauthManager,
+    };
+
+    super(baseConfig);
+
     this.baseURL = baseURL;
     this.config = config;
 
     this.anthropic = new Anthropic({
-      apiKey: apiKey || '',
+      apiKey: apiKey || 'placeholder', // Use placeholder if OAuth will be used
       baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -58,9 +75,38 @@ export class AnthropicProvider implements IProvider {
     this.toolFormatter = new ToolFormatter();
   }
 
+  /**
+   * Implementation of BaseProvider abstract method
+   * Determines if this provider supports OAuth authentication
+   */
+  protected supportsOAuth(): boolean {
+    // Anthropic supports OAuth authentication
+    return true;
+  }
+
+  /**
+   * Update the Anthropic client with resolved authentication if needed
+   */
+  private async updateClientWithResolvedAuth(): Promise<void> {
+    const resolvedToken = await this.getAuthToken();
+    if (!resolvedToken) {
+      throw new Error('No authentication available for Anthropic API calls');
+    }
+
+    // Create new client with resolved token if needed
+    if (this.anthropic.apiKey !== resolvedToken) {
+      this.anthropic = new Anthropic({
+        apiKey: resolvedToken,
+        baseURL: this.baseURL,
+        dangerouslyAllowBrowser: true,
+      });
+    }
+  }
+
   async getModels(): Promise<IModel[]> {
-    if (!this.apiKey || this.apiKey.trim() === '') {
-      throw new Error('Anthropic API key is required to fetch models');
+    const authToken = await this.getAuthToken();
+    if (!authToken) {
+      throw new Error('Authentication required to fetch Anthropic models');
     }
 
     try {
@@ -108,11 +154,15 @@ export class AnthropicProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
-    if (!this.apiKey || this.apiKey.trim() === '') {
+    const authToken = await this.getAuthToken();
+    if (!authToken) {
       throw new Error(
-        'Anthropic API key is required to generate chat completions',
+        'Authentication required to generate Anthropic chat completions',
       );
     }
+
+    // Update Anthropic client with resolved authentication if needed
+    await this.updateClientWithResolvedAuth();
 
     let attemptCount = 0;
 
@@ -350,7 +400,9 @@ export class AnthropicProvider implements IProvider {
   }
 
   setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
+    // Call base provider implementation
+    super.setApiKey?.(apiKey);
+
     // Create a new Anthropic client with the updated API key
     this.anthropic = new Anthropic({
       apiKey,
@@ -362,9 +414,14 @@ export class AnthropicProvider implements IProvider {
   setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+
+    // Call base provider implementation
+    super.setBaseUrl?.(baseUrl);
+
     // Create a new Anthropic client with the updated (or cleared) base URL
+    // Note: We'll use placeholder and update with actual token in updateClientWithResolvedAuth
     this.anthropic = new Anthropic({
-      apiKey: this.apiKey,
+      apiKey: 'placeholder',
       baseURL: this.baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -584,7 +641,7 @@ export class AnthropicProvider implements IProvider {
   }
 
   /**
-   * Anthropic always requires payment (API key)
+   * Anthropic always requires payment (API key or OAuth)
    */
   isPaidMode(): boolean {
     return true;
@@ -626,5 +683,13 @@ export class AnthropicProvider implements IProvider {
    */
   getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
+  }
+
+  /**
+   * Check if the provider is authenticated using any available method
+   * Uses the base provider's isAuthenticated implementation
+   */
+  async isAuthenticated(): Promise<boolean> {
+    return super.isAuthenticated();
   }
 }

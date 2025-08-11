@@ -26,6 +26,7 @@ import { OAuthManager } from '../auth/oauth-manager.js';
 import { MultiProviderTokenStore } from '../auth/types.js';
 import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
 import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
+import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.
@@ -101,6 +102,7 @@ export function getProviderManager(
     // Register OAuth providers
     oauthManager.registerProvider(new GeminiOAuthProvider());
     oauthManager.registerProvider(new QwenOAuthProvider());
+    oauthManager.registerProvider(new AnthropicOAuthProvider());
 
     // Set config BEFORE registering providers so logging wrapper works
     if (config) {
@@ -222,9 +224,10 @@ export function getProviderManager(
       allowBrowserEnvironment,
     };
     const anthropicProvider = new AnthropicProvider(
-      anthropicApiKey || '',
+      anthropicApiKey || undefined, // Pass undefined instead of empty string to allow OAuth fallback
       anthropicBaseUrl,
       anthropicProviderConfig,
+      oauthManager,
     );
     providerManagerInstance.registerProvider(anthropicProvider);
 
