@@ -83,8 +83,6 @@ export class IdeClient {
   }
 
   async connect(): Promise<void> {
-    this.setState(IDEConnectionStatus.Connecting);
-
     if (!this.currentIde || !this.currentIdeDisplayName) {
       this.setState(
         IDEConnectionStatus.Disconnected,
@@ -93,10 +91,12 @@ export class IdeClient {
         )
           .map((ide) => getIdeDisplayName(ide))
           .join(', ')}`,
-        true,
+        false,
       );
       return;
     }
+
+    this.setState(IDEConnectionStatus.Connecting);
 
     if (!this.validateWorkspacePath()) {
       return;
