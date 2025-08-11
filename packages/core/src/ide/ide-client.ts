@@ -218,13 +218,18 @@ export class IdeClient {
     // disconnected, so that the first detail message is preserved.
     if (!isAlreadyDisconnected) {
       this.state = { status, details };
-      if (logToConsole) {
-        logger.error(details);
+      if (details) {
+        if (logToConsole) {
+          logger.error(details);
+        } else {
+          // We only want to log disconnect messages to debug
+          // if they are not already being logged to the console.
+          logger.debug(details);
+        }
       }
     }
 
     if (status === IDEConnectionStatus.Disconnected) {
-      logger.debug(details);
       ideContext.clearIdeContext();
     }
   }
@@ -234,7 +239,7 @@ export class IdeClient {
     if (!port) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. LLxprt Code Companion extension not found. Install via /ide install and restart the CLI in a fresh terminal window.`,
+        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. Please ensure the extension is running and try restarting your terminal. To install the extension, run /ide install.`,
         true,
       );
       return undefined;
@@ -344,7 +349,7 @@ export class IdeClient {
     } catch (_error) {
       this.setState(
         IDEConnectionStatus.Disconnected,
-        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. Please ensure the extension is running and try refreshing your terminal. To install the extension, run /ide install.`,
+        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. Please ensure the extension is running and try restarting your terminal. To install the extension, run /ide install.`,
         true,
       );
       if (transport) {
