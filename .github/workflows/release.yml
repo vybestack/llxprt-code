@@ -175,33 +175,49 @@ jobs:
         if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
         id: release_notes
         run: |
-          # Get the last release tag
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
+          # Get the last stable release tag (excluding pre-release tags)
+          LAST_STABLE_TAG=$(git tag -l 'v*' | grep -v '\-' | sort -V | tail -n 1)
+          if [ -z "$LAST_STABLE_TAG" ]; then
+            # If no stable tag, get the most recent tag
+            LAST_STABLE_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          fi
+          if [ -z "$LAST_STABLE_TAG" ]; then
             echo "No previous release tag found, using first commit"
-            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+            LAST_STABLE_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
 
           # Save last tag for comparison link
-          echo "LAST_TAG=$LAST_TAG" >> $GITHUB_OUTPUT
+          echo "LAST_TAG=$LAST_STABLE_TAG" >> $GITHUB_OUTPUT
 
           # Get commit messages since last tag
-          echo "Getting commits from $LAST_TAG to HEAD"
-          git log --pretty=format:"- %s (%h)" $LAST_TAG..HEAD > commits.txt
+          echo "Getting commits from $LAST_STABLE_TAG to HEAD"
+          git log --pretty=format:"- %s (%h)" $LAST_STABLE_TAG..HEAD > commits.txt
 
           # Generate release notes with LLxprt or fall back to basic format
           echo "Attempting to generate release notes with LLxprt Code..."
 
           # Create the prompt in a variable
-          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }} comparing to previous release $LAST_TAG. NO EMOJIS. Include sections: Release Focus, Features, Bug Fixes, Installation. Add comparison link at end. Commits: $(cat commits.txt)"
+          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }}.
 
-          # Try LLxprt generation
+          Format the output as follows:
+          1. Start with 'Release ${{ steps.version.outputs.RELEASE_TAG }}'
+          2. Add a note about alpha/beta/gamma naming (if applicable): 'Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance.'
+          3. Include 'Installation & Upgrade' section with npm commands including the version tag
+          4. Add 'Major Features' section summarizing the most important changes
+          5. Add 'Changes' section with the detailed commit list
+          6. NO EMOJIS anywhere
+
+          Here are the commits since $LAST_STABLE_TAG:
+          $(cat commits.txt)"
+
+          # Try LLxprt generation using OpenRouter
           set +e
           npx @vybestack/llxprt-code@latest \
             --no-interactive \
-            --provider gemini \
-            --model gemini-2.0-flash-exp \
-            --key "${{ secrets.GEMINI_API_KEY }}" \
+            --provider openai \
+            --model google/gemini-2.5-flash \
+            --key "${{ secrets.OPENROUTER_API_KEY }}" \
+            --base-url https://openrouter.ai/api/v1 \
             --prompt "$PROMPT" > generated-notes.md 2>&1
           LLXPRT_EXIT=$?
           set -e
@@ -215,16 +231,23 @@ jobs:
             # Write basic release notes
             echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
             echo "" >> release-notes.md
+            
+            # Add note for pre-release versions
+            if [[ "${{ steps.version.outputs.RELEASE_TAG }}" == *"-"* ]]; then
+              echo "Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance." >> release-notes.md
+              echo "" >> release-notes.md
+            fi
+            
             echo "### Installation & Upgrade" >> release-notes.md
             echo "" >> release-notes.md
             echo "#### Install" >> release-notes.md
             echo '```bash' >> release-notes.md
-            echo "npm install -g @vybestack/llxprt-code" >> release-notes.md
+            echo "npm install -g @vybestack/llxprt-code@${{ steps.version.outputs.RELEASE_VERSION }}" >> release-notes.md
             echo '```' >> release-notes.md
             echo "" >> release-notes.md
             echo "#### Upgrade" >> release-notes.md
             echo '```bash' >> release-notes.md
-            echo "npm update -g @vybestack/llxprt-code" >> release-notes.md
+            echo "npm update -g @vybestack/llxprt-code@${{ steps.version.outputs.RELEASE_VERSION }}" >> release-notes.md
             echo '```' >> release-notes.md
             echo "" >> release-notes.md
             echo "### Changes" >> release-notes.md
@@ -233,11 +256,11 @@ jobs:
           fi
 
           # Add comparison link if we have a real previous tag
-          if [[ "$LAST_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
+          if [[ "$LAST_STABLE_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
             echo "" >> release-notes.md
             echo "---" >> release-notes.md
             echo "" >> release-notes.md
-            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_TAG}...${{ steps.version.outputs.RELEASE_TAG }}" >> release-notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_STABLE_TAG}...${{ steps.version.outputs.RELEASE_TAG }}" >> release-notes.md
           fi
 
           echo "Release notes generated"
