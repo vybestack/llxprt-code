@@ -90,8 +90,8 @@ Slash commands provide meta-level control over the CLI itself.
   - **Note:** Only available if the CLI is invoked with the `--checkpointing` option or configured via [settings](./configuration.md). See [Checkpointing documentation](../checkpointing.md) for more details.
 
 - **`/settings`**
-  - **Description:** Open the settings editor to view and modify Gemini CLI settings.
-  - **Details:** This command provides a user-friendly interface for changing settings that control the behavior and appearance of Gemini CLI. It is equivalent to manually editing the `.gemini/settings.json` file, but with validation and guidance to prevent errors.
+  - **Description:** Open the settings editor to view and modify LLxprt Code settings.
+  - **Details:** This command provides a user-friendly interface for changing settings that control the behavior and appearance of LLxprt Code. It is equivalent to manually editing the `.llxprt/settings.json` file, but with validation and guidance to prevent errors.
   - **Usage:** Simply run `/settings` and the editor will open. You can then browse or search for specific settings, view their current values, and modify them as desired. Changes to some settings are applied immediately, while others require a restart.
 
 - **`/stats`**
