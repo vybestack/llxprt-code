@@ -1,26 +1,26 @@
 /**
  * Provider and model-specific default prompts
- * These constants contain the default content for provider/model overrides
+ * These constants reference the corresponding .md files for default content
  */
 
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+function loadMarkdownFile(filename: string): string {
+  try {
+    return readFileSync(join(__dirname, filename), 'utf-8');
+  } catch (_error) {
+    console.warn(`Warning: Could not load ${filename}, using empty content`);
+    return '';
+  }
+}
+
 export const PROVIDER_DEFAULTS: Record<string, string> = {
-  'providers/gemini/models/gemini-1-5-flash/core.md': `IMPORTANT: You MUST use the provided tools when appropriate. For example:
-- When asked to list files or directories, use the 'Ls' tool
-- When asked to read file contents, use the 'ReadFile' tool
-- When asked to search for patterns in files, use the 'Grep' tool
-- When asked to find files by name, use the 'Glob' tool
-- When asked to create files, use the 'WriteFile' tool
-- When asked to modify files, use the 'Edit' tool
-- When asked to run commands, use the 'Shell' tool
-Do not describe what you would do - actually execute the tool calls.`,
-  'providers/gemini/models/gemini-2-5-flash/core.md': `IMPORTANT: You MUST use the provided tools when appropriate. For example:
-- When asked to list files or directories, use the 'Ls' tool
-- When asked to read file contents, use the 'ReadFile' tool
-- When asked to search for patterns in files, use the 'Grep' tool
-- When asked to find files by name, use the 'Glob' tool
-- When asked to create files, use the 'WriteFile' tool
-- When asked to modify files, use the 'Edit' tool
-- When asked to run commands, use the 'Shell' tool
-Do not describe what you would do - actually execute the tool calls.`,
+  'providers/gemini/models/gemini-2-5-flash/core.md': loadMarkdownFile(
+    'providers/gemini/models/gemini-2-5-flash/core.md',
+  ),
   // Future provider-specific defaults can be added here
 };
