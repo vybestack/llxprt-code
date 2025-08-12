@@ -55,7 +55,7 @@ export function IdeIntegrationNudge({
       <Box marginBottom={1} flexDirection="column">
         <Text>
           <Text color="yellow">{'> '}</Text>
-          {`Do you want to connect your ${ideName ?? 'your'} editor to Gemini CLI?`}
+          {`Do you want to connect your ${ideName ?? 'your'} editor to LLxprt Code?`}
         </Text>
         <Text
           dimColor

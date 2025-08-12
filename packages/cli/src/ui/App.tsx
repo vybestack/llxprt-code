@@ -1256,7 +1256,7 @@ const App = (props: AppInternalProps) => {
 
           {shouldShowIdePrompt ? (
             <IdeIntegrationNudge
-              ideName={config.getIdeClient().getDetectedIdeDisplayName()}
+              ideName={config.getIdeClient()?.getDetectedIdeDisplayName()}
               onComplete={handleIdePromptComplete}
             />
           ) : isFolderTrustDialogOpen ? (
