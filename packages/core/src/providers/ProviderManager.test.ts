@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ProviderManager } from './ProviderManager.js';
 import { IProvider, IModel, IMessage, ITool } from './IProvider.js';
 import { ContentGeneratorRole } from './ContentGeneratorRole.js';
+import { resetSettingsService } from '../settings/settingsServiceInstance.js';
 
 // Helper function to create mock providers
 function createMockProvider(
@@ -49,6 +50,9 @@ describe('ProviderManager', () => {
   let manager: ProviderManager;
 
   beforeEach(() => {
+    // Reset SettingsService for each test
+    resetSettingsService();
+
     manager = new ProviderManager();
   });
 

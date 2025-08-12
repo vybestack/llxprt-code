@@ -67,7 +67,6 @@ describe('Multi-Provider Integration Tests', () => {
       // Clear SettingsService state before each test
       const settingsService = getSettingsService();
       settingsService.set('activeProvider', '');
-      settingsService.clearProviderSettings();
 
       manager = new ProviderManager();
     }
