@@ -268,7 +268,6 @@ describe('Gemini Client (client.ts)', () => {
         getDirectories: vi.fn().mockReturnValue(['/test/dir']),
       }),
       getGeminiClient: vi.fn(),
-      getDebugMode: vi.fn().mockReturnValue(false),
       setFallbackMode: vi.fn(),
       getComplexityAnalyzerSettings: vi.fn().mockReturnValue({
         complexityThreshold: 0.6,
