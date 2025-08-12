@@ -91,6 +91,25 @@ Direct access to o3, o1, GPT-4.1, and other OpenAI models:
 
 Access Claude Sonnet 4, Claude Opus 4, and other Anthropic models:
 
+#### Option 1: Log in with Anthropic to use your Claude Pro or Max account
+
+Use OAuth authentication to access Claude with your existing Claude Pro or Max subscription:
+
+1. Select the Anthropic provider:
+   ```
+   /provider anthropic
+   ```
+2. Authenticate with your Claude account:
+   ```
+   /auth
+   ```
+3. Your browser will open to the Claude authentication page
+4. Log in and authorize LLxprt Code
+5. Copy the authorization code shown and paste it back in the terminal
+6. You're now using your Claude Pro/Max account!
+
+#### Option 2: Use an API Key
+
 1. Get your API key from [Anthropic](https://console.anthropic.com/account/keys)
 2. Configure:
    ```
@@ -279,7 +298,7 @@ Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
 - `/baseurl` - Set custom API endpoint
 - `/key` - Set API key for current session
 - `/keyfile` - Load API key from file
-- `/auth` - Authenticate with Google (for Gemini provider)
+- `/auth` - Authenticate with Google (for Gemini) or Anthropic (for Claude)
 
 ### Troubleshooting
 
