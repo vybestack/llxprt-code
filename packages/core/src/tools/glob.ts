@@ -325,7 +325,7 @@ export class GlobTool extends BaseDeclarativeTool<GlobToolParams, ToolResult> {
           max_files: {
             description:
               'Optional: Maximum number of files to return. If omitted, returns all matching files up to system limits. Set a lower number if you expect many matches to avoid overwhelming output.',
-            type: Type.NUMBER,
+            type: 'number',
           },
         },
         required: ['pattern'],
