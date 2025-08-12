@@ -217,7 +217,7 @@ jobs:
             --provider openai \
             --model google/gemini-2.5-flash \
             --key "${{ secrets.OPENROUTER_API_KEY }}" \
-            --base-url https://openrouter.ai/api/v1 \
+            --baseurl https://openrouter.ai/api/v1 \
             --prompt "$PROMPT" > generated-notes.md 2>&1
           LLXPRT_EXIT=$?
           set -e
