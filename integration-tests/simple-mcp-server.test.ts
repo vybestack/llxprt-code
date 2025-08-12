@@ -14,7 +14,6 @@ import { test, describe, before } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { TestRig, validateModelOutput } from './test-helper.js';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
 import { writeFileSync } from 'fs';
 
 // Skip MCP tests in CI when using OpenRouter as tool extraction may vary by model
@@ -22,8 +21,6 @@ if (process.env.OPENAI_BASE_URL?.includes('openrouter')) {
   console.log('Skipping MCP server tests when using OpenRouter');
   test.skip('MCP server tests skipped for OpenRouter', () => {});
 } else {
-  const __dirname = fileURLToPath(new URL('.', import.meta.url));
-
   // Create a minimal MCP server that doesn't require external dependencies
   // This implements the MCP protocol directly using Node.js built-ins
   const serverScript = `#!/usr/bin/env node
