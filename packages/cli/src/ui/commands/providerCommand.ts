@@ -14,11 +14,12 @@ import {
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-core/src/settings/SettingsService.js';
 
 /**
  * Get SettingsService instance for provider switching
  */
-async function getSettingsServiceForProvider(): Promise<unknown> {
+async function getSettingsServiceForProvider(): Promise<SettingsService> {
   try {
     const { getSettingsService } = await import(
       '@vybestack/llxprt-code-core/src/settings/settingsServiceInstance.js'
@@ -88,20 +89,14 @@ export const providerCommand: SlashCommand = {
       // Use SettingsService for provider switching
       try {
         const settingsService = await getSettingsServiceForProvider();
-        if (
-          typeof settingsService === 'object' &&
-          settingsService !== null &&
-          'switchProvider' in settingsService &&
-          typeof settingsService.switchProvider === 'function'
-        ) {
-          await settingsService.switchProvider(providerName);
-        }
+        await settingsService.switchProvider(providerName);
 
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Switched from ${fromProvider} to ${providerName}`,
-        };
+        // Also set the default model for this provider
+        const activeProvider = providerManager.getActiveProvider();
+        const defaultModel = activeProvider.getDefaultModel();
+        settingsService.setProviderSetting(providerName, 'model', defaultModel);
+
+        // Don't return early - continue with the rest of the setup
       } catch (error) {
         if (process.env.DEBUG) {
           console.warn(
@@ -144,25 +139,13 @@ export const providerCommand: SlashCommand = {
         // Get the active provider and ensure it uses a valid default model
         const activeProvider = providerManager.getActiveProvider();
 
-        // Determine the correct default model for this provider
-        let defaultModel = '';
+        // Get the default model from the provider
+        const defaultModel = activeProvider.getDefaultModel();
         let baseUrl: string | undefined;
-        switch (providerName) {
-          case 'gemini':
-            defaultModel = 'gemini-2.5-pro';
-            break;
-          case 'openai':
-            defaultModel = 'gpt-4.1';
-            break;
-          case 'anthropic':
-            defaultModel = 'claude-sonnet-4-latest';
-            break;
-          case 'qwen':
-            defaultModel = 'qwen3-coder-plus';
-            baseUrl = 'https://portal.qwen.ai/v1';
-            break;
-          default:
-            defaultModel = activeProvider.getCurrentModel?.() || '';
+
+        // Set base URL for specific providers
+        if (providerName === 'qwen') {
+          baseUrl = 'https://portal.qwen.ai/v1';
         }
 
         // Set the base URL if needed (for qwen)

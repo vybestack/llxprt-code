@@ -8,6 +8,7 @@ import { retryWithBackoff } from '../../utils/retry.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 export class AnthropicProvider implements IProvider {
   name: string = 'anthropic';
@@ -371,11 +372,39 @@ export class AnthropicProvider implements IProvider {
   }
 
   setModel(modelId: string): void {
+    // Update SettingsService as the source of truth
+    try {
+      const settingsService = getSettingsService();
+      settingsService.setProviderSetting(this.name, 'model', modelId);
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn('Failed to persist model to SettingsService:', error);
+      }
+    }
+    // Keep local cache for performance
     this.currentModel = modelId;
   }
 
   getCurrentModel(): string {
-    return this.currentModel;
+    // Try to get from SettingsService first (source of truth)
+    try {
+      const settingsService = getSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+      if (providerSettings.model) {
+        return providerSettings.model as string;
+      }
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn('Failed to get model from SettingsService:', error);
+      }
+    }
+    // Fall back to cached value or default
+    return this.currentModel || this.getDefaultModel();
+  }
+
+  getDefaultModel(): string {
+    // Return the default model for this provider
+    return 'claude-sonnet-4-latest';
   }
 
   /**

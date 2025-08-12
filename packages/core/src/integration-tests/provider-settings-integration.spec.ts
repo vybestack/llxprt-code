@@ -4,12 +4,8 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SettingsService } from '../settings/SettingsService.js';
-import { FileSystemSettingsRepository } from '../settings/FileSystemSettingsRepository.js';
 import { BaseProvider } from '../providers/BaseProvider.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
-import * as os from 'os';
-import * as path from 'path';
-import * as fs from 'fs/promises';
 
 // Mock the settings service instance
 vi.mock('../settings/settingsServiceInstance.js');
@@ -43,38 +39,25 @@ class TestProvider extends BaseProvider {
 describe('Provider Settings Integration', () => {
   let settingsService: SettingsService;
   let testProvider: TestProvider;
-  let tempDir: string;
-  let settingsPath: string;
 
   beforeEach(async () => {
-    // Create temporary directory for test settings
-    tempDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), 'provider-settings-test-'),
-    );
-    settingsPath = path.join(tempDir, 'settings.json');
-
-    // Create settings service
-    const repository = new FileSystemSettingsRepository(settingsPath);
-    settingsService = new SettingsService(repository);
+    // Create settings service without repository (in-memory only)
+    settingsService = new SettingsService();
 
     // Mock getSettingsService to return our test instance
     mockGetSettingsService.mockReturnValue(settingsService);
 
-    // Create test provider with settings service using supported provider name
+    // Create test provider using supported provider name
     testProvider = new TestProvider({
       name: 'openai',
-      settingsService,
     });
 
-    // Wait for settings service to initialize
-    await new Promise((resolve) => {
-      settingsService.on('initialized' as never, resolve);
-    });
+    // Settings service is immediately ready (in-memory only)
   });
 
   afterEach(async () => {
-    // Clean up temp directory
-    await fs.rm(tempDir, { recursive: true, force: true });
+    // Clean up settings service
+    settingsService.clear();
   });
 
   it('should integrate provider with SettingsService always enabled', async () => {
@@ -114,36 +97,35 @@ describe('Provider Settings Integration', () => {
     const retrievedParams = await testProvider.getModelParamsFromSettings();
     expect(retrievedParams).toEqual({ temperature: 0.8, max_tokens: 2048 });
 
-    // Verify settings are persisted to file
-    const fileContent = await fs.readFile(settingsPath, 'utf-8');
-    const settings = JSON.parse(fileContent);
-    expect(settings.providers.openai).toBeDefined();
-    expect(settings.providers.openai.model).toBe(testModel);
-    expect(settings.providers.openai.apiKey).toBe(testApiKey);
-    expect(settings.providers.openai.baseUrl).toBe(testBaseUrl);
-    expect(settings.providers.openai.temperature).toBe(0.8);
-    expect(settings.providers.openai.maxTokens).toBe(2048);
+    // Verify settings are persisted in memory
+    const allSettings = await settingsService.getSettings();
+    expect(allSettings.providers.openai).toBeDefined();
+    expect(allSettings.providers.openai.model).toBe(testModel);
+    expect(allSettings.providers.openai.apiKey).toBe(testApiKey);
+    expect(allSettings.providers.openai.baseUrl).toBe(testBaseUrl);
+    expect(allSettings.providers.openai.temperature).toBe(0.8);
+    expect(allSettings.providers.openai.maxTokens).toBe(2048);
   });
 
-  it('should gracefully handle missing SettingsService', async () => {
-    // Test provider without settings service
-    const providerWithoutSettings = new TestProvider({
-      name: 'test-no-settings',
+  it('should work with global SettingsService', async () => {
+    // Test provider uses global settings service
+    const providerWithGlobalSettings = new TestProvider({
+      name: 'test-global',
     });
 
-    // These should not throw errors even when SettingsService is not available
+    // These should work with global SettingsService
     await expect(
-      providerWithoutSettings.setModelInSettings('test-model'),
+      providerWithGlobalSettings.setModelInSettings('test-model'),
     ).resolves.toBeUndefined();
     await expect(
-      providerWithoutSettings.getModelFromSettings(),
+      providerWithGlobalSettings.getModelFromSettings(),
+    ).resolves.toBe('test-model');
+    await expect(
+      providerWithGlobalSettings.setApiKeyInSettings('test-key'),
     ).resolves.toBeUndefined();
     await expect(
-      providerWithoutSettings.setApiKeyInSettings('test-key'),
-    ).resolves.toBeUndefined();
-    await expect(
-      providerWithoutSettings.getApiKeyFromSettings(),
-    ).resolves.toBeUndefined();
+      providerWithGlobalSettings.getApiKeyFromSettings(),
+    ).resolves.toBe('test-key');
   });
 
   it('should use SettingsService for provider switching', async () => {
@@ -151,13 +133,13 @@ describe('Provider Settings Integration', () => {
     // Test provider switching through SettingsService with a known provider
     await settingsService.switchProvider('openai');
 
-    // Verify the default provider was updated
-    const settings = await settingsService.getSettings();
-    expect(settings.defaultProvider).toBe('openai');
+    // Verify the active provider was updated (not defaultProvider)
+    const globalSettings = settingsService.getAllGlobalSettings();
+    expect(globalSettings.activeProvider).toBe('openai');
 
-    // Verify the provider settings exist
-    expect(settings.providers.openai).toBeDefined();
-    expect(settings.providers.openai.enabled).toBe(true);
+    // Provider settings are created on demand when accessed
+    const settings = await settingsService.getSettings();
+    expect(settings.providers).toBeDefined();
   });
 
   it('should maintain backward compatibility with SettingsService always enabled', async () => {
@@ -165,7 +147,6 @@ describe('Provider Settings Integration', () => {
     // Provider methods should work properly with SettingsService
     const provider = new TestProvider({
       name: 'test-compat',
-      settingsService,
     });
 
     // These should work with SettingsService integration

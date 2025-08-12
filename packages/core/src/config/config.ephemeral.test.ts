@@ -6,11 +6,15 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Config } from './config.js';
+import { resetSettingsService } from '../settings/settingsServiceInstance.js';
 
 describe('Config - Ephemeral Settings', () => {
   let config: Config;
 
   beforeEach(() => {
+    // Reset SettingsService singleton to ensure clean state between tests
+    resetSettingsService();
+
     config = new Config({
       model: 'test-model',
       question: 'test question',

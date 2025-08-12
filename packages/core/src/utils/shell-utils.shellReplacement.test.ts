@@ -10,11 +10,15 @@ import {
   checkCommandPermissions,
 } from './shell-utils.js';
 import { Config } from '../config/config.js';
+import { resetSettingsService } from '../settings/settingsServiceInstance.js';
 
 describe('Shell replacement settings', () => {
   let config: Config;
 
   beforeEach(() => {
+    // Reset SettingsService singleton to ensure clean state between tests
+    resetSettingsService();
+
     config = new Config({
       model: 'test-model',
       question: 'test question',

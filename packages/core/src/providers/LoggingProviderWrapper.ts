@@ -204,6 +204,10 @@ export class LoggingProviderWrapper implements IProvider {
     return this.wrapped.getModels();
   }
 
+  getDefaultModel(): string {
+    return this.wrapped.getDefaultModel();
+  }
+
   // Only method that includes logging - everything else is passthrough
   async *generateChatCompletion(
     messages: IMessage[],

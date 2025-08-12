@@ -1,0 +1,54 @@
+{
+  "compliant": true,
+  "has_integration_plan": true,
+  "builds_in_isolation": false,
+  "violations": [],
+  "specific_files_to_modify": [
+    "packages/core/src/settings/SettingsService.ts",
+    "packages/core/src/config/config.ts",
+    "packages/core/src/settings/settingsServiceInstance.ts",
+    "packages/core/src/config/config.test.ts",
+    "packages/core/test/settings/SettingsService.spec.ts"
+  ],
+  "files_to_delete": [
+    "packages/core/src/settings/FileSystemSettingsRepository.ts",
+    "packages/core/src/settings/ISettingsRepository.ts"
+  ],
+  "user_access_points": [
+    "CLI: /set command for ephemeral settings",
+    "CLI: /model, /provider, /baseurl commands",
+    "API: Config.setEphemeralSetting() method",
+    "API: Config.getEphemeralSetting() method"
+  ],
+  "old_code_to_remove": [
+    "Config's ephemeralSettings object - Replace with SettingsService calls",
+    "Config's setEphemeralInSettingsService() - Remove async persistence logic",
+    "Config's queueSettingsUpdate() - Remove queuing logic",
+    "Config's loadEphemeralSettingsFromService() - Remove loading from file",
+    "packages/core/src/settings/FileSystemSettingsRepository.ts - DELETE ENTIRELY",
+    "All file system operations in SettingsService",
+    "All async patterns around ephemeral settings"
+  ],
+  "pseudocode_used": true,
+  "reverse_testing_found": false,
+  "mutation_testing": false,
+  "property_testing": false,
+  "evaluation_summary": {
+    "passes_integration_check": true,
+    "reason": "This plan PASSES the integration requirements. It identifies specific existing files that will use the feature (Config, CLI commands, UI components), shows exactly what old code will be replaced (ephemeralSettings object, async methods, FileSystemSettingsRepository), and demonstrates clear user access points. The feature cannot be built in isolation - it requires modifying existing Config behavior and CLI commands to work properly.",
+    "integration_strengths": [
+      "Identifies specific consumer files: Config.ts, setCommand.ts, diagnosticsCommand.ts, etc.",
+      "Shows exact replacement pattern: Config.ephemeralSettings -> SettingsService delegation",
+      "Lists specific methods to remove: setEphemeralInSettingsService, queueSettingsUpdate, etc.",
+      "Includes cleanup phase to delete FileSystemSettingsRepository entirely",
+      "Has integration tests that verify end-to-end functionality",
+      "Cannot work without modifying existing Config class - prevents isolation"
+    ],
+    "implementation_quality": "Good - follows PLAN.md patterns with numbered pseudocode, proper stub/TDD/implementation phases, and avoids NotYetImplemented patterns",
+    "weaknesses": [
+      "Missing mutation testing requirements (80% minimum)",
+      "Missing property-based testing requirements (30% minimum)",
+      "Could benefit from more explicit CLI command integration phases"
+    ]
+  }
+}

@@ -23,6 +23,7 @@ import type {
 } from '@google/genai';
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 /**
  * Represents the default Gemini provider.
@@ -954,13 +955,44 @@ export class GeminiProvider extends BaseProvider {
    * Gets the current model ID
    */
   getCurrentModel(): string {
-    return this.currentModel;
+    // Try to get from SettingsService first (source of truth)
+    try {
+      const settingsService = getSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+      if (providerSettings.model) {
+        return providerSettings.model as string;
+      }
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn('Failed to get model from SettingsService:', error);
+      }
+    }
+    // Fall back to cached value or default
+    return this.currentModel || this.getDefaultModel();
+  }
+
+  /**
+   * Gets the default model for Gemini
+   */
+  getDefaultModel(): string {
+    return 'gemini-2.5-pro';
   }
 
   /**
    * Sets the current model ID
    */
   setModel(modelId: string): void {
+    // Update SettingsService as the source of truth
+    try {
+      const settingsService = getSettingsService();
+      settingsService.setProviderSetting(this.name, 'model', modelId);
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn('Failed to persist model to SettingsService:', error);
+      }
+    }
+
+    // Keep local cache for performance
     this.currentModel = modelId;
     this.modelExplicitlySet = true;
 

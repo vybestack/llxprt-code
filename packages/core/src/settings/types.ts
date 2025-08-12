@@ -2,8 +2,6 @@
  * Settings service interfaces and types
  */
 
-import { IProvider } from '../providers/IProvider.js';
-
 /**
  * Global settings schema matching the specification
  */
@@ -75,15 +73,6 @@ export interface SettingsChangeEvent {
 }
 
 /**
- * Settings repository interface for persistence layer
- */
-export interface ISettingsRepository {
-  load(): Promise<GlobalSettings>;
-  save(settings: GlobalSettings): Promise<void>;
-  watch(callback: (settings: GlobalSettings) => void): () => void;
-}
-
-/**
  * Event listener function type
  */
 export type EventListener<T = unknown> = (event: T) => void;
@@ -128,7 +117,7 @@ export interface ISettingsService {
   /**
    * Switch to a different provider and update settings
    */
-  switchProvider(providerId: string): Promise<IProvider>;
+  switchProvider(providerId: string): Promise<void>;
 
   /**
    * Subscribe to settings change events

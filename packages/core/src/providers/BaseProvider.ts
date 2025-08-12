@@ -231,6 +231,7 @@ export abstract class BaseProvider implements IProvider {
 
   // Abstract methods that must be implemented by concrete providers
   abstract getModels(): Promise<IModel[]>;
+  abstract getDefaultModel(): string;
   abstract generateChatCompletion(
     messages: IMessage[],
     tools?: ITool[],

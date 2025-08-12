@@ -49,6 +49,8 @@ export const modelCommand: SlashCommand = {
         if (useSettingsService && settingsService && config) {
           // Use SettingsService to update provider settings
           try {
+            // Ensure activeProvider is set in SettingsService
+            settingsService.set('activeProvider', activeProvider.name);
             await settingsService.updateSettings(activeProvider.name, {
               model: modelName,
             });

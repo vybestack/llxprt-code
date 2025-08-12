@@ -26,7 +26,6 @@ export type {
   ISettingsService,
   GlobalSettings,
   SettingsChangeEvent,
-  ISettingsRepository,
   ProviderSettings,
   UISettings,
   AdvancedSettings,

@@ -29,6 +29,7 @@ export interface IProvider {
   ): AsyncIterableIterator<unknown>;
   setModel?(modelId: string): void;
   getCurrentModel?(): string;
+  getDefaultModel(): string;
   // Methods for updating provider configuration
   setApiKey?(apiKey: string): void;
   setBaseUrl?(baseUrl?: string): void;

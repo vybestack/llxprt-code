@@ -168,7 +168,6 @@ export * from './tools/ToolFormatter.js';
 
 // Export settings system
 export { SettingsService } from './settings/SettingsService.js';
-export { FileSystemSettingsRepository } from './settings/FileSystemSettingsRepository.js';
 export {
   getSettingsService,
   resetSettingsService,
@@ -177,7 +176,6 @@ export type {
   ISettingsService,
   GlobalSettings,
   SettingsChangeEvent,
-  ISettingsRepository,
   ProviderSettings,
   UISettings,
   AdvancedSettings,

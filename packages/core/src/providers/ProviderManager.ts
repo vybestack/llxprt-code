@@ -22,10 +22,10 @@ import type {
   ProviderContext,
   ProviderComparison,
 } from './types.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 export class ProviderManager implements IProviderManager {
   private providers: Map<string, IProvider>;
-  private activeProviderName: string;
   private serverToolsProvider: IProvider | null;
   private config?: Config;
   private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
@@ -33,7 +33,6 @@ export class ProviderManager implements IProviderManager {
 
   constructor() {
     this.providers = new Map<string, IProvider>();
-    this.activeProviderName = ''; // No default provider
     this.serverToolsProvider = null;
   }
 
@@ -101,8 +100,12 @@ export class ProviderManager implements IProviderManager {
     }
 
     // If this is the default provider and no provider is active, set it as active
-    if (provider.isDefault && !this.activeProviderName) {
-      this.activeProviderName = provider.name;
+    const settingsService = getSettingsService();
+    const currentActiveProvider = settingsService.get(
+      'activeProvider',
+    ) as string;
+    if (provider.isDefault && !currentActiveProvider) {
+      settingsService.set('activeProvider', provider.name);
     }
 
     // If registering Gemini and we don't have a serverToolsProvider, use it
@@ -111,7 +114,7 @@ export class ProviderManager implements IProviderManager {
     }
 
     // If Gemini is the active provider, it should also be the serverToolsProvider
-    if (provider.name === 'gemini' && this.activeProviderName === 'gemini') {
+    if (provider.name === 'gemini' && currentActiveProvider === 'gemini') {
       this.serverToolsProvider = provider;
     }
   }
@@ -122,7 +125,9 @@ export class ProviderManager implements IProviderManager {
     }
 
     // Store reference to the current active provider before switching
-    const previousProviderName = this.activeProviderName;
+    const settingsService = getSettingsService();
+    const previousProviderName =
+      (settingsService.get('activeProvider') as string) || '';
 
     // Only clear state from the provider we're switching FROM
     // BUT never clear the serverToolsProvider's state
@@ -153,7 +158,8 @@ export class ProviderManager implements IProviderManager {
       );
     }
 
-    this.activeProviderName = name;
+    // Update SettingsService as the single source of truth
+    settingsService.set('activeProvider', name);
 
     // If switching to Gemini, use it as both active and serverTools provider
     // BUT only if we don't already have a Gemini serverToolsProvider with auth state
@@ -174,14 +180,19 @@ export class ProviderManager implements IProviderManager {
   }
 
   clearActiveProvider(): void {
-    this.activeProviderName = '';
+    const settingsService = getSettingsService();
+    settingsService.set('activeProvider', '');
   }
 
   getActiveProvider(): IProvider {
-    if (!this.activeProviderName) {
+    const settingsService = getSettingsService();
+    const activeProviderName =
+      (settingsService.get('activeProvider') as string) || '';
+
+    if (!activeProviderName) {
       throw new Error('No active provider set');
     }
-    const provider = this.providers.get(this.activeProviderName);
+    const provider = this.providers.get(activeProviderName);
     if (!provider) {
       throw new Error('Active provider not found');
     }
@@ -208,14 +219,15 @@ export class ProviderManager implements IProviderManager {
   }
 
   getActiveProviderName(): string {
-    return this.activeProviderName;
+    const settingsService = getSettingsService();
+    return (settingsService.get('activeProvider') as string) || '';
   }
 
   hasActiveProvider(): boolean {
-    return (
-      this.activeProviderName !== '' &&
-      this.providers.has(this.activeProviderName)
-    );
+    const settingsService = getSettingsService();
+    const activeProviderName =
+      (settingsService.get('activeProvider') as string) || '';
+    return activeProviderName !== '' && this.providers.has(activeProviderName);
   }
 
   getServerToolsProvider(): IProvider | null {
@@ -392,7 +404,9 @@ export class ProviderManager implements IProviderManager {
   getProviderCapabilities(
     providerName?: string,
   ): ProviderCapabilities | undefined {
-    const name = providerName || this.activeProviderName;
+    const settingsService = getSettingsService();
+    const name =
+      providerName || (settingsService.get('activeProvider') as string) || '';
     return this.providerCapabilities.get(name);
   }
 

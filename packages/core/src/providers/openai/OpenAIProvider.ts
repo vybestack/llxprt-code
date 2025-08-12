@@ -958,17 +958,40 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   setModel(modelId: string): void {
-    this.currentModel = modelId;
-    // Persist to SettingsService if available
+    // Update SettingsService as the source of truth
     this.setModelInSettings(modelId).catch((error) => {
       if (process.env.DEBUG) {
         console.warn('Failed to persist model to SettingsService:', error);
       }
     });
+    // Keep local cache for performance
+    this.currentModel = modelId;
   }
 
   getCurrentModel(): string {
-    return this.currentModel;
+    // Try to get from SettingsService first (source of truth)
+    try {
+      const settingsService = getSettingsService();
+      const providerSettings = settingsService.getProviderSettings(this.name);
+      if (providerSettings.model) {
+        return providerSettings.model as string;
+      }
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn('Failed to get model from SettingsService:', error);
+      }
+    }
+    // Fall back to cached value or default
+    return this.currentModel || this.getDefaultModel();
+  }
+
+  getDefaultModel(): string {
+    // Return the default model for this provider
+    // This can be overridden based on configuration or endpoint
+    if (this.isUsingQwen()) {
+      return 'qwen3-coder-plus';
+    }
+    return 'gpt-4.1';
   }
 
   setApiKey(apiKey: string): void {

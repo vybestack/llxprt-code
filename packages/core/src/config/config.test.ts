@@ -19,6 +19,7 @@ import {
 import { GeminiClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { IdeClient } from '../ide/ide-client.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -91,6 +92,21 @@ vi.mock('../services/gitService.js', () => {
   const GitServiceMock = vi.fn();
   GitServiceMock.prototype.initialize = vi.fn();
   return { GitService: GitServiceMock };
+});
+
+vi.mock('../settings/settingsServiceInstance.js', () => {
+  const mockSettingsService = {
+    get: vi.fn(),
+    set: vi.fn(),
+    clear: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+  };
+  return {
+    getSettingsService: vi.fn(() => mockSettingsService),
+    resetSettingsService: vi.fn(),
+  };
 });
 
 describe('Server Config (config.ts)', () => {
@@ -442,6 +458,224 @@ describe('Server Config (config.ts)', () => {
       delete paramsWithoutTelemetry.telemetry;
       const config = new Config(paramsWithoutTelemetry);
       expect(config.getTelemetryOtlpEndpoint()).toBe(DEFAULT_OTLP_ENDPOINT);
+    });
+  });
+
+  describe('Ephemeral Settings with SettingsService Integration', () => {
+    let mockSettingsService: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      mockSettingsService = getSettingsService() as ReturnType<typeof vi.fn>;
+      vi.clearAllMocks();
+    });
+
+    /**
+     * @requirement REQ-002.1
+     * @scenario Config delegates ephemeral get
+     * @given SettingsService has 'model' = 'gpt-4'
+     * @when config.getEphemeralSetting('model') called
+     * @then Returns 'gpt-4' from SettingsService
+     * @and No local storage accessed
+     */
+    it('should delegate getEphemeralSetting to SettingsService', () => {
+      const config = new Config(baseParams);
+
+      mockSettingsService.get.mockReturnValue('gpt-4');
+
+      const result = config.getEphemeralSetting('model');
+
+      expect(mockSettingsService.get).toHaveBeenCalledWith('model');
+      expect(result).toBe('gpt-4');
+      expect(mockSettingsService.get).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * @requirement REQ-002.1
+     * @scenario Config delegates ephemeral set
+     * @given SettingsService is available
+     * @when config.setEphemeralSetting('temperature', 0.8) called
+     * @then SettingsService.set called with 'temperature', 0.8
+     * @and No local storage occurs
+     */
+    it('should delegate setEphemeralSetting to SettingsService', () => {
+      const config = new Config(baseParams);
+
+      config.setEphemeralSetting('temperature', 0.8);
+
+      expect(mockSettingsService.set).toHaveBeenCalledWith('temperature', 0.8);
+      expect(mockSettingsService.set).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * @requirement REQ-002.3
+     * @scenario Config has no local ephemeral storage
+     * @given Config instance created
+     * @when ephemeral setting is set
+     * @then No local ephemeralSettings property exists
+     */
+    it('should not maintain local ephemeral storage', () => {
+      const config = new Config(baseParams);
+
+      config.setEphemeralSetting('test', 'value');
+
+      // Verify no local storage property exists
+      expect(
+        (config as unknown as { ephemeralSettings?: unknown })
+          .ephemeralSettings,
+      ).toBeUndefined();
+    });
+
+    /**
+     * @requirement REQ-002.4
+     * @scenario Config operations are synchronous
+     * @given Config instance available
+     * @when setEphemeralSetting and getEphemeralSetting called
+     * @then Operations complete synchronously without await
+     */
+    it('should complete operations synchronously', () => {
+      const config = new Config(baseParams);
+      mockSettingsService.get.mockReturnValue(true);
+
+      // No await needed - operations must be synchronous
+      config.setEphemeralSetting('instant', true);
+      const result = config.getEphemeralSetting('instant');
+
+      expect(result).toBe(true);
+      expect(mockSettingsService.set).toHaveBeenCalledWith('instant', true);
+      expect(mockSettingsService.get).toHaveBeenCalledWith('instant');
+    });
+
+    /**
+     * @requirement REQ-002.4
+     * @scenario Multiple settings operations are synchronous
+     * @given Config instance available
+     * @when multiple ephemeral settings are modified
+     * @then All operations complete synchronously
+     */
+    it('should handle multiple synchronous operations', () => {
+      const config = new Config(baseParams);
+      mockSettingsService.get
+        .mockReturnValueOnce('provider1')
+        .mockReturnValueOnce('model1')
+        .mockReturnValueOnce(0.7);
+
+      // All operations should be synchronous
+      config.setEphemeralSetting('provider', 'provider1');
+      config.setEphemeralSetting('model', 'model1');
+      config.setEphemeralSetting('temperature', 0.7);
+
+      const provider = config.getEphemeralSetting('provider');
+      const model = config.getEphemeralSetting('model');
+      const temperature = config.getEphemeralSetting('temperature');
+
+      expect(provider).toBe('provider1');
+      expect(model).toBe('model1');
+      expect(temperature).toBe(0.7);
+
+      expect(mockSettingsService.set).toHaveBeenCalledTimes(3);
+      expect(mockSettingsService.get).toHaveBeenCalledTimes(3);
+    });
+
+    /**
+     * @requirement REQ-002.1
+     * @scenario Config delegates get with various data types
+     * @given SettingsService returns different types
+     * @when getEphemeralSetting called for different keys
+     * @then Correct values returned for each type
+     */
+    it('should delegate get operations for various data types', () => {
+      const config = new Config(baseParams);
+
+      mockSettingsService.get.mockImplementation((key: string) => {
+        switch (key) {
+          case 'stringValue':
+            return 'test string';
+          case 'numberValue':
+            return 42;
+          case 'booleanValue':
+            return true;
+          case 'objectValue':
+            return { nested: 'object' };
+          case 'arrayValue':
+            return [1, 2, 3];
+          case 'undefinedValue':
+            return undefined;
+          default:
+            return null;
+        }
+      });
+
+      expect(config.getEphemeralSetting('stringValue')).toBe('test string');
+      expect(config.getEphemeralSetting('numberValue')).toBe(42);
+      expect(config.getEphemeralSetting('booleanValue')).toBe(true);
+      expect(config.getEphemeralSetting('objectValue')).toEqual({
+        nested: 'object',
+      });
+      expect(config.getEphemeralSetting('arrayValue')).toEqual([1, 2, 3]);
+      expect(config.getEphemeralSetting('undefinedValue')).toBeUndefined();
+
+      expect(mockSettingsService.get).toHaveBeenCalledTimes(6);
+    });
+
+    /**
+     * @requirement REQ-002.1
+     * @scenario Config delegates set with various data types
+     * @given Config instance available
+     * @when setEphemeralSetting called with different types
+     * @then All values properly delegated to SettingsService
+     */
+    it('should delegate set operations for various data types', () => {
+      const config = new Config(baseParams);
+
+      const testValues = {
+        stringValue: 'test string',
+        numberValue: 42,
+        booleanValue: true,
+        objectValue: { nested: 'object' },
+        arrayValue: [1, 2, 3],
+        nullValue: null,
+      };
+
+      Object.entries(testValues).forEach(([key, value]) => {
+        config.setEphemeralSetting(key, value);
+        expect(mockSettingsService.set).toHaveBeenCalledWith(key, value);
+      });
+
+      expect(mockSettingsService.set).toHaveBeenCalledTimes(6);
+    });
+
+    /**
+     * @requirement REQ-001.3
+     * @scenario Return to SettingsService clear functionality
+     * @given Config instance exists
+     * @when clear ephemeral settings is needed
+     * @then SettingsService clear is called
+     */
+    it('should use SettingsService for clearing operations', () => {
+      const config = new Config(baseParams);
+      const settingsService = config.getSettingsService();
+
+      // Call clear on the settings service directly
+      settingsService.clear();
+
+      expect(mockSettingsService.clear).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * @requirement REQ-002.1
+     * @scenario Config accesses SettingsService correctly
+     * @given Config instance exists
+     * @when getSettingsService is called
+     * @then Same instance is returned
+     */
+    it('should provide access to SettingsService instance', () => {
+      const config = new Config(baseParams);
+
+      const settingsService1 = config.getSettingsService();
+      const settingsService2 = config.getSettingsService();
+
+      expect(settingsService1).toBe(settingsService2);
+      expect(settingsService1).toBe(mockSettingsService);
     });
   });
 });

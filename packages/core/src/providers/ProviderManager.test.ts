@@ -22,6 +22,9 @@ function createMockProvider(
     async getModels(): Promise<IModel[]> {
       return models;
     },
+    getDefaultModel(): string {
+      return 'default-model';
+    },
     async *generateChatCompletion(
       _messages: IMessage[],
       _tools?: ITool[],
@@ -167,6 +170,7 @@ describe('ProviderManager', () => {
         async getModels() {
           return [];
         },
+        getDefaultModel: () => 'default-model',
         async *generateChatCompletion() {
           yield { role: 'assistant', content: 'test' };
         },
@@ -182,6 +186,7 @@ describe('ProviderManager', () => {
         async getModels() {
           return [];
         },
+        getDefaultModel: () => 'default-model',
         async *generateChatCompletion() {
           yield { role: 'assistant', content: 'test' };
         },

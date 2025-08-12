@@ -10,6 +10,7 @@ import {
   ProviderManager,
   ContentGeneratorRole,
 } from '../../index.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { existsSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -63,6 +64,11 @@ describe('Multi-Provider Integration Tests', () => {
 
   beforeEach(() => {
     if (!skipTests) {
+      // Clear SettingsService state before each test
+      const settingsService = getSettingsService();
+      settingsService.set('activeProvider', '');
+      settingsService.clearProviderSettings();
+
       manager = new ProviderManager();
     }
   });
