@@ -26,11 +26,12 @@ export class AnthropicDeviceFlow {
   private config: AnthropicFlowConfig;
   private codeVerifier?: string;
   private codeChallenge?: string;
+  private state?: string;
 
   constructor(config?: Partial<AnthropicFlowConfig>) {
     const defaultConfig: AnthropicFlowConfig = {
       clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e', // Anthropic's public OAuth client ID
-      authorizationEndpoint: 'https://console.anthropic.com/oauth/authorize',
+      authorizationEndpoint: 'https://claude.ai/oauth/authorize', // Use claude.ai like OpenCode's "max" mode
       tokenEndpoint: 'https://console.anthropic.com/v1/oauth/token',
       scopes: ['org:create_api_key', 'user:profile', 'user:inference'],
     };
@@ -43,14 +44,16 @@ export class AnthropicDeviceFlow {
    */
   private generatePKCE(): { verifier: string; challenge: string } {
     // Generate a random code verifier (43-128 characters)
-    const verifier = randomBytes(32).toString('base64url');
-    this.codeVerifier = verifier;
+    const _verifier = randomBytes(32).toString('base64url');
+    this.codeVerifier = _verifier;
 
     // Generate code challenge using S256 (SHA256 hash)
-    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const challenge = createHash('sha256')
+      .update(_verifier)
+      .digest('base64url');
     this.codeChallenge = challenge;
 
-    return { verifier, challenge };
+    return { verifier: _verifier, challenge };
   }
 
   /**
@@ -61,8 +64,8 @@ export class AnthropicDeviceFlow {
     // Generate PKCE parameters
     const { verifier, challenge } = this.generatePKCE();
 
-    // Generate a unique state for this auth session
-    const state = verifier; // Use verifier as state for tracking
+    // Use verifier as state like OpenCode does
+    this.state = verifier; // Store for later use in token exchange
 
     // Build authorization URL with PKCE parameters
     const params = new URLSearchParams({
@@ -73,7 +76,7 @@ export class AnthropicDeviceFlow {
       scope: this.config.scopes.join(' '),
       code_challenge: challenge,
       code_challenge_method: 'S256',
-      state,
+      state: verifier, // Use verifier as state like OpenCode
     });
 
     const authUrl = `${this.config.authorizationEndpoint}?${params.toString()}`;
@@ -81,7 +84,7 @@ export class AnthropicDeviceFlow {
     // Return a simulated device code response with the authorization URL
     // The user will need to manually visit this URL and authorize
     return {
-      device_code: state, // Use state as a tracking ID
+      device_code: verifier, // Use verifier as a tracking ID
       user_code: 'ANTHROPIC', // Display code for user
       verification_uri: 'https://console.anthropic.com/oauth/authorize',
       verification_uri_complete: authUrl,
@@ -93,25 +96,45 @@ export class AnthropicDeviceFlow {
   /**
    * Exchange authorization code for access token (PKCE flow)
    */
-  async exchangeCodeForToken(authCode: string): Promise<OAuthToken> {
+  async exchangeCodeForToken(authCodeWithState: string): Promise<OAuthToken> {
     if (!this.codeVerifier) {
       throw new Error(
         'No PKCE code verifier found - OAuth flow not initialized',
       );
     }
 
+    // OpenCode splits the code and state - format: code#state
+    const splits = authCodeWithState.split('#');
+    const authCode = splits[0];
+    const stateFromResponse = splits[1] || this.state; // Use state from response if available
+
+    // Debug logging
+    console.log('Exchanging authorization code:', {
+      codeLength: authCode.length,
+      codePreview: authCode.substring(0, 10) + '...',
+      hasVerifier: !!this.codeVerifier,
+      verifierLength: this.codeVerifier.length,
+      hasState: !!stateFromResponse,
+    });
+
+    // OpenCode sends JSON, not form-encoded!
+    const requestBody = {
+      grant_type: 'authorization_code',
+      code: authCode,
+      state: stateFromResponse, // Include state in the request
+      client_id: this.config.clientId,
+      redirect_uri: 'https://console.anthropic.com/oauth/code/callback',
+      code_verifier: this.codeVerifier,
+    };
+
+    console.log('Token request body:', JSON.stringify(requestBody));
+
     const response = await fetch(this.config.tokenEndpoint, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json', // JSON, not form-encoded!
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: authCode,
-        client_id: this.config.clientId,
-        redirect_uri: 'https://console.anthropic.com/oauth/code/callback',
-        code_verifier: this.codeVerifier,
-      }),
+      body: JSON.stringify(requestBody), // Send as JSON
     });
 
     if (!response.ok) {
@@ -120,6 +143,15 @@ export class AnthropicDeviceFlow {
     }
 
     const data = await response.json();
+    console.log('Token response:', {
+      hasAccessToken: !!data.access_token,
+      hasRefreshToken: !!data.refresh_token,
+      tokenPreview: data.access_token
+        ? data.access_token.substring(0, 20) + '...'
+        : 'none',
+      expiresIn: data.expires_in,
+      scope: data.scope, // Log the actual scopes returned
+    });
     return this.mapTokenResponse(data);
   }
 

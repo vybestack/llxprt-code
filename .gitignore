@@ -62,3 +62,4 @@ test-*.sh
 debug-*.js
 temp-*
 tmp-*
+opencode-dev/

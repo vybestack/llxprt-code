@@ -4,9 +4,10 @@
  * Allows users to paste authorization code from browser
  */
 
-import React, { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import React, { useState, useCallback } from 'react';
+import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
+import { useKeypress, Key } from '../hooks/useKeypress.js';
 
 interface OAuthCodeDialogProps {
   provider: string;
@@ -21,47 +22,53 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
 }) => {
   const [code, setCode] = useState('');
 
-  useInput((input, key) => {
-    if (key.escape) {
-      onClose();
-      return;
-    }
+  const handleInput = useCallback(
+    (key: Key) => {
+      // Handle escape to close
+      if (key.name === 'escape') {
+        onClose();
+        return;
+      }
 
-    if (key.return) {
-      if (code.trim()) {
-        // Strip bracketed paste sequences before submitting
-        const cleanCode = code
-          .replace(/\[200~/g, '')
-          .replace(/\[201~/g, '')
-          .replace(/~\[200~/g, '')
-          .replace(/~\[201~/g, '')
-          .trim();
-
-        if (cleanCode) {
-          onSubmit(cleanCode);
+      // Handle enter to submit
+      if (key.name === 'return') {
+        if (code.trim()) {
+          onSubmit(code.trim());
           onClose();
         }
+        return;
       }
-      return;
-    }
 
-    if (key.backspace || key.delete) {
-      setCode((prev) => prev.slice(0, -1));
-      return;
-    }
+      // Handle backspace
+      if (key.name === 'backspace') {
+        setCode((prev) => prev.slice(0, -1));
+        return;
+      }
 
-    // Handle regular input (including paste)
-    if (input) {
-      // Strip bracketed paste mode indicators
-      const cleanInput = input
-        .replace(/\[200~/g, '')
-        .replace(/\[201~/g, '')
-        .replace(/~\[200~/g, '')
-        .replace(/~\[201~/g, '');
+      // Handle paste - the useKeypress hook properly handles bracketed paste
+      if (key.paste && key.sequence) {
+        // The sequence already has the paste content without escape codes
+        // Just filter to only allow valid OAuth code characters
+        const cleanInput = key.sequence.replace(/[^a-zA-Z0-9\-_#]/g, '');
+        if (cleanInput) {
+          setCode((prev) => prev + cleanInput);
+        }
+        return;
+      }
 
-      setCode((prev) => prev + cleanInput);
-    }
-  });
+      // Handle regular character input
+      if (key.sequence && !key.ctrl && !key.meta) {
+        // Only allow valid OAuth code characters
+        const cleanInput = key.sequence.replace(/[^a-zA-Z0-9\-_#]/g, '');
+        if (cleanInput) {
+          setCode((prev) => prev + cleanInput);
+        }
+      }
+    },
+    [code, onClose, onSubmit],
+  );
+
+  useKeypress(handleInput, { isActive: true });
 
   return (
     <Box

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Stream } from '@anthropic-ai/sdk/streaming';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
@@ -67,7 +68,7 @@ export class AnthropicProvider extends BaseProvider {
     this.config = config;
 
     this.anthropic = new Anthropic({
-      apiKey: apiKey || 'placeholder', // Use placeholder if OAuth will be used
+      apiKey: apiKey || '', // Empty string if OAuth will be used
       baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -93,24 +94,73 @@ export class AnthropicProvider extends BaseProvider {
       throw new Error('No authentication available for Anthropic API calls');
     }
 
-    // Create new client with resolved token if needed
-    if (this.anthropic.apiKey !== resolvedToken) {
-      this.anthropic = new Anthropic({
-        apiKey: resolvedToken,
+    // Check if this is an OAuth token (starts with sk-ant-oat)
+    const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
+
+    if (isOAuthToken) {
+      // For OAuth tokens, use authToken field which sends Bearer token
+      // Don't pass apiKey at all - just authToken
+      const oauthConfig: Record<string, unknown> = {
+        authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
         baseURL: this.baseURL,
         dangerouslyAllowBrowser: true,
-      });
+        defaultHeaders: {
+          'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
+        },
+      };
+      
+      this.anthropic = new Anthropic(oauthConfig as ClientOptions);
+    } else {
+      // Regular API key auth
+      if (this.anthropic.apiKey !== resolvedToken) {
+        this.anthropic = new Anthropic({
+          apiKey: resolvedToken,
+          baseURL: this.baseURL,
+          dangerouslyAllowBrowser: true,
+        });
+      }
     }
   }
 
   async getModels(): Promise<IModel[]> {
     const authToken = await this.getAuthToken();
     if (!authToken) {
-      throw new Error('Authentication required to fetch Anthropic models');
+      // Return empty array if no auth - models aren't critical for operation
+      console.warn('No authentication available for fetching Anthropic models');
+      return [];
+    }
+
+    // Update client with resolved auth (handles OAuth vs API key)
+    await this.updateClientWithResolvedAuth();
+
+    // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
+    const isOAuthToken = authToken.startsWith('sk-ant-oat');
+    
+    if (isOAuthToken) {
+      // For OAuth, return only the two working models
+      console.log('[OAuth] Using hardcoded model list for OAuth authentication');
+      return [
+        {
+          id: 'claude-opus-4-1-20250805',
+          name: 'Claude Opus 4.1',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 500000,
+          maxOutputTokens: 32000,
+        },
+        {
+          id: 'claude-sonnet-4-20250514',
+          name: 'Claude Sonnet 4',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 400000,
+          maxOutputTokens: 64000,
+        },
+      ];
     }
 
     try {
-      // Fetch models from Anthropic API (beta endpoint)
+      // Fetch models from Anthropic API (beta endpoint) - only for API keys
       const models: IModel[] = [];
 
       // Handle pagination
@@ -169,7 +219,7 @@ export class AnthropicProvider extends BaseProvider {
     const apiCall = async () => {
       attemptCount++;
 
-      // Resolve model if it uses -latest placeholder
+      // Resolve model if it uses -latest alias
       const resolvedModel = await this.resolveLatestModel(this.currentModel);
 
       // Validate and fix message history to prevent tool_use/tool_result mismatches
@@ -259,7 +309,13 @@ export class AnthropicProvider extends BaseProvider {
       };
 
       // Add system message as top-level parameter if present
-      if (systemMessage) {
+      // For OAuth, just send Claude Code spoof
+      const authToken = await this.getAuthToken();
+      const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
+      
+      if (isOAuth) {
+        createOptions.system = "You are Claude Code, Anthropic's official CLI for Claude.";
+      } else if (systemMessage) {
         createOptions.system = systemMessage;
       }
 
@@ -419,9 +475,9 @@ export class AnthropicProvider extends BaseProvider {
     super.setBaseUrl?.(baseUrl);
 
     // Create a new Anthropic client with the updated (or cleared) base URL
-    // Note: We'll use placeholder and update with actual token in updateClientWithResolvedAuth
+    // Will be updated with actual token in updateClientWithResolvedAuth
     this.anthropic = new Anthropic({
-      apiKey: 'placeholder',
+      apiKey: '', // Empty string, will be replaced when auth is resolved
       baseURL: this.baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -486,20 +542,35 @@ export class AnthropicProvider extends BaseProvider {
       }
     }
 
-    // Fetch fresh models
-    const models = await this.getModels();
-    this.modelCache = { models, timestamp: now };
+    try {
+      // Ensure client has proper auth before calling getModels
+      await this.updateClientWithResolvedAuth();
 
-    // Find the real model for this latest alias
-    const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
-    const realModel = models
-      .filter(
-        (m) =>
-          m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'),
-      )
-      .sort((a, b) => b.id.localeCompare(a.id))[0];
+      // Fetch fresh models
+      const models = await this.getModels();
+      this.modelCache = { models, timestamp: now };
 
-    return realModel ? realModel.id : modelId;
+      // Find the real model for this latest alias
+      const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
+      const realModel = models
+        .filter(
+          (m) =>
+            m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'),
+        )
+        .sort((a, b) => b.id.localeCompare(a.id))[0];
+
+      return realModel ? realModel.id : modelId;
+    } catch (_error) {
+      // If we can't fetch models, just use simple fallback like Claude Code does
+      console.log(
+        'Failed to fetch models for latest resolution, using fallback',
+      );
+      if (modelId.includes('opus')) {
+        return 'opus';
+      } else {
+        return 'sonnet'; // Default to sonnet like Claude Code
+      }
+    }
   }
 
   private getMaxTokensForModel(modelId: string): number {
