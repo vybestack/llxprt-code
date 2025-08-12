@@ -816,6 +816,7 @@ const App = (props: AppInternalProps) => {
     initError,
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
+    cancelOngoingRequest,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -941,6 +942,9 @@ const App = (props: AppInternalProps) => {
         if (isAuthenticating) {
           return;
         }
+        if (!ctrlCPressedOnce) {
+          cancelOngoingRequest?.();
+        }
         handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
       } else if (keyMatchers[Command.EXIT](key)) {
         if (buffer.text.length > 0) {
@@ -972,6 +976,7 @@ const App = (props: AppInternalProps) => {
       ctrlDTimerRef,
       handleSlashCommand,
       isAuthenticating,
+      cancelOngoingRequest,
     ],
   );
 

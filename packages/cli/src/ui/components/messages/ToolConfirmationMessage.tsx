@@ -69,7 +69,7 @@ export const ToolConfirmationMessage: React.FC<
 
   useInput((input, key) => {
     if (!isFocused) return;
-    if (key.escape) {
+    if (key.escape || (key.ctrl && (input === 'c' || input === 'C'))) {
       handleConfirm(ToolConfirmationOutcome.Cancel);
     }
     // Handle 'd' key for details toggle
