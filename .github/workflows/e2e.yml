@@ -27,6 +27,13 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      - name: Ensure npx is available (Windows fix)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "Checking npx availability..."
+          npx --version || npm install -g npm@latest
+          npx --version
+
       - name: Install dependencies
         run: npm ci
 
