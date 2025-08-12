@@ -34,7 +34,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { ApprovalMode, Config } from '../config/config.js';
-import { Content, Part, SchemaUnion } from '@google/genai';
+import { Content, Part } from '@google/genai';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 
 describe('EditTool', () => {
@@ -112,7 +112,7 @@ describe('EditTool', () => {
     // Default mock for generateJson to return the snippet unchanged
     mockGenerateJson.mockReset();
     mockGenerateJson.mockImplementation(
-      async (contents: Content[], schema: SchemaUnion) => {
+      async (contents: Content[], schema: Record<string, unknown>) => {
         // The problematic_snippet is the last part of the user's content
         const userContent = contents.find((c: Content) => c.role === 'user');
         let promptText = '';

@@ -68,7 +68,7 @@ export * from './services/todo-context-tracker.js';
 export * from './ide/ide-client.js';
 export * from './ide/ideContext.js';
 export * from './ide/ide-installer.js';
-export { getIdeDisplayName, DetectedIde } from './ide/detect-ide.js';
+export { getIdeInfo, DetectedIde, IdeInfo } from './ide/detect-ide.js';
 
 // Export Shell Execution Service
 export * from './services/shellExecutionService.js';

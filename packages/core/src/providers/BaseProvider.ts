@@ -63,7 +63,7 @@ export abstract class BaseProvider implements IProvider {
       cliKey: config.cliKey,
       cliKeyfile: config.cliKeyfile,
       envKeyNames: config.envKeyNames || [],
-      isOAuthEnabled: true, // Always true if manager exists, manager will check settings
+      isOAuthEnabled: config.isOAuthEnabled ?? false, // Use the config value, which can be updated
       supportsOAuth: this.supportsOAuth(),
       oauthProvider: config.oauthProvider,
     };

@@ -6,7 +6,6 @@
 
 import { GroundingMetadata } from '@google/genai';
 import { BaseTool, Icon, ToolResult } from './tools.js';
-import { Type } from '@google/genai';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 
 import { getErrorMessage } from '../utils/errors.js';
@@ -71,10 +70,10 @@ export class WebSearchTool extends BaseTool<
       'Performs a web search using Google Search (via the Gemini API) and returns the results. This tool is useful for finding information on the internet based on a query.',
       Icon.Globe,
       {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
           query: {
-            type: Type.STRING,
+            type: 'string',
             description: 'The search query to find information on the web.',
           },
         },
@@ -89,7 +88,10 @@ export class WebSearchTool extends BaseTool<
    * @returns An error message string if validation fails, null if valid
    */
   validateParams(params: WebSearchToolParams): string | null {
-    const errors = SchemaValidator.validate(this.schema.parameters, params);
+    const errors = SchemaValidator.validate(
+      this.schema.parametersJsonSchema,
+      params,
+    );
     if (errors) {
       return errors;
     }

@@ -816,6 +816,7 @@ const App = (props: AppInternalProps) => {
     initError,
     pendingHistoryItems: pendingGeminiHistoryItems,
     thought,
+    cancelOngoingRequest,
   } = useGeminiStream(
     config.getGeminiClient(),
     history,
@@ -857,14 +858,18 @@ const App = (props: AppInternalProps) => {
 
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
-      if (result === 'yes') {
-        handleSlashCommand('/ide install');
+      if (result.userSelection === 'yes') {
+        if (result.isExtensionPreInstalled) {
+          handleSlashCommand('/ide enable');
+        } else {
+          handleSlashCommand('/ide install');
+        }
         settings.setValue(
           SettingScope.User,
           'hasSeenIdeIntegrationNudge',
           true,
         );
-      } else if (result === 'dismiss') {
+      } else if (result.userSelection === 'dismiss') {
         settings.setValue(
           SettingScope.User,
           'hasSeenIdeIntegrationNudge',
@@ -941,6 +946,9 @@ const App = (props: AppInternalProps) => {
         if (isAuthenticating) {
           return;
         }
+        if (!ctrlCPressedOnce) {
+          cancelOngoingRequest?.();
+        }
         handleExit(ctrlCPressedOnce, setCtrlCPressedOnce, ctrlCTimerRef);
       } else if (keyMatchers[Command.EXIT](key)) {
         if (buffer.text.length > 0) {
@@ -972,6 +980,7 @@ const App = (props: AppInternalProps) => {
       ctrlDTimerRef,
       handleSlashCommand,
       isAuthenticating,
+      cancelOngoingRequest,
     ],
   );
 
@@ -1254,10 +1263,9 @@ const App = (props: AppInternalProps) => {
           {/* TodoPanel outside the scrollable area */}
           <TodoPanel width={inputWidth} />
 
-          {shouldShowIdePrompt ? (
+          {shouldShowIdePrompt && currentIDE ? (
             <IdeIntegrationNudge
-              question="Do you want to connect your VS Code editor to LLxprt Code?"
-              description="If you select Yes, we'll install an extension that allows the CLI to access your open files and display diffs directly in VS Code."
+              ide={currentIDE}
               onComplete={handleIdePromptComplete}
             />
           ) : isFolderTrustDialogOpen ? (

@@ -215,9 +215,7 @@ describe('BaseProvider', () => {
             { role: ContentGeneratorRole.USER, content: 'test' },
           ])
           .next(),
-      ).rejects.toThrow(
-        'No API key found and OAuth is available but not authenticated for test provider',
-      );
+      ).rejects.toThrow('No authentication method available for test provider');
     });
   });
 

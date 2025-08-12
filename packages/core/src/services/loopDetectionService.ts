@@ -9,7 +9,6 @@ import { GeminiEventType, ServerGeminiStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
-import { SchemaUnion, Type } from '@google/genai';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import path from 'node:path';
 import os from 'node:os';
@@ -229,7 +228,7 @@ Please analyze the conversation history to determine the possibility that the co
     const wasInCodeBlock = this.inCodeBlock;
     this.inCodeBlock =
       numFences % 2 === 0 ? this.inCodeBlock : !this.inCodeBlock;
-    if (wasInCodeBlock) {
+    if (wasInCodeBlock || this.inCodeBlock) {
       return false;
     }
 
@@ -377,16 +376,16 @@ Please analyze the conversation history to determine the possibility that the co
       ...recentHistory,
       { role: 'user', parts: [{ text: prompt }] },
     ];
-    const schema: SchemaUnion = {
-      type: Type.OBJECT,
+    const schema: Record<string, unknown> = {
+      type: 'object',
       properties: {
         reasoning: {
-          type: Type.STRING,
+          type: 'string',
           description:
             'Your reasoning on if the conversation is looping without forward progress.',
         },
         confidence: {
-          type: Type.NUMBER,
+          type: 'number',
           description:
             'A number between 0.0 and 1.0 representing your confidence that the conversation is in an unproductive state.',
         },

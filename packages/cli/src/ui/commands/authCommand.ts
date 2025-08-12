@@ -17,6 +17,10 @@ import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
+import {
+  getOAuthManager,
+  getProviderManager,
+} from '../../providers/providerManagerInstance.js';
 
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
@@ -195,17 +199,23 @@ export const authCommand: SlashCommand = {
     'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
-    // Initialize OAuth manager with token store and settings
-    const tokenStore = new MultiProviderTokenStore();
-    const oauthManager = new OAuthManager(
-      tokenStore,
-      context.services.settings,
-    );
+    // Ensure provider manager is initialized (which creates the OAuth manager)
+    getProviderManager();
 
-    // Register OAuth providers
-    oauthManager.registerProvider(new GeminiOAuthProvider());
-    oauthManager.registerProvider(new QwenOAuthProvider());
-    oauthManager.registerProvider(new AnthropicOAuthProvider());
+    // Get the shared OAuth manager instance
+    let oauthManager = getOAuthManager();
+
+    // If for some reason it doesn't exist yet, create it
+    if (!oauthManager) {
+      // This should rarely happen, but handle it as a fallback
+      const tokenStore = new MultiProviderTokenStore();
+      oauthManager = new OAuthManager(tokenStore, context.services.settings);
+
+      // Register OAuth providers
+      oauthManager.registerProvider(new GeminiOAuthProvider());
+      oauthManager.registerProvider(new QwenOAuthProvider());
+      oauthManager.registerProvider(new AnthropicOAuthProvider());
+    }
 
     const executor = new AuthCommandExecutor(oauthManager);
     return executor.execute(context, args);
