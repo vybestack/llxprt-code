@@ -120,26 +120,21 @@ Use OAuth authentication to access Claude with your existing Claude Pro or Max s
 
 ### Using Qwen
 
-Access Qwen3-Coder-Pro and other Qwen models:
+Access Qwen3-Coder-Pro and other Qwen models for free:
 
-#### Option 1: Log in with Qwen to use your Qwen account
+#### Option 1: Log in with Qwen (FREE)
 
-Use OAuth authentication to access Qwen with your existing account:
+Use OAuth authentication to access Qwen with your free account:
 
-1. Select the Qwen provider:
-   ```
-   /provider qwen
-   ```
-2. Authenticate with your Qwen account:
-   ```
-   /auth
-   ```
-3. Your browser will open to the Qwen authentication page
-4. Log in and authorize LLxprt Code
-5. Copy the authorization code shown and paste it back in the terminal
-6. You're now using your Qwen account!
+```
+/auth qwen
+```
+
+Your browser will open to the Qwen authentication page. Log in and authorize LLxprt Code, then copy the authorization code shown and paste it back in the terminal. You're now using Qwen3-Coder-Pro for free!
 
 #### Option 2: Use an API Key
+
+For advanced users who need API access:
 
 1. Get your API key from [Qwen](https://platform.qwen.ai/)
 2. Configure:
