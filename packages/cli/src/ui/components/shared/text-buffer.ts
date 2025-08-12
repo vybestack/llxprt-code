@@ -502,7 +502,7 @@ export const replaceRangeInternal = (
 function stripUnsafeCharacters(str: string): string {
   const stripped = stripAnsi(str);
   return toCodePoints(stripped)
-    .filter((char) => {
+    .filter((char: string) => {
       if (char.length > 1) return false;
       const code = char.codePointAt(0);
       if (code === undefined) {

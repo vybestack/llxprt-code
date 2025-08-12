@@ -18,8 +18,8 @@ import {
   findWordEndInLine,
   findNextWordStartInLine,
   isWordCharStrict,
-} from './text-buffer';
-import { cpLen } from '../../utils/textUtils';
+} from './text-buffer.js';
+import { cpLen } from '../../utils/textUtils.js';
 
 const initialState: TextBufferState = {
   lines: [''],
