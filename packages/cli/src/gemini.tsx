@@ -24,14 +24,8 @@ import {
   loadSettings,
   SettingScope,
 } from './config/settings.js';
-import { themeManager } from './ui/themes/theme-manager.js';
-import { getStartupWarnings } from './utils/startupWarnings.js';
-import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
-import { runNonInteractive } from './nonInteractiveCli.js';
-import { loadExtensions } from './config/extension.js';
-import { cleanupCheckpoints, registerCleanup } from './utils/cleanup.js';
-import { getCliVersion } from './utils/version.js';
 import {
+  getSettingsService,
   Config,
   sessionId,
   // TELEMETRY REMOVED: logUserPrompt disabled
@@ -39,6 +33,13 @@ import {
   getOauthClient,
   setGitStatsService,
 } from '@vybestack/llxprt-code-core';
+import { themeManager } from './ui/themes/theme-manager.js';
+import { getStartupWarnings } from './utils/startupWarnings.js';
+import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
+import { runNonInteractive } from './nonInteractiveCli.js';
+import { loadExtensions } from './config/extension.js';
+import { cleanupCheckpoints, registerCleanup } from './utils/cleanup.js';
+import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';
@@ -238,11 +239,28 @@ export async function main() {
     try {
       await providerManager.setActiveProvider(configProvider);
 
-      // Set the model from command line args after activating provider
-      const configModel = config.getModel();
+      // Set the model after activating provider
+      // If no model specified, use the provider's default
       const activeProvider = providerManager.getActiveProvider();
+      let configModel = config.getModel();
+
+      if (
+        (!configModel || configModel === 'placeholder-model') &&
+        activeProvider.getDefaultModel
+      ) {
+        // No model specified or placeholder, get the provider's default
+        configModel = activeProvider.getDefaultModel();
+      }
+
       if (configModel && activeProvider.setModel) {
         activeProvider.setModel(configModel);
+        // Also update the config with the resolved model
+        const settingsService = getSettingsService();
+        settingsService.setProviderSetting(
+          configProvider,
+          'model',
+          configModel,
+        );
       }
 
       // Apply profile model params if loaded AND provider was NOT specified via CLI

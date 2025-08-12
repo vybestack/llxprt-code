@@ -99,10 +99,32 @@ export class GeminiProvider extends BaseProvider {
   }
 
   /**
+   * Updates OAuth configuration based on current OAuth manager state
+   */
+  private updateOAuthState(): void {
+    if (this.geminiOAuthManager) {
+      const manager = this.geminiOAuthManager as OAuthManager & {
+        isOAuthEnabled?(provider: string): boolean;
+      };
+      if (
+        manager.isOAuthEnabled &&
+        typeof manager.isOAuthEnabled === 'function'
+      ) {
+        const isEnabled = manager.isOAuthEnabled('gemini');
+        // Update the OAuth configuration if state has changed
+        this.updateOAuthConfig(isEnabled, 'gemini', this.geminiOAuthManager);
+      }
+    }
+  }
+
+  /**
    * Determines the best available authentication method based on environment variables
    * and existing configuration. Now uses lazy evaluation with proper precedence chain.
    */
   private async determineBestAuth(): Promise<string> {
+    // Re-check OAuth enablement state before determining auth
+    this.updateOAuthState();
+
     // Use the base provider's auth precedence resolution
     try {
       const token = await this.getAuthToken();
@@ -393,11 +415,16 @@ export class GeminiProvider extends BaseProvider {
         break;
 
       case 'oauth': {
+        // For OAuth, create a minimal config-like object if we don't have one
+        const configForOAuth = this.geminiConfig || {
+          getProxy: () => undefined, // OAuth only needs this from config
+        };
+
         // For OAuth, we need to use the code assist server
         const contentGenerator = await createCodeAssistContentGenerator(
           httpOptions,
           AuthType.LOGIN_WITH_GOOGLE,
-          this.geminiConfig!,
+          configForOAuth as Config,
           this.baseURL,
         );
 
