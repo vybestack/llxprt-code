@@ -94,4 +94,6 @@ jobs:
           LLXPRT_NO_BROWSER_AUTH: true
           CI: true
           LLXPRT_SANDBOX: ${{ matrix.sandbox == 'sandbox:none' && 'false' || matrix.sandbox == 'sandbox:docker' && 'docker' || matrix.sandbox == 'sandbox:podman' && 'podman' }}
-        run: node integration-tests/run-tests.js --verbose --keep-output
+          VERBOSE: true
+          KEEP_OUTPUT: true
+        run: npm run test:integration:${{ matrix.sandbox }}
