@@ -1446,7 +1446,7 @@ ${JSON.stringify(
             ]),
         };
         client['chat'] = mockChat as GeminiChat;
-        
+
         // Override the client.getHistory mock to return non-empty history for delta tests
         (client.getHistory as any).mockResolvedValue([
           { role: 'user', parts: [{ text: 'previous message' }] },
@@ -1657,7 +1657,7 @@ ${JSON.stringify(
           addHistory: ReturnType<(typeof vi)['fn']>;
         };
         mockChat.getHistory.mockReturnValue([]);
-        
+
         // Also update client.getHistory to return empty for this test
         (client.getHistory as any).mockResolvedValue([]);
 

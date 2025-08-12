@@ -281,7 +281,7 @@ export class GeminiClient {
       this.getChat().setHistory(history);
     }
     // Otherwise, the history will be used when the chat is initialized
-    
+
     // Reset IDE context tracking when history changes
     this.forceFullIdeContext = true;
   }
