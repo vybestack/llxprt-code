@@ -5,7 +5,6 @@
  */
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { useInput } from 'ink';
 import {
   Config,
   GeminiClient,
@@ -56,6 +55,7 @@ import {
 } from './useReactToolScheduler.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import { useTodoContinuation } from './useTodoContinuation.js';
+import { useKeypress } from './useKeypress.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   const resultParts: Part[] = [];
@@ -251,13 +251,16 @@ export const useGeminiStream = (
     pendingHistoryItemRef,
   ]);
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      cancelOngoingRequest();
-      // Clear the queue on cancel - we don't want to process tools after user cancellation
-      queuedToolResponsesRef.current = [];
-    }
-  });
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        cancelOngoingRequest();
+        // Clear the queue on cancel - we don't want to process tools after user cancellation
+        queuedToolResponsesRef.current = [];
+      }
+    },
+    { isActive: streamingState === StreamingState.Responding },
+  );
 
   const prepareQueryForGemini = useCallback(
     async (

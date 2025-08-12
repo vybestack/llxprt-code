@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { DiffRenderer } from './DiffRenderer.js';
 import { Colors, SemanticColors } from '../../colors.js';
 import {
@@ -22,6 +22,7 @@ import {
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
 import { useResponsive } from '../../hooks/useResponsive.js';
 import { truncateEnd } from '../../utils/responsive.js';
+import { useKeypress } from '../../hooks/useKeypress.js';
 
 export interface ToolConfirmationMessageProps {
   confirmationDetails: ToolCallConfirmationDetails;
@@ -67,16 +68,19 @@ export const ToolConfirmationMessage: React.FC<
     [confirmationDetails, config, onConfirm],
   );
 
-  useInput((input, key) => {
-    if (!isFocused) return;
-    if (key.escape || (key.ctrl && (input === 'c' || input === 'C'))) {
-      handleConfirm(ToolConfirmationOutcome.Cancel);
-    }
-    // Handle 'd' key for details toggle
-    if (input === 'd') {
-      setShowDetails(!showDetails);
-    }
-  });
+  useKeypress(
+    (key) => {
+      if (!isFocused) return;
+      if (key.name === 'escape' || (key.ctrl && key.name === 'c')) {
+        handleConfirm(ToolConfirmationOutcome.Cancel);
+      }
+      // Handle 'd' key for details toggle
+      if (key.name === 'd') {
+        setShowDetails(!showDetails);
+      }
+    },
+    { isActive: isFocused },
+  );
 
   const handleSelect = useCallback(
     (item: ToolConfirmationOutcome) => handleConfirm(item),

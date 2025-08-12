@@ -5,12 +5,13 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import { Colors } from '../colors.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod as _validateAuthMethod } from '../../config/auth.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 interface AuthDialogProps {
   onSelect: (authMethod: AuthType | undefined, scope: SettingScope) => void;
@@ -117,12 +118,15 @@ export function AuthDialog({
     [onSelect, enabledProviders],
   );
 
-  useInput((_input, key) => {
-    if (key.escape) {
-      // Allow ESC to close the dialog
-      onSelect(undefined, SettingScope.User);
-    }
-  });
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        // Allow ESC to close the dialog
+        onSelect(undefined, SettingScope.User);
+      }
+    },
+    { isActive: true },
+  );
 
   return (
     <Box

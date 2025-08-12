@@ -5,8 +5,9 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { Text, Box, useInput } from 'ink';
+import { Text, Box } from 'ink';
 import { Colors } from '../../colors.js';
+import { useKeypress } from '../../hooks/useKeypress.js';
 
 /**
  * Represents a single option for the RadioButtonSelect.
@@ -92,9 +93,10 @@ export function RadioButtonSelect<T>({
     [],
   );
 
-  useInput(
-    (input, key) => {
-      const isNumeric = showNumbers && /^[0-9]$/.test(input);
+  useKeypress(
+    (key) => {
+      const { sequence, name } = key;
+      const isNumeric = showNumbers && /^[0-9]$/.test(sequence);
 
       // Any key press that is not a digit should clear the number input buffer.
       if (!isNumeric && numberInputTimer.current) {
@@ -102,7 +104,7 @@ export function RadioButtonSelect<T>({
         setNumberInput('');
       }
 
-      if (input === 'k' || key.upArrow) {
+      if (name === 'k' || name === 'up') {
         const newIndex = activeIndex > 0 ? activeIndex - 1 : items.length - 1;
         setActiveIndex(newIndex);
         if (items[newIndex]) {
@@ -111,7 +113,7 @@ export function RadioButtonSelect<T>({
         return;
       }
 
-      if (input === 'j' || key.downArrow) {
+      if (name === 'j' || name === 'down') {
         const newIndex = activeIndex < items.length - 1 ? activeIndex + 1 : 0;
         setActiveIndex(newIndex);
         if (items[newIndex]) {
@@ -120,7 +122,7 @@ export function RadioButtonSelect<T>({
         return;
       }
 
-      if (key.return) {
+      if (name === 'return') {
         if (items[activeIndex]) {
           onSelect(items[activeIndex].value);
         }
@@ -133,7 +135,7 @@ export function RadioButtonSelect<T>({
           clearTimeout(numberInputTimer.current);
         }
 
-        const newNumberInput = numberInput + input;
+        const newNumberInput = numberInput + sequence;
         setNumberInput(newNumberInput);
 
         const targetIndex = Number.parseInt(newNumberInput, 10) - 1;
@@ -167,7 +169,7 @@ export function RadioButtonSelect<T>({
         }
       }
     },
-    { isActive: isFocused && items.length > 0 },
+    { isActive: !!(isFocused && items.length > 0) },
   );
 
   const visibleItems = items.slice(scrollOffset, scrollOffset + maxItemsToShow);

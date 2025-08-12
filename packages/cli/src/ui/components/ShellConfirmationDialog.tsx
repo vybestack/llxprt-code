@@ -5,13 +5,14 @@
  */
 
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
-import { Box, Text, useInput } from 'ink';
+import { Box, Text } from 'ink';
 import React, { useCallback } from 'react';
 import { Colors } from '../colors.js';
 import {
   RadioButtonSelect,
   RadioSelectItem,
 } from './shared/RadioButtonSelect.js';
+import { useKeypress } from '../hooks/useKeypress.js';
 
 export interface ShellConfirmationRequest {
   commands: string[];
@@ -30,11 +31,14 @@ export const ShellConfirmationDialog: React.FC<
 > = ({ request }) => {
   const { commands, onConfirm } = request;
 
-  useInput((_, key) => {
-    if (key.escape) {
-      onConfirm(ToolConfirmationOutcome.Cancel);
-    }
-  });
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') {
+        onConfirm(ToolConfirmationOutcome.Cancel);
+      }
+    },
+    { isActive: true },
+  );
 
   const handleSelect = useCallback(
     (item: ToolConfirmationOutcome) => {
