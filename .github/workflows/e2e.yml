@@ -85,7 +85,7 @@ jobs:
           # Use OpenRouter as a cost-effective alternative to Google's API
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
-          LLXPRT_DEFAULT_MODEL: qwen/qwen3-coder
+          LLXPRT_DEFAULT_MODEL: anthropic/claude-sonnet-4
           LLXPRT_DEFAULT_PROVIDER: openai
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
