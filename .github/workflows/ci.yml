@@ -74,6 +74,7 @@ jobs:
       checks: write
       pull-requests: write
     strategy:
+      fail-fast: false # So we can see all test failures
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node-version: [24.x]
