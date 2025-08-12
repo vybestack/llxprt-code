@@ -15,7 +15,6 @@ import {
   ToolExecuteConfirmationDetails,
   Icon,
 } from './tools.js';
-import { ToolErrorType } from './tool-error.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { summarizeToolOutput } from '../utils/summarizer.js';

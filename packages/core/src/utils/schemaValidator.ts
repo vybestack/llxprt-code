@@ -25,13 +25,8 @@ export class SchemaValidator {
     if (typeof data !== 'object' || data === null) {
       return 'Value of params must be an object';
     }
-<<<<<<< HEAD
 
-    const objectSchema = this.toObjectSchema(schema);
-    const validate = ajValidator.compile(objectSchema);
-=======
     const validate = ajValidator.compile(schema);
->>>>>>> d9fb08c9 (feat: migrate tools to use parametersJsonSchema. (#5330))
     const valid = validate(data);
 
     if (!valid && validate.errors) {
