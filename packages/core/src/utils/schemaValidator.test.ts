@@ -6,16 +6,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { SchemaValidator } from './schemaValidator.js';
-import { Type } from '@google/genai';
 
 describe('SchemaValidator', () => {
   describe('validate', () => {
     it('should return null for valid data', () => {
       const schema = {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
-          name: { type: Type.STRING },
-          age: { type: Type.NUMBER },
+          name: { type: 'string' },
+          age: { type: 'number' },
         },
         required: ['name'],
       };
@@ -26,10 +25,10 @@ describe('SchemaValidator', () => {
 
     it('should return error for invalid data', () => {
       const schema = {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
-          name: { type: Type.STRING },
-          age: { type: Type.NUMBER },
+          name: { type: 'string' },
+          age: { type: 'number' },
         },
         required: ['name'],
       };
@@ -41,20 +40,20 @@ describe('SchemaValidator', () => {
 
     it('should handle numeric validation properties', () => {
       const schema = {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
           items: {
-            type: Type.ARRAY,
-            minItems: '2', // @google/genai Schema expects strings for numeric properties
-            maxItems: '5',
+            type: 'array',
+            minItems: 2,
+            maxItems: 5,
           },
           text: {
-            type: Type.STRING,
-            minLength: '3',
-            maxLength: '10',
+            type: 'string',
+            minLength: 3,
+            maxLength: 10,
           },
           count: {
-            type: Type.NUMBER,
+            type: 'number',
             minimum: 0,
             maximum: 100,
           },
@@ -90,10 +89,10 @@ describe('SchemaValidator', () => {
 
     it('should handle nested schemas with anyOf, allOf, oneOf', () => {
       const schema = {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
           value: {
-            anyOf: [{ type: Type.STRING }, { type: Type.NUMBER }],
+            anyOf: [{ type: 'string' }, { type: 'number' }],
           },
         },
       };
@@ -107,12 +106,12 @@ describe('SchemaValidator', () => {
 
     it('should handle arrays with item schemas', () => {
       const schema = {
-        type: Type.ARRAY,
+        type: 'array',
         items: {
-          type: Type.OBJECT,
+          type: 'object',
           properties: {
-            id: { type: Type.NUMBER },
-            name: { type: Type.STRING },
+            id: { type: 'number' },
+            name: { type: 'string' },
           },
           required: ['id'],
         },
@@ -134,11 +133,11 @@ describe('SchemaValidator', () => {
 
     it('should handle additionalProperties', () => {
       const schema = {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
-          name: { type: Type.STRING },
+          name: { type: 'string' },
         },
-        additionalProperties: { type: Type.NUMBER },
+        additionalProperties: { type: 'number' },
       };
 
       const validData = { name: 'test', extra: 123 };
@@ -151,10 +150,10 @@ describe('SchemaValidator', () => {
 
     it('should convert UPPERCASE type enums to lowercase', () => {
       const schema = {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
-          name: { type: Type.STRING },
-          count: { type: Type.NUMBER },
+          name: { type: 'string' },
+          count: { type: 'number' },
         },
       };
 
