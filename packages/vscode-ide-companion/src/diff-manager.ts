@@ -228,7 +228,7 @@ export class DiffManager {
     }
     await vscode.commands.executeCommand(
       'setContext',
-      'gemini.diff.isVisible',
+      'llxprt.diff.isVisible',
       isVisible,
     );
   }
