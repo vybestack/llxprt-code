@@ -108,7 +108,7 @@ export class AnthropicProvider extends BaseProvider {
           'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
         },
       };
-      
+
       this.anthropic = new Anthropic(oauthConfig as ClientOptions);
     } else {
       // Regular API key auth
@@ -135,10 +135,12 @@ export class AnthropicProvider extends BaseProvider {
 
     // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
     const isOAuthToken = authToken.startsWith('sk-ant-oat');
-    
+
     if (isOAuthToken) {
       // For OAuth, return only the two working models
-      console.log('[OAuth] Using hardcoded model list for OAuth authentication');
+      console.log(
+        '[OAuth] Using hardcoded model list for OAuth authentication',
+      );
       return [
         {
           id: 'claude-opus-4-1-20250805',
@@ -312,9 +314,10 @@ export class AnthropicProvider extends BaseProvider {
       // For OAuth, just send Claude Code spoof
       const authToken = await this.getAuthToken();
       const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
-      
+
       if (isOAuth) {
-        createOptions.system = "You are Claude Code, Anthropic's official CLI for Claude.";
+        createOptions.system =
+          "You are Claude Code, Anthropic's official CLI for Claude.";
       } else if (systemMessage) {
         createOptions.system = systemMessage;
       }
