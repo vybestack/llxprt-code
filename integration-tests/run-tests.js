@@ -98,8 +98,14 @@ async function main() {
       }
       nodeArgs.push(testFile);
 
-      const child = spawn('npx', ['tsx', ...nodeArgs], {
+      // Use npm exec instead of npx for better Windows compatibility
+      const isWindows = process.platform === 'win32';
+      const command = isWindows ? 'npm.cmd' : 'npm';
+      const args = ['exec', '--', 'tsx', ...nodeArgs];
+
+      const child = spawn(command, args, {
         stdio: 'pipe',
+        shell: isWindows, // Use shell on Windows for better compatibility
         env: {
           ...process.env,
           LLXPRT_CODE_INTEGRATION_TEST: 'true',
