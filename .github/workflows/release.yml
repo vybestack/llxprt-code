@@ -197,7 +197,7 @@ jobs:
           echo "Attempting to generate release notes with LLxprt Code..."
 
           # Create the prompt in a variable
-          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }}.
+          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }} and write them to a file called 'generated-notes.md'.
 
           Format the output as follows:
           1. Start with 'Release ${{ steps.version.outputs.RELEASE_TAG }}'
@@ -208,7 +208,9 @@ jobs:
           6. NO EMOJIS anywhere
 
           Here are the commits since $LAST_STABLE_TAG:
-          $(cat commits.txt)"
+          $(cat commits.txt)
+
+          IMPORTANT: Use the write_file tool to save the release notes to 'generated-notes.md'. The file_path should be 'generated-notes.md' and content should be the formatted release notes. Do not output them to stdout."
 
           # Try LLxprt generation using OpenRouter
           set +e
@@ -217,7 +219,8 @@ jobs:
             --model google/gemini-2.5-flash \
             --key "${{ secrets.OPENROUTER_API_KEY }}" \
             --baseurl https://openrouter.ai/api/v1 \
-            --prompt "$PROMPT" > generated-notes.md 2>&1
+            --yolo \
+            --prompt "$PROMPT" > /dev/null 2>&1
           LLXPRT_EXIT=$?
           set -e
 
