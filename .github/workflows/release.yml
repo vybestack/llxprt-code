@@ -213,7 +213,6 @@ jobs:
           # Try LLxprt generation using OpenRouter
           set +e
           npx @vybestack/llxprt-code@latest \
-            --no-interactive \
             --provider openai \
             --model google/gemini-2.5-flash \
             --key "${{ secrets.OPENROUTER_API_KEY }}" \
