@@ -17,7 +17,6 @@ import {
   setLlxprtMdFilename as setServerGeminiMdFilename,
   getCurrentLlxprtMdFilename,
   ApprovalMode,
-  DEFAULT_GEMINI_MODEL,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
@@ -335,7 +334,10 @@ export async function loadCliConfig(
   let profileModelParams: Record<string, unknown> | undefined;
 
   // Check for profile to load - either from CLI arg or default profile setting
-  const profileToLoad = argv.profileLoad || settings.defaultProfile;
+  // BUT skip default profile if --provider is explicitly specified
+  const profileToLoad =
+    argv.profileLoad ||
+    (argv.provider === undefined ? settings.defaultProfile : undefined);
 
   if (profileToLoad) {
     try {
@@ -510,15 +512,7 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
 
-  // Handle model selection with proper precedence
-  const finalModel =
-    argv.model ||
-    profileModel ||
-    process.env.LLXPRT_DEFAULT_MODEL ||
-    process.env.GEMINI_MODEL ||
-    DEFAULT_GEMINI_MODEL;
-
-  // Handle provider selection with proper precedence
+  // Handle provider selection FIRST with proper precedence
   // Priority: CLI arg > Profile > Environment > Default
   let finalProvider: string;
   if (argv.provider) {
@@ -531,6 +525,15 @@ export async function loadCliConfig(
   } else {
     finalProvider = 'gemini';
   }
+
+  // Handle model selection with proper precedence
+  // For now, use a temporary placeholder - we'll set the real model after provider initialization
+  const finalModel =
+    argv.model ||
+    profileModel ||
+    process.env.LLXPRT_DEFAULT_MODEL ||
+    process.env.GEMINI_MODEL ||
+    'placeholder-model'; // Temporary placeholder, will be replaced with provider's default
 
   const config = new Config({
     sessionId,

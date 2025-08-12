@@ -1,4 +1,4 @@
-name: 'Release'
+name: Release
 
 on:
   schedule:
@@ -9,242 +9,218 @@ on:
       version:
         description: 'The version to release (e.g., v0.1.11). Required for manual patch releases.'
         required: false # Not required for scheduled runs
-        type: 'string'
+        type: string
       ref:
         description: 'The branch or ref (full git sha) to release from.'
         required: true
-        type: 'string'
+        type: string
         default: 'main'
       dry_run:
         description: 'Run a dry-run of the release process; no branches, npm packages or GitHub releases will be created.'
         required: true
-        type: 'boolean'
+        type: boolean
         default: true
       create_nightly_release:
         description: 'Auto apply the nightly release tag, input version is ignored.'
         required: false
-        type: 'boolean'
+        type: boolean
         default: false
       force_skip_tests:
         description: 'Select to skip the "Run Tests" step in testing. Prod releases should run tests'
         required: false
-        type: 'boolean'
+        type: boolean
         default: false
 
 jobs:
   release:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     environment:
-      name: 'production-release'
-      url: '${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}'
-    if: |-
-      ${{ github.repository == 'acoliver/llxprt-code' }}
+      name: production-release
+      url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}
+    if: github.repository == 'acoliver/llxprt-code'
     permissions:
-      contents: 'write'
-      packages: 'write'
-      id-token: 'write'
-      issues: 'write' # For creating issues on failure
+      contents: write
+      packages: write
+      id-token: write
+      issues: write # For creating issues on failure
     outputs:
-      RELEASE_TAG: '${{ steps.version.outputs.RELEASE_TAG }}'
+      RELEASE_TAG: ${{ steps.version.outputs.RELEASE_TAG }}
 
     steps:
-      - name: 'Checkout'
-        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
-          ref: '${{ github.sha }}'
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: 'Set booleans for simplified logic'
-        env:
-          CREATE_NIGHTLY_RELEASE: '${{ github.event.inputs.create_nightly_release }}'
-          EVENT_NAME: '${{ github.event_name }}'
-          DRY_RUN_INPUT: '${{ github.event.inputs.dry_run }}'
-        id: 'vars'
-        run: |-
+      - name: Set booleans for simplified logic
+        id: vars
+        run: |
           is_nightly="false"
-          if [[ "${EVENT_NAME}" == "schedule" || "${CREATE_NIGHTLY_RELEASE}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.create_nightly_release }}" == "true" ]]; then
             is_nightly="true"
           fi
-          echo "is_nightly=${is_nightly}" >> "${GITHUB_OUTPUT}"
+          echo "is_nightly=${is_nightly}" >> $GITHUB_OUTPUT
 
           is_dry_run="false"
-          if [[ "${DRY_RUN_INPUT}" == "true" ]]; then
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             is_dry_run="true"
           fi
-          echo "is_dry_run=${is_dry_run}" >> "${GITHUB_OUTPUT}"
+          echo "is_dry_run=${is_dry_run}" >> $GITHUB_OUTPUT
 
-      - name: 'Setup Node.js'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: 'npm'
 
-      - name: 'Install Dependencies'
-        run: |-
-          npm ci
+      - name: Install Dependencies
+        run: npm ci
 
-      - name: 'Get the version'
-        id: 'version'
+      - name: Get the version
+        id: version
+        run: |
+          VERSION_JSON=$(node scripts/get-release-version.js)
+          echo "RELEASE_TAG=$(echo $VERSION_JSON | jq -r .releaseTag)" >> $GITHUB_OUTPUT
+          echo "RELEASE_VERSION=$(echo $VERSION_JSON | jq -r .releaseVersion)" >> $GITHUB_OUTPUT
+          echo "NPM_TAG=$(echo $VERSION_JSON | jq -r .npmTag)" >> $GITHUB_OUTPUT
         env:
-          IS_NIGHTLY: '${{ steps.vars.outputs.is_nightly }}'
-          MANUAL_VERSION: '${{ inputs.version }}'
-        run: |-
-          VERSION_JSON="$(node scripts/get-release-version.js)"
-          echo "RELEASE_TAG=$(echo "${VERSION_JSON}" | jq -r .releaseTag)" >> "${GITHUB_OUTPUT}"
-          echo "RELEASE_VERSION=$(echo "${VERSION_JSON}" | jq -r .releaseVersion)" >> "${GITHUB_OUTPUT}"
-          echo "NPM_TAG=$(echo "${VERSION_JSON}" | jq -r .npmTag)" >> "${GITHUB_OUTPUT}"
+          IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
+          MANUAL_VERSION: ${{ inputs.version }}
 
-      - name: 'Run Preflight Checks'
-        if: |-
-          ${{ github.event.inputs.force_skip_tests != 'true' }}
+      - name: Run Preflight Checks
+        if: github.event.inputs.force_skip_tests != 'true'
+        run: node scripts/preflight-ci.js
         env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
-          OPENAI_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
-          OPENAI_BASE_URL: 'https://openrouter.ai/api/v1'
-          LLXPRT_DEFAULT_MODEL: 'google/gemini-2.5-flash'
-          LLXPRT_DEFAULT_PROVIDER: 'openai'
-          LLXPRT_AUTH_TYPE: 'none'
-        run: |-
-          node scripts/preflight-ci.js
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
+          LLXPRT_DEFAULT_PROVIDER: openai
+          LLXPRT_AUTH_TYPE: none
 
-      - name: 'Build Bundle for Integration Tests'
-        run: |-
-          npm run bundle
+      - name: Build Bundle for Integration Tests
+        run: npm run bundle
 
-      - name: 'Run Integration Tests'
-        if: |-
-          ${{ github.event.inputs.force_skip_tests != 'true' }}
-        env:
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
-          OPENAI_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
-          OPENAI_BASE_URL: 'https://openrouter.ai/api/v1'
-          LLXPRT_DEFAULT_MODEL: 'google/gemini-2.5-flash'
-          LLXPRT_DEFAULT_PROVIDER: 'openai'
-          LLXPRT_AUTH_TYPE: 'none'
-        run: |-
+      - name: Run Integration Tests
+        if: github.event.inputs.force_skip_tests != 'true'
+        run: |
           npm run test:integration:sandbox:none
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          LLXPRT_DEFAULT_MODEL: google/gemini-2.5-flash
+          LLXPRT_DEFAULT_PROVIDER: openai
+          LLXPRT_AUTH_TYPE: none
 
-      - name: 'Configure Git User'
-        run: |-
+      - name: Configure Git User
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: 'Create and switch to a release branch'
-        id: 'release_branch'
-        env:
-          RELEASE_TAG: '${{ steps.version.outputs.RELEASE_TAG }}'
-        run: |-
-          BRANCH_NAME="release/${RELEASE_TAG}"
-          git switch -c "${BRANCH_NAME}"
-          echo "BRANCH_NAME=${BRANCH_NAME}" >> "${GITHUB_OUTPUT}"
+      - name: Create and switch to a release branch
+        id: release_branch
+        run: |
+          BRANCH_NAME="release/${{ steps.version.outputs.RELEASE_TAG }}"
+          git switch -c $BRANCH_NAME
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_OUTPUT
 
-      - name: 'Update package versions'
-        env:
-          RELEASE_VERSION: '${{ steps.version.outputs.RELEASE_VERSION }}'
-        run: |-
-          npm run release:version "${RELEASE_VERSION}"
+      - name: Update package versions
+        run: |
+          npm run release:version ${{ steps.version.outputs.RELEASE_VERSION }}
 
-      - name: 'Commit and Conditionally Push package versions'
-        env:
-          BRANCH_NAME: '${{ steps.release_branch.outputs.BRANCH_NAME }}'
-          IS_DRY_RUN: '${{ steps.vars.outputs.is_dry_run }}'
-          RELEASE_TAG: '${{ steps.version.outputs.RELEASE_TAG }}'
-        run: |-
+      - name: Commit and Conditionally Push package versions
+        run: |
           git add package.json package-lock.json packages/*/package.json packages/*/package-lock.json
-          git commit -m "chore(release): ${RELEASE_TAG}"
-          if [[ "${IS_DRY_RUN}" == "false" ]]; then
+          git commit -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }}"
+          if [[ "${{ steps.vars.outputs.is_dry_run }}" == "false" ]]; then
             echo "Pushing release branch to remote..."
-            git push --set-upstream origin "${BRANCH_NAME}" --follow-tags
+            git push --set-upstream origin ${{ steps.release_branch.outputs.BRANCH_NAME }} --follow-tags
           else
             echo "Dry run enabled. Skipping push."
           fi
 
-      - name: 'Build and Prepare Packages'
-        run: |-
+      - name: Build and Prepare Packages
+        run: |
           rm -rf packages/*/dist
           npm run build:packages
           npm run bundle
           npm run prepare:package
 
-      - name: 'Configure npm for publishing'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+      - name: Configure npm for publishing
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org/'
           scope: '@vybestack'
 
-      - name: 'Publish @vybestack/llxprt-code-core'
+      - name: Publish @vybestack/llxprt-code-core
+        run: npm publish --workspace=@vybestack/llxprt-code-core --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
         env:
-          IS_DRY_RUN: '${{ steps.vars.outputs.is_dry_run }}'
-          NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}'
-          NPM_TAG: '${{ steps.version.outputs.NPM_TAG }}'
-        run: |-
-          npm publish \
-            --dry-run="${IS_DRY_RUN}" \
-            --workspace="@vybestack/llxprt-code-core" \
-            --tag="${NPM_TAG}"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: 'Install latest core package'
-        if: |-
-          ${{ steps.vars.outputs.is_dry_run == 'false' }}
-        env:
-          RELEASE_VERSION: '${{ steps.version.outputs.RELEASE_VERSION }}'
-        run: |-
-          npm install "@vybestack/llxprt-code-core@${RELEASE_VERSION}" \
-          --workspace="@vybestack/llxprt-code" \
-          --save-exact
+      - name: Install latest core package
+        if: steps.vars.outputs.is_dry_run == 'false'
+        run: npm install @vybestack/llxprt-code-core@${{ steps.version.outputs.RELEASE_VERSION }} --workspace=@vybestack/llxprt-code --save-exact
 
-      - name: 'Publish @vybestack/llxprt-code'
+      - name: Publish @vybestack/llxprt-code
+        run: npm publish --workspace=@vybestack/llxprt-code --tag=${{ steps.version.outputs.NPM_TAG }} ${{ steps.vars.outputs.is_dry_run == 'true' && '--dry-run' || '' }}
         env:
-          IS_DRY_RUN: '${{ steps.vars.outputs.is_dry_run }}'
-          NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}'
-          NPM_TAG: '${{ steps.version.outputs.NPM_TAG }}'
-        run: |-
-          npm publish \
-            --dry-run="${IS_DRY_RUN}" \
-            --workspace="@vybestack/llxprt-code" \
-            --tag="${NPM_TAG}"
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: 'Generate Release Notes'
-        if: |-
-          ${{ steps.vars.outputs.is_dry_run == 'false' }}
-        id: 'release_notes'
-        env:
-          RELEASE_TAG: '${{ steps.version.outputs.RELEASE_TAG }}'
-          LAST_TAG: '${{ steps.release_notes.outputs.LAST_TAG }}'
-          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
-          GITHUB_REPOSITORY: '${{ github.repository }}'
-        run: |-
-          # Get the last release tag
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then
+      - name: Generate Release Notes
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
+        id: release_notes
+        run: |
+          # Get the last stable release tag (excluding pre-release tags)
+          LAST_STABLE_TAG=$(git tag -l 'v*' | grep -v '\-' | sort -V | tail -n 1)
+          if [ -z "$LAST_STABLE_TAG" ]; then
+            # If no stable tag, get the most recent tag
+            LAST_STABLE_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          fi
+          if [ -z "$LAST_STABLE_TAG" ]; then
             echo "No previous release tag found, using first commit"
-            LAST_TAG=$(git rev-list --max-parents=0 HEAD)
+            LAST_STABLE_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
 
           # Save last tag for comparison link
-          echo "LAST_TAG=${LAST_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "LAST_TAG=$LAST_STABLE_TAG" >> $GITHUB_OUTPUT
 
           # Get commit messages since last tag
-          echo "Getting commits from ${LAST_TAG} to HEAD"
-          git log --pretty=format:"- %s (%h)" "${LAST_TAG}..HEAD" > commits.txt
+          echo "Getting commits from $LAST_STABLE_TAG to HEAD"
+          git log --pretty=format:"- %s (%h)" $LAST_STABLE_TAG..HEAD > commits.txt
 
           # Generate release notes with LLxprt or fall back to basic format
           echo "Attempting to generate release notes with LLxprt Code..."
 
           # Create the prompt in a variable
-          PROMPT="Generate professional release notes for LLxprt Code version ${RELEASE_TAG} comparing to previous release ${LAST_TAG}. NO EMOJIS. Include sections: Release Focus, Features, Bug Fixes, Installation. Add comparison link at end. Commits: $(cat commits.txt)"
+          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }} and write them to a file called 'generated-notes.md'.
 
-          # Try LLxprt generation
+          Format the output as follows:
+          1. Start with 'Release ${{ steps.version.outputs.RELEASE_TAG }}'
+          2. Add a note about alpha/beta/gamma naming (if applicable): 'Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance.'
+          3. Include 'Installation & Upgrade' section with npm commands including the version tag
+          4. Add 'Major Features' section summarizing the most important changes
+          5. Add 'Changes' section with the detailed commit list
+          6. NO EMOJIS anywhere
+
+          Here are the commits since $LAST_STABLE_TAG:
+          $(cat commits.txt)
+
+          IMPORTANT: Use the write_file tool to save the release notes to 'generated-notes.md'. The file_path should be 'generated-notes.md' and content should be the formatted release notes. Do not output them to stdout."
+
+          # Try LLxprt generation using OpenRouter
           set +e
           npx @vybestack/llxprt-code@latest \
-            --no-interactive \
-            --provider gemini \
-            --model gemini-2.0-flash-exp \
-            --key "${GEMINI_API_KEY}" \
-            --prompt "${PROMPT}" > generated-notes.md 2>&1
+            --provider openai \
+            --model google/gemini-2.5-flash \
+            --key "${{ secrets.OPENROUTER_API_KEY }}" \
+            --baseurl https://openrouter.ai/api/v1 \
+            --yolo \
+            --prompt "$PROMPT" > /dev/null 2>&1
           LLXPRT_EXIT=$?
           set -e
 
@@ -255,18 +231,25 @@ jobs:
           else
             echo "Falling back to basic release notes"
             # Write basic release notes
-            echo "## Release ${RELEASE_TAG}" > release-notes.md
+            echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
             echo "" >> release-notes.md
+            
+            # Add note for pre-release versions
+            if [[ "${{ steps.version.outputs.RELEASE_TAG }}" == *"-"* ]]; then
+              echo "Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance." >> release-notes.md
+              echo "" >> release-notes.md
+            fi
+            
             echo "### Installation & Upgrade" >> release-notes.md
             echo "" >> release-notes.md
             echo "#### Install" >> release-notes.md
             echo '```bash' >> release-notes.md
-            echo "npm install -g @vybestack/llxprt-code" >> release-notes.md
+            echo "npm install -g @vybestack/llxprt-code@${{ steps.version.outputs.RELEASE_VERSION }}" >> release-notes.md
             echo '```' >> release-notes.md
             echo "" >> release-notes.md
             echo "#### Upgrade" >> release-notes.md
             echo '```bash' >> release-notes.md
-            echo "npm update -g @vybestack/llxprt-code" >> release-notes.md
+            echo "npm update -g @vybestack/llxprt-code@${{ steps.version.outputs.RELEASE_VERSION }}" >> release-notes.md
             echo '```' >> release-notes.md
             echo "" >> release-notes.md
             echo "### Changes" >> release-notes.md
@@ -275,38 +258,33 @@ jobs:
           fi
 
           # Add comparison link if we have a real previous tag
-          if [[ "${LAST_TAG}" != $(git rev-list --max-parents=0 HEAD) ]]; then
+          if [[ "$LAST_STABLE_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
             echo "" >> release-notes.md
             echo "---" >> release-notes.md
             echo "" >> release-notes.md
-            echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${LAST_TAG}...${RELEASE_TAG}" >> release-notes.md
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_STABLE_TAG}...${{ steps.version.outputs.RELEASE_TAG }}" >> release-notes.md
           fi
 
           echo "Release notes generated"
 
-      - name: 'Create GitHub Release and Tag'
-        if: |-
-          ${{ steps.vars.outputs.is_dry_run == 'false' }}
+      - name: Create GitHub Release and Tag
+        if: ${{ steps.vars.outputs.is_dry_run == 'false' }}
         env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-          RELEASE_BRANCH: '${{ steps.release_branch.outputs.BRANCH_NAME }}'
-          RELEASE_TAG: '${{ steps.version.outputs.RELEASE_TAG }}'
-        run: |-
-          gh release create "${RELEASE_TAG}" \
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ steps.release_branch.outputs.BRANCH_NAME }}
+        run: |
+          gh release create ${{ steps.version.outputs.RELEASE_TAG }} \
             bundle/llxprt.js \
-            --target "${RELEASE_BRANCH}" \
-            --title "Release ${RELEASE_TAG}" \
+            --target "$RELEASE_BRANCH" \
+            --title "Release ${{ steps.version.outputs.RELEASE_TAG }}" \
             --notes-file release-notes.md
 
-      - name: 'Create Issue on Failure'
-        if: |-
-          ${{ failure() }}
-        env:
-          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
-          RELEASE_TAG: '${{ steps.version.outputs.RELEASE_TAG }} || "N/A"'
-          DETAILS_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
-        run: |-
+      - name: Create Issue on Failure
+        if: failure()
+        run: |
           gh issue create \
-            --title "Release Failed for ${RELEASE_TAG} on $(date +'%Y-%m-%d')" \
-            --body "The release workflow failed. See the full run for details: ${DETAILS_URL}" \
+            --title "Release Failed for ${{ steps.version.outputs.RELEASE_TAG || 'N/A' }} on $(date +'%Y-%m-%d')" \
+            --body "The release workflow failed. See the full run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --label "kind/bug,release-failure"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

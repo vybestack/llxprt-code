@@ -18,7 +18,7 @@ export class AnthropicProvider extends BaseProvider {
   toolFormat: ToolFormat = 'anthropic';
   private baseURL?: string;
   private config?: IProviderConfig;
-  private currentModel: string = 'claude-sonnet-4-latest'; // Default model using latest alias
+  private currentModel: string = 'claude-sonnet-4-20250514'; // Default model
   private modelParams?: Record<string, unknown>;
 
   // Model cache for latest resolution
@@ -520,7 +520,7 @@ export class AnthropicProvider extends BaseProvider {
 
   getDefaultModel(): string {
     // Return the default model for this provider
-    return 'claude-sonnet-4-latest';
+    return 'claude-sonnet-4-20250514';
   }
 
   /**

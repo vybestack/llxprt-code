@@ -42,11 +42,14 @@ export class OAuthManager {
   private providers: Map<string, OAuthProvider>;
   private tokenStore: TokenStore;
   private settings?: LoadedSettings;
+  // In-memory OAuth enablement state for when settings aren't available
+  private inMemoryOAuthState: Map<string, boolean>;
 
   constructor(tokenStore: TokenStore, settings?: LoadedSettings) {
     this.providers = new Map();
     this.tokenStore = tokenStore;
     this.settings = settings;
+    this.inMemoryOAuthState = new Map();
   }
 
   /**
@@ -320,24 +323,27 @@ export class OAuthManager {
       throw new Error(`Unknown provider: ${providerName}`);
     }
 
-    if (!this.settings) {
-      throw new Error('Settings are required to toggle OAuth enablement');
-    }
-
     const currentlyEnabled = this.isOAuthEnabled(providerName);
     const newState = !currentlyEnabled;
 
-    // Get current OAuth enabled providers or initialize empty object
-    const oauthEnabledProviders =
-      this.settings.merged.oauthEnabledProviders || {};
-    oauthEnabledProviders[providerName] = newState;
+    if (this.settings) {
+      // If we have settings, persist the state
+      // Get current OAuth enabled providers or initialize empty object
+      const oauthEnabledProviders =
+        this.settings.merged.oauthEnabledProviders || {};
+      oauthEnabledProviders[providerName] = newState;
 
-    // Save the updated configuration
-    this.settings.setValue(
-      SettingScope.User,
-      'oauthEnabledProviders',
-      oauthEnabledProviders,
-    );
+      // Save the updated configuration
+      this.settings.setValue(
+        SettingScope.User,
+        'oauthEnabledProviders',
+        oauthEnabledProviders,
+      );
+    } else {
+      // No settings available, store in memory only
+      // This allows OAuth to work even without a settings file
+      this.inMemoryOAuthState.set(providerName, newState);
+    }
 
     return newState;
   }
@@ -348,14 +354,15 @@ export class OAuthManager {
    * @returns True if OAuth is enabled, false otherwise
    */
   isOAuthEnabled(providerName: string): boolean {
-    if (!this.settings) {
-      // Default to false if no settings available
-      return false;
+    if (this.settings) {
+      // Check settings first if available
+      const oauthEnabledProviders =
+        this.settings.merged.oauthEnabledProviders || {};
+      return oauthEnabledProviders[providerName] ?? false;
+    } else {
+      // Fall back to in-memory state if no settings
+      return this.inMemoryOAuthState.get(providerName) ?? false;
     }
-
-    const oauthEnabledProviders =
-      this.settings.merged.oauthEnabledProviders || {};
-    return oauthEnabledProviders[providerName] ?? false;
   }
 
   /**
