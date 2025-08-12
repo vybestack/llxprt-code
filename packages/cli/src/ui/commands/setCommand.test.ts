@@ -52,6 +52,7 @@ describe('setCommand', () => {
       getGeminiClient: vi.fn(() => ({
         setCompressionSettings: vi.fn(),
       })),
+      getSettingsService: vi.fn().mockReturnValue(null), // Return null to use fallback behavior
     };
 
     // Create context with the mock config

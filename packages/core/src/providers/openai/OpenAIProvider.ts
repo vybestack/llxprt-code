@@ -41,6 +41,7 @@ import {
   generateOAuthEndpointMismatchError,
 } from '../../config/endpoints.js';
 import { OAuthManager } from '../../auth/precedence.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 export class OpenAIProvider extends BaseProvider {
   private openai: OpenAI;
@@ -93,6 +94,16 @@ export class OpenAIProvider extends BaseProvider {
     this.toolFormatter = new ToolFormatter();
     this.conversationCache = new ConversationCache();
 
+    // Initialize from SettingsService
+    this.initializeFromSettings().catch((error) => {
+      if (process.env.DEBUG) {
+        console.warn(
+          'Failed to initialize OpenAI provider from SettingsService:',
+          error,
+        );
+      }
+    });
+
     // Set appropriate default model based on the provider
     if (shouldEnableQwenOAuth || isQwenEndpoint(baseURL || '')) {
       // Default to Qwen model when using Qwen endpoints
@@ -130,13 +141,9 @@ export class OpenAIProvider extends BaseProvider {
    * Helper method to determine if we're using Qwen (via OAuth or direct endpoint)
    */
   private isUsingQwen(): boolean {
-    return (
-      this.currentModel.includes('qwen') ||
-      this.baseURL?.includes('qwen') ||
-      this.baseURL?.includes('dashscope.aliyuncs.com') ||
-      (this.isOAuthEnabled() &&
-        this.baseProviderConfig.oauthProvider === 'qwen')
-    );
+    // Check if we're using qwen format based on tool format detection
+    const toolFormat = this.detectToolFormat();
+    return toolFormat === 'qwen';
   }
 
   /**
@@ -735,10 +742,8 @@ export class OpenAIProvider extends BaseProvider {
     // Get current tool format (with override support)
     const currentToolFormat = this.getToolFormat();
 
-    // Format tools using ToolFormatter
-    const formattedTools = tools
-      ? this.toolFormatter.toProviderFormat(tools, currentToolFormat)
-      : undefined;
+    // Format tools using formatToolsForAPI method
+    const formattedTools = tools ? this.formatToolsForAPI(tools) : undefined;
 
     // Get stream_options from ephemeral settings (not model params)
     const streamOptions =
@@ -769,7 +774,7 @@ export class OpenAIProvider extends BaseProvider {
       tools: formattedTools as
         | OpenAI.Chat.Completions.ChatCompletionTool[]
         | undefined,
-      tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
+      tool_choice: this.getToolChoiceForFormat(tools),
       ...this.modelParams,
     });
 
@@ -954,6 +959,12 @@ export class OpenAIProvider extends BaseProvider {
 
   setModel(modelId: string): void {
     this.currentModel = modelId;
+    // Persist to SettingsService if available
+    this.setModelInSettings(modelId).catch((error) => {
+      if (process.env.DEBUG) {
+        console.warn('Failed to persist model to SettingsService:', error);
+      }
+    });
   }
 
   getCurrentModel(): string {
@@ -963,6 +974,13 @@ export class OpenAIProvider extends BaseProvider {
   setApiKey(apiKey: string): void {
     // Call base provider implementation
     super.setApiKey?.(apiKey);
+
+    // Persist to SettingsService if available
+    this.setApiKeyInSettings(apiKey).catch((error) => {
+      if (process.env.DEBUG) {
+        console.warn('Failed to persist API key to SettingsService:', error);
+      }
+    });
 
     // Create a new OpenAI client with the updated API key
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
@@ -981,6 +999,13 @@ export class OpenAIProvider extends BaseProvider {
   setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+
+    // Persist to SettingsService if available
+    this.setBaseUrlInSettings(this.baseURL).catch((error) => {
+      if (process.env.DEBUG) {
+        console.warn('Failed to persist base URL to SettingsService:', error);
+      }
+    });
 
     // Update OAuth configuration based on endpoint validation
     // Enable OAuth for Qwen endpoints if we have an OAuth manager
@@ -1093,6 +1118,16 @@ export class OpenAIProvider extends BaseProvider {
     } else {
       this.modelParams = { ...this.modelParams, ...params };
     }
+
+    // Persist to SettingsService if available
+    this.setModelParamsInSettings(this.modelParams).catch((error) => {
+      if (process.env.DEBUG) {
+        console.warn(
+          'Failed to persist model params to SettingsService:',
+          error,
+        );
+      }
+    });
   }
 
   /**
@@ -1104,10 +1139,160 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
+   * Initialize provider configuration from SettingsService
+   */
+  private async initializeFromSettings(): Promise<void> {
+    try {
+      const _settingsService = getSettingsService();
+      // Load saved model if available
+      const savedModel = await this.getModelFromSettings();
+      if (savedModel) {
+        this.currentModel = savedModel;
+      }
+
+      // Load saved base URL if available
+      const savedBaseUrl = await this.getBaseUrlFromSettings();
+      if (savedBaseUrl !== undefined) {
+        this.baseURL = savedBaseUrl;
+      }
+
+      // Load saved model parameters if available
+      const savedParams = await this.getModelParamsFromSettings();
+      if (savedParams) {
+        this.modelParams = savedParams;
+      }
+
+      if (process.env.DEBUG) {
+        console.log(
+          `[OpenAI] Initialized from SettingsService - model: ${this.currentModel}, baseURL: ${this.baseURL}, params:`,
+          this.modelParams,
+        );
+      }
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.error(
+          'Failed to initialize OpenAI provider from SettingsService:',
+          error,
+        );
+      }
+    }
+  }
+
+  /**
    * Check if the provider is authenticated using any available method
    * Uses the base provider's isAuthenticated implementation
    */
   async isAuthenticated(): Promise<boolean> {
     return super.isAuthenticated();
+  }
+
+  /**
+   * Detect the appropriate tool format for the current model/configuration
+   * @returns The detected tool format
+   */
+  detectToolFormat(): ToolFormat {
+    try {
+      const settingsService = getSettingsService();
+
+      // First check SettingsService for toolFormat override in provider settings
+      // Note: This is synchronous access to cached settings, not async
+      const currentSettings = settingsService['settings'];
+      const providerSettings = currentSettings?.providers?.[this.name];
+      const toolFormatOverride = providerSettings?.toolFormat as
+        | ToolFormat
+        | 'auto'
+        | undefined;
+
+      // If explicitly set to a specific format (not 'auto'), use it
+      if (toolFormatOverride && toolFormatOverride !== 'auto') {
+        return toolFormatOverride;
+      }
+
+      // Auto-detect based on model name if set to 'auto' or not set
+      const modelName = this.currentModel.toLowerCase();
+
+      // Check for GLM-4.5 models (glm-4.5, glm-4-5)
+      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+        return 'qwen';
+      }
+
+      // Check for qwen models
+      if (modelName.includes('qwen')) {
+        return 'qwen';
+      }
+
+      // Default to 'openai' format
+      return 'openai';
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.warn(
+          'Failed to detect tool format from SettingsService:',
+          error,
+        );
+      }
+
+      // Fallback detection without SettingsService
+      const modelName = this.currentModel.toLowerCase();
+
+      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+        return 'qwen';
+      }
+
+      if (modelName.includes('qwen')) {
+        return 'qwen';
+      }
+
+      return 'openai';
+    }
+  }
+
+  /**
+   * Get appropriate tool_choice value based on detected tool format
+   * @param tools Array of tools (if any)
+   * @returns Appropriate tool_choice value for the current format
+   */
+  private getToolChoiceForFormat(
+    tools: ITool[] | undefined,
+  ): OpenAI.Chat.Completions.ChatCompletionToolChoiceOption | undefined {
+    if (!tools || tools.length === 0) {
+      return undefined;
+    }
+
+    // For all formats, use 'auto' (standard behavior)
+    // Future enhancement: different formats may need different tool_choice values
+    return 'auto';
+  }
+
+  /**
+   * Format tools for API based on detected tool format
+   * @param tools Array of tools to format
+   * @returns Formatted tools for API consumption
+   */
+  formatToolsForAPI(tools: ITool[]): unknown {
+    // For now, always use OpenAI format through OpenRouter
+    // TODO: Investigate if OpenRouter needs special handling for GLM/Qwen
+    // const detectedFormat = this.detectToolFormat();
+    // if (detectedFormat === 'qwen') {
+    //   // Convert OpenAI format to Qwen format: {name, description, parameters} without type/function wrapper
+    //   return tools.map((tool) => ({
+    //     name: tool.function.name,
+    //     description: tool.function.description,
+    //     parameters: tool.function.parameters,
+    //   }));
+    // }
+
+    // For all formats, use the existing ToolFormatter
+    return this.toolFormatter.toProviderFormat(tools, 'openai');
+  }
+
+  /**
+   * Parse tool response from API (placeholder for future response parsing)
+   * @param response The raw API response
+   * @returns Parsed tool response
+   */
+  parseToolResponse(response: unknown): unknown {
+    // TODO: Implement response parsing based on detected format
+    // For now, return the response as-is
+    return response;
   }
 }

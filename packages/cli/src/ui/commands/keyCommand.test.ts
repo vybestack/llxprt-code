@@ -46,6 +46,7 @@ describe('keyCommand', () => {
       getProviderManager: vi.fn().mockReturnValue(mockProviderManager),
       setEphemeralSetting: vi.fn(),
       refreshAuth: vi.fn(),
+      getSettingsService: vi.fn().mockReturnValue(null), // Return null to use fallback behavior
     };
 
     mockContext = createMockCommandContext({

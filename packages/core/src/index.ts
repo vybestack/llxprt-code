@@ -165,3 +165,23 @@ export * from './parsers/TextToolCallParser.js';
 // Export tool formatters
 export * from './tools/IToolFormatter.js';
 export * from './tools/ToolFormatter.js';
+
+// Export settings system
+export { SettingsService } from './settings/SettingsService.js';
+export { FileSystemSettingsRepository } from './settings/FileSystemSettingsRepository.js';
+export {
+  getSettingsService,
+  resetSettingsService,
+} from './settings/settingsServiceInstance.js';
+export type {
+  ISettingsService,
+  GlobalSettings,
+  SettingsChangeEvent,
+  ISettingsRepository,
+  ProviderSettings,
+  UISettings,
+  AdvancedSettings,
+  EventListener,
+  EventUnsubscribe,
+} from './settings/types.js';
+export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';

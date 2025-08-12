@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
+import type { ITool } from '../ITool.js';
 
 // Mock OpenAI module
 vi.mock('openai', () => ({
@@ -31,6 +32,11 @@ vi.mock('openai', () => ({
       list: vi.fn(),
     },
   })),
+}));
+
+// Mock SettingsService
+vi.mock('../../settings/settingsServiceInstance.js', () => ({
+  getSettingsService: vi.fn(),
 }));
 
 describe('OpenAIProvider', () => {
@@ -775,6 +781,556 @@ describe('OpenAIProvider', () => {
         expect(apiParams.top_p).toBe(0.9);
         expect(apiParams.presence_penalty).toBe(0.5);
         expect(apiParams.frequency_penalty).toBe(0.3);
+      });
+    });
+  });
+
+  describe('GLM-4.5 Tool Format Detection and Conversion', () => {
+    // Import the getSettingsService mock
+    let mockGetSettingsService: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      const { getSettingsService } = vi.mocked(
+        await import('../../settings/settingsServiceInstance.js'),
+      );
+      mockGetSettingsService = getSettingsService;
+    });
+
+    describe('detectToolFormat', () => {
+      it('should return "qwen" for glm-4.5 model', () => {
+        // Given a provider with GLM-4.5 model
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService to return no override (auto-detect)
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {
+                toolFormat: 'auto',
+              },
+            },
+          },
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should return 'qwen'
+        expect(format).toBe('qwen');
+      });
+
+      it('should return "qwen" for glm-4-5 model with dash', () => {
+        // Given a provider with GLM-4-5 model (dash variant)
+        provider.setModel('glm-4-5-turbo');
+
+        // Mock SettingsService to return no override
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {
+                toolFormat: 'auto',
+              },
+            },
+          },
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should return 'qwen'
+        expect(format).toBe('qwen');
+      });
+
+      it('should return "qwen" for qwen models', () => {
+        // Given a provider with Qwen model
+        provider.setModel('qwen2.5-72b-instruct');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should return 'qwen'
+        expect(format).toBe('qwen');
+      });
+
+      it('should return "openai" for gpt models', () => {
+        // Given a provider with GPT model
+        provider.setModel('gpt-4o');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should return 'openai'
+        expect(format).toBe('openai');
+      });
+
+      it('should respect toolFormat setting override', () => {
+        // Given a provider with GLM model but explicit OpenAI format setting
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService to return explicit override
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {
+                toolFormat: 'openai',
+              },
+            },
+          },
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should respect the override and return 'openai'
+        expect(format).toBe('openai');
+      });
+
+      it('should fallback to model-based detection when SettingsService fails', () => {
+        // Given a provider with GLM model
+        provider.setModel('glm-4.5-chat');
+
+        // Mock SettingsService to throw an error
+        mockGetSettingsService.mockImplementation(() => {
+          throw new Error('Settings access failed');
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should still detect 'qwen' based on model name
+        expect(format).toBe('qwen');
+      });
+
+      it('should return "openai" as default for unknown models', () => {
+        // Given a provider with unknown model
+        provider.setModel('unknown-model-v1');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I detect tool format
+        const format = provider.detectToolFormat();
+
+        // Then it should default to 'openai'
+        expect(format).toBe('openai');
+      });
+    });
+
+    describe('formatToolsForAPI', () => {
+      const sampleTools: ITool[] = [
+        {
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get current weather information',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: {
+                  type: 'string',
+                  description: 'The city and state',
+                },
+              },
+              required: ['location'],
+            },
+          },
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'calculate',
+            description: 'Perform mathematical calculations',
+            parameters: {
+              type: 'object',
+              properties: {
+                expression: {
+                  type: 'string',
+                  description: 'Mathematical expression to evaluate',
+                },
+              },
+              required: ['expression'],
+            },
+          },
+        },
+      ];
+
+      it('should convert to OpenAI format for GLM models (pending Qwen format implementation)', () => {
+        // Given a provider with GLM model
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I format tools for API
+        const formattedTools = provider.formatToolsForAPI(sampleTools);
+
+        // Then tools should currently be in OpenAI format (TODO: convert to Qwen format)
+        // The current implementation always uses OpenAI format through ToolFormatter
+        expect(Array.isArray(formattedTools)).toBe(true);
+        const tools = formattedTools as Array<Record<string, unknown>>;
+        expect(tools).toHaveLength(2);
+
+        // Verify the structure is OpenAI format (with type/function wrapper)
+        expect(tools[0]).toMatchObject({
+          type: 'function',
+          function: {
+            name: 'get_weather',
+            description: 'Get current weather information',
+          },
+        });
+
+        expect(tools[1]).toMatchObject({
+          type: 'function',
+          function: {
+            name: 'calculate',
+            description: 'Perform mathematical calculations',
+          },
+        });
+      });
+
+      it('should keep OpenAI format for GPT models', () => {
+        // Given a provider with GPT model
+        provider.setModel('gpt-4o');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I format tools for API
+        const formattedTools = provider.formatToolsForAPI(sampleTools);
+
+        // Then tools should remain in OpenAI format (with type/function wrapper)
+        // The ToolFormatter.toProviderFormat should be called for 'openai' format
+        expect(Array.isArray(formattedTools)).toBe(true);
+        // Note: The exact format depends on ToolFormatter implementation
+        // but it should not be the flat Qwen format
+      });
+
+      it('should handle tools with missing descriptions in OpenAI format', () => {
+        // Given tools without descriptions
+        const toolsWithoutDesc: ITool[] = [
+          {
+            type: 'function',
+            function: {
+              name: 'simple_function',
+              parameters: {
+                type: 'object',
+                properties: {},
+              },
+            },
+          },
+        ];
+
+        // And a GLM model
+        provider.setModel('glm-4-5-chat');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I format tools for API
+        const formattedTools = provider.formatToolsForAPI(toolsWithoutDesc);
+
+        // Then it should be in OpenAI format with undefined description
+        expect(Array.isArray(formattedTools)).toBe(true);
+        const tools = formattedTools as Array<Record<string, unknown>>;
+        expect(tools).toHaveLength(1);
+        expect(tools[0]).toMatchObject({
+          type: 'function',
+          function: {
+            name: 'simple_function',
+            description: undefined,
+          },
+        });
+      });
+
+      it('should respect toolFormat override when formatting', () => {
+        // Given a GLM model with OpenAI format override
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService to override to OpenAI format
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {
+                toolFormat: 'openai',
+              },
+            },
+          },
+        });
+
+        // When I format tools for API
+        const formattedTools = provider.formatToolsForAPI(sampleTools);
+
+        // Then it should use ToolFormatter instead of Qwen conversion
+        expect(Array.isArray(formattedTools)).toBe(true);
+        // Should not be the flat Qwen format since override is 'openai'
+        const firstTool = (formattedTools as unknown[])[0] as Record<
+          string,
+          unknown
+        >;
+        expect(firstTool).not.toHaveProperty('name');
+        expect(firstTool).not.toHaveProperty('description');
+        expect(firstTool).not.toHaveProperty('parameters');
+      });
+
+      it('should handle empty tools array', () => {
+        // Given empty tools array
+        const emptyTools: ITool[] = [];
+
+        // And a GLM model
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // When I format tools for API
+        const formattedTools = provider.formatToolsForAPI(emptyTools);
+
+        // Then it should return empty array
+        expect(formattedTools).toEqual([]);
+      });
+    });
+
+    describe('integration with chat completions', () => {
+      it('should pass correctly formatted tools to API for GLM models (currently OpenAI format)', async () => {
+        // Given a GLM model
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // And sample tools
+        const tools: ITool[] = [
+          {
+            type: 'function',
+            function: {
+              name: 'test_tool',
+              description: 'A test tool',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        ];
+
+        // And mock API response
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              choices: [{ delta: { content: 'Response with tools' } }],
+            };
+          },
+        };
+
+        let capturedApiParams: unknown;
+        mockOpenAIInstance.chat.completions.create.mockImplementation(
+          async (params) => {
+            capturedApiParams = params;
+            return mockStream;
+          },
+        );
+
+        // When I generate chat completion with tools
+        const messages = [
+          { role: ContentGeneratorRole.USER, content: 'Use the tool' },
+        ];
+        const generator = provider.generateChatCompletion(messages, tools);
+        const results: unknown[] = [];
+        for await (const chunk of generator) {
+          results.push(chunk);
+        }
+
+        // Then the API should receive tools in OpenAI format (current implementation)
+        expect(capturedApiParams).toBeDefined();
+        const apiParams = capturedApiParams as Record<string, unknown>;
+        const apiTools = apiParams.tools as Array<Record<string, unknown>>;
+        expect(Array.isArray(apiTools)).toBe(true);
+        expect(apiTools).toHaveLength(1);
+        expect(apiTools[0]).toMatchObject({
+          type: 'function',
+          function: {
+            name: 'test_tool',
+            description: 'A test tool',
+          },
+        });
+      });
+
+      it('should apply anti-repetition streaming logic for GLM-4.5 models with tool calls', async () => {
+        // Given a GLM-4.5 model
+        provider.setModel('glm-4.5-plus');
+
+        // Mock SettingsService
+        mockGetSettingsService.mockReturnValue({
+          settings: {
+            providers: {
+              openai: {},
+            },
+          },
+        });
+
+        // And sample tools
+        const tools: ITool[] = [
+          {
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get weather information',
+              parameters: { type: 'object', properties: {} },
+            },
+          },
+        ];
+
+        // Mock streaming response that includes both content and tool calls
+        const mockStream = {
+          async *[Symbol.asyncIterator]() {
+            // First chunk: content
+            yield {
+              choices: [
+                {
+                  delta: { content: 'I will check the weather for you.' },
+                },
+              ],
+            };
+            // Second chunk: more content
+            yield {
+              choices: [
+                {
+                  delta: { content: ' Let me use the weather tool.' },
+                },
+              ],
+            };
+            // Third chunk: tool call
+            yield {
+              choices: [
+                {
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: 'call_123',
+                        function: {
+                          name: 'get_weather',
+                          arguments: '{"location": "San Francisco"}',
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            };
+            // Final chunk: usage data
+            yield {
+              choices: [{ delta: {} }],
+              usage: {
+                prompt_tokens: 25,
+                completion_tokens: 15,
+                total_tokens: 40,
+              },
+            };
+          },
+        };
+
+        mockOpenAIInstance.chat.completions.create.mockResolvedValue(
+          mockStream,
+        );
+
+        // When I generate chat completion with tools
+        const messages = [
+          { role: ContentGeneratorRole.USER, content: 'What is the weather?' },
+        ];
+        const generator = provider.generateChatCompletion(messages, tools);
+        const results: unknown[] = [];
+        for await (const chunk of generator) {
+          results.push(chunk);
+        }
+
+        // Then it should apply anti-repetition logic:
+        // 1. Stream content chunks first
+        expect(results).toHaveLength(3);
+
+        // First content chunk
+        expect(results[0]).toMatchObject({
+          role: ContentGeneratorRole.ASSISTANT,
+          content: 'I will check the weather for you.',
+        });
+
+        // Second content chunk
+        expect(results[1]).toMatchObject({
+          role: ContentGeneratorRole.ASSISTANT,
+          content: ' Let me use the weather tool.',
+        });
+
+        // Final message should have tool calls with EMPTY content (anti-repetition)
+        expect(results[2]).toMatchObject({
+          role: ContentGeneratorRole.ASSISTANT,
+          content: '', // Content should be empty to avoid duplication
+          tool_calls: [
+            {
+              id: 'call_123',
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                arguments: '{"location": "San Francisco"}',
+              },
+            },
+          ],
+          usage: {
+            prompt_tokens: 25,
+            completion_tokens: 15,
+            total_tokens: 40,
+          },
+        });
       });
     });
   });

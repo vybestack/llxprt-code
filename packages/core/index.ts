@@ -19,3 +19,18 @@ export {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './src/utils/secure-browser-launcher.js';
+
+// Re-export settings system for explicit access
+export { SettingsService } from './src/settings/SettingsService.js';
+export type {
+  ISettingsService,
+  GlobalSettings,
+  SettingsChangeEvent,
+  ISettingsRepository,
+  ProviderSettings,
+  UISettings,
+  AdvancedSettings,
+  EventListener,
+  EventUnsubscribe,
+} from './src/settings/types.js';
+export type { TelemetrySettings as SettingsTelemetrySettings } from './src/settings/types.js';

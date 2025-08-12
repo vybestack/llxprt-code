@@ -22,10 +22,10 @@ export const toolformatCommand: SlashCommand = {
   description:
     'override the auto-detected tool calling/format parser for tools',
   kind: CommandKind.BUILT_IN,
-  action: (
+  action: async (
     context: CommandContext,
     args: string,
-  ): MessageActionReturn | void => {
+  ): Promise<MessageActionReturn | void> => {
     const formatName = args?.trim();
     const providerManager = getProviderManager();
     if (!providerManager.hasActiveProvider()) {
@@ -39,16 +39,38 @@ export const toolformatCommand: SlashCommand = {
     const activeProvider = providerManager.getActiveProvider();
     const providerName = activeProvider.name;
     const settings = context.services.settings;
+    const config = context.services.config;
+    const settingsService = config?.getSettingsService();
 
     // Show current format
     if (!formatName) {
       const currentFormat = activeProvider.getToolFormat
         ? activeProvider.getToolFormat()
         : 'unknown';
-      const isAutoDetected = !(
-        settings.merged.providerToolFormatOverrides &&
-        settings.merged.providerToolFormatOverrides[providerName]
-      );
+
+      let isAutoDetected = true;
+      if (settingsService) {
+        try {
+          const providerSettings =
+            await settingsService.getSettings(providerName);
+          isAutoDetected =
+            !providerSettings.toolFormat ||
+            providerSettings.toolFormat === 'auto';
+        } catch {
+          // Provider settings don't exist yet, use legacy check
+          isAutoDetected = !(
+            settings.merged.providerToolFormatOverrides &&
+            settings.merged.providerToolFormatOverrides[providerName]
+          );
+        }
+      } else {
+        // Fallback to legacy settings
+        isAutoDetected = !(
+          settings.merged.providerToolFormatOverrides &&
+          settings.merged.providerToolFormatOverrides[providerName]
+        );
+      }
+
       return {
         type: 'message',
         messageType: 'info',
@@ -60,20 +82,42 @@ export const toolformatCommand: SlashCommand = {
       if (activeProvider.setToolFormatOverride) {
         activeProvider.setToolFormatOverride(null);
       }
-      const currentOverrides = {
-        ...(settings.merged.providerToolFormatOverrides || {}),
-      };
-      delete currentOverrides[providerName];
-      settings.setValue(
-        SettingScope.User,
-        'providerToolFormatOverrides',
-        currentOverrides,
-      );
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Tool format override cleared for provider '${providerName}'. Using auto-detection.`,
-      };
+
+      // Use SettingsService if available
+      if (settingsService) {
+        try {
+          await settingsService.updateSettings(providerName, {
+            toolFormat: 'auto',
+          });
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Tool format override cleared for provider '${providerName}'. Using auto-detection.`,
+          };
+        } catch (error) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to clear tool format override: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      } else {
+        // Fallback to legacy settings
+        const currentOverrides = {
+          ...(settings.merged.providerToolFormatOverrides || {}),
+        };
+        delete currentOverrides[providerName];
+        settings.setValue(
+          SettingScope.User,
+          'providerToolFormatOverrides',
+          currentOverrides,
+        );
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Tool format override cleared for provider '${providerName}'. Using auto-detection.`,
+        };
+      }
     }
 
     if (!ALL_FORMATS.includes(formatName)) {
@@ -89,20 +133,43 @@ export const toolformatCommand: SlashCommand = {
       if (activeProvider.setToolFormatOverride) {
         activeProvider.setToolFormatOverride(formatName);
       }
-      const currentOverrides = {
-        ...(settings.merged.providerToolFormatOverrides || {}),
-      };
-      currentOverrides[providerName] = formatName;
-      settings.setValue(
-        SettingScope.User,
-        'providerToolFormatOverrides',
-        currentOverrides,
-      );
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Tool format override set to '${formatName}' for provider '${providerName}'.`,
-      };
+
+      // Use SettingsService if available
+      if (settingsService) {
+        await settingsService.updateSettings(providerName, {
+          toolFormat: formatName as
+            | 'auto'
+            | 'openai'
+            | 'qwen'
+            | 'hermes'
+            | 'xml'
+            | 'anthropic'
+            | 'deepseek'
+            | 'gemma'
+            | 'llama',
+        });
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Tool format override set to '${formatName}' for provider '${providerName}'.`,
+        };
+      } else {
+        // Fallback to legacy settings
+        const currentOverrides = {
+          ...(settings.merged.providerToolFormatOverrides || {}),
+        };
+        currentOverrides[providerName] = formatName;
+        settings.setValue(
+          SettingScope.User,
+          'providerToolFormatOverrides',
+          currentOverrides,
+        );
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Tool format override set to '${formatName}' for provider '${providerName}'.`,
+        };
+      }
     } catch (error) {
       return {
         type: 'message',

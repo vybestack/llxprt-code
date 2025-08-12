@@ -15,6 +15,27 @@ import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
 
+/**
+ * Get SettingsService instance for provider switching
+ */
+async function getSettingsServiceForProvider(): Promise<unknown> {
+  try {
+    const { getSettingsService } = await import(
+      '@vybestack/llxprt-code-core/src/settings/settingsServiceInstance.js'
+    );
+
+    return getSettingsService();
+  } catch (error) {
+    if (process.env.DEBUG) {
+      console.warn(
+        'Failed to get SettingsService for provider switching:',
+        error,
+      );
+    }
+    throw error;
+  }
+}
+
 export const providerCommand: SlashCommand = {
   name: 'provider',
   description:
@@ -56,6 +77,39 @@ export const providerCommand: SlashCommand = {
 
       // Switch provider first (this will clear state from ALL providers)
       providerManager.setActiveProvider(providerName);
+
+      // Clear base-url ephemeral setting when switching providers
+      // This prevents the old provider's base-url from affecting the new provider
+      const config = context.services.config;
+      if (config) {
+        config.setEphemeralSetting('base-url', undefined);
+      }
+
+      // Use SettingsService for provider switching
+      try {
+        const settingsService = await getSettingsServiceForProvider();
+        if (
+          typeof settingsService === 'object' &&
+          settingsService !== null &&
+          'switchProvider' in settingsService &&
+          typeof settingsService.switchProvider === 'function'
+        ) {
+          await settingsService.switchProvider(providerName);
+        }
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Switched from ${fromProvider} to ${providerName}`,
+        };
+      } catch (error) {
+        if (process.env.DEBUG) {
+          console.warn(
+            'SettingsService provider switch failed, falling back to legacy method:',
+            error,
+          );
+        }
+      }
 
       // Update config if available
       if (context.services.config) {

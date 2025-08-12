@@ -109,6 +109,8 @@ const unsetCommand: SlashCommand = {
 
       // If no headers left, remove the entire setting
       if (Object.keys(updatedHeaders).length === 0) {
+        // Note: SettingsService doesn't currently support ephemeral settings,
+        // so we continue to use the config directly for these session-only settings
         config.setEphemeralSetting('custom-headers', undefined);
         return {
           type: 'message',
@@ -145,6 +147,8 @@ const unsetCommand: SlashCommand = {
     }
 
     // Clear the ephemeral setting
+    // Note: SettingsService doesn't currently support ephemeral settings,
+    // so we continue to use the config directly for these session-only settings
     config.setEphemeralSetting(key, undefined);
 
     // Special handling for context-limit and compression-threshold
@@ -504,6 +508,9 @@ export const setCommand: SlashCommand = {
       };
     }
 
+    const settingsService = config.getSettingsService();
+    const useSettingsService = settingsService !== null;
+
     // Apply settings to GeminiClient for context-limit and compression-threshold
     if (key === 'context-limit' || key === 'compression-threshold') {
       const geminiClient = config.getGeminiClient();
@@ -518,7 +525,16 @@ export const setCommand: SlashCommand = {
 
     // Store ephemeral settings in memory only
     // They will be saved only when user explicitly saves a profile
-    config.setEphemeralSetting(key, parsedValue);
+    // Note: SettingsService doesn't currently support ephemeral settings,
+    // so we continue to use the config directly for these session-only settings
+    if (useSettingsService) {
+      // When SettingsService is available, we still use config for ephemeral settings
+      // as they are session-only and not persisted to the settings file
+      config.setEphemeralSetting(key, parsedValue);
+    } else {
+      // Fallback to direct config usage
+      config.setEphemeralSetting(key, parsedValue);
+    }
 
     return {
       type: 'message',

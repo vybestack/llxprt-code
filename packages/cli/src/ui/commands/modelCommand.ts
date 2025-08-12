@@ -40,10 +40,26 @@ export const modelCommand: SlashCommand = {
         : 'unknown';
 
       if (activeProvider.setModel) {
+        const config = context.services.config;
+        const settingsService = config?.getSettingsService();
+        const useSettingsService = settingsService !== null;
+
         activeProvider.setModel(modelName);
-        // Keep config model in sync so /about shows correct model
-        if (context.services.config) {
-          context.services.config.setModel(modelName);
+
+        if (useSettingsService && settingsService && config) {
+          // Use SettingsService to update provider settings
+          try {
+            await settingsService.updateSettings(activeProvider.name, {
+              model: modelName,
+            });
+          } catch (error) {
+            console.error('SettingsService error, using fallback:', error);
+            // Keep config model in sync so /about shows correct model
+            config.setModel(modelName);
+          }
+        } else if (config) {
+          // Fallback to direct config update
+          config.setModel(modelName);
         }
 
         return {

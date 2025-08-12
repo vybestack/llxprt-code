@@ -12,6 +12,30 @@ import {
 } from './types.js';
 
 /**
+ * Get SettingsService instance for diagnostics
+ */
+async function getSettingsServiceForDiagnostics(): Promise<{
+  getDiagnosticsData?: () => Promise<unknown>;
+  on?: (event: string, listener: () => void) => void;
+} | null> {
+  try {
+    const { getSettingsService } = await import(
+      '@vybestack/llxprt-code-core/src/settings/settingsServiceInstance.js'
+    );
+
+    return getSettingsService() as {
+      getDiagnosticsData?: () => Promise<unknown>;
+      on?: (event: string, listener: () => void) => void;
+    };
+  } catch (error) {
+    if (process.env.DEBUG) {
+      console.warn('Failed to get SettingsService for diagnostics:', error);
+    }
+    return null;
+  }
+}
+
+/**
  * Masks sensitive information like API keys
  */
 function maskSensitive(value: string): string {
@@ -47,14 +71,93 @@ export const diagnosticsCommand: SlashCommand = {
 
       const diagnostics: string[] = ['# LLxprt Diagnostics\n'];
 
+      // Use SettingsService for more accurate data
+      let settingsService;
+      try {
+        settingsService = await getSettingsServiceForDiagnostics();
+      } catch (error) {
+        if (process.env.DEBUG) {
+          console.warn(
+            'Failed to get SettingsService, using legacy data:',
+            error,
+          );
+        }
+        settingsService = null;
+      }
+      let diagnosticsData: {
+        provider: string;
+        model: string;
+        profile: string | null;
+        modelParams: Record<string, unknown>;
+      } | null = null;
+
+      if (
+        settingsService &&
+        'getDiagnosticsData' in settingsService &&
+        typeof settingsService.getDiagnosticsData === 'function'
+      ) {
+        try {
+          // Wait for initialization if needed using the on method
+          if (
+            'on' in settingsService &&
+            typeof settingsService.on === 'function'
+          ) {
+            await new Promise<void>((resolve) => {
+              settingsService.on!('initialized', () => resolve());
+              // Fallback timeout
+              setTimeout(resolve, 100);
+            });
+          }
+
+          const data = await settingsService.getDiagnosticsData();
+          if (
+            data &&
+            typeof data === 'object' &&
+            'provider' in data &&
+            'model' in data &&
+            'profile' in data &&
+            'modelParams' in data
+          ) {
+            diagnosticsData = data as {
+              provider: string;
+              model: string;
+              profile: string | null;
+              modelParams: Record<string, unknown>;
+            };
+          }
+        } catch (error) {
+          if (process.env.DEBUG) {
+            console.warn(
+              'Failed to get diagnostics from SettingsService:',
+              error,
+            );
+          }
+        }
+      }
+
       // Provider information
+      diagnostics.push('## Provider Information');
+
+      if (diagnosticsData) {
+        // Use SettingsService data (more accurate after profile operations)
+        diagnostics.push(`- Active Provider: ${diagnosticsData.provider}`);
+        diagnostics.push(`- Current Model: ${diagnosticsData.model}`);
+        diagnostics.push(
+          `- Current Profile: ${diagnosticsData.profile || 'none'}`,
+        );
+      } else {
+        // Fallback to legacy scattered sources
+        const providerManager = config.getProviderManager();
+        const activeProvider = providerManager?.getActiveProvider();
+        diagnostics.push(
+          `- Active Provider: ${activeProvider?.name || 'none'}`,
+        );
+        diagnostics.push(`- Current Model: ${config.getModel()}`);
+      }
+
+      // Check for API key (still from provider for now)
       const providerManager = config.getProviderManager();
       const activeProvider = providerManager?.getActiveProvider();
-      diagnostics.push('## Provider Information');
-      diagnostics.push(`- Active Provider: ${activeProvider?.name || 'none'}`);
-      diagnostics.push(`- Current Model: ${config.getModel()}`);
-
-      // Check for API key
       if (
         activeProvider &&
         'hasApiKey' in activeProvider &&
@@ -139,21 +242,39 @@ export const diagnosticsCommand: SlashCommand = {
 
       // Model parameters
       diagnostics.push('\n## Model Parameters');
-      if (
-        activeProvider &&
-        'getModelParams' in activeProvider &&
-        typeof activeProvider.getModelParams === 'function'
-      ) {
-        const modelParams = activeProvider.getModelParams();
+
+      if (diagnosticsData) {
+        // Use SettingsService data (more accurate)
+        const modelParams = diagnosticsData.modelParams;
         if (modelParams && Object.keys(modelParams).length > 0) {
           for (const [key, value] of Object.entries(modelParams)) {
-            diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            if (value !== undefined) {
+              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            }
           }
         } else {
           diagnostics.push('- No model parameters configured');
         }
       } else {
-        diagnostics.push('- Model parameters not available for this provider');
+        // Fallback to legacy provider method
+        if (
+          activeProvider &&
+          'getModelParams' in activeProvider &&
+          typeof activeProvider.getModelParams === 'function'
+        ) {
+          const modelParams = activeProvider.getModelParams();
+          if (modelParams && Object.keys(modelParams).length > 0) {
+            for (const [key, value] of Object.entries(modelParams)) {
+              diagnostics.push(`- ${key}: ${JSON.stringify(value)}`);
+            }
+          } else {
+            diagnostics.push('- No model parameters configured');
+          }
+        } else {
+          diagnostics.push(
+            '- Model parameters not available for this provider',
+          );
+        }
       }
 
       // Add important defaults if not explicitly set

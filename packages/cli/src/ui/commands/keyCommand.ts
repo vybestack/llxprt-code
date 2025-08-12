@@ -29,6 +29,9 @@ export const keyCommand: SlashCommand = {
       };
     }
 
+    const settingsService = config.getSettingsService();
+    const useSettingsService = settingsService !== null;
+
     const providerManager = config.getProviderManager();
     if (!providerManager) {
       return {
@@ -47,7 +50,21 @@ export const keyCommand: SlashCommand = {
       // Clear the API key
       if (activeProvider.setApiKey) {
         activeProvider.setApiKey('');
-        config.setEphemeralSetting('auth-key', undefined);
+
+        if (useSettingsService && settingsService) {
+          // Use SettingsService to update provider settings
+          try {
+            await settingsService.updateSettings(providerName, {
+              apiKey: undefined,
+            });
+          } catch (error) {
+            console.error('SettingsService error, using fallback:', error);
+            config.setEphemeralSetting('auth-key', undefined);
+          }
+        } else {
+          // Fallback to direct ephemeral setting
+          config.setEphemeralSetting('auth-key', undefined);
+        }
 
         // If this is the Gemini provider, we might need to switch auth mode
         const requiresAuthRefresh = providerName === 'gemini';
@@ -78,7 +95,19 @@ export const keyCommand: SlashCommand = {
     // Set the API key
     if (activeProvider.setApiKey) {
       activeProvider.setApiKey(apiKey);
-      config.setEphemeralSetting('auth-key', apiKey);
+
+      if (useSettingsService && settingsService) {
+        // Use SettingsService to update provider settings
+        try {
+          await settingsService.updateSettings(providerName, { apiKey });
+        } catch (error) {
+          console.error('SettingsService error, using fallback:', error);
+          config.setEphemeralSetting('auth-key', apiKey);
+        }
+      } else {
+        // Fallback to direct ephemeral setting
+        config.setEphemeralSetting('auth-key', apiKey);
+      }
 
       // If this is the Gemini provider, we need to refresh auth to use API key mode
       const requiresAuthRefresh = providerName === 'gemini';

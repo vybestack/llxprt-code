@@ -5,6 +5,7 @@
  */
 
 import { Profile } from '../types/modelParams.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -114,23 +115,111 @@ export class ProfileManager {
 
   /**
    * Delete a profile.
-   * @param _profileName The name of the profile to delete
+   * @param profileName The name of the profile to delete
    */
-  async deleteProfile(_profileName: string): Promise<void> {
-    // TODO: Implement delete functionality
-    // 1. Check if profile exists
-    // 2. Delete the file
-    throw new Error('NotYetImplemented');
+  async deleteProfile(profileName: string): Promise<void> {
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('ENOENT')) {
+        throw new Error(`Profile '${profileName}' not found`);
+      }
+      throw error;
+    }
   }
 
   /**
    * Check if a profile exists.
-   * @param _profileName The name of the profile to check
+   * @param profileName The name of the profile to check
    * @returns True if the profile exists
    */
-  async profileExists(_profileName: string): Promise<boolean> {
-    // TODO: Implement existence check
-    // 1. Check if <profilesDir>/<profileName>.json exists
-    throw new Error('NotYetImplemented');
+  async profileExists(profileName: string): Promise<boolean> {
+    const filePath = path.join(this.profilesDir, `${profileName}.json`);
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  /**
+   * Save current settings to a profile through SettingsService
+   * @param profileName The name of the profile to save
+   */
+  async save(profileName: string): Promise<void> {
+    const settingsService = getSettingsService();
+
+    // Use SettingsService to export current settings
+    if (!settingsService.exportForProfile) {
+      throw new Error('SettingsService does not support profile export');
+    }
+    const settingsData = await settingsService.exportForProfile();
+
+    // Convert SettingsService format to Profile format
+    // We need to extract provider/model from the default provider settings
+    const defaultProvider = settingsData.defaultProvider;
+    const providerSettings = settingsData.providers[defaultProvider];
+
+    const profile: Profile = {
+      version: 1,
+      provider: defaultProvider,
+      model: providerSettings?.model || 'default',
+      modelParams: {
+        temperature: providerSettings?.temperature,
+        max_tokens: providerSettings?.maxTokens,
+      },
+      ephemeralSettings: {
+        'base-url': providerSettings?.baseUrl,
+        'auth-key': providerSettings?.apiKey,
+      },
+    };
+
+    // Update current profile name in SettingsService
+    if (settingsService.setCurrentProfileName) {
+      settingsService.setCurrentProfileName(profileName);
+    }
+
+    // Save to file using existing method for consistency
+    await this.saveProfile(profileName, profile);
+  }
+
+  /**
+   * Load a profile and apply through SettingsService
+   * @param profileName The name of the profile to load
+   */
+  async load(profileName: string): Promise<void> {
+    const settingsService = getSettingsService();
+
+    // Load profile from file
+    const profile = await this.loadProfile(profileName);
+
+    // Convert Profile format to SettingsService format
+    const settingsData = {
+      defaultProvider: profile.provider,
+      providers: {
+        [profile.provider]: {
+          enabled: true,
+          model: profile.model,
+          temperature: profile.modelParams.temperature,
+          maxTokens: profile.modelParams.max_tokens,
+          baseUrl: profile.ephemeralSettings['base-url'],
+          apiKey: profile.ephemeralSettings['auth-key'],
+        },
+      },
+    };
+
+    // Update current profile name first
+    if (settingsService.setCurrentProfileName) {
+      settingsService.setCurrentProfileName(profileName);
+    }
+
+    // Apply through SettingsService
+    if (!settingsService.importFromProfile) {
+      throw new Error('SettingsService does not support profile import');
+    }
+    await settingsService.importFromProfile(settingsData);
   }
 }

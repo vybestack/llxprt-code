@@ -70,6 +70,7 @@ import {
   type IdeContext,
   ideContext,
   type IModel,
+  getSettingsService,
 } from '@vybestack/llxprt-code-core';
 import {
   IdeIntegrationNudge,
@@ -259,6 +260,41 @@ const App = (props: AppInternalProps) => {
     setIdeContextState(ideContext.getIdeContext());
     return unsubscribe;
   }, []);
+
+  // Update currentModel when settings change - get it from the SAME place as diagnostics
+  useEffect(() => {
+    const updateModel = async () => {
+      const settingsService = getSettingsService();
+
+      // Try to get from SettingsService first (same as diagnostics does)
+      if (settingsService && settingsService.getDiagnosticsData) {
+        try {
+          const diagnosticsData = await settingsService.getDiagnosticsData();
+          if (diagnosticsData && diagnosticsData.model) {
+            setCurrentModel(diagnosticsData.model);
+            return;
+          }
+        } catch (_error) {
+          // Fall through to config
+        }
+      }
+
+      // Otherwise use config (which is what diagnostics falls back to)
+      setCurrentModel(config.getModel());
+    };
+
+    // Update immediately
+    updateModel();
+
+    // Also listen for any changes if SettingsService is available
+    const settingsService = getSettingsService();
+    if (settingsService) {
+      settingsService.on('settings-changed', updateModel);
+      return () => {
+        settingsService.off('settings-changed', updateModel);
+      };
+    }
+  }, [config]);
 
   useEffect(() => {
     const openDebugConsole = () => {

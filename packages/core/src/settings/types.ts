@@ -1,0 +1,189 @@
+/**
+ * Settings service interfaces and types
+ */
+
+import { IProvider } from '../providers/IProvider.js';
+
+/**
+ * Global settings schema matching the specification
+ */
+export interface GlobalSettings {
+  defaultProvider?: string;
+  providers: Record<string, ProviderSettings>;
+  ui?: UISettings | null;
+  telemetry?: TelemetrySettings;
+  advanced?: AdvancedSettings;
+}
+
+/**
+ * Provider-specific settings
+ */
+export interface ProviderSettings {
+  enabled: boolean;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  toolFormat?:
+    | 'auto'
+    | 'openai'
+    | 'qwen'
+    | 'hermes'
+    | 'xml'
+    | 'anthropic'
+    | 'deepseek'
+    | 'gemma'
+    | 'llama';
+  [key: string]: unknown;
+}
+
+/**
+ * UI-related settings
+ */
+export interface UISettings {
+  theme?: 'light' | 'dark' | 'auto';
+  fontSize?: number;
+  compactMode?: boolean;
+}
+
+/**
+ * Telemetry settings
+ */
+export interface TelemetrySettings {
+  enabled: boolean;
+  level?: 'minimal' | 'standard' | 'detailed';
+}
+
+/**
+ * Advanced settings
+ */
+export interface AdvancedSettings {
+  debug?: boolean;
+  logLevel?: 'error' | 'warn' | 'info' | 'debug';
+  maxRetries?: number;
+  timeout?: number;
+}
+
+/**
+ * Event emitted when settings change
+ */
+export interface SettingsChangeEvent {
+  type: 'settings_changed';
+  changes: Partial<GlobalSettings>;
+  timestamp: Date;
+}
+
+/**
+ * Settings repository interface for persistence layer
+ */
+export interface ISettingsRepository {
+  load(): Promise<GlobalSettings>;
+  save(settings: GlobalSettings): Promise<void>;
+  watch(callback: (settings: GlobalSettings) => void): () => void;
+}
+
+/**
+ * Event listener function type
+ */
+export type EventListener<T = unknown> = (event: T) => void;
+
+/**
+ * Event unsubscribe function type
+ */
+export type EventUnsubscribe = () => void;
+
+/**
+ * Comprehensive diagnostics information from SettingsService
+ */
+export interface DiagnosticsInfo {
+  provider: string;
+  model: string;
+  profile: string | null;
+  providerSettings: ProviderSettings;
+  ephemeralSettings: Record<string, unknown>;
+  modelParams: Record<string, unknown>;
+  allSettings: GlobalSettings;
+}
+
+/**
+ * Settings service interface
+ */
+export interface ISettingsService {
+  /**
+   * Get current global settings
+   */
+  getSettings(): Promise<GlobalSettings>;
+  getSettings(provider: string): Promise<ProviderSettings>;
+
+  /**
+   * Update global settings (partial update)
+   */
+  updateSettings(updates: Partial<GlobalSettings>): Promise<void>;
+  updateSettings(
+    provider: string,
+    updates: Partial<ProviderSettings>,
+  ): Promise<void>;
+
+  /**
+   * Switch to a different provider and update settings
+   */
+  switchProvider(providerId: string): Promise<IProvider>;
+
+  /**
+   * Subscribe to settings change events
+   */
+  onSettingsChanged(
+    listener: EventListener<SettingsChangeEvent>,
+  ): EventUnsubscribe;
+
+  /**
+   * Subscribe to settings change events (legacy method)
+   */
+  on(
+    event: 'settings_changed',
+    listener: EventListener<SettingsChangeEvent>,
+  ): EventUnsubscribe;
+
+  /**
+   * Emit a settings change event
+   */
+  emit(event: 'settings_changed', data: SettingsChangeEvent): void;
+
+  /**
+   * Get comprehensive diagnostics data from centralized source
+   */
+  getDiagnosticsData?(): Promise<DiagnosticsInfo>;
+
+  /**
+   * Export current settings for profile storage
+   */
+  exportForProfile?(): Promise<{
+    defaultProvider: string;
+    providers: Record<string, ProviderSettings>;
+    ui?: UISettings;
+    telemetry?: TelemetrySettings;
+    advanced?: AdvancedSettings;
+  }>;
+
+  /**
+   * Import settings from profile data
+   */
+  importFromProfile?(profileData: {
+    defaultProvider: string;
+    providers: Record<string, ProviderSettings>;
+    ui?: UISettings;
+    telemetry?: TelemetrySettings;
+    advanced?: AdvancedSettings;
+  }): Promise<void>;
+
+  /**
+   * Set the current profile name (for tracking)
+   */
+  setCurrentProfileName?(profileName: string | null): void;
+
+  /**
+   * Get the current profile name
+   */
+  getCurrentProfileName?(): string | null;
+}

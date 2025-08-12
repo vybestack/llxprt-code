@@ -55,6 +55,8 @@ import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
 import { IdeClient } from '../ide/ide-client.js';
 import type { Content } from '@google/genai';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { SettingsService } from '../settings/SettingsService.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig };
@@ -475,6 +477,15 @@ export class Config {
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this);
+
+    // Load ephemeral settings from SettingsService in background
+    // This provides persistence across sessions but doesn't block initialization
+    this.loadEphemeralSettingsFromService().catch((error) => {
+      console.warn(
+        'Failed to load ephemeral settings from SettingsService:',
+        error,
+      );
+    });
   }
 
   async refreshAuth(authMethod: AuthType) {
@@ -939,14 +950,27 @@ export class Config {
   }
 
   getEphemeralSetting(key: string): unknown {
+    // Return from local ephemeral storage immediately for sync access
+    // SettingsService integration happens in background via setEphemeralSetting
     return this.ephemeralSettings[key];
   }
 
   setEphemeralSetting(key: string, value: unknown): void {
+    // Store immediately in local ephemeral storage for synchronous access
     this.ephemeralSettings[key] = value;
+
+    // Queue async update to SettingsService in background
+    // This provides persistence across sessions but doesn't block immediate usage
+    this.setEphemeralInSettingsService(key, value).catch((error) => {
+      // Silently fail - ephemeral storage is the primary source of truth
+      // SettingsService is just for persistence
+      console.warn('SettingsService update failed:', error);
+    });
   }
 
   getEphemeralSettings(): Record<string, unknown> {
+    // Return copy of local ephemeral storage
+    // This ensures immediate availability and prevents external modification
     return { ...this.ephemeralSettings };
   }
 
@@ -974,12 +998,116 @@ export class Config {
     return this.shellReplacement;
   }
 
+  /**
+   * Helper method to set ephemeral setting in SettingsService
+   */
+  private async setEphemeralInSettingsService(
+    key: string,
+    value: unknown,
+  ): Promise<void> {
+    // Queue the async operation
+    return this.queueSettingsUpdate(key, value);
+  }
+
+  /**
+   * Queue async settings updates
+   */
+  private async queueSettingsUpdate(
+    key: string,
+    value: unknown,
+  ): Promise<void> {
+    const settingsService = getSettingsService();
+
+    try {
+      if (this.isProviderSpecificSetting(key) && this.provider) {
+        // Update provider-specific setting
+        await settingsService.updateSettings(this.provider, {
+          [key]: value,
+        });
+      } else {
+        // Update global advanced setting
+        await settingsService.updateSettings({
+          advanced: { [key]: value },
+        });
+      }
+    } catch (error) {
+      // Silently fail - ephemeral storage is the fallback
+      console.warn('Settings update failed:', error);
+    }
+  }
+
+  /**
+   * Check if a setting key is provider-specific
+   */
+  private isProviderSpecificSetting(key: string): boolean {
+    // Settings that are provider-specific according to the compatibility layer design
+    return [
+      'auth-key',
+      'api-key',
+      'base-url',
+      'api-version',
+      'tool-format',
+      'custom-headers',
+      'temperature',
+      'max-tokens',
+      'top-p',
+    ].includes(key);
+  }
+
+  /**
+   * Load ephemeral settings from SettingsService into local storage
+   */
+  private async loadEphemeralSettingsFromService(): Promise<void> {
+    try {
+      const settingsService = getSettingsService();
+      const globalSettings = await settingsService.getSettings();
+
+      // Load advanced settings that might contain ephemeral settings
+      if (globalSettings.advanced) {
+        for (const [key, value] of Object.entries(globalSettings.advanced)) {
+          // Only load if not already set locally (local takes precedence)
+          if (this.ephemeralSettings[key] === undefined) {
+            this.ephemeralSettings[key] = value;
+          }
+        }
+      }
+
+      // Load provider-specific settings if we have a provider
+      if (this.provider) {
+        const providerSettings = await settingsService.getSettings(
+          this.provider,
+        );
+        for (const [key, value] of Object.entries(providerSettings)) {
+          if (
+            this.isProviderSpecificSetting(key) &&
+            this.ephemeralSettings[key] === undefined
+          ) {
+            this.ephemeralSettings[key] = value;
+          }
+        }
+      }
+    } catch (error) {
+      // Silent fail - ephemeral settings work fine without SettingsService
+      console.warn(
+        'Could not load ephemeral settings from SettingsService:',
+        error,
+      );
+    }
+  }
+
   async getGitService(): Promise<GitService> {
     if (!this.gitService) {
       this.gitService = new GitService(this.targetDir);
       await this.gitService.initialize();
     }
     return this.gitService;
+  }
+
+  /**
+   * Get the SettingsService instance
+   */
+  getSettingsService(): SettingsService {
+    return getSettingsService();
   }
 
   async refreshMemory(): Promise<{ memoryContent: string; fileCount: number }> {

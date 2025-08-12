@@ -17,6 +17,7 @@ import {
   AuthPrecedenceConfig,
   OAuthManager,
 } from '../auth/precedence.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -268,4 +269,189 @@ export abstract class BaseProvider implements IProvider {
   getModelParams?(): Record<string, unknown> | undefined {
     return undefined;
   }
+
+  /**
+   * Get setting value from SettingsService
+   */
+  protected async getProviderSetting<T>(
+    key: keyof ProviderSettings,
+    fallback?: T,
+  ): Promise<T | undefined> {
+    const settingsService = getSettingsService();
+
+    try {
+      const settings = await settingsService.getSettings(this.name);
+      return (settings[key] as T) || fallback;
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.error(
+          `Failed to get ${key} from SettingsService for ${this.name}:`,
+          error,
+        );
+      }
+      return fallback;
+    }
+  }
+
+  /**
+   * Set setting value in SettingsService
+   */
+  protected async setProviderSetting<T>(
+    key: keyof ProviderSettings,
+    value: T,
+  ): Promise<void> {
+    const settingsService = getSettingsService();
+
+    try {
+      await settingsService.updateSettings(this.name, {
+        [key]: value,
+      });
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.error(
+          `Failed to set ${key} in SettingsService for ${this.name}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  /**
+   * Get API key from SettingsService if available
+   */
+  protected async getApiKeyFromSettings(): Promise<string | undefined> {
+    return this.getProviderSetting('apiKey');
+  }
+
+  /**
+   * Set API key in SettingsService if available
+   */
+  protected async setApiKeyInSettings(apiKey: string): Promise<void> {
+    await this.setProviderSetting('apiKey', apiKey);
+  }
+
+  /**
+   * Get model from SettingsService if available
+   */
+  protected async getModelFromSettings(): Promise<string | undefined> {
+    return this.getProviderSetting('model');
+  }
+
+  /**
+   * Set model in SettingsService if available
+   */
+  protected async setModelInSettings(model: string): Promise<void> {
+    await this.setProviderSetting('model', model);
+  }
+
+  /**
+   * Get base URL from SettingsService if available
+   */
+  protected async getBaseUrlFromSettings(): Promise<string | undefined> {
+    return this.getProviderSetting('baseUrl');
+  }
+
+  /**
+   * Set base URL in SettingsService if available
+   */
+  protected async setBaseUrlInSettings(baseUrl?: string): Promise<void> {
+    await this.setProviderSetting('baseUrl', baseUrl);
+  }
+
+  /**
+   * Get model parameters from SettingsService
+   */
+  protected async getModelParamsFromSettings(): Promise<
+    Record<string, unknown> | undefined
+  > {
+    const settingsService = getSettingsService();
+
+    try {
+      const settings = await settingsService.getSettings(this.name);
+
+      // Extract model parameters from settings, excluding standard fields
+      const {
+        enabled: _enabled,
+        apiKey: _apiKey,
+        baseUrl: _baseUrl,
+        model: _model,
+        maxTokens,
+        temperature,
+        ...modelParams
+      } = settings;
+
+      // Include temperature and maxTokens as model params if they exist
+      const params: Record<string, unknown> = {};
+      if (temperature !== undefined) params.temperature = temperature;
+      if (maxTokens !== undefined) params.max_tokens = maxTokens;
+
+      return Object.keys(params).length > 0 ||
+        Object.keys(modelParams).length > 0
+        ? { ...params, ...modelParams }
+        : undefined;
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.error(
+          `Failed to get model params from SettingsService for ${this.name}:`,
+          error,
+        );
+      }
+      return undefined;
+    }
+  }
+
+  /**
+   * Set model parameters in SettingsService
+   */
+  protected async setModelParamsInSettings(
+    params: Record<string, unknown> | undefined,
+  ): Promise<void> {
+    const settingsService = getSettingsService();
+
+    try {
+      if (params === undefined) {
+        // Clear model parameters by setting them to undefined
+        await settingsService.updateSettings(this.name, {
+          temperature: undefined,
+          maxTokens: undefined,
+        });
+        return;
+      }
+
+      // Convert standard model params to settings format
+      const updates: Record<string, unknown> = {};
+      if ('temperature' in params) updates.temperature = params.temperature;
+      if ('max_tokens' in params) updates.maxTokens = params.max_tokens;
+      if ('maxTokens' in params) updates.maxTokens = params.maxTokens;
+
+      // Store other parameters as custom fields
+      for (const [key, value] of Object.entries(params)) {
+        if (!['temperature', 'max_tokens', 'maxTokens'].includes(key)) {
+          updates[key] = value;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await settingsService.updateSettings(this.name, updates);
+      }
+    } catch (error) {
+      if (process.env.DEBUG) {
+        console.error(
+          `Failed to set model params in SettingsService for ${this.name}:`,
+          error,
+        );
+      }
+    }
+  }
+}
+
+// Import ProviderSettings type to avoid circular dependency
+interface ProviderSettings {
+  enabled: boolean;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  maxTokens?: number;
+  temperature?: number;
+  [key: string]: unknown;
 }
