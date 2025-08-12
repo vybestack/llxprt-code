@@ -200,7 +200,6 @@ export class WriteFileTool
 
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
-      this.config.getIdeModeFeature() &&
       this.config.getIdeMode() &&
       ideClient &&
       ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected

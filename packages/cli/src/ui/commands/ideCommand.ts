@@ -91,7 +91,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
 }
 
 export const ideCommand = (config: Config | null): SlashCommand | null => {
-  if (!config || !config.getIdeModeFeature()) {
+  if (!config) {
     return null;
   }
   const ideClient = config.getIdeClient();

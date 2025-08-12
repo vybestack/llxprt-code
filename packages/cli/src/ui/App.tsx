@@ -195,7 +195,6 @@ const App = (props: AppInternalProps) => {
     }
   }, [config]);
   const shouldShowIdePrompt =
-    config.getIdeModeFeature() &&
     currentIDE &&
     !config.getIdeMode() &&
     !settings.merged.hasSeenIdeIntegrationNudge &&

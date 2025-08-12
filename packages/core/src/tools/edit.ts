@@ -253,7 +253,6 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     );
     const ideClient = this.config.getIdeClient();
     const ideConfirmation =
-      this.config.getIdeModeFeature() &&
       this.config.getIdeMode() &&
       ideClient?.getConnectionStatus().status === IDEConnectionStatus.Connected
         ? ideClient.openDiff(this.params.file_path, editData.newContent)
