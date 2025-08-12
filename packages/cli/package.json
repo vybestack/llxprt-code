@@ -83,6 +83,7 @@
     "@types/semver": "^7.7.0",
     "@types/shell-quote": "^1.7.5",
     "@types/yargs": "^17.0.33",
+    "@vybestack/llxprt-code-test-utils": "file:../test-utils",
     "dom-accessibility-api": "^0.5.16",
     "ink-testing-library": "^4.0.0",
     "jsdom": "^26.1.0",
@@ -90,8 +91,7 @@
     "pretty-format": "^30.0.2",
     "react-dom": "^19.1.0",
     "typescript": "^5.3.3",
-    "vitest": "^3.1.1",
-    "@vybestack/llxprt-code-test-utils": "file:../test-utils"
+    "vitest": "^3.1.1"
   },
   "engines": {
     "node": ">=20"

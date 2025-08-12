@@ -47,6 +47,10 @@ export function AuthDialog({
       label: 'Qwen (OAuth)',
       value: 'oauth_qwen',
     },
+    {
+      label: 'Anthropic Claude (OAuth)',
+      value: 'oauth_anthropic',
+    },
   ];
 
   // Default to first item (Gemini OAuth)

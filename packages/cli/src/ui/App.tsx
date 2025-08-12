@@ -41,6 +41,7 @@ import { Footer } from './components/Footer.js';
 import { ThemeDialog } from './components/ThemeDialog.js';
 import { AuthDialog } from './components/AuthDialog.js';
 import { AuthInProgress } from './components/AuthInProgress.js';
+import { OAuthCodeDialog } from './components/OAuthCodeDialog.js';
 import { EditorSettingsDialog } from './components/EditorSettingsDialog.js';
 import { FolderTrustDialog } from './components/FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
@@ -169,7 +170,14 @@ interface AppInternalProps extends AppProps {
 }
 
 const App = (props: AppInternalProps) => {
-  const { config, settings, startupWarnings = [], version, appState } = props;
+  const {
+    config,
+    settings,
+    startupWarnings = [],
+    version,
+    appState,
+    appDispatch,
+  } = props;
   const isFocused = useFocus();
   useBracketedPaste();
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
@@ -362,13 +370,12 @@ const App = (props: AppInternalProps) => {
       const error = validateAuthMethod(settings.merged.selectedAuthType);
       if (error) {
         setAuthError(error);
-        openAuthDialog();
+        // Don't automatically open auth dialog - user must use /auth command
       }
     }
   }, [
     settings.merged.selectedAuthType,
     settings.merged.useExternalAuth,
-    openAuthDialog,
     setAuthError,
   ]);
 
@@ -379,6 +386,25 @@ const App = (props: AppInternalProps) => {
       setUserTier(config.getGeminiClient()?.getUserTier());
     }
   }, [config, isAuthenticating]);
+
+  // Check for OAuth code needed flag
+  useEffect(() => {
+    const checkOAuthFlag = setInterval(() => {
+      if (
+        (global as unknown as { __oauth_needs_code?: boolean })
+          .__oauth_needs_code
+      ) {
+        // Clear the flag
+        (
+          global as unknown as { __oauth_needs_code?: boolean }
+        ).__oauth_needs_code = false;
+        // Open the OAuth code dialog
+        appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+      }
+    }, 100); // Check every 100ms
+
+    return () => clearInterval(checkOAuthFlag);
+  }, [appDispatch]);
 
   const {
     isEditorDialogOpen,
@@ -676,14 +702,25 @@ const App = (props: AppInternalProps) => {
 
   const onAuthError = useCallback(() => {
     setAuthError('reauth required');
-    openAuthDialog();
-  }, [openAuthDialog, setAuthError]);
+    // NEVER automatically open auth dialog - user must use /auth
+  }, [setAuthError]);
+
+  const onOAuthCodeNeeded = useCallback(
+    (provider: string) => {
+      // Store provider for the dialog
+      (global as unknown as { __oauth_provider: string }).__oauth_provider =
+        provider;
+      // Open the OAuth code input dialog
+      appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+    },
+    [appDispatch],
+  );
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
     cancelAuthentication();
-    openAuthDialog();
-  }, [setAuthError, cancelAuthentication, openAuthDialog]);
+    // NEVER automatically open auth dialog - user must use /auth
+  }, [setAuthError, cancelAuthentication]);
 
   const handlePrivacyNoticeExit = useCallback(() => {
     setShowPrivacyNotice(false);
@@ -746,6 +783,33 @@ const App = (props: AppInternalProps) => {
     }
   }, [buffer, userMessages]);
 
+  const handleOAuthCodeDialogClose = useCallback(() => {
+    appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+  }, [appDispatch]);
+
+  const handleOAuthCodeSubmit = useCallback(async (code: string) => {
+    const provider = (global as unknown as { __oauth_provider?: string })
+      .__oauth_provider;
+
+    if (provider === 'anthropic') {
+      // Get the OAuth manager from provider manager
+      const { getOAuthManager } = await import(
+        '../providers/providerManagerInstance.js'
+      );
+      const oauthManager = getOAuthManager();
+
+      if (oauthManager) {
+        const anthropicProvider = oauthManager.getProvider('anthropic');
+        if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
+          // This will resolve the promise in initiateAuth
+          (
+            anthropicProvider as { submitAuthCode: (code: string) => void }
+          ).submitAuthCode(code);
+        }
+      }
+    }
+  }, []);
+
   const {
     streamingState,
     submitQuery,
@@ -768,6 +832,7 @@ const App = (props: AppInternalProps) => {
     setModelSwitchedFromQuotaError,
     refreshStatic,
     handleUserCancel,
+    onOAuthCodeNeeded,
   );
 
   // Input handling
@@ -1263,6 +1328,17 @@ const App = (props: AppInternalProps) => {
                 onSelect={handleAuthSelect}
                 settings={settings}
                 initialErrorMessage={authError}
+              />
+            </Box>
+          ) : appState.openDialogs.oauthCode ? (
+            <Box flexDirection="column">
+              <OAuthCodeDialog
+                provider={
+                  (global as unknown as { __oauth_provider?: string })
+                    .__oauth_provider || 'anthropic'
+                }
+                onClose={handleOAuthCodeDialogClose}
+                onSubmit={handleOAuthCodeSubmit}
               />
             </Box>
           ) : isEditorDialogOpen ? (

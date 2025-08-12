@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Stream } from '@anthropic-ai/sdk/streaming';
-import { IProvider } from '../IProvider.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
@@ -8,14 +8,14 @@ import { retryWithBackoff } from '../../utils/retry.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
+import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
-export class AnthropicProvider implements IProvider {
-  name: string = 'anthropic';
+export class AnthropicProvider extends BaseProvider {
   private anthropic: Anthropic;
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
-  private apiKey: string;
   private baseURL?: string;
   private config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-latest'; // Default model using latest alias
@@ -45,13 +45,31 @@ export class AnthropicProvider implements IProvider {
     { pattern: /claude-.*3.*haiku/i, tokens: 4096 },
   ];
 
-  constructor(apiKey: string, baseURL?: string, config?: IProviderConfig) {
-    this.apiKey = apiKey;
+  constructor(
+    apiKey?: string,
+    baseURL?: string,
+    config?: IProviderConfig,
+    oauthManager?: OAuthManager,
+  ) {
+    // Initialize base provider with auth configuration
+    const baseConfig: BaseProviderConfig = {
+      name: 'anthropic',
+      apiKey,
+      baseURL,
+      cliKey: !apiKey || apiKey === '' ? undefined : apiKey,
+      envKeyNames: ['ANTHROPIC_API_KEY'],
+      isOAuthEnabled: !!oauthManager,
+      oauthProvider: oauthManager ? 'anthropic' : undefined,
+      oauthManager,
+    };
+
+    super(baseConfig);
+
     this.baseURL = baseURL;
     this.config = config;
 
     this.anthropic = new Anthropic({
-      apiKey: apiKey || '',
+      apiKey: apiKey || '', // Empty string if OAuth will be used
       baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -59,13 +77,93 @@ export class AnthropicProvider implements IProvider {
     this.toolFormatter = new ToolFormatter();
   }
 
+  /**
+   * Implementation of BaseProvider abstract method
+   * Determines if this provider supports OAuth authentication
+   */
+  protected supportsOAuth(): boolean {
+    // Anthropic supports OAuth authentication
+    return true;
+  }
+
+  /**
+   * Update the Anthropic client with resolved authentication if needed
+   */
+  private async updateClientWithResolvedAuth(): Promise<void> {
+    const resolvedToken = await this.getAuthToken();
+    if (!resolvedToken) {
+      throw new Error('No authentication available for Anthropic API calls');
+    }
+
+    // Check if this is an OAuth token (starts with sk-ant-oat)
+    const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
+
+    if (isOAuthToken) {
+      // For OAuth tokens, use authToken field which sends Bearer token
+      // Don't pass apiKey at all - just authToken
+      const oauthConfig: Record<string, unknown> = {
+        authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
+        baseURL: this.baseURL,
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: {
+          'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
+        },
+      };
+
+      this.anthropic = new Anthropic(oauthConfig as ClientOptions);
+    } else {
+      // Regular API key auth
+      if (this.anthropic.apiKey !== resolvedToken) {
+        this.anthropic = new Anthropic({
+          apiKey: resolvedToken,
+          baseURL: this.baseURL,
+          dangerouslyAllowBrowser: true,
+        });
+      }
+    }
+  }
+
   async getModels(): Promise<IModel[]> {
-    if (!this.apiKey || this.apiKey.trim() === '') {
-      throw new Error('Anthropic API key is required to fetch models');
+    const authToken = await this.getAuthToken();
+    if (!authToken) {
+      // Return empty array if no auth - models aren't critical for operation
+      console.warn('No authentication available for fetching Anthropic models');
+      return [];
+    }
+
+    // Update client with resolved auth (handles OAuth vs API key)
+    await this.updateClientWithResolvedAuth();
+
+    // Check if using OAuth - the models.list endpoint doesn't work with OAuth tokens
+    const isOAuthToken = authToken.startsWith('sk-ant-oat');
+
+    if (isOAuthToken) {
+      // For OAuth, return only the two working models
+      console.log(
+        '[OAuth] Using hardcoded model list for OAuth authentication',
+      );
+      return [
+        {
+          id: 'claude-opus-4-1-20250805',
+          name: 'Claude Opus 4.1',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 500000,
+          maxOutputTokens: 32000,
+        },
+        {
+          id: 'claude-sonnet-4-20250514',
+          name: 'Claude Sonnet 4',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 400000,
+          maxOutputTokens: 64000,
+        },
+      ];
     }
 
     try {
-      // Fetch models from Anthropic API (beta endpoint)
+      // Fetch models from Anthropic API (beta endpoint) - only for API keys
       const models: IModel[] = [];
 
       // Handle pagination
@@ -109,18 +207,22 @@ export class AnthropicProvider implements IProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
-    if (!this.apiKey || this.apiKey.trim() === '') {
+    const authToken = await this.getAuthToken();
+    if (!authToken) {
       throw new Error(
-        'Anthropic API key is required to generate chat completions',
+        'Authentication required to generate Anthropic chat completions',
       );
     }
+
+    // Update Anthropic client with resolved authentication if needed
+    await this.updateClientWithResolvedAuth();
 
     let attemptCount = 0;
 
     const apiCall = async () => {
       attemptCount++;
 
-      // Resolve model if it uses -latest placeholder
+      // Resolve model if it uses -latest alias
       const resolvedModel = await this.resolveLatestModel(this.currentModel);
 
       // Validate and fix message history to prevent tool_use/tool_result mismatches
@@ -210,7 +312,14 @@ export class AnthropicProvider implements IProvider {
       };
 
       // Add system message as top-level parameter if present
-      if (systemMessage) {
+      // For OAuth, just send Claude Code spoof
+      const authToken = await this.getAuthToken();
+      const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
+
+      if (isOAuth) {
+        createOptions.system =
+          "You are Claude Code, Anthropic's official CLI for Claude.";
+      } else if (systemMessage) {
         createOptions.system = systemMessage;
       }
 
@@ -351,7 +460,9 @@ export class AnthropicProvider implements IProvider {
   }
 
   setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
+    // Call base provider implementation
+    super.setApiKey?.(apiKey);
+
     // Create a new Anthropic client with the updated API key
     this.anthropic = new Anthropic({
       apiKey,
@@ -363,9 +474,14 @@ export class AnthropicProvider implements IProvider {
   setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+
+    // Call base provider implementation
+    super.setBaseUrl?.(baseUrl);
+
     // Create a new Anthropic client with the updated (or cleared) base URL
+    // Will be updated with actual token in updateClientWithResolvedAuth
     this.anthropic = new Anthropic({
-      apiKey: this.apiKey,
+      apiKey: '', // Empty string, will be replaced when auth is resolved
       baseURL: this.baseURL,
       dangerouslyAllowBrowser: true,
     });
@@ -458,20 +574,35 @@ export class AnthropicProvider implements IProvider {
       }
     }
 
-    // Fetch fresh models
-    const models = await this.getModels();
-    this.modelCache = { models, timestamp: now };
+    try {
+      // Ensure client has proper auth before calling getModels
+      await this.updateClientWithResolvedAuth();
 
-    // Find the real model for this latest alias
-    const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
-    const realModel = models
-      .filter(
-        (m) =>
-          m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'),
-      )
-      .sort((a, b) => b.id.localeCompare(a.id))[0];
+      // Fetch fresh models
+      const models = await this.getModels();
+      this.modelCache = { models, timestamp: now };
 
-    return realModel ? realModel.id : modelId;
+      // Find the real model for this latest alias
+      const tier = modelId.includes('opus') ? 'opus' : 'sonnet';
+      const realModel = models
+        .filter(
+          (m) =>
+            m.id.startsWith(`claude-${tier}-4-`) && !m.id.endsWith('-latest'),
+        )
+        .sort((a, b) => b.id.localeCompare(a.id))[0];
+
+      return realModel ? realModel.id : modelId;
+    } catch (_error) {
+      // If we can't fetch models, just use simple fallback like Claude Code does
+      console.log(
+        'Failed to fetch models for latest resolution, using fallback',
+      );
+      if (modelId.includes('opus')) {
+        return 'opus';
+      } else {
+        return 'sonnet'; // Default to sonnet like Claude Code
+      }
+    }
   }
 
   private getMaxTokensForModel(modelId: string): number {
@@ -613,7 +744,7 @@ export class AnthropicProvider implements IProvider {
   }
 
   /**
-   * Anthropic always requires payment (API key)
+   * Anthropic always requires payment (API key or OAuth)
    */
   isPaidMode(): boolean {
     return true;
@@ -655,5 +786,13 @@ export class AnthropicProvider implements IProvider {
    */
   getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
+  }
+
+  /**
+   * Check if the provider is authenticated using any available method
+   * Uses the base provider's isAuthenticated implementation
+   */
+  async isAuthenticated(): Promise<boolean> {
+    return super.isAuthenticated();
   }
 }

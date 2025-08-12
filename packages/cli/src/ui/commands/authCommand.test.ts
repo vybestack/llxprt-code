@@ -448,7 +448,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const { authCommand } = await import('./authCommand.js');
       expect(authCommand.name).toBe('auth');
       expect(authCommand.description).toBe(
-        'toggle OAuth enablement for providers (gemini, qwen)',
+        'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
       );
     });
   });

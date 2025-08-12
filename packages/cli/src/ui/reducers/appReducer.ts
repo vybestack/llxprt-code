@@ -21,7 +21,8 @@ export type AppAction =
         | 'provider'
         | 'privacy'
         | 'loadProfile'
-        | 'tools';
+        | 'tools'
+        | 'oauthCode';
     }
   | {
       type: 'CLOSE_DIALOG';
@@ -33,7 +34,8 @@ export type AppAction =
         | 'provider'
         | 'privacy'
         | 'loadProfile'
-        | 'tools';
+        | 'tools'
+        | 'oauthCode';
     }
   | { type: 'SET_WARNING'; payload: { key: string; message: string } }
   | { type: 'CLEAR_WARNING'; payload: string }
@@ -51,6 +53,7 @@ export interface AppState {
     privacy: boolean;
     loadProfile: boolean;
     tools: boolean;
+    oauthCode: boolean;
   };
   warnings: Map<string, string>;
   errors: {
@@ -74,6 +77,7 @@ export const initialAppState: AppState = {
     privacy: false,
     loadProfile: false,
     tools: false,
+    oauthCode: false,
   },
   warnings: new Map(),
   errors: {

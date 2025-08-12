@@ -16,6 +16,7 @@ import { OAuthManager } from '../../auth/oauth-manager.js';
 import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
 import { QwenOAuthProvider } from '../../auth/qwen-oauth-provider.js';
 import { GeminiOAuthProvider } from '../../auth/gemini-oauth-provider.js';
+import { AnthropicOAuthProvider } from '../../auth/anthropic-oauth-provider.js';
 
 export class AuthCommandExecutor {
   constructor(private oauthManager: OAuthManager) {}
@@ -190,7 +191,8 @@ export class AuthCommandExecutor {
 
 export const authCommand: SlashCommand = {
   name: 'auth',
-  description: 'toggle OAuth enablement for providers (gemini, qwen)',
+  description:
+    'toggle OAuth enablement for providers (gemini, qwen, anthropic)',
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
     // Initialize OAuth manager with token store and settings
@@ -203,6 +205,7 @@ export const authCommand: SlashCommand = {
     // Register OAuth providers
     oauthManager.registerProvider(new GeminiOAuthProvider());
     oauthManager.registerProvider(new QwenOAuthProvider());
+    oauthManager.registerProvider(new AnthropicOAuthProvider());
 
     const executor = new AuthCommandExecutor(oauthManager);
     return executor.execute(context, args);

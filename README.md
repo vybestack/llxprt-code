@@ -89,7 +89,26 @@ Direct access to o3, o1, GPT-4.1, and other OpenAI models:
 
 ### Using Anthropic
 
-Access Claude Sonnet 4, Claude Opus 4, and other Anthropic models:
+Access Claude Sonnet 4, Claude Opus 4.1, and other Anthropic models:
+
+#### Option 1: Log in with Anthropic to use your Claude Pro or Max account
+
+Use OAuth authentication to access Claude with your existing Claude Pro or Max subscription:
+
+1. Select the Anthropic provider:
+   ```
+   /provider anthropic
+   ```
+2. Authenticate with your Claude account:
+   ```
+   /auth
+   ```
+3. Your browser will open to the Claude authentication page
+4. Log in and authorize LLxprt Code
+5. Copy the authorization code shown and paste it back in the terminal
+6. You're now using your Claude Pro/Max account!
+
+#### Option 2: Use an API Key
 
 1. Get your API key from [Anthropic](https://console.anthropic.com/account/keys)
 2. Configure:
@@ -97,6 +116,32 @@ Access Claude Sonnet 4, Claude Opus 4, and other Anthropic models:
    /provider anthropic
    /key sk-ant-your-key-here
    /model claude-sonnet-4-20250115
+   ```
+
+### Using Qwen
+
+Access Qwen3-Coder-Pro and other Qwen models for free:
+
+#### Option 1: Log in with Qwen (FREE)
+
+Use OAuth authentication to access Qwen with your free account:
+
+```
+/auth qwen
+```
+
+Your browser will open to the Qwen authentication page. Log in and authorize LLxprt Code, then copy the authorization code shown and paste it back in the terminal. You're now using Qwen3-Coder-Pro for free!
+
+#### Option 2: Use an API Key
+
+For advanced users who need API access:
+
+1. Get your API key from [Qwen](https://platform.qwen.ai/)
+2. Configure:
+   ```
+   /provider qwen
+   /key your-qwen-api-key
+   /model qwen3-coder-pro
    ```
 
 ### Using Local Models
@@ -279,7 +324,7 @@ Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
 - `/baseurl` - Set custom API endpoint
 - `/key` - Set API key for current session
 - `/keyfile` - Load API key from file
-- `/auth` - Authenticate with Google (for Gemini provider)
+- `/auth` - Authenticate with Google (for Gemini), Anthropic (for Claude), or Qwen
 
 ### Troubleshooting
 

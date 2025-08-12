@@ -87,11 +87,12 @@ export const useAuthCommand = (
 
         console.log(`Authenticated via "${authType}".`);
       } catch (e) {
+        const errorMessage = getErrorMessage(e);
         appDispatch({
           type: 'SET_AUTH_ERROR',
-          payload: `Failed to login. Message: ${getErrorMessage(e)}`,
+          payload: `Failed to login. Message: ${errorMessage}`,
         });
-        openAuthDialog();
+        // NEVER automatically open auth dialog - user must use /auth command
       } finally {
         setIsAuthenticating(false);
       }
@@ -105,18 +106,53 @@ export const useAuthCommand = (
       // Handle OAuth provider selections
       if (
         authType === AuthType.OAUTH_GEMINI ||
-        authType === AuthType.OAUTH_QWEN
+        authType === AuthType.OAUTH_QWEN ||
+        authType === AuthType.OAUTH_ANTHROPIC
       ) {
-        // Close the dialog
+        // Trigger the OAuth flow directly
+        let provider: string;
+        if (authType === AuthType.OAUTH_GEMINI) {
+          provider = 'gemini';
+        } else if (authType === AuthType.OAUTH_QWEN) {
+          provider = 'qwen';
+        } else {
+          provider = 'anthropic';
+        }
+
+        // Close the dialog first
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
         appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
 
-        // Trigger the OAuth flow via the /auth command
-        const provider = authType === AuthType.OAUTH_GEMINI ? 'gemini' : 'qwen';
-        console.log(`Starting OAuth authentication for ${provider}...`);
-        console.log(`Please run: /auth ${provider}`);
+        // Get the existing OAuth manager from provider manager
+        const { getOAuthManager } = await import(
+          '../../providers/providerManagerInstance.js'
+        );
+        const oauthManager = getOAuthManager();
 
-        // TODO: Directly trigger OAuth flow here instead of requiring /auth command
+        if (!oauthManager) {
+          console.error('OAuth manager not initialized');
+          appDispatch({
+            type: 'SET_AUTH_ERROR',
+            payload:
+              'OAuth system not initialized. Please restart the application.',
+          });
+          return;
+        }
+
+        // Trigger authentication
+        try {
+          await oauthManager.authenticate(provider);
+          console.log(`Successfully authenticated with ${provider}!`);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          console.error(`Authentication failed: ${errorMessage}`);
+          appDispatch({
+            type: 'SET_AUTH_ERROR',
+            payload: `Failed to authenticate with ${provider}: ${errorMessage}`,
+          });
+        }
+
         return;
       }
 

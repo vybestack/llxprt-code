@@ -50,11 +50,13 @@ export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
 export * from './utils/filesearch/fileSearch.js';
+export * from './utils/secure-browser-launcher.js';
 
 // Export auth system
 export * from './auth/token-store.js';
 export * from './auth/types.js';
 export * from './auth/qwen-device-flow.js';
+export * from './auth/anthropic-device-flow.js';
 
 // Export services
 export * from './services/fileDiscoveryService.js';
