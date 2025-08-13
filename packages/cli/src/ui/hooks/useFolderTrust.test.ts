@@ -7,7 +7,7 @@
 import { vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useFolderTrust } from './useFolderTrust.js';
-import { type Config } from '@google/gemini-cli-core';
+import { type Config } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {

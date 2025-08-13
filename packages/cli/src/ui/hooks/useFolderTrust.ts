@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { type Config } from '@google/gemini-cli-core';
+import { type Config } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import { loadTrustedFolders, TrustLevel } from '../../config/trustedFolders.js';
