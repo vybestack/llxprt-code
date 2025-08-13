@@ -5,7 +5,7 @@
  */
 
 import { Type } from '@google/genai';
-import { BaseTool, ToolResult, Icon } from './tools.js';
+import { BaseTool, ToolResult, Kind } from './tools.js';
 import { Todo, TodoArraySchema } from './todo-schemas.js';
 import { TodoStore } from './todo-store.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
@@ -25,7 +25,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
       TodoWrite.Name,
       'TodoWrite',
       'Create and manage a structured task list for the current coding session. Updates the entire todo list.',
-      Icon.LightBulb,
+      Kind.Think,
       {
         type: Type.OBJECT,
         properties: {

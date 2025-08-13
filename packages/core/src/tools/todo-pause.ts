@@ -5,7 +5,7 @@
  */
 
 import { Type } from '@google/genai';
-import { BaseTool, ToolResult, Icon } from './tools.js';
+import { BaseTool, ToolResult, Kind } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 
 export interface TodoPauseParams {
@@ -29,7 +29,7 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
         'DO NOT use this tool for normal task completion (use todo_write to update status instead), ' +
         'requesting clarification (continue with your best understanding), or minor issues that can be worked around. ' +
         'The reason should clearly explain what specific issue is preventing progress.',
-      Icon.LightBulb,
+      Kind.Think,
       {
         type: Type.OBJECT,
         properties: {

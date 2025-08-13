@@ -91,6 +91,7 @@ import { useTextBuffer } from './components/shared/text-buffer.js';
 import { useVimMode, VimModeProvider } from './contexts/VimModeContext.js';
 import { useVim } from './hooks/vim.js';
 import { useKeypress, Key } from './hooks/useKeypress.js';
+import { useKittyKeyboardProtocol } from './hooks/useKittyKeyboardProtocol.js';
 import { keyMatchers, Command } from './keyMatchers.js';
 import * as fs from 'fs';
 import {
@@ -888,6 +889,7 @@ const App = (props: AppInternalProps) => {
   const { elapsedTime, currentLoadingPhrase } =
     useLoadingIndicator(streamingState);
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config });
+  const kittyProtocolStatus = useKittyKeyboardProtocol();
 
   const handleExit = useCallback(
     (
@@ -984,7 +986,11 @@ const App = (props: AppInternalProps) => {
     ],
   );
 
-  useKeypress(handleGlobalKeypress, { isActive: true });
+  useKeypress(handleGlobalKeypress, {
+    isActive: true,
+    kittyProtocolEnabled: kittyProtocolStatus.enabled,
+    config,
+  });
 
   useEffect(() => {
     if (config) {
