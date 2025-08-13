@@ -149,7 +149,7 @@ export async function runNonInteractive(
         process.stdout.write('\n'); // Ensure a final newline
         // Ensure telemetry is flushed before exiting
         if (isTelemetrySdkInitialized()) {
-          await shutdownTelemetry();
+          await shutdownTelemetry(config);
         }
         return;
       }
