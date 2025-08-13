@@ -354,8 +354,10 @@ const App = (props: AppInternalProps) => {
   const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
     useSettingsCommand();
 
-  const { isFolderTrustDialogOpen, handleFolderTrustSelect } =
-    useFolderTrust(settings);
+  const { isFolderTrustDialogOpen, handleFolderTrustSelect } = useFolderTrust(
+    settings,
+    config,
+  );
 
   const {
     isAuthDialogOpen,

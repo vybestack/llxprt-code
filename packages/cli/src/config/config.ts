@@ -38,6 +38,8 @@ import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
 
+import { isWorkspaceTrusted } from './trustedFolders.js';
+
 const LLXPRT_DIR = '.llxprt';
 
 // Simple console logger for now - replace with actual logger if available
@@ -536,8 +538,9 @@ export async function loadCliConfig(
   const ideClient = IdeClient.getInstance(ideMode && ideModeFeature);
 
   const folderTrustFeature = settings.folderTrustFeature ?? false;
-  const folderTrustSetting = settings.folderTrust ?? false;
+  const folderTrustSetting = settings.folderTrust ?? true;
   const folderTrust = folderTrustFeature && folderTrustSetting;
+  const trustedFolder = folderTrust ? isWorkspaceTrusted() : true;
 
   const allExtensions = annotateActiveExtensions(
     extensions,
@@ -788,6 +791,7 @@ export async function loadCliConfig(
     folderTrustFeature,
     interactive,
     folderTrust,
+    trustedFolder,
     shellReplacement: effectiveSettings.shellReplacement,
   });
 
