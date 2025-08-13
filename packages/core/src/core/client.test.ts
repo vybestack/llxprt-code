@@ -1996,4 +1996,144 @@ ${JSON.stringify(
       expect(models).toEqual([]);
     });
   });
+
+  describe('setHistory', () => {
+    it('should strip thought signatures when stripThoughts is true', async () => {
+      const mockChat = {
+        setHistory: vi.fn(),
+      };
+      client['chat'] = mockChat as unknown as GeminiChat;
+
+      const historyWithThoughts: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'hello' }],
+        },
+        {
+          role: 'model',
+          parts: [
+            { text: 'thinking...', thoughtSignature: 'thought-123' },
+            {
+              functionCall: { name: 'test', args: {} },
+              thoughtSignature: 'thought-456',
+            },
+          ],
+        },
+      ];
+
+      await client.setHistory(historyWithThoughts, { stripThoughts: true });
+
+      const expectedHistory: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'hello' }],
+        },
+        {
+          role: 'model',
+          parts: [
+            { text: 'thinking...' },
+            { functionCall: { name: 'test', args: {} } },
+          ],
+        },
+      ];
+
+      expect(mockChat.setHistory).toHaveBeenCalledWith(expectedHistory);
+    });
+
+    it('should not strip thought signatures when stripThoughts is false', async () => {
+      const mockChat = {
+        setHistory: vi.fn(),
+      };
+      client['chat'] = mockChat as unknown as GeminiChat;
+
+      const historyWithThoughts: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'hello' }],
+        },
+        {
+          role: 'model',
+          parts: [
+            { text: 'thinking...', thoughtSignature: 'thought-123' },
+            { text: 'ok', thoughtSignature: 'thought-456' },
+          ],
+        },
+      ];
+
+      await client.setHistory(historyWithThoughts, { stripThoughts: false });
+
+      expect(mockChat.setHistory).toHaveBeenCalledWith(historyWithThoughts);
+    });
+
+    it('should store history for later use when chat is not initialized', async () => {
+      // Arrange
+      client['chat'] = undefined; // Chat not initialized
+      const mockHasChatInitialized = vi.spyOn(client, 'hasChatInitialized').mockReturnValue(false);
+
+      const history: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'hello' }],
+        },
+      ];
+
+      // Act
+      await client.setHistory(history);
+
+      // Assert
+      expect(mockHasChatInitialized).toHaveBeenCalled();
+      expect(client['_previousHistory']).toEqual(history);
+      expect(client['forceFullIdeContext']).toBe(true);
+    });
+
+    it('should update chat immediately when chat is initialized', async () => {
+      // Arrange
+      const mockChat = {
+        setHistory: vi.fn(),
+      };
+      client['chat'] = mockChat as unknown as GeminiChat;
+      const mockHasChatInitialized = vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
+
+      const history: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'hello' }],
+        },
+      ];
+
+      // Act
+      await client.setHistory(history);
+
+      // Assert
+      expect(mockHasChatInitialized).toHaveBeenCalled();
+      expect(mockChat.setHistory).toHaveBeenCalledWith(history);
+      expect(client['_previousHistory']).toEqual(history);
+      expect(client['forceFullIdeContext']).toBe(true);
+    });
+
+    it('should reset IDE context tracking when history changes', async () => {
+      // Arrange
+      const mockChat = {
+        setHistory: vi.fn(),
+      };
+      client['chat'] = mockChat as unknown as GeminiChat;
+      vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
+
+      const history: Content[] = [
+        {
+          role: 'user',
+          parts: [{ text: 'hello' }],
+        },
+      ];
+
+      // Initialize forceFullIdeContext to false to test that it gets reset to true
+      client['forceFullIdeContext'] = false;
+
+      // Act
+      await client.setHistory(history);
+
+      // Assert
+      expect(client['forceFullIdeContext']).toBe(true);
+    });
+  });
 });

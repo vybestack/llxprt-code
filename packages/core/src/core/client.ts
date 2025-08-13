@@ -270,13 +270,38 @@ export class GeminiClient {
     return [];
   }
 
-  async setHistory(history: Content[]): Promise<void> {
+  async setHistory(
+    history: Content[],
+    { stripThoughts = false }: { stripThoughts?: boolean } = {},
+  ): Promise<void> {
+    const historyToSet = stripThoughts
+      ? history.map((content) => {
+          const newContent = { ...content };
+          if (newContent.parts) {
+            newContent.parts = newContent.parts.map((part) => {
+              if (
+                part &&
+                typeof part === 'object' &&
+                'thoughtSignature' in part
+              ) {
+                const newPart = { ...part };
+                delete (newPart as { thoughtSignature?: string })
+                  .thoughtSignature;
+                return newPart;
+              }
+              return part;
+            });
+          }
+          return newContent;
+        })
+      : history;
+
     // Store the history for later use
-    this._previousHistory = history;
+    this._previousHistory = historyToSet;
 
     // If chat is already initialized, update it immediately
     if (this.hasChatInitialized()) {
-      this.getChat().setHistory(history);
+      this.getChat().setHistory(historyToSet);
     }
     // Otherwise, the history will be used when the chat is initialized
 
