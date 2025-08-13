@@ -91,11 +91,11 @@ export async function parseArguments(): Promise<CliArgs> {
     .command('$0', 'Launch Gemini CLI', (yargsInstance) =>
       yargsInstance
         .option('model', {
-      alias: 'm',
-      type: 'string',
-      description: `Model`,
-      // Don't set default here, handle it in loadCliConfig
-    })
+          alias: 'm',
+          type: 'string',
+          description: `Model`,
+          // Don't set default here, handle it in loadCliConfig
+        })
         .option('prompt', {
           alias: 'p',
           type: 'string',
@@ -366,7 +366,7 @@ export async function parseArguments(): Promise<CliArgs> {
 
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
-  
+
   // Map camelCase names to match CliArgs interface
   const cliArgs: CliArgs = {
     model: result.model as string | undefined,
@@ -399,9 +399,10 @@ export async function parseArguments(): Promise<CliArgs> {
     proxy: result.proxy as string | undefined,
     includeDirectories: result.includeDirectories as string[] | undefined,
     profileLoad: result.profileLoad as string | undefined,
-    loadMemoryFromIncludeDirectories: result.loadMemoryFromIncludeDirectories as boolean | undefined,
+    loadMemoryFromIncludeDirectories:
+      result.loadMemoryFromIncludeDirectories as boolean | undefined,
   };
-  
+
   return cliArgs;
 }
 
