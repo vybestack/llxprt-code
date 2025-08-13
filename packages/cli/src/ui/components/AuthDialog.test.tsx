@@ -266,7 +266,7 @@ describe('AuthDialog', () => {
     });
   });
 
-  it('should prevent exiting when no auth method is selected and show error message', async () => {
+  it('should close dialog when ESC is pressed', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -288,7 +288,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { lastFrame, stdin, unmount } = render(
+    const { stdin, unmount } = render(
       <AuthDialog onSelect={onSelect} settings={settings} />,
     );
     await wait();
@@ -297,15 +297,12 @@ describe('AuthDialog', () => {
     stdin.write('\u001b'); // ESC key
     await wait();
 
-    // Should show error message instead of calling onSelect
-    expect(lastFrame()).toContain(
-      'You must select an auth method to proceed. Press Ctrl+C twice to exit.',
-    );
-    expect(onSelect).not.toHaveBeenCalled();
+    // Should call onSelect with undefined to close the dialog
+    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
     unmount();
   });
 
-  it('should not exit if there is already an error message', async () => {
+  it('should close dialog even with an error message when ESC is pressed', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -342,8 +339,8 @@ describe('AuthDialog', () => {
     stdin.write('\u001b'); // ESC key
     await wait();
 
-    // Should not call onSelect
-    expect(onSelect).not.toHaveBeenCalled();
+    // Should call onSelect with undefined to close the dialog
+    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
     unmount();
   });
 

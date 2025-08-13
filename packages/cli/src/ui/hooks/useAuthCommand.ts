@@ -6,15 +6,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
-import {
-  AuthType,
-  Config,
-  clearCachedCredentialFile,
-  getErrorMessage,
-} from '@vybestack/llxprt-code-core';
+import { AuthType, Config, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
-import { runExitCleanup } from '../../utils/cleanup.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 export const useAuthCommand = (
@@ -110,12 +104,12 @@ export const useAuthCommand = (
         appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
         return;
       }
-      
+
       // Save the selected auth type - NO OAuth flow triggering
       settings.setValue(scope, 'selectedAuthType', authType);
       // Don't close dialog - let user continue toggling providers
     },
-    [settings, appDispatch, config],
+    [settings, appDispatch],
   );
 
   const cancelAuthentication = useCallback(() => {

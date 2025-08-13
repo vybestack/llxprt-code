@@ -545,22 +545,42 @@ export const useGeminiStream = (
         addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         setPendingHistoryItem(null);
       }
+
+      const errorText = parseAndFormatApiError(
+        eventValue.error,
+        config.getContentGeneratorConfig()?.authType,
+        undefined,
+        config.getModel(),
+        DEFAULT_GEMINI_FLASH_MODEL,
+      );
+
+      // Check if this is an authentication error that should trigger onAuthError
+      // Match various authentication error patterns from different providers
+      if (
+        errorText.includes('Failed to resolve authentication') ||
+        errorText.includes('Authentication required')
+      ) {
+        // Call the onAuthError callback which will be handled by App.tsx
+        onAuthError();
+      }
+
       addItem(
         {
           type: MessageType.ERROR,
-          text: parseAndFormatApiError(
-            eventValue.error,
-            config.getContentGeneratorConfig()?.authType,
-            undefined,
-            config.getModel(),
-            DEFAULT_GEMINI_FLASH_MODEL,
-          ),
+          text: errorText,
         },
         userMessageTimestamp,
       );
       setThought(null); // Reset thought when there's an error
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought],
+    [
+      addItem,
+      pendingHistoryItemRef,
+      setPendingHistoryItem,
+      config,
+      setThought,
+      onAuthError,
+    ],
   );
 
   const handleFinishedEvent = useCallback(

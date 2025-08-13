@@ -702,8 +702,9 @@ const App = (props: AppInternalProps) => {
 
   const onAuthError = useCallback(() => {
     setAuthError('reauth required');
-    // NEVER automatically open auth dialog - user must use /auth
-  }, [setAuthError]);
+    // Open the auth dialog when authentication errors occur
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
+  }, [setAuthError, appDispatch]);
 
   const onOAuthCodeNeeded = useCallback(
     (provider: string) => {

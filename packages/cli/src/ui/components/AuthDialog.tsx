@@ -38,7 +38,7 @@ export function AuthDialog({
   const [errorMessage, setErrorMessage] = useState<string | null>(
     initialErrorMessage || null,
   );
-  
+
   // Track enabled providers from settings (oauthEnabledProviders is an object)
   const [enabledProviders, setEnabledProviders] = useState<Set<string>>(() => {
     const oauthProviders = settings.merged.oauthEnabledProviders || {};
@@ -50,7 +50,7 @@ export function AuthDialog({
     }
     return enabled;
   });
-  
+
   const items = [
     {
       label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
@@ -78,27 +78,27 @@ export function AuthDialog({
   const handleAuthSelect = useCallback(
     async (authMethod: string) => {
       setErrorMessage(null);
-      
+
       // Handle Close option
       if (authMethod === 'close') {
         onSelect(undefined, SettingScope.User);
         return;
       }
-      
+
       // Map oauth_gemini -> gemini, etc.
       const providerName = authMethod.replace('oauth_', '');
-      
+
       // Use the actual oauthManager to toggle the provider
       // This will call the same code as /auth gemini enable/disable
       const { getOAuthManager } = await import(
         '../../providers/providerManagerInstance.js'
       );
       const oauthManager = getOAuthManager();
-      
+
       if (oauthManager) {
         try {
           await oauthManager.toggleOAuthEnabled(providerName);
-          
+
           // Update local state to reflect the change
           const newEnabledProviders = new Set(enabledProviders);
           if (newEnabledProviders.has(authMethod)) {
@@ -111,7 +111,7 @@ export function AuthDialog({
           setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
         }
       }
-      
+
       // Don't close the dialog - let user continue toggling
     },
     [onSelect, enabledProviders],

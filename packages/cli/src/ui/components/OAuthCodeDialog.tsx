@@ -39,31 +39,29 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         return;
       }
 
-      // Handle backspace
-      if (key.name === 'backspace') {
-        setCode((prev) => prev.slice(0, -1));
+      // Handle clear (allow clearing the field with Cmd+K or Ctrl+L)
+      if ((key.ctrl && key.name === 'l') || (key.meta && key.name === 'k')) {
+        setCode('');
         return;
       }
 
-      // Handle paste - the useKeypress hook properly handles bracketed paste
+      // ONLY accept pasted input - ignore ALL typed characters
       if (key.paste && key.sequence) {
         // The sequence already has the paste content without escape codes
         // Just filter to only allow valid OAuth code characters
         const cleanInput = key.sequence.replace(/[^a-zA-Z0-9\-_#]/g, '');
         if (cleanInput) {
-          setCode((prev) => prev + cleanInput);
+          // Replace the entire code with the pasted content (don't append)
+          setCode(cleanInput);
         }
         return;
       }
 
-      // Handle regular character input
-      if (key.sequence && !key.ctrl && !key.meta) {
-        // Only allow valid OAuth code characters
-        const cleanInput = key.sequence.replace(/[^a-zA-Z0-9\-_#]/g, '');
-        if (cleanInput) {
-          setCode((prev) => prev + cleanInput);
-        }
-      }
+      // Explicitly ignore ALL other input including:
+      // - Regular typed characters
+      // - Control codes
+      // - Backspace (users must paste the entire correct code)
+      // This prevents accidental control codes like I, IO, etc. from being added
     },
     [code, onClose, onSubmit],
   );
@@ -92,10 +90,14 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
       </Text>
       <Box marginTop={1}>
         <Text color={Colors.AccentCyan}>Code: </Text>
-        <Text color={Colors.Foreground}>{code || '(paste code here)'}</Text>
+        <Text color={Colors.Foreground}>
+          {code || '(paste only - typing disabled)'}
+        </Text>
       </Box>
       <Box marginTop={1}>
-        <Text dimColor>Press Enter to submit or Escape to cancel</Text>
+        <Text dimColor>
+          Paste code • Enter to submit • Escape to cancel • Ctrl+L to clear
+        </Text>
       </Box>
     </Box>
   );
