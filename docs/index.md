@@ -20,6 +20,7 @@ This documentation is organized into the following sections:
   - **[Settings and Profiles](./settings-and-profiles.md):** How to manage settings and use profiles.
   - **[Checkpointing](./checkpointing.md):** Documentation for the checkpointing feature.
   - **[Extensions](./extension.md):** How to extend the CLI with new functionality.
+  - **[IDE Integration](./ide-integration.md):** Connect the CLI to your editor.
   - **[Telemetry](./telemetry.md):** Overview of telemetry in the CLI.
 - **Core Details:** Documentation for `packages/core`.
   - **[Core Introduction](./core/index.md):** Overview of the core component.

@@ -326,6 +326,15 @@ Learn more in the [Prompt Configuration Guide](./docs/prompt-configuration.md).
 - `/keyfile` - Load API key from file
 - `/auth` - Authenticate with Google (for Gemini), Anthropic (for Claude), or Qwen
 
+### Documentation
+
+- [**Architecture Overview**](./docs/architecture.md) - How llxprt works
+- [**IDE Integration**](./docs/ide-integration.md) - VS Code companion
+- [**Sandboxing & Security**](./docs/sandbox.md) - Safe execution environments
+- [**Enterprise Deployment**](./docs/deployment.md) - Docker, system-wide config
+- [**Telemetry & Monitoring**](./docs/telemetry.md) - Usage tracking
+- [**Tools API Development**](./docs/core/tools-api.md) - Create custom tools
+
 ### Troubleshooting
 
 See the [troubleshooting guide](docs/troubleshooting.md) if you encounter issues.
