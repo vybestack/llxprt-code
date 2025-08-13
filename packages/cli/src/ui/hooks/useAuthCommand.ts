@@ -103,81 +103,17 @@ export const useAuthCommand = (
 
   const handleAuthSelect = useCallback(
     async (authType: AuthType | undefined, scope: SettingScope) => {
-      // Handle OAuth provider selections
-      if (
-        authType === AuthType.OAUTH_GEMINI ||
-        authType === AuthType.OAUTH_QWEN ||
-        authType === AuthType.OAUTH_ANTHROPIC
-      ) {
-        // Trigger the OAuth flow directly
-        let provider: string;
-        if (authType === AuthType.OAUTH_GEMINI) {
-          provider = 'gemini';
-        } else if (authType === AuthType.OAUTH_QWEN) {
-          provider = 'qwen';
-        } else {
-          provider = 'anthropic';
-        }
-
-        // Close the dialog first
+      // If undefined passed, it means close was selected
+      if (authType === undefined) {
+        // Close the dialog
         appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
         appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
-
-        // Get the existing OAuth manager from provider manager
-        const { getOAuthManager } = await import(
-          '../../providers/providerManagerInstance.js'
-        );
-        const oauthManager = getOAuthManager();
-
-        if (!oauthManager) {
-          console.error('OAuth manager not initialized');
-          appDispatch({
-            type: 'SET_AUTH_ERROR',
-            payload:
-              'OAuth system not initialized. Please restart the application.',
-          });
-          return;
-        }
-
-        // Trigger authentication
-        try {
-          await oauthManager.authenticate(provider);
-          console.log(`Successfully authenticated with ${provider}!`);
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          console.error(`Authentication failed: ${errorMessage}`);
-          appDispatch({
-            type: 'SET_AUTH_ERROR',
-            payload: `Failed to authenticate with ${provider}: ${errorMessage}`,
-          });
-        }
-
         return;
       }
-
-      // Handle legacy auth types (for backward compatibility)
-      if (authType) {
-        await clearCachedCredentialFile();
-
-        settings.setValue(scope, 'selectedAuthType', authType);
-        if (
-          authType === AuthType.LOGIN_WITH_GOOGLE &&
-          config.isBrowserLaunchSuppressed()
-        ) {
-          runExitCleanup();
-          console.log(
-            `
-----------------------------------------------------------------
-Logging in with Google... Please restart Gemini CLI to continue.
-----------------------------------------------------------------
-            `,
-          );
-          process.exit(0);
-        }
-      }
-      appDispatch({ type: 'CLOSE_DIALOG', payload: 'auth' });
-      appDispatch({ type: 'SET_AUTH_ERROR', payload: null });
+      
+      // Save the selected auth type - NO OAuth flow triggering
+      settings.setValue(scope, 'selectedAuthType', authType);
+      // Don't close dialog - let user continue toggling providers
     },
     [settings, appDispatch, config],
   );

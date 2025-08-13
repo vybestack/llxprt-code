@@ -38,18 +38,35 @@ export function AuthDialog({
   const [errorMessage, setErrorMessage] = useState<string | null>(
     initialErrorMessage || null,
   );
+  
+  // Track enabled providers from settings (oauthEnabledProviders is an object)
+  const [enabledProviders, setEnabledProviders] = useState<Set<string>>(() => {
+    const oauthProviders = settings.merged.oauthEnabledProviders || {};
+    const enabled = new Set<string>();
+    for (const [provider, isEnabled] of Object.entries(oauthProviders)) {
+      if (isEnabled) {
+        enabled.add(`oauth_${provider}`);
+      }
+    }
+    return enabled;
+  });
+  
   const items = [
     {
-      label: 'Gemini (Google OAuth)',
+      label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_gemini',
     },
     {
-      label: 'Qwen (OAuth)',
+      label: `Qwen (OAuth) ${enabledProviders.has('oauth_qwen') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_qwen',
     },
     {
-      label: 'Anthropic Claude (OAuth)',
+      label: `Anthropic Claude (OAuth) ${enabledProviders.has('oauth_anthropic') ? '[ON]' : '[OFF]'}`,
       value: 'oauth_anthropic',
+    },
+    {
+      label: 'Close',
+      value: 'close',
     },
   ];
 
@@ -59,29 +76,50 @@ export function AuthDialog({
   // Ensure we have a valid initial index (default to 0 if not found)
   const safeInitialIndex = initialAuthIndex >= 0 ? initialAuthIndex : 0;
   const handleAuthSelect = useCallback(
-    (authMethod: string) => {
-      // For OAuth providers, we don't need the old validation
-      // Just pass the selection to the handler
+    async (authMethod: string) => {
       setErrorMessage(null);
-      onSelect(authMethod as AuthType, SettingScope.User);
+      
+      // Handle Close option
+      if (authMethod === 'close') {
+        onSelect(undefined, SettingScope.User);
+        return;
+      }
+      
+      // Map oauth_gemini -> gemini, etc.
+      const providerName = authMethod.replace('oauth_', '');
+      
+      // Use the actual oauthManager to toggle the provider
+      // This will call the same code as /auth gemini enable/disable
+      const { getOAuthManager } = await import(
+        '../../providers/providerManagerInstance.js'
+      );
+      const oauthManager = getOAuthManager();
+      
+      if (oauthManager) {
+        try {
+          await oauthManager.toggleOAuthEnabled(providerName);
+          
+          // Update local state to reflect the change
+          const newEnabledProviders = new Set(enabledProviders);
+          if (newEnabledProviders.has(authMethod)) {
+            newEnabledProviders.delete(authMethod);
+          } else {
+            newEnabledProviders.add(authMethod);
+          }
+          setEnabledProviders(newEnabledProviders);
+        } catch (error) {
+          setErrorMessage(`Failed to toggle ${providerName}: ${error}`);
+        }
+      }
+      
+      // Don't close the dialog - let user continue toggling
     },
-    [onSelect],
+    [onSelect, enabledProviders],
   );
 
   useInput((_input, key) => {
     if (key.escape) {
-      // Prevent exit if there is an error message.
-      // This means they user is not authenticated yet.
-      if (errorMessage) {
-        return;
-      }
-      if (settings.merged.selectedAuthType === undefined) {
-        // Prevent exiting if no auth method is set
-        setErrorMessage(
-          'You must select an auth method to proceed. Press Ctrl+C twice to exit.',
-        );
-        return;
-      }
+      // Allow ESC to close the dialog
       onSelect(undefined, SettingScope.User);
     }
   });
@@ -118,7 +156,7 @@ export function AuthDialog({
         </Box>
       )}
       <Box marginTop={1}>
-        <Text color={Colors.Gray}>(Use Enter to select)</Text>
+        <Text color={Colors.Gray}>(Use Enter to select, ESC to close)</Text>
       </Box>
       <Box marginTop={1}>
         <Text>Terms of Services and Privacy Notice for Gemini CLI</Text>
