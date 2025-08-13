@@ -178,6 +178,15 @@ export const SETTINGS_SCHEMA = {
     description: 'Enable IDE integration mode',
     showInDialog: true,
   },
+  ideModeFeature: {
+    type: 'boolean',
+    label: 'IDE Mode Feature',
+    category: 'Mode',
+    requiresRestart: true,
+    default: false,
+    description: 'Enable IDE mode feature flag',
+    showInDialog: false,
+  },
 
   accessibility: {
     type: 'object',

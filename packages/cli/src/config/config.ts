@@ -354,7 +354,42 @@ export async function parseArguments(): Promise<CliArgs> {
 
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
-  return result as CliArgs;
+  
+  // Map camelCase names to match CliArgs interface
+  const cliArgs: CliArgs = {
+    model: result.model as string | undefined,
+    sandbox: result.sandbox as boolean | string | undefined,
+    sandboxImage: result.sandboxImage as string | undefined,
+    debug: result.debug as boolean | undefined,
+    prompt: result.prompt as string | undefined,
+    promptInteractive: result.promptInteractive as string | undefined,
+    allFiles: result.allFiles as boolean | undefined,
+    all_files: result.all_files as boolean | undefined,
+    showMemoryUsage: result.showMemoryUsage as boolean | undefined,
+    show_memory_usage: result.show_memory_usage as boolean | undefined,
+    yolo: result.yolo as boolean | undefined,
+    telemetry: result.telemetry as boolean | undefined,
+    checkpointing: result.checkpointing as boolean | undefined,
+    telemetryTarget: result.telemetryTarget as string | undefined,
+    telemetryOtlpEndpoint: result.telemetryOtlpEndpoint as string | undefined,
+    telemetryLogPrompts: result.telemetryLogPrompts as boolean | undefined,
+    telemetryOutfile: result.telemetryOutfile as string | undefined,
+    allowedMcpServerNames: result.allowedMcpServerNames as string[] | undefined,
+    experimentalAcp: result.experimentalAcp as boolean | undefined,
+    extensions: result.extensions as string[] | undefined,
+    listExtensions: result.listExtensions as boolean | undefined,
+    provider: result.provider as string | undefined,
+    ideModeFeature: result.ideModeFeature as boolean | undefined,
+    key: result.key as string | undefined,
+    keyfile: result.keyfile as string | undefined,
+    baseurl: result.baseurl as string | undefined,
+    proxy: result.proxy as string | undefined,
+    includeDirectories: result.includeDirectories as string[] | undefined,
+    profileLoad: result.profileLoad as string | undefined,
+    loadMemoryFromIncludeDirectories: result.loadMemoryFromIncludeDirectories as boolean | undefined,
+  };
+  
+  return cliArgs;
 }
 
 // This function is now a thin wrapper around the server's implementation.

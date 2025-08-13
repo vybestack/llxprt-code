@@ -256,6 +256,7 @@ export interface ConfigParameters {
   folderTrustFeature?: boolean;
   folderTrust?: boolean;
   ideMode?: boolean;
+  ideModeFeature?: boolean;
   ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
   loadMemoryFromIncludeDirectories?: boolean;
@@ -311,6 +312,7 @@ export class Config {
   private readonly folderTrustFeature: boolean;
   private readonly folderTrust: boolean;
   private ideMode: boolean;
+  private ideModeFeature: boolean;
   private ideClient?: IdeClient;
   private inFallbackMode = false;
   private modelSwitchedDuringSession: boolean = false;
@@ -412,6 +414,7 @@ export class Config {
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
     this.ideMode = params.ideMode ?? false;
+    this.ideModeFeature = params.ideModeFeature ?? false;
     this.ideClient =
       params.ideClient ||
       IdeClient.getInstance(this.ideMode && this.ideModeFeature);
