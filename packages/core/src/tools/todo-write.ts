@@ -108,7 +108,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
     );
   }
 
-  getDescription(params: TodoWriteParams): string {
+  override getDescription(params: TodoWriteParams): string {
     return `Update todo list with ${params.todos.length} items`;
   }
 

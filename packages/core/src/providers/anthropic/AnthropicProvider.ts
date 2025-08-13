@@ -123,7 +123,7 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  async getModels(): Promise<IModel[]> {
+  override async getModels(): Promise<IModel[]> {
     const authToken = await this.getAuthToken();
     if (!authToken) {
       // Return empty array if no auth - models aren't critical for operation
@@ -459,7 +459,7 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  setApiKey(apiKey: string): void {
+  override setApiKey(apiKey: string): void {
     // Call base provider implementation
     super.setApiKey?.(apiKey);
 
@@ -471,7 +471,7 @@ export class AnthropicProvider extends BaseProvider {
     });
   }
 
-  setBaseUrl(baseUrl?: string): void {
+  override setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
 
@@ -487,7 +487,7 @@ export class AnthropicProvider extends BaseProvider {
     });
   }
 
-  setModel(modelId: string): void {
+  override setModel(modelId: string): void {
     // Update SettingsService as the source of truth
     try {
       const settingsService = getSettingsService();
@@ -501,7 +501,7 @@ export class AnthropicProvider extends BaseProvider {
     this.currentModel = modelId;
   }
 
-  getCurrentModel(): string {
+  override getCurrentModel(): string {
     // Try to get from SettingsService first (source of truth)
     try {
       const settingsService = getSettingsService();
@@ -518,7 +518,7 @@ export class AnthropicProvider extends BaseProvider {
     return this.currentModel || this.getDefaultModel();
   }
 
-  getDefaultModel(): string {
+  override getDefaultModel(): string {
     // Return the default model for this provider
     return 'claude-sonnet-4-20250514';
   }
@@ -746,21 +746,21 @@ export class AnthropicProvider extends BaseProvider {
   /**
    * Anthropic always requires payment (API key or OAuth)
    */
-  isPaidMode(): boolean {
+  override isPaidMode(): boolean {
     return true;
   }
 
   /**
    * Get the list of server tools supported by this provider
    */
-  getServerTools(): string[] {
+  override getServerTools(): string[] {
     return [];
   }
 
   /**
    * Invoke a server tool (native provider tool)
    */
-  async invokeServerTool(
+  override async invokeServerTool(
     _toolName: string,
     _params: unknown,
     _config?: unknown,
@@ -772,7 +772,7 @@ export class AnthropicProvider extends BaseProvider {
    * Set model parameters that will be merged into API calls
    * @param params Parameters to merge with existing, or undefined to clear all
    */
-  setModelParams(params: Record<string, unknown> | undefined): void {
+  override setModelParams(params: Record<string, unknown> | undefined): void {
     if (params === undefined) {
       this.modelParams = undefined;
     } else {
@@ -784,7 +784,7 @@ export class AnthropicProvider extends BaseProvider {
    * Get current model parameters
    * @returns Current parameters or undefined if not set
    */
-  getModelParams(): Record<string, unknown> | undefined {
+  override getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
   }
 
@@ -792,7 +792,7 @@ export class AnthropicProvider extends BaseProvider {
    * Check if the provider is authenticated using any available method
    * Uses the base provider's isAuthenticated implementation
    */
-  async isAuthenticated(): Promise<boolean> {
+  override async isAuthenticated(): Promise<boolean> {
     return super.isAuthenticated();
   }
 }

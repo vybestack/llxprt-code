@@ -31,7 +31,7 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     );
   }
 
-  getDescription(_params: TodoReadParams): string {
+  override getDescription(_params: TodoReadParams): string {
     return 'Read current todo list';
   }
 

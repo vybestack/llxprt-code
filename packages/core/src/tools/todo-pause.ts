@@ -48,11 +48,11 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     );
   }
 
-  getDescription(params: TodoPauseParams): string {
+  override getDescription(params: TodoPauseParams): string {
     return `Pause AI continuation: ${params.reason}`;
   }
 
-  validateToolParams(params: unknown): (string & { message: string }) | null {
+  override validateToolParams(params: unknown): (string & { message: string }) | null {
     // First validate against schema
     const schemaError = SchemaValidator.validate(
       this.schema.parameters,

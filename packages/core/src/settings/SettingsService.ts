@@ -134,12 +134,12 @@ export class SettingsService extends EventEmitter implements ISettingsService {
   }
 
   // Event handling
-  on(
+  override on(
     event: 'settings_changed',
     listener: EventListener<SettingsChangeEvent>,
   ): EventUnsubscribe;
-  on(eventName: string | symbol, listener: (...args: unknown[]) => void): this;
-  on(
+  override on(eventName: string | symbol, listener: (...args: unknown[]) => void): this;
+  override on(
     event: string | symbol | 'settings_changed',
     listener: unknown,
   ): EventUnsubscribe | this {
@@ -152,7 +152,7 @@ export class SettingsService extends EventEmitter implements ISettingsService {
     return this;
   }
 
-  off(event: string, listener: (...args: unknown[]) => void): this {
+  override off(event: string, listener: (...args: unknown[]) => void): this {
     this.eventEmitter.off(event, listener);
     return this;
   }

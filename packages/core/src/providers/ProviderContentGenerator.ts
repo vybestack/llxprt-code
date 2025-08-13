@@ -27,7 +27,7 @@ import { GeminiCompatibleWrapper } from './adapters/GeminiCompatibleWrapper.js';
 export class ProviderContentGenerator implements ContentGenerator {
   constructor(
     private providerManager: ProviderManager,
-    private config: ContentGeneratorConfig,
+    private _config: ContentGeneratorConfig,
   ) {}
 
   private getWrapper(): GeminiCompatibleWrapper {

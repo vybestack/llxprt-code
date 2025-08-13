@@ -236,7 +236,7 @@ export class OpenAIProvider extends BaseProvider {
     return configuredModels.includes(this.currentModel);
   }
 
-  getToolFormat(): ToolFormat {
+  override getToolFormat(): ToolFormat {
     // Check manual override first
     if (this.toolFormatOverride) {
       return this.toolFormatOverride;
@@ -606,7 +606,7 @@ export class OpenAIProvider extends BaseProvider {
     })();
   }
 
-  async getModels(): Promise<IModel[]> {
+  override async getModels(): Promise<IModel[]> {
     // Check if API key is available (using resolved authentication)
     const apiKey = await this.getAuthToken();
     if (!apiKey) {
@@ -957,7 +957,7 @@ export class OpenAIProvider extends BaseProvider {
     }
   }
 
-  setModel(modelId: string): void {
+  override setModel(modelId: string): void {
     // Update SettingsService as the source of truth
     this.setModelInSettings(modelId).catch((error) => {
       if (process.env.DEBUG) {
@@ -968,7 +968,7 @@ export class OpenAIProvider extends BaseProvider {
     this.currentModel = modelId;
   }
 
-  getCurrentModel(): string {
+  override getCurrentModel(): string {
     // Try to get from SettingsService first (source of truth)
     try {
       const settingsService = getSettingsService();
@@ -985,7 +985,7 @@ export class OpenAIProvider extends BaseProvider {
     return this.currentModel || this.getDefaultModel();
   }
 
-  getDefaultModel(): string {
+  override getDefaultModel(): string {
     // Return the default model for this provider
     // This can be overridden based on configuration or endpoint
     if (this.isUsingQwen()) {
@@ -994,7 +994,7 @@ export class OpenAIProvider extends BaseProvider {
     return 'gpt-4.1';
   }
 
-  setApiKey(apiKey: string): void {
+  override setApiKey(apiKey: string): void {
     // Call base provider implementation
     super.setApiKey?.(apiKey);
 
@@ -1019,7 +1019,7 @@ export class OpenAIProvider extends BaseProvider {
     this._cachedClientKey = apiKey; // Update cached key
   }
 
-  setBaseUrl(baseUrl?: string): void {
+  override setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided, clear to default (undefined)
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
 
@@ -1062,11 +1062,11 @@ export class OpenAIProvider extends BaseProvider {
     this._cachedClientKey = undefined;
   }
 
-  setConfig(config: IProviderConfig): void {
+  override setConfig(config: IProviderConfig): void {
     this.providerConfig = config;
   }
 
-  setToolFormatOverride(format: ToolFormat | null): void {
+  override setToolFormatOverride(format: ToolFormat | null): void {
     this.toolFormatOverride = format || undefined;
   }
 
@@ -1104,11 +1104,11 @@ export class OpenAIProvider extends BaseProvider {
   /**
    * OpenAI always requires payment (API key)
    */
-  isPaidMode(): boolean {
+  override isPaidMode(): boolean {
     return true;
   }
 
-  clearState(): void {
+  override clearState(): void {
     // Clear the conversation cache to prevent tool call ID mismatches
     this.conversationCache.clear();
   }
@@ -1116,14 +1116,14 @@ export class OpenAIProvider extends BaseProvider {
   /**
    * Get the list of server tools supported by this provider
    */
-  getServerTools(): string[] {
+  override getServerTools(): string[] {
     return [];
   }
 
   /**
    * Invoke a server tool (native provider tool)
    */
-  async invokeServerTool(
+  override async invokeServerTool(
     _toolName: string,
     _params: unknown,
     _config?: unknown,
@@ -1135,7 +1135,7 @@ export class OpenAIProvider extends BaseProvider {
    * Set model parameters to be included in API calls
    * @param params Parameters to merge with existing, or undefined to clear all
    */
-  setModelParams(params: Record<string, unknown> | undefined): void {
+  override setModelParams(params: Record<string, unknown> | undefined): void {
     if (params === undefined) {
       this.modelParams = undefined;
     } else {
@@ -1157,7 +1157,7 @@ export class OpenAIProvider extends BaseProvider {
    * Get current model parameters
    * @returns Current parameters or undefined if not set
    */
-  getModelParams(): Record<string, unknown> | undefined {
+  override getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
   }
 
@@ -1205,7 +1205,7 @@ export class OpenAIProvider extends BaseProvider {
    * Check if the provider is authenticated using any available method
    * Uses the base provider's isAuthenticated implementation
    */
-  async isAuthenticated(): Promise<boolean> {
+  override async isAuthenticated(): Promise<boolean> {
     return super.isAuthenticated();
   }
 

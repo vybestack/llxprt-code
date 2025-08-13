@@ -205,7 +205,7 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Sets the config instance for reading OAuth credentials
    */
-  setConfig(config: Config): void {
+  override setConfig(config: Config): void {
     this.geminiConfig = config;
 
     // Sync with config model if user hasn't explicitly set a model
@@ -228,7 +228,7 @@ export class GeminiProvider extends BaseProvider {
     this.authDetermined = false;
   }
 
-  async getModels(): Promise<IModel[]> {
+  override async getModels(): Promise<IModel[]> {
     // For OAuth mode, return fixed list of models
     if (this.authMode === 'oauth') {
       return [
@@ -939,7 +939,7 @@ export class GeminiProvider extends BaseProvider {
     return result;
   }
 
-  setApiKey(apiKey: string): void {
+  override setApiKey(apiKey: string): void {
     // Call base provider implementation
     super.setApiKey?.(apiKey);
 
@@ -950,7 +950,7 @@ export class GeminiProvider extends BaseProvider {
     this.authDetermined = false;
   }
 
-  setBaseUrl(baseUrl?: string): void {
+  override setBaseUrl(baseUrl?: string): void {
     // If no baseUrl is provided or it's an empty string, clear to undefined
     this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
   }
@@ -981,7 +981,7 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Gets the current model ID
    */
-  getCurrentModel(): string {
+  override getCurrentModel(): string {
     // Try to get from SettingsService first (source of truth)
     try {
       const settingsService = getSettingsService();
@@ -1001,14 +1001,14 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Gets the default model for Gemini
    */
-  getDefaultModel(): string {
+  override getDefaultModel(): string {
     return 'gemini-2.5-pro';
   }
 
   /**
    * Sets the current model ID
    */
-  setModel(modelId: string): void {
+  override setModel(modelId: string): void {
     // Update SettingsService as the source of truth
     try {
       const settingsService = getSettingsService();
@@ -1033,7 +1033,7 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Sets additional model parameters to include in requests
    */
-  setModelParams(params: Record<string, unknown> | undefined): void {
+  override setModelParams(params: Record<string, unknown> | undefined): void {
     if (params === undefined) {
       this.modelParams = undefined;
     } else {
@@ -1044,21 +1044,21 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Gets the current model parameters
    */
-  getModelParams(): Record<string, unknown> | undefined {
+  override getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
   }
 
   /**
    * Checks if the current auth mode requires payment
    */
-  isPaidMode(): boolean {
+  override isPaidMode(): boolean {
     return this.authMode === 'gemini-api-key' || this.authMode === 'vertex-ai';
   }
 
   /**
    * Clears provider state but preserves explicitly set model
    */
-  clearState(): void {
+  override clearState(): void {
     // Clear auth-related state
     this.authMode = 'none';
     this.authDetermined = false;
@@ -1072,7 +1072,7 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Forces re-determination of auth method
    */
-  clearAuthCache(): void {
+  override clearAuthCache(): void {
     this.authDetermined = false;
     // Don't clear the auth mode itself, just the determination flag
     // This allows for smoother transitions
@@ -1081,14 +1081,14 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Get the list of server tools supported by this provider
    */
-  getServerTools(): string[] {
+  override getServerTools(): string[] {
     return ['web_search', 'web_fetch'];
   }
 
   /**
    * Invoke a server tool (native provider tool)
    */
-  async invokeServerTool(
+  override async invokeServerTool(
     toolName: string,
     params: unknown,
     _config?: unknown,
