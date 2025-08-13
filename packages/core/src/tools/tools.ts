@@ -146,9 +146,9 @@ export interface ToolBuilder<
   description: string;
 
   /**
-   * The icon to display when interacting via ACP.
+   * The kind of tool for categorization and permissions
    */
-  icon: Icon;
+  kind: Kind;
 
   /**
    * Function declaration schema from @google/genai.
@@ -186,7 +186,7 @@ export abstract class DeclarativeTool<
     readonly name: string,
     readonly displayName: string,
     readonly description: string,
-    readonly icon: Icon,
+    readonly kind: Kind,
     readonly parameterSchema: unknown,
     readonly isOutputMarkdown: boolean = true,
     readonly canUpdateOutput: boolean = false,
@@ -293,7 +293,7 @@ export abstract class BaseTool<
     readonly name: string,
     readonly displayName: string,
     readonly description: string,
-    readonly icon: Icon,
+    readonly kind: Kind,
     readonly parameterSchema: unknown,
     readonly isOutputMarkdown: boolean = true,
     readonly canUpdateOutput: boolean = false,
@@ -302,7 +302,7 @@ export abstract class BaseTool<
       name,
       displayName,
       description,
-      icon,
+      kind,
       parameterSchema,
       isOutputMarkdown,
       canUpdateOutput,
@@ -581,15 +581,16 @@ export enum ToolConfirmationOutcome {
   Cancel = 'cancel',
 }
 
-export enum Icon {
-  FileSearch = 'fileSearch',
-  Folder = 'folder',
-  Globe = 'globe',
-  Hammer = 'hammer',
-  LightBulb = 'lightBulb',
-  Pencil = 'pencil',
-  Regex = 'regex',
-  Terminal = 'terminal',
+export enum Kind {
+  Read = 'read',
+  Edit = 'edit',
+  Delete = 'delete',
+  Move = 'move',
+  Search = 'search',
+  Execute = 'execute',
+  Think = 'think',
+  Fetch = 'fetch',
+  Other = 'other',
 }
 
 export interface ToolLocation {

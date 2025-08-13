@@ -13,7 +13,7 @@ import { globStream } from 'glob';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
-  Icon,
+  Kind,
   ToolInvocation,
   ToolResult,
 } from './tools.js';
@@ -613,7 +613,7 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
       GrepTool.Name,
       'SearchFileContent',
       'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers. IMPORTANT: This tool expects regular expression patterns, not literal strings.',
-      Icon.FileSearch,
+      Kind.Search,
       {
         properties: {
           pattern: {

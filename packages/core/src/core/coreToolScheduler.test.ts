@@ -19,7 +19,7 @@ import {
   ToolConfirmationPayload,
   ToolResult,
   Config,
-  Icon,
+  Kind,
   ApprovalMode,
 } from '../index.js';
 import { Part, PartListUnion } from '@google/genai';
@@ -417,7 +417,7 @@ describe('CoreToolScheduler edit cancellation', () => {
           'mockEditTool',
           'mockEditTool',
           'A mock edit tool',
-          Icon.Pencil,
+          Kind.Edit,
           {},
         );
       }

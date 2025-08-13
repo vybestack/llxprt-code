@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BaseTool, Icon, ToolResult } from './tools.js';
+import { BaseTool, Kind, ToolResult } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import * as path from 'path';
@@ -228,7 +228,7 @@ IMPORTANT LIMITS:
 - Maximum tokens: 50,000 (default, configurable via 'tool-output-max-tokens' setting)  
 - Maximum file size: 512KB per file (configurable via 'tool-output-item-size-limit' setting)
 - If limits are exceeded, the tool will warn and suggest more specific patterns (configurable behavior via 'tool-output-truncate-mode')`,
-      Icon.FileSearch,
+      Kind.Read,
       parameterSchema,
     );
     this.llxprtIgnorePatterns = config
