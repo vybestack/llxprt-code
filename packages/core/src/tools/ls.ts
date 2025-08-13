@@ -196,7 +196,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           fullPath,
         );
 
-        // Check if this file should be ignored based on git or gemini ignore rules
+        // Check if this file should be ignored based on git or llxprt ignore rules
         if (
           fileFilteringOptions.respectGitIgnore &&
           fileDiscovery.shouldGitIgnoreFile(relativePath)
@@ -311,11 +311,6 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
                 type: 'boolean',
               },
             },
-          },
-          max_entries: {
-            description:
-              'Optional: Maximum number of entries to return. If omitted, returns all entries in the directory. Set a lower number for large directories to avoid overwhelming output.',
-            type: 'number',
           },
         },
         required: ['path'],
