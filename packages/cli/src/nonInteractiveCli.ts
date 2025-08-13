@@ -165,7 +165,7 @@ export async function runNonInteractive(
   } finally {
     consolePatcher.cleanup();
     if (isTelemetrySdkInitialized()) {
-      await shutdownTelemetry();
+      await shutdownTelemetry(config);
     }
   }
 }

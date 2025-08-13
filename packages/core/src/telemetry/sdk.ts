@@ -138,17 +138,24 @@ export function initializeTelemetry(config: Config): void {
 
   try {
     sdk.start();
+    if (config.getDebugMode()) {
+      console.log('OpenTelemetry SDK started successfully.');
+    }
     telemetryInitialized = true;
     initializeMetrics(config);
   } catch (error) {
     console.error('Error starting OpenTelemetry SDK:', error);
   }
 
-  process.on('SIGTERM', shutdownTelemetry);
-  process.on('SIGINT', shutdownTelemetry);
+  process.on('SIGTERM', () => {
+    shutdownTelemetry(config);
+  });
+  process.on('SIGINT', () => {
+    shutdownTelemetry(config);
+  });
 }
 
-export async function shutdownTelemetry(): Promise<void> {
+export async function shutdownTelemetry(config: Config): Promise<void> {
   // TELEMETRY: Shutdown only affects local file writing
   if (!telemetryInitialized || !sdk) {
     return;
@@ -156,6 +163,9 @@ export async function shutdownTelemetry(): Promise<void> {
   try {
     // ClearcutLogger is disabled - no data sent to Google
     await sdk.shutdown();
+    if (config.getDebugMode()) {
+      console.log('OpenTelemetry SDK shut down successfully.');
+    }
   } catch (error) {
     console.error('Error shutting down SDK:', error);
   } finally {
