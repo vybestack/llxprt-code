@@ -79,6 +79,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     GitService: vi.fn(),
     GeminiClient: MockedGeminiClientClass,
     UserPromptEvent: MockedUserPromptEvent,
+    parseAndFormatApiError: mockParseAndFormatApiError,
   };
 });
 
@@ -149,9 +150,6 @@ vi.mock('./slashCommandProcessor.js', () => ({
 }));
 
 const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
-vi.mock('../utils/errorParsing.js', () => ({
-  parseAndFormatApiError: mockParseAndFormatApiError,
-}));
 
 // --- END MOCKS ---
 

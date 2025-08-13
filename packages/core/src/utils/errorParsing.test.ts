@@ -5,13 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseAndFormatApiError } from './errorParsing';
-import {
-  AuthType,
-  UserTierId,
-  DEFAULT_GEMINI_FLASH_MODEL,
-  isProQuotaExceededError,
-} from '@vybestack/llxprt-code-core';
+import { parseAndFormatApiError } from './errorParsing.js';
+import { isProQuotaExceededError } from './quotaErrorDetection.js';
+import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
+import { UserTierId } from '../code_assist/types.js';
+import { AuthType } from '../core/contentGenerator.js';
+import { StructuredError } from '../core/turn.js';
 
 describe('parseAndFormatApiError', () => {
   const _enterpriseMessage =

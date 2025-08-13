@@ -53,6 +53,7 @@ const MockedGeminiClientClass = vi.hoisted(() =>
 const MockedUserPromptEvent = vi.hoisted(() =>
   vi.fn().mockImplementation(() => {}),
 );
+const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
 
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actualCoreModule = (await importOriginal()) as any;
@@ -61,6 +62,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
     GitService: vi.fn(),
     GeminiClient: MockedGeminiClientClass,
     UserPromptEvent: MockedUserPromptEvent,
+    parseAndFormatApiError: mockParseAndFormatApiError,
   };
 });
 
@@ -127,11 +129,6 @@ vi.mock('../contexts/SessionContext.js', () => ({
 
 vi.mock('./slashCommandProcessor.js', () => ({
   handleSlashCommand: vi.fn().mockReturnValue(false),
-}));
-
-const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
-vi.mock('../utils/errorParsing.js', () => ({
-  parseAndFormatApiError: mockParseAndFormatApiError,
 }));
 
 // --- END MOCKS ---
