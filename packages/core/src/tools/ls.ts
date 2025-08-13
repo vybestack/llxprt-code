@@ -16,11 +16,7 @@ import {
 import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
-import {
-  limitOutputTokens,
-  formatLimitedOutput,
-  getOutputLimits,
-} from '../utils/toolOutputLimiter.js';
+// Tool output limiter imports removed - not currently used
 
 /**
  * Parameters for the LS tool
