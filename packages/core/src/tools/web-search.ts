@@ -6,7 +6,6 @@
 
 import { GroundingMetadata } from '@google/genai';
 import { BaseTool, Kind, ToolResult } from './tools.js';
-import { Type } from '@google/genai';
 import { SchemaValidator } from '../utils/schemaValidator.js';
 
 import { getErrorMessage } from '../utils/errors.js';

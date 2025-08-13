@@ -13,7 +13,6 @@ import {
   BaseTool,
   ToolResult,
   ToolExecuteConfirmationDetails,
-  ToolConfirmationOutcome,
   Kind,
 } from './tools.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
