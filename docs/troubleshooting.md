@@ -77,6 +77,11 @@ This means if you're using OpenAI as your main provider but want web search, you
   - The provided API key is malformed or revoked
   - Solution: Check your API key in the provider's dashboard and ensure it's active
 
+- **Error: `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` or `unable to get local issuer certificate`**
+  - **Cause:** You may be on a corporate network with a firewall that intercepts and inspects SSL/TLS traffic. This often requires a custom root CA certificate to be trusted by Node.js.
+  - **Solution:** Set the `NODE_EXTRA_CA_CERTS` environment variable to the absolute path of your corporate root CA certificate file.
+    - Example: `export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt`
+
 ## Frequently asked questions (FAQs)
 
 - **Q: How do I update LLxprt Code to the latest version?**
