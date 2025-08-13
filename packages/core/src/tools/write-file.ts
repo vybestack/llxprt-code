@@ -103,11 +103,11 @@ export class WriteFileTool
     );
   }
 
-  toolLocations(params: WriteFileToolParams): ToolLocation[] {
+  override toolLocations(params: WriteFileToolParams): ToolLocation[] {
     return [{ path: params.file_path }];
   }
 
-  validateToolParams(params: WriteFileToolParams): string | null {
+  override validateToolParams(params: WriteFileToolParams): string | null {
     const errors = SchemaValidator.validate(
       this.schema.parametersJsonSchema,
       params,
@@ -145,7 +145,7 @@ export class WriteFileTool
     return null;
   }
 
-  getDescription(params: WriteFileToolParams): string {
+  override getDescription(params: WriteFileToolParams): string {
     if (!params.file_path || !params.content) {
       return `Model did not provide valid parameters for write file tool`;
     }
@@ -159,7 +159,7 @@ export class WriteFileTool
   /**
    * Handles the confirmation prompt for the WriteFile tool.
    */
-  async shouldConfirmExecute(
+  override async shouldConfirmExecute(
     params: WriteFileToolParams,
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {

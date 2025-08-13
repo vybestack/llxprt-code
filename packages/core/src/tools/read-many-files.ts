@@ -701,7 +701,9 @@ IMPORTANT LIMITS:
     );
   }
 
-  protected validateToolParams(params: ReadManyFilesParams): string | null {
+  protected override validateToolParams(
+    params: ReadManyFilesParams,
+  ): string | null {
     const errors = SchemaValidator.validate(
       this.schema.parametersJsonSchema,
       params,
