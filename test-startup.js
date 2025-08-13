@@ -8,16 +8,16 @@ import * as os from 'os';
 
 async function testStartup() {
   console.log('Testing startup with no prompts...');
-  
+
   const promptsDir = path.join(os.homedir(), '.llxprt', 'prompts');
-  
+
   // Clean prompts directory
   if (fs.existsSync(promptsDir)) {
     fs.rmSync(promptsDir, { recursive: true, force: true });
   }
-  
+
   console.log(`Prompts directory exists: ${fs.existsSync(promptsDir)}`);
-  
+
   try {
     // Create a mock config
     const mockConfig = {
@@ -28,26 +28,26 @@ async function testStartup() {
       selectedAuthType: 'api_key',
       apiKey: 'test-key',
     };
-    
+
     // Create client (this should trigger prompt initialization via startChat)
     const client = new GeminiClient(mockConfig, {
       debug: true,
       onProgress: () => {},
     });
-    
+
     console.log('Created GeminiClient, now starting chat...');
-    
+
     // This should call getCoreSystemPromptAsync internally
     await client.startChat();
-    
+
     console.log('Chat started successfully');
-    
+
     // Check if files were installed
     const files = [
       'core.md',
-      'providers/gemini/models/gemini-2.5-flash/core.md'
+      'providers/gemini/models/gemini-2.5-flash/core.md',
     ];
-    
+
     for (const file of files) {
       const filePath = path.join(promptsDir, file);
       if (fs.existsSync(filePath)) {

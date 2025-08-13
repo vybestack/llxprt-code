@@ -17,12 +17,12 @@ function loadMarkdownFile(filename: string): string {
     if (existsSync(normalPath)) {
       return readFileSync(normalPath, 'utf-8');
     }
-    
+
     // If that doesn't work, we might be in a bundled environment
     // Try to find the bundle directory by looking for a parent 'bundle' directory
     const pathParts = __dirname.split(sep);
     const bundleIndex = pathParts.lastIndexOf('bundle');
-    
+
     if (bundleIndex !== -1) {
       // Reconstruct path to bundle directory
       const bundleDir = pathParts.slice(0, bundleIndex + 1).join(sep);
@@ -31,7 +31,7 @@ function loadMarkdownFile(filename: string): string {
         return readFileSync(bundlePath, 'utf-8');
       }
     }
-    
+
     // As a last resort, check if we're running from a bundle directory
     if (process.cwd().includes('bundle')) {
       const cwdPath = join(process.cwd(), filename);
@@ -39,7 +39,7 @@ function loadMarkdownFile(filename: string): string {
         return readFileSync(cwdPath, 'utf-8');
       }
     }
-    
+
     throw new Error(`File not found in any expected location`);
   } catch (_error) {
     console.warn(`Warning: Could not load ${filename}, using empty content`);
