@@ -180,18 +180,19 @@ rpc.send({
             args: ['mcp-server.cjs'],
           },
         },
-      });
-
-      // Create server script in the test directory
-      const testServerPath = join(rig.testDir, 'mcp-server.cjs');
-      writeFileSync(testServerPath, serverScript);
-
-      // Make the script executable (though running with 'node' should work anyway)
-      if (process.platform !== 'win32') {
-        const { chmodSync } = await import('fs');
-        chmodSync(testServerPath, 0o755);
-      }
+      },
     });
+
+    // Create server script in the test directory
+    const testServerPath = join(rig.testDir!, 'mcp-server.cjs');
+    writeFileSync(testServerPath, serverScript);
+
+    // Make the script executable (though running with 'node' should work anyway)
+    if (process.platform !== 'win32') {
+      const { chmodSync } = await import('fs');
+      chmodSync(testServerPath, 0o755);
+    }
+  });
 
   it('should add two numbers', async () => {
     // Test directory is already set up in before hook
