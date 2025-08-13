@@ -885,9 +885,14 @@ describe('mcpCommand', () => {
             }),
             getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
             getGeminiClient: vi.fn().mockReturnValue(mockGeminiClient),
+            getPromptRegistry: vi.fn().mockResolvedValue({
+              removePromptsByServer: vi.fn(),
+            }),
           },
         },
       });
+      // Mock the reloadCommands function
+      context.ui.reloadCommands = vi.fn();
 
       const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-core');
 
@@ -905,6 +910,7 @@ describe('mcpCommand', () => {
         'test-server',
       );
       expect(mockGeminiClient.setTools).toHaveBeenCalled();
+      expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -989,6 +995,8 @@ describe('mcpCommand', () => {
           },
         },
       });
+      // Mock the reloadCommands function, which is new logic.
+      context.ui.reloadCommands = vi.fn();
 
       const refreshCommand = mcpCommand.subCommands?.find(
         (cmd) => cmd.name === 'refresh',
@@ -1006,6 +1014,7 @@ describe('mcpCommand', () => {
       );
       expect(mockToolRegistry.discoverMcpTools).toHaveBeenCalled();
       expect(mockGeminiClient.setTools).toHaveBeenCalled();
+      expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
