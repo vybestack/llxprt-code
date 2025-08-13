@@ -54,4 +54,26 @@ if (existsSync(tiktokenWasmPath)) {
   copyFileSync(tiktokenWasmPath, join(bundleDir, 'tiktoken_bg.wasm'));
 }
 
+// Copy all markdown files from prompt-config/defaults preserving directory structure
+const promptMdFiles = glob.sync(
+  'packages/core/src/prompt-config/defaults/**/*.md',
+  { cwd: root },
+);
+for (const file of promptMdFiles) {
+  // Extract the relative path after 'defaults/'
+  const relativePath = file.replace(
+    'packages/core/src/prompt-config/defaults/',
+    '',
+  );
+  const targetPath = join(bundleDir, relativePath);
+  const targetDir = dirname(targetPath);
+
+  // Create directory structure if it doesn't exist
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  copyFileSync(join(root, file), targetPath);
+}
+
 console.log('Assets copied to bundle/');
