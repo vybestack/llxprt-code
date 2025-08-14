@@ -15,7 +15,6 @@ import {
 import { createCodeAssistContentGenerator } from '../code_assist/codeAssist.js';
 import { DEFAULT_GEMINI_MODEL } from '../config/models.js';
 import { Config } from '../config/config.js';
-import { getEffectiveModel } from './modelCheck.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
 import { UserTierId } from '../code_assist/types.js';
@@ -92,11 +91,6 @@ export function createContentGeneratorConfig(
   if (authType === AuthType.USE_GEMINI && geminiApiKey) {
     contentGeneratorConfig.apiKey = geminiApiKey;
     contentGeneratorConfig.vertexai = false;
-    getEffectiveModel(
-      contentGeneratorConfig.apiKey,
-      contentGeneratorConfig.model,
-      contentGeneratorConfig.proxy,
-    );
 
     return contentGeneratorConfig;
   }
