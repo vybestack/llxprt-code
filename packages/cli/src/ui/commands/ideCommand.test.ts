@@ -99,7 +99,7 @@ describe('ideCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: '🟢 Connected to VS Code',
+        content: '[CONNECTED] Connected to VS Code',
       });
     });
 
@@ -115,7 +115,7 @@ describe('ideCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'info',
-        content: `🟡 Connecting...`,
+        content: `[CONNECTING] Connecting...`,
       });
     });
     it('should show disconnected status', async () => {
@@ -130,7 +130,7 @@ describe('ideCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: `🔴 Disconnected`,
+        content: `[DISCONNECTED] Disconnected`,
       });
     });
 
@@ -148,7 +148,7 @@ describe('ideCommand', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: `🔴 Disconnected: ${details}`,
+        content: `[DISCONNECTED] Disconnected: ${details}`,
       });
     });
   });

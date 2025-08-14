@@ -2068,7 +2068,9 @@ ${JSON.stringify(
     it('should store history for later use when chat is not initialized', async () => {
       // Arrange
       client['chat'] = undefined; // Chat not initialized
-      const mockHasChatInitialized = vi.spyOn(client, 'hasChatInitialized').mockReturnValue(false);
+      const mockHasChatInitialized = vi
+        .spyOn(client, 'hasChatInitialized')
+        .mockReturnValue(false);
 
       const history: Content[] = [
         {
@@ -2092,7 +2094,9 @@ ${JSON.stringify(
         setHistory: vi.fn(),
       };
       client['chat'] = mockChat as unknown as GeminiChat;
-      const mockHasChatInitialized = vi.spyOn(client, 'hasChatInitialized').mockReturnValue(true);
+      const mockHasChatInitialized = vi
+        .spyOn(client, 'hasChatInitialized')
+        .mockReturnValue(true);
 
       const history: Content[] = [
         {

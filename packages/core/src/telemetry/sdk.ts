@@ -41,7 +41,6 @@ export function isTelemetrySdkInitialized(): boolean {
   return telemetryInitialized;
 }
 
-
 export function initializeTelemetry(config: Config): void {
   // TELEMETRY: Modified to ONLY support local file logging - network exporters disabled
   if (telemetryInitialized || !config.getTelemetryEnabled()) {

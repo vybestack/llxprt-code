@@ -503,7 +503,6 @@ export class CoreToolScheduler {
     });
   }
 
-
   private buildInvocation(
     tool: AnyDeclarativeTool,
     args: object,

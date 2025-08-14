@@ -359,7 +359,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getAuthStatus as unknown) = mockGetAuthStatus;
 
       const result = await executor.getAuthStatus();
-      expect(result).toEqual(['✗ gemini: not authenticated [OAuth enabled]']);
+      expect(result).toEqual(['[✗] gemini: not authenticated [OAuth enabled]']);
     });
   });
 
@@ -388,8 +388,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
       // Then: Should return formatted status indicators with enablement info
       expect(result).toEqual([
-        '✓ gemini: oauth (expires in 60m) [OAuth enabled]',
-        '✗ qwen: not authenticated [OAuth disabled]',
+        '[✓] gemini: oauth (expires in 60m) [OAuth enabled]',
+        '[✗] qwen: not authenticated [OAuth disabled]',
       ]);
     });
   });

@@ -409,7 +409,6 @@ export class LoggingProviderWrapper implements IProvider {
         }
       }
 
-
       // Write to disk
       const fileWriter = getConversationFileWriter(
         this.config.getConversationLogPath(),

@@ -73,7 +73,7 @@ describe('keyCommand', () => {
     expect(result).toEqual({
       type: 'message',
       messageType: 'info',
-      content: `API key updated for provider 'test-provider'\n⚠️  You are now in PAID MODE - API usage will be charged to your account`,
+      content: `API key updated for provider 'test-provider'\nWARNING: You are now in PAID MODE - API usage will be charged to your account`,
     });
   });
 

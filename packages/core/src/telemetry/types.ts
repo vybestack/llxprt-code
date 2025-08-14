@@ -505,7 +505,6 @@ export class ProviderCapabilityEvent {
   }
 }
 
-
 export type TelemetryEvent =
   | StartSessionEvent
   | EndSessionEvent

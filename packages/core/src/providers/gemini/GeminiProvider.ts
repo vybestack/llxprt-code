@@ -311,7 +311,6 @@ export class GeminiProvider extends BaseProvider {
     ];
   }
 
-
   async *generateChatCompletion(
     messages: IMessage[],
     tools?: ITool[],

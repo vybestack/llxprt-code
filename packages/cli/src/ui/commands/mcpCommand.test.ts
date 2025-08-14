@@ -205,25 +205,25 @@ describe('mcpCommand', () => {
         const message = result.content;
         // Server 1 - Connected
         expect(message).toContain(
-          '🟢 \u001b[1mserver1\u001b[0m - Ready (2 tools)',
+          '[READY] \u001b[1mserver1\u001b[0m - Ready (2 tools)',
         );
         expect(message).toContain('server1_tool1');
         expect(message).toContain('server1_tool2');
 
         // Server 2 - Connected
         expect(message).toContain(
-          '🟢 \u001b[1mserver2\u001b[0m - Ready (1 tool)',
+          '[READY] \u001b[1mserver2\u001b[0m - Ready (1 tool)',
         );
         expect(message).toContain('server2_tool1');
 
         // Server 3 - Disconnected but with cached tools, so shows as Ready
         expect(message).toContain(
-          '🟢 \u001b[1mserver3\u001b[0m - Ready (1 tool)',
+          '[READY] \u001b[1mserver3\u001b[0m - Ready (1 tool)',
         );
         expect(message).toContain('server3_tool1');
 
         // Check that helpful tips are displayed when no arguments are provided
-        expect(message).toContain('💡 Tips:');
+        expect(message).toContain('TIP: Tips:');
         expect(message).toContain('/mcp desc');
         expect(message).toContain('/mcp schema');
         expect(message).toContain('/mcp nodesc');
@@ -282,7 +282,7 @@ describe('mcpCommand', () => {
         );
 
         // Check that tips are NOT displayed when arguments are provided
-        expect(message).not.toContain('💡 Tips:');
+        expect(message).not.toContain('TIP: Tips:');
       }
     });
 
@@ -322,7 +322,7 @@ describe('mcpCommand', () => {
         expect(message).toContain('\u001b[36mtool1\u001b[0m');
 
         // Check that tips are NOT displayed when arguments are provided
-        expect(message).not.toContain('💡 Tips:');
+        expect(message).not.toContain('TIP: Tips:');
       }
     });
 
@@ -354,11 +354,11 @@ describe('mcpCommand', () => {
       if (isMessageAction(result)) {
         const message = result.content;
         expect(message).toContain(
-          '🟢 \u001b[1mserver1\u001b[0m - Ready (1 tool)',
+          '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
         );
         expect(message).toContain('\u001b[36mserver1_tool1\u001b[0m');
         expect(message).toContain(
-          '🔴 \u001b[1mserver2\u001b[0m - Disconnected (0 tools cached)',
+          '[DISCONNECTED] \u001b[1mserver2\u001b[0m - Disconnected (0 tools cached)',
         );
         expect(message).toContain('No tools or prompts available');
       }
@@ -402,7 +402,7 @@ describe('mcpCommand', () => {
 
         // Check that startup indicator is shown
         expect(message).toContain(
-          '⏳ MCP servers are starting up (1 initializing)...',
+          'MCP servers are starting up (1 initializing)...',
         );
         expect(message).toContain(
           'Note: First startup may take longer. Tool availability will update automatically.',
@@ -410,10 +410,10 @@ describe('mcpCommand', () => {
 
         // Check server statuses
         expect(message).toContain(
-          '🟢 \u001b[1mserver1\u001b[0m - Ready (1 tool)',
+          '[READY] \u001b[1mserver1\u001b[0m - Ready (1 tool)',
         );
         expect(message).toContain(
-          '🔄 \u001b[1mserver2\u001b[0m - Starting... (first startup may take longer) (tools and prompts will appear when ready)',
+          '[STARTING] \u001b[1mserver2\u001b[0m - Starting... (first startup may take longer) (tools and prompts will appear when ready)',
         );
       }
     });
@@ -446,7 +446,7 @@ describe('mcpCommand', () => {
       if (isMessageAction(result)) {
         const message = result.content;
         expect(message).toContain(
-          '🔴 \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
+          '[BLOCKED] \u001b[1mblocked-server (from my-extension)\u001b[0m - Blocked',
         );
       }
     });
@@ -468,7 +468,7 @@ describe('mcpCommand', () => {
         const message = result.content;
         expect(message).toContain('server1 (from my-extension)');
         expect(message).toContain(
-          '🔴 \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
+          '[BLOCKED] \u001b[1mblocked-server (from another-extension)\u001b[0m - Blocked',
         );
       }
     });

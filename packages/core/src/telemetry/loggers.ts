@@ -466,4 +466,3 @@ export function logProviderCapability(
     console.warn('Failed to log provider capability:', error);
   }
 }
-

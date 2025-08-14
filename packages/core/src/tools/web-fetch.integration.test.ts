@@ -112,7 +112,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Summarize the content from https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Summarize the content from https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(mockGeminiProvider.invokeServerTool).toHaveBeenCalledWith(
@@ -128,7 +130,9 @@ describe('WebFetchTool Integration Tests', () => {
       expect(result.llmContent).toContain(
         '[1] Example Page (https://example.com)',
       );
-      expect(result.returnDisplay).toContain('This is the fetched content from example.com');
+      expect(result.returnDisplay).toContain(
+        'This is the fetched content from example.com',
+      );
     });
 
     it('should handle multiple URLs in prompt', async () => {
@@ -159,7 +163,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Compare https://example1.com and https://example2.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Compare https://example1.com and https://example2.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain('Summary of both pages');
@@ -206,7 +212,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Get content from https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Get content from https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // Should call Gemini's invokeServerTool, not OpenAI's
@@ -257,7 +265,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Analyze https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Analyze https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // Should call Gemini's invokeServerTool, not Anthropic's
@@ -267,7 +277,9 @@ describe('WebFetchTool Integration Tests', () => {
       expect(result.llmContent).toContain(
         'Anthropic user but Gemini fetched this',
       );
-      expect(result.returnDisplay).toContain('Anthropic user but Gemini fetched this');
+      expect(result.returnDisplay).toContain(
+        'Anthropic user but Gemini fetched this',
+      );
     });
   });
 
@@ -280,7 +292,9 @@ describe('WebFetchTool Integration Tests', () => {
         providerManager: null,
       } as unknown as ContentGeneratorConfig);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain(
@@ -295,7 +309,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockProviderManager.getServerToolsProvider as ReturnType<typeof vi.fn>
       ).mockReturnValue(null);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain(
@@ -310,7 +326,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.getServerTools as ReturnType<typeof vi.fn>
       ).mockReturnValue(['web_search']); // Only web_search, no web_fetch
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain(
@@ -334,7 +352,9 @@ describe('WebFetchTool Integration Tests', () => {
           .mockResolvedValue('<html><body>Local content</body></html>'),
       } as unknown as Response);
 
-      const invocation = webFetchTool.build({ prompt: 'Get content from http://localhost:3000' });
+      const invocation = webFetchTool.build({
+        prompt: 'Get content from http://localhost:3000',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // Should not call Gemini's invokeServerTool
@@ -363,7 +383,9 @@ describe('WebFetchTool Integration Tests', () => {
           ),
       } as unknown as Response);
 
-      const invocation = webFetchTool.build({ prompt: 'Get content from http://192.168.1.100:8080' });
+      const invocation = webFetchTool.build({
+        prompt: 'Get content from http://192.168.1.100:8080',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // Should not call Gemini's invokeServerTool
@@ -387,7 +409,9 @@ describe('WebFetchTool Integration Tests', () => {
         new Error('Network error'),
       );
 
-      const invocation = webFetchTool.build({ prompt: 'Get content from http://localhost:3000' });
+      const invocation = webFetchTool.build({
+        prompt: 'Get content from http://localhost:3000',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain(
@@ -407,7 +431,9 @@ describe('WebFetchTool Integration Tests', () => {
       // Mock isPrivateIp to return false so it doesn't fallback
       vi.spyOn(fetchUtils, 'isPrivateIp').mockReturnValue(false);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain('Error during web fetch');
@@ -448,7 +474,9 @@ describe('WebFetchTool Integration Tests', () => {
         text: vi.fn().mockResolvedValue(''),
       } as unknown as Response);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // Should return no content found
@@ -459,14 +487,14 @@ describe('WebFetchTool Integration Tests', () => {
   describe('Validation', () => {
     it('should reject empty prompt', () => {
       expect(() => webFetchTool.build({ prompt: '' })).toThrow(
-        'cannot be empty'
+        'cannot be empty',
       );
     });
 
     it('should reject prompt without URLs', () => {
-      expect(() => webFetchTool.build({ prompt: 'Just some text without any URLs' })).toThrow(
-        'must contain at least one valid URL'
-      );
+      expect(() =>
+        webFetchTool.build({ prompt: 'Just some text without any URLs' }),
+      ).toThrow('must contain at least one valid URL');
     });
 
     it('should accept prompt with multiple URLs', async () => {
@@ -497,7 +525,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Compare https://example1.com and https://example2.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Compare https://example1.com and https://example2.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain('Processed multiple URLs');
@@ -532,9 +562,9 @@ describe('WebFetchTool Integration Tests', () => {
       ).mockResolvedValue(mockResponse);
 
       const invocation = webFetchTool.build({
-          prompt:
-            'Get content from https://github.com/user/repo/blob/main/file.js',
-        });
+        prompt:
+          'Get content from https://github.com/user/repo/blob/main/file.js',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // The tool should still pass the original prompt to the server
@@ -595,7 +625,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Extract info from https://example.com/source' });
+      const invocation = webFetchTool.build({
+        prompt: 'Extract info from https://example.com/source',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // Should have citation marker inserted after 'cite' (at index 12)
@@ -636,7 +668,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(mockResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       // getResponseText throws on null parts, so we get an error
@@ -655,7 +689,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockProviderManager.getServerToolsProvider as ReturnType<typeof vi.fn>
       ).mockReturnValue(null);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       const result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain(
@@ -689,7 +725,9 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(geminiResponse);
 
-      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({
+        prompt: 'Fetch https://example.com',
+      });
       let result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain('Gemini fetched content');
@@ -703,7 +741,9 @@ describe('WebFetchTool Integration Tests', () => {
       ).mockReturnValue('openai');
 
       // Second request should still use Gemini for server tools
-      const invocation2 = webFetchTool.build({ prompt: 'Fetch https://example.com again' });
+      const invocation2 = webFetchTool.build({
+        prompt: 'Fetch https://example.com again',
+      });
       result = await invocation2.execute(mockAbortSignal);
 
       // Should still call Gemini's invokeServerTool
