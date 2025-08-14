@@ -18,39 +18,41 @@ function loadMarkdownFile(filename: string): string {
       return readFileSync(normalPath, 'utf-8');
     }
 
+    // Check if we're already in a bundle directory FIRST
+    // This fixes the Windows CI issue where __dirname is already bundle
+    const currentDir = resolve(__dirname);
+    if (basename(currentDir) === 'bundle') {
+      const directPath = join(currentDir, filename);
+      if (existsSync(directPath)) {
+        return readFileSync(directPath, 'utf-8');
+      }
+    }
+
     // If that doesn't work, we might be in a bundled environment
     // Try to find the bundle directory by traversing up the directory tree
-    let currentDir = resolve(__dirname);
+    let searchDir = currentDir;
     let attempts = 0;
     const maxAttempts = 10; // Prevent infinite loops
 
     while (attempts < maxAttempts) {
       // Check if we find a 'bundle' directory at this level
-      const bundleDir = join(currentDir, 'bundle');
+      const bundleDir = join(searchDir, 'bundle');
       const bundlePath = join(bundleDir, filename);
       if (existsSync(bundlePath)) {
         return readFileSync(bundlePath, 'utf-8');
       }
 
-      // Also check if current directory itself is named 'bundle'
-      if (basename(currentDir) === 'bundle') {
-        const directPath = join(currentDir, filename);
-        if (existsSync(directPath)) {
-          return readFileSync(directPath, 'utf-8');
-        }
-      }
-
       // Move up one directory
-      const parentDir = dirname(currentDir);
-      if (parentDir === currentDir) {
+      const parentDir = dirname(searchDir);
+      if (parentDir === searchDir) {
         // We've reached the root
         break;
       }
-      currentDir = parentDir;
+      searchDir = parentDir;
       attempts++;
     }
 
-    // As a last resort, check if we're running from a bundle directory
+    // As a last resort, check if we're running from a bundle directory using process.cwd()
     if (process.cwd().includes('bundle')) {
       const cwdPath = join(process.cwd(), filename);
       if (existsSync(cwdPath)) {
