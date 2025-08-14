@@ -38,6 +38,79 @@ import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 
 /**
+ * Custom createUserContent function that properly handles function response arrays.
+ * This fixes the issue where multiple function responses are incorrectly nested.
+ *
+ * The Gemini API requires that when multiple function calls are made, each function response
+ * must be sent as a separate Part in the same Content, not as nested arrays.
+ */
+function createUserContentWithFunctionResponseFix(
+  message: string | Part[] | unknown,
+): Content {
+  if (typeof message === 'string') {
+    return createUserContent(message);
+  }
+
+  // Handle array of parts or nested function response arrays
+  const parts: Part[] = [];
+
+  if (process.env.DEBUG) {
+    console.log(
+      '[DEBUG] createUserContentWithFunctionResponseFix - input message:',
+      JSON.stringify(message, null, 2),
+    );
+    console.log(
+      '[DEBUG] createUserContentWithFunctionResponseFix - input type check - isArray:',
+      Array.isArray(message),
+    );
+  }
+
+  // If the message is an array, process each element
+  if (Array.isArray(message)) {
+    for (const item of message) {
+      if (typeof item === 'string') {
+        parts.push({ text: item });
+      } else if (Array.isArray(item)) {
+        // Nested array case - flatten it
+        if (process.env.DEBUG) {
+          console.log(
+            '[DEBUG] createUserContentWithFunctionResponseFix - flattening nested array:',
+            JSON.stringify(item, null, 2),
+          );
+        }
+        for (const subItem of item) {
+          parts.push(subItem);
+        }
+      } else if (item && typeof item === 'object') {
+        // Individual part (function response, text, etc.)
+        parts.push(item);
+      }
+    }
+  } else {
+    // Not an array, fallback to original createUserContent
+    return createUserContent(message);
+  }
+
+  const result = {
+    role: 'user' as const,
+    parts,
+  };
+
+  if (process.env.DEBUG) {
+    console.log(
+      '[DEBUG] createUserContentWithFunctionResponseFix - result parts count:',
+      parts.length,
+    );
+    console.log(
+      '[DEBUG] createUserContentWithFunctionResponseFix - result:',
+      JSON.stringify(result, null, 2),
+    );
+  }
+
+  return result;
+}
+
+/**
  * Returns true if the response is valid, false otherwise.
  */
 function isValidResponse(response: GenerateContentResponse): boolean {
@@ -272,7 +345,9 @@ export class GeminiChat {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     await this.sendPromise;
-    const userContent = createUserContent(params.message);
+    const userContent = createUserContentWithFunctionResponseFix(
+      params.message,
+    );
     const requestContents = this.getHistory(true).concat(userContent);
 
     this._logApiRequest(requestContents, this.config.getModel(), prompt_id);
@@ -419,7 +494,9 @@ export class GeminiChat {
       );
     }
     await this.sendPromise;
-    const userContent = createUserContent(params.message);
+    const userContent = createUserContentWithFunctionResponseFix(
+      params.message,
+    );
 
     // Debug: Check if this is a function response submission
     if (Array.isArray(params.message)) {

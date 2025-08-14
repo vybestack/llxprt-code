@@ -153,6 +153,9 @@ export class TestRig {
         otlpEndpoint: '',
         outfile: telemetryPath,
       },
+      promptService: {
+        baseDir: join(__dirname, '..', 'src', 'prompts'),
+      },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
       selectedAuthType: 'none', // Explicitly set auth type to none for tests
       provider: env.LLXPRT_DEFAULT_PROVIDER || 'openai', // Use OpenAI provider by default
@@ -209,6 +212,7 @@ export class TestRig {
       commandArgs.push('--baseurl', baseUrl);
     }
 
+    // Add API key if available
     // Add API key if available
     if (apiKey) {
       commandArgs.push('--key', apiKey);
