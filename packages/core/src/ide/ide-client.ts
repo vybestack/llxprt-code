@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'node:fs';
+import { isSubpath } from '../utils/paths.js';
 import { detectIde, DetectedIde, getIdeInfo } from '../ide/detect-ide.js';
 import {
   ideContext,
@@ -97,7 +98,14 @@ export class IdeClient {
 
     this.setState(IDEConnectionStatus.Connecting);
 
-    if (!this.validateWorkspacePath()) {
+    const { isValid, error } = IdeClient.validateWorkspacePath(
+      process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'],
+      this.currentIdeDisplayName,
+      process.cwd(),
+    );
+
+    if (!isValid) {
+      this.setState(IDEConnectionStatus.Disconnected, error, true);
       return;
     }
 
@@ -261,33 +269,45 @@ export class IdeClient {
     return port;
   }
 
-  private validateWorkspacePath(): boolean {
-    const ideWorkspacePath = process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
-    if (!ideWorkspacePath) {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        `To use this feature, please open a single workspace folder in ${this.currentIdeDisplayName} and try again.`,
-        true,
-      );
-      return false;
+  static validateWorkspacePath(
+    ideWorkspacePath: string | undefined,
+    currentIdeDisplayName: string | undefined,
+    cwd: string,
+  ): { isValid: boolean; error?: string } {
+    if (ideWorkspacePath === undefined) {
+      return {
+        isValid: false,
+        error: `Failed to connect to IDE companion extension for ${currentIdeDisplayName}. Please ensure the extension is running and try refreshing your terminal. To install the extension, run /ide install.`,
+      };
     }
 
-    const idePath = getRealPath(ideWorkspacePath).toLocaleLowerCase();
-    const cwd = getRealPath(process.cwd()).toLocaleLowerCase();
-    const rel = path.relative(idePath, cwd);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        `Directory mismatch. LLxprt Code is running in a different location than the open workspace in ${this.currentIdeDisplayName}. Please run the CLI from the same directory as your project's root folder.`,
-        true,
-      );
-      return false;
+    if (ideWorkspacePath === '') {
+      return {
+        isValid: false,
+        error: `To use this feature, please open a workspace folder in ${currentIdeDisplayName} and try again.`,
+      };
     }
-    return true;
+
+    const ideWorkspacePaths = ideWorkspacePath.split(':');
+    const realCwd = getRealPath(cwd);
+    const isWithinWorkspace = ideWorkspacePaths.some((workspacePath) => {
+      const idePath = getRealPath(workspacePath);
+      return isSubpath(idePath, realCwd);
+    });
+
+    if (!isWithinWorkspace) {
+      return {
+        isValid: false,
+        error: `Directory mismatch. LLxprt Code is running in a different location than the open workspace in ${currentIdeDisplayName}. Please run the CLI from one of the following directories: ${ideWorkspacePaths.join(
+          ', ',
+        )}`,
+      };
+    }
+    return { isValid: true };
   }
 
   private getPortFromEnvForInit(): string | undefined {
-    const port = process.env['LLXPRT_CLI_IDE_SERVER_PORT'];
+    const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     if (!port) {
       return undefined;
     }
@@ -414,7 +434,14 @@ export class IdeClient {
 
     this.setState(IDEConnectionStatus.Connecting);
 
-    if (!this.validateWorkspacePath()) {
+    const { isValid, error } = IdeClient.validateWorkspacePath(
+      process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'],
+      this.currentIdeDisplayName,
+      process.cwd(),
+    );
+
+    if (!isValid) {
+      this.setState(IDEConnectionStatus.Disconnected, error, true);
       return;
     }
 
