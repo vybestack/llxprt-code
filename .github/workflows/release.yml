@@ -233,13 +233,13 @@ jobs:
             # Write basic release notes
             echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
             echo "" >> release-notes.md
-            
+
             # Add note for pre-release versions
             if [[ "${{ steps.version.outputs.RELEASE_TAG }}" == *"-"* ]]; then
               echo "Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance." >> release-notes.md
               echo "" >> release-notes.md
             fi
-            
+
             echo "### Installation & Upgrade" >> release-notes.md
             echo "" >> release-notes.md
             echo "#### Install" >> release-notes.md

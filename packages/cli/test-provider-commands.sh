@@ -17,7 +17,7 @@ cat > test-commands.txt << 'EOF'
 EOF
 
 # Run the test
-node test-multi-provider.js < test-commands.txt | tee test-output.log
+node test-multi-provider.js < test-commands.txt | tee test-output.log || true
 
 # Check results
 echo ""

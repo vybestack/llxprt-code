@@ -121,7 +121,7 @@ jobs:
             echo "has_conflicts=true" >> $GITHUB_OUTPUT
             echo "Found merge conflicts in the following files:"
             echo "$CONFLICT_FILES"
-            
+
             # Save conflict files for PR description
             {
               echo 'conflict_files<<EOF'

@@ -17,7 +17,7 @@ if echo "$command" | grep -qE "git (push|commit)"; then
     cd "$CLAUDE_PROJECT_DIR" || exit 1
     
     # Check if Git pre-commit hook exists, create if missing
-    if [ ! -f ".git/hooks/pre-commit" ]; then
+    if [[ ! -f ".git/hooks/pre-commit" ]]; then
         echo "📝 Creating missing Git pre-commit hook..."
         cat > .git/hooks/pre-commit << 'EOF'
 #!/bin/bash
