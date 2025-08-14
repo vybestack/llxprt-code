@@ -97,7 +97,7 @@ runs:
         echo "_For detailed HTML reports, please see the 'coverage-reports-${{ inputs.node_version }}-${{ inputs.os }}' artifact from the main CI run._" >> "$comment_file"
 
     - name: Post Coverage Comment
-      uses: thollander/actions-comment-pull-request@v3
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       if: always()
       with:
         file-path: coverage-comment.md # Use the generated file directly

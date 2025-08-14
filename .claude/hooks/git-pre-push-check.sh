@@ -13,8 +13,8 @@ command=$(echo "${input}" | jq -r '.args.command // empty' 2>/dev/null)
 if echo "${command}" | grep -qE "git (push|commit)"; then
     echo "🔍 Pre-commit/push check: Running code quality checks..."
     
-    # Change to project directory
-    cd "${CLAUDE_PROJECT_DIR}" || exit 1
+    # Change to project directory (use environment variable or current directory)
+    cd "${CLAUDE_PROJECT_DIR:-$(pwd)}" || exit 1
     
     # Check if Git pre-commit hook exists, create if missing
     if [[ ! -f ".git/hooks/pre-commit" ]]; then
