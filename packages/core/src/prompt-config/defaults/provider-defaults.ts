@@ -60,6 +60,16 @@ function loadMarkdownFile(filename: string): string {
       }
     }
 
+    // Additional check for Windows CI where files might be in a different location
+    // Check if the file exists relative to the executing script location
+    if (process.argv[1]) {
+      const scriptDir = dirname(process.argv[1]);
+      const scriptPath = join(scriptDir, filename);
+      if (existsSync(scriptPath)) {
+        return readFileSync(scriptPath, 'utf-8');
+      }
+    }
+
     throw new Error(`File not found in any expected location`);
   } catch (_error) {
     console.warn(`Warning: Could not load ${filename}, using empty content`);
