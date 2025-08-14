@@ -10,7 +10,8 @@ import process from 'node:process';
 
 // In bundled environment, use global __dirname if available
 const __dirname =
-  (globalThis as any).__dirname || dirname(fileURLToPath(import.meta.url));
+  ((globalThis as Record<string, unknown>).__dirname as string) ||
+  dirname(fileURLToPath(import.meta.url));
 
 function loadMarkdownFile(filename: string): string {
   // Always log in Windows CI to debug the issue
