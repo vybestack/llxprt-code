@@ -43,20 +43,20 @@ export const DetailedMessagesDisplay: React.FC<
       <MaxSizedBox maxHeight={maxHeight} maxWidth={width - borderAndPadding}>
         {messages.map((msg, index) => {
           let textColor = Colors.Foreground;
-          let icon = '\u2139'; // Information source (ℹ)
+          let icon = 'INFO:'; // Information
 
           switch (msg.type) {
             case 'warn':
               textColor = Colors.AccentYellow;
-              icon = '\u26A0'; // Warning sign (⚠)
+              icon = 'WARNING:'; // Warning sign
               break;
             case 'error':
               textColor = Colors.AccentRed;
-              icon = '\u2716'; // Heavy multiplication x (✖)
+              icon = 'ERROR:'; // Error
               break;
             case 'debug':
               textColor = Colors.Gray; // Or Colors.Gray
-              icon = '\u1F50D'; // Left-pointing magnifying glass (????)
+              icon = 'DEBUG:'; // Debug
               break;
             case 'log':
             default:

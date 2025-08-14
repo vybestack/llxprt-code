@@ -74,7 +74,7 @@ export function useRenderLoopDetector(
 
     if (rapidRenders > RAPID_RENDER_THRESHOLD) {
       console.error(
-        `🚨 RENDER LOOP DETECTED: ${componentName} rendered ${rapidRenders} times in ${RAPID_TIME_WINDOW}ms!`,
+        `CRITICAL: RENDER LOOP DETECTED: ${componentName} rendered ${rapidRenders} times in ${RAPID_TIME_WINDOW}ms!`,
         '\nProps:',
         props,
         '\nTotal renders:',
@@ -87,7 +87,7 @@ export function useRenderLoopDetector(
       );
     } else if (recentRenders > RENDER_THRESHOLD) {
       console.warn(
-        `⚠️ High render count: ${componentName} rendered ${recentRenders} times in ${TIME_WINDOW}ms`,
+        `WARNING: High render count: ${componentName} rendered ${recentRenders} times in ${TIME_WINDOW}ms`,
         '\nProps:',
         props,
         '\nTotal renders:',
@@ -155,7 +155,7 @@ export function useWhyDidYouRender(
 
       if (Object.keys(changedProps).length > 0) {
         console.log(
-          `🔍 ${componentName} re-rendered due to prop changes:`,
+          `DEBUG: ${componentName} re-rendered due to prop changes:`,
           changedProps,
         );
       }

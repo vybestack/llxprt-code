@@ -228,6 +228,16 @@ export const SETTINGS_SCHEMA = {
       },
     },
   },
+  emojifilter: {
+    type: 'string',
+    label: 'Emoji Filter',
+    category: 'Content Filtering',
+    requiresRestart: false,
+    default: 'auto' as 'allowed' | 'auto' | 'warn' | 'error',
+    description:
+      'Filter emojis from AI-generated content and file operations. Options: allowed (no filtering), auto (silent filtering), warn (filter with warnings to AI), error (block operations with emojis).',
+    showInDialog: true,
+  },
   fileFiltering: {
     type: 'object',
     label: 'File Filtering',

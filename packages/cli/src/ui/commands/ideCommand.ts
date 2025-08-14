@@ -56,7 +56,7 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
   const connection = ideClient.getConnectionStatus();
   switch (connection.status) {
     case IDEConnectionStatus.Connected: {
-      let content = `🟢 Connected to ${ideClient.getDetectedIdeDisplayName()}`;
+      let content = `[CONNECTED] Connected to ${ideClient.getDetectedIdeDisplayName()}`;
       try {
         const context = await ideContext.getIdeContext();
         const openFiles = context?.workspaceState?.openFiles;
@@ -75,10 +75,10 @@ async function getIdeStatusMessageWithFiles(ideClient: IdeClient): Promise<{
     case IDEConnectionStatus.Connecting:
       return {
         messageType: 'info',
-        content: `🟡 Connecting...`,
+        content: `[CONNECTING] Connecting...`,
       };
     default: {
-      let content = `🔴 Disconnected`;
+      let content = `[DISCONNECTED] Disconnected`;
       if (connection?.details) {
         content += `: ${connection.details}`;
       }

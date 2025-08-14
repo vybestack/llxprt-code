@@ -466,7 +466,7 @@ export class GeminiChat {
 
       if (estimatedTokens > maxPromptTokens) {
         console.warn(
-          `⚠️ Prompt size (${estimatedTokens} tokens) exceeds max-prompt-tokens limit (${maxPromptTokens}). Trimming...`,
+          `WARNING: Prompt size (${estimatedTokens} tokens) exceeds max-prompt-tokens limit (${maxPromptTokens}). Trimming...`,
         );
 
         // Add a warning message to the request that will be visible to the LLM
@@ -474,7 +474,7 @@ export class GeminiChat {
           role: 'user',
           parts: [
             {
-              text: `⚠️ SYSTEM WARNING: The original prompt exceeded the ${maxPromptTokens} token limit (estimated ${estimatedTokens} tokens). Some conversation history and tool outputs have been truncated to fit. This may affect context continuity. Please be aware that some information from earlier in the conversation or from tool outputs may be missing.`,
+              text: `WARNING: SYSTEM WARNING: The original prompt exceeded the ${maxPromptTokens} token limit (estimated ${estimatedTokens} tokens). Some conversation history and tool outputs have been truncated to fit. This may affect context continuity. Please be aware that some information from earlier in the conversation or from tool outputs may be missing.`,
             },
           ],
         };
@@ -491,7 +491,7 @@ export class GeminiChat {
 
         // Log the trimming action
         console.log(
-          `✂️ Trimmed prompt from ${estimatedTokens} to ~${estimateTokens(JSON.stringify(trimmedContents))} tokens`,
+          `TRIMMED: Trimmed prompt from ${estimatedTokens} to ~${estimateTokens(JSON.stringify(trimmedContents))} tokens`,
         );
 
         // Use trimmed contents instead

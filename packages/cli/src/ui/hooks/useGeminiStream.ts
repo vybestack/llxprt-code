@@ -25,6 +25,8 @@ import {
   DEFAULT_GEMINI_FLASH_MODEL,
   AuthType,
   parseAndFormatApiError,
+  EmojiFilter,
+  FilterConfiguration,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -118,6 +120,7 @@ export const useGeminiStream = (
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
   const queuedToolResponsesRef = useRef<TrackedToolCall[]>([]);
+  const queuedSystemFeedbackRef = useRef<string[]>([]);
   const handleCompletedToolsRef = useRef<
     ((tools: TrackedToolCall[]) => Promise<void>) | null
   >(null);
@@ -254,8 +257,9 @@ export const useGeminiStream = (
     (key) => {
       if (key.name === 'escape') {
         cancelOngoingRequest();
-        // Clear the queue on cancel - we don't want to process tools after user cancellation
+        // Clear the queues on cancel - we don't want to process tools or feedback after user cancellation
         queuedToolResponsesRef.current = [];
+        queuedSystemFeedbackRef.current = [];
       }
     },
     { isActive: streamingState === StreamingState.Responding },
@@ -606,7 +610,7 @@ export const useGeminiStream = (
         addItem(
           {
             type: 'info',
-            text: `⚠️  ${message}`,
+            text: `WARNING: ${message}`,
           },
           userMessageTimestamp,
         );
@@ -663,18 +667,85 @@ export const useGeminiStream = (
     ): Promise<StreamProcessingResult> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
+
+      // Initialize emoji filter for stream processing from settings
+      const emojiFilterMode =
+        (config.getEphemeralSetting('emojifilter') as
+          | 'allowed'
+          | 'auto'
+          | 'warn'
+          | 'error') || 'auto';
+      /**
+       * @requirement REQ-004.1 - Silent filtering in auto mode
+       * Use mode from settings or default to auto
+       */
+      const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
+      const emojiFilter = new EmojiFilter(filterConfig);
+
       for await (const event of stream) {
         switch (event.type) {
           case ServerGeminiEventType.Thought:
             setThought(event.value);
             break;
-          case ServerGeminiEventType.Content:
+          case ServerGeminiEventType.Content: {
+            // Filter the content chunk through emoji filter
+            const filterResult = emojiFilter.filterStreamChunk(event.value);
+
+            if (filterResult.blocked) {
+              // In error mode: stop displaying and queue error feedback for model
+
+              // Clear any partial content that was being built (don't display it)
+              if (geminiMessageBuffer.trim()) {
+                geminiMessageBuffer = '';
+              }
+
+              // Show a brief message to user
+              addItem(
+                {
+                  type: 'info',
+                  text: 'Emojis detected - content blocked in error mode',
+                },
+                userMessageTimestamp,
+              );
+
+              // Queue error feedback to be sent with next tool response or user message
+              if (!queuedSystemFeedbackRef.current) {
+                queuedSystemFeedbackRef.current = [];
+              }
+              queuedSystemFeedbackRef.current.push(
+                `<system-reminder>ERROR: Your previous response contained emojis which are strictly prohibited. You must not use any emojis in your responses. Please provide your response again without emojis.</system-reminder>`,
+              );
+
+              // Stop processing this chunk
+              // The error feedback will be sent with the next interaction
+              break;
+            }
+
+            // Handle the filtered content
+            const filteredText =
+              typeof filterResult.filtered === 'string'
+                ? filterResult.filtered
+                : '';
             geminiMessageBuffer = handleContentEvent(
-              event.value,
+              filteredText,
               geminiMessageBuffer,
               userMessageTimestamp,
             );
+
+            // Queue system feedback to be sent to model in next tool response
+            // This feedback is for the LLM, not for display to the user
+            if (filterResult.systemFeedback) {
+              // We'll append this to the next tool response or create a special system message
+              // Store it in a ref so it persists across renders
+              if (!queuedSystemFeedbackRef.current) {
+                queuedSystemFeedbackRef.current = [];
+              }
+              queuedSystemFeedbackRef.current.push(
+                `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
+              );
+            }
             break;
+          }
           case ServerGeminiEventType.ToolCallRequest:
             if (process.env.DEBUG) {
               console.log(
@@ -719,6 +790,17 @@ export const useGeminiStream = (
           }
         }
       }
+
+      // Flush any remaining content from emoji filter buffer
+      const remainingContent = emojiFilter.flushBuffer();
+      if (remainingContent.length > 0) {
+        geminiMessageBuffer = handleContentEvent(
+          remainingContent,
+          geminiMessageBuffer,
+          userMessageTimestamp,
+        );
+      }
+
       if (toolCallRequests.length > 0) {
         if (process.env.DEBUG) {
           console.log(
@@ -744,6 +826,8 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
+      config,
+      addItem,
     ],
   );
 
@@ -1050,13 +1134,33 @@ export const useGeminiStream = (
         }
 
         const responsesToSend: PartListUnion[] = toolsToProcess.map(
-          (toolCall) => {
+          (toolCall, index) => {
             if (process.env.DEBUG) {
               console.log(
                 `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
                 JSON.stringify(toolCall.response.responseParts, null, 2),
               );
             }
+
+            // For the last tool response, append any queued system feedback
+            // This ensures the model receives the emoji filter warnings
+            if (
+              index === toolsToProcess.length - 1 &&
+              queuedSystemFeedbackRef.current.length > 0
+            ) {
+              const feedbackMessages =
+                queuedSystemFeedbackRef.current.join('\n');
+              queuedSystemFeedbackRef.current = []; // Clear the queue
+
+              // Append the system feedback as a text part to the response
+              const parts = Array.isArray(toolCall.response.responseParts)
+                ? toolCall.response.responseParts
+                : [toolCall.response.responseParts];
+
+              // Add the system feedback as an additional text part
+              return [...parts, { text: feedbackMessages }] as PartListUnion;
+            }
+
             return toolCall.response.responseParts;
           },
         );

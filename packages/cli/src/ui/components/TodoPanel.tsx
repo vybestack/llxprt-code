@@ -119,10 +119,10 @@ const renderTodoSummary = (todos: Todo[]): React.ReactElement[] => {
         let markerColor = SemanticColors.text.primary;
 
         if (todo.status === 'completed') {
-          marker = '✔';
+          marker = '[*]';
           markerColor = SemanticColors.status.success;
         } else if (todo.status === 'pending') {
-          marker = '○';
+          marker = '[ ]';
           markerColor = SemanticColors.text.secondary;
         } else if (todo.status === 'in_progress') {
           marker = '→';

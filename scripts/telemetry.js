@@ -36,7 +36,7 @@ function loadSettingsValue(filePath) {
     }
   } catch (e) {
     console.warn(
-      `⚠️ Warning: Could not parse settings file at ${filePath}: ${e.message}`,
+      `WARNING: Could not parse settings file at ${filePath}: ${e.message}`,
     );
   }
   return undefined;
@@ -56,16 +56,16 @@ if (targetArg) {
   const potentialTarget = targetArg.split('=')[1];
   if (allowedTargets.includes(potentialTarget)) {
     target = potentialTarget;
-    console.log(`⚙️  Using command-line target: ${target}`);
+    console.log(`[CONFIG] Using command-line target: ${target}`);
   } else {
     console.error(
-      `🛑 Error: Invalid target '${potentialTarget}'. Allowed targets are: ${allowedTargets.join(', ')}.`,
+      `[ERROR] Invalid target '${potentialTarget}'. Allowed targets are: ${allowedTargets.join(', ')}.`,
     );
     process.exit(1);
   }
 } else if (settingsTarget) {
   console.log(
-    `⚙️ Using telemetry target from settings.json: ${settingsTarget}`,
+    `[CONFIG] Using telemetry target from settings.json: ${settingsTarget}`,
   );
 }
 
@@ -76,10 +76,10 @@ const scriptPath = join(
 );
 
 try {
-  console.log(`🚀 Running telemetry script for target: ${target}.`);
+  console.log(`Running telemetry script for target: ${target}.`);
   execSync(`node ${scriptPath}`, { stdio: 'inherit', cwd: projectRoot });
 } catch (error) {
-  console.error(`🛑 Failed to run telemetry script for target: ${target}`);
+  console.error(`[ERROR] Failed to run telemetry script for target: ${target}`);
   console.error(error);
   process.exit(1);
 }

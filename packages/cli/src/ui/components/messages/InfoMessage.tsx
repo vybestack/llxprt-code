@@ -13,7 +13,7 @@ interface InfoMessageProps {
 }
 
 export const InfoMessage: React.FC<InfoMessageProps> = ({ text }) => {
-  const prefix = 'ℹ ';
+  const prefix = 'INFO: ';
   const prefixWidth = prefix.length;
 
   return (

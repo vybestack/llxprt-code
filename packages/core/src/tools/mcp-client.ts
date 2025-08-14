@@ -189,7 +189,7 @@ async function handleAutomaticOAuth(
   wwwAuthenticate: string,
 ): Promise<boolean> {
   try {
-    console.log(`🔐 '${mcpServerName}' requires OAuth authentication`);
+    console.log(`[AUTH] '${mcpServerName}' requires OAuth authentication`);
 
     // Always try to parse the resource metadata URI from the www-authenticate header
     let oauthConfig;
@@ -917,7 +917,7 @@ export async function connectToMcpServer(
         // For SSE servers, try to discover OAuth configuration from the base URL
         if (process.env.DEBUG) {
           console.log(
-            `🔍 Attempting OAuth discovery for '${mcpServerName}'...`,
+            `[DISCOVERY] Attempting OAuth discovery for '${mcpServerName}'...`,
           );
         }
 

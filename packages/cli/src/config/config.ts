@@ -29,6 +29,7 @@ import {
   EditTool,
   WriteFileTool,
   MCPServerConfig,
+  getSettingsService,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -86,10 +87,10 @@ export interface CliArgs {
 
 export async function parseArguments(): Promise<CliArgs> {
   const yargsInstance = yargs(hideBin(process.argv))
-    .scriptName('gemini')
+    .scriptName('llxprt')
     .usage(
       '$0 [options]',
-      'Gemini CLI - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
+      'LLxprt Code - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
     )
     .command('$0', 'Launch Gemini CLI', (yargsInstance) =>
       yargsInstance
@@ -797,6 +798,13 @@ export async function loadCliConfig(
   });
 
   const enhancedConfig = config;
+
+  // Apply emojifilter setting from settings.json to SettingsService
+  // Only set if there isn't already an ephemeral setting (from /set command)
+  const settingsService = getSettingsService();
+  if (effectiveSettings.emojifilter && !settingsService.get('emojifilter')) {
+    settingsService.set('emojifilter', effectiveSettings.emojifilter);
+  }
 
   // Apply ephemeral settings from profile if loaded
   // BUT skip ALL profile ephemeral settings if --provider was explicitly specified

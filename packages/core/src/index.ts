@@ -186,3 +186,11 @@ export type {
   EventUnsubscribe,
 } from './settings/types.js';
 export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/types.js';
+
+// Export emoji filter system
+export { EmojiFilter } from './filters/EmojiFilter.js';
+export type {
+  FilterConfiguration,
+  FilterResult,
+  EmojiFilterMode,
+} from './filters/EmojiFilter.js';

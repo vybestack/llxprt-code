@@ -35,6 +35,32 @@ import {
 } from '../telemetry/metrics.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
+import { EmojiFilter } from '../filters/EmojiFilter.js';
+
+/**
+ * Gets emoji filter instance based on configuration
+ */
+function getEmojiFilter(config: Config): EmojiFilter {
+  // Get emojifilter from ephemeral settings or default to 'auto'
+  const mode =
+    (config.getEphemeralSetting('emojifilter') as
+      | 'allowed'
+      | 'auto'
+      | 'warn'
+      | 'error') || 'auto';
+
+  // Map auto to warn for file operations (we want warnings when filtering files)
+  let filterMode: 'allowed' | 'warn' | 'error';
+  if (mode === 'allowed') {
+    filterMode = 'allowed';
+  } else if (mode === 'auto' || mode === 'warn') {
+    filterMode = 'warn';
+  } else {
+    filterMode = 'error';
+  }
+
+  return new EmojiFilter({ mode: filterMode });
+}
 
 /**
  * Parameters for the WriteFile tool
@@ -176,9 +202,24 @@ export class WriteFileTool
       return false;
     }
 
+    // Apply emoji filtering to params.content FIRST, before any processing
+    const filter = getEmojiFilter(this.config);
+    const filterResult = filter.filterFileContent(params.content, 'write_file');
+
+    // If blocked in error mode, return false to prevent confirmation
+    if (filterResult.blocked) {
+      return false;
+    }
+
+    // Update params.content with filtered content for all downstream processing
+    const filteredParamsContent =
+      typeof filterResult.filtered === 'string'
+        ? filterResult.filtered
+        : params.content;
+
     const correctedContentResult = await this._getCorrectedFileContent(
       params.file_path,
-      params.content,
+      filteredParamsContent, // Use filtered content
       abortSignal,
     );
 
@@ -188,6 +229,7 @@ export class WriteFileTool
     }
 
     const { originalContent, correctedContent } = correctedContentResult;
+
     const relativePath = makeRelative(
       params.file_path,
       this.config.getTargetDir(),
@@ -197,7 +239,7 @@ export class WriteFileTool
     const fileDiff = Diff.createPatch(
       fileName,
       originalContent, // Original content (empty if new file or unreadable)
-      correctedContent, // Content after potential correction
+      correctedContent, // Content after correction and emoji filtering
       'Current',
       'Proposed',
       DEFAULT_DIFF_OPTIONS,
@@ -229,6 +271,9 @@ export class WriteFileTool
           if (result.status === 'accepted' && result.content) {
             params.content = result.content;
           }
+        } else {
+          // Update params.content with the filtered content so execute() uses it
+          params.content = correctedContent;
         }
       },
       ideConfirmation,
@@ -252,16 +297,41 @@ export class WriteFileTool
       };
     }
 
+    // Apply emoji filtering to file content
+    const filter = getEmojiFilter(this.config);
+    const filterResult = filter.filterFileContent(params.content, 'write_file');
+
+    // Handle blocking in error mode
+    if (filterResult.blocked) {
+      return {
+        llmContent:
+          filterResult.error || 'File write blocked due to emoji content',
+        returnDisplay:
+          filterResult.error || 'File write blocked due to emoji content',
+        error: {
+          message:
+            filterResult.error || 'File write blocked due to emoji content',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+      };
+    }
+
+    // Use filtered content
+    const filteredParams = {
+      ...params,
+      content: filterResult.filtered as string,
+    };
+
     const correctedContentResult = await this._getCorrectedFileContent(
-      params.file_path,
-      params.content,
+      filteredParams.file_path,
+      filteredParams.content,
       abortSignal,
     );
 
     if (correctedContentResult.error) {
       const errDetails = correctedContentResult.error;
       const errorMsg = errDetails.code
-        ? `Error checking existing file '${params.file_path}': ${errDetails.message} (${errDetails.code})`
+        ? `Error checking existing file '${filteredParams.file_path}': ${errDetails.message} (${errDetails.code})`
         : `Error checking existing file: ${errDetails.message}`;
       return {
         llmContent: errorMsg,
@@ -286,12 +356,12 @@ export class WriteFileTool
         !correctedContentResult.fileExists);
 
     try {
-      const dirName = path.dirname(params.file_path);
+      const dirName = path.dirname(filteredParams.file_path);
       if (!fs.existsSync(dirName)) {
         fs.mkdirSync(dirName, { recursive: true });
       }
 
-      fs.writeFileSync(params.file_path, fileContent, 'utf8');
+      fs.writeFileSync(filteredParams.file_path, fileContent, 'utf8');
 
       // Track git stats if logging is enabled and service is available
       let gitStats = null;
@@ -300,7 +370,7 @@ export class WriteFileTool
         if (gitStatsService) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
-              params.file_path,
+              filteredParams.file_path,
               originalContent || '',
               fileContent,
             );
@@ -312,7 +382,7 @@ export class WriteFileTool
       }
 
       // Generate diff for display result
-      const fileName = path.basename(params.file_path);
+      const fileName = path.basename(filteredParams.file_path);
       // If there was a readError, originalContent in correctedContentResult is '',
       // but for the diff, we want to show the original content as it was before the write if possible.
       // However, if it was unreadable, currentContentForDiff will be empty.
@@ -330,22 +400,29 @@ export class WriteFileTool
       );
 
       const originallyProposedContent =
-        params.ai_proposed_content || params.content;
+        filteredParams.ai_proposed_content || filteredParams.content;
       const diffStat = getDiffStat(
         fileName,
         currentContentForDiff,
         originallyProposedContent,
-        params.content,
+        filteredParams.content,
       );
 
       const llmSuccessMessageParts = [
         isNewFile
-          ? `Successfully created and wrote to new file: ${params.file_path}.`
-          : `Successfully overwrote file: ${params.file_path}.`,
+          ? `Successfully created and wrote to new file: ${filteredParams.file_path}.`
+          : `Successfully overwrote file: ${filteredParams.file_path}.`,
       ];
-      if (params.modified_by_user) {
+      if (filteredParams.modified_by_user) {
         llmSuccessMessageParts.push(
-          `User modified the \`content\` to be: ${params.content}`,
+          `User modified the \`content\` to be: ${filteredParams.content}`,
+        );
+      }
+
+      // Add system feedback for emoji filtering if detected
+      if (filterResult.systemFeedback) {
+        llmSuccessMessageParts.push(
+          `\n\n<system-reminder>\n${filterResult.systemFeedback}\n</system-reminder>`,
         );
       }
 
@@ -358,8 +435,8 @@ export class WriteFileTool
       };
 
       const lines = fileContent.split('\n').length;
-      const mimetype = getSpecificMimeType(params.file_path);
-      const extension = path.extname(params.file_path); // Get extension
+      const mimetype = getSpecificMimeType(filteredParams.file_path);
+      const extension = path.extname(filteredParams.file_path); // Get extension
       if (isNewFile) {
         recordFileOperationMetric(
           this.config,
@@ -401,17 +478,17 @@ export class WriteFileTool
 
       if (isNodeError(error)) {
         // Handle specific Node.js errors with their error codes
-        errorMsg = `Error writing to file '${params.file_path}': ${error.message} (${error.code})`;
+        errorMsg = `Error writing to file '${filteredParams.file_path}': ${error.message} (${error.code})`;
 
         // Log specific error types for better debugging
         if (error.code === 'EACCES') {
-          errorMsg = `Permission denied writing to file: ${params.file_path} (${error.code})`;
+          errorMsg = `Permission denied writing to file: ${filteredParams.file_path} (${error.code})`;
           errorType = ToolErrorType.PERMISSION_DENIED;
         } else if (error.code === 'ENOSPC') {
-          errorMsg = `No space left on device: ${params.file_path} (${error.code})`;
+          errorMsg = `No space left on device: ${filteredParams.file_path} (${error.code})`;
           errorType = ToolErrorType.NO_SPACE_LEFT;
         } else if (error.code === 'EISDIR') {
-          errorMsg = `Target is a directory, not a file: ${params.file_path} (${error.code})`;
+          errorMsg = `Target is a directory, not a file: ${filteredParams.file_path} (${error.code})`;
           errorType = ToolErrorType.TARGET_IS_DIRECTORY;
         }
 

@@ -606,40 +606,40 @@ const App = (props: AppInternalProps) => {
         // Check if this is a Pro quota exceeded error
         if (error && isProQuotaExceededError(error)) {
           if (isPaidTier) {
-            message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ To continue using ${currentModel}, you can use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-⚡ Or you can switch to a different model using the /model command`;
+            message = `You have reached your daily ${currentModel} quota limit.
+To continue using ${currentModel}, you can use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+Or you can switch to a different model using the /model command`;
           } else {
-            message = `⚡ You have reached your daily ${currentModel} quota limit.
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
+            message = `You have reached your daily ${currentModel} quota limit.
+To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         } else if (error && isGenericQuotaExceededError(error)) {
           if (isPaidTier) {
-            message = `⚡ You have reached your daily quota limit.
-⚡ To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-⚡ Or you can switch to a different model using the /model command`;
+            message = `You have reached your daily quota limit.
+To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+Or you can switch to a different model using the /model command`;
           } else {
-            message = `⚡ You have reached your daily quota limit.
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
+            message = `You have reached your daily quota limit.
+To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         } else {
           if (isPaidTier) {
             // Default message for other cases (like consecutive 429s)
-            message = `⚡ You are experiencing capacity issues with ${currentModel}.
-⚡ Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
-⚡ To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-⚡ Or you can switch to a different model using the /model command`;
+            message = `You are experiencing capacity issues with ${currentModel}.
+Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
+To continue, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
+Or you can switch to a different model using the /model command`;
           } else {
             // Default message for other cases (like consecutive 429s)
-            message = `⚡ You are experiencing capacity issues with ${currentModel}.
-⚡ Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
-⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-⚡ You can switch authentication methods by typing /auth or switch to a different model using /model`;
+            message = `You are experiencing capacity issues with ${currentModel}.
+Possible reasons are consecutive capacity errors or reaching your daily ${currentModel} quota limit.
+To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+You can switch authentication methods by typing /auth or switch to a different model using /model`;
           }
         }
 

@@ -29,6 +29,32 @@ import { ReadFileTool } from './read-file.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
+import { EmojiFilter } from '../filters/EmojiFilter.js';
+
+/**
+ * Gets emoji filter instance based on configuration
+ */
+function getEmojiFilter(config: Config): EmojiFilter {
+  // Get emojifilter from ephemeral settings or default to 'auto'
+  const mode =
+    (config.getEphemeralSetting('emojifilter') as
+      | 'allowed'
+      | 'auto'
+      | 'warn'
+      | 'error') || 'auto';
+
+  // Map auto to warn for file operations (we want warnings when filtering files)
+  let filterMode: 'allowed' | 'warn' | 'error';
+  if (mode === 'allowed') {
+    filterMode = 'allowed';
+  } else if (mode === 'auto' || mode === 'warn') {
+    filterMode = 'warn';
+  } else {
+    filterMode = 'error';
+  }
+
+  return new EmojiFilter({ mode: filterMode });
+}
 
 export function applyReplacement(
   currentContent: string | null,
@@ -92,6 +118,7 @@ interface CalculatedEdit {
   occurrences: number;
   error?: { display: string; raw: string; type: ToolErrorType };
   isNewFile: boolean;
+  filterResult?: { systemFeedback?: string };
 }
 
 class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
@@ -114,19 +141,46 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     params: EditToolParams,
     abortSignal: AbortSignal,
   ): Promise<CalculatedEdit> {
-    const expectedReplacements = params.expected_replacements ?? 1;
+    // Apply emoji filtering to edit content
+    // NOTE: old_string is NOT filtered because it needs to match existing content exactly
+    // Only new_string is filtered to remove emojis from the replacement text
+    const filter = getEmojiFilter(this.config);
+    const newStringResult = filter.filterFileContent(params.new_string, 'edit');
+
+    // Handle blocking in error mode (only check new_string, not old_string)
+    if (newStringResult.blocked) {
+      return {
+        currentContent: null,
+        newContent: '',
+        occurrences: 0,
+        error: {
+          display: 'Cannot edit files with emojis in content',
+          raw: 'Emoji filtering blocked the edit operation',
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+        isNewFile: false,
+        filterResult: newStringResult,
+      };
+    }
+
+    // Use filtered content for the edit (only filter new_string)
+    const filteredParams = {
+      ...params,
+      new_string: newStringResult.filtered as string,
+    };
+    const expectedReplacements = filteredParams.expected_replacements ?? 1;
     let currentContent: string | null = null;
     let fileExists = false;
     let isNewFile = false;
-    let finalNewString = params.new_string;
-    let finalOldString = params.old_string;
+    let finalNewString = filteredParams.new_string;
+    let finalOldString = filteredParams.old_string;
     let occurrences = 0;
     let error:
       | { display: string; raw: string; type: ToolErrorType }
       | undefined = undefined;
 
     try {
-      currentContent = fs.readFileSync(params.file_path, 'utf8');
+      currentContent = fs.readFileSync(filteredParams.file_path, 'utf8');
       // Normalize line endings to LF for consistent processing.
       currentContent = currentContent.replace(/\r\n/g, '\n');
       fileExists = true;
@@ -138,22 +192,22 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       fileExists = false;
     }
 
-    if (params.old_string === '' && !fileExists) {
+    if (filteredParams.old_string === '' && !fileExists) {
       // Creating a new file
       isNewFile = true;
     } else if (!fileExists) {
       // Trying to edit a nonexistent file (and old_string is not empty)
       error = {
         display: `File not found. Cannot apply edit. Use an empty old_string to create a new file.`,
-        raw: `File not found: ${params.file_path}`,
+        raw: `File not found: ${filteredParams.file_path}`,
         type: ToolErrorType.FILE_NOT_FOUND,
       };
     } else if (currentContent !== null) {
       // Editing an existing file
       const correctedEdit = await ensureCorrectEdit(
-        params.file_path,
+        filteredParams.file_path,
         currentContent,
-        params,
+        filteredParams,
         this.config.getGeminiClient(),
         abortSignal,
       );
@@ -161,17 +215,17 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       finalNewString = correctedEdit.params.new_string;
       occurrences = correctedEdit.occurrences;
 
-      if (params.old_string === '') {
+      if (filteredParams.old_string === '') {
         // Error: Trying to create a file that already exists
         error = {
           display: `Failed to edit. Attempted to create a file that already exists.`,
-          raw: `File already exists, cannot create: ${params.file_path}`,
+          raw: `File already exists, cannot create: ${filteredParams.file_path}`,
           type: ToolErrorType.ATTEMPT_TO_CREATE_EXISTING_FILE,
         };
       } else if (occurrences === 0) {
         error = {
           display: `Failed to edit, could not find the string to replace.`,
-          raw: `Failed to edit, 0 occurrences found for old_string in ${params.file_path}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
+          raw: `Failed to edit, 0 occurrences found for old_string in ${filteredParams.file_path}. No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use ${ReadFileTool.Name} tool to verify.`,
           type: ToolErrorType.EDIT_NO_OCCURRENCE_FOUND,
         };
       } else if (occurrences !== expectedReplacements) {
@@ -180,13 +234,13 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
 
         error = {
           display: `Failed to edit, expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences}.`,
-          raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${params.file_path}`,
+          raw: `Failed to edit, Expected ${expectedReplacements} ${occurrenceTerm} but found ${occurrences} for old_string in file: ${filteredParams.file_path}`,
           type: ToolErrorType.EDIT_EXPECTED_OCCURRENCE_MISMATCH,
         };
       } else if (finalOldString === finalNewString) {
         error = {
           display: `No changes to apply. The old_string and new_string are identical.`,
-          raw: `No changes to apply. The old_string and new_string are identical in file: ${params.file_path}`,
+          raw: `No changes to apply. The old_string and new_string are identical in file: ${filteredParams.file_path}`,
           type: ToolErrorType.EDIT_NO_CHANGE,
         };
       }
@@ -194,7 +248,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       // Should not happen if fileExists and no exception was thrown, but defensively:
       error = {
         display: `Failed to read content of file.`,
-        raw: `Failed to read content of existing file: ${params.file_path}`,
+        raw: `Failed to read content of existing file: ${filteredParams.file_path}`,
         type: ToolErrorType.READ_CONTENT_FAILURE,
       };
     }
@@ -212,6 +266,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       occurrences,
       error,
       isNewFile,
+      filterResult: newStringResult,
     };
   }
 
@@ -242,11 +297,26 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       return false;
     }
 
+    // Apply emoji filtering to the newContent for preview
+    // NOTE: We only filter new_string, not old_string which must match exactly
+    const filter = getEmojiFilter(this.config);
+    const filterResult = filter.filterFileContent(editData.newContent, 'edit');
+
+    // If blocked in error mode, return false to prevent confirmation
+    if (filterResult.blocked) {
+      return false;
+    }
+
+    const filteredNewContent =
+      typeof filterResult.filtered === 'string'
+        ? filterResult.filtered
+        : editData.newContent;
+
     const fileName = path.basename(this.params.file_path);
     const fileDiff = Diff.createPatch(
       fileName,
       editData.currentContent ?? '',
-      editData.newContent,
+      filteredNewContent,
       'Current',
       'Proposed',
       DEFAULT_DIFF_OPTIONS,
@@ -255,7 +325,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     const ideConfirmation =
       this.config.getIdeMode() &&
       ideClient?.getConnectionStatus().status === IDEConnectionStatus.Connected
-        ? ideClient.openDiff(this.params.file_path, editData.newContent)
+        ? ideClient.openDiff(this.params.file_path, filteredNewContent)
         : undefined;
 
     const confirmationDetails: ToolEditConfirmationDetails = {
@@ -265,7 +335,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       filePath: this.params.file_path,
       fileDiff,
       originalContent: editData.currentContent,
-      newContent: editData.newContent,
+      newContent: filteredNewContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
@@ -279,6 +349,10 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
             this.params.old_string = editData.currentContent ?? '';
             this.params.new_string = result.content;
           }
+        } else {
+          // Update params.new_string with the filtered content so execute() uses it
+          // Keep old_string unchanged as it needs to match exactly
+          this.params.new_string = filteredNewContent;
         }
       },
       ideConfirmation,
@@ -402,6 +476,13 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       if (this.params.modified_by_user) {
         llmSuccessMessageParts.push(
           `User modified the \`new_string\` content to be: ${this.params.new_string}.`,
+        );
+      }
+
+      // Add system feedback for emoji filtering if detected
+      if (editData.filterResult?.systemFeedback) {
+        llmSuccessMessageParts.push(
+          `\n\n<system-reminder>\n${editData.filterResult.systemFeedback}\n</system-reminder>`,
         );
       }
 

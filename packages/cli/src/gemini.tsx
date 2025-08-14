@@ -579,7 +579,7 @@ export async function main() {
 
     // Special handling for maximum update depth errors
     if (error.message.includes('Maximum update depth exceeded')) {
-      console.error('\n🚨 RENDER LOOP DETECTED!');
+      console.error('\nCRITICAL: RENDER LOOP DETECTED!');
       console.error('This is likely caused by:');
       console.error('- State updates during render');
       console.error('- Incorrect useEffect dependencies');

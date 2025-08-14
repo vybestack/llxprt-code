@@ -103,7 +103,7 @@ export async function listMcpServers(): Promise<void> {
     let statusText = '';
     switch (status) {
       case MCPServerStatus.CONNECTED:
-        statusIndicator = COLOR_GREEN + '✓' + RESET_COLOR;
+        statusIndicator = COLOR_GREEN + '[OK]' + RESET_COLOR;
         statusText = 'Connected';
         break;
       case MCPServerStatus.CONNECTING:

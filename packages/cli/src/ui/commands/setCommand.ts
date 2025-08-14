@@ -10,7 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { IProvider } from '@vybestack/llxprt-code-core';
+import { IProvider, EmojiFilterMode } from '@vybestack/llxprt-code-core';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 const unsetCommand: SlashCommand = {
@@ -136,6 +136,8 @@ const unsetCommand: SlashCommand = {
       };
     }
 
+    // No special handling for emojifilter - treat it like any other ephemeral setting
+
     // Check if the setting exists
     const currentValue = config.getEphemeralSetting(key);
     if (currentValue === undefined) {
@@ -187,12 +189,22 @@ const unsetCommand: SlashCommand = {
       (key) => ephemeralSettings[key] !== undefined,
     );
 
-    // Add 'modelparam' as a completion option
-    const specialKeys = ['modelparam'];
+    // Add 'modelparam' and 'emojifilter' as completion options
+    const specialKeys = ['modelparam', 'emojifilter'];
+
     const allKeys = [...ephemeralKeys, ...specialKeys];
 
     if (partialArg) {
       const parts = partialArg.split(/\s+/);
+
+      // If user typed "emojifilter " (with space), offer mode options
+      if (parts.length === 2 && parts[0] === 'emojifilter') {
+        const modes = ['allowed', 'auto', 'warn', 'error'];
+        if (parts[1]) {
+          return modes.filter((mode) => mode.startsWith(parts[1]));
+        }
+        return modes;
+      }
 
       // If user typed "modelparam " (with space), offer model param names
       if (parts.length === 2 && parts[0] === 'modelparam') {
@@ -377,6 +389,8 @@ const ephemeralSettingHelp: Record<string, string> = {
   // Final catch-all to prevent context overflow
   'max-prompt-tokens':
     'Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
+  // Emoji filter settings
+  emojifilter: 'Emoji filter mode (allowed, auto, warn, error)',
 };
 
 export const setCommand: SlashCommand = {
@@ -437,7 +451,7 @@ export const setCommand: SlashCommand = {
     }
 
     // Parse the value
-    const parsedValue = parseValue(value);
+    let parsedValue = parseValue(value);
 
     // Validate specific settings
     if (key === 'compression-threshold') {
@@ -498,6 +512,28 @@ export const setCommand: SlashCommand = {
       }
     }
 
+    // Validate emojifilter mode
+    if (key === 'emojifilter') {
+      const validModes: EmojiFilterMode[] = [
+        'allowed',
+        'auto',
+        'warn',
+        'error',
+      ];
+      const normalizedValue = (
+        parsedValue as string
+      ).toLowerCase() as EmojiFilterMode;
+      if (!validModes.includes(normalizedValue)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid emoji filter mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+        };
+      }
+      // Override the parsed value with normalized lowercase version
+      parsedValue = normalizedValue;
+    }
+
     // Get the config to apply settings
     const config = context.services.config;
     if (!config) {
@@ -522,6 +558,9 @@ export const setCommand: SlashCommand = {
         geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
       }
     }
+
+    // Store emojifilter in ephemeral settings like everything else
+    // No special handling needed - it will be stored below with other settings
 
     // Store ephemeral settings in memory only
     // They will be saved only when user explicitly saves a profile
@@ -560,6 +599,17 @@ export const setCommand: SlashCommand = {
           const modes = ['warn', 'truncate', 'sample'];
           if (parts[1]) {
             return modes.filter((mode) => mode.startsWith(parts[1]));
+          }
+          return modes;
+        }
+
+        // Provide completions for emojifilter
+        if (key === 'emojifilter') {
+          const modes = ['allowed', 'auto', 'warn', 'error'];
+          if (parts[1]) {
+            return modes.filter((mode) =>
+              mode.startsWith(parts[1].toLowerCase()),
+            );
           }
           return modes;
         }

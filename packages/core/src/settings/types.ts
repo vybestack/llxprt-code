@@ -3,6 +3,15 @@
  */
 
 /**
+ * Emoji filter configuration
+ * @requirement REQ-003.2 - Default configuration in settings.json
+ * @plan PLAN-20250113-EMOJIFILTER.P08
+ */
+export interface EmojiFilterSettings {
+  mode: 'allowed' | 'auto' | 'warn' | 'error';
+}
+
+/**
  * Global settings schema matching the specification
  */
 export interface GlobalSettings {
@@ -11,6 +20,12 @@ export interface GlobalSettings {
   ui?: UISettings | null;
   telemetry?: TelemetrySettings;
   advanced?: AdvancedSettings;
+  /**
+   * Emoji filter configuration
+   * @requirement REQ-003.2 - Default configuration in settings.json
+   * @plan PLAN-20250113-EMOJIFILTER.P08
+   */
+  emojiFilter?: EmojiFilterSettings;
 }
 
 /**
@@ -153,6 +168,7 @@ export interface ISettingsService {
     ui?: UISettings;
     telemetry?: TelemetrySettings;
     advanced?: AdvancedSettings;
+    emojiFilter?: EmojiFilterSettings;
   }>;
 
   /**
@@ -164,6 +180,7 @@ export interface ISettingsService {
     ui?: UISettings;
     telemetry?: TelemetrySettings;
     advanced?: AdvancedSettings;
+    emojiFilter?: EmojiFilterSettings;
   }): Promise<void>;
 
   /**

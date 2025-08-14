@@ -2,6 +2,8 @@
 
 This document defines how to create foolproof implementation plans that prevent Claude fraud and ensure valid TDD implementations through autonomous worker execution.
 
+**CRITICAL**: When executing plans, you MUST follow the coordination rules in [COORDINATING.md](./COORDINATING.md) and use the [PLAN-TEMPLATE.md](./PLAN-TEMPLATE.md) for generating plans.
+
 ---
 
 ## Core Principles
@@ -14,6 +16,57 @@ This document defines how to create foolproof implementation plans that prevent 
 6. **No Reverse Testing** - Tests NEVER check for NotYetImplemented or stub behavior
 7. **Modify, Don't Duplicate** - Always UPDATE existing files, never create parallel versions
 8. **NO ISOLATED FEATURES** - Every feature MUST be integrated into the existing system, not built in isolation
+
+---
+
+## CRITICAL: Phase Numbering and Execution
+
+### Sequential Execution is MANDATORY
+
+**PROBLEM**: Coordinators skip phase numbers (executing 03, 06, 09, 16 instead of 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16).
+
+**SOLUTION**:
+
+1. **NEVER SKIP NUMBERS** - Phases must be executed in exact numerical sequence
+2. **USE PLAN IDS** - Every plan gets `PLAN-YYYYMMDD-FEATURE` ID
+3. **TAG EVERYTHING** - Every implementation must include `@plan:PLAN-ID.P##` markers
+
+### Required Plan Structure
+
+```markdown
+Plan ID: PLAN-20250113-FEATURE
+Phases: 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16
+
+Execution MUST be:
+✅ P03 → Verify → P04 → Verify → P05 → Verify → P06 → Verify → P07...
+❌ P03 → P06 → P09 → P16 (WRONG - skipped phases)
+```
+
+### Code Traceability Requirements
+
+Every function, test, and class MUST include:
+
+```typescript
+/**
+ * @plan PLAN-20250113-FEATURE.P07
+ * @requirement REQ-003.1
+ * @pseudocode lines 42-74
+ */
+```
+
+### Phase Verification Before Proceeding
+
+Before starting Phase N, coordinator MUST verify:
+
+```bash
+# Check previous phase exists
+grep -r "@plan:PLAN-ID.P$((N-1))" . || exit 1
+
+# Cannot skip from P06 to P09
+# Must do P07, P08 first
+```
+
+See [COORDINATING.md](./COORDINATING.md) for detailed execution rules.
 
 ---
 
