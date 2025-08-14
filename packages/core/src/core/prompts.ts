@@ -9,6 +9,7 @@ import os from 'node:os';
 import process from 'node:process';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import type {
   PromptContext,
   PromptEnvironment,
@@ -73,7 +74,11 @@ function getToolNameMapping(): Record<string, string> {
 /**
  * Build PromptContext from current environment and parameters
  */
-function buildPromptContext(model?: string, tools?: string[]): PromptContext {
+function buildPromptContext(
+  model?: string,
+  tools?: string[],
+  provider?: string,
+): PromptContext {
   const environment: PromptEnvironment = {
     isGitRepository: isGitRepository(process.cwd()),
     isSandboxed: !!process.env.SANDBOX,
@@ -116,36 +121,25 @@ function buildPromptContext(model?: string, tools?: string[]): PromptContext {
     );
   }
 
-  // Detect provider from model name or environment
-  let provider = 'gemini'; // Default
+  // Use provider if explicitly passed, otherwise get from settings or default to gemini
+  let resolvedProvider = provider || 'gemini';
 
-  // Check if we have provider info in environment or settings
-  if (process.env.LLXPRT_PROVIDER) {
-    provider = process.env.LLXPRT_PROVIDER;
-  } else if (model) {
-    // Infer provider from model name patterns
-    if (
-      model.includes('gpt') ||
-      model.includes('davinci') ||
-      model.includes('turbo')
-    ) {
-      provider = 'openai';
-    } else if (model.includes('claude')) {
-      provider = 'anthropic';
-    } else if (model.includes('gemini') || model.includes('palm')) {
-      provider = 'gemini';
-    } else if (
-      model.includes('llama') ||
-      model.includes('mixtral') ||
-      model.includes('smol')
-    ) {
-      // Local models often used with OpenAI-compatible APIs
-      provider = 'openai';
+  // If provider wasn't explicitly passed, try to get it from settings
+  if (!provider) {
+    try {
+      const settingsService = getSettingsService();
+      const activeProvider = settingsService.get('activeProvider') as string;
+      if (activeProvider) {
+        resolvedProvider = activeProvider;
+      }
+    } catch (_error) {
+      // If we can't get settings (e.g., during tests), use default
+      // Don't log in production to avoid noise
     }
   }
 
   return {
-    provider,
+    provider: resolvedProvider,
     model: model || 'gemini-1.5-pro',
     enabledTools,
     environment,
