@@ -46,6 +46,14 @@ function loadMarkdownFile(filename: string): string {
         console.log(
           `[PROMPT_LOADER] directPath exists: ${existsSync(directPath)}`,
         );
+        
+        // List files in bundle directory to see what's actually there
+        try {
+          const files = readdirSync(currentDir).filter(f => f.endsWith('.md') || f === 'tools' || f === 'providers' || f === 'env');
+          console.log(`[PROMPT_LOADER] Files in bundle dir ${currentDir}:`, files.slice(0, 10));
+        } catch (e) {
+          console.log(`[PROMPT_LOADER] Could not list bundle dir: ${e instanceof Error ? e.message : String(e)}`);
+        }
       }
       if (existsSync(directPath)) {
         if (debugLog) console.log(`[PROMPT_LOADER] Found at directPath`);
