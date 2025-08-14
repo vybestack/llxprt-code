@@ -239,6 +239,8 @@ export class EmojiFilter {
    */
   private detectEmojis(text: string): boolean {
     for (const pattern of this.patterns) {
+      // Reset lastIndex to ensure test starts from beginning
+      pattern.lastIndex = 0;
       if (pattern.test(text)) {
         return true;
       }
@@ -270,12 +272,12 @@ export class EmojiFilter {
     // Remove ALL emojis using comprehensive Unicode patterns
     // Note: Functional emojis (✅, ✓, ⚠️, ❌, ⚡) are already converted by applyConversions
     let result = text;
-    
+
     // Apply each pattern to remove emojis
     for (const pattern of this.patterns) {
       result = result.replace(new RegExp(pattern.source, pattern.flags), '');
     }
-    
+
     return result;
   }
 
@@ -335,14 +337,18 @@ export class EmojiFilter {
     return [
       // Unicode emoji ranges for comprehensive detection
       /[\u{1F300}-\u{1F9FF}]/gu, // Miscellaneous Symbols and Pictographs + Supplemental Symbols
+      /[\u{1FA00}-\u{1FAFF}]/gu, // Extended Symbols and Pictographs (includes magic wand, rock, blood, planet, berries, vegetables, teapot, beans, jar)
       /[\u{2600}-\u{26FF}]/gu, // Miscellaneous Symbols
       /[\u{2700}-\u{27BF}]/gu, // Dingbats
-      /[\u{1F1E0}-\u{1F1FF}]/gu, // Regional Indicator Symbols
+      /[\u{1F170}-\u{1F1FF}]/gu, // Enclosed Alphanumeric Supplement (includes 🆙 U+1F199) and Regional Indicators
       /[\u{1F600}-\u{1F64F}]/gu, // Emoticons
       /[\u{1F680}-\u{1F6FF}]/gu, // Transport and Map Symbols
       /[\u{23E9}-\u{23FF}]/gu, // Additional symbols including ⏳ (hourglass)
       // Specific functional emojis that might not be caught by ranges
       /[\u2705\u2713\u26A0\u274C\u26A1]|\u26A0\uFE0F/gu,
+      // Variation selectors and combining characters often used with emojis
+      /[\uFE0E\uFE0F]/gu, // Variation selectors
+      /[\u200D]/gu, // Zero-width joiner
     ];
   }
 
@@ -358,6 +364,17 @@ export class EmojiFilter {
       ['⚠️', 'WARNING:'], // ⚠️ -> WARNING:
       ['❌', '[ERROR]'], // ❌ -> [ERROR]
       ['⚡', '[ACTION]'], // ⚡ -> [ACTION]
+      ['🪄', '[MAGIC]'], // 🪄 -> [MAGIC]
+      ['🆙', '[UP]'], // 🆙 -> [UP]
+      ['🪨', '[ROCK]'], // 🪨 -> [ROCK]
+      ['🩸', '[BLOOD]'], // 🩸 -> [BLOOD]
+      ['🪐', '[PLANET]'], // 🪐 -> [PLANET]
+      ['🫐', '[BLUEBERRIES]'], // 🫐 -> [BLUEBERRIES]
+      ['🫒', '[OLIVE]'], // 🫒 -> [OLIVE]
+      ['🫑', '[BELL_PEPPER]'], // 🫑 -> [BELL_PEPPER]
+      ['🫖', '[TEAPOT]'], // 🫖 -> [TEAPOT]
+      ['🫘', '[BEANS]'], // 🫘 -> [BEANS]
+      ['🫙', '[JAR]'], // 🫙 -> [JAR]
       // Note: 📝 is treated as decorative in the tests, not functional
     ]);
   }

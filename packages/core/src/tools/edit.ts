@@ -297,11 +297,26 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       return false;
     }
 
+    // Apply emoji filtering to the newContent for preview
+    // NOTE: We only filter new_string, not old_string which must match exactly
+    const filter = getEmojiFilter(this.config);
+    const filterResult = filter.filterFileContent(editData.newContent, 'edit');
+
+    // If blocked in error mode, return false to prevent confirmation
+    if (filterResult.blocked) {
+      return false;
+    }
+
+    const filteredNewContent =
+      typeof filterResult.filtered === 'string'
+        ? filterResult.filtered
+        : editData.newContent;
+
     const fileName = path.basename(this.params.file_path);
     const fileDiff = Diff.createPatch(
       fileName,
       editData.currentContent ?? '',
-      editData.newContent,
+      filteredNewContent,
       'Current',
       'Proposed',
       DEFAULT_DIFF_OPTIONS,
@@ -311,7 +326,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       this.config.getIdeModeFeature() &&
       this.config.getIdeMode() &&
       ideClient?.getConnectionStatus().status === IDEConnectionStatus.Connected
-        ? ideClient.openDiff(this.params.file_path, editData.newContent)
+        ? ideClient.openDiff(this.params.file_path, filteredNewContent)
         : undefined;
 
     const confirmationDetails: ToolEditConfirmationDetails = {
@@ -321,7 +336,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       filePath: this.params.file_path,
       fileDiff,
       originalContent: editData.currentContent,
-      newContent: editData.newContent,
+      newContent: filteredNewContent,
       onConfirm: async (outcome: ToolConfirmationOutcome) => {
         if (outcome === ToolConfirmationOutcome.ProceedAlways) {
           this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
@@ -335,6 +350,10 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
             this.params.old_string = editData.currentContent ?? '';
             this.params.new_string = result.content;
           }
+        } else {
+          // Update params.new_string with the filtered content so execute() uses it
+          // Keep old_string unchanged as it needs to match exactly
+          this.params.new_string = filteredNewContent;
         }
       },
       ideConfirmation,

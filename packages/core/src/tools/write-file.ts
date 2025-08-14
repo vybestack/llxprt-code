@@ -197,9 +197,24 @@ export class WriteFileTool
       return false;
     }
 
+    // Apply emoji filtering to params.content FIRST, before any processing
+    const filter = getEmojiFilter(this.config);
+    const filterResult = filter.filterFileContent(params.content, 'write_file');
+
+    // If blocked in error mode, return false to prevent confirmation
+    if (filterResult.blocked) {
+      return false;
+    }
+
+    // Update params.content with filtered content for all downstream processing
+    const filteredParamsContent =
+      typeof filterResult.filtered === 'string'
+        ? filterResult.filtered
+        : params.content;
+
     const correctedContentResult = await this._getCorrectedFileContent(
       params.file_path,
-      params.content,
+      filteredParamsContent, // Use filtered content
       abortSignal,
     );
 
@@ -209,6 +224,7 @@ export class WriteFileTool
     }
 
     const { originalContent, correctedContent } = correctedContentResult;
+
     const relativePath = makeRelative(
       params.file_path,
       this.config.getTargetDir(),
@@ -218,7 +234,7 @@ export class WriteFileTool
     const fileDiff = Diff.createPatch(
       fileName,
       originalContent, // Original content (empty if new file or unreadable)
-      correctedContent, // Content after potential correction
+      correctedContent, // Content after correction and emoji filtering
       'Current',
       'Proposed',
       DEFAULT_DIFF_OPTIONS,
@@ -251,6 +267,9 @@ export class WriteFileTool
           if (result.status === 'accepted' && result.content) {
             params.content = result.content;
           }
+        } else {
+          // Update params.content with the filtered content so execute() uses it
+          params.content = correctedContent;
         }
       },
       ideConfirmation,

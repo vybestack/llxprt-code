@@ -10,10 +10,7 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import {
-  IProvider,
-  EmojiFilterMode,
-} from '@vybestack/llxprt-code-core';
+import { IProvider, EmojiFilterMode } from '@vybestack/llxprt-code-core';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 const unsetCommand: SlashCommand = {
@@ -199,6 +196,15 @@ const unsetCommand: SlashCommand = {
 
     if (partialArg) {
       const parts = partialArg.split(/\s+/);
+
+      // If user typed "emojifilter " (with space), offer mode options
+      if (parts.length === 2 && parts[0] === 'emojifilter') {
+        const modes = ['allowed', 'auto', 'warn', 'error'];
+        if (parts[1]) {
+          return modes.filter((mode) => mode.startsWith(parts[1]));
+        }
+        return modes;
+      }
 
       // If user typed "modelparam " (with space), offer model param names
       if (parts.length === 2 && parts[0] === 'modelparam') {
@@ -599,7 +605,7 @@ export const setCommand: SlashCommand = {
 
         // Provide completions for emojifilter
         if (key === 'emojifilter') {
-          const modes: EmojiFilterMode[] = ['allowed', 'auto', 'warn', 'error'];
+          const modes = ['allowed', 'auto', 'warn', 'error'];
           if (parts[1]) {
             return modes.filter((mode) =>
               mode.startsWith(parts[1].toLowerCase()),

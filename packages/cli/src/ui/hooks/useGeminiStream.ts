@@ -675,7 +675,12 @@ export const useGeminiStream = (
       const toolCallRequests: ToolCallRequestInfo[] = [];
 
       // Initialize emoji filter for stream processing from settings
-      const emojiFilterMode = (config.getEphemeralSetting('emojifilter') as 'allowed' | 'auto' | 'warn' | 'error') || 'auto';
+      const emojiFilterMode =
+        (config.getEphemeralSetting('emojifilter') as
+          | 'allowed'
+          | 'auto'
+          | 'warn'
+          | 'error') || 'auto';
       /**
        * @requirement REQ-004.1 - Silent filtering in auto mode
        * Use mode from settings or default to auto
