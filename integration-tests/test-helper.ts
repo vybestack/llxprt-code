@@ -154,7 +154,18 @@ export class TestRig {
         outfile: telemetryPath,
       },
       promptService: {
-        baseDir: join(__dirname, '..', 'src', 'prompts'),
+        // In bundled environment, prompts are in the bundle directory
+        baseDir: fs.existsSync(join(__dirname, '..', 'bundle'))
+          ? join(__dirname, '..', 'bundle')
+          : join(
+              __dirname,
+              '..',
+              'packages',
+              'core',
+              'src',
+              'prompt-config',
+              'defaults',
+            ),
       },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
       selectedAuthType: 'none', // Explicitly set auth type to none for tests
