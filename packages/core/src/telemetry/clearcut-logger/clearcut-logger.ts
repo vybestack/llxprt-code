@@ -690,7 +690,7 @@ export class ClearcutLogger {
     }
   }
 
-  // @ts-ignore - Reserved for future error handling
+  // @ts-expect-error - Reserved for future error handling
   private _requeueFailedEvents(failedEvents: LogEventEntry[][]): void {
     // Method reserved for future error handling
     void this;

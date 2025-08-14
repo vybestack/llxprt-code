@@ -503,7 +503,7 @@ export class CoreToolScheduler {
     });
   }
 
-  // @ts-ignore - Reserved for future scheduler monitoring
+  // @ts-expect-error - Reserved for future scheduler monitoring
   private _isRunning(): boolean {
     // Method reserved for future use in scheduler monitoring
     void this;

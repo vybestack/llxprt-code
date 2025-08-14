@@ -689,7 +689,7 @@ describe('WebFetchTool Integration Tests', () => {
         mockGeminiProvider.invokeServerTool as ReturnType<typeof vi.fn>
       ).mockResolvedValue(geminiResponse);
 
-      let invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
+      const invocation = webFetchTool.build({ prompt: 'Fetch https://example.com' });
       let result = await invocation.execute(mockAbortSignal);
 
       expect(result.llmContent).toContain('Gemini fetched content');

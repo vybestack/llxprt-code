@@ -319,7 +319,7 @@ export class GeminiProvider extends BaseProvider {
   /**
    * Checks if OAuth authentication is still valid
    */
-  // @ts-ignore - Reserved for future OAuth validation
+  // @ts-expect-error - Reserved for future OAuth validation
   private async _isOAuthValid(): Promise<boolean> {
     // Method reserved for future OAuth validation
     void this;
