@@ -16,15 +16,15 @@ echo ""
 
 # Detect OS
 OS="unknown"
-if [[ "$OSTYPE" == "darwin"* ]]; then
+if [[ "${OSTYPE}" == "darwin"* ]]; then
     OS="macos"
-elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+elif [[ "${OSTYPE}" == "linux-gnu"* ]]; then
     OS="linux"
-elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]]; then
+elif [[ "${OSTYPE}" == "msys" ]] || [[ "${OSTYPE}" == "cygwin" ]]; then
     OS="windows"
 fi
 
-echo -e "${YELLOW}Detected OS: $OS${NC}"
+echo -e "${YELLOW}Detected OS: ${OS}${NC}"
 echo ""
 
 # Check for package managers
@@ -48,9 +48,9 @@ fi
 echo -e "${YELLOW}Checking shellcheck...${NC}"
 if ! command -v shellcheck &> /dev/null; then
     echo "shellcheck not found. Installing..."
-    if [ "$OS" = "macos" ] && [ "$HAS_BREW" = true ]; then
+    if [[ "${OS}" = "macos" ]] && [[ "${HAS_BREW}" = true ]]; then
         brew install shellcheck
-    elif [ "$OS" = "linux" ] && [ "$HAS_APT" = true ]; then
+    elif [[ "${OS}" = "linux" ]] && [[ "${HAS_APT}" = true ]]; then
         sudo apt-get update && sudo apt-get install -y shellcheck
     else
         echo -e "${RED}Please install shellcheck manually:${NC}"
@@ -66,11 +66,11 @@ fi
 echo -e "\n${YELLOW}Checking yamllint...${NC}"
 if ! command -v yamllint &> /dev/null; then
     echo "yamllint not found. Installing..."
-    if [ "$HAS_PIP" = true ]; then
+    if [[ "${HAS_PIP}" = true ]]; then
         pip3 install yamllint || pip install yamllint
-    elif [ "$OS" = "macos" ] && [ "$HAS_BREW" = true ]; then
+    elif [[ "${OS}" = "macos" ]] && [[ "${HAS_BREW}" = true ]]; then
         brew install yamllint
-    elif [ "$OS" = "linux" ] && [ "$HAS_APT" = true ]; then
+    elif [[ "${OS}" = "linux" ]] && [[ "${HAS_APT}" = true ]]; then
         sudo apt-get update && sudo apt-get install -y yamllint
     else
         echo -e "${RED}Please install yamllint manually:${NC}"
@@ -86,11 +86,12 @@ fi
 echo -e "\n${YELLOW}Checking actionlint...${NC}"
 if ! command -v actionlint &> /dev/null; then
     echo "actionlint not found. Installing..."
-    if [ "$OS" = "macos" ] && [ "$HAS_BREW" = true ]; then
+    if [[ "${OS}" = "macos" ]] && [[ "${HAS_BREW}" = true ]]; then
         brew install actionlint
     elif command -v go &> /dev/null; then
         go install github.com/rhysd/actionlint/cmd/actionlint@latest
-        echo -e "${YELLOW}Note: Make sure $(go env GOPATH)/bin is in your PATH${NC}"
+        GOPATH=$(go env GOPATH)
+        echo -e "${YELLOW}Note: Make sure ${GOPATH}/bin is in your PATH${NC}"
     else
         echo -e "${RED}Please install actionlint manually:${NC}"
         echo "  macOS: brew install actionlint"
@@ -103,7 +104,7 @@ fi
 
 # Setup git hooks with husky
 echo -e "\n${YELLOW}Setting up git hooks...${NC}"
-if [ -d ".husky" ]; then
+if [[ -d ".husky" ]]; then
     npx husky install
     echo -e "${GREEN}✓ Git hooks configured${NC}"
 else

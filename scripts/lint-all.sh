@@ -37,11 +37,16 @@ fi
 # YAML linting (if yamllint is installed)
 if command -v yamllint &> /dev/null; then
     echo -e "\n${YELLOW}Running yamllint...${NC}"
-    if git ls-files | grep -E '\.(yaml|yml)$' | xargs yamllint; then
-        echo -e "${GREEN}✓ yamllint passed${NC}"
+    YAML_FILES=$(git ls-files | grep -E '\.(yaml|yml)$' || true)
+    if [[ -n "${YAML_FILES}" ]]; then
+        if echo "${YAML_FILES}" | xargs yamllint; then
+            echo -e "${GREEN}✓ yamllint passed${NC}"
+        else
+            echo -e "${RED}✗ yamllint failed${NC}"
+            FAILED=1
+        fi
     else
-        echo -e "${RED}✗ yamllint failed${NC}"
-        FAILED=1
+        echo -e "${GREEN}✓ No YAML files to check${NC}"
     fi
 else
     echo -e "${YELLOW}⚠ yamllint not installed - skipping YAML linting${NC}"
@@ -53,8 +58,8 @@ if command -v shellcheck &> /dev/null; then
     echo -e "\n${YELLOW}Running shellcheck...${NC}"
     SHELL_FILES=$(git ls-files | grep -E '^([^.]+|.*\.(sh|zsh|bash))$' | xargs file --mime-type 2>/dev/null | grep "text/x-shellscript" | awk '{ print substr($1, 1, length($1)-1) }' || true)
     
-    if [ -n "$SHELL_FILES" ]; then
-        if echo "$SHELL_FILES" | xargs shellcheck \
+    if [[ -n "${SHELL_FILES}" ]]; then
+        if echo "${SHELL_FILES}" | xargs shellcheck \
             --check-sourced \
             --enable=all \
             --exclude=SC2002,SC2129,SC2310 \
@@ -97,7 +102,7 @@ fi
 
 # Summary
 echo -e "\n================================"
-if [ $FAILED -eq 0 ]; then
+if [[ ${FAILED} -eq 0 ]]; then
     echo -e "${GREEN}✓ All lint checks passed!${NC}"
 else
     echo -e "${RED}✗ Some lint checks failed. Please fix the issues above.${NC}"
