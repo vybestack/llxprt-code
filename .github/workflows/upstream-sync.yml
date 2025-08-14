@@ -57,10 +57,10 @@ jobs:
           COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/$CURRENT_BRANCH || echo "0")
           echo "Commits behind upstream: $COMMITS_BEHIND"
           if [ "$COMMITS_BEHIND" -gt 0 ]; then
-            echo "has_new_commits=true" >> $GITHUB_OUTPUT
-            echo "commits_behind=$COMMITS_BEHIND" >> $GITHUB_OUTPUT
+            echo "has_new_commits=true" >> "$GITHUB_OUTPUT"
+            echo "commits_behind=$COMMITS_BEHIND" >> "$GITHUB_OUTPUT"
           else
-            echo "has_new_commits=false" >> $GITHUB_OUTPUT
+            echo "has_new_commits=false" >> "$GITHUB_OUTPUT"
             echo "No new commits from upstream"
           fi
       - name: Create sync branch
@@ -69,9 +69,9 @@ jobs:
         run: |
           # Create a unique branch name with timestamp
           BRANCH_NAME="upstream-sync-$(date +%Y%m%d-%H%M%S)"
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
           # Create and checkout the new branch
-          git checkout -b $BRANCH_NAME
+          git checkout -b "$BRANCH_NAME"
           echo "Created branch: $BRANCH_NAME"
       - name: Run llxprt-code
         if: steps.check-commits.outputs.has_new_commits == 'true'
@@ -87,7 +87,7 @@ jobs:
 
           # Get the last commit hash we'll cherry-pick (for the merge commit later)
           LAST_COMMIT=$(git log --oneline --reverse HEAD..upstream/main | tail -1 | awk '{print $1}')
-          echo "last_commit=$LAST_COMMIT" >> $GITHUB_OUTPUT
+          echo "last_commit=$LAST_COMMIT" >> "$GITHUB_OUTPUT"
 
           # Run llxprt-code and capture output
           set +e  # Don't exit on error
@@ -101,13 +101,13 @@ jobs:
           LLXPRT_EXIT_CODE=$?
           set -e
           echo "llxprt-code exit code: $LLXPRT_EXIT_CODE"
-          echo "exit_code=$LLXPRT_EXIT_CODE" >> $GITHUB_OUTPUT
+          echo "exit_code=$LLXPRT_EXIT_CODE" >> "$GITHUB_OUTPUT"
           # Save the output for the PR description
           {
             echo 'llxprt_output<<EOF'
             tail -n 100 llxprt-output.log
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } >> "$GITHUB_OUTPUT"
       - name: Check for merge conflicts
         if: steps.check-commits.outputs.has_new_commits == 'true'
         id: check-conflicts
@@ -118,7 +118,7 @@ jobs:
           CONFLICT_FILES=$(git grep -l "^<<<<<<< " || true)
           set -e
           if [ -n "$CONFLICT_FILES" ]; then
-            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            echo "has_conflicts=true" >> "$GITHUB_OUTPUT"
             echo "Found merge conflicts in the following files:"
             echo "$CONFLICT_FILES"
 
@@ -127,9 +127,9 @@ jobs:
               echo 'conflict_files<<EOF'
               echo "$CONFLICT_FILES"
               echo 'EOF'
-            } >> $GITHUB_OUTPUT
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            echo "has_conflicts=false" >> "$GITHUB_OUTPUT"
             echo "No merge conflicts detected"
           fi
       - name: Get commit information
@@ -143,11 +143,11 @@ jobs:
             echo 'commit_log<<EOF'
             git log --oneline --reverse HEAD..upstream/$CURRENT_BRANCH | head -50
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } >> "$GITHUB_OUTPUT"
           # Get the commit range
           FIRST_COMMIT=$(git rev-list --reverse HEAD..upstream/$CURRENT_BRANCH | head -1 | cut -c1-7)
           LAST_COMMIT=$(git rev-list HEAD..upstream/$CURRENT_BRANCH | head -1 | cut -c1-7)
-          echo "commit_range=$FIRST_COMMIT..$LAST_COMMIT" >> $GITHUB_OUTPUT
+          echo "commit_range=$FIRST_COMMIT..$LAST_COMMIT" >> "$GITHUB_OUTPUT"
       - name: Commit changes
         if: steps.check-commits.outputs.has_new_commits == 'true'
         run: |
@@ -172,7 +172,7 @@ jobs:
           echo "Creating empty merge commit for upstream commit: $LAST_COMMIT"
 
           # Get the full commit hash
-          FULL_COMMIT=$(git rev-parse $LAST_COMMIT)
+          FULL_COMMIT=$(git rev-parse "$LAST_COMMIT")
 
           # Get values for the commit message
           COMMITS_BEHIND="${{ steps.check-commits.outputs.commits_behind }}"
@@ -180,7 +180,7 @@ jobs:
 
           # Create the merge commit using -s ours strategy
           # This creates a merge commit without actually merging any content
-          git merge -s ours --no-ff $FULL_COMMIT -m "$(cat <<EOF
+          git merge -s ours --no-ff "$FULL_COMMIT" -m "$(cat <<EOF
           Merge upstream gemini-cli up to commit $LAST_COMMIT
 
           This is an empty merge commit to maintain parity with upstream structure.
@@ -201,46 +201,46 @@ jobs:
       - name: Summary
         if: steps.check-commits.outputs.has_new_commits == 'true'
         run: |
-          echo "## 🔄 Upstream Sync Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📊 Sync Status" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch created:** \`${{ steps.create-branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commits synced:** ${{ steps.check-commits.outputs.commits_behind }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **llxprt-code exit code:** ${{ steps.llxprt.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔄 Upstream Sync Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📊 Sync Status" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Branch created:** \`${{ steps.create-branch.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Commits synced:** ${{ steps.check-commits.outputs.commits_behind }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **llxprt-code exit code:** ${{ steps.llxprt.outputs.exit_code }}" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "${{ steps.llxprt.outputs.exit_code }}" == "0" ]; then
-            echo "- **Empty merge commit:** ✅ Created (prevents 'behind' status)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Empty merge commit:** ✅ Created (prevents 'behind' status)" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- **Empty merge commit:** ⚠️ Skipped (llxprt-code failed)" >> $GITHUB_STEP_SUMMARY
+            echo "- **Empty merge commit:** ⚠️ Skipped (llxprt-code failed)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
-            echo "- **Status:** ⚠️ Merge conflicts detected" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### ⚠️ Conflicted Files" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps.check-conflicts.outputs.conflict_files }}" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** ⚠️ Merge conflicts detected" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ⚠️ Conflicted Files" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "${{ steps.check-conflicts.outputs.conflict_files }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- **Status:** ✅ No conflicts" >> $GITHUB_STEP_SUMMARY
+            echo "- **Status:** ✅ No conflicts" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📝 Commits Cherry-picked" >> $GITHUB_STEP_SUMMARY
-          echo "Range: \`${{ steps.commit-info.outputs.commit_range }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.commit-info.outputs.commit_log }}" | head -20 >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📝 Commits Cherry-picked" >> "$GITHUB_STEP_SUMMARY"
+          echo "Range: \`${{ steps.commit-info.outputs.commit_range }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.commit-info.outputs.commit_log }}" | head -20 >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### ⚡ Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Check out the branch: \`git fetch origin && git checkout ${{ steps.create-branch.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "2. Review the changes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### ⚡ Next Steps" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Check out the branch: \`git fetch origin && git checkout ${{ steps.create-branch.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Review the changes" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
-            echo "3. Resolve any remaining conflicts" >> $GITHUB_STEP_SUMMARY
-            echo "4. Run tests to ensure everything works" >> $GITHUB_STEP_SUMMARY
-            echo "5. Merge when ready" >> $GITHUB_STEP_SUMMARY
+            echo "3. Resolve any remaining conflicts" >> "$GITHUB_STEP_SUMMARY"
+            echo "4. Run tests to ensure everything works" >> "$GITHUB_STEP_SUMMARY"
+            echo "5. Merge when ready" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "3. Run tests to ensure everything works" >> $GITHUB_STEP_SUMMARY
-            echo "4. Merge when ready" >> $GITHUB_STEP_SUMMARY
+            echo "3. Run tests to ensure everything works" >> "$GITHUB_STEP_SUMMARY"
+            echo "4. Merge when ready" >> "$GITHUB_STEP_SUMMARY"
           fi

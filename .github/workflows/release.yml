@@ -60,13 +60,13 @@ jobs:
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.create_nightly_release }}" == "true" ]]; then
             is_nightly="true"
           fi
-          echo "is_nightly=${is_nightly}" >> $GITHUB_OUTPUT
+          echo "is_nightly=${is_nightly}" >> "$GITHUB_OUTPUT"
 
           is_dry_run="false"
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             is_dry_run="true"
           fi
-          echo "is_dry_run=${is_dry_run}" >> $GITHUB_OUTPUT
+          echo "is_dry_run=${is_dry_run}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -81,9 +81,9 @@ jobs:
         id: version
         run: |
           VERSION_JSON=$(node scripts/get-release-version.js)
-          echo "RELEASE_TAG=$(echo $VERSION_JSON | jq -r .releaseTag)" >> $GITHUB_OUTPUT
-          echo "RELEASE_VERSION=$(echo $VERSION_JSON | jq -r .releaseVersion)" >> $GITHUB_OUTPUT
-          echo "NPM_TAG=$(echo $VERSION_JSON | jq -r .npmTag)" >> $GITHUB_OUTPUT
+          echo "RELEASE_TAG=$(echo "$VERSION_JSON" | jq -r .releaseTag)" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_VERSION=$(echo "$VERSION_JSON" | jq -r .releaseVersion)" >> "$GITHUB_OUTPUT"
+          echo "NPM_TAG=$(echo "$VERSION_JSON" | jq -r .npmTag)" >> "$GITHUB_OUTPUT"
         env:
           IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
           MANUAL_VERSION: ${{ inputs.version }}
@@ -125,8 +125,8 @@ jobs:
         id: release_branch
         run: |
           BRANCH_NAME="release/${{ steps.version.outputs.RELEASE_TAG }}"
-          git switch -c $BRANCH_NAME
-          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          git switch -c "$BRANCH_NAME"
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Update package versions
         run: |
@@ -187,11 +187,11 @@ jobs:
           fi
 
           # Save last tag for comparison link
-          echo "LAST_TAG=$LAST_STABLE_TAG" >> $GITHUB_OUTPUT
+          echo "LAST_TAG=$LAST_STABLE_TAG" >> "$GITHUB_OUTPUT"
 
           # Get commit messages since last tag
           echo "Getting commits from $LAST_STABLE_TAG to HEAD"
-          git log --pretty=format:"- %s (%h)" $LAST_STABLE_TAG..HEAD > commits.txt
+          git log --pretty=format:"- %s (%h)" "$LAST_STABLE_TAG"..HEAD > commits.txt
 
           # Generate release notes with LLxprt or fall back to basic format
           echo "Attempting to generate release notes with LLxprt Code..."
@@ -235,7 +235,7 @@ jobs:
             echo "" >> release-notes.md
 
             # Add note for pre-release versions
-            if [[ "${{ steps.version.outputs.RELEASE_TAG }}" == *"-"* ]]; then
+            if [[ "${{ steps.version.outputs.RELEASE_TAG }}" == *-* ]]; then
               echo "Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance." >> release-notes.md
               echo "" >> release-notes.md
             fi
