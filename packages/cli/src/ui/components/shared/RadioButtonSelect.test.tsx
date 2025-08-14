@@ -5,11 +5,12 @@
  */
 
 import { render } from 'ink-testing-library';
+import { waitFor } from '@testing-library/react';
 import {
   RadioButtonSelect,
   type RadioSelectItem,
 } from './RadioButtonSelect.js';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 const ITEMS: Array<RadioSelectItem<string>> = [
   { label: 'Option 1', value: 'one' },
@@ -29,12 +30,7 @@ describe('<RadioButtonSelect />', () => {
 
   it('renders with the second item selected and matches snapshot', () => {
     const { lastFrame } = render(
-      <RadioButtonSelect
-        items={ITEMS}
-        initialIndex={1}
-        onSelect={noop}
-        isFocused={true}
-      />,
+      <RadioButtonSelect items={ITEMS} initialIndex={1} onSelect={() => {}} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -43,8 +39,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = render(
       <RadioButtonSelect
         items={ITEMS}
-        onSelect={noop}
-        isFocused={true}
+        onSelect={() => {}}
         showNumbers={false}
       />,
     );
@@ -59,8 +54,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = render(
       <RadioButtonSelect
         items={manyItems}
-        onSelect={noop}
-        isFocused={true}
+        onSelect={() => {}}
         showScrollArrows={true}
         maxItemsToShow={5}
       />,
@@ -84,7 +78,7 @@ describe('<RadioButtonSelect />', () => {
       },
     ];
     const { lastFrame } = render(
-      <RadioButtonSelect items={themeItems} onSelect={noop} isFocused={true} />,
+      <RadioButtonSelect items={themeItems} onSelect={() => {}} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -95,7 +89,7 @@ describe('<RadioButtonSelect />', () => {
       value: `item-${i + 1}`,
     }));
     const { lastFrame } = render(
-      <RadioButtonSelect items={manyItems} onSelect={noop} isFocused={true} />,
+      <RadioButtonSelect items={manyItems} onSelect={() => {}} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -105,5 +99,85 @@ describe('<RadioButtonSelect />', () => {
       <RadioButtonSelect items={[]} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toBe('');
+  });
+});
+
+describe('keyboard navigation', () => {
+  it('should call onSelect when "enter" is pressed', () => {
+    const onSelect = vi.fn();
+    const { stdin } = render(
+      <RadioButtonSelect items={ITEMS} onSelect={onSelect} />,
+    );
+
+    stdin.write('\r');
+
+    expect(onSelect).toHaveBeenCalledWith('one');
+  });
+
+  describe('when isFocused is false', () => {
+    it('should not handle any keyboard input', () => {
+      const onSelect = vi.fn();
+      const { stdin } = render(
+        <RadioButtonSelect
+          items={ITEMS}
+          onSelect={onSelect}
+          isFocused={false}
+        />,
+      );
+
+      stdin.write('\u001B[B'); // Down arrow
+      stdin.write('\u001B[A'); // Up arrow
+      stdin.write('\r'); // Enter
+
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each([
+    { description: 'when isFocused is true', isFocused: true },
+    { description: 'when isFocused is omitted', isFocused: undefined },
+  ])('$description', ({ isFocused }) => {
+    it('should navigate down with arrow key and select with enter', async () => {
+      const onSelect = vi.fn();
+      const { stdin, lastFrame } = render(
+        <RadioButtonSelect
+          items={ITEMS}
+          onSelect={onSelect}
+          isFocused={isFocused}
+        />,
+      );
+
+      stdin.write('\u001B[B'); // Down arrow
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('● 2. Option 2');
+      });
+
+      stdin.write('\r');
+
+      expect(onSelect).toHaveBeenCalledWith('two');
+    });
+
+    it('should navigate up with arrow key and select with enter', async () => {
+      const onSelect = vi.fn();
+      const { stdin, lastFrame } = render(
+        <RadioButtonSelect
+          items={ITEMS}
+          onSelect={onSelect}
+          initialIndex={1}
+          isFocused={isFocused}
+        />,
+      );
+
+      stdin.write('\u001B[A'); // Up arrow
+
+      await waitFor(() => {
+        expect(lastFrame()).toContain('● 1. Option 1');
+      });
+
+      stdin.write('\r');
+
+      expect(onSelect).toHaveBeenCalledWith('one');
+    });
   });
 });
