@@ -106,7 +106,6 @@ export const useShellCommandProcessor = (
       const execPromise = new Promise<void>((resolve) => {
         let lastUpdateTime = Date.now();
         let cumulativeStdout = '';
-        let cumulativeStderr = '';
         let isBinaryStream = false;
         let binaryBytesReceived = 0;
 
@@ -144,11 +143,7 @@ export const useShellCommandProcessor = (
                 case 'data':
                   // Do not process text data if we've already switched to binary mode.
                   if (isBinaryStream) break;
-                  if (event.stream === 'stdout') {
-                    cumulativeStdout += event.chunk;
-                  } else {
-                    cumulativeStderr += event.chunk;
-                  }
+                  cumulativeStdout = event.chunk;
                   break;
                 case 'binary_detected':
                   isBinaryStream = true;
@@ -174,9 +169,7 @@ export const useShellCommandProcessor = (
                     '[Binary output detected. Halting stream...]';
                 }
               } else {
-                currentDisplayOutput =
-                  cumulativeStdout +
-                  (cumulativeStderr ? `\n${cumulativeStderr}` : '');
+                currentDisplayOutput = cumulativeStdout;
               }
 
               // Throttle pending UI updates to avoid excessive re-renders.
