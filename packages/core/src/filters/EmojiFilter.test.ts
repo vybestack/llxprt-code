@@ -906,7 +906,6 @@ function validate(input) {
       expect(result.blocked).toBe(false);
     });
 
-
     it('should handle arrays of emojis in tool arguments', () => {
       const filter = new EmojiFilter({ mode: 'warn' });
       const args = {

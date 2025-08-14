@@ -704,8 +704,9 @@ describe('EmojiFilter Property-Based Tests', () => {
         fc.property(
           fc.anything().filter(
             (obj) =>
-              // Filter out functions and symbols that can't be JSON serialized
+              // Filter out functions, symbols, null, and undefined that can't be JSON serialized
               obj !== null &&
+              obj !== undefined &&
               typeof obj !== 'function' &&
               typeof obj !== 'symbol',
           ),
@@ -715,7 +716,7 @@ describe('EmojiFilter Property-Based Tests', () => {
 
             // Should not crash even with weird objects
             expect(() => {
-              const result = filter.filterToolArgs(obj);
+              const result = filter.filterToolArgs(obj as object);
               expect(result.filtered !== undefined).toBe(true);
               expect(typeof result.emojiDetected).toBe('boolean');
               expect(typeof result.blocked).toBe('boolean');

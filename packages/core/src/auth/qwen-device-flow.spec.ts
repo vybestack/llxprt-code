@@ -424,25 +424,30 @@ describe('QwenDeviceFlow - Behavioral Tests', () => {
      * @when requesting token
      * @then Uses https://chat.qwen.ai/api/v1/oauth2/token
      */
-    it('should use correct Qwen token endpoint', { timeout: 10000 }, async () => {
-      const realConfig: DeviceFlowConfig = {
-        clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
-        authorizationEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/device/code',
-        tokenEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/token',
-        scopes: ['read'],
-      };
+    it(
+      'should use correct Qwen token endpoint',
+      { timeout: 10000 },
+      async () => {
+        const realConfig: DeviceFlowConfig = {
+          clientId: 'f0304373b74a44d2b584a3fb70ca9e56',
+          authorizationEndpoint:
+            'https://chat.qwen.ai/api/v1/oauth2/device/code',
+          tokenEndpoint: 'https://chat.qwen.ai/api/v1/oauth2/token',
+          scopes: ['read'],
+        };
 
-      const realDeviceFlow = new QwenDeviceFlow(realConfig);
-      // This will fail with a real network request, which is expected
-      await expect(realDeviceFlow.pollForToken('test_device')).rejects.toThrow(
-        'HTTP 400: Bad Request',
-      );
+        const realDeviceFlow = new QwenDeviceFlow(realConfig);
+        // This will fail with a real network request, which is expected
+        await expect(
+          realDeviceFlow.pollForToken('test_device'),
+        ).rejects.toThrow('HTTP 400: Bad Request');
 
-      // Verify the configuration contains the correct endpoint
-      expect(realConfig.tokenEndpoint).toBe(
-        'https://chat.qwen.ai/api/v1/oauth2/token',
-      );
-    });
+        // Verify the configuration contains the correct endpoint
+        expect(realConfig.tokenEndpoint).toBe(
+          'https://chat.qwen.ai/api/v1/oauth2/token',
+        );
+      },
+    );
 
     /**
      * @requirement REQ-002.1
