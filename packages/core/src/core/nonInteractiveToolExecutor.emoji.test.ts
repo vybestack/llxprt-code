@@ -57,6 +57,7 @@ describe('nonInteractiveToolExecutor Emoji Filtering - REAL Integration Tests', 
       getLlxprtMdFileCount: () => 0,
       setLlxprtMdFileCount: vi.fn(),
       getConversationLoggingEnabled: () => false,
+      getEphemeralSetting: vi.fn(() => 'auto'), // Default to 'auto' for emoji filter
       getToolRegistry: () => null,
       getSessionId: () => 'test-session',
       getUsageStatisticsEnabled: () => true,

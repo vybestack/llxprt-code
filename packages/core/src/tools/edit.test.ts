@@ -82,6 +82,7 @@ describe('EditTool', () => {
       getLlxprtMdFileCount: () => 0,
       setLlxprtMdFileCount: vi.fn(),
       getConversationLoggingEnabled: () => false,
+      getEphemeralSetting: vi.fn(() => 'auto'), // Default to 'auto' for emoji filter
       getToolRegistry: () => ({}) as any, // Minimal mock for ToolRegistry
     } as unknown as Config;
 

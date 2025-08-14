@@ -27,7 +27,6 @@ import {
   DEFAULT_GEMINI_FLASH_MODEL,
   AuthType,
   EmojiFilter,
-  ConfigurationManager,
   FilterConfiguration,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
@@ -675,14 +674,13 @@ export const useGeminiStream = (
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
 
-      // Initialize emoji filter for stream processing
-      const configManager = ConfigurationManager.getInstance();
-      const currentMode = configManager.getCurrentMode();
+      // Initialize emoji filter for stream processing from settings
+      const emojiFilterMode = (config.getEphemeralSetting('emojifilter') as 'allowed' | 'auto' | 'warn' | 'error') || 'auto';
       /**
        * @requirement REQ-004.1 - Silent filtering in auto mode
-       * Use auto mode directly instead of mapping to warn
+       * Use mode from settings or default to auto
        */
-      const filterConfig: FilterConfiguration = { mode: currentMode };
+      const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
       const emojiFilter = new EmojiFilter(filterConfig);
 
       for await (const event of stream) {
@@ -812,6 +810,7 @@ export const useGeminiStream = (
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
       addItem,
+      config,
     ],
   );
 

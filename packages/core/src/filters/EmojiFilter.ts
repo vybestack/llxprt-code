@@ -4,11 +4,16 @@
  */
 
 /**
+ * Emoji filter modes
+ */
+export type EmojiFilterMode = 'allowed' | 'auto' | 'warn' | 'error';
+
+/**
  * Configuration for emoji filtering behavior
  * @requirement REQ-004.1 - Silent filtering in auto mode
  */
 export interface FilterConfiguration {
-  mode: 'allowed' | 'auto' | 'warn' | 'error';
+  mode: EmojiFilterMode;
 }
 
 /**

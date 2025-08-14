@@ -12,7 +12,6 @@ import {
 } from './types.js';
 import {
   IProvider,
-  ConfigurationManager,
   EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 
@@ -140,31 +139,7 @@ const unsetCommand: SlashCommand = {
       };
     }
 
-    // Special handling for emojifilter - check before generic ephemeral settings
-    if (key === 'emojifilter') {
-      try {
-        const configManager = ConfigurationManager.getInstance();
-        const success = configManager.clearSessionOverride();
-        if (!success) {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: 'Failed to remove emoji filter session override',
-          };
-        }
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: 'Emoji filter session override has been removed',
-        };
-      } catch (error) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Failed to access emoji filter configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        };
-      }
-    }
+    // No special handling for emojifilter - treat it like any other ephemeral setting
 
     // Check if the setting exists
     const currentValue = config.getEphemeralSetting(key);
@@ -578,33 +553,8 @@ export const setCommand: SlashCommand = {
       }
     }
 
-    // Apply emojifilter settings to ConfigurationManager
-    if (key === 'emojifilter') {
-      try {
-        const configManager = ConfigurationManager.getInstance();
-        const success = configManager.setSessionOverride(
-          parsedValue as EmojiFilterMode,
-        );
-        if (!success) {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: `Failed to set emoji filter mode to '${parsedValue}'`,
-          };
-        }
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Emoji filter mode set to '${parsedValue}' (session only, use /profile save to persist)`,
-        };
-      } catch (error) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Failed to access emoji filter configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        };
-      }
-    }
+    // Store emojifilter in ephemeral settings like everything else
+    // No special handling needed - it will be stored below with other settings
 
     // Store ephemeral settings in memory only
     // They will be saved only when user explicitly saves a profile

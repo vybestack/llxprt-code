@@ -33,7 +33,6 @@ import {
   getOauthClient,
   setGitStatsService,
   // IDE connection logging removed - telemetry disabled in llxprt
-  ConfigurationManager,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -175,10 +174,6 @@ export async function main() {
 
   const providerManager = getProviderManager(config);
   config.setProviderManager(providerManager);
-
-  // Initialize ConfigurationManager for emoji filtering
-  const settingsService = getSettingsService();
-  ConfigurationManager.getInstance().initialize(config, settingsService);
 
   // Initialize git stats service for tracking file changes when logging is enabled
   if (config.getConversationLoggingEnabled()) {

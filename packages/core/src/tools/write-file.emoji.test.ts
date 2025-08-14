@@ -53,6 +53,7 @@ describe('WriteFileTool Emoji Filtering - REAL Behavioral Tests', () => {
       getLlxprtMdFileCount: () => 0,
       setLlxprtMdFileCount: vi.fn(),
       getConversationLoggingEnabled: () => false,
+      getEphemeralSetting: vi.fn(() => 'auto'), // Default to 'auto' for emoji filter
       getToolRegistry: () => null,
     };
     config = mockConfig as unknown as Config;

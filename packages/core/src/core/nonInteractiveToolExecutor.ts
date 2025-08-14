@@ -18,7 +18,6 @@ import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolContext } from '../tools/tool-context.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
-import { ConfigurationManager } from '../filters/ConfigurationManager.js';
 
 /**
  * Global emoji filter instance for reuse across tool calls
@@ -29,24 +28,20 @@ let emojiFilter: EmojiFilter | null = null;
  * Gets or creates the emoji filter instance based on current configuration
  * Always checks current configuration to ensure filter is up-to-date
  */
-function getOrCreateFilter(_config: Config): EmojiFilter {
-  const configManager = ConfigurationManager.getInstance();
-  const currentMode = configManager.getCurrentMode();
+function getOrCreateFilter(config: Config): EmojiFilter {
+  // Get emojifilter from ephemeral settings or default to 'auto'
+  const mode =
+    (config.getEphemeralSetting('emojifilter') as
+      | 'allowed'
+      | 'auto'
+      | 'warn'
+      | 'error') || 'auto';
 
   /**
    * @requirement REQ-004.1 - Silent filtering in auto mode
-   * Map ConfigurationManager modes to EmojiFilter modes
+   * Use mode directly from settings
    */
-  let filterMode: 'allowed' | 'auto' | 'warn' | 'error';
-  if (currentMode === 'allowed') {
-    filterMode = 'allowed';
-  } else if (currentMode === 'auto') {
-    filterMode = 'auto';
-  } else if (currentMode === 'warn') {
-    filterMode = 'warn';
-  } else {
-    filterMode = 'error';
-  }
+  const filterMode: 'allowed' | 'auto' | 'warn' | 'error' = mode;
 
   // Always create a new filter to ensure current configuration is applied
   // Tool execution is infrequent enough that this performance cost is acceptable

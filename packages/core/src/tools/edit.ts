@@ -30,20 +30,24 @@ import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
-import { ConfigurationManager } from '../filters/ConfigurationManager.js';
 
 /**
  * Gets emoji filter instance based on configuration
  */
-function getEmojiFilter(): EmojiFilter {
-  const configManager = ConfigurationManager.getInstance();
-  const currentMode = configManager.getCurrentMode();
+function getEmojiFilter(config: Config): EmojiFilter {
+  // Get emojifilter from ephemeral settings or default to 'auto'
+  const mode =
+    (config.getEphemeralSetting('emojifilter') as
+      | 'allowed'
+      | 'auto'
+      | 'warn'
+      | 'error') || 'auto';
 
-  // Map ConfigurationManager modes to EmojiFilter modes
+  // Map auto to warn for file operations (we want warnings when filtering files)
   let filterMode: 'allowed' | 'warn' | 'error';
-  if (currentMode === 'allowed') {
+  if (mode === 'allowed') {
     filterMode = 'allowed';
-  } else if (currentMode === 'auto' || currentMode === 'warn') {
+  } else if (mode === 'auto' || mode === 'warn') {
     filterMode = 'warn';
   } else {
     filterMode = 'error';
@@ -140,7 +144,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     // Apply emoji filtering to edit content
     // NOTE: old_string is NOT filtered because it needs to match existing content exactly
     // Only new_string is filtered to remove emojis from the replacement text
-    const filter = getEmojiFilter();
+    const filter = getEmojiFilter(this.config);
     const newStringResult = filter.filterFileContent(params.new_string, 'edit');
 
     // Handle blocking in error mode (only check new_string, not old_string)

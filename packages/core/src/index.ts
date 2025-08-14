@@ -188,9 +188,8 @@ export type { TelemetrySettings as SettingsTelemetrySettings } from './settings/
 
 // Export emoji filter system
 export { EmojiFilter } from './filters/EmojiFilter.js';
-export { ConfigurationManager } from './filters/ConfigurationManager.js';
 export type {
   FilterConfiguration,
   FilterResult,
+  EmojiFilterMode,
 } from './filters/EmojiFilter.js';
-export type { EmojiFilterMode } from './filters/ConfigurationManager.js';

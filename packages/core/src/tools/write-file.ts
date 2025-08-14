@@ -35,20 +35,24 @@ import {
 import { IDEConnectionStatus } from '../ide/ide-client.js';
 import { getGitStatsService } from '../services/git-stats-service.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
-import { ConfigurationManager } from '../filters/ConfigurationManager.js';
 
 /**
  * Gets emoji filter instance based on configuration
  */
-function getEmojiFilter(): EmojiFilter {
-  const configManager = ConfigurationManager.getInstance();
-  const currentMode = configManager.getCurrentMode();
+function getEmojiFilter(config: Config): EmojiFilter {
+  // Get emojifilter from ephemeral settings or default to 'auto'
+  const mode =
+    (config.getEphemeralSetting('emojifilter') as
+      | 'allowed'
+      | 'auto'
+      | 'warn'
+      | 'error') || 'auto';
 
-  // Map ConfigurationManager modes to EmojiFilter modes
+  // Map auto to warn for file operations (we want warnings when filtering files)
   let filterMode: 'allowed' | 'warn' | 'error';
-  if (currentMode === 'allowed') {
+  if (mode === 'allowed') {
     filterMode = 'allowed';
-  } else if (currentMode === 'auto' || currentMode === 'warn') {
+  } else if (mode === 'auto' || mode === 'warn') {
     filterMode = 'warn';
   } else {
     filterMode = 'error';
@@ -271,7 +275,7 @@ export class WriteFileTool
     }
 
     // Apply emoji filtering to file content
-    const filter = getEmojiFilter();
+    const filter = getEmojiFilter(this.config);
     const filterResult = filter.filterFileContent(params.content, 'write_file');
 
     // Handle blocking in error mode
