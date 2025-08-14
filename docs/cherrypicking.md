@@ -4,15 +4,17 @@ This guide documents the process for cherry-picking changes from the upstream ge
 
 ## Current Sync Status
 
-**Last synced upstream commit:** `0157eae3` (August 10, 2025)
+**Last synced upstream commit:** `342820cf` (August 14, 2025)
 
-- Added /settings command and UI panel
-- Enhanced input UX with double ESC clear
-- Fixed duplicate key bindings
-- Enabled default usage statistics collection
-- All valuable commits from August 7-10, 2025 have been cherry-picked
+- Fix thought signature auth switching (OAuth transitions)
+- Updated Ink version dependencies
+- Removed deprecated modelCheck feature
+- Fixed emoji support in terminal rendering
+- Added GCA free tier authentication support
+- Improved IDE detection (Devin, Replit environments)
+- Completely removed ClearcutLogger and all Google telemetry
 
-**Branch:** `20250810-gmerge`
+**Branch:** `20250813-gmerge`
 
 ## Overview
 
