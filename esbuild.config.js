@@ -40,5 +40,23 @@ esbuild
       js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
     },
   })
-  .then(() => fs.chmodSync('bundle/llxprt.js', 0o755))
-  .catch(() => process.exit(1));
+  .then(() => {
+    const bundlePath = path.resolve(__dirname, 'bundle/llxprt.js');
+    console.log('ESBuild completed:');
+    console.log('  Bundle path:', bundlePath);
+    console.log('  Bundle exists:', fs.existsSync(bundlePath));
+    console.log('  Bundle size:', fs.existsSync(bundlePath) ? fs.statSync(bundlePath).size : 'N/A');
+    
+    // List bundle directory contents
+    const bundleDir = path.dirname(bundlePath);
+    if (fs.existsSync(bundleDir)) {
+      const files = fs.readdirSync(bundleDir);
+      console.log(`  Bundle dir contents (${files.length} items):`, files);
+    }
+    
+    fs.chmodSync('bundle/llxprt.js', 0o755);
+  })
+  .catch((err) => {
+    console.error('ESBuild failed:', err);
+    process.exit(1);
+  });

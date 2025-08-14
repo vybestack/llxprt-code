@@ -64,12 +64,14 @@ const promptMdFiles = glob.sync(
   { cwd: root },
 );
 console.log(`Found ${promptMdFiles.length} markdown files to copy`);
+let copiedCount = 0;
 for (const file of promptMdFiles) {
   // Extract the relative path after 'defaults/'
   const relativePath = file.replace(
     'packages/core/src/prompt-config/defaults/',
     '',
   );
+  const sourcePath = join(root, file);
   const targetPath = join(bundleDir, relativePath);
   const targetDir = dirname(targetPath);
 
@@ -78,8 +80,16 @@ for (const file of promptMdFiles) {
     mkdirSync(targetDir, { recursive: true });
   }
 
-  copyFileSync(join(root, file), targetPath);
+  copyFileSync(sourcePath, targetPath);
+  
+  // Verify the file was copied
+  if (existsSync(targetPath)) {
+    copiedCount++;
+  } else {
+    console.error(`  Failed to copy: ${relativePath}`);
+  }
 }
+console.log(`  Successfully copied ${copiedCount}/${promptMdFiles.length} markdown files`);
 
 // List what's actually in the bundle directory
 const bundleContents = existsSync(bundleDir)

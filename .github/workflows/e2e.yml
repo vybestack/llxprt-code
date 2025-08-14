@@ -40,7 +40,14 @@ jobs:
 
       - name: 'Create bundle'
         run: |-
+          echo "Current directory: $(pwd)"
+          echo "Directory contents before bundle:"
+          ls -la
           npm run bundle
+          echo "Directory contents after bundle:"
+          ls -la
+          echo "Bundle directory contents:"
+          ls -la bundle/ || echo "Bundle directory not found"
 
       - name: 'Set up Docker'
         if: |-
