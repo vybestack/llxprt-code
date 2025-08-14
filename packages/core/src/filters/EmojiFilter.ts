@@ -267,12 +267,16 @@ export class EmojiFilter {
    * @pseudocode lines 157-163
    */
   private removeDecorativeEmojis(text: string): string {
-    // Remove decorative emojis - NOT functional ones that are converted first
-    // Functional emojis: ✅, ✓, ⚠️, ❌, ⚡ (these are converted, not removed)
-    const decorativePattern =
-      /🎉|🎊|✨|💫|⭐|🌟|😀|😁|😂|😃|😄|😅|😆|😇|😈|😉|😊|😋|😌|😍|😎|😏|🔥|💯|🚫|🎯|🤔|💭|🚀|⏳|💾|🐛|👍|👨‍💻|☕|🌍|🔧|📝/g;
-
-    return text.replace(decorativePattern, '');
+    // Remove ALL emojis using comprehensive Unicode patterns
+    // Note: Functional emojis (✅, ✓, ⚠️, ❌, ⚡) are already converted by applyConversions
+    let result = text;
+    
+    // Apply each pattern to remove emojis
+    for (const pattern of this.patterns) {
+      result = result.replace(new RegExp(pattern.source, pattern.flags), '');
+    }
+    
+    return result;
   }
 
   /**
