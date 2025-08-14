@@ -217,23 +217,24 @@ export class AnthropicProvider extends BaseProvider {
     // Update Anthropic client with resolved authentication if needed
     await this.updateClientWithResolvedAuth();
 
-    let attemptCount = 0;
-
     const apiCall = async () => {
-      attemptCount++;
-
       // Resolve model if it uses -latest alias
       const resolvedModel = await this.resolveLatestModel(this.currentModel);
 
-      // Validate and fix message history to prevent tool_use/tool_result mismatches
-      const validatedMessages =
-        attemptCount > 1 ? this.validateAndFixMessages(messages) : messages;
+      // Always validate and fix message history to prevent tool_use/tool_result mismatches
+      // This is necessary for both cancelled tools and retries
+      const validatedMessages = this.validateAndFixMessages(messages);
 
       // Use the resolved model for the API call
       const modelForApi = resolvedModel;
 
+      // Check if we're in OAuth mode early
+      const authToken = await this.getAuthToken();
+      const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
+
       // Extract system message if present and handle tool responses
       let systemMessage: string | undefined;
+      let llxprtPrompts: string | undefined; // Store llxprt prompts separately
       const anthropicMessages: Array<{
         role: 'user' | 'assistant';
         content:
@@ -247,7 +248,13 @@ export class AnthropicProvider extends BaseProvider {
 
       for (const msg of validatedMessages) {
         if (msg.role === 'system') {
-          systemMessage = msg.content;
+          if (isOAuth) {
+            // In OAuth mode, save system content for injection as user message
+            llxprtPrompts = msg.content;
+          } else {
+            // In normal mode, use as system message
+            systemMessage = msg.content;
+          }
         } else if (msg.role === 'tool') {
           // Anthropic expects tool responses as user messages with tool_result content
           anthropicMessages.push({
@@ -295,31 +302,65 @@ export class AnthropicProvider extends BaseProvider {
         }
       }
 
+      // In OAuth mode, inject llxprt prompts as conversation content
+      // ONLY for the very first message in a new conversation
+      if (isOAuth && llxprtPrompts && anthropicMessages.length === 0) {
+        // This is the very first message - inject the context
+        const contextMessage = `Important context for using llxprt tools:
+
+Tool Parameter Reference:
+- read_file uses parameter 'absolute_path' (not 'file_path')
+- write_file uses parameter 'file_path' (not 'path')
+- list_directory uses parameter 'path'
+- replace uses 'file_path', 'old_string', 'new_string'
+- search_file_content (grep) expects regex patterns, not literal text
+- todo_write requires 'todos' array with {id, content, status, priority}
+- All file paths must be absolute (starting with /)
+
+${llxprtPrompts}`;
+
+        // Inject at the beginning of the conversation
+        anthropicMessages.unshift(
+          {
+            role: 'user',
+            content: contextMessage,
+          },
+          {
+            role: 'assistant',
+            content:
+              "I understand the llxprt tool parameters and context. I'll use the correct parameter names for each tool. Ready to help with your tasks.",
+          },
+        );
+      }
+      // For ongoing conversations, the context was already injected in the first message
+      // so we don't need to inject it again
+
       // Convert ITool[] to Anthropic's tool format if tools are provided
       const anthropicTools = tools
         ? this.toolFormatter.toProviderFormat(tools, 'anthropic')
         : undefined;
 
       // Create the stream with proper typing
+      // Note: Anthropic's streaming API includes usage by default in message_start and message_delta events
+      // But we need to ensure we're not overriding the stream parameter with modelParams
       const createOptions: Parameters<
         typeof this.anthropic.messages.create
       >[0] = {
         model: modelForApi,
         messages: anthropicMessages,
         max_tokens: this.getMaxTokensForModel(resolvedModel),
-        stream: true,
-        ...this.modelParams,
+        ...this.modelParams, // Apply model params first
+        stream: true, // Ensure stream is always true (don't let modelParams override it)
       };
 
-      // Add system message as top-level parameter if present
-      // For OAuth, just send Claude Code spoof
-      const authToken = await this.getAuthToken();
-      const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
-
+      // Set system message based on auth mode
       if (isOAuth) {
+        // OAuth mode: Use Claude Code system prompt (required for Max/Pro)
         createOptions.system =
           "You are Claude Code, Anthropic's official CLI for Claude.";
+        // llxprt prompts were already injected as conversation content above
       } else if (systemMessage) {
+        // Normal mode: Use full llxprt system prompt
         createOptions.system = systemMessage;
       }
 
@@ -349,26 +390,45 @@ export class AnthropicProvider extends BaseProvider {
 
       // Process the stream
       for await (const chunk of stream) {
+        if (process.env.DEBUG) {
+          console.log(
+            `[ANTHROPIC DEBUG] Received chunk type: ${chunk.type}`,
+            chunk.type === 'message_start'
+              ? JSON.stringify(chunk, null, 2)
+              : '',
+          );
+        }
         if (chunk.type === 'message_start') {
           // Initial usage info
-          if (chunk.message.usage) {
+          if (process.env.DEBUG) {
+            console.log(
+              '[ANTHROPIC DEBUG] message_start chunk:',
+              JSON.stringify(chunk, null, 2),
+            );
+          }
+          if (chunk.message?.usage) {
             const usage = chunk.message.usage;
-            if (usage.input_tokens !== null && usage.output_tokens !== null) {
-              currentUsage = {
-                input_tokens: usage.input_tokens,
-                output_tokens: usage.output_tokens,
-              };
-              yield {
-                role: 'assistant',
-                content: '',
-                usage: {
-                  prompt_tokens: currentUsage.input_tokens,
-                  completion_tokens: currentUsage.output_tokens,
-                  total_tokens:
-                    currentUsage.input_tokens + currentUsage.output_tokens,
-                },
-              } as IMessage;
+            // Don't require both fields - Anthropic might send them separately
+            currentUsage = {
+              input_tokens: usage.input_tokens ?? 0,
+              output_tokens: usage.output_tokens ?? 0,
+            };
+            if (process.env.DEBUG) {
+              console.log(
+                '[ANTHROPIC DEBUG] Set currentUsage from message_start:',
+                currentUsage,
+              );
             }
+            yield {
+              role: 'assistant',
+              content: '',
+              usage: {
+                prompt_tokens: currentUsage.input_tokens,
+                completion_tokens: currentUsage.output_tokens,
+                total_tokens:
+                  currentUsage.input_tokens + currentUsage.output_tokens,
+              },
+            } as IMessage;
           }
         } else if (chunk.type === 'content_block_start') {
           // Handle tool use blocks
@@ -416,15 +476,26 @@ export class AnthropicProvider extends BaseProvider {
           }
         } else if (chunk.type === 'message_delta') {
           // Update usage if provided
-          if (
-            chunk.usage &&
-            chunk.usage.input_tokens !== null &&
-            chunk.usage.output_tokens !== null
-          ) {
+          if (process.env.DEBUG && chunk.usage) {
+            console.log(
+              '[ANTHROPIC DEBUG] message_delta usage:',
+              JSON.stringify(chunk.usage, null, 2),
+            );
+          }
+          if (chunk.usage) {
+            // Anthropic may send partial usage data - merge with existing
             currentUsage = {
-              input_tokens: chunk.usage.input_tokens,
-              output_tokens: chunk.usage.output_tokens,
+              input_tokens:
+                chunk.usage.input_tokens ?? currentUsage?.input_tokens ?? 0,
+              output_tokens:
+                chunk.usage.output_tokens ?? currentUsage?.output_tokens ?? 0,
             };
+            if (process.env.DEBUG) {
+              console.log(
+                '[ANTHROPIC DEBUG] Updated currentUsage from message_delta:',
+                currentUsage,
+              );
+            }
             yield {
               role: 'assistant',
               content: '',
@@ -439,6 +510,12 @@ export class AnthropicProvider extends BaseProvider {
         } else if (chunk.type === 'message_stop') {
           // Final usage info
           if (currentUsage) {
+            if (process.env.DEBUG) {
+              console.log(
+                '[ANTHROPIC DEBUG] Yielding final usage:',
+                currentUsage,
+              );
+            }
             yield {
               role: 'assistant',
               content: '',
@@ -449,6 +526,10 @@ export class AnthropicProvider extends BaseProvider {
                   currentUsage.input_tokens + currentUsage.output_tokens,
               },
             } as IMessage;
+          } else if (process.env.DEBUG) {
+            console.log(
+              '[ANTHROPIC DEBUG] No currentUsage data at message_stop',
+            );
           }
         }
       }

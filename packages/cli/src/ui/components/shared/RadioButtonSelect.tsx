@@ -206,7 +206,7 @@ export function RadioButtonSelect<T>({
           <Box key={item.label} alignItems="center">
             <Box minWidth={2} flexShrink={0}>
               <Text color={isSelected ? Colors.AccentGreen : Colors.Foreground}>
-                {isSelected ? '●' : ' '}
+                {isSelected ? '[*]' : '[ ]'}
               </Text>
             </Box>
             <Box

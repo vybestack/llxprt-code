@@ -118,7 +118,7 @@ export class IntegrationTester {
   }
 
   async runIntegrationTests(): Promise<boolean> {
-    console.log('🧪 Starting Integration Testing...\n');
+    console.log('Starting Integration Testing...\n');
 
     try {
       await this.setupTestEnvironment();
@@ -151,7 +151,7 @@ export class IntegrationTester {
   }
 
   private async testBasicLogging(): Promise<void> {
-    console.log('📝 Testing basic conversation logging...');
+    console.log('Testing basic conversation logging...');
 
     const config = new Config({
       sessionId: 'integration-test-session',
@@ -222,7 +222,7 @@ export class IntegrationTester {
   }
 
   private async testProviderSwitching(): Promise<void> {
-    console.log('🔄 Testing provider switching with logging...');
+    console.log('Testing provider switching with logging...');
 
     const config = new Config({
       sessionId: 'integration-test-session',
@@ -272,7 +272,7 @@ export class IntegrationTester {
   }
 
   private async testPrivacyControls(): Promise<void> {
-    console.log('🔒 Testing privacy controls...');
+    console.log('Testing privacy controls...');
 
     const config = new Config({
       sessionId: 'integration-test-session',
@@ -327,7 +327,7 @@ export class IntegrationTester {
   }
 
   private async testStorageManagement(): Promise<void> {
-    console.log('💾 Testing storage management...');
+    console.log('Testing storage management...');
 
     const config = new Config({
       sessionId: 'integration-test-session',
@@ -383,7 +383,7 @@ export class IntegrationTester {
   }
 
   private async testErrorHandling(): Promise<void> {
-    console.log('🚨 Testing error handling...');
+    console.log('Testing error handling...');
 
     const config = new Config({
       sessionId: 'integration-test-session',
@@ -431,7 +431,7 @@ export class IntegrationTester {
 
   private addResult(result: IntegrationTestResult): void {
     this.results.push(result);
-    const status = result.passed ? '✅' : '❌';
+    const status = result.passed ? '[OK]' : '[FAIL]';
     console.log(`${status} ${result.test}`);
     if (!result.passed) {
       console.log(`   Details: ${result.details}`);
@@ -442,20 +442,20 @@ export class IntegrationTester {
     const total = this.results.length;
     const passed = this.results.filter((r) => r.passed).length;
 
-    console.log('\n📊 Integration Test Results:');
+    console.log('\nIntegration Test Results:');
     console.log(`   Total tests: ${total}`);
     console.log(`   Passed: ${passed}`);
     console.log(`   Failed: ${total - passed}`);
 
     if (passed === total) {
-      console.log('\n✅ All integration tests passed!');
+      console.log('\n[OK] All integration tests passed!');
       return true;
     } else {
-      console.log('\n❌ Some integration tests failed!');
+      console.log('\n[FAIL] Some integration tests failed!');
       this.results
         .filter((r) => !r.passed)
         .forEach((r) => {
-          console.log(`   • ${r.test}: ${r.details}`);
+          console.log(`   - ${r.test}: ${r.details}`);
         });
       return false;
     }

@@ -13,6 +13,8 @@ import {
   isTelemetrySdkInitialized,
   GeminiEventType,
   ToolErrorType,
+  ConfigurationManager,
+  getSettingsService,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
@@ -28,6 +30,10 @@ export async function runNonInteractive(
     stderr: true,
     debugMode: config.getDebugMode(),
   });
+
+  // Initialize ConfigurationManager for emoji filtering
+  const settingsService = getSettingsService();
+  ConfigurationManager.getInstance().initialize(config, settingsService);
 
   try {
     consolePatcher.patch();

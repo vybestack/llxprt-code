@@ -155,7 +155,7 @@ export async function handleAtCommand({
   if (isPowerShell && query.includes('@') && !powershellTipShown) {
     powershellTipShown = true;
     onDebugMessage(
-      '💡 PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
+      'TIP: PowerShell tip: You can use "+" instead of "@" to avoid IntelliSense lag (e.g., +example.txt instead of @example.txt)',
     );
   }
 

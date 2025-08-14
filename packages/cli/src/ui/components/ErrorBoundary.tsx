@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
     );
 
     if (isMaxUpdateDepthError || isErrorLoop) {
-      console.error('🚨 CRITICAL: Render loop detected!');
+      console.error('CRITICAL: Render loop detected!');
       console.error('Error:', error.message);
       console.error('Component Stack:', errorInfo.componentStack);
 
@@ -127,7 +127,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <Box flexDirection="column" padding={1}>
           <Text color="red" bold>
             {isMaxUpdateDepthError
-              ? '🚨 Render Loop Error'
+              ? 'CRITICAL: Render Loop Error'
               : '❌ An error occurred'}
           </Text>
           <Text color="red">{this.state.error.message}</Text>

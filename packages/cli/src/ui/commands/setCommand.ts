@@ -10,7 +10,11 @@ import {
   MessageActionReturn,
   CommandKind,
 } from './types.js';
-import { IProvider } from '@vybestack/llxprt-code-core';
+import {
+  IProvider,
+  ConfigurationManager,
+  EmojiFilterMode,
+} from '@vybestack/llxprt-code-core';
 
 // Subcommand for /set unset - removes ephemeral settings or model parameters
 const unsetCommand: SlashCommand = {
@@ -136,6 +140,32 @@ const unsetCommand: SlashCommand = {
       };
     }
 
+    // Special handling for emojifilter - check before generic ephemeral settings
+    if (key === 'emojifilter') {
+      try {
+        const configManager = ConfigurationManager.getInstance();
+        const success = configManager.clearSessionOverride();
+        if (!success) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: 'Failed to remove emoji filter session override',
+          };
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: 'Emoji filter session override has been removed',
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to access emoji filter configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        };
+      }
+    }
+
     // Check if the setting exists
     const currentValue = config.getEphemeralSetting(key);
     if (currentValue === undefined) {
@@ -187,8 +217,9 @@ const unsetCommand: SlashCommand = {
       (key) => ephemeralSettings[key] !== undefined,
     );
 
-    // Add 'modelparam' as a completion option
-    const specialKeys = ['modelparam'];
+    // Add 'modelparam' and 'emojifilter' as completion options
+    const specialKeys = ['modelparam', 'emojifilter'];
+
     const allKeys = [...ephemeralKeys, ...specialKeys];
 
     if (partialArg) {
@@ -377,6 +408,8 @@ const ephemeralSettingHelp: Record<string, string> = {
   // Final catch-all to prevent context overflow
   'max-prompt-tokens':
     'Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
+  // Emoji filter settings
+  emojifilter: 'Emoji filter mode (allowed, auto, warn, error)',
 };
 
 export const setCommand: SlashCommand = {
@@ -437,7 +470,7 @@ export const setCommand: SlashCommand = {
     }
 
     // Parse the value
-    const parsedValue = parseValue(value);
+    let parsedValue = parseValue(value);
 
     // Validate specific settings
     if (key === 'compression-threshold') {
@@ -498,6 +531,28 @@ export const setCommand: SlashCommand = {
       }
     }
 
+    // Validate emojifilter mode
+    if (key === 'emojifilter') {
+      const validModes: EmojiFilterMode[] = [
+        'allowed',
+        'auto',
+        'warn',
+        'error',
+      ];
+      const normalizedValue = (
+        parsedValue as string
+      ).toLowerCase() as EmojiFilterMode;
+      if (!validModes.includes(normalizedValue)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid emoji filter mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+        };
+      }
+      // Override the parsed value with normalized lowercase version
+      parsedValue = normalizedValue;
+    }
+
     // Get the config to apply settings
     const config = context.services.config;
     if (!config) {
@@ -520,6 +575,34 @@ export const setCommand: SlashCommand = {
         const compressionThreshold =
           key === 'compression-threshold' ? (parsedValue as number) : undefined;
         geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
+      }
+    }
+
+    // Apply emojifilter settings to ConfigurationManager
+    if (key === 'emojifilter') {
+      try {
+        const configManager = ConfigurationManager.getInstance();
+        const success = configManager.setSessionOverride(
+          parsedValue as EmojiFilterMode,
+        );
+        if (!success) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to set emoji filter mode to '${parsedValue}'`,
+          };
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Emoji filter mode set to '${parsedValue}' (session only, use /profile save to persist)`,
+        };
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to access emoji filter configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        };
       }
     }
 
@@ -560,6 +643,17 @@ export const setCommand: SlashCommand = {
           const modes = ['warn', 'truncate', 'sample'];
           if (parts[1]) {
             return modes.filter((mode) => mode.startsWith(parts[1]));
+          }
+          return modes;
+        }
+
+        // Provide completions for emojifilter
+        if (key === 'emojifilter') {
+          const modes: EmojiFilterMode[] = ['allowed', 'auto', 'warn', 'error'];
+          if (parts[1]) {
+            return modes.filter((mode) =>
+              mode.startsWith(parts[1].toLowerCase()),
+            );
           }
           return modes;
         }

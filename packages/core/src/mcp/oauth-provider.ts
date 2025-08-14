@@ -600,10 +600,10 @@ export class MCPOAuthProvider {
     console.log(separator);
     console.log('');
     console.log(
-      '💡 TIP: Triple-click to select the entire URL, then copy and paste it into your browser.',
+      'TIP: Triple-click to select the entire URL, then copy and paste it into your browser.',
     );
     console.log(
-      '⚠️  Make sure to copy the COMPLETE URL - it may wrap across multiple lines.',
+      'WARNING: Make sure to copy the COMPLETE URL - it may wrap across multiple lines.',
     );
     console.log('');
 

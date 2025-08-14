@@ -150,7 +150,7 @@ export async function* parseResponsesStream(
                         // Format reasoning nicely
                         yield {
                           role: ContentGeneratorRole.ASSISTANT,
-                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                          content: `Thinking: ${parsed.reasoning}\n\n`,
                         };
                         // Check if there's an answer/response field
                         if (parsed.answer || parsed.response) {
@@ -196,7 +196,7 @@ export async function* parseResponsesStream(
                         // This is complete O3 JSON in a single delta
                         yield {
                           role: ContentGeneratorRole.ASSISTANT,
-                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                          content: `Thinking: ${parsed.reasoning}\n\n`,
                         };
                         // Check if there's an answer/response field
                         if (parsed.answer || parsed.response) {
@@ -249,7 +249,7 @@ export async function* parseResponsesStream(
                         // Format reasoning nicely
                         yield {
                           role: ContentGeneratorRole.ASSISTANT,
-                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                          content: `Thinking: ${parsed.reasoning}\n\n`,
                         };
                         // Check if there's an answer/response field
                         if (parsed.answer || parsed.response) {
@@ -295,7 +295,7 @@ export async function* parseResponsesStream(
                         // This is complete O3 JSON in a single delta
                         yield {
                           role: ContentGeneratorRole.ASSISTANT,
-                          content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                          content: `Thinking: ${parsed.reasoning}\n\n`,
                         };
                         // Check if there's an answer/response field
                         if (parsed.answer || parsed.response) {
@@ -357,7 +357,7 @@ export async function* parseResponsesStream(
                           // This is reasoning JSON - format it nicely
                           yield {
                             role: ContentGeneratorRole.ASSISTANT,
-                            content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                            content: `Thinking: ${parsed.reasoning}\n\n`,
                           };
                           // Check if there's an answer/response field
                           if (parsed.answer || parsed.response) {
@@ -446,7 +446,7 @@ export async function* parseResponsesStream(
                           // This is reasoning JSON - format it nicely
                           yield {
                             role: ContentGeneratorRole.ASSISTANT,
-                            content: `🤔 Thinking: ${parsed.reasoning}\n\n`,
+                            content: `Thinking: ${parsed.reasoning}\n\n`,
                           };
                           // Check if there's an answer/response field
                           if (parsed.answer || parsed.response) {

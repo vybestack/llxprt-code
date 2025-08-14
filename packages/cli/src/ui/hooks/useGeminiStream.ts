@@ -26,6 +26,9 @@ import {
   UnauthorizedError,
   DEFAULT_GEMINI_FLASH_MODEL,
   AuthType,
+  EmojiFilter,
+  ConfigurationManager,
+  FilterConfiguration,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -614,7 +617,7 @@ export const useGeminiStream = (
         addItem(
           {
             type: 'info',
-            text: `⚠️  ${message}`,
+            text: `WARNING: ${message}`,
           },
           userMessageTimestamp,
         );
@@ -671,18 +674,63 @@ export const useGeminiStream = (
     ): Promise<StreamProcessingResult> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
+
+      // Initialize emoji filter for stream processing
+      const configManager = ConfigurationManager.getInstance();
+      const currentMode = configManager.getCurrentMode();
+      /**
+       * @requirement REQ-004.1 - Silent filtering in auto mode
+       * Use auto mode directly instead of mapping to warn
+       */
+      const filterConfig: FilterConfiguration = { mode: currentMode };
+      const emojiFilter = new EmojiFilter(filterConfig);
+
       for await (const event of stream) {
         switch (event.type) {
           case ServerGeminiEventType.Thought:
             setThought(event.value);
             break;
-          case ServerGeminiEventType.Content:
+          case ServerGeminiEventType.Content: {
+            // Filter the content chunk through emoji filter
+            const filterResult = emojiFilter.filterStreamChunk(event.value);
+
+            if (filterResult.blocked) {
+              // In error mode, treat as an error event
+              handleErrorEvent(
+                {
+                  error: {
+                    message:
+                      filterResult.error || 'Content blocked by emoji filter',
+                  },
+                },
+                userMessageTimestamp,
+              );
+              break;
+            }
+
+            // Handle the filtered content
+            const filteredText =
+              typeof filterResult.filtered === 'string'
+                ? filterResult.filtered
+                : '';
             geminiMessageBuffer = handleContentEvent(
-              event.value,
+              filteredText,
               geminiMessageBuffer,
               userMessageTimestamp,
             );
+
+            // Add system feedback for warn mode
+            if (filterResult.systemFeedback) {
+              addItem(
+                {
+                  type: 'info',
+                  text: `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
+                },
+                userMessageTimestamp,
+              );
+            }
             break;
+          }
           case ServerGeminiEventType.ToolCallRequest:
             if (process.env.DEBUG) {
               console.log(
@@ -727,6 +775,17 @@ export const useGeminiStream = (
           }
         }
       }
+
+      // Flush any remaining content from emoji filter buffer
+      const remainingContent = emojiFilter.flushBuffer();
+      if (remainingContent.length > 0) {
+        geminiMessageBuffer = handleContentEvent(
+          remainingContent,
+          geminiMessageBuffer,
+          userMessageTimestamp,
+        );
+      }
+
       if (toolCallRequests.length > 0) {
         if (process.env.DEBUG) {
           console.log(
@@ -752,6 +811,7 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
+      addItem,
     ],
   );
 

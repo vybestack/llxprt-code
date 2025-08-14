@@ -57,7 +57,7 @@ export class PrivacyComplianceValidator {
   private results: ValidationResult[] = [];
 
   async runValidation(): Promise<boolean> {
-    console.log('🔒 Starting Privacy Compliance Validation...\n');
+    console.log('Starting Privacy Compliance Validation...\n');
 
     // Critical privacy requirements
     await this.validateDefaultDisabled();
@@ -313,7 +313,11 @@ export class PrivacyComplianceValidator {
 
   private addResult(result: ValidationResult): void {
     this.results.push(result);
-    const status = result.passed ? '✅' : result.critical ? '❌' : '⚠️';
+    const status = result.passed
+      ? '[OK]'
+      : result.critical
+        ? '[FAIL]'
+        : 'WARNING:';
     const criticality = result.critical ? '[CRITICAL]' : '[INFO]';
     console.log(`${status} ${criticality} ${result.test}`);
     if (!result.passed) {
@@ -328,29 +332,29 @@ export class PrivacyComplianceValidator {
     const critical = this.results.filter((r) => r.critical);
     const criticalFailed = critical.filter((r) => !r.passed).length;
 
-    console.log('📊 Privacy Compliance Validation Results:');
+    console.log('Privacy Compliance Validation Results:');
     console.log(`   Total tests: ${total}`);
     console.log(`   Passed: ${passed}`);
     console.log(`   Failed: ${total - passed}`);
     console.log(`   Critical failures: ${criticalFailed}`);
 
     if (criticalFailed > 0) {
-      console.log('\n❌ CRITICAL PRIVACY FAILURES DETECTED!');
+      console.log('\n[FAIL] CRITICAL PRIVACY FAILURES DETECTED!');
       console.log('The following critical privacy requirements are not met:');
       critical
         .filter((r) => !r.passed)
         .forEach((r) => {
-          console.log(`   • ${r.test}: ${r.details}`);
+          console.log(`   - ${r.test}: ${r.details}`);
         });
       return false;
     }
 
     if (passed === total) {
-      console.log('\n✅ All privacy compliance tests passed!');
+      console.log('\n[OK] All privacy compliance tests passed!');
       return true;
     } else {
       console.log(
-        '\n⚠️  Some non-critical privacy tests failed. Review recommended.',
+        '\nWARNING: Some non-critical privacy tests failed. Review recommended.',
       );
       return true; // Non-critical failures don't fail the validation
     }

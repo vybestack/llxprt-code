@@ -165,7 +165,11 @@ export const LoggingDialog: React.FC<LoggingDialogProps> = ({
     const globalIndex = scrollOffset + index;
     const timestamp = formatTimestamp(entry.timestamp, isNarrow);
     const typeIcon =
-      entry.type === 'request' ? '→' : entry.type === 'tool_call' ? '🔧' : '←';
+      entry.type === 'request'
+        ? '→'
+        : entry.type === 'tool_call'
+          ? '[TOOL]'
+          : '←';
     const typeColor =
       entry.type === 'request'
         ? SemanticColors.text.accent

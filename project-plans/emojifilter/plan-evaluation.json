@@ -1,0 +1,78 @@
+{
+  "compliant": true,
+  "has_integration_plan": true,
+  "builds_in_isolation": false,
+  "violations": [],
+  "specific_files_to_modify": [
+    "/packages/core/src/filters/EmojiFilter.ts",
+    "/packages/core/src/config/config.ts", 
+    "/packages/cli/src/ui/hooks/useGeminiStream.ts",
+    "/packages/core/src/core/nonInteractiveToolExecutor.ts",
+    "/packages/core/src/tools/edit.ts",
+    "/packages/core/src/tools/write-file.ts",
+    "/packages/cli/src/ui/commands/setCommand.ts"
+  ],
+  "user_access_points": [
+    "/set emojifilter [mode] CLI command",
+    "~/.llxprt/settings.json configuration",
+    "/profile save and /profile load for persistence"
+  ],
+  "old_code_to_remove": [
+    "No existing emoji handling code to remove (new feature)"
+  ],
+  "pseudocode_used": true,
+  "reverse_testing_found": false,
+  "mutation_testing": true,
+  "property_testing": true,
+  "detailed_analysis": {
+    "integration_strength": "EXCELLENT",
+    "integration_details": {
+      "stream_processing": "Modifies existing useGeminiStream.ts processGeminiStreamEvents at line 816",
+      "tool_execution": "Modifies existing nonInteractiveToolExecutor.ts executeToolCall at line 77", 
+      "file_operations": "Updates edit.ts, write-file.ts, and replace.ts to filter content",
+      "configuration": "Extends existing config.ts and setCommand.ts",
+      "cannot_work_in_isolation": "Feature requires modifications to 6 existing files to function"
+    },
+    "pseudocode_compliance": {
+      "numbered_lines": true,
+      "implementation_references": "All implementation phases cite specific pseudocode line numbers",
+      "verification_included": "Phase 16 includes pseudocode compliance verification"
+    },
+    "test_quality": {
+      "behavioral_tests": true,
+      "no_reverse_testing": true,
+      "no_mock_theater": true,
+      "property_based_coverage": "30% minimum required and enforced",
+      "mutation_testing_threshold": "80% minimum required"
+    },
+    "file_modification_strategy": {
+      "updates_existing": true,
+      "no_parallel_versions": true,
+      "integration_phases": "Phases 06-14 are dedicated integration phases"
+    }
+  },
+  "critical_integration_analysis": {
+    "specific_line_modifications": {
+      "useGeminiStream_line_816": "processGeminiStreamEvents wrapped with emoji filtering",
+      "nonInteractiveToolExecutor_line_77": "executeToolCall wrapped with parameter filtering",
+      "file_tools_content_filtering": "edit.ts, write-file.ts content parameters filtered"
+    },
+    "user_workflow_integration": {
+      "cli_command": "/set emojifilter integrates with existing set command handler",
+      "settings_persistence": "Extends existing settings.json schema",
+      "profile_system": "Works with existing profile save/load mechanism"
+    },
+    "data_flow_integration": {
+      "stream_pipeline": "Inserts into existing LLM response stream processing",
+      "tool_pipeline": "Intercepts tool parameter processing before execution",
+      "configuration_hierarchy": "Follows existing session > profile > default pattern"
+    }
+  },
+  "requirement_coverage": {
+    "REQ_001": "Emoji filtering functionality - covered by core EmojiFilter tests",
+    "REQ_002": "File protection - covered by tool integration tests", 
+    "REQ_003": "Configuration - covered by config integration tests",
+    "REQ_004": "Feedback mechanism - covered by mode-specific tests",
+    "REQ_INT_001": "Integration requirements - covered by phases 06-15"
+  }
+}

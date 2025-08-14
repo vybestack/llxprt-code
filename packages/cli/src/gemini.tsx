@@ -33,6 +33,7 @@ import {
   getOauthClient,
   setGitStatsService,
   // IDE connection logging removed - telemetry disabled in llxprt
+  ConfigurationManager,
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
 import { getStartupWarnings } from './utils/startupWarnings.js';
@@ -174,6 +175,10 @@ export async function main() {
 
   const providerManager = getProviderManager(config);
   config.setProviderManager(providerManager);
+
+  // Initialize ConfigurationManager for emoji filtering
+  const settingsService = getSettingsService();
+  ConfigurationManager.getInstance().initialize(config, settingsService);
 
   // Initialize git stats service for tracking file changes when logging is enabled
   if (config.getConversationLoggingEnabled()) {
@@ -579,7 +584,7 @@ export async function main() {
 
     // Special handling for maximum update depth errors
     if (error.message.includes('Maximum update depth exceeded')) {
-      console.error('\n🚨 RENDER LOOP DETECTED!');
+      console.error('\nCRITICAL: RENDER LOOP DETECTED!');
       console.error('This is likely caused by:');
       console.error('- State updates during render');
       console.error('- Incorrect useEffect dependencies');

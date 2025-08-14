@@ -81,7 +81,7 @@ const getMcpStatus = async (
     discoveryState === MCPDiscoveryState.IN_PROGRESS ||
     connectingServers.length > 0
   ) {
-    message += `${COLOR_YELLOW}⏳ MCP servers are starting up (${connectingServers.length} initializing)...${RESET_COLOR}\n`;
+    message += `${COLOR_YELLOW}MCP servers are starting up (${connectingServers.length} initializing)...${RESET_COLOR}\n`;
     message += `${COLOR_CYAN}Note: First startup may take longer. Tool availability will update automatically.${RESET_COLOR}\n\n`;
   }
 
@@ -111,16 +111,16 @@ const getMcpStatus = async (
     let statusText = '';
     switch (status) {
       case MCPServerStatus.CONNECTED:
-        statusIndicator = '🟢';
+        statusIndicator = '[READY]';
         statusText = 'Ready';
         break;
       case MCPServerStatus.CONNECTING:
-        statusIndicator = '🔄';
+        statusIndicator = '[STARTING]';
         statusText = 'Starting... (first startup may take longer)';
         break;
       case MCPServerStatus.DISCONNECTED:
       default:
-        statusIndicator = '🔴';
+        statusIndicator = '[DISCONNECTED]';
         statusText = 'Disconnected';
         break;
     }
@@ -289,13 +289,13 @@ const getMcpStatus = async (
     if (server.extensionName) {
       serverDisplayName += ` (from ${server.extensionName})`;
     }
-    message += `🔴 \u001b[1m${serverDisplayName}\u001b[0m - Blocked\n\n`;
+    message += `[BLOCKED] \u001b[1m${serverDisplayName}\u001b[0m - Blocked\n\n`;
   }
 
   // Add helpful tips when no arguments are provided
   if (showTips) {
     message += '\n';
-    message += `${COLOR_CYAN}💡 Tips:${RESET_COLOR}\n`;
+    message += `${COLOR_CYAN}TIP: Tips:${RESET_COLOR}\n`;
     message += `  • Use ${COLOR_CYAN}/mcp desc${RESET_COLOR} to show server and tool descriptions\n`;
     message += `  • Use ${COLOR_CYAN}/mcp schema${RESET_COLOR} to show tool parameter schemas\n`;
     message += `  • Use ${COLOR_CYAN}/mcp nodesc${RESET_COLOR} to hide descriptions\n`;

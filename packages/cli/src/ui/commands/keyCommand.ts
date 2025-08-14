@@ -118,7 +118,7 @@ export const keyCommand: SlashCommand = {
       // Check if we're now in paid mode
       const isPaidMode = activeProvider.isPaidMode?.() ?? true;
       const paymentWarning = isPaidMode
-        ? '\n⚠️  You are now in PAID MODE - API usage will be charged to your account'
+        ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
         : '';
 
       // Trigger payment mode check if available

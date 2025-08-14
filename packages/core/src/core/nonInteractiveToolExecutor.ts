@@ -17,6 +17,117 @@ import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolContext } from '../tools/tool-context.js';
 import { ToolCallDecision } from '../telemetry/types.js';
+import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
+import { ConfigurationManager } from '../filters/ConfigurationManager.js';
+
+/**
+ * Global emoji filter instance for reuse across tool calls
+ */
+let emojiFilter: EmojiFilter | null = null;
+
+/**
+ * Gets or creates the emoji filter instance based on current configuration
+ * Always checks current configuration to ensure filter is up-to-date
+ */
+function getOrCreateFilter(_config: Config): EmojiFilter {
+  const configManager = ConfigurationManager.getInstance();
+  const currentMode = configManager.getCurrentMode();
+
+  /**
+   * @requirement REQ-004.1 - Silent filtering in auto mode
+   * Map ConfigurationManager modes to EmojiFilter modes
+   */
+  let filterMode: 'allowed' | 'auto' | 'warn' | 'error';
+  if (currentMode === 'allowed') {
+    filterMode = 'allowed';
+  } else if (currentMode === 'auto') {
+    filterMode = 'auto';
+  } else if (currentMode === 'warn') {
+    filterMode = 'warn';
+  } else {
+    filterMode = 'error';
+  }
+
+  // Always create a new filter to ensure current configuration is applied
+  // Tool execution is infrequent enough that this performance cost is acceptable
+  const filterConfig = { mode: filterMode };
+  emojiFilter = new EmojiFilter(filterConfig);
+
+  return emojiFilter;
+}
+
+/**
+ * Filters file modification tool arguments
+ */
+function filterFileModificationArgs(
+  filter: EmojiFilter,
+  toolName: string,
+  args: Record<string, unknown>,
+): FilterResult {
+  // Never filter file paths - they might legitimately contain emojis
+  // Only filter the content being written to files
+
+  if (
+    toolName === 'edit_file' ||
+    toolName === 'edit' ||
+    toolName === 'replace'
+  ) {
+    const oldString = args?.old_string as string;
+    const newString = args?.new_string as string;
+
+    // CRITICAL: Never filter old_string - it must match exactly what's in the file
+    // Only filter new_string to prevent emojis from being written
+    const newResult = filter.filterFileContent(newString, toolName);
+
+    if (newResult.blocked) {
+      return {
+        filtered: null,
+        emojiDetected: true,
+        blocked: true,
+        error: 'Cannot write emojis to code files',
+      };
+    }
+
+    return {
+      filtered: {
+        ...args,
+        // Preserve file_path unchanged - never filter paths
+        file_path: args.file_path,
+        // MUST preserve old_string exactly for matching
+        old_string: oldString,
+        // Filter new_string to remove emojis
+        new_string: newResult.filtered,
+      },
+      emojiDetected: newResult.emojiDetected,
+      blocked: false,
+      systemFeedback: newResult.systemFeedback,
+    };
+  }
+
+  if (toolName === 'write_file' || toolName === 'create_file') {
+    const content = args.content as string;
+    const result = filter.filterFileContent(content, toolName);
+
+    if (result.blocked) {
+      return result;
+    }
+
+    return {
+      filtered: {
+        ...args,
+        // Preserve file_path unchanged - never filter paths
+        file_path: args.file_path,
+        content: result.filtered,
+      },
+      emojiDetected: result.emojiDetected,
+      blocked: false,
+      systemFeedback: result.systemFeedback,
+    };
+  }
+
+  // Fallback for other tools
+  return filter.filterToolArgs(args);
+}
 
 /**
  * Executes a single tool call non-interactively.
@@ -72,10 +183,90 @@ export async function executeToolCall(
   }
 
   try {
+    // Get emoji filter instance
+    const filter = getOrCreateFilter(config);
+
+    // Check if this is a search tool that should bypass filtering
+    const isSearchTool = [
+      'shell',
+      'bash',
+      'exec',
+      'run_shell_command',
+      'grep',
+      'search_file_content',
+      'glob',
+      'find',
+      'ls',
+      'list_directory',
+      'read_file',
+      'read_many_files',
+    ].includes(toolCallRequest.name);
+
+    let filteredArgs = toolCallRequest.args;
+    let systemFeedback: string | undefined;
+
+    // Search tools need unfiltered access for finding emojis
+    if (!isSearchTool) {
+      // Check if this is a file modification tool
+      const isFileModTool = [
+        'edit_file',
+        'edit',
+        'write_file',
+        'create_file',
+        'replace',
+        'replace_all',
+      ].includes(toolCallRequest.name);
+
+      // Filter tool arguments
+      let filterResult: FilterResult;
+      if (isFileModTool) {
+        filterResult = filterFileModificationArgs(
+          filter,
+          toolCallRequest.name,
+          toolCallRequest.args,
+        );
+      } else {
+        filterResult = filter.filterToolArgs(toolCallRequest.args);
+      }
+
+      // Handle blocking in error mode
+      if (filterResult.blocked) {
+        const durationMs = Date.now() - startTime;
+        logToolCall(config, {
+          'event.name': 'tool_call',
+          'event.timestamp': new Date().toISOString(),
+          function_name: toolCallRequest.name,
+          function_args: toolCallRequest.args,
+          duration_ms: durationMs,
+          success: false,
+          error: filterResult.error,
+          prompt_id: toolCallRequest.prompt_id,
+        });
+
+        return {
+          callId: toolCallRequest.callId,
+          responseParts: {
+            functionResponse: {
+              id: toolCallRequest.callId,
+              name: toolCallRequest.name,
+              response: { error: filterResult.error },
+            },
+          },
+          resultDisplay: filterResult.error || 'Tool execution blocked',
+          error: new Error(filterResult.error || 'Tool execution blocked'),
+          errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+        };
+      }
+
+      // Use filtered arguments
+      filteredArgs = filterResult.filtered as Record<string, unknown>;
+      systemFeedback = filterResult.systemFeedback;
+    }
+
     // Directly execute without confirmation or live output handling
     const effectiveAbortSignal = abortSignal ?? new AbortController().signal;
     const toolResult: ToolResult = await tool.buildAndExecute(
-      toolCallRequest.args,
+      filteredArgs,
       effectiveAbortSignal,
       // No live output callback for non-interactive mode
     );
@@ -119,15 +310,21 @@ export async function executeToolCall(
       decision: ToolCallDecision.AUTO_ACCEPT,
     });
 
-    const response = convertToFunctionResponse(
+    // Add system feedback for warn mode if emojis were detected and filtered
+    let finalLlmContent = tool_output;
+    if (systemFeedback) {
+      finalLlmContent = `${tool_output}\n\n<system-reminder>\n${systemFeedback}\n</system-reminder>`;
+    }
+
+    const finalResponse = convertToFunctionResponse(
       toolCallRequest.name,
       toolCallRequest.callId,
-      tool_output,
+      finalLlmContent,
     );
 
     return {
       callId: toolCallRequest.callId,
-      responseParts: response,
+      responseParts: finalResponse,
       resultDisplay: tool_display,
       error:
         toolResult.error === undefined

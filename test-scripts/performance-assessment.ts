@@ -60,7 +60,7 @@ export class PerformanceAssessment {
   private results: PerformanceResult[] = [];
 
   async runAssessment(): Promise<boolean> {
-    console.log('⚡ Starting Performance Impact Assessment...\n');
+    console.log('Starting Performance Impact Assessment...\n');
 
     // Test with different providers
     const providers = ['gemini', 'openai', 'anthropic'];
@@ -73,7 +73,7 @@ export class PerformanceAssessment {
   }
 
   private async assessProvider(providerName: string): Promise<void> {
-    console.log(`📊 Testing provider: ${providerName}`);
+    console.log(`Testing provider: ${providerName}`);
 
     const provider = new MockProvider(providerName);
 
@@ -169,7 +169,7 @@ export class PerformanceAssessment {
   }
 
   private reportResults(): boolean {
-    console.log('📈 Performance Assessment Results:\n');
+    console.log('Performance Assessment Results:\n');
 
     const providers = [...new Set(this.results.map((r) => r.provider))];
     let allPassed = true;
@@ -195,11 +195,11 @@ export class PerformanceAssessment {
 
       if (!overheadOk) {
         console.log(
-          `  ❌ FAIL: Overhead ${enabled.overhead.toFixed(2)}% exceeds acceptable limits`,
+          `  [FAIL] Overhead ${enabled.overhead.toFixed(2)}% exceeds acceptable limits`,
         );
         allPassed = false;
       } else {
-        console.log(`  ✅ PASS: Overhead within acceptable limits`);
+        console.log(`  [PASS] Overhead within acceptable limits`);
       }
 
       console.log('');
@@ -211,12 +211,12 @@ export class PerformanceAssessment {
         .filter((r) => r.loggingEnabled)
         .reduce((sum, r) => sum + r.overhead, 0) / providers.length;
 
-    console.log(`📊 Overall Performance Impact: ${avgOverhead.toFixed(2)}%`);
+    console.log(`Overall Performance Impact: ${avgOverhead.toFixed(2)}%`);
 
     if (allPassed) {
-      console.log('✅ All performance requirements met!');
+      console.log('[OK] All performance requirements met!');
     } else {
-      console.log('❌ Performance requirements not met!');
+      console.log('[FAIL] Performance requirements not met!');
     }
 
     return allPassed;

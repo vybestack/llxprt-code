@@ -52,9 +52,9 @@ async function testStartup() {
       const filePath = path.join(promptsDir, file);
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
-        console.log(`✅ File exists: ${file} (${content.length} bytes)`);
+        console.log(`[OK] File exists: ${file} (${content.length} bytes)`);
       } else {
-        console.log(`❌ File missing: ${file}`);
+        console.log(`[FAIL] File missing: ${file}`);
       }
     }
   } catch (error) {

@@ -110,15 +110,15 @@ export class TodoRead extends BaseTool<TodoReadParams, ToolResult> {
     allTodos: Todo[],
   ): string {
     const priorityIndicators = {
-      high: '🔴',
-      medium: '🟡',
-      low: '🟢',
+      high: '[HIGH]',
+      medium: '[MEDIUM]',
+      low: '[LOW]',
     };
 
     const statusIcons = {
-      in_progress: '⏳',
-      pending: '○',
-      completed: '✓',
+      in_progress: '[IN_PROGRESS]',
+      pending: '[ ]',
+      completed: '[*]',
     };
 
     let output = '## Todo List\n\n';
