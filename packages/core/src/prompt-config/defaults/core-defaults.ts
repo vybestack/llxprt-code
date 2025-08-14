@@ -20,11 +20,13 @@ function loadMarkdownFile(filename: string): string {
 
     // If that doesn't work, we might be in a bundled environment
     // Try to find the bundle directory by looking for a parent 'bundle' directory
-    const pathParts = __dirname.split(sep);
+    // Normalize the path to use consistent separators (important for Windows)
+    const normalizedDir = __dirname.replace(/\\/g, '/');
+    const pathParts = normalizedDir.split('/');
     const bundleIndex = pathParts.lastIndexOf('bundle');
 
     if (bundleIndex !== -1) {
-      // Reconstruct path to bundle directory
+      // Reconstruct path to bundle directory using native separators
       const bundleDir = pathParts.slice(0, bundleIndex + 1).join(sep);
       const bundlePath = join(bundleDir, filename);
       if (existsSync(bundlePath)) {
