@@ -17,6 +17,7 @@ import {
   Part,
   GenerateContentResponseUsageMetadata,
   Tool,
+  PartListUnion,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -45,7 +46,7 @@ import { isStructuredError } from '../utils/quotaErrorDetection.js';
  * must be sent as a separate Part in the same Content, not as nested arrays.
  */
 function createUserContentWithFunctionResponseFix(
-  message: string | Part[] | unknown,
+  message: PartListUnion,
 ): Content {
   if (typeof message === 'string') {
     return createUserContent(message);
@@ -87,7 +88,7 @@ function createUserContentWithFunctionResponseFix(
       }
     }
   } else {
-    // Not an array, fallback to original createUserContent
+    // Not an array, pass through to original createUserContent
     return createUserContent(message);
   }
 
