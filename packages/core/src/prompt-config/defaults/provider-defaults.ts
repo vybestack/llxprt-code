@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname, sep } from 'node:path';
+import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
@@ -19,20 +19,35 @@ function loadMarkdownFile(filename: string): string {
     }
 
     // If that doesn't work, we might be in a bundled environment
-    // In the bundle, llxprt.js is in the bundle directory and markdown files are copied there too
-    // Try to find the bundle directory by looking for a parent 'bundle' directory
-    // Normalize the path to use consistent separators (important for Windows)
-    const normalizedDir = __dirname.replace(/\\/g, '/');
-    const pathParts = normalizedDir.split('/');
-    const bundleIndex = pathParts.lastIndexOf('bundle');
+    // Try to find the bundle directory by traversing up the directory tree
+    let currentDir = resolve(__dirname);
+    let attempts = 0;
+    const maxAttempts = 10; // Prevent infinite loops
 
-    if (bundleIndex !== -1) {
-      // Reconstruct path to bundle directory using native separators
-      const bundleDir = pathParts.slice(0, bundleIndex + 1).join(sep);
+    while (attempts < maxAttempts) {
+      // Check if we find a 'bundle' directory at this level
+      const bundleDir = join(currentDir, 'bundle');
       const bundlePath = join(bundleDir, filename);
       if (existsSync(bundlePath)) {
         return readFileSync(bundlePath, 'utf-8');
       }
+
+      // Also check if current directory itself is named 'bundle'
+      if (basename(currentDir) === 'bundle') {
+        const directPath = join(currentDir, filename);
+        if (existsSync(directPath)) {
+          return readFileSync(directPath, 'utf-8');
+        }
+      }
+
+      // Move up one directory
+      const parentDir = dirname(currentDir);
+      if (parentDir === currentDir) {
+        // We've reached the root
+        break;
+      }
+      currentDir = parentDir;
+      attempts++;
     }
 
     // As a last resort, check if we're running from a bundle directory
