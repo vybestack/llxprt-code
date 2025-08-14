@@ -68,7 +68,9 @@ console.log('First few files:', promptMdFiles.slice(0, 5));
 let copiedCount = 0;
 for (const file of promptMdFiles) {
   // Extract the relative path after 'defaults/'
-  const relativePath = file.replace(
+  // Normalize path separators to forward slashes for consistent replacement
+  const normalizedFile = file.replace(/\\/g, '/');
+  const relativePath = normalizedFile.replace(
     'packages/core/src/prompt-config/defaults/',
     '',
   );
