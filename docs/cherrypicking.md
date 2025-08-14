@@ -4,13 +4,14 @@ This guide documents the process for cherry-picking changes from the upstream ge
 
 ## Current Sync Status
 
-**Last synced upstream commit:** `342820cf` (August 14, 2025)
+**Last synced upstream commit:** `c63185da` (August 14, 2025)
 
 - Fix thought signature auth switching (OAuth transitions)
 - Updated Ink version dependencies
 - Removed deprecated modelCheck feature
 - Fixed emoji support in terminal rendering
 - Added GCA free tier authentication support
+- Updated @google/genai to 1.13.0
 - Improved IDE detection (Devin, Replit environments)
 - Completely removed ClearcutLogger and all Google telemetry
 
