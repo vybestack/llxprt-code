@@ -20,6 +20,7 @@ const mockConfig = {
   getSessionId: () => 'test-session-id',
   getUsageStatisticsEnabled: () => true,
   getDebugMode: () => false,
+  getEphemeralSetting: () => 'auto',
 } as unknown as Config;
 
 describe('executeToolCall', () => {

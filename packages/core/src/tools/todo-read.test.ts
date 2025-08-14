@@ -159,9 +159,9 @@ describe('TodoRead', () => {
       const result = await tool.execute({}, abortSignal);
 
       // Check for status indicators
-      expect(result.llmContent).toMatch(/[\u23f3\ud83d\udd04]/u); // in_progress
-      expect(result.llmContent).toMatch(/[\u25cb\u26aa]/u); // pending
-      expect(result.llmContent).toMatch(/[\u2713\u2705]/u); // completed
+      expect(result.llmContent).toMatch(/\[IN_PROGRESS\]/); // in_progress
+      expect(result.llmContent).toMatch(/\[ \]/); // pending
+      expect(result.llmContent).toMatch(/\[\*\]/); // completed
     });
 
     it('should include priority levels in output', async () => {

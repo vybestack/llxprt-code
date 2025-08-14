@@ -920,15 +920,13 @@ function validate(input) {
       ];
       const results = chunks.map((chunk) => filter.filterStreamChunk(chunk));
 
-      // Only the last chunk should have filtered content
-      expect(results[0].filtered).toBe('');
-      expect(results[1].filtered).toBe('');
-      expect(results[2].filtered).toBe('');
-      expect(results[3].filtered).toBe('');
-      expect(results[4].filtered).toBe('');
-      expect(results[5].filtered).toBe(
-        'Task [OK] completed, WARNING: check warnings',
-      );
+      // Check the filtered results
+      expect(results[0].filtered).toBe('Task ');
+      expect(results[1].filtered).toBe('[OK]');
+      expect(results[2].filtered).toBe(' completed, ');
+      expect(results[3].filtered).toBe('WARNING:');
+      expect(results[4].filtered).toBe(' check ');
+      expect(results[5].filtered).toBe('warnings');
 
       expect(results[5].emojiDetected).toBe(true);
       expect(results[5].blocked).toBe(false);

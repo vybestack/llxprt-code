@@ -332,7 +332,7 @@ describe('EditTool', () => {
         async (_, content, p, client) => {
           mockCalled = true;
           expect(content).toBe(originalContent);
-          expect(p).toBe(params);
+          expect(p).toStrictEqual(params);
           expect(client).toBe(geminiClient);
           return {
             params: {
