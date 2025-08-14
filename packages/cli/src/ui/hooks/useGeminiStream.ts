@@ -121,6 +121,7 @@ export const useGeminiStream = (
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
   const queuedToolResponsesRef = useRef<TrackedToolCall[]>([]);
+  const queuedSystemFeedbackRef = useRef<string[]>([]);
   const handleCompletedToolsRef = useRef<
     ((tools: TrackedToolCall[]) => Promise<void>) | null
   >(null);
@@ -256,8 +257,9 @@ export const useGeminiStream = (
   useInput((_input, key) => {
     if (key.escape) {
       cancelOngoingRequest();
-      // Clear the queue on cancel - we don't want to process tools after user cancellation
+      // Clear the queues on cancel - we don't want to process tools or feedback after user cancellation
       queuedToolResponsesRef.current = [];
+      queuedSystemFeedbackRef.current = [];
     }
   });
 
@@ -722,14 +724,16 @@ export const useGeminiStream = (
               userMessageTimestamp,
             );
 
-            // Add system feedback for warn mode
+            // Queue system feedback to be sent to model in next tool response
+            // This feedback is for the LLM, not for display to the user
             if (filterResult.systemFeedback) {
-              addItem(
-                {
-                  type: 'info',
-                  text: `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
-                },
-                userMessageTimestamp,
+              // We'll append this to the next tool response or create a special system message
+              // Store it in a ref so it persists across renders
+              if (!queuedSystemFeedbackRef.current) {
+                queuedSystemFeedbackRef.current = [];
+              }
+              queuedSystemFeedbackRef.current.push(
+                `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
               );
             }
             break;
@@ -814,7 +818,6 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
-      addItem,
       config,
     ],
   );
@@ -1122,13 +1125,33 @@ export const useGeminiStream = (
         }
 
         const responsesToSend: PartListUnion[] = toolsToProcess.map(
-          (toolCall) => {
+          (toolCall, index) => {
             if (process.env.DEBUG) {
               console.log(
                 `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
                 JSON.stringify(toolCall.response.responseParts, null, 2),
               );
             }
+
+            // For the last tool response, append any queued system feedback
+            // This ensures the model receives the emoji filter warnings
+            if (
+              index === toolsToProcess.length - 1 &&
+              queuedSystemFeedbackRef.current.length > 0
+            ) {
+              const feedbackMessages =
+                queuedSystemFeedbackRef.current.join('\n');
+              queuedSystemFeedbackRef.current = []; // Clear the queue
+
+              // Append the system feedback as a text part to the response
+              const parts = Array.isArray(toolCall.response.responseParts)
+                ? toolCall.response.responseParts
+                : [toolCall.response.responseParts];
+
+              // Add the system feedback as an additional text part
+              return [...parts, { text: feedbackMessages }] as PartListUnion;
+            }
+
             return toolCall.response.responseParts;
           },
         );
