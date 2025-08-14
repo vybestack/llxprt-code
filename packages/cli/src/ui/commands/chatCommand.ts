@@ -15,6 +15,7 @@ import {
   CommandKind,
   SlashCommandActionReturn,
 } from './types.js';
+import { decodeTagName } from '@google/gemini-cli-core';
 import path from 'path';
 import { HistoryItemWithoutId, MessageType } from '../types.js';
 import { Part } from '@google/genai';
@@ -42,8 +43,9 @@ const getSavedChatTags = async (
       if (file.startsWith(file_head) && file.endsWith(file_tail)) {
         const filePath = path.join(geminiDir, file);
         const stats = await fsPromises.stat(filePath);
+        const tagName = file.slice(file_head.length, -file_tail.length);
         chatDetails.push({
-          name: file.slice(file_head.length, -file_tail.length),
+          name: decodeTagName(tagName),
           mtime: stats.mtime,
         });
       }
@@ -151,7 +153,7 @@ const saveCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: `Conversation checkpoint saved with tag: ${tag}.`,
+        content: `Conversation checkpoint saved with tag: ${decodeTagName(tag)}.`,
       };
     } else {
       return {
@@ -188,7 +190,7 @@ const resumeCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: `No saved checkpoint found with tag: ${tag}.`,
+        content: `No saved checkpoint found with tag: ${decodeTagName(tag)}.`,
       };
     }
 
@@ -257,13 +259,13 @@ const deleteCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'info',
-        content: `Conversation checkpoint '${tag}' has been deleted.`,
+        content: `Conversation checkpoint '${decodeTagName(tag)}' has been deleted.`,
       };
     } else {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Error: No checkpoint found with tag '${tag}'.`,
+        content: `Error: No checkpoint found with tag '${decodeTagName(tag)}'.`,
       };
     }
   },
