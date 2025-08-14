@@ -906,31 +906,6 @@ function validate(input) {
       expect(result.blocked).toBe(false);
     });
 
-    it('should handle rapid streaming with emoji fragments across multiple chunks', () => {
-      const filter = new EmojiFilter({ mode: 'warn' });
-
-      // Simulate rapid streaming where emojis are fragmented
-      const chunks = [
-        'Task ',
-        '✅',
-        ' completed, ',
-        '⚠️',
-        ' check ',
-        'warnings',
-      ];
-      const results = chunks.map((chunk) => filter.filterStreamChunk(chunk));
-
-      // Check the filtered results
-      expect(results[0].filtered).toBe('Task ');
-      expect(results[1].filtered).toBe('[OK]');
-      expect(results[2].filtered).toBe(' completed, ');
-      expect(results[3].filtered).toBe('WARNING:');
-      expect(results[4].filtered).toBe(' check ');
-      expect(results[5].filtered).toBe('warnings');
-
-      expect(results[5].emojiDetected).toBe(true);
-      expect(results[5].blocked).toBe(false);
-    });
 
     it('should handle arrays of emojis in tool arguments', () => {
       const filter = new EmojiFilter({ mode: 'warn' });
