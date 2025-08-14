@@ -70,9 +70,46 @@ function loadMarkdownFile(filename: string): string {
       }
     }
 
+    // Last resort: Do a broader search for the bundle directory
+    // This handles edge cases like Windows CI where paths might be unusual
+    const searchPaths = [
+      process.cwd(),
+      dirname(process.argv[1] || ''),
+      dirname(dirname(process.argv[1] || '')),
+      dirname(dirname(dirname(process.argv[1] || ''))),
+      __dirname,
+      dirname(__dirname),
+      dirname(dirname(__dirname)),
+    ].filter((p) => p && p !== '');
+
+    for (const base of searchPaths) {
+      // Try direct path
+      const directTry = join(base, filename);
+      if (existsSync(directTry)) {
+        return readFileSync(directTry, 'utf-8');
+      }
+
+      // Try with bundle subdirectory
+      const bundleTry = join(base, 'bundle', filename);
+      if (existsSync(bundleTry)) {
+        return readFileSync(bundleTry, 'utf-8');
+      }
+
+      // Try if base itself is named bundle
+      if (basename(base) === 'bundle') {
+        const inBundleTry = join(base, filename);
+        if (existsSync(inBundleTry)) {
+          return readFileSync(inBundleTry, 'utf-8');
+        }
+      }
+    }
+
     throw new Error(`File not found in any expected location`);
-  } catch (_error) {
-    console.warn(`Warning: Could not load ${filename}, using empty content`);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Warning: Could not load ${filename} from ${process.cwd()}, using empty content. Error: ${errorMsg}`,
+    );
     return '';
   }
 }
