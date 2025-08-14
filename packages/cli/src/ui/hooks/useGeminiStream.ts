@@ -700,16 +700,32 @@ export const useGeminiStream = (
             const filterResult = emojiFilter.filterStreamChunk(event.value);
 
             if (filterResult.blocked) {
-              // In error mode, treat as an error event
-              handleErrorEvent(
+              // In error mode: stop displaying and queue error feedback for model
+
+              // Clear any partial content that was being built (don't display it)
+              if (geminiMessageBuffer.trim()) {
+                geminiMessageBuffer = '';
+              }
+
+              // Show a brief message to user
+              addItem(
                 {
-                  error: {
-                    message:
-                      filterResult.error || 'Content blocked by emoji filter',
-                  },
+                  type: 'info',
+                  text: 'Emojis detected - content blocked in error mode',
                 },
                 userMessageTimestamp,
               );
+
+              // Queue error feedback to be sent with next tool response or user message
+              if (!queuedSystemFeedbackRef.current) {
+                queuedSystemFeedbackRef.current = [];
+              }
+              queuedSystemFeedbackRef.current.push(
+                `<system-reminder>ERROR: Your previous response contained emojis which are strictly prohibited. You must not use any emojis in your responses. Please provide your response again without emojis.</system-reminder>`,
+              );
+
+              // Stop processing this chunk
+              // The error feedback will be sent with the next interaction
               break;
             }
 
@@ -819,6 +835,7 @@ export const useGeminiStream = (
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
       config,
+      addItem,
     ],
   );
 
