@@ -296,6 +296,37 @@ llxprt --profile-load my-assistant
 
 See the [complete settings documentation](./docs/settings-and-profiles.md) for all configuration options.
 
+## Key Features
+
+### Code Understanding & Generation
+
+- Query and edit large codebases
+- Generate new apps from PDFs, images, or sketches using multimodal capabilities
+- Debug issues and troubleshoot with natural language
+
+### Automation & Integration
+
+- Automate operational tasks like querying pull requests or handling complex rebases
+- Use MCP servers to connect new capabilities
+- Run non-interactively in scripts for workflow automation
+
+### Advanced Capabilities
+
+- Ground your queries with built-in search capabilities for real-time information
+- Conversation checkpointing to save and resume complex sessions
+- Custom context files (LLXPRT.md) to tailor behavior for your projects
+
+### GitHub Integration (Experimental)
+
+> **Note:** GitHub Actions integration is currently experimental and disabled by default in LLxprt Code. This feature is under development and may not be fully functional.
+
+For potential future GitHub workflow integration:
+
+- **Pull Request Reviews**: Automated code review with contextual feedback and suggestions
+- **Issue Triage**: Automated labeling and prioritization of GitHub issues based on content analysis
+- **On-demand Assistance**: Mention capabilities in issues and pull requests for help with debugging, explanations, or task delegation
+- **Custom Workflows**: Build automated, scheduled and on-demand workflows tailored to your team's needs
+
 ## Customizing AI Behavior with Prompts
 
 LLxprt Code features a sophisticated prompt configuration system that allows you to customize the AI's behavior for different providers, models, and use cases. You can:
