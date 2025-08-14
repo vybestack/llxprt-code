@@ -18,6 +18,7 @@ import {
   getCurrentLlxprtMdFilename,
   ApprovalMode,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
+  DEFAULT_GEMINI_MODEL,
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
   TelemetryTarget,
@@ -696,13 +697,13 @@ export async function loadCliConfig(
   }
 
   // Handle model selection with proper precedence
-  // For now, use a temporary placeholder - we'll set the real model after provider initialization
   const finalModel =
     argv.model ||
     profileModel ||
+    effectiveSettings.model ||
     process.env.LLXPRT_DEFAULT_MODEL ||
     process.env.GEMINI_MODEL ||
-    'placeholder-model'; // Temporary placeholder, will be replaced with provider's default
+    DEFAULT_GEMINI_MODEL;
 
   const config = new Config({
     sessionId,

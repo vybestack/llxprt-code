@@ -87,6 +87,7 @@ interface MockServerConfig {
   getUserTier: Mock<() => Promise<string | undefined>>;
   getEphemeralSetting?: Mock<(key: string) => unknown>;
   getIdeClient: Mock<() => { getCurrentIde: Mock<() => string | undefined> }>;
+  isTrustedFolder: Mock<() => boolean | undefined>;
 }
 
 // Mock @vybestack/llxprt-code-core and its Config class
@@ -164,6 +165,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
           getCurrentIde: vi.fn(() => 'vscode'),
           getDetectedIdeDisplayName: vi.fn(() => 'VSCode'),
         })),
+        isTrustedFolder: vi.fn(() => true),
       };
     });
 

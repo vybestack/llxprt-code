@@ -35,7 +35,7 @@ describe('mcp command', () => {
       version: vi.fn().mockReturnThis(),
     };
 
-    (mcpCommand.builder as Function)(mockYargs as unknown as Argv);
+    (mcpCommand.builder as (yargs: Argv) => Argv)(mockYargs as unknown as Argv);
 
     expect(mockYargs.command).toHaveBeenCalledTimes(3);
 

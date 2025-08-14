@@ -302,7 +302,7 @@ const App = (props: AppInternalProps) => {
         settingsService.off('settings-changed', updateModel);
       };
     }
-    
+
     return undefined;
   }, [config]);
 

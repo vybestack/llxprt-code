@@ -1656,7 +1656,7 @@ describe('--profile-load flag functionality', () => {
       // Should not throw, but continue with default settings
       const config = await loadCliConfig(settings, [], 'test-session', argv);
 
-      expect(config.getModel()).toBe('placeholder-model'); // Model is placeholder initially, resolved when provider is initialized
+      expect(config.getModel()).toBe('gemini-2.5-pro'); // Model falls back to default when profile loading fails
       expect(config.getProvider()).toBe('gemini'); // Default provider is 'gemini' not undefined
     } finally {
       // Restore original env vars
