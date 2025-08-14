@@ -3,7 +3,7 @@
  * These constants reference the corresponding .md files for default content
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
@@ -11,42 +11,82 @@ import process from 'node:process';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function loadMarkdownFile(filename: string): string {
+  // Always log in Windows CI to debug the issue
+  const debugLog =
+    process.env.DEBUG_PROMPT_LOADING === 'true' || process.platform === 'win32';
+
+  if (debugLog) {
+    console.log(`\n[PROMPT_LOADER] ========== Loading ${filename} ==========`);
+    console.log(`[PROMPT_LOADER] __dirname: ${__dirname}`);
+    console.log(`[PROMPT_LOADER] process.cwd(): ${process.cwd()}`);
+    console.log(`[PROMPT_LOADER] process.argv[0]: ${process.argv[0]}`);
+    console.log(`[PROMPT_LOADER] process.argv[1]: ${process.argv[1]}`);
+    console.log(`[PROMPT_LOADER] process.platform: ${process.platform}`);
+    console.log(`[PROMPT_LOADER] NODE_ENV: ${process.env.NODE_ENV}`);
+    console.log(`[PROMPT_LOADER] CI: ${process.env.CI}`);
+  }
+
   try {
-    // First try the normal path (works in development and non-bundled builds)
+    // Check if we're already in a bundle directory FIRST
+    // This fixes the Windows CI issue where __dirname is already bundle
+    const currentDir = resolve(__dirname);
+    if (debugLog) {
+      console.log(`[PROMPT_LOADER] currentDir: ${currentDir}`);
+      console.log(
+        `[PROMPT_LOADER] basename(currentDir): ${basename(currentDir)}`,
+      );
+    }
+
+    if (basename(currentDir) === 'bundle') {
+      const directPath = join(currentDir, filename);
+      if (debugLog) {
+        console.log(
+          `[PROMPT_LOADER] In bundle dir, checking directPath: ${directPath}`,
+        );
+        console.log(
+          `[PROMPT_LOADER] directPath exists: ${existsSync(directPath)}`,
+        );
+      }
+      if (existsSync(directPath)) {
+        if (debugLog) console.log(`[PROMPT_LOADER] Found at directPath`);
+        return readFileSync(directPath, 'utf-8');
+      }
+    }
+
+    // Then try the normal path (works in development and non-bundled builds)
     const normalPath = join(__dirname, filename);
+    if (debugLog) {
+      console.log(`[PROMPT_LOADER] Checking normalPath: ${normalPath}`);
+      console.log(
+        `[PROMPT_LOADER] normalPath exists: ${existsSync(normalPath)}`,
+      );
+    }
     if (existsSync(normalPath)) {
+      if (debugLog) console.log(`[PROMPT_LOADER] Found at normalPath`);
       return readFileSync(normalPath, 'utf-8');
     }
 
     // If that doesn't work, we might be in a bundled environment
     // Try to find the bundle directory by traversing up the directory tree
-    let currentDir = resolve(__dirname);
+    let searchDir = currentDir;
     let attempts = 0;
     const maxAttempts = 10; // Prevent infinite loops
 
     while (attempts < maxAttempts) {
       // Check if we find a 'bundle' directory at this level
-      const bundleDir = join(currentDir, 'bundle');
+      const bundleDir = join(searchDir, 'bundle');
       const bundlePath = join(bundleDir, filename);
       if (existsSync(bundlePath)) {
         return readFileSync(bundlePath, 'utf-8');
       }
 
-      // Also check if current directory itself is named 'bundle'
-      if (basename(currentDir) === 'bundle') {
-        const directPath = join(currentDir, filename);
-        if (existsSync(directPath)) {
-          return readFileSync(directPath, 'utf-8');
-        }
-      }
-
       // Move up one directory
-      const parentDir = dirname(currentDir);
-      if (parentDir === currentDir) {
+      const parentDir = dirname(searchDir);
+      if (parentDir === searchDir) {
         // We've reached the root
         break;
       }
-      currentDir = parentDir;
+      searchDir = parentDir;
       attempts++;
     }
 
@@ -80,16 +120,45 @@ function loadMarkdownFile(filename: string): string {
       dirname(dirname(__dirname)),
     ].filter((p) => p && p !== '');
 
+    if (debugLog) {
+      console.log(`[PROMPT_LOADER] Searching in paths:`, searchPaths);
+
+      // List files in key directories to debug CI issue
+      const checkDirs = [
+        __dirname,
+        process.cwd(),
+        dirname(process.argv[1] || ''),
+      ];
+      for (const dir of checkDirs) {
+        try {
+          const files = readdirSync(dir).filter(
+            (f) =>
+              f.endsWith('.md') ||
+              f === 'tools' ||
+              f === 'providers' ||
+              f === 'env',
+          );
+          console.log(`[PROMPT_LOADER] Files in ${dir}:`, files);
+        } catch (e) {
+          console.log(
+            `[PROMPT_LOADER] Could not list ${dir}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+    }
+
     for (const base of searchPaths) {
       // Try direct path
       const directTry = join(base, filename);
       if (existsSync(directTry)) {
+        if (debugLog) console.log(`[PROMPT_LOADER] Found at: ${directTry}`);
         return readFileSync(directTry, 'utf-8');
       }
 
       // Try with bundle subdirectory
       const bundleTry = join(base, 'bundle', filename);
       if (existsSync(bundleTry)) {
+        if (debugLog) console.log(`[PROMPT_LOADER] Found at: ${bundleTry}`);
         return readFileSync(bundleTry, 'utf-8');
       }
 
@@ -97,14 +166,27 @@ function loadMarkdownFile(filename: string): string {
       if (basename(base) === 'bundle') {
         const inBundleTry = join(base, filename);
         if (existsSync(inBundleTry)) {
+          if (debugLog) console.log(`[PROMPT_LOADER] Found at: ${inBundleTry}`);
           return readFileSync(inBundleTry, 'utf-8');
         }
       }
     }
 
-    throw new Error(`File not found in any expected location`);
-  } catch (_error) {
-    console.warn(`Warning: Could not load ${filename}, using empty content`);
+    throw new Error(
+      `File not found in any expected location. Searched: ${searchPaths.join(', ')}`,
+    );
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `Warning: Could not load ${filename}, using empty content. Error: ${errorMsg}`,
+    );
+    if (debugLog) {
+      console.warn(`[PROMPT_LOADER] Full error:`, error);
+      console.warn(
+        `[PROMPT_LOADER] Stack trace:`,
+        error instanceof Error ? error.stack : 'No stack trace',
+      );
+    }
     return '';
   }
 }

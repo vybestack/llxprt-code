@@ -3,7 +3,7 @@
  * These constants reference the corresponding .md files for default content
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
@@ -27,28 +27,43 @@ function loadMarkdownFile(filename: string): string {
   }
 
   try {
-    // First try the normal path (works in development and non-bundled builds)
-    const normalPath = join(__dirname, filename);
-    if (debugLog)
-      console.log(`[PROMPT_LOADER] Checking normalPath: ${normalPath}`);
-    if (existsSync(normalPath)) {
-      if (debugLog) console.log(`[PROMPT_LOADER] Found at normalPath`);
-      return readFileSync(normalPath, 'utf-8');
-    }
-
     // Check if we're already in a bundle directory FIRST
     // This fixes the Windows CI issue where __dirname is already bundle
     const currentDir = resolve(__dirname);
+    if (debugLog) {
+      console.log(`[PROMPT_LOADER] currentDir: ${currentDir}`);
+      console.log(
+        `[PROMPT_LOADER] basename(currentDir): ${basename(currentDir)}`,
+      );
+    }
+
     if (basename(currentDir) === 'bundle') {
       const directPath = join(currentDir, filename);
-      if (debugLog)
+      if (debugLog) {
         console.log(
-          `[PROMPT_LOADER] Checking directPath (in bundle): ${directPath}`,
+          `[PROMPT_LOADER] In bundle dir, checking directPath: ${directPath}`,
         );
+        console.log(
+          `[PROMPT_LOADER] directPath exists: ${existsSync(directPath)}`,
+        );
+      }
       if (existsSync(directPath)) {
         if (debugLog) console.log(`[PROMPT_LOADER] Found at directPath`);
         return readFileSync(directPath, 'utf-8');
       }
+    }
+
+    // Then try the normal path (works in development and non-bundled builds)
+    const normalPath = join(__dirname, filename);
+    if (debugLog) {
+      console.log(`[PROMPT_LOADER] Checking normalPath: ${normalPath}`);
+      console.log(
+        `[PROMPT_LOADER] normalPath exists: ${existsSync(normalPath)}`,
+      );
+    }
+    if (existsSync(normalPath)) {
+      if (debugLog) console.log(`[PROMPT_LOADER] Found at normalPath`);
+      return readFileSync(normalPath, 'utf-8');
     }
 
     // If that doesn't work, we might be in a bundled environment
@@ -105,8 +120,32 @@ function loadMarkdownFile(filename: string): string {
       dirname(dirname(__dirname)),
     ].filter((p) => p && p !== '');
 
-    if (debugLog)
+    if (debugLog) {
       console.log(`[PROMPT_LOADER] Searching in paths:`, searchPaths);
+
+      // List files in key directories to debug CI issue
+      const checkDirs = [
+        __dirname,
+        process.cwd(),
+        dirname(process.argv[1] || ''),
+      ];
+      for (const dir of checkDirs) {
+        try {
+          const files = readdirSync(dir).filter(
+            (f) =>
+              f.endsWith('.md') ||
+              f === 'tools' ||
+              f === 'providers' ||
+              f === 'env',
+          );
+          console.log(`[PROMPT_LOADER] Files in ${dir}:`, files);
+        } catch (e) {
+          console.log(
+            `[PROMPT_LOADER] Could not list ${dir}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      }
+    }
 
     for (const base of searchPaths) {
       // Try direct path
