@@ -1,6 +1,6 @@
 # LLxprt Code Companion
 
-The LLxprt Code Companion extension seamlessly integrates [LLxprt Code](https://github.com/vybestack/llxprt-code) into your IDE.
+The LLxprt Code Companion extension seamlessly integrates [LLxprt Code](https://github.com/vybestack/llxprt-code) into your IDE. This extension is compatible with both VS Code and VS Code forks.
 
 # Features
 
