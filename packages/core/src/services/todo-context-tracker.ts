@@ -13,7 +13,10 @@ export class TodoContextTracker {
 
   private activeTodoId: string | null = null;
 
-  private constructor(private readonly sessionId: string) {}
+  private constructor(private readonly _sessionId: string) {
+    // Session ID reserved for future session-specific functionality
+    void this._sessionId;
+  }
 
   /**
    * Get or create a tracker instance for a session

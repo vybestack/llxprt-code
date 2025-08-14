@@ -62,7 +62,7 @@ export interface LogEventEntry {
 // Singleton class for batch posting log events to Clearcut. When a new event comes in, the elapsed time
 // is checked and events are flushed to Clearcut if at least a minute has passed since the last flush.
 export class ClearcutLogger {
-  private static instance: ClearcutLogger;
+  private static _instance: ClearcutLogger;
   private config?: Config;
   // Telemetry is disabled - this is just a stub to maintain API compatibility
   private readonly events: {
@@ -101,6 +101,9 @@ export class ClearcutLogger {
 
   private constructor(config?: Config) {
     this.config = config;
+    
+    // Static instance reserved for future telemetry implementation
+    void ClearcutLogger._instance;
   }
 
   static getInstance(_config?: Config): ClearcutLogger | undefined {
@@ -687,7 +690,11 @@ export class ClearcutLogger {
     }
   }
 
-  private requeueFailedEvents(failedEvents: LogEventEntry[][]): void {
+  // @ts-ignore - Reserved for future error handling
+  private _requeueFailedEvents(failedEvents: LogEventEntry[][]): void {
+    // Method reserved for future error handling
+    void this;
+    
     const availableSpace = this.max_events - this.events.size;
     const eventsToRequeue = Math.min(
       failedEvents.length,

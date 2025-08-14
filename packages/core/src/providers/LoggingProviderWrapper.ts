@@ -409,18 +409,6 @@ export class LoggingProviderWrapper implements IProvider {
         }
       }
 
-      const _entry = {
-        type: 'tool_call',
-        tool: toolName,
-        timestamp: new Date(startTime).toISOString(),
-        duration,
-        success,
-        conversationId: this.conversationId,
-        turnNumber: this.turnNumber,
-        // Include git stats if present
-        gitStats,
-        error: error ? String(error) : undefined,
-      };
 
       // Write to disk
       const fileWriter = getConversationFileWriter(

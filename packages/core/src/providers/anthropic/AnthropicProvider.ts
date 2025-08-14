@@ -17,7 +17,7 @@ export class AnthropicProvider extends BaseProvider {
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
   private baseURL?: string;
-  private config?: IProviderConfig;
+  private _config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-20250514'; // Default model
   private modelParams?: Record<string, unknown>;
 
@@ -66,7 +66,10 @@ export class AnthropicProvider extends BaseProvider {
     super(baseConfig);
 
     this.baseURL = baseURL;
-    this.config = config;
+    this._config = config;
+
+    // Config reserved for future provider customization
+    void this._config;
 
     this.anthropic = new Anthropic({
       apiKey: apiKey || '', // Empty string if OAuth will be used

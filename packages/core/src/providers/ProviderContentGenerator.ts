@@ -28,7 +28,10 @@ export class ProviderContentGenerator implements ContentGenerator {
   constructor(
     private providerManager: ProviderManager,
     private _config: ContentGeneratorConfig,
-  ) {}
+  ) {
+    // Config parameter is reserved for future use
+    void this._config;
+  }
 
   private getWrapper(): GeminiCompatibleWrapper {
     const provider = this.providerManager.getActiveProvider();

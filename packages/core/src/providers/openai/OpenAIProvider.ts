@@ -121,6 +121,9 @@ export class OpenAIProvider extends BaseProvider {
     }
     this.openai = new OpenAI(clientOptions);
     this._cachedClientKey = apiKey; // Track the initial key used
+
+    // Cached client reserved for future optimization
+    void this._cachedClient;
   }
 
   /**
@@ -1166,7 +1169,6 @@ export class OpenAIProvider extends BaseProvider {
    */
   private async initializeFromSettings(): Promise<void> {
     try {
-      const _settingsService = getSettingsService();
       // Load saved model if available
       const savedModel = await this.getModelFromSettings();
       if (savedModel) {

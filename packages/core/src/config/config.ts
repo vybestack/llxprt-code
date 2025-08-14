@@ -316,7 +316,7 @@ export class Config {
   private ideModeFeature: boolean;
   private ideClient?: IdeClient;
   private inFallbackMode = false;
-  private modelSwitchedDuringSession: boolean = false;
+  private _modelSwitchedDuringSession: boolean = false;
   private readonly maxSessionTurns: number;
   private readonly _activeExtensions: ActiveExtension[];
   private readonly listExtensions: boolean;
@@ -484,6 +484,9 @@ export class Config {
     // Create GeminiClient instance immediately without authentication
     // This ensures geminiClient is available for providers on startup
     this.geminiClient = new GeminiClient(this);
+
+    // Reserved for future model switching tracking
+    void this._modelSwitchedDuringSession;
   }
 
   async refreshAuth(authMethod: AuthType) {

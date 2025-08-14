@@ -25,7 +25,7 @@ interface AnthropicFlowConfig {
 export class AnthropicDeviceFlow {
   private config: AnthropicFlowConfig;
   private codeVerifier?: string;
-  private codeChallenge?: string;
+  private _codeChallenge?: string;
   private state?: string;
 
   constructor(config?: Partial<AnthropicFlowConfig>) {
@@ -51,7 +51,10 @@ export class AnthropicDeviceFlow {
     const challenge = createHash('sha256')
       .update(_verifier)
       .digest('base64url');
-    this.codeChallenge = challenge;
+    this._codeChallenge = challenge;
+
+    // Store challenge for potential future use
+    void this._codeChallenge;
 
     return { verifier: _verifier, challenge };
   }

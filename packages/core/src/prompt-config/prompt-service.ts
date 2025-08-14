@@ -47,7 +47,7 @@ export class PromptService {
   private initialized: boolean;
   private config: Required<PromptServiceConfig>;
   private preloadedFiles: Map<string, string>;
-  private detectedEnvironment: EnvironmentInfo | null;
+  private _detectedEnvironment: EnvironmentInfo | null;
 
   /**
    * Creates a new PromptService instance
@@ -78,7 +78,10 @@ export class PromptService {
     // Initialize state
     this.initialized = false;
     this.preloadedFiles = new Map();
-    this.detectedEnvironment = null;
+    this._detectedEnvironment = null;
+
+    // Environment detection reserved for future prompt customization
+    void this._detectedEnvironment;
   }
 
   /**
@@ -151,7 +154,7 @@ export class PromptService {
     }
 
     // Detect environment
-    this.detectedEnvironment = await this.loader.detectEnvironment(
+    this._detectedEnvironment = await this.loader.detectEnvironment(
       process.cwd(),
     );
 

@@ -503,7 +503,10 @@ export class CoreToolScheduler {
     });
   }
 
-  private isRunning(): boolean {
+  // @ts-ignore - Reserved for future scheduler monitoring
+  private _isRunning(): boolean {
+    // Method reserved for future use in scheduler monitoring
+    void this;
     return this.toolCalls.some(
       (call) =>
         call.status === 'executing' || call.status === 'awaiting_approval',

@@ -435,10 +435,7 @@ export class GeminiCompatibleWrapper {
         );
 
         // Special handling: check if all parts are functionResponses
-        const _allFunctionResponses = parts.every(
-          (part) =>
-            part && typeof part === 'object' && 'functionResponse' in part,
-        );
+        // Note: this check was computed but not used in the current implementation
 
         contentArray = [
           {
