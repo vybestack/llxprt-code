@@ -692,7 +692,7 @@ export const useGeminiStream = (
             const filterResult = emojiFilter.filterStreamChunk(event.value);
 
             if (filterResult.blocked) {
-              // In error mode: stop displaying and queue error feedback for model
+              // In error mode: stop displaying and inject error feedback as tool response
 
               // Clear any partial content that was being built (don't display it)
               if (geminiMessageBuffer.trim()) {
@@ -703,21 +703,26 @@ export const useGeminiStream = (
               addItem(
                 {
                   type: 'info',
-                  text: 'Emojis detected - content blocked in error mode',
+                  text: 'Emojis detected - requesting retry without emojis...',
                 },
                 userMessageTimestamp,
               );
 
-              // Queue error feedback to be sent with next tool response or user message
+              // Queue the error feedback to be sent with the next tool response
+              // This ensures the model gets the feedback on the next interaction
               if (!queuedSystemFeedbackRef.current) {
                 queuedSystemFeedbackRef.current = [];
               }
               queuedSystemFeedbackRef.current.push(
-                `<system-reminder>ERROR: Your previous response contained emojis which are strictly prohibited. You must not use any emojis in your responses. Please provide your response again without emojis.</system-reminder>`,
+                `<system-reminder>ERROR: Your response contained emojis which are strictly prohibited. Please regenerate your response without using any emojis.</system-reminder>`,
               );
 
+              // Cancel current stream to stop processing
+              if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+              }
+
               // Stop processing this chunk
-              // The error feedback will be sent with the next interaction
               break;
             }
 

@@ -117,6 +117,19 @@ export class WebSearchTool extends BaseTool<
         returnDisplay: validationError,
       };
     }
+
+    // Additional safety check - ensure query exists and is not just "undefined" string
+    if (
+      !params.query ||
+      params.query.trim() === '' ||
+      params.query === 'undefined'
+    ) {
+      return {
+        llmContent: `Error: Web search requires a valid search query. Please provide a specific search query.`,
+        returnDisplay: `Error: No valid search query provided.`,
+      };
+    }
+
     try {
       // Get the content generator config to access the provider manager
       const contentGenConfig = this.config.getContentGeneratorConfig();
@@ -148,10 +161,19 @@ export class WebSearchTool extends BaseTool<
         };
       }
 
-      // Invoke the server tool
+      // Invoke the server tool with validated query
+      // Double-check query is not undefined before sending
+      const searchQuery = params.query?.trim() || '';
+      if (!searchQuery) {
+        return {
+          llmContent: `Error: Cannot perform web search without a query.`,
+          returnDisplay: `Error: Empty search query.`,
+        };
+      }
+
       const response = await serverToolsProvider.invokeServerTool(
         'web_search',
-        { query: params.query },
+        { query: searchQuery },
         { signal },
       );
 
@@ -222,7 +244,8 @@ export class WebSearchTool extends BaseTool<
         sources,
       };
     } catch (error: unknown) {
-      const errorMessage = `Error during web search for query "${params.query}": ${getErrorMessage(error)}`;
+      const queryDisplay = params.query || 'undefined';
+      const errorMessage = `Error during web search for query "${queryDisplay}": ${getErrorMessage(error)}`;
       console.error(errorMessage, error);
       return {
         llmContent: `Error: ${errorMessage}`,
