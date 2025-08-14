@@ -64,6 +64,7 @@ const promptMdFiles = glob.sync(
   { cwd: root },
 );
 console.log(`Found ${promptMdFiles.length} markdown files to copy`);
+console.log('First few files:', promptMdFiles.slice(0, 5));
 let copiedCount = 0;
 for (const file of promptMdFiles) {
   // Extract the relative path after 'defaults/'
@@ -81,7 +82,7 @@ for (const file of promptMdFiles) {
   }
 
   copyFileSync(sourcePath, targetPath);
-  
+
   // Verify the file was copied
   if (existsSync(targetPath)) {
     copiedCount++;
@@ -89,14 +90,22 @@ for (const file of promptMdFiles) {
     console.error(`  Failed to copy: ${relativePath}`);
   }
 }
-console.log(`  Successfully copied ${copiedCount}/${promptMdFiles.length} markdown files`);
+console.log(
+  `  Successfully copied ${copiedCount}/${promptMdFiles.length} markdown files`,
+);
 
-// List what's actually in the bundle directory
+// List what's actually in the bundle directory - including subdirectories
 const bundleContents = existsSync(bundleDir)
-  ? glob.sync('*', { cwd: bundleDir })
+  ? glob.sync('**/*', { cwd: bundleDir })
   : [];
 console.log(
-  `Bundle directory contents (${bundleContents.length} items):`,
-  bundleContents,
+  `Bundle directory contents (${bundleContents.length} total files/dirs):`,
 );
+// Show just the markdown files
+const mdFiles = bundleContents.filter((f) => f.endsWith('.md'));
+console.log(`  Markdown files (${mdFiles.length}):`, mdFiles.slice(0, 10));
+// Show top level items
+const topLevel = bundleContents.filter((f) => !f.includes('/'));
+console.log(`  Top level items (${topLevel.length}):`, topLevel);
+
 console.log('Assets copied to bundle/');

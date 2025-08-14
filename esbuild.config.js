@@ -45,15 +45,18 @@ esbuild
     console.log('ESBuild completed:');
     console.log('  Bundle path:', bundlePath);
     console.log('  Bundle exists:', fs.existsSync(bundlePath));
-    console.log('  Bundle size:', fs.existsSync(bundlePath) ? fs.statSync(bundlePath).size : 'N/A');
-    
+    console.log(
+      '  Bundle size:',
+      fs.existsSync(bundlePath) ? fs.statSync(bundlePath).size : 'N/A',
+    );
+
     // List bundle directory contents
     const bundleDir = path.dirname(bundlePath);
     if (fs.existsSync(bundleDir)) {
       const files = fs.readdirSync(bundleDir);
       console.log(`  Bundle dir contents (${files.length} items):`, files);
     }
-    
+
     fs.chmodSync('bundle/llxprt.js', 0o755);
   })
   .catch((err) => {

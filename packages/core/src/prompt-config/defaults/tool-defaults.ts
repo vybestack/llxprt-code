@@ -8,7 +8,9 @@ import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// In bundled environment, use global __dirname if available
+const __dirname =
+  (globalThis as any).__dirname || dirname(fileURLToPath(import.meta.url));
 
 function loadMarkdownFile(filename: string): string {
   // Always log in Windows CI to debug the issue

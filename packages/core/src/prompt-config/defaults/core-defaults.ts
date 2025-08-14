@@ -8,7 +8,9 @@ import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// In bundled environment, use global __dirname if available
+const __dirname =
+  (globalThis as any).__dirname || dirname(fileURLToPath(import.meta.url));
 
 function loadMarkdownFile(filename: string): string {
   // Always log in Windows CI to debug the issue
@@ -47,22 +49,33 @@ function loadMarkdownFile(filename: string): string {
           `[PROMPT_LOADER] directPath exists: ${existsSync(directPath)}`,
         );
 
-        // List files in bundle directory to see what's actually there
+        // Check for specific files we expect
         try {
-          const files = readdirSync(currentDir).filter(
-            (f) =>
-              f.endsWith('.md') ||
-              f === 'tools' ||
-              f === 'providers' ||
-              f === 'env',
-          );
+          const expectedFiles = [
+            'core.md',
+            'compression.md',
+            'tools',
+            'env',
+            'providers',
+          ];
+          const foundFiles = expectedFiles.filter((f) => {
+            const fullPath = join(currentDir, f);
+            try {
+              const exists = existsSync(fullPath);
+              if (debugLog && exists) {
+                console.log(`[PROMPT_LOADER] Found ${f} at ${fullPath}`);
+              }
+              return exists;
+            } catch (e) {
+              return false;
+            }
+          });
           console.log(
-            `[PROMPT_LOADER] Files in bundle dir ${currentDir}:`,
-            files.slice(0, 10),
+            `[PROMPT_LOADER] Found ${foundFiles.length}/${expectedFiles.length} expected items in bundle dir`,
           );
         } catch (e) {
           console.log(
-            `[PROMPT_LOADER] Could not list bundle dir: ${e instanceof Error ? e.message : String(e)}`,
+            `[PROMPT_LOADER] Could not check bundle dir: ${e instanceof Error ? e.message : String(e)}`,
           );
         }
       }
