@@ -116,8 +116,36 @@ function buildPromptContext(model?: string, tools?: string[]): PromptContext {
     );
   }
 
+  // Detect provider from model name or environment
+  let provider = 'gemini'; // Default
+
+  // Check if we have provider info in environment or settings
+  if (process.env.LLXPRT_PROVIDER) {
+    provider = process.env.LLXPRT_PROVIDER;
+  } else if (model) {
+    // Infer provider from model name patterns
+    if (
+      model.includes('gpt') ||
+      model.includes('davinci') ||
+      model.includes('turbo')
+    ) {
+      provider = 'openai';
+    } else if (model.includes('claude')) {
+      provider = 'anthropic';
+    } else if (model.includes('gemini') || model.includes('palm')) {
+      provider = 'gemini';
+    } else if (
+      model.includes('llama') ||
+      model.includes('mixtral') ||
+      model.includes('smol')
+    ) {
+      // Local models often used with OpenAI-compatible APIs
+      provider = 'openai';
+    }
+  }
+
   return {
-    provider: 'gemini', // Default provider for now
+    provider,
     model: model || 'gemini-1.5-pro',
     enabledTools,
     environment,
