@@ -34,7 +34,6 @@ import {
   ConversationResponseEvent,
   ProviderSwitchEvent,
   ProviderCapabilityEvent,
-  KittySequenceOverflowEvent,
 } from './types.js';
 import {
   recordApiErrorMetrics,
@@ -468,19 +467,3 @@ export function logProviderCapability(
   }
 }
 
-export function logKittySequenceOverflow(
-  config: Config,
-  event: KittySequenceOverflowEvent,
-): void {
-  if (!isTelemetrySdkInitialized()) return;
-  const attributes: LogAttributes = {
-    ...getCommonAttributes(config),
-    ...event,
-  };
-  const logger = logs.getLogger(SERVICE_NAME);
-  const logRecord: LogRecord = {
-    body: `Kitty sequence buffer overflow: ${event.sequence_length} bytes`,
-    attributes,
-  };
-  logger.emit(logRecord);
-}

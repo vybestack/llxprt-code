@@ -27,7 +27,6 @@ export {
   logApiResponse,
   logFlashFallback,
   logSlashCommand,
-  logKittySequenceOverflow,
 } from './loggers.js';
 export {
   StartSessionEvent,
@@ -40,7 +39,6 @@ export {
   TelemetryEvent,
   FlashFallbackEvent,
   SlashCommandEvent,
-  KittySequenceOverflowEvent,
 } from './types.js';
 export { SpanStatusCode, ValueType } from '@opentelemetry/api';
 export { SemanticAttributes } from '@opentelemetry/semantic-conventions';

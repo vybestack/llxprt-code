@@ -13,11 +13,7 @@ import {
   BACKSLASH_ENTER_DETECTION_WINDOW_MS,
   MAX_KITTY_SEQUENCE_LENGTH,
 } from '../utils/platformConstants.js';
-import {
-  KittySequenceOverflowEvent,
-  logKittySequenceOverflow,
-  Config,
-} from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import { FOCUS_IN, FOCUS_OUT } from './useFocus.js';
 
 const ESC = '\u001B';
@@ -274,14 +270,6 @@ export function useKeypress(
 
           // If buffer doesn't match expected pattern and is getting long, flush it
           if (kittySequenceBuffer.length > MAX_KITTY_SEQUENCE_LENGTH) {
-            // Log telemetry for buffer overflow
-            if (config) {
-              const event = new KittySequenceOverflowEvent(
-                kittySequenceBuffer.length,
-                kittySequenceBuffer,
-              );
-              logKittySequenceOverflow(config, event);
-            }
             // Not a Kitty sequence, treat as regular key
             kittySequenceBuffer = '';
           } else {
