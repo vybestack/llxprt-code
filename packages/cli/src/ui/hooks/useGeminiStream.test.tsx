@@ -367,6 +367,7 @@ describe('useGeminiStream', () => {
       getGeminiClient: mockGetGeminiClient,
       getUsageStatisticsEnabled: () => true,
       getDebugMode: () => false,
+      getEphemeralSetting: vi.fn(() => 'auto'),
       addHistory: vi.fn(),
       getSessionId() {
         return 'test-session-id';

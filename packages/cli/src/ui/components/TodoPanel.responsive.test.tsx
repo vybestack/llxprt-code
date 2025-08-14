@@ -88,9 +88,9 @@ describe('TodoPanel Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show status indicators but not full content
-      expect(output).toMatch(/✔/); // completed marker
+      expect(output).toMatch(/\[\*\]/); // completed marker
       expect(output).toMatch(/→/); // in_progress marker
-      expect(output).toMatch(/○/); // pending marker
+      expect(output).toMatch(/\[ \]/); // pending marker
 
       // Should show task count summary
       expect(output).toMatch(/3 tasks/i);

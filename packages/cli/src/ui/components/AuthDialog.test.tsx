@@ -197,7 +197,7 @@ describe('AuthDialog', () => {
       );
 
       // OAuth-only implementation always shows first option selected by default
-      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
+      expect(lastFrame()).toContain('[*]1. Gemini (Google OAuth)');
     });
 
     it('should fall back to default if GEMINI_DEFAULT_AUTH_TYPE is not set', () => {
@@ -226,7 +226,7 @@ describe('AuthDialog', () => {
       );
 
       // OAuth-only implementation defaults to Gemini OAuth
-      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
+      expect(lastFrame()).toContain('[*]1. Gemini (Google OAuth)');
     });
 
     it('should show an error and fall back to default if GEMINI_DEFAULT_AUTH_TYPE is invalid', () => {
@@ -262,7 +262,7 @@ describe('AuthDialog', () => {
       );
 
       // OAuth-only implementation defaults to Gemini OAuth
-      expect(lastFrame()).toContain('● 1. Gemini (Google OAuth)');
+      expect(lastFrame()).toContain('[*]1. Gemini (Google OAuth)');
     });
   });
 
