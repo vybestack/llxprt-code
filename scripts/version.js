@@ -34,31 +34,13 @@ if (!versionType) {
 // 2. Bump the version in the root and all workspace package.json files.
 run(`npm version ${versionType} --no-git-tag-version --allow-same-version`);
 
-// 3. Get all workspaces from package.json files and filter out the one we don't want to version.
-const rootPackageJsonPath = resolve(process.cwd(), 'package.json');
-const workspacesToExclude = ['llxprt-code-vscode-ide-companion'];
-// Get workspace names by reading package.json files directly
-const packageDirs = readJson(rootPackageJsonPath).workspaces || [];
-const allWorkspaces = [];
-for (const pattern of packageDirs) {
-  const dirs = execSync(`ls -d ${pattern} 2>/dev/null || true`, {
-    encoding: 'utf-8',
-  })
-    .trim()
-    .split('\n')
-    .filter(Boolean);
-  for (const dir of dirs) {
-    try {
-      const pkgPath = resolve(dir, 'package.json');
-      const pkg = readJson(pkgPath);
-      if (pkg.name) {
-        allWorkspaces.push(pkg.name);
-      }
-    } catch {
-      // Skip directories without package.json
-    }
-  }
-}
+// 3. Get all workspaces and filter out the one we don't want to version.
+// Now we version the companion extension too, so the exclude list is empty
+const workspacesToExclude = [];
+const lsOutput = JSON.parse(
+  execSync('npm ls --workspaces --json --depth=0').toString(),
+);
+const allWorkspaces = Object.keys(lsOutput.dependencies || {});
 const workspacesToVersion = allWorkspaces.filter(
   (wsName) => !workspacesToExclude.includes(wsName),
 );
