@@ -54,7 +54,7 @@ jobs:
           CURRENT_BRANCH=$(git branch --show-current)
           echo "Current branch: $CURRENT_BRANCH"
           # Check if there are new commits in upstream
-          COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/$CURRENT_BRANCH || echo "0")
+          COMMITS_BEHIND=$(git rev-list --count HEAD..upstream/"$CURRENT_BRANCH" || echo "0")
           echo "Commits behind upstream: $COMMITS_BEHIND"
           if [ "$COMMITS_BEHIND" -gt 0 ]; then
             echo "has_new_commits=true" >> "$GITHUB_OUTPUT"
@@ -141,12 +141,12 @@ jobs:
           # Get commit log between HEAD and upstream
           {
             echo 'commit_log<<EOF'
-            git log --oneline --reverse HEAD..upstream/$CURRENT_BRANCH | head -50
+            git log --oneline --reverse HEAD..upstream/"$CURRENT_BRANCH" | head -50
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
           # Get the commit range
-          FIRST_COMMIT=$(git rev-list --reverse HEAD..upstream/$CURRENT_BRANCH | head -1 | cut -c1-7)
-          LAST_COMMIT=$(git rev-list HEAD..upstream/$CURRENT_BRANCH | head -1 | cut -c1-7)
+          FIRST_COMMIT=$(git rev-list --reverse HEAD..upstream/"$CURRENT_BRANCH" | head -1 | cut -c1-7)
+          LAST_COMMIT=$(git rev-list HEAD..upstream/"$CURRENT_BRANCH" | head -1 | cut -c1-7)
           echo "commit_range=$FIRST_COMMIT..$LAST_COMMIT" >> "$GITHUB_OUTPUT"
       - name: Commit changes
         if: steps.check-commits.outputs.has_new_commits == 'true'

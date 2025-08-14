@@ -7,14 +7,14 @@ input=$(cat)
 
 # Extract the actual command from the JSON
 # The input format is: {"tool": "Bash", "args": {"command": "..."}}
-command=$(echo "$input" | jq -r '.args.command // empty' 2>/dev/null)
+command=$(echo "${input}" | jq -r '.args.command // empty' 2>/dev/null)
 
 # Check if this is a git push or commit command
-if echo "$command" | grep -qE "git (push|commit)"; then
+if echo "${command}" | grep -qE "git (push|commit)"; then
     echo "🔍 Pre-commit/push check: Running code quality checks..."
     
     # Change to project directory
-    cd "$CLAUDE_PROJECT_DIR" || exit 1
+    cd "${CLAUDE_PROJECT_DIR}" || exit 1
     
     # Check if Git pre-commit hook exists, create if missing
     if [[ ! -f ".git/hooks/pre-commit" ]]; then

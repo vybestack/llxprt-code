@@ -1,17 +1,24 @@
+---
 extends: default
 
 rules:
   # Disable quoted-strings rule entirely - too strict
   quoted-strings: disable
-  
+
   # Line length - be more permissive
   line-length:
     max: 120
     level: warning
-    
+
   # Trailing spaces should be errors
   trailing-spaces: enable
-  
+
   # Comments configuration
   comments:
     min-spaces-from-content: 1
+
+  # Disable document-start requirement
+  document-start: disable
+
+  # Disable truthy requirement (allow on/off)
+  truthy: disable
