@@ -18,7 +18,6 @@ import {
   isNodeError,
   MessageSenderType,
   ToolCallRequestInfo,
-  // TELEMETRY REMOVED: logUserPrompt and UserPromptEvent disabled
   GitService,
   EditorType,
   ThoughtSummary,
@@ -316,16 +315,6 @@ export const useGeminiStream = (
 
       if (typeof query === 'string') {
         const trimmedQuery = query.trim();
-        // TELEMETRY REMOVED: Disabled Google data collection
-        // logUserPrompt(
-        //   config,
-        //   new UserPromptEvent(
-        //     trimmedQuery.length,
-        //     prompt_id,
-        //     config.getContentGeneratorConfig()?.authType,
-        //     trimmedQuery,
-        //   ),
-        // );
         onDebugMessage(`User query: '${trimmedQuery}'`);
         await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
 

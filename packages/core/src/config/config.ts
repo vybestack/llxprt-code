@@ -42,14 +42,11 @@ import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
   TelemetryTarget,
-  // StartSessionEvent,
 } from '../telemetry/index.js';
 import {
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_FLASH_MODEL,
 } from './models.js';
-// TELEMETRY REMOVED: ClearcutLogger import disabled
-// import { ClearcutLogger } from '../telemetry/clearcut-logger/clearcut-logger.js';
 import type { IProviderManager as ProviderManager } from '../providers/IProviderManager.js';
 import { shouldAttemptBrowserLaunch } from '../utils/browser.js';
 import { MCPOAuthConfig } from '../mcp/oauth-provider.js';
@@ -453,15 +450,6 @@ export class Config {
       console.log(`[CONFIG] Telemetry disabled`);
     }
 
-    /* USAGE STATISTICS REMOVED: ClearcutLogger disabled to prevent Google data collection
-    if (this.getUsageStatisticsEnabled()) {
-      ClearcutLogger.getInstance(this)?.logStartSessionEvent(
-        new StartSessionEvent(this),
-      );
-    } else {
-      console.log('Data collection is disabled.');
-    }
-    */
     // Data collection is disabled
   }
 

@@ -19,7 +19,6 @@ import {
   SERVICE_NAME,
   EVENT_SLASH_COMMAND,
 } from './constants.js';
-import { ClearcutLogger } from './clearcut-logger/clearcut-logger.js';
 import {
   ApiErrorEvent,
   ApiRequestEvent,
@@ -60,8 +59,6 @@ export function logCliConfiguration(
   config: Config,
   event: StartSessionEvent,
 ): void {
-  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
-  // ClearcutLogger.getInstance(config)?.logStartSessionEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -90,8 +87,6 @@ export function logCliConfiguration(
 }
 
 export function logUserPrompt(config: Config, event: UserPromptEvent): void {
-  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
-  // ClearcutLogger.getInstance(config)?.logNewPromptEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -124,8 +119,6 @@ export function logToolCall(config: Config, event: ToolCallEvent): void {
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
-  // ClearcutLogger.getInstance(config)?.logToolCallEvent(event);
   if (!isTelemetrySdkInitialized()) {
     if (process.env.VERBOSE === 'true') {
       console.log(`[TELEMETRY] SDK not initialized, skipping log`);
@@ -172,8 +165,6 @@ export function logToolCall(config: Config, event: ToolCallEvent): void {
 }
 
 export function logApiRequest(config: Config, event: ApiRequestEvent): void {
-  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
-  // ClearcutLogger.getInstance(config)?.logApiRequestEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -195,8 +186,6 @@ export function logFlashFallback(
   config: Config,
   event: FlashFallbackEvent,
 ): void {
-  // TELEMETRY REMOVED: ClearcutLogger disabled
-  // ClearcutLogger.getInstance(config)?.logFlashFallbackEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -221,8 +210,6 @@ export function logApiError(config: Config, event: ApiErrorEvent): void {
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
-  // ClearcutLogger.getInstance(config)?.logApiErrorEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -264,8 +251,6 @@ export function logApiResponse(config: Config, event: ApiResponseEvent): void {
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
   uiTelemetryService.addEvent(uiEvent);
-  // TELEMETRY REMOVED: Disabled ClearcutLogger to prevent Google data collection
-  // ClearcutLogger.getInstance(config)?.logApiResponseEvent(event);
   if (!isTelemetrySdkInitialized()) return;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),
@@ -328,8 +313,6 @@ export function logLoopDetected(
   config: Config,
   event: LoopDetectedEvent,
 ): void {
-  // TELEMETRY REMOVED: ClearcutLogger disabled
-  // ClearcutLogger.getInstance(config)?.logLoopDetectedEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -349,8 +332,6 @@ export function logNextSpeakerCheck(
   config: Config,
   event: NextSpeakerCheckEvent,
 ): void {
-  // TELEMETRY REMOVED: ClearcutLogger disabled
-  // ClearcutLogger.getInstance(config)?.logNextSpeakerCheck(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -371,7 +352,6 @@ export function logSlashCommand(
   config: Config,
   event: SlashCommandEvent,
 ): void {
-  ClearcutLogger.getInstance(config)?.logSlashCommandEvent(event);
   if (!isTelemetrySdkInitialized()) return;
 
   const attributes: LogAttributes = {
@@ -492,7 +472,6 @@ export function logKittySequenceOverflow(
   config: Config,
   event: KittySequenceOverflowEvent,
 ): void {
-  ClearcutLogger.getInstance(config)?.logKittySequenceOverflowEvent(event);
   if (!isTelemetrySdkInitialized()) return;
   const attributes: LogAttributes = {
     ...getCommonAttributes(config),

@@ -40,7 +40,6 @@ export class GeminiProvider extends BaseProvider {
   private geminiConfig?: Config;
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
-  private authDetermined: boolean = false;
   private baseURL?: string;
   private modelParams?: Record<string, unknown>;
   private toolSchemas:
@@ -132,7 +131,6 @@ export class GeminiProvider extends BaseProvider {
       // Check for special OAuth signal
       if (token === 'USE_LOGIN_WITH_GOOGLE') {
         this.authMode = 'oauth';
-        this.authDetermined = true;
         return token; // Return the magic token
       }
 
@@ -150,14 +148,12 @@ export class GeminiProvider extends BaseProvider {
         this.authMode = 'none';
       }
 
-      this.authDetermined = true;
       return token;
     } catch (error) {
       // Handle case where no auth is available
       const authType = this.geminiConfig?.getContentGeneratorConfig()?.authType;
       if (authType === AuthType.USE_NONE) {
         this.authMode = 'none';
-        this.authDetermined = true;
         throw new AuthenticationRequiredError(
           'Authentication is set to USE_NONE but no credentials are available',
           this.authMode,
@@ -225,10 +221,9 @@ export class GeminiProvider extends BaseProvider {
     );
 
     // Clear auth cache when config changes to allow re-determination
-    this.authDetermined = false;
   }
 
-  override async getModels(): Promise<IModel[]> {
+  async getModels(): Promise<IModel[]> {
     // For OAuth mode, return fixed list of models
     if (this.authMode === 'oauth') {
       return [
@@ -316,26 +311,6 @@ export class GeminiProvider extends BaseProvider {
     ];
   }
 
-  /**
-   * Checks if OAuth authentication is still valid
-   */
-  // @ts-expect-error - Reserved for future OAuth validation
-  private async _isOAuthValid(): Promise<boolean> {
-    // Method reserved for future OAuth validation
-    void this;
-    
-    if (this.authMode !== 'oauth') return true;
-
-    // Check if we have valid OAuth tokens
-    // This would need to interact with the core auth system
-    try {
-      // For now, assume OAuth is valid if we've already determined auth
-      // A more robust check would query the auth status from the config
-      return this.authDetermined;
-    } catch {
-      return false;
-    }
-  }
 
   async *generateChatCompletion(
     messages: IMessage[],
@@ -951,7 +926,6 @@ export class GeminiProvider extends BaseProvider {
     process.env.GEMINI_API_KEY = apiKey;
 
     // Clear auth cache when API key changes
-    this.authDetermined = false;
   }
 
   override setBaseUrl(baseUrl?: string): void {
@@ -1065,7 +1039,6 @@ export class GeminiProvider extends BaseProvider {
   override clearState(): void {
     // Clear auth-related state
     this.authMode = 'none';
-    this.authDetermined = false;
     // Only reset model if it wasn't explicitly set by user
     if (!this.modelExplicitlySet) {
       this.currentModel = 'gemini-2.5-pro';
@@ -1077,7 +1050,6 @@ export class GeminiProvider extends BaseProvider {
    * Forces re-determination of auth method
    */
   override clearAuthCache(): void {
-    this.authDetermined = false;
     // Don't clear the auth mode itself, just the determination flag
     // This allows for smoother transitions
   }

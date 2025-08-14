@@ -6,11 +6,6 @@
 
 // TELEMETRY: Modified to support local file logging only - no data sent to Google
 import { DiagConsoleLogger, DiagLogLevel, diag } from '@opentelemetry/api';
-// TELEMETRY REMOVED: Network exporters disabled to prevent sending data to Google
-// import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-// import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-grpc';
-// import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-grpc';
-// import { CompressionAlgorithm } from '@opentelemetry/otlp-exporter-base';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 import { Resource } from '@opentelemetry/resources';
@@ -30,8 +25,6 @@ import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
 import { Config } from '../config/config.js';
 import { SERVICE_NAME } from './constants.js';
 import { initializeMetrics } from './metrics.js';
-// TELEMETRY REMOVED: ClearcutLogger disabled to prevent sending data to Google
-// import { ClearcutLogger } from './clearcut-logger/clearcut-logger.js';
 import {
   FileLogExporter,
   FileMetricExporter,
@@ -48,26 +41,6 @@ export function isTelemetrySdkInitialized(): boolean {
   return telemetryInitialized;
 }
 
-// TELEMETRY REMOVED: Commented out unused function
-// function parseGrpcEndpoint(
-//   otlpEndpointSetting: string | undefined,
-// ): string | undefined {
-//   if (!otlpEndpointSetting) {
-//     return undefined;
-//   }
-//   // Trim leading/trailing quotes that might come from env variables
-//   const trimmedEndpoint = otlpEndpointSetting.replace(/^["']|["']$/g, '');
-
-//   try {
-//     const url = new URL(trimmedEndpoint);
-//     // OTLP gRPC exporters expect an endpoint in the format scheme://host:port
-//     // The `origin` property provides this, stripping any path, query, or hash.
-//     return url.origin;
-//   } catch (error) {
-//     diag.error('Invalid OTLP endpoint URL provided:', trimmedEndpoint, error);
-//     return undefined;
-//   }
-// }
 
 export function initializeTelemetry(config: Config): void {
   // TELEMETRY: Modified to ONLY support local file logging - network exporters disabled

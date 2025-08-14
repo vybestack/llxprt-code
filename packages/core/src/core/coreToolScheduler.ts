@@ -503,15 +503,6 @@ export class CoreToolScheduler {
     });
   }
 
-  // @ts-expect-error - Reserved for future scheduler monitoring
-  private _isRunning(): boolean {
-    // Method reserved for future use in scheduler monitoring
-    void this;
-    return this.toolCalls.some(
-      (call) =>
-        call.status === 'executing' || call.status === 'awaiting_approval',
-    );
-  }
 
   private buildInvocation(
     tool: AnyDeclarativeTool,

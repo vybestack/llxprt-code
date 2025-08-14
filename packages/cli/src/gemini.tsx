@@ -28,7 +28,6 @@ import {
   getSettingsService,
   Config,
   sessionId,
-  // TELEMETRY REMOVED: logUserPrompt disabled
   AuthType,
   getOauthClient,
   setGitStatsService,
@@ -654,15 +653,6 @@ export async function main() {
   }
 
   const prompt_id = Math.random().toString(16).slice(2);
-  // TELEMETRY REMOVED: Disabled Google data collection
-  // logUserPrompt(config, {
-  //   'event.name': 'user_prompt',
-  //   'event.timestamp': new Date().toISOString(),
-  //   prompt: input,
-  //   prompt_id,
-  //   auth_type: config.getContentGeneratorConfig()?.authType,
-  //   prompt_length: input.length,
-  // });
 
   const nonInteractiveConfig = await validateNonInteractiveAuth(
     settings.merged.selectedAuthType,

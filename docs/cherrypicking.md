@@ -70,6 +70,7 @@ git cherry-pick <commit-hash>
 - **Next-speaker check functionality** - This feature has been permanently disabled in llxprt and should never be re-enabled
 - **Tool scheduler queue changes** - llxprt has superior parallel batching for multi-provider support
 - **CLI argument removals** - Preserve backward compatibility unless there's a strong reason
+- **ClearcutLogger (Google telemetry) commits** - All ClearcutLogger functionality has been completely removed from llxprt to prevent data collection
 - Gemini-specific release commits
 
 #### Features Reimplemented (Don't Cherry-pick):
@@ -78,6 +79,12 @@ These upstream features have been reimplemented in llxprt with our own approach:
 
 - **Conversation Logging (commit `36f58a34`)** - Reimplemented as privacy-first, multi-provider conversation logging via `/logging` command with local storage, granular controls, and sensitive data redaction
 - **Tool Scheduler Request Queue (commit `69322e12`)** - llxprt has superior parallel batching that queues and processes multiple requests in parallel for better multi-provider performance, while upstream processes serially
+
+#### Features Completely Removed (Don't Cherry-pick):
+
+These upstream features have been completely removed from llxprt for privacy/security reasons:
+
+- **ClearcutLogger (Google telemetry)** - All Google telemetry collection has been completely removed from llxprt. The codebase now uses only local file logging for telemetry, with no data sent to Google servers. Any upstream commits that add ClearcutLogger functionality should be skipped entirely.
 
 #### Handling Conflicts:
 
