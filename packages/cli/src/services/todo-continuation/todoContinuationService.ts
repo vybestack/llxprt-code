@@ -99,7 +99,8 @@ export interface ContinuationPromptTemplates {
 export class TodoContinuationService {
   private static readonly MAX_CONTINUATION_ATTEMPTS = 3;
   private static readonly MIN_CONTINUATION_INTERVAL_MS = 1000;
-  private static readonly CONTINUATION_TIMEOUT_MS = 30000;
+  // TODO: Add timeout functionality in the future
+  // private static readonly CONTINUATION_TIMEOUT_MS = 30000;
   private static readonly MAX_TASK_DESCRIPTION_LENGTH = 200;
 
   /**

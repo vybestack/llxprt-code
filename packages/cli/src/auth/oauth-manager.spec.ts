@@ -18,10 +18,10 @@ class MockOAuthProvider implements OAuthProvider {
 
   constructor(
     name: string,
-    private initialToken?: OAuthToken,
+    private _initialToken?: OAuthToken,
   ) {
     this.name = name;
-    this.token = initialToken || null;
+    this.token = this._initialToken || null;
   }
 
   async initiateAuth(): Promise<void> {

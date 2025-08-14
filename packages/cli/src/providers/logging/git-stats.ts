@@ -113,7 +113,6 @@ export class GitStatsTracker {
     let removed = 0;
 
     // Find common lines and differences
-    const _maxLength = Math.max(oldLines.length, newLines.length);
     const minLength = Math.min(oldLines.length, newLines.length);
 
     // Count changed lines in the common range

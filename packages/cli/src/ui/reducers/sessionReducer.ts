@@ -49,6 +49,7 @@ export const sessionReducer = (
     default: {
       // Exhaustive check - this ensures all action types are handled
       const _exhaustiveCheck: never = action;
+      void _exhaustiveCheck; // Explicitly acknowledge the variable for TypeScript
       return state;
     }
   }

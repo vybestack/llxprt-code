@@ -19,17 +19,8 @@ interface AuthDialogProps {
   initialErrorMessage?: string | null;
 }
 
-function _parseDefaultAuthType(
-  defaultAuthType: string | undefined,
-): AuthType | null {
-  if (
-    defaultAuthType &&
-    Object.values(AuthType).includes(defaultAuthType as AuthType)
-  ) {
-    return defaultAuthType as AuthType;
-  }
-  return null;
-}
+// TODO: Re-add _parseDefaultAuthType if needed for future auth type parsing
+// function was removed as it was unused
 
 export function AuthDialog({
   onSelect,

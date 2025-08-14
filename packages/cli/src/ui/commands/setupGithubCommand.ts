@@ -18,28 +18,12 @@ import {
   SlashCommand,
   SlashCommandActionReturn,
 } from './types.js';
-import { getUrlOpenCommand } from '../../ui/utils/commandUtils.js';
-import { getGitHubRepoInfo } from '../../utils/gitUtils.js';
+// TODO: Re-add imports when the setup-github command is re-enabled
+// import { getUrlOpenCommand } from '../../ui/utils/commandUtils.js';
+// import { getGitHubRepoInfo } from '../../utils/gitUtils.js';
 
-// Generate OS-specific commands to open the GitHub pages needed for setup.
-function _getOpenUrlsCommands(readmeUrl: string): string[] {
-  // Determine the OS-specific command to open URLs, ex: 'open', 'xdg-open', etc
-  const openCmd = getUrlOpenCommand();
-
-  // Build a list of URLs to open
-  const urlsToOpen = [readmeUrl];
-
-  const repoInfo = getGitHubRepoInfo();
-  if (repoInfo) {
-    urlsToOpen.push(
-      `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
-    );
-  }
-
-  // Create and join the individual commands
-  const commands = urlsToOpen.map((url) => `${openCmd} "${url}"`);
-  return commands;
-}
+// TODO: Reimplement _getOpenUrlsCommands when the setup-github command is re-enabled
+// This function was removed because it's currently unused
 
 export const setupGithubCommand: SlashCommand = {
   name: 'setup-github',

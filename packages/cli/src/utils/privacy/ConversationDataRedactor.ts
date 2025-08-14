@@ -235,29 +235,8 @@ export class ConversationDataRedactor {
     return redacted;
   }
 
-  private redactContentPart(part: unknown, providerName: string): unknown {
-    const redactedPart = { ...(part as Record<string, unknown>) };
-
-    if (typeof part === 'object' && part !== null) {
-      const partObj = part as Record<string, unknown>;
-      if (partObj.text && typeof partObj.text === 'string') {
-        redactedPart.text = this.redactContent(partObj.text, providerName);
-      }
-
-      if (partObj.functionCall) {
-        const funcCall = partObj.functionCall as Record<string, unknown>;
-        redactedPart.functionCall = {
-          ...funcCall,
-          args: this.redactToolParameters(
-            funcCall.args,
-            funcCall.name as string,
-          ),
-        };
-      }
-    }
-
-    return redactedPart;
-  }
+  // TODO: Re-add redactContentPart method when needed for advanced content redaction
+  // private redactContentPart(part: unknown, providerName: string): unknown {
 
   private redactToolParameters(params: unknown, toolName: string): unknown {
     if (!params || typeof params !== 'object') {
@@ -489,26 +468,8 @@ export class ConversationDataRedactor {
     return patterns;
   }
 
-  private isPatternEnabled(patternName: string): boolean {
-    switch (patternName) {
-      case 'api_keys':
-      case 'generic_api_keys':
-      case 'openai_api_keys':
-      case 'openai_project_keys':
-      case 'anthropic_api_keys':
-      case 'google_api_keys':
-        return this.redactionConfig.redactApiKeys;
-      case 'email_addresses':
-        return this.redactionConfig.redactEmails;
-      case 'passwords':
-      case 'bearer_tokens':
-      case 'openai_org_ids':
-      case 'google_tokens':
-        return this.redactionConfig.redactCredentials;
-      default:
-        return true;
-    }
-  }
+  // TODO: Re-add isPatternEnabled method when needed for dynamic pattern checking
+  // private isPatternEnabled(patternName: string): boolean {
 
   /**
    * Update redaction configuration

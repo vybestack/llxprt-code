@@ -97,7 +97,8 @@ describe('ShellTool multibyte handling', () => {
       },
     );
 
-    const execPromise = tool.execute({ command: 'noop' }, abortSignal);
+    const invocation = tool.build({ command: 'noop' });
+    const execPromise = invocation.execute(abortSignal);
 
     resolveNow({
       rawOutput: Buffer.from(MULTIBYTE, 'utf8'),
