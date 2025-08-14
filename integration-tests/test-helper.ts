@@ -117,6 +117,28 @@ export class TestRig {
   constructor() {
     this.bundlePath = join(__dirname, '..', 'bundle/llxprt.js');
     this.testDir = null;
+
+    // Debug bundle path
+    if (process.platform === 'win32' || process.env.CI) {
+      console.log('[TEST-HELPER] Bundle path:', this.bundlePath);
+      console.log(
+        '[TEST-HELPER] Bundle exists:',
+        fs.existsSync(this.bundlePath),
+      );
+      const bundleDir = dirname(this.bundlePath);
+      if (fs.existsSync(bundleDir)) {
+        const files = fs.readdirSync(bundleDir);
+        console.log(
+          `[TEST-HELPER] Bundle dir contents (${files.length} items):`,
+          files.slice(0, 10),
+        );
+      } else {
+        console.log(
+          '[TEST-HELPER] Bundle directory does not exist:',
+          bundleDir,
+        );
+      }
+    }
   }
 
   // Get timeout based on environment

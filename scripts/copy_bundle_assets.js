@@ -26,6 +26,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const bundleDir = join(root, 'bundle');
 
+console.log('Copy bundle assets script:');
+console.log('  root:', root);
+console.log('  bundleDir:', bundleDir);
+
 // Create the bundle directory if it doesn't exist
 if (!existsSync(bundleDir)) {
   mkdirSync(bundleDir);
@@ -59,6 +63,7 @@ const promptMdFiles = glob.sync(
   'packages/core/src/prompt-config/defaults/**/*.md',
   { cwd: root },
 );
+console.log(`Found ${promptMdFiles.length} markdown files to copy`);
 for (const file of promptMdFiles) {
   // Extract the relative path after 'defaults/'
   const relativePath = file.replace(
@@ -76,4 +81,12 @@ for (const file of promptMdFiles) {
   copyFileSync(join(root, file), targetPath);
 }
 
+// List what's actually in the bundle directory
+const bundleContents = existsSync(bundleDir)
+  ? glob.sync('*', { cwd: bundleDir })
+  : [];
+console.log(
+  `Bundle directory contents (${bundleContents.length} items):`,
+  bundleContents,
+);
 console.log('Assets copied to bundle/');

@@ -15,6 +15,10 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const pkg = require(path.resolve(__dirname, 'package.json'));
 
+console.log('ESBuild config:');
+console.log('  __dirname:', __dirname);
+console.log('  outfile:', path.resolve(__dirname, 'bundle/llxprt.js'));
+
 esbuild
   .build({
     entryPoints: ['packages/cli/index.ts'],
