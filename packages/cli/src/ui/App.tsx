@@ -1287,6 +1287,7 @@ You can switch authentication methods by typing /auth or switch to a different m
               {confirmationRequest.prompt}
               <Box paddingY={1}>
                 <RadioButtonSelect
+                  isFocused={!!confirmationRequest}
                   items={[
                     { label: 'Yes', value: true },
                     { label: 'No', value: false },
