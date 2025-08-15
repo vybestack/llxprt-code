@@ -1390,18 +1390,29 @@ describe('loadCliConfig model selection', () => {
   });
 
   it('uses the default gemini model if nothing is set', async () => {
-    process.argv = ['node', 'script.js']; // No model set.
-    const argv = await parseArguments();
-    const config = await loadCliConfig(
-      {
-        // No model set.
-      },
-      [],
-      'test-session',
-      argv,
-    );
+    // Clear environment override to test code default
+    const originalModel = process.env.LLXPRT_DEFAULT_MODEL;
+    delete process.env.LLXPRT_DEFAULT_MODEL;
 
-    expect(config.getModel()).toBe('gemini-2.5-pro');
+    try {
+      process.argv = ['node', 'script.js']; // No model set.
+      const argv = await parseArguments();
+      const config = await loadCliConfig(
+        {
+          // No model set.
+        },
+        [],
+        'test-session',
+        argv,
+      );
+
+      expect(config.getModel()).toBe('gemini-2.5-pro');
+    } finally {
+      // Restore original environment
+      if (originalModel !== undefined) {
+        process.env.LLXPRT_DEFAULT_MODEL = originalModel;
+      }
+    }
   });
 
   it('always prefers model from argvs', async () => {

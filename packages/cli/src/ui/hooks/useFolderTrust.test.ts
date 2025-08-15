@@ -18,10 +18,15 @@ import * as process from 'process';
 
 import * as trustedFolders from '../../config/trustedFolders.js';
 
-vi.mock('process', () => ({
-  cwd: vi.fn(),
-  platform: 'linux',
-}));
+vi.mock('process', async (importOriginal) => {
+  const actual = await importOriginal<typeof process>();
+  return {
+    ...actual,
+    default: actual,
+    cwd: vi.fn(),
+    platform: 'linux',
+  };
+});
 
 describe('useFolderTrust', () => {
   let mockSettings: LoadedSettings;

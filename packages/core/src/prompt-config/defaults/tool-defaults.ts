@@ -15,18 +15,39 @@ const __dirname =
 
 function loadMarkdownFile(filename: string): string {
   // Always log in Windows CI to debug the issue
-  const debugLog =
-    process.env.DEBUG_PROMPT_LOADING === 'true' || process.platform === 'win32';
+  // Skip debug logging if process or process.env is unavailable (test environment)
+  let debugLog = false;
+  try {
+    debugLog =
+      (typeof process !== 'undefined' &&
+        process.env &&
+        process.env.DEBUG_PROMPT_LOADING === 'true') ||
+      (typeof process !== 'undefined' && process.platform === 'win32');
+  } catch {
+    debugLog = false;
+  }
 
   if (debugLog) {
     console.log(`\n[PROMPT_LOADER] ========== Loading ${filename} ==========`);
     console.log(`[PROMPT_LOADER] __dirname: ${__dirname}`);
-    console.log(`[PROMPT_LOADER] process.cwd(): ${process.cwd()}`);
-    console.log(`[PROMPT_LOADER] process.argv[0]: ${process.argv[0]}`);
-    console.log(`[PROMPT_LOADER] process.argv[1]: ${process.argv[1]}`);
-    console.log(`[PROMPT_LOADER] process.platform: ${process.platform}`);
-    console.log(`[PROMPT_LOADER] NODE_ENV: ${process.env.NODE_ENV}`);
-    console.log(`[PROMPT_LOADER] CI: ${process.env.CI}`);
+    console.log(
+      `[PROMPT_LOADER] process.cwd(): ${typeof process !== 'undefined' ? process.cwd() : 'N/A'}`,
+    );
+    console.log(
+      `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv?.[0] : 'N/A'}`,
+    );
+    console.log(
+      `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv?.[1] : 'N/A'}`,
+    );
+    console.log(
+      `[PROMPT_LOADER] process.platform: ${typeof process !== 'undefined' ? process.platform : 'N/A'}`,
+    );
+    console.log(
+      `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'}`,
+    );
+    console.log(
+      `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
+    );
   }
 
   try {
@@ -94,7 +115,7 @@ function loadMarkdownFile(filename: string): string {
     }
 
     // As a last resort, check if we're running from a bundle directory
-    if (process.cwd().includes('bundle')) {
+    if (typeof process !== 'undefined' && process.cwd().includes('bundle')) {
       const cwdPath = join(process.cwd(), filename);
       if (existsSync(cwdPath)) {
         return readFileSync(cwdPath, 'utf-8');
@@ -103,7 +124,7 @@ function loadMarkdownFile(filename: string): string {
 
     // Additional check for Windows CI where files might be in a different location
     // Check if the file exists relative to the executing script location
-    if (process.argv[1]) {
+    if (typeof process !== 'undefined' && process.argv[1]) {
       const scriptDir = dirname(process.argv[1]);
       const scriptPath = join(scriptDir, filename);
       if (existsSync(scriptPath)) {
@@ -114,10 +135,14 @@ function loadMarkdownFile(filename: string): string {
     // Last resort: Do a broader search for the bundle directory
     // This handles edge cases like Windows CI where paths might be unusual
     const searchPaths = [
-      process.cwd(),
-      dirname(process.argv[1] || ''),
-      dirname(dirname(process.argv[1] || '')),
-      dirname(dirname(dirname(process.argv[1] || ''))),
+      typeof process !== 'undefined' ? process.cwd() : '',
+      typeof process !== 'undefined' ? dirname(process.argv[1] || '') : '',
+      typeof process !== 'undefined'
+        ? dirname(dirname(process.argv[1] || ''))
+        : '',
+      typeof process !== 'undefined'
+        ? dirname(dirname(dirname(process.argv[1] || '')))
+        : '',
       __dirname,
       dirname(__dirname),
       dirname(dirname(__dirname)),
@@ -129,9 +154,9 @@ function loadMarkdownFile(filename: string): string {
       // List files in key directories to debug CI issue
       const checkDirs = [
         __dirname,
-        process.cwd(),
-        dirname(process.argv[1] || ''),
-      ];
+        typeof process !== 'undefined' ? process.cwd() : '',
+        typeof process !== 'undefined' ? dirname(process.argv[1] || '') : '',
+      ].filter((dir) => dir !== '');
       for (const dir of checkDirs) {
         try {
           const files = readdirSync(dir).filter(
