@@ -123,6 +123,12 @@ export const useSlashCommandProcessor = (
           gcpProject: message.gcpProject,
           keyfile: message.keyfile,
           key: message.key,
+          ideClient: message.ideClient,
+        };
+      } else if (message.type === MessageType.HELP) {
+        historyItemContent = {
+          type: 'help',
+          timestamp: message.timestamp,
         };
       } else if (message.type === MessageType.STATS) {
         historyItemContent = {

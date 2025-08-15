@@ -54,6 +54,9 @@ export const aboutCommand: SlashCommand = {
     const selectedAuthType =
       context.services.settings.merged.selectedAuthType || '';
     const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || '';
+    const ideClient =
+      context.services.config?.getIdeClient()?.getDetectedIdeDisplayName() ||
+      '';
 
     // Determine keyfile path and key status for the active provider (if any)
     let keyfilePath = '';
@@ -83,6 +86,7 @@ export const aboutCommand: SlashCommand = {
       gcpProject,
       keyfile: keyfilePath,
       key: keyStatus,
+      ideClient,
     };
 
     context.ui.addItem(aboutItem, Date.now());
