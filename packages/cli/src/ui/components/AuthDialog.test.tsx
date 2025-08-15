@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthDialog } from './AuthDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
+import { renderWithProviders } from '../../test-utils/render.js';
 
 describe('AuthDialog', () => {
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,10 +47,9 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const mockOnSelect = vi.fn();
-    const { lastFrame } = render(
+    const { lastFrame } = renderWithProviders(
       <AuthDialog
-        onSelect={mockOnSelect}
+        onSelect={() => {}}
         settings={settings}
         initialErrorMessage="GEMINI_API_KEY  environment variable not found"
       />,
@@ -62,7 +61,7 @@ describe('AuthDialog', () => {
   });
 
   describe('GEMINI_API_KEY environment variable', () => {
-    it('should show OAuth dialog even when GEMINI_API_KEY is set', () => {
+    it('should detect GEMINI_API_KEY environment variable', () => {
       process.env.GEMINI_API_KEY = 'foobar';
 
       const settings: LoadedSettings = new LoadedSettings(
@@ -85,18 +84,16 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const mockOnSelect = vi.fn();
-      const { lastFrame } = render(
-        <AuthDialog onSelect={mockOnSelect} settings={settings} />,
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={() => {}} settings={settings} />,
       );
 
-      // OAuth-only dialog shows regardless of API key presence
-      expect(lastFrame()).toContain('OAuth Authentication');
-      expect(lastFrame()).toContain('Gemini (Google OAuth)');
-      expect(lastFrame()).toContain('Qwen (OAuth)');
+      expect(lastFrame()).toContain(
+        'Existing API key detected (GEMINI_API_KEY)',
+      );
     });
 
-    it('should show OAuth options regardless of GEMINI_DEFAULT_AUTH_TYPE', () => {
+    it('should not show the GEMINI_API_KEY message if GEMINI_DEFAULT_AUTH_TYPE is set to something else', () => {
       process.env.GEMINI_API_KEY = 'foobar';
       process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.LOGIN_WITH_GOOGLE;
 
@@ -120,18 +117,16 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={() => {}} settings={settings} />,
       );
 
-      // OAuth-only implementation doesn't show API key messages
       expect(lastFrame()).not.toContain(
         'Existing API key detected (GEMINI_API_KEY)',
       );
-      expect(lastFrame()).toContain('OAuth Authentication');
     });
 
-    it('should show OAuth dialog even when GEMINI_DEFAULT_AUTH_TYPE is set to use api key', () => {
+    it('should show the GEMINI_API_KEY message if GEMINI_DEFAULT_AUTH_TYPE is set to use api key', () => {
       process.env.GEMINI_API_KEY = 'foobar';
       process.env.GEMINI_DEFAULT_AUTH_TYPE = AuthType.USE_GEMINI;
 
@@ -155,16 +150,13 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={() => {}} settings={settings} />,
       );
 
-      // OAuth-only dialog shows, API key message not shown
-      expect(lastFrame()).not.toContain(
+      expect(lastFrame()).toContain(
         'Existing API key detected (GEMINI_API_KEY)',
       );
-      expect(lastFrame()).toContain('OAuth Authentication');
-      expect(lastFrame()).toContain('Note: You can also use API keys');
     });
   });
 
@@ -192,12 +184,12 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={() => {}} settings={settings} />,
       );
 
-      // OAuth-only implementation always shows first option selected by default
-      expect(lastFrame()).toContain('[*]1. Gemini (Google OAuth)');
+      // This is a bit brittle, but it's the best way to check which item is selected.
+      expect(lastFrame()).toContain('● 1. Login with Google');
     });
 
     it('should fall back to default if GEMINI_DEFAULT_AUTH_TYPE is not set', () => {
@@ -221,12 +213,12 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={() => {}} settings={settings} />,
       );
 
-      // OAuth-only implementation defaults to Gemini OAuth
-      expect(lastFrame()).toContain('[*]1. Gemini (Google OAuth)');
+      // Default is LOGIN_WITH_GOOGLE
+      expect(lastFrame()).toContain('● 1. Login with Google');
     });
 
     it('should show an error and fall back to default if GEMINI_DEFAULT_AUTH_TYPE is invalid', () => {
@@ -252,21 +244,20 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
-        <AuthDialog onSelect={vi.fn()} settings={settings} />,
+      const { lastFrame } = renderWithProviders(
+        <AuthDialog onSelect={() => {}} settings={settings} />,
       );
 
-      // OAuth-only implementation doesn't validate GEMINI_DEFAULT_AUTH_TYPE anymore
-      expect(lastFrame()).not.toContain(
-        'Invalid value for GEMINI_DEFAULT_AUTH_TYPE',
+      expect(lastFrame()).toContain(
+        'Invalid value for GEMINI_DEFAULT_AUTH_TYPE: "invalid-auth-type"',
       );
 
-      // OAuth-only implementation defaults to Gemini OAuth
-      expect(lastFrame()).toContain('[*]1. Gemini (Google OAuth)');
+      // Default is LOGIN_WITH_GOOGLE
+      expect(lastFrame()).toContain('● 1. Login with Google');
     });
   });
 
-  it('should close dialog when ESC is pressed', async () => {
+  it('should prevent exiting when no auth method is selected and show error message', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -288,7 +279,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { stdin, unmount } = render(
+    const { lastFrame, stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={onSelect} settings={settings} />,
     );
     await wait();
@@ -297,12 +288,15 @@ describe('AuthDialog', () => {
     stdin.write('\u001b'); // ESC key
     await wait();
 
-    // Should call onSelect with undefined to close the dialog
-    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
+    // Should show error message instead of calling onSelect
+    expect(lastFrame()).toContain(
+      'You must select an auth method to proceed. Press Ctrl+C twice to exit.',
+    );
+    expect(onSelect).not.toHaveBeenCalled();
     unmount();
   });
 
-  it('should close dialog even with an error message when ESC is pressed', async () => {
+  it('should not exit if there is already an error message', async () => {
     const onSelect = vi.fn();
     const settings: LoadedSettings = new LoadedSettings(
       {
@@ -324,7 +318,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { lastFrame, stdin, unmount } = render(
+    const { lastFrame, stdin, unmount } = renderWithProviders(
       <AuthDialog
         onSelect={onSelect}
         settings={settings}
@@ -339,8 +333,8 @@ describe('AuthDialog', () => {
     stdin.write('\u001b'); // ESC key
     await wait();
 
-    // Should call onSelect with undefined to close the dialog
-    expect(onSelect).toHaveBeenCalledWith(undefined, 'User');
+    // Should not call onSelect
+    expect(onSelect).not.toHaveBeenCalled();
     unmount();
   });
 
@@ -366,7 +360,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { stdin, unmount } = render(
+    const { stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={onSelect} settings={settings} />,
     );
     await wait();
