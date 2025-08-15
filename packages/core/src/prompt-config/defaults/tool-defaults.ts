@@ -14,15 +14,13 @@ const __dirname =
   dirname(fileURLToPath(import.meta.url));
 
 function loadMarkdownFile(filename: string): string {
-  // Always log in Windows CI to debug the issue
   // Skip debug logging if process or process.env is unavailable (test environment)
   let debugLog = false;
   try {
     debugLog =
-      (typeof process !== 'undefined' &&
-        process.env &&
-        process.env.DEBUG_PROMPT_LOADING === 'true') ||
-      (typeof process !== 'undefined' && process.platform === 'win32');
+      typeof process !== 'undefined' &&
+      process.env &&
+      (process.env.DEBUG === '1' || process.env.DEBUG === 'true');
   } catch {
     debugLog = false;
   }

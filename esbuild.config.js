@@ -15,9 +15,7 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
 const pkg = require(path.resolve(__dirname, 'package.json'));
 
-console.log('ESBuild config:');
-console.log('  __dirname:', __dirname);
-console.log('  outfile:', path.resolve(__dirname, 'bundle/llxprt.js'));
+// ESBuild config
 
 esbuild
   .build({
@@ -41,22 +39,7 @@ esbuild
     },
   })
   .then(() => {
-    const bundlePath = path.resolve(__dirname, 'bundle/llxprt.js');
-    console.log('ESBuild completed:');
-    console.log('  Bundle path:', bundlePath);
-    console.log('  Bundle exists:', fs.existsSync(bundlePath));
-    console.log(
-      '  Bundle size:',
-      fs.existsSync(bundlePath) ? fs.statSync(bundlePath).size : 'N/A',
-    );
-
-    // List bundle directory contents
-    const bundleDir = path.dirname(bundlePath);
-    if (fs.existsSync(bundleDir)) {
-      const files = fs.readdirSync(bundleDir);
-      console.log(`  Bundle dir contents (${files.length} items):`, files);
-    }
-
+    // ESBuild completed successfully
     fs.chmodSync('bundle/llxprt.js', 0o755);
   })
   .catch((err) => {
