@@ -108,11 +108,33 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       updateWorkspacePath(context);
     }),
-    vscode.commands.registerCommand('llxprt-code.runLLxprtCode', () => {
-      const llxprtCmd = 'llxprt';
-      const terminal = vscode.window.createTerminal(`LLxprt Code`);
-      terminal.show();
-      terminal.sendText(llxprtCmd);
+    vscode.commands.registerCommand('llxprt-code.runLLxprtCode', async () => {
+      const workspaceFolders = vscode.workspace.workspaceFolders;
+      if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showInformationMessage(
+          'No folder open. Please open a folder to run LLxprt Code.',
+        );
+        return;
+      }
+
+      let selectedFolder: vscode.WorkspaceFolder | undefined;
+      if (workspaceFolders.length === 1) {
+        selectedFolder = workspaceFolders[0];
+      } else {
+        selectedFolder = await vscode.window.showWorkspaceFolderPick({
+          placeHolder: 'Select a folder to run LLxprt Code in',
+        });
+      }
+
+      if (selectedFolder) {
+        const llxprtCmd = 'llxprt';
+        const terminal = vscode.window.createTerminal({
+          name: `LLxprt Code (${selectedFolder.name})`,
+          cwd: selectedFolder.uri.fsPath,
+        });
+        terminal.show();
+        terminal.sendText(llxprtCmd);
+      }
     }),
     vscode.commands.registerCommand('llxprt-code.showNotices', async () => {
       const noticePath = vscode.Uri.joinPath(
