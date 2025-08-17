@@ -293,7 +293,6 @@ export class TestRig {
     if (execOptions.input) {
       child.stdin!.write(execOptions.input);
     }
-    // Always end stdin to prevent hanging
     child.stdin!.end();
 
     child.stdout!.on('data', (data: Buffer) => {
