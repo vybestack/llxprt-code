@@ -6,9 +6,9 @@
  */
 
 import * as vscode from 'vscode';
-import { IDEServer } from './ide-server';
-import { DiffContentProvider, DiffManager } from './diff-manager';
-import { createLogger } from './utils/logger';
+import { IDEServer } from './ide-server.js';
+import { DiffContentProvider, DiffManager } from './diff-manager.js';
+import { createLogger } from './utils/logger.js';
 
 const INFO_MESSAGE_SHOWN_KEY = 'llxprtCodeInfoMessageShown';
 const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
