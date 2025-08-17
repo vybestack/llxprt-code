@@ -37,7 +37,7 @@ describe('IdeClient', () => {
     // await server.stop();
     delete process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
     // Reset instance
-    IdeClient.resetInstance();
+    IdeClient.instance = undefined;
   });
 });
 
@@ -128,7 +128,7 @@ describe('getIdeProcessId', () => {
     const parentPid = process.pid;
     const output = await new Promise<string>((resolve, reject) => {
       child = child_process.spawn(
-        'npx',
+        'node',
         [
           'tsx',
           '-e',
