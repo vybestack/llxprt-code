@@ -34,6 +34,7 @@ interface FooterProps {
   nightly: boolean;
   vimMode?: string;
   contextLimit?: number;
+  isTrustedFolder?: boolean;
 }
 
 // Responsive Memory Usage Display
@@ -163,6 +164,7 @@ export const Footer: React.FC<FooterProps> = ({
   nightly,
   vimMode,
   contextLimit,
+  isTrustedFolder,
 }) => {
   const { breakpoint } = useResponsive();
 
@@ -210,6 +212,9 @@ export const Footer: React.FC<FooterProps> = ({
                 </Text>
               )}
             </>
+          )}
+          {isTrustedFolder === false && (
+            <Text color={SemanticColors.status.warning}> (untrusted)</Text>
           )}
           {debugMode && (
             <>

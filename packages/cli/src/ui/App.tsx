@@ -1557,6 +1557,7 @@ You can switch authentication methods by typing /auth or switch to a different m
             contextLimit={
               config.getEphemeralSetting('context-limit') as number | undefined
             }
+            isTrustedFolder={config.isTrustedFolder()}
           />
         </Box>
       </Box>

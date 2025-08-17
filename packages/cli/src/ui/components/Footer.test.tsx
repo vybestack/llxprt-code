@@ -243,4 +243,79 @@ describe('Footer', () => {
       // This is currently fixed in the implementation
     });
   });
+
+  describe('untrusted folder display', () => {
+    it('should show (untrusted) when isTrustedFolder is false', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(
+        <Footer {...defaultProps} isTrustedFolder={false} />,
+      );
+
+      const textContent = container.textContent;
+      expect(textContent).toContain('(untrusted)');
+    });
+
+    it('should not show (untrusted) when isTrustedFolder is true', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(
+        <Footer {...defaultProps} isTrustedFolder={true} />,
+      );
+
+      const textContent = container.textContent;
+      expect(textContent).not.toContain('(untrusted)');
+    });
+
+    it('should not show (untrusted) when isTrustedFolder is undefined', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(
+        <Footer {...defaultProps} isTrustedFolder={undefined} />,
+      );
+
+      const textContent = container.textContent;
+      expect(textContent).not.toContain('(untrusted)');
+    });
+
+    it('should show (untrusted) after branch name when both are present', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(
+        <Footer
+          {...defaultProps}
+          branchName="test-branch"
+          isTrustedFolder={false}
+        />,
+      );
+
+      const textContent = container.textContent;
+      expect(textContent).toContain('test-branch*');
+      expect(textContent).toContain('(untrusted)');
+    });
+  });
 });
