@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.1.20",
+  "version": "0.1.20-nightly.250817.90f427f5",
   "engines": {
     "node": ">=24"
   },
@@ -14,7 +14,7 @@
     "url": "git+https://github.com/acoliver/llxprt-code.git"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.19"
+    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.20-nightly.250817.90f427f5"
   },
   "scripts": {
     "start": "node scripts/start.js",
