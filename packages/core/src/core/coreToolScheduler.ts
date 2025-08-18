@@ -272,7 +272,6 @@ interface CoreToolSchedulerOptions {
   onToolCallsUpdate?: ToolCallsUpdateHandler;
   getPreferredEditor: () => EditorType | undefined;
   config: Config;
-  getTerminalSize: () => { columns: number; rows: number };
   onEditorClose: () => void;
 }
 
@@ -284,13 +283,12 @@ export class CoreToolScheduler {
   private onToolCallsUpdate?: ToolCallsUpdateHandler;
   private getPreferredEditor: () => EditorType | undefined;
   private config: Config;
-  private getTerminalSize: () => { columns: number; rows: number };
-  private onEditorClose: () => void;
   private pendingQueue: Array<{
     request: ToolCallRequestInfo;
     signal?: AbortSignal;
   }> = [];
   private isProcessingBatch = false;
+  private onEditorClose: () => void;
 
   constructor(options: CoreToolSchedulerOptions) {
     this.config = options.config;
@@ -299,7 +297,6 @@ export class CoreToolScheduler {
     this.onAllToolCallsComplete = options.onAllToolCallsComplete;
     this.onToolCallsUpdate = options.onToolCallsUpdate;
     this.getPreferredEditor = options.getPreferredEditor;
-    this.getTerminalSize = options.getTerminalSize;
     this.onEditorClose = options.onEditorClose;
   }
 
@@ -876,9 +873,8 @@ export class CoreToolScheduler {
           }
         : undefined;
 
-    const terminalSize = this.getTerminalSize();
     invocation
-      .execute(signal, liveOutputCallback, terminalSize.columns, terminalSize.rows)
+      .execute(signal, liveOutputCallback)
       .then(async (toolResult: ToolResult) => {
         if (signal.aborted) {
           // Mark tool call as failed if aborted
