@@ -150,7 +150,7 @@ describe('keyboard navigation', () => {
       stdin.write('\u001B[B'); // Down arrow
 
       await waitFor(() => {
-        expect(lastFrame()).toContain('● 2. Option 2');
+        expect(lastFrame()).toContain('[*]2. Option 2');
       });
 
       stdin.write('\r');
@@ -172,7 +172,7 @@ describe('keyboard navigation', () => {
       stdin.write('\u001B[A'); // Up arrow
 
       await waitFor(() => {
-        expect(lastFrame()).toContain('● 1. Option 1');
+        expect(lastFrame()).toContain('[*]1. Option 1');
       });
 
       stdin.write('\r');

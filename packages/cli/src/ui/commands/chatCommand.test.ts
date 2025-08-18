@@ -29,6 +29,10 @@ import { Stats } from 'fs';
 import { HistoryItemWithoutId } from '../types.js';
 
 vi.mock('fs/promises', () => ({
+  default: {
+    stat: vi.fn(),
+    readdir: vi.fn().mockResolvedValue(['file1.txt', 'file2.txt'] as string[]),
+  },
   stat: vi.fn(),
   readdir: vi.fn().mockResolvedValue(['file1.txt', 'file2.txt'] as string[]),
 }));

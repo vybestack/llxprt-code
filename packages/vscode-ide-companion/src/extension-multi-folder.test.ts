@@ -97,7 +97,7 @@ describe('activate with multiple folders', () => {
     await activate(context);
 
     expect(context.environmentVariableCollection.replace).toHaveBeenCalledWith(
-      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
       '/foo/bar',
     );
   });
@@ -116,7 +116,7 @@ describe('activate with multiple folders', () => {
     await activate(context);
 
     expect(context.environmentVariableCollection.replace).toHaveBeenCalledWith(
-      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
       '/foo/bar:/baz/qux',
     );
   });
@@ -132,7 +132,7 @@ describe('activate with multiple folders', () => {
     await activate(context);
 
     expect(context.environmentVariableCollection.replace).toHaveBeenCalledWith(
-      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
       '',
     );
   });
@@ -150,7 +150,7 @@ describe('activate with multiple folders', () => {
     await activate(context);
 
     expect(context.environmentVariableCollection.replace).toHaveBeenCalledWith(
-      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
       '/foo/bar',
     );
 
@@ -165,7 +165,7 @@ describe('activate with multiple folders', () => {
     });
 
     expect(context.environmentVariableCollection.replace).toHaveBeenCalledWith(
-      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
       '/foo/bar:/baz/qux',
     );
 
@@ -179,7 +179,7 @@ describe('activate with multiple folders', () => {
     });
 
     expect(context.environmentVariableCollection.replace).toHaveBeenCalledWith(
-      'GEMINI_CLI_IDE_WORKSPACE_PATH',
+      'LLXPRT_CODE_IDE_WORKSPACE_PATH',
       '/baz/qux',
     );
   });
