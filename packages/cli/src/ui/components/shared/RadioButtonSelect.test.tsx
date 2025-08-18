@@ -30,7 +30,7 @@ describe('<RadioButtonSelect />', () => {
 
   it('renders with the second item selected and matches snapshot', () => {
     const { lastFrame } = render(
-      <RadioButtonSelect items={ITEMS} initialIndex={1} onSelect={() => {}} />,
+      <RadioButtonSelect items={ITEMS} initialIndex={1} onSelect={noop} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -39,7 +39,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = render(
       <RadioButtonSelect
         items={ITEMS}
-        onSelect={() => {}}
+        onSelect={noop}
         showNumbers={false}
       />,
     );
@@ -54,7 +54,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = render(
       <RadioButtonSelect
         items={manyItems}
-        onSelect={() => {}}
+        onSelect={noop}
         showScrollArrows={true}
         maxItemsToShow={5}
       />,
@@ -78,7 +78,7 @@ describe('<RadioButtonSelect />', () => {
       },
     ];
     const { lastFrame } = render(
-      <RadioButtonSelect items={themeItems} onSelect={() => {}} />,
+      <RadioButtonSelect items={themeItems} onSelect={noop} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -89,7 +89,7 @@ describe('<RadioButtonSelect />', () => {
       value: `item-${i + 1}`,
     }));
     const { lastFrame } = render(
-      <RadioButtonSelect items={manyItems} onSelect={() => {}} />,
+      <RadioButtonSelect items={manyItems} onSelect={noop} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
