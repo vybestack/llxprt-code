@@ -200,7 +200,7 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should generate chat completion with default model',
       async () => {
-        if (!manager) return; // Guard for when test is skipped
+        if (!manager || skipTests) return; // Guard for when test is skipped
 
         const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
         manager.registerProvider(openaiProvider);

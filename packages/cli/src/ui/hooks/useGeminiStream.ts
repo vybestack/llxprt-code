@@ -1138,7 +1138,7 @@ export const useGeminiStream = (
           continue;
         }
 
-        const responsesToSend: PartListUnion[] = toolsToProcess.map(
+        const responsesToSend: Part[] = toolsToProcess.map(
           (toolCall, index) => {
             if (process.env.DEBUG) {
               console.log(
@@ -1157,16 +1157,13 @@ export const useGeminiStream = (
                 queuedSystemFeedbackRef.current.join('\n');
               queuedSystemFeedbackRef.current = []; // Clear the queue
 
-              // Append the system feedback as a text part to the response
-              const parts = Array.isArray(toolCall.response.responseParts)
-                ? toolCall.response.responseParts
-                : [toolCall.response.responseParts];
-
-              // Add the system feedback as an additional text part
-              return [...parts, { text: feedbackMessages }] as PartListUnion;
+              // Since we need to return a single Part (functionResponse), 
+              // we can't append text directly. Log a warning instead.
+              console.warn('[Warning] System feedback queued but cannot be appended to function response:', feedbackMessages);
             }
 
-            return toolCall.response.responseParts;
+            // Each responseParts should be a functionResponse object
+            return toolCall.response.responseParts as Part;
           },
         );
 
@@ -1200,8 +1197,8 @@ export const useGeminiStream = (
           });
         }
 
-        // For Gemini, when there are multiple function responses, each must be sent
-        // as a separate user message turn, not as an array in a single turn
+        // For Gemini, when there are multiple function responses, they should be sent
+        // as an array of parts in a single message
         if (responsesToSend.length === 1) {
           // Single response - send as-is
           if (process.env.DEBUG) {
@@ -1217,62 +1214,21 @@ export const useGeminiStream = (
           // Mark as submitted after sending
           markToolsAsSubmitted(callIdsToMarkAsSubmitted);
         } else {
-          // Multiple responses - combine them into a single message with multiple parts
+          // Multiple responses - send as array of parts
           if (process.env.DEBUG) {
             console.log(
-              `[DEBUG] Multiple function responses (${responsesToSend.length}), combining into single message`,
+              `[DEBUG] Multiple function responses (${responsesToSend.length}), sending as array`,
+            );
+            console.log(
+              '[DEBUG] Function responses to send:',
+              JSON.stringify(responsesToSend, null, 2),
             );
           }
 
-          // Combine all function responses into a single array of parts
-          const combinedParts: Part[] = [];
-
-          responsesToSend.forEach((response, index) => {
-            if (process.env.DEBUG) {
-              console.log(
-                `[DEBUG] Processing function response ${index + 1}/${responsesToSend.length}:`,
-                JSON.stringify(response, null, 2),
-              );
-            }
-
-            // Each response can be a Part, Part[], or string
-            if (Array.isArray(response)) {
-              // Spread array of Parts
-              for (const part of response) {
-                if (typeof part === 'string') {
-                  combinedParts.push({ text: part });
-                } else {
-                  combinedParts.push(part as Part);
-                }
-              }
-            } else if (typeof response === 'string') {
-              // This shouldn't happen with function responses, but handle it just in case
-              combinedParts.push({ text: response });
-            } else if (response && typeof response === 'object') {
-              // Single Part object (likely a functionResponse)
-              combinedParts.push(response as Part);
-            }
-          });
-
-          if (process.env.DEBUG) {
-            console.log(
-              '[DEBUG] Combined function responses:',
-              JSON.stringify(combinedParts, null, 2),
-            );
-          }
-
-          // Send all function responses together in a single message
-          // For Gemini 2.5 Pro, we need to ensure the parts are sent as individual elements
-          // not as a nested array
-          if (process.env.DEBUG) {
-            console.log(
-              '[DEBUG] Submitting combined parts as array of',
-              combinedParts.length,
-              'parts',
-            );
-          }
+          // Send all function responses as an array of parts
+          // Gemini expects multiple function responses as separate parts in the same message
           submitQuery(
-            combinedParts,
+            responsesToSend,
             {
               isContinuation: true,
             },

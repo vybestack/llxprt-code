@@ -27,7 +27,7 @@ import {
   BaseTool,
   AnyDeclarativeTool,
   AnyToolInvocation,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import {
   HistoryItemWithoutId,
   ToolCallStatus,
