@@ -15,10 +15,12 @@ import { TestRig, validateModelOutput } from './test-helper.js';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
 
-// Skip MCP tests in CI when using OpenRouter as tool extraction may vary by model
-const skipForOpenRouter = process.env.OPENAI_BASE_URL?.includes('openrouter');
+// Skip MCP tests in CI when using OpenRouter or Groq as tool extraction may vary by model
+const skipForAlternativeProviders = 
+  process.env.OPENAI_BASE_URL?.includes('openrouter') ||
+  process.env.OPENAI_BASE_URL?.includes('groq');
 
-describe.skipIf(skipForOpenRouter)('simple-mcp-server', () => {
+describe.skipIf(skipForAlternativeProviders)('simple-mcp-server', () => {
   // Create a minimal MCP server that doesn't require external dependencies
   // This implements the MCP protocol directly using Node.js built-ins
   const serverScript = `#!/usr/bin/env node

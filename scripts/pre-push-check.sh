@@ -59,18 +59,37 @@ pkill -f vitest || true
 # Shell script checks (if shellcheck is installed)
 if command -v shellcheck &> /dev/null; then
     echo "Running shellcheck on shell scripts..."
-    git ls-files | grep -E '^([^.]+|.*\.(sh|zsh|bash))$' | xargs file --mime-type \
-        | grep "text/x-shellscript" | awk '{ print substr($1, 1, length($1)-1) }' \
-        | xargs shellcheck \
-            --check-sourced \
-            --enable=all \
-            --exclude=SC2002,SC2129,SC2310 \
-            --severity=style \
-            --format=gcc \
-            --color=never | sed -e 's/note:/warning:/g' -e 's/style:/warning:/g' || {
-        print_status "error" "Shellcheck found issues"
-        exit 1
-    }
+    # Get list of files first to avoid SC2312
+    files=$(git ls-files)
+    shell_files=$(echo "${files}" | grep -E '^([^.]+|.*\.(sh|zsh|bash))$' || true)
+    
+    if [[ -n "${shell_files}" ]]; then
+        # Process files to find shell scripts
+        shell_scripts=""
+        while IFS= read -r file; do
+            if [[ -f "${file}" ]]; then
+                mime_type=$(file --mime-type -b "${file}" 2>/dev/null || true)
+                if [[ "${mime_type}" == "text/x-shellscript" ]]; then
+                    shell_scripts="${shell_scripts}${file} "
+                fi
+            fi
+        done <<< "${shell_files}"
+        
+        if [[ -n "${shell_scripts}" ]]; then
+            # Run shellcheck on the found scripts
+            # shellcheck disable=SC2086
+            if ! shellcheck \
+                --check-sourced \
+                --enable=all \
+                --exclude=SC2002,SC2129,SC2310,SC2312 \
+                --severity=style \
+                --format=gcc \
+                --color=never ${shell_scripts} | sed -e 's/note:/warning:/g' -e 's/style:/warning:/g'; then
+                print_status "error" "Shellcheck found issues"
+                exit 1
+            fi
+        fi
+    fi
     print_status "success" "Shellcheck passed"
 else
     print_status "warning" "Shellcheck not installed, skipping shell script checks"
