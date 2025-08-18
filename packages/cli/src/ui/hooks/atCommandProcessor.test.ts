@@ -399,7 +399,7 @@ describe('handleAtCommand', () => {
     expect(result.shouldProceed).toBe(true);
     expect(result.processedQuery).toBeDefined();
     const processedQuery = result.processedQuery!;
-    expect((processedQuery as any)[0]).toEqual({
+    expect((processedQuery as Array<{ text: string }>)[0]).toEqual({
       text: `Look at @${relativePath1} then @${invalidFile} and also just @ symbol, then @${relativePath2}`,
     });
 
@@ -407,7 +407,7 @@ describe('handleAtCommand', () => {
     const queryText = (
       Array.isArray(processedQuery) ? processedQuery : [processedQuery]
     )
-      .map((p: any) => p.text)
+      .map((p: unknown) => (p as { text: string }).text)
       .join('');
     expect(queryText).toContain('--- Content from referenced files ---');
     expect(queryText).toContain(`Content from @${file1Path}:`);

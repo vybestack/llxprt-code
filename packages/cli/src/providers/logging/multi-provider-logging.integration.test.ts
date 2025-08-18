@@ -715,7 +715,7 @@ describe('Multi-Provider Conversation Logging Integration', () => {
    */
   it('should maintain session continuity across provider switches in logging', async () => {
     // Session ID for testing continuity tracking
-    'session_' + Date.now();
+    // const _sessionId = 'session_' + Date.now(); // Unused for now but may be needed for future session continuity tests
     const providers = ['openai', 'anthropic', 'gemini'].map((name) =>
       createMockProvider(name),
     );

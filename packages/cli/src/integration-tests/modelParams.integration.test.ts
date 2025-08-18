@@ -15,23 +15,19 @@ import { SettingScope } from '../config/settings.js';
 
 // Stub implementations for missing commands
 const saveCommand = {
-  action: vi
-    .fn()
-    .mockResolvedValue({
-      type: 'message',
-      messageType: 'success',
-      content: 'Profile saved',
-    }),
+  action: vi.fn().mockResolvedValue({
+    type: 'message',
+    messageType: 'success',
+    content: 'Profile saved',
+  }),
 };
 
 const loadCommand = {
-  action: vi
-    .fn()
-    .mockResolvedValue({
-      type: 'message',
-      messageType: 'success',
-      content: 'Profile loaded',
-    }),
+  action: vi.fn().mockResolvedValue({
+    type: 'message',
+    messageType: 'success',
+    content: 'Profile loaded',
+  }),
 };
 import { getProviderManager } from '../providers/providerManagerInstance.js';
 import {
@@ -92,14 +88,14 @@ vi.mock('openai', () => ({
 }));
 
 interface MockProviderManager {
-  getActiveProvider: any;
-  setActiveProvider: any;
-  getProvider: any;
+  getActiveProvider: ReturnType<typeof vi.fn>;
+  setActiveProvider: ReturnType<typeof vi.fn>;
+  getProvider: ReturnType<typeof vi.fn>;
 }
 
 interface MockSettings {
   merged: Record<string, unknown>;
-  setValue: any;
+  setValue: ReturnType<typeof vi.fn>;
   errors: never[];
 }
 
@@ -652,18 +648,22 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(testProfile));
 
       // Mock provider operations to track order
-      (mockProviderManager.setActiveProvider as any).mockImplementation(() => {
-        callOrder.push('setActiveProvider');
-      });
+      vi.mocked(mockProviderManager.setActiveProvider).mockImplementation(
+        () => {
+          callOrder.push('setActiveProvider');
+        },
+      );
 
-      (mockProvider.setModelParams as any).mockImplementation(() => {
-        callOrder.push('setModelParams');
-      });
+      if (mockProvider.setModelParams) {
+        vi.mocked(mockProvider.setModelParams).mockImplementation(() => {
+          callOrder.push('setModelParams');
+        });
+      }
 
-      (mockProvider.generateChatCompletion as any).mockImplementation(
-        async () => {
+      vi.mocked(mockProvider.generateChatCompletion).mockImplementation(
+        async function* () {
           callOrder.push('generateChatCompletion');
-          return { content: 'Response' };
+          yield { content: 'Response' };
         },
       );
 
@@ -906,12 +906,14 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       await loadCommand.action!(context, '"Precision Profile"');
 
       // Verify precision was preserved
-      const calledParams = (mockProvider.setModelParams as any).mock
-        .calls[0][0];
-      expect(calledParams.temperature).toBe(0.123456789);
-      expect(calledParams.top_p).toBe(0.999999999);
-      expect(calledParams.frequency_penalty).toBe(-0.000000001);
-      expect(calledParams.seed).toBe(9007199254740991);
+      const mockCalls = vi.mocked(mockProvider.setModelParams).mock.calls;
+      expect(mockCalls).toHaveLength(1);
+      const calledParams = mockCalls[0]?.[0];
+      expect(calledParams).toBeDefined();
+      expect(calledParams?.temperature).toBe(0.123456789);
+      expect(calledParams?.top_p).toBe(0.999999999);
+      expect(calledParams?.frequency_penalty).toBe(-0.000000001);
+      expect(calledParams?.seed).toBe(9007199254740991);
     });
   });
 
@@ -974,14 +976,19 @@ describe('Model Parameters and Profiles Integration Tests', () => {
 
         // 6. Verify complete restoration
         return {
-          modelParams: (mockProvider.setModelParams as any).mock.calls[0][0],
-          ephemeralSettings: (freshSettings.setValue as any).mock.calls.reduce(
-            (acc: Record<string, unknown>, call: unknown[]) => {
-              acc[call[1] as string] = call[2];
-              return acc;
-            },
-            {},
-          ),
+          modelParams: vi.mocked(mockProvider.setModelParams).mock.calls[0][0],
+          ephemeralSettings: vi
+            .mocked(freshSettings.setValue)
+            .mock.calls.reduce(
+              (
+                acc: Record<string, unknown>,
+                call: Parameters<typeof freshSettings.setValue>,
+              ) => {
+                acc[call[1] as string] = call[2];
+                return acc;
+              },
+              {},
+            ),
         };
       };
 

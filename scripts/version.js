@@ -52,6 +52,7 @@ for (const workspaceName of workspacesToVersion) {
 }
 
 // 4. Get the new version number from the root package.json
+const rootPackageJsonPath = resolve(process.cwd(), 'package.json');
 const newVersion = readJson(rootPackageJsonPath).version;
 
 // 4. Update the sandboxImageUri in the root package.json

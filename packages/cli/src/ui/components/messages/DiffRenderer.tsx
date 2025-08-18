@@ -6,11 +6,10 @@
 
 import React from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../../colors.js';
+import { Colors, SemanticColors } from '../../colors.js';
 import crypto from 'crypto';
 import { colorizeCode, colorizeLine } from '../../utils/CodeColorizer.js';
 import { MaxSizedBox } from '../shared/MaxSizedBox.js';
-import { SemanticColors } from '../../colors.js';
 
 interface DiffLine {
   type: 'add' | 'del' | 'context' | 'hunk' | 'other';

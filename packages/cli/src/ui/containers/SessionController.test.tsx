@@ -33,8 +33,8 @@ import {
   isProQuotaExceededError,
   isGenericQuotaExceededError,
   Config,
+  IProvider,
 } from '@vybestack/llxprt-code-core';
-import { IProvider } from '@vybestack/llxprt-code-core';
 // import { AppAction } from '../reducers/appReducer.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
 

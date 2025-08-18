@@ -37,7 +37,7 @@ describe('useKeypress', () => {
     // Update the mock implementation for this test
     const { useStdin } = await import('ink');
     vi.mocked(useStdin).mockReturnValue({
-      stdin: stdin as any,
+      stdin: stdin as NodeJS.ReadStream & EventEmitter,
       setRawMode,
       isRawModeSupported: true,
       internal_exitOnCtrlC: true,

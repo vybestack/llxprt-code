@@ -413,7 +413,7 @@ describe('Multi-Provider Conversation Logging', () => {
 
     expect(logSpy).toHaveBeenCalled();
     expect(results).toHaveLength(3);
-    expect(results.map((r) => (r as any).content)).toEqual([
+    expect(results.map((r) => (r as { content: string }).content)).toEqual([
       'Chunk 1',
       'Chunk 2',
       'Chunk 3',

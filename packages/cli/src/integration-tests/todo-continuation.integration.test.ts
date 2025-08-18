@@ -248,6 +248,11 @@ describe('Todo Continuation Integration Tests', () => {
         capturedMessage =
           typeof request === 'string' ? request : JSON.stringify(request);
         capturedOptions = { signal, prompt_id, turns, originalModel };
+        // Yield a mock stream event
+        yield {
+          type: 'content',
+          value: 'test',
+        } as ServerGeminiStreamEvent;
         // Create a mock Turn object
         const mockTurn = {} as Turn;
         return mockTurn;

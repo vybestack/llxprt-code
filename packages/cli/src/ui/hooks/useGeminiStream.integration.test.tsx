@@ -323,10 +323,13 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
     },
   ];
 
-  const TodoContextProvider: React.FC<{
+  const TodoContextProvider = ({
+    children,
+    todos = [],
+  }: {
     children: React.ReactNode;
     todos?: Todo[];
-  }> = ({ children, todos = [] }) => {
+  }) => {
     const contextValue = {
       ...mockTodoContext,
       todos,
@@ -415,7 +418,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
           toolCalls: initialToolCalls,
         },
         wrapper: ({ children }: { children: React.ReactNode }) =>
-          React.createElement(TodoContextProvider, { todos, children }),
+          TodoContextProvider({ children, todos }),
       },
     );
     return {
