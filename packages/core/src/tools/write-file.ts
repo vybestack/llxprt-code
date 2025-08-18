@@ -9,7 +9,8 @@ import path from 'path';
 import * as Diff from 'diff';
 import { Config, ApprovalMode } from '../config/config.js';
 import {
-  BaseTool,
+  BaseDeclarativeTool,
+  BaseToolInvocation,
   ToolResult,
   FileDiff,
   ToolEditConfirmationDetails,
@@ -17,6 +18,7 @@ import {
   ToolCallConfirmationDetails,
   Kind,
   ToolLocation,
+  ToolInvocation,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import { SchemaValidator } from '../utils/schemaValidator.js';
@@ -95,88 +97,85 @@ interface GetCorrectedFileContentResult {
 }
 
 /**
- * Implementation of the WriteFile tool logic
+ * Gets corrected file content using AI correction services
  */
-export class WriteFileTool
-  extends BaseTool<WriteFileToolParams, ToolResult>
-  implements ModifiableDeclarativeTool<WriteFileToolParams>
-{
-  static readonly Name: string = 'write_file';
+async function getCorrectedFileContent(
+  filePath: string,
+  proposedContent: string,
+  config: Config,
+  abortSignal: AbortSignal,
+): Promise<GetCorrectedFileContentResult> {
+  let originalContent = '';
+  let fileExists = false;
+  let correctedContent = proposedContent;
 
-  constructor(private readonly config: Config) {
-    super(
-      WriteFileTool.Name,
-      'WriteFile',
-      `Writes content to a specified file in the local filesystem.
+  try {
+    originalContent = fs.readFileSync(filePath, 'utf8');
+    fileExists = true; // File exists and was read
+  } catch (err) {
+    if (isNodeError(err) && err.code === 'ENOENT') {
+      fileExists = false;
+      originalContent = '';
+    } else {
+      // File exists but could not be read (permissions, etc.)
+      fileExists = true; // Mark as existing but problematic
+      originalContent = ''; // Can't use its content
+      const error = {
+        message: getErrorMessage(err),
+        code: isNodeError(err) ? err.code : undefined,
+      };
+      // Return early as we can't proceed with content correction meaningfully
+      return { originalContent, correctedContent, fileExists, error };
+    }
+  }
 
-      The user has the ability to modify \`content\`. If modified, this will be stated in the response.`,
-      Kind.Edit,
+  // If readError is set, we have returned.
+  // So, file was either read successfully (fileExists=true, originalContent set)
+  // or it was ENOENT (fileExists=false, originalContent='').
+
+  if (fileExists) {
+    // This implies originalContent is available
+    const { params: correctedParams } = await ensureCorrectEdit(
+      filePath,
+      originalContent,
       {
-        properties: {
-          file_path: {
-            description:
-              "The absolute path to the file to write to (e.g., '/home/user/project/file.txt'). Relative paths are not supported.",
-            type: 'string',
-          },
-          content: {
-            description: 'The content to write to the file.',
-            type: 'string',
-          },
-        },
-        required: ['file_path', 'content'],
-        type: 'object',
+        old_string: originalContent, // Treat entire current content as old_string
+        new_string: proposedContent,
+        file_path: filePath,
       },
+      config.getGeminiClient(),
+      abortSignal,
+    );
+    correctedContent = correctedParams.new_string;
+  } else {
+    // This implies new file (ENOENT)
+    correctedContent = await ensureCorrectFileContent(
+      proposedContent,
+      config.getGeminiClient(),
+      abortSignal,
     );
   }
+  return { originalContent, correctedContent, fileExists };
+}
 
-  override toolLocations(params: WriteFileToolParams): ToolLocation[] {
-    return [{ path: params.file_path }];
+class WriteFileToolInvocation extends BaseToolInvocation<WriteFileToolParams, ToolResult> {
+  constructor(
+    private readonly config: Config,
+    params: WriteFileToolParams,
+  ) {
+    super(params);
   }
 
-  override validateToolParams(params: WriteFileToolParams): string | null {
-    const errors = SchemaValidator.validate(
-      this.schema.parametersJsonSchema,
-      params,
-    );
-    if (errors) {
-      return errors;
-    }
-
-    const filePath = params.file_path;
-    if (!path.isAbsolute(filePath)) {
-      return `File path must be absolute: ${filePath}`;
-    }
-
-    const workspaceContext = this.config.getWorkspaceContext();
-    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
-      const directories = workspaceContext.getDirectories();
-      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
-    }
-
-    try {
-      // This check should be performed only if the path exists.
-      // If it doesn't exist, it's a new file, which is valid for writing.
-      if (fs.existsSync(filePath)) {
-        const stats = fs.lstatSync(filePath);
-        if (stats.isDirectory()) {
-          return `Path is a directory, not a file: ${filePath}`;
-        }
-      }
-    } catch (statError: unknown) {
-      // If fs.existsSync is true but lstatSync fails (e.g., permissions, race condition where file is deleted)
-      // this indicates an issue with accessing the path that should be reported.
-      return `Error accessing path properties for validation: ${filePath}. Reason: ${statError instanceof Error ? statError.message : String(statError)}`;
-    }
-
-    return null;
+  override toolLocations(): ToolLocation[] {
+    return [{ path: this.params.file_path }];
   }
 
-  override getDescription(params: WriteFileToolParams): string {
-    if (!params.file_path || !params.content) {
+  getDescription(): string {
+    if (!this.params.file_path || !this.params.content) {
       return `Model did not provide valid parameters for write file tool`;
     }
     const relativePath = makeRelative(
-      params.file_path,
+      this.params.file_path,
       this.config.getTargetDir(),
     );
     return `Writing to ${shortenPath(relativePath)}`;
@@ -186,7 +185,6 @@ export class WriteFileTool
    * Handles the confirmation prompt for the WriteFile tool.
    */
   override async shouldConfirmExecute(
-    params: WriteFileToolParams,
     abortSignal: AbortSignal,
   ): Promise<ToolCallConfirmationDetails | false> {
     const approvalMode = this.config.getApprovalMode();
@@ -197,14 +195,9 @@ export class WriteFileTool
       return false;
     }
 
-    const validationError = this.validateToolParams(params);
-    if (validationError) {
-      return false;
-    }
-
     // Apply emoji filtering to params.content FIRST, before any processing
     const filter = getEmojiFilter(this.config);
-    const filterResult = filter.filterFileContent(params.content, 'write_file');
+    const filterResult = filter.filterFileContent(this.params.content, 'write_file');
 
     // If blocked in error mode, return false to prevent confirmation
     if (filterResult.blocked) {
@@ -215,11 +208,12 @@ export class WriteFileTool
     const filteredParamsContent =
       typeof filterResult.filtered === 'string'
         ? filterResult.filtered
-        : params.content;
+        : this.params.content;
 
-    const correctedContentResult = await this._getCorrectedFileContent(
-      params.file_path,
+    const correctedContentResult = await getCorrectedFileContent(
+      this.params.file_path,
       filteredParamsContent, // Use filtered content
+      this.config,
       abortSignal,
     );
 
@@ -231,10 +225,10 @@ export class WriteFileTool
     const { originalContent, correctedContent } = correctedContentResult;
 
     const relativePath = makeRelative(
-      params.file_path,
+      this.params.file_path,
       this.config.getTargetDir(),
     );
-    const fileName = path.basename(params.file_path);
+    const fileName = path.basename(this.params.file_path);
 
     const fileDiff = Diff.createPatch(
       fileName,
@@ -250,14 +244,14 @@ export class WriteFileTool
       this.config.getIdeMode() &&
       ideClient &&
       ideClient.getConnectionStatus().status === IDEConnectionStatus.Connected
-        ? ideClient.openDiff(params.file_path, correctedContent)
+        ? ideClient.openDiff(this.params.file_path, correctedContent)
         : undefined;
 
     const confirmationDetails: ToolEditConfirmationDetails = {
       type: 'edit',
       title: `Confirm Write: ${shortenPath(relativePath)}`,
       fileName,
-      filePath: params.file_path,
+      filePath: this.params.file_path,
       fileDiff,
       originalContent,
       newContent: correctedContent,
@@ -269,11 +263,11 @@ export class WriteFileTool
         if (ideConfirmation) {
           const result = await ideConfirmation;
           if (result.status === 'accepted' && result.content) {
-            params.content = result.content;
+            this.params.content = result.content;
           }
         } else {
           // Update params.content with the filtered content so execute() uses it
-          params.content = correctedContent;
+          this.params.content = correctedContent;
         }
       },
       ideConfirmation,
@@ -282,24 +276,11 @@ export class WriteFileTool
   }
 
   async execute(
-    params: WriteFileToolParams,
     abortSignal: AbortSignal,
   ): Promise<ToolResult> {
-    const validationError = this.validateToolParams(params);
-    if (validationError) {
-      return {
-        llmContent: `Could not write file due to invalid parameters: ${validationError}`,
-        returnDisplay: validationError,
-        error: {
-          message: validationError,
-          type: ToolErrorType.INVALID_TOOL_PARAMS,
-        },
-      };
-    }
-
     // Apply emoji filtering to file content
     const filter = getEmojiFilter(this.config);
-    const filterResult = filter.filterFileContent(params.content, 'write_file');
+    const filterResult = filter.filterFileContent(this.params.content, 'write_file');
 
     // Handle blocking in error mode
     if (filterResult.blocked) {
@@ -318,13 +299,14 @@ export class WriteFileTool
 
     // Use filtered content
     const filteredParams = {
-      ...params,
+      ...this.params,
       content: filterResult.filtered as string,
     };
 
-    const correctedContentResult = await this._getCorrectedFileContent(
+    const correctedContentResult = await getCorrectedFileContent(
       filteredParams.file_path,
       filteredParams.content,
+      this.config,
       abortSignal,
     );
 
@@ -512,64 +494,90 @@ export class WriteFileTool
       };
     }
   }
+}
 
-  private async _getCorrectedFileContent(
-    filePath: string,
-    proposedContent: string,
-    abortSignal: AbortSignal,
-  ): Promise<GetCorrectedFileContentResult> {
-    let originalContent = '';
-    let fileExists = false;
-    let correctedContent = proposedContent;
+/**
+ * Implementation of the WriteFile tool logic
+ */
+export class WriteFileTool
+  extends BaseDeclarativeTool<WriteFileToolParams, ToolResult>
+  implements ModifiableDeclarativeTool<WriteFileToolParams>
+{
+  static readonly Name: string = 'write_file';
+
+  constructor(private readonly config: Config) {
+    super(
+      WriteFileTool.Name,
+      'WriteFile',
+      `Writes content to a specified file in the local filesystem.
+
+      The user has the ability to modify \`content\`. If modified, this will be stated in the response.`,
+      Kind.Edit,
+      {
+        properties: {
+          file_path: {
+            description:
+              "The absolute path to the file to write to (e.g., '/home/user/project/file.txt'). Relative paths are not supported.",
+            type: 'string',
+          },
+          content: {
+            description: 'The content to write to the file.',
+            type: 'string',
+          },
+        },
+        required: ['file_path', 'content'],
+        type: 'object',
+      },
+    );
+  }
+
+
+  override validateToolParams(params: WriteFileToolParams): string | null {
+    const errors = SchemaValidator.validate(
+      this.schema.parametersJsonSchema,
+      params,
+    );
+    if (errors) {
+      return errors;
+    }
+
+    const filePath = params.file_path;
+    if (!path.isAbsolute(filePath)) {
+      return `File path must be absolute: ${filePath}`;
+    }
+
+    const workspaceContext = this.config.getWorkspaceContext();
+    if (!workspaceContext.isPathWithinWorkspace(filePath)) {
+      const directories = workspaceContext.getDirectories();
+      return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    }
 
     try {
-      originalContent = fs.readFileSync(filePath, 'utf8');
-      fileExists = true; // File exists and was read
-    } catch (err) {
-      if (isNodeError(err) && err.code === 'ENOENT') {
-        fileExists = false;
-        originalContent = '';
-      } else {
-        // File exists but could not be read (permissions, etc.)
-        fileExists = true; // Mark as existing but problematic
-        originalContent = ''; // Can't use its content
-        const error = {
-          message: getErrorMessage(err),
-          code: isNodeError(err) ? err.code : undefined,
-        };
-        // Return early as we can't proceed with content correction meaningfully
-        return { originalContent, correctedContent, fileExists, error };
+      // This check should be performed only if the path exists.
+      // If it doesn't exist, it's a new file, which is valid for writing.
+      if (fs.existsSync(filePath)) {
+        const stats = fs.lstatSync(filePath);
+        if (stats.isDirectory()) {
+          return `Path is a directory, not a file: ${filePath}`;
+        }
       }
+    } catch (statError: unknown) {
+      // If fs.existsSync is true but lstatSync fails (e.g., permissions, race condition where file is deleted)
+      // this indicates an issue with accessing the path that should be reported.
+      return `Error accessing path properties for validation: ${filePath}. Reason: ${statError instanceof Error ? statError.message : String(statError)}`;
     }
 
-    // If readError is set, we have returned.
-    // So, file was either read successfully (fileExists=true, originalContent set)
-    // or it was ENOENT (fileExists=false, originalContent='').
-
-    if (fileExists) {
-      // This implies originalContent is available
-      const { params: correctedParams } = await ensureCorrectEdit(
-        filePath,
-        originalContent,
-        {
-          old_string: originalContent, // Treat entire current content as old_string
-          new_string: proposedContent,
-          file_path: filePath,
-        },
-        this.config.getGeminiClient(),
-        abortSignal,
-      );
-      correctedContent = correctedParams.new_string;
-    } else {
-      // This implies new file (ENOENT)
-      correctedContent = await ensureCorrectFileContent(
-        proposedContent,
-        this.config.getGeminiClient(),
-        abortSignal,
-      );
-    }
-    return { originalContent, correctedContent, fileExists };
+    return null;
   }
+
+
+
+  protected createInvocation(
+    params: WriteFileToolParams,
+  ): ToolInvocation<WriteFileToolParams, ToolResult> {
+    return new WriteFileToolInvocation(this.config, params);
+  }
+
 
   getModifyContext(
     abortSignal: AbortSignal,
@@ -577,17 +585,19 @@ export class WriteFileTool
     return {
       getFilePath: (params: WriteFileToolParams) => params.file_path,
       getCurrentContent: async (params: WriteFileToolParams) => {
-        const correctedContentResult = await this._getCorrectedFileContent(
+        const correctedContentResult = await getCorrectedFileContent(
           params.file_path,
           params.content,
+          this.config,
           abortSignal,
         );
         return correctedContentResult.originalContent;
       },
       getProposedContent: async (params: WriteFileToolParams) => {
-        const correctedContentResult = await this._getCorrectedFileContent(
+        const correctedContentResult = await getCorrectedFileContent(
           params.file_path,
           params.content,
+          this.config,
           abortSignal,
         );
         return correctedContentResult.correctedContent;
