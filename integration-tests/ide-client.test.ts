@@ -108,11 +108,11 @@ describe('getIdeProcessId', () => {
     const parentPid = process.pid;
     const output = await new Promise<string>((resolve, reject) => {
       child = spawn(
-        'node',
+        'tsx',
         [
           '-e',
           `
-        const { getIdeProcessId } = require('../packages/core/src/ide/process-utils.js');
+        import { getIdeProcessId } from '../packages/core/src/ide/process-utils.js';
         getIdeProcessId().then(pid => console.log(pid));
       `,
         ],
@@ -122,15 +122,19 @@ describe('getIdeProcessId', () => {
       );
 
       let out = '';
+      let err = '';
       child.stdout?.on('data', (data) => {
         out += data.toString();
+      });
+      child.stderr?.on('data', (data) => {
+        err += data.toString();
       });
 
       child.on('close', (code) => {
         if (code === 0) {
           resolve(out.trim());
         } else {
-          reject(new Error(`Child process exited with code ${code}`));
+          reject(new Error(`Child process exited with code ${code}. Error: ${err}`));
         }
       });
     });
