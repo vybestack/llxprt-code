@@ -353,9 +353,6 @@ export const diagnosticsCommand: SlashCommand = {
       diagnostics.push(
         `- IDE Mode: ${config.getIdeMode() ? 'Enabled' : 'Disabled'}`,
       );
-      diagnostics.push(
-        `- IDE Mode Feature: ${config.getIdeModeFeature() ? 'Enabled' : 'Disabled'}`,
-      );
       const ideClient = config.getIdeClient();
       if (ideClient) {
         diagnostics.push(`- IDE Client: Connected`);

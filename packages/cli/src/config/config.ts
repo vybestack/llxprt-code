@@ -75,7 +75,6 @@ export interface CliArgs {
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
   provider: string | undefined;
-  ideModeFeature: boolean | undefined;
   key: string | undefined;
   keyfile: string | undefined;
   baseurl: string | undefined;
@@ -309,10 +308,6 @@ export async function parseArguments(): Promise<CliArgs> {
       type: 'boolean',
       description: 'Run in IDE mode?',
     })
-    .option('ide-mode-feature', {
-      type: 'boolean',
-      description: 'Enable IDE mode feature flag?',
-    })
     .option('key', {
       type: 'string',
       description: 'API key for the current provider',
@@ -396,7 +391,6 @@ export async function parseArguments(): Promise<CliArgs> {
     extensions: result.extensions as string[] | undefined,
     listExtensions: result.listExtensions as boolean | undefined,
     provider: result.provider as string | undefined,
-    ideModeFeature: result.ideModeFeature as boolean | undefined,
     key: result.key as string | undefined,
     keyfile: result.keyfile as string | undefined,
     baseurl: result.baseurl as string | undefined,
@@ -533,11 +527,9 @@ export async function loadCliConfig(
   const memoryImportFormat = effectiveSettings.memoryImportFormat || 'tree';
   const ideMode = effectiveSettings.ideMode ?? false;
 
-  const ideModeFeature =
-    (argv.ideModeFeature ?? effectiveSettings.ideModeFeature ?? false) &&
-    !process.env.SANDBOX;
+  // ideModeFeature flag removed - now using ideMode directly
 
-  const ideClient = IdeClient.getInstance(ideMode && ideModeFeature);
+  const ideClient = IdeClient.getInstance();
 
   const folderTrustFeature = settings.folderTrustFeature ?? false;
   const folderTrustSetting = settings.folderTrust ?? true;
@@ -787,7 +779,6 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
-    ideModeFeature,
     ideClient,
     chatCompression: settings.chatCompression,
     folderTrustFeature,

@@ -49,21 +49,43 @@ export const ToolConfirmationMessage: React.FC<
   const [showDetails, setShowDetails] = useState(false);
 
   const handleConfirm = useCallback(
-    async (outcome: ToolConfirmationOutcome) => {
+    (outcome: ToolConfirmationOutcome) => {
+      console.log('[DEBUG] handleConfirm called with outcome:', outcome);
+      console.log('[DEBUG] confirmationDetails.type:', confirmationDetails.type);
+      console.log('[DEBUG] IDE mode:', config?.getIdeMode());
+      
+      // Call onConfirm synchronously first
+      console.log('[DEBUG] Calling onConfirm...');
+      try {
+        onConfirm(outcome);
+        console.log('[DEBUG] onConfirm completed');
+      } catch (err) {
+        console.error('[DEBUG] onConfirm threw error:', err);
+      }
+      
+      // Handle IDE operations asynchronously without blocking
       if (confirmationDetails.type === 'edit') {
         const ideClient = config?.getIdeClient();
-        if (config?.getIdeMode() && config?.getIdeModeFeature()) {
+        if (config?.getIdeMode()) {
           const cliOutcome =
             outcome === ToolConfirmationOutcome.Cancel
               ? 'rejected'
               : 'accepted';
-          await ideClient?.resolveDiffFromCli(
-            confirmationDetails.filePath,
-            cliOutcome,
-          );
+          console.log('[DEBUG] Scheduling IDE resolveDiff with outcome:', cliOutcome);
+          // Fire and forget with error handling to ensure it never blocks
+          setTimeout(() => {
+            console.log('[DEBUG] Executing IDE resolveDiff...');
+            ideClient?.resolveDiffFromCli(
+              confirmationDetails.filePath,
+              cliOutcome,
+            ).then(() => {
+              console.log('[DEBUG] IDE resolveDiff completed');
+            }).catch((err) => {
+              console.error('[DEBUG] Failed to resolve IDE diff:', err);
+            });
+          }, 0);
         }
       }
-      onConfirm(outcome);
     },
     [confirmationDetails, config, onConfirm],
   );

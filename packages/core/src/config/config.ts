@@ -253,7 +253,6 @@ export interface ConfigParameters {
   folderTrustFeature?: boolean;
   folderTrust?: boolean;
   ideMode?: boolean;
-  ideModeFeature?: boolean;
   ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
   loadMemoryFromIncludeDirectories?: boolean;
@@ -310,7 +309,6 @@ export class Config {
   private readonly folderTrustFeature: boolean;
   private readonly folderTrust: boolean;
   private ideMode: boolean;
-  private ideModeFeature: boolean;
   private ideClient?: IdeClient;
   private inFallbackMode = false;
   private _modelSwitchedDuringSession: boolean = false;
@@ -414,10 +412,7 @@ export class Config {
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
     this.ideMode = params.ideMode ?? false;
-    this.ideModeFeature = params.ideModeFeature ?? false;
-    this.ideClient =
-      params.ideClient ||
-      IdeClient.getInstance(this.ideMode && this.ideModeFeature);
+    this.ideClient = params.ideClient || IdeClient.getInstance();
     this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
       complexityThreshold: 0.6,
       minTasksForSuggestion: 3,
@@ -932,9 +927,6 @@ export class Config {
     return this.summarizeToolOutput;
   }
 
-  getIdeModeFeature(): boolean {
-    return this.ideModeFeature;
-  }
 
   getIdeClient(): IdeClient | undefined {
     return this.ideClient;
@@ -961,11 +953,11 @@ export class Config {
   }
 
   setIdeClientDisconnected(): void {
-    this.ideClient?.setDisconnected();
+    this.ideClient?.disconnect();
   }
 
   setIdeClientConnected(): void {
-    this.ideClient?.reconnect(this.ideMode && this.ideModeFeature);
+    this.ideClient?.connect();
   }
 
   getComplexityAnalyzerSettings(): ComplexityAnalyzerSettings {

@@ -261,7 +261,6 @@ describe('Gemini Client (client.ts)', () => {
       setQuotaErrorOccurred: vi.fn(),
       getNoBrowser: vi.fn().mockReturnValue(false),
       getUsageStatisticsEnabled: vi.fn().mockReturnValue(true),
-      getIdeModeFeature: vi.fn().mockReturnValue(false),
       getIdeMode: vi.fn().mockReturnValue(true),
       getDebugMode: vi.fn().mockReturnValue(false),
       getWorkspaceContext: vi.fn().mockReturnValue({
@@ -884,7 +883,6 @@ describe('Gemini Client (client.ts)', () => {
       });
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -953,7 +951,6 @@ ${JSON.stringify(
       });
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -1009,7 +1006,6 @@ ${JSON.stringify(
       });
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -1086,7 +1082,6 @@ ${JSON.stringify(
       });
 
       vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-      vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -1435,8 +1430,7 @@ ${JSON.stringify(
         client['forceFullIdeContext'] = false; // Reset before each delta test
         vi.spyOn(client, 'tryCompressChat').mockResolvedValue(null);
         vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-        vi.spyOn(client['config'], 'getIdeModeFeature').mockReturnValue(true);
-        mockTurnRunFn.mockReturnValue(mockStream);
+          mockTurnRunFn.mockReturnValue(mockStream);
 
         const mockChat: Partial<GeminiChat> = {
           addHistory: vi.fn(),
