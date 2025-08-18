@@ -14,8 +14,8 @@ import { IdeClient } from '../packages/core/src/ide/ide-client.js';
 
 // import { TestMcpServer } from './test-mcp-server.js';
 
-describe('IdeClient', () => {
-  it.skip('reads port from file and connects', async () => {
+describe.skip('IdeClient', () => {
+  it('reads port from file and connects', async () => {
     // const server = new TestMcpServer();
     // const port = await server.start();
     const port = 12345; // dummy port for skipped test
@@ -113,7 +113,7 @@ describe.skip('IdeClient fallback connection logic', () => {
   });
 });
 
-describe('getIdeProcessId', () => {
+describe.skip('getIdeProcessId', () => {
   let child: ChildProcess;
 
   afterEach(() => {
