@@ -566,7 +566,7 @@ describe('Logger', () => {
     it('should delete both new and old checkpoint files if they exist', async () => {
       const oldTag = 'delete-me(old)';
       const oldStylePath = path.join(
-        TEST_GEMINI_DIR,
+        TEST_LLXPRT_DIR,
         `checkpoint-${oldTag}.json`,
       );
       const newStylePath = logger['_checkpointPath'](oldTag);
@@ -691,7 +691,7 @@ describe('Logger', () => {
       ];
       const tag = 'special(char)';
       const taggedFilePath = path.join(
-        TEST_GEMINI_DIR,
+        TEST_LLXPRT_DIR,
         `checkpoint-${tag}.json`,
       );
       await fs.writeFile(

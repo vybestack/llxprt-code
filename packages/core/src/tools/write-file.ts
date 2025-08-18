@@ -99,7 +99,7 @@ interface GetCorrectedFileContentResult {
 /**
  * Gets corrected file content using AI correction services
  */
-async function getCorrectedFileContent(
+export async function getCorrectedFileContent(
   filePath: string,
   proposedContent: string,
   config: Config,

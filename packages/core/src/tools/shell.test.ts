@@ -56,6 +56,7 @@ describe('ShellTool', () => {
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(undefined),
       getWorkspaceContext: () => createMockWorkspaceContext('.'),
       getGeminiClient: vi.fn(),
+      getEphemeralSettings: vi.fn().mockReturnValue({}),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
