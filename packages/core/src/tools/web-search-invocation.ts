@@ -55,7 +55,10 @@ export interface WebSearchToolResult extends ToolResult {
 /**
  * Tool invocation for performing web searches using Google Search via the Gemini API.
  */
-export class WebSearchToolInvocation extends BaseToolInvocation<WebSearchToolParams, WebSearchToolResult> {
+export class WebSearchToolInvocation extends BaseToolInvocation<
+  WebSearchToolParams,
+  WebSearchToolResult
+> {
   constructor(
     private readonly config: Config,
     params: WebSearchToolParams,
@@ -67,9 +70,7 @@ export class WebSearchToolInvocation extends BaseToolInvocation<WebSearchToolPar
     return `Searching the web for: "${this.params.query}"`;
   }
 
-  async execute(
-    signal: AbortSignal,
-  ): Promise<WebSearchToolResult> {
+  async execute(signal: AbortSignal): Promise<WebSearchToolResult> {
     // Additional safety check - ensure query exists and is not just "undefined" string
     if (
       !this.params.query ||

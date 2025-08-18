@@ -158,7 +158,10 @@ async function getCorrectedFileContent(
   return { originalContent, correctedContent, fileExists };
 }
 
-class WriteFileToolInvocation extends BaseToolInvocation<WriteFileToolParams, ToolResult> {
+class WriteFileToolInvocation extends BaseToolInvocation<
+  WriteFileToolParams,
+  ToolResult
+> {
   constructor(
     private readonly config: Config,
     params: WriteFileToolParams,
@@ -197,7 +200,10 @@ class WriteFileToolInvocation extends BaseToolInvocation<WriteFileToolParams, To
 
     // Apply emoji filtering to params.content FIRST, before any processing
     const filter = getEmojiFilter(this.config);
-    const filterResult = filter.filterFileContent(this.params.content, 'write_file');
+    const filterResult = filter.filterFileContent(
+      this.params.content,
+      'write_file',
+    );
 
     // If blocked in error mode, return false to prevent confirmation
     if (filterResult.blocked) {
@@ -275,12 +281,13 @@ class WriteFileToolInvocation extends BaseToolInvocation<WriteFileToolParams, To
     return confirmationDetails;
   }
 
-  async execute(
-    abortSignal: AbortSignal,
-  ): Promise<ToolResult> {
+  async execute(abortSignal: AbortSignal): Promise<ToolResult> {
     // Apply emoji filtering to file content
     const filter = getEmojiFilter(this.config);
-    const filterResult = filter.filterFileContent(this.params.content, 'write_file');
+    const filterResult = filter.filterFileContent(
+      this.params.content,
+      'write_file',
+    );
 
     // Handle blocking in error mode
     if (filterResult.blocked) {
@@ -531,7 +538,6 @@ export class WriteFileTool
     );
   }
 
-
   override validateToolParams(params: WriteFileToolParams): string | null {
     const errors = SchemaValidator.validate(
       this.schema.parametersJsonSchema,
@@ -570,14 +576,11 @@ export class WriteFileTool
     return null;
   }
 
-
-
   protected createInvocation(
     params: WriteFileToolParams,
   ): ToolInvocation<WriteFileToolParams, ToolResult> {
     return new WriteFileToolInvocation(this.config, params);
   }
-
 
   getModifyContext(
     abortSignal: AbortSignal,

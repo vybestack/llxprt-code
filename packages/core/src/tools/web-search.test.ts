@@ -149,10 +149,14 @@ describe('WebSearchTool', () => {
 
     it('should handle validation errors', () => {
       // Test by building with invalid parameters - should throw error
-      expect(() => webSearchTool.build({ query: '' })).toThrow("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '' })).toThrow(
+        "The 'query' parameter cannot be empty.",
+      );
 
       // Test whitespace-only query
-      expect(() => webSearchTool.build({ query: '   ' })).toThrow("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '   ' })).toThrow(
+        "The 'query' parameter cannot be empty.",
+      );
     });
 
     it('should handle grounding supports without citations', async () => {
@@ -243,11 +247,15 @@ describe('WebSearchTool', () => {
     });
 
     it('should reject empty query', () => {
-      expect(() => webSearchTool.build({ query: '' })).toThrow("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '' })).toThrow(
+        "The 'query' parameter cannot be empty.",
+      );
     });
 
     it('should reject whitespace-only query', () => {
-      expect(() => webSearchTool.build({ query: '   ' })).toThrow("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '   ' })).toThrow(
+        "The 'query' parameter cannot be empty.",
+      );
     });
   });
 

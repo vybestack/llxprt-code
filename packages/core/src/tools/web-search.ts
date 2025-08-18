@@ -14,8 +14,10 @@ import {
 } from './web-search-invocation.js';
 
 // Re-export interfaces for external consumers
-export { WebSearchToolParams, WebSearchToolResult } from './web-search-invocation.js';
-
+export {
+  WebSearchToolParams,
+  WebSearchToolResult,
+} from './web-search-invocation.js';
 
 /**
  * A tool to perform web searches using Google Search via the Gemini API.
@@ -45,7 +47,9 @@ export class WebSearchTool extends BaseDeclarativeTool<
     );
   }
 
-  protected override validateToolParams(params: WebSearchToolParams): string | null {
+  protected override validateToolParams(
+    params: WebSearchToolParams,
+  ): string | null {
     const errors = SchemaValidator.validate(
       this.schema.parametersJsonSchema,
       params,
