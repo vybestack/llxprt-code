@@ -116,6 +116,25 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - **NEVER** push without explicit user permission - they need to test the UI first
 - Documentation-only changes (\*.md files, docs/) do NOT require build/test/lint cycle
 
+### CI-Aligned Verification (MUST DO BEFORE PUSH)
+
+Run these checks in this exact order to match GitHub Actions CI:
+1. `npm run format:check` - Ensure all files are formatted
+2. `npm run lint:ci` - Zero warnings allowed (eslint with --max-warnings 0)
+3. `npx eslint integration-tests --max-warnings 0` - Integration tests lint
+4. `npx prettier --check integration-tests` - Integration tests format
+5. `npm run typecheck` - Type safety check
+6. `npm run build` - Build all packages
+7. `npm run bundle` - Create bundle
+8. `npm run test:ci` - Run all tests with CI configuration
+
+For shell scripts:
+```bash
+shellcheck --enable=all --exclude=SC2002,SC2129,SC2310 shell-scripts/*.sh
+```
+
+Or use the pre-push check script: `./scripts/pre-push-check.sh`
+
 ### Communication Style
 
 - **BANNED PHRASES**: "You're absolutely right", "You're right", "Absolutely", "Indeed", "Correct"
