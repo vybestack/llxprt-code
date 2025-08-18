@@ -119,6 +119,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ### CI-Aligned Verification (MUST DO BEFORE PUSH)
 
 Run these checks in this exact order to match GitHub Actions CI:
+
 1. `npm run format:check` - Ensure all files are formatted
 2. `npm run lint:ci` - Zero warnings allowed (eslint with --max-warnings 0)
 3. `npx eslint integration-tests --max-warnings 0` - Integration tests lint
@@ -129,6 +130,7 @@ Run these checks in this exact order to match GitHub Actions CI:
 8. `npm run test:ci` - Run all tests with CI configuration
 
 For shell scripts:
+
 ```bash
 shellcheck --enable=all --exclude=SC2002,SC2129,SC2310 shell-scripts/*.sh
 ```
