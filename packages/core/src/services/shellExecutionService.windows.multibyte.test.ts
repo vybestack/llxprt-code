@@ -100,30 +100,33 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it.skipIf(process.platform !== 'win32')('should handle mixed English and Japanese output', async () => {
-    const command = 'echo "Hello 世界"';
-    const mixedOutput = 'Hello 世界\r\n';
+  it.skipIf(process.platform !== 'win32')(
+    'should handle mixed English and Japanese output',
+    async () => {
+      const command = 'echo "Hello 世界"';
+      const mixedOutput = 'Hello 世界\r\n';
 
-    const promise = ShellExecutionService.execute(
-      command,
-      '.',
-      () => {},
-      new AbortController().signal,
-    );
+      const promise = ShellExecutionService.execute(
+        command,
+        '.',
+        () => {},
+        new AbortController().signal,
+      );
 
-    setImmediate(() => {
-      // Split the output to test chunked decoding
-      const buffer = Buffer.from(mixedOutput, 'utf-8');
-      mockChildProcess.stdout?.emit('data', buffer.slice(0, 7)); // "Hello "
-      mockChildProcess.stdout?.emit('data', buffer.slice(7)); // "世界\r\n"
-      mockChildProcess.emit('exit', 0, null);
-    });
+      setImmediate(() => {
+        // Split the output to test chunked decoding
+        const buffer = Buffer.from(mixedOutput, 'utf-8');
+        mockChildProcess.stdout?.emit('data', buffer.slice(0, 7)); // "Hello "
+        mockChildProcess.stdout?.emit('data', buffer.slice(7)); // "世界\r\n"
+        mockChildProcess.emit('exit', 0, null);
+      });
 
-    const result = await promise.result;
+      const result = await promise.result;
 
-    expect(result.stdout).toBe(mixedOutput);
-    expect(result.exitCode).toBe(0);
-  });
+      expect(result.stdout).toBe(mixedOutput);
+      expect(result.exitCode).toBe(0);
+    },
+  );
 
   it('should not escape quotes excessively in commands', async () => {
     const command = 'git commit -m "日本語のコミットメッセージ"';

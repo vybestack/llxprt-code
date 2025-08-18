@@ -21,7 +21,6 @@ vi.mock('../services/shellExecutionService.js', () => ({
 vi.mock('fs');
 vi.mock('os');
 vi.mock('crypto');
-vi.mock('../utils/summarizer.js');
 
 import { isCommandAllowed } from '../utils/shell-utils.js';
 import { ShellTool } from './shell.js';
@@ -34,7 +33,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import * as summarizer from '../utils/summarizer.js';
 import { ToolConfirmationOutcome } from './tools.js';
 import { OUTPUT_UPDATE_INTERVAL_MS } from './shell.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
