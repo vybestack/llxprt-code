@@ -927,7 +927,6 @@ export class Config {
     return this.summarizeToolOutput;
   }
 
-
   getIdeClient(): IdeClient | undefined {
     return this.ideClient;
   }

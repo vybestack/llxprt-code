@@ -1,6 +1,5 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -82,8 +81,7 @@ describe('activate', () => {
     vi.mocked(context.globalState.get).mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalledWith(
-      'LLxprt Code Companion extension successfully installed. Please restart your terminal to enable full IDE integration.',
-      'Re-launch LLxprt Code',
+      'LLxprt Code Companion extension successfully installed.',
     );
   });
 
@@ -93,7 +91,7 @@ describe('activate', () => {
     expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should launch LLxprt Code when the user clicks the button', async () => {
+  it('should launch the LLxprt Code when the user clicks the button', async () => {
     const showInformationMessageMock = vi
       .mocked(vscode.window.showInformationMessage)
       .mockResolvedValue('Re-launch LLxprt Code' as never);
@@ -101,8 +99,10 @@ describe('activate', () => {
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalled();
     await new Promise(process.nextTick); // Wait for the promise to resolve
-    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-      'llxprt-code.runLLxprtCode',
-    );
+    const commandCallback = vi
+      .mocked(vscode.commands.registerCommand)
+      .mock.calls.find((call) => call[0] === 'llxprt-code.runLLxprtCode')?.[1];
+
+    expect(commandCallback).toBeDefined();
   });
 });

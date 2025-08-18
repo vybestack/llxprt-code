@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { DetectedIde } from './detect-ide.js';
-import { GEMINI_CLI_COMPANION_EXTENSION_NAME } from './constants.js';
+import { LLXPRT_CODE_COMPANION_EXTENSION_NAME } from './constants.js';
 
 const VSCODE_COMMAND = process.platform === 'win32' ? 'code.cmd' : 'code';
 
@@ -97,11 +97,11 @@ class VsCodeInstaller implements IdeInstaller {
     if (!commandPath) {
       return {
         success: false,
-        message: `VS Code CLI not found. Please ensure 'code' is in your system's PATH. For help, see https://code.visualstudio.com/docs/configure/command-line#_code-is-not-recognized-as-an-internal-or-external-command. You can also install the '${GEMINI_CLI_COMPANION_EXTENSION_NAME}' extension manually from the VS Code marketplace.`,
+        message: `VS Code CLI not found. Please ensure 'code' is in your system's PATH. For help, see https://code.visualstudio.com/docs/configure/command-line#_code-is-not-recognized-as-an-internal-or-external-command. You can also install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the VS Code marketplace.`,
       };
     }
 
-    const command = `"${commandPath}" --install-extension google.gemini-cli-vscode-ide-companion --force`;
+    const command = `"${commandPath}" --install-extension vybestack.llxprt-code-vscode-ide-companion --force`;
     try {
       child_process.execSync(command, { stdio: 'pipe' });
       return {
@@ -111,7 +111,7 @@ class VsCodeInstaller implements IdeInstaller {
     } catch (_error) {
       return {
         success: false,
-        message: `Failed to install VS Code companion extension. Please try installing '${GEMINI_CLI_COMPANION_EXTENSION_NAME}' manually from the VS Code extension marketplace.`,
+        message: `Failed to install VS Code companion extension. Please try installing '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' manually from the VS Code extension marketplace.`,
       };
     }
   }

@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { IDEServer } from './ide-server.js';
 import { DiffContentProvider, DiffManager } from './diff-manager.js';
 import { createLogger } from './utils/logger.js';
@@ -20,11 +20,12 @@ let logger: vscode.OutputChannel;
 let log: (message: string) => void = () => {};
 
 function updateWorkspacePath(context: vscode.ExtensionContext) {
+  console.error('updateWorkspace called with ', context);
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders && workspaceFolders.length > 0) {
     const workspacePaths = workspaceFolders
       .map((folder) => folder.uri.fsPath)
-      .join(':');
+      .join(path.delimiter);
     context.environmentVariableCollection.replace(
       IDE_WORKSPACE_PATH_ENV_VAR,
       workspacePaths,
@@ -86,21 +87,9 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   if (!context.globalState.get(INFO_MESSAGE_SHOWN_KEY)) {
-    void vscode.window
-      .showInformationMessage(
-        'LLxprt Code Companion extension successfully installed. Please restart your terminal to enable full IDE integration.',
-        'Re-launch LLxprt Code',
-      )
-      .then(
-        (selection) => {
-          if (selection === 'Re-launch LLxprt Code') {
-            void vscode.commands.executeCommand('llxprt-code.runLLxprtCode');
-          }
-        },
-        (err) => {
-          log(`Failed to show information message: ${String(err)}`);
-        },
-      );
+    void vscode.window.showInformationMessage(
+      'LLxprt Code Companion extension successfully installed.',
+    );
     context.globalState.update(INFO_MESSAGE_SHOWN_KEY, true);
   }
 

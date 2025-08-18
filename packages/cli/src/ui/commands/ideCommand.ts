@@ -8,12 +8,12 @@ import * as path from 'node:path';
 import {
   Config,
   DetectedIde,
-  GEMINI_CLI_COMPANION_EXTENSION_NAME,
   IDEConnectionStatus,
   getIdeInfo,
-  getIdeInstaller,
   ideContext,
   IdeClient,
+  getIdeInstaller,
+  LLXPRT_CODE_COMPANION_EXTENSION_NAME,
   type File,
 } from '@vybestack/llxprt-code-core';
 import {
@@ -150,7 +150,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
         context.ui.addItem(
           {
             type: 'error',
-            text: `No installer is available for ${ideClient.getDetectedIdeDisplayName()}. Please install the '${GEMINI_CLI_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
+            text: `No installer is available for ${ideClient.getDetectedIdeDisplayName()}. Please install the '${LLXPRT_CODE_COMPANION_EXTENSION_NAME}' extension manually from the marketplace.`,
           },
           Date.now(),
         );
@@ -160,7 +160,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
       context.ui.addItem(
         {
           type: 'info',
-          text: `Installing IDE companion...`,
+          text: `Installing IDE companion from marketplace...`,
         },
         Date.now(),
       );

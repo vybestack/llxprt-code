@@ -1273,7 +1273,6 @@ describe('loadCliConfig extensions', () => {
   });
 });
 
-
 describe('loadCliConfig model selection', () => {
   it('selects a model from settings.json if provided', async () => {
     process.argv = ['node', 'script.js'];

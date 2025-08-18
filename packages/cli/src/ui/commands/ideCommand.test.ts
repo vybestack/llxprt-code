@@ -191,7 +191,7 @@ describe('ideCommand', () => {
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'info',
-          text: `Installing IDE companion...`,
+          text: `Installing IDE companion from marketplace...`,
         }),
         expect.any(Number),
       );
@@ -221,7 +221,7 @@ describe('ideCommand', () => {
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'info',
-          text: `Installing IDE companion...`,
+          text: `Installing IDE companion from marketplace...`,
         }),
         expect.any(Number),
       );

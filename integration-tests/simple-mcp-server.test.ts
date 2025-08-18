@@ -197,7 +197,9 @@ rpc.send({
   it('should add two numbers', async () => {
     // Test directory is already set up in before hook
     // Just run the command - MCP server config is in settings.json
-    const output = await rig.run('You MUST use the "add" tool to add 5 and 10. Do NOT calculate it yourself - use the add tool.');
+    const output = await rig.run(
+      'You MUST use the "add" tool to add 5 and 10. Do NOT calculate it yourself - use the add tool.',
+    );
 
     const foundToolCall = await rig.waitForToolCall('add');
 

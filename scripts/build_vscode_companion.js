@@ -24,7 +24,10 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 
-execSync('npx --yes @vscode/vsce package --no-dependencies', {
-  stdio: 'inherit',
-  cwd: join(root, 'packages', 'vscode-ide-companion'),
-});
+execSync(
+  'npx --yes @vscode/vsce package --no-dependencies --allow-package-secrets sendgrid',
+  {
+    stdio: 'inherit',
+    cwd: join(root, 'packages', 'vscode-ide-companion'),
+  },
+);

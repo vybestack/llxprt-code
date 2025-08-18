@@ -1,6 +1,5 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -8,7 +7,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { OpenFilesManager, MAX_FILES } from './open-files-manager.js';
-import type { File } from '@vybestack/llxprt-code-core';
 
 vi.mock('vscode', () => ({
   EventEmitter: vi.fn(() => {
@@ -416,7 +414,7 @@ describe('OpenFilesManager', () => {
     await vi.advanceTimersByTimeAsync(100);
 
     file1 = manager.state.workspaceState!.openFiles!.find(
-      (f: File) => f.path === '/test/file1.txt',
+      (f) => f.path === '/test/file1.txt',
     )!;
     const file2 = manager.state.workspaceState!.openFiles![0];
 

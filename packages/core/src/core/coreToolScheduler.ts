@@ -129,7 +129,7 @@ export type OutputUpdateHandler = (
 
 export type AllToolCallsCompleteHandler = (
   completedToolCalls: CompletedToolCall[],
-) => void;
+) => void | Promise<void>;
 
 export type ToolCallsUpdateHandler = (toolCalls: ToolCall[]) => void;
 
@@ -466,7 +466,7 @@ export class CoreToolScheduler {
       }
     });
     this.notifyToolCallsUpdate();
-    this.checkAndNotifyCompletion();
+    void this.checkAndNotifyCompletion();
   }
 
   private setArgsInternal(targetCallId: string, args: unknown): void {
@@ -694,7 +694,7 @@ export class CoreToolScheduler {
       }
     }
     this.attemptExecutionOfScheduledCalls(signal);
-    this.checkAndNotifyCompletion();
+    void this.checkAndNotifyCompletion();
   }
 
   async handleConfirmationResponse(
@@ -942,7 +942,9 @@ export class CoreToolScheduler {
       });
   }
 
-  private checkAndNotifyCompletion(_toolJustCompleted = false): void {
+  private async checkAndNotifyCompletion(
+    _toolJustCompleted = false,
+  ): Promise<void> {
     const allCallsAreTerminal = this.toolCalls.every(
       (call) =>
         call.status === 'success' ||
@@ -959,13 +961,13 @@ export class CoreToolScheduler {
       }
 
       if (this.onAllToolCallsComplete) {
-        this.onAllToolCallsComplete(completedCalls);
+        await this.onAllToolCallsComplete(completedCalls);
       }
       this.notifyToolCallsUpdate();
 
       // Batch is complete, process any queued requests
       this.isProcessingBatch = false;
-      this.processQueue();
+      await this.processQueue();
     }
   }
 

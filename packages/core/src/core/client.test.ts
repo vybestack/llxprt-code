@@ -1430,7 +1430,7 @@ ${JSON.stringify(
         client['forceFullIdeContext'] = false; // Reset before each delta test
         vi.spyOn(client, 'tryCompressChat').mockResolvedValue(null);
         vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-          mockTurnRunFn.mockReturnValue(mockStream);
+        mockTurnRunFn.mockReturnValue(mockStream);
 
         const mockChat: Partial<GeminiChat> = {
           addHistory: vi.fn(),

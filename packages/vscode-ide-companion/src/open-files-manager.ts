@@ -1,12 +1,11 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import * as vscode from 'vscode';
-import type { File, IdeContext } from '@vybestack/llxprt-code-core';
+import type { File, IdeContext } from './ide-schemas.js';
 
 export const MAX_FILES = 10;
 const MAX_SELECTED_TEXT_LENGTH = 16384; // 16 KiB limit

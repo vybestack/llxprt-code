@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import * as vscode from 'vscode';
-import { IdeContextNotificationSchema } from '@vybestack/llxprt-code-core';
+import { IdeContextNotificationSchema } from './ide-schemas.js';
+import { z } from 'zod';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -16,7 +16,6 @@ import { type Server as HTTPServer } from 'node:http';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
-import { z } from 'zod';
 import { DiffManager } from './diff-manager.js';
 import { OpenFilesManager } from './open-files-manager.js';
 
@@ -58,7 +57,7 @@ export class IDEServer {
     this.diffManager = diffManager;
     this.portFile = path.join(
       os.tmpdir(),
-      `gemini-ide-server-${process.ppid}.json`,
+      `llxprt-ide-server-${process.ppid}.json`,
     );
   }
 

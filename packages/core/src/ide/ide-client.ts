@@ -53,33 +53,33 @@ function getRealPath(path: string): string {
  * Manages the connection to and interaction with the IDE server.
  */
 export class IdeClient {
-  client: Client | undefined = undefined;
+  private static instance: IdeClient;
+  private client: Client | undefined = undefined;
   private state: IDEConnectionState = {
     status: IDEConnectionStatus.Disconnected,
+    details:
+      'IDE integration is currently disabled. To enable it, run /ide enable.',
   };
-  private static instance: IdeClient;
   private readonly currentIde: DetectedIde | undefined;
   private readonly currentIdeDisplayName: string | undefined;
   private diffResponses = new Map<string, (result: DiffUpdateResult) => void>();
 
-  constructor(ideMode: boolean) {
+  private constructor() {
     this.currentIde = detectIde();
     if (this.currentIde) {
       this.currentIdeDisplayName = getIdeInfo(this.currentIde).displayName;
     }
-    if (!ideMode) {
-      return;
-    }
-    this.init().catch((err) => {
-      logger.debug('Failed to initialize IdeClient:', err);
-    });
   }
 
-  static getInstance(ideMode: boolean): IdeClient {
+  static getInstance(): IdeClient {
     if (!IdeClient.instance) {
-      IdeClient.instance = new IdeClient(ideMode);
+      IdeClient.instance = new IdeClient();
     }
     return IdeClient.instance;
+  }
+
+  static resetInstance(): void {
+    IdeClient.instance = undefined as unknown as IdeClient;
   }
 
   async connect(): Promise<void> {
@@ -215,6 +215,7 @@ export class IdeClient {
     );
     this.client?.close();
   }
+
   getCurrentIde(): DetectedIde | undefined {
     return this.currentIde;
   }
@@ -256,19 +257,6 @@ export class IdeClient {
     }
   }
 
-  private getPortFromEnv(): string | undefined {
-    const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
-    if (!port) {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        `Failed to connect to IDE companion extension for ${this.currentIdeDisplayName}. Please ensure the extension is running and try restarting your terminal. To install the extension, run /ide install.`,
-        true,
-      );
-      return undefined;
-    }
-    return port;
-  }
-
   static validateWorkspacePath(
     ideWorkspacePath: string | undefined,
     currentIdeDisplayName: string | undefined,
@@ -288,7 +276,7 @@ export class IdeClient {
       };
     }
 
-    const ideWorkspacePaths = ideWorkspacePath.split(':');
+    const ideWorkspacePaths = ideWorkspacePath.split(path.delimiter);
     const realCwd = getRealPath(cwd);
     const isWithinWorkspace = ideWorkspacePaths.some((workspacePath) => {
       const idePath = getRealPath(workspacePath);
@@ -306,7 +294,7 @@ export class IdeClient {
     return { isValid: true };
   }
 
-  private getPortFromEnvForInit(): string | undefined {
+  private getPortFromEnv(): string | undefined {
     const port = process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     if (!port) {
       return undefined;
@@ -340,7 +328,6 @@ export class IdeClient {
         ideContext.setIdeContext(notification.params);
       },
     );
-
     this.client.onerror = (_error) => {
       this.setState(
         IDEConnectionStatus.Disconnected,
@@ -348,7 +335,6 @@ export class IdeClient {
         true,
       );
     };
-
     this.client.onclose = () => {
       this.setState(
         IDEConnectionStatus.Disconnected,
@@ -385,10 +371,6 @@ export class IdeClient {
     );
   }
 
-  async reconnect(ideMode: boolean) {
-    IdeClient.instance = new IdeClient(ideMode);
-  }
-
   private async establishConnection(port: string): Promise<boolean> {
     let transport: StreamableHTTPClientTransport | undefined;
     try {
@@ -397,15 +379,11 @@ export class IdeClient {
         // TODO(#3487): use the CLI version here.
         version: '1.0.0',
       });
-
       transport = new StreamableHTTPClientTransport(
         new URL(`http://${getIdeServerHost()}:${port}/mcp`),
       );
-
-      this.registerClientHandlers();
-
       await this.client.connect(transport);
-
+      this.registerClientHandlers();
       this.setState(IDEConnectionStatus.Connected);
       return true;
     } catch (_error) {
@@ -416,49 +394,9 @@ export class IdeClient {
           logger.debug('Failed to close transport:', closeError);
         }
       }
+      logger.error(`Failed to connect: ${_error}`);
       return false;
     }
-  }
-
-  async init(): Promise<void> {
-    if (this.state.status === IDEConnectionStatus.Connected) {
-      return;
-    }
-    if (!this.currentIde) {
-      this.setState(
-        IDEConnectionStatus.Disconnected,
-        'Not running in a supported IDE, skipping connection.',
-      );
-      return;
-    }
-
-    this.setState(IDEConnectionStatus.Connecting);
-
-    const { isValid, error } = IdeClient.validateWorkspacePath(
-      process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'],
-      this.currentIdeDisplayName,
-      process.cwd(),
-    );
-
-    if (!isValid) {
-      this.setState(IDEConnectionStatus.Disconnected, error, true);
-      return;
-    }
-
-    const port = this.getPortFromEnvForInit();
-    if (!port) {
-      return;
-    }
-
-    await this.establishConnection(port);
-  }
-
-  dispose() {
-    this.client?.close();
-  }
-
-  setDisconnected() {
-    this.setState(IDEConnectionStatus.Disconnected);
   }
 }
 

@@ -38,9 +38,11 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
 ### Available settings in `settings.json`:
 
 - **`contextFileName`** (string or array of strings):
-  - **Description:** Specifies the filename for context files (e.g., `LLXPRT.md`, `AGENTS.md`). Can be a single filename or a list of accepted filenames.
-  - **Default:** `LLXPRT.md`
-  - **Example:** `"contextFileName": "AGENTS.md"`
+  - **Description:** Specifies the filename(s) for context files that contain project instructions and context for the AI. Can be a single filename string or an array of accepted filenames. These files are loaded hierarchically from various locations (global, project root, ancestors, and subdirectories) to provide instructional context to the AI.
+  - **Default:** `"LLXPRT.md"`
+  - **Single filename example:** `"contextFileName": "AGENTS.md"`
+  - **Multiple filenames example:** `"contextFileName": ["AGENTS.md", "CONTEXT.md", "INSTRUCTIONS.md"]`
+  - **Usage:** When you prefer different naming conventions (like `AGENTS.md` for AI agent instructions, `CONTEXT.md` for project context, or custom names that match your project's documentation style), you can configure this setting. All specified filenames will be searched for and loaded from the hierarchical memory system.
 
 - **`bugCommand`** (object):
   - **Description:** Overrides the default URL for the `/bug` command.
@@ -263,7 +265,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     ```
 
 - **`excludedProjectEnvVars`** (array of strings):
-  - **Description:** Specifies environment variables that should be excluded from being loaded from project `.env` files. This prevents project-specific environment variables (like `DEBUG=true`) from interfering with gemini-cli behavior. Variables from `.gemini/.env` files are never excluded.
+  - **Description:** Specifies environment variables that should be excluded from being loaded from project `.env` files. This prevents project-specific environment variables (like `DEBUG=true`) from interfering with llxprt-code behavior. Variables from `.llxprt/.env` files are never excluded.
   - **Default:** `["DEBUG", "DEBUG_MODE"]`
   - **Example:**
     ```json
@@ -408,7 +410,7 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
   - `<profile_name>`: Uses a custom profile. To define a custom profile, create a file named `sandbox-macos-<profile_name>.sb` in your project's `.llxprt/` directory (e.g., `my-project/.llxprt/sandbox-macos-custom.sb`).
 - **`DEBUG` or `DEBUG_MODE`** (often used by underlying libraries or the CLI itself):
   - Set to `true` or `1` to enable verbose debug logging, which can be helpful for troubleshooting.
-  - **Note:** These variables are automatically excluded from project `.env` files by default to prevent interference with gemini-cli behavior. Use `.gemini/.env` files if you need to set these for gemini-cli specifically.
+  - **Note:** These variables are automatically excluded from project `.env` files by default to prevent interference with llxprt-code behavior. Use `.llxprt/.env` files if you need to set these for llxprt-code specifically.
 - **`NO_COLOR`**:
   - Set to any value to disable all color output in the CLI.
 - **`CLI_TITLE`**:
