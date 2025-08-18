@@ -227,7 +227,7 @@ describe('WriteFileTool', () => {
 
       // Import the getCorrectedFileContent function directly
       const { getCorrectedFileContent } = await import('./write-file.js');
-      
+
       const result = await getCorrectedFileContent(
         filePath,
         proposedContent,
@@ -267,7 +267,7 @@ describe('WriteFileTool', () => {
 
       // Import the getCorrectedFileContent function directly
       const { getCorrectedFileContent } = await import('./write-file.js');
-      
+
       const result = await getCorrectedFileContent(
         filePath,
         proposedContent,
@@ -307,7 +307,7 @@ describe('WriteFileTool', () => {
 
       // Import the getCorrectedFileContent function directly
       const { getCorrectedFileContent } = await import('./write-file.js');
-      
+
       const result = await getCorrectedFileContent(
         filePath,
         proposedContent,
@@ -493,7 +493,9 @@ describe('WriteFileTool', () => {
       } catch (error) {
         // If validation fails during build, that's expected for invalid params
         expect(error).toBeDefined();
-        expect(String(error)).toContain('File path must be within one of the workspace directories');
+        expect(String(error)).toContain(
+          'File path must be within one of the workspace directories',
+        );
       }
     });
 
@@ -528,9 +530,7 @@ describe('WriteFileTool', () => {
       const params = { file_path: filePath, content: proposedContent };
       const invocation = tool.build(params);
 
-      const confirmDetails = await invocation.shouldConfirmExecute(
-        abortSignal,
-      );
+      const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
@@ -586,9 +586,7 @@ describe('WriteFileTool', () => {
       const params = { file_path: filePath, content: proposedContent };
       const invocation = tool.build(params);
 
-      const confirmDetails = await invocation.shouldConfirmExecute(
-        abortSignal,
-      );
+      const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
@@ -631,9 +629,7 @@ describe('WriteFileTool', () => {
       const params = { file_path: filePath, content };
       const invocation = tool.build(params);
       // Simulate confirmation if your logic requires it before execute, or remove if not needed for this path
-      const confirmDetails = await invocation.shouldConfirmExecute(
-        abortSignal,
-      );
+      const confirmDetails = await invocation.shouldConfirmExecute(abortSignal);
       if (
         typeof confirmDetails === 'object' &&
         'onConfirm' in confirmDetails &&
