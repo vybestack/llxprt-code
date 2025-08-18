@@ -84,7 +84,7 @@ describe('WebSearchTool', () => {
 
       mockGenerateContent.mockResolvedValue(mockResponse);
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'test query' },
         mockAbortSignal,
       );
@@ -120,7 +120,7 @@ describe('WebSearchTool', () => {
 
       mockGenerateContent.mockResolvedValue(mockResponse);
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'empty query' },
         mockAbortSignal,
       );
@@ -135,7 +135,7 @@ describe('WebSearchTool', () => {
       const mockError = new Error('API Error: Function call/response mismatch');
       mockGenerateContent.mockRejectedValue(mockError);
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'error query' },
         mockAbortSignal,
       );
@@ -148,13 +148,11 @@ describe('WebSearchTool', () => {
     });
 
     it('should handle validation errors', () => {
-      // Test validateParams directly since execute method has try-catch
-      const error = webSearchTool.validateParams({ query: '' });
-      expect(error).toBe("The 'query' parameter cannot be empty.");
+      // Test by building with invalid parameters - should throw error
+      expect(() => webSearchTool.build({ query: '' })).toThrow("The 'query' parameter cannot be empty.");
 
       // Test whitespace-only query
-      const whitespaceError = webSearchTool.validateParams({ query: '   ' });
-      expect(whitespaceError).toBe("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '   ' })).toThrow("The 'query' parameter cannot be empty.");
     });
 
     it('should handle grounding supports without citations', async () => {
@@ -182,7 +180,7 @@ describe('WebSearchTool', () => {
 
       mockGenerateContent.mockResolvedValue(mockResponse);
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'no citations' },
         mockAbortSignal,
       );
@@ -208,7 +206,7 @@ describe('WebSearchTool', () => {
 
       mockGenerateContent.mockResolvedValue(mockResponse);
 
-      await webSearchTool.execute(
+      await webSearchTool.buildAndExecute(
         { query: 'test google search' },
         mockAbortSignal,
       );
@@ -227,7 +225,7 @@ describe('WebSearchTool', () => {
       );
       mockGenerateContent.mockRejectedValue(mockError);
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'function mismatch test' },
         mockAbortSignal,
       );
@@ -240,26 +238,25 @@ describe('WebSearchTool', () => {
 
   describe('validateParams', () => {
     it('should accept valid query', () => {
-      const error = webSearchTool.validateParams({ query: 'valid query' });
-      expect(error).toBeNull();
+      // Valid parameters should not throw when building
+      expect(() => webSearchTool.build({ query: 'valid query' })).not.toThrow();
     });
 
     it('should reject empty query', () => {
-      const error = webSearchTool.validateParams({ query: '' });
-      expect(error).toBe("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '' })).toThrow("The 'query' parameter cannot be empty.");
     });
 
     it('should reject whitespace-only query', () => {
-      const error = webSearchTool.validateParams({ query: '   ' });
-      expect(error).toBe("The 'query' parameter cannot be empty.");
+      expect(() => webSearchTool.build({ query: '   ' })).toThrow("The 'query' parameter cannot be empty.");
     });
   });
 
   describe('getDescription', () => {
     it('should return description with query', () => {
-      const description = webSearchTool.getDescription({
+      const invocation = webSearchTool.build({
         query: 'test search',
       });
+      const description = invocation.getDescription();
       expect(description).toBe('Searching the web for: "test search"');
     });
   });
@@ -275,7 +272,7 @@ describe('WebSearchTool', () => {
       mockConfig.getContentGeneratorConfig = vi.fn(() => undefined);
       mockConfig.refreshAuth = vi.fn();
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'test query' },
         mockAbortSignal,
       );
@@ -303,7 +300,7 @@ describe('WebSearchTool', () => {
         },
       }));
 
-      const result = await webSearchTool.execute(
+      const result = await webSearchTool.buildAndExecute(
         { query: 'test query' },
         mockAbortSignal,
       );
