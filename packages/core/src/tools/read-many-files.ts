@@ -449,6 +449,7 @@ ${finalExclusionPatternsForDescription
       const fileReadResult = await processSingleFileContent(
         filePath,
         this.config.getTargetDir(),
+        this.config.getFileSystemService(),
       );
 
       if (fileReadResult.error) {

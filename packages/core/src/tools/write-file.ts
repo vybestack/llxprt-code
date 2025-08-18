@@ -110,7 +110,9 @@ export async function getCorrectedFileContent(
   let correctedContent = proposedContent;
 
   try {
-    originalContent = fs.readFileSync(filePath, 'utf8');
+    originalContent = await config
+      .getFileSystemService()
+      .readTextFile(filePath);
     fileExists = true; // File exists and was read
   } catch (err) {
     if (isNodeError(err) && err.code === 'ENOENT') {
@@ -350,7 +352,9 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         fs.mkdirSync(dirName, { recursive: true });
       }
 
-      fs.writeFileSync(filteredParams.file_path, fileContent, 'utf8');
+      await this.config
+        .getFileSystemService()
+        .writeTextFile(file_path, fileContent);
 
       // Track git stats if logging is enabled and service is available
       let gitStats = null;
@@ -359,7 +363,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         if (gitStatsService) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
-              filteredParams.file_path,
+              file_path,
               originalContent || '',
               fileContent,
             );

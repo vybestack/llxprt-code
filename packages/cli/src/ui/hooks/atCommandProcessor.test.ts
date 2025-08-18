@@ -11,6 +11,7 @@ import {
   FileDiscoveryService,
   GlobTool,
   ReadManyFilesTool,
+  StandardFileSystemService,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import * as os from 'os';
@@ -59,6 +60,7 @@ describe('handleAtCommand', () => {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       }),
+      getFileSystemService: () => new StandardFileSystemService(),
       getEnableRecursiveFileSearch: vi.fn(() => true),
       getWorkspaceContext: () => ({
         isPathWithinWorkspace: () => true,
