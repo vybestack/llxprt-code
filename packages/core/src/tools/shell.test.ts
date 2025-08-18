@@ -219,39 +219,8 @@ describe('ShellTool', () => {
       );
     });
 
-    it('should summarize output when configured', async () => {
-      (mockConfig.getSummarizeToolOutputConfig as Mock).mockReturnValue({
-        [shellTool.name]: { tokenBudget: 1000 },
-      });
-      vi.mocked(summarizer.summarizeToolOutput).mockResolvedValue(
-        'summarized output',
-      );
-
-      const invocation = shellTool.build({ command: 'ls' });
-      const promise = invocation.execute(mockAbortSignal);
-      resolveExecutionPromise({
-        output: 'long output',
-        rawOutput: Buffer.from('long output'),
-        stdout: 'long output',
-        stderr: '',
-        exitCode: 0,
-        signal: null,
-        error: null,
-        aborted: false,
-        pid: 12345,
-      });
-
-      const result = await promise;
-
-      expect(summarizer.summarizeToolOutput).toHaveBeenCalledWith(
-        expect.any(String),
-        mockConfig.getGeminiClient(),
-        mockAbortSignal,
-        1000,
-      );
-      expect(result.llmContent).toBe('summarized output');
-      expect(result.returnDisplay).toBe('long output');
-    });
+    // Removed obsolete test: summarization feature was removed from shell tool
+    // The tool now only does token-based truncation without summarization
 
     it('should clean up the temp file on synchronous execution error', async () => {
       const error = new Error('sync spawn error');

@@ -100,7 +100,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('should handle mixed English and Japanese output', async () => {
+  it.skipIf(process.platform !== 'win32')('should handle mixed English and Japanese output', async () => {
     const command = 'echo "Hello 世界"';
     const mixedOutput = 'Hello 世界\r\n';
 

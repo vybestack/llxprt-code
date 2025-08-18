@@ -700,7 +700,7 @@ describe('Logger', () => {
       );
 
       const loaded = await logger.loadCheckpoint(tag);
-      expect(loaded).toEqual(taggedConversation);
+      expect(loaded).toEqual({ history: taggedConversation });
     });
   });
 

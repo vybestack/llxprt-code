@@ -8,8 +8,8 @@
 
 ## Linting and Formatting
 
-- **Always run `npm run format` before committing** - Never push without formatting
-- Always run `npm run lint` before considering work complete
+- **Always run `npm run format` FROM THE MAIN llxprt-code directory before committing** - Never push without formatting
+- Always run `npm run lint` FROM THE MAIN llxprt-code directory before considering work complete
 - Fix all linting errors, including warnings about `any` types
 - Run `npm run typecheck` to ensure type safety
 
