@@ -246,7 +246,14 @@ function createMockProvider(name: string): IProvider {
       provider.state = {};
     },
 
-    getModels: async () => [{ id: 'test-model', name: 'Test Model', provider: name, supportedToolFormats: [] }],
+    getModels: async () => [
+      {
+        id: 'test-model',
+        name: 'Test Model',
+        provider: name,
+        supportedToolFormats: [],
+      },
+    ],
 
     getDefaultModel: () => 'test-model',
 

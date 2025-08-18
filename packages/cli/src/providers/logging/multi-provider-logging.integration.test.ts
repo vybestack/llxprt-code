@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
-  IProvider, 
-  IMessage, 
-  ITool, 
-  ContentGeneratorRole
+import {
+  IProvider,
+  IMessage,
+  ITool,
+  ContentGeneratorRole,
 } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
@@ -82,7 +82,10 @@ function createMockProvider(
     async *generateChatCompletion(_messages: IMessage[], _tools?: ITool[]) {
       // Simulate provider-specific response patterns
       if (name === 'openai') {
-        yield { content: 'OpenAI response chunk 1', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          content: 'OpenAI response chunk 1',
+          role: ContentGeneratorRole.ASSISTANT,
+        };
         yield { content: ' chunk 2', role: ContentGeneratorRole.ASSISTANT };
       } else if (name === 'anthropic') {
         yield {
@@ -330,7 +333,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     providerManager.setActiveProvider('openai');
     await consumeAsyncIterable(
       openaiWrapper.generateChatCompletion([
-        { role: ContentGeneratorRole.USER, content: 'Explain quantum computing' },
+        {
+          role: ContentGeneratorRole.USER,
+          content: 'Explain quantum computing',
+        },
       ]),
     );
 
@@ -347,7 +353,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     providerManager.setActiveProvider('gemini');
     await consumeAsyncIterable(
       geminiWrapper.generateChatCompletion([
-        { role: ContentGeneratorRole.USER, content: 'Summarize the key points' },
+        {
+          role: ContentGeneratorRole.USER,
+          content: 'Summarize the key points',
+        },
       ]),
     );
 
@@ -499,7 +508,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     );
 
     const message: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Tell me about machine learning' },
+      {
+        role: ContentGeneratorRole.USER,
+        content: 'Tell me about machine learning',
+      },
     ];
 
     // Test fast streaming
@@ -545,7 +557,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     errorProvider.generateChatCompletion = vi
       .fn()
       .mockImplementation(async function* () {
-        yield { content: 'Starting response...', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          content: 'Starting response...',
+          role: ContentGeneratorRole.ASSISTANT,
+        };
         throw new Error('Provider API error');
       });
 
@@ -562,7 +577,9 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       storage,
     );
 
-    const message: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test message' }];
+    const message: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test message' },
+    ];
 
     // Test reliable provider first
     await consumeAsyncIterable(reliableWrapper.generateChatCompletion(message));
@@ -709,8 +726,14 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     // Simulate conversation progression
     const conversationMessages = [
-      { role: ContentGeneratorRole.USER as const, content: 'What is machine learning?' },
-      { role: ContentGeneratorRole.USER as const, content: 'Can you give examples?' },
+      {
+        role: ContentGeneratorRole.USER as const,
+        content: 'What is machine learning?',
+      },
+      {
+        role: ContentGeneratorRole.USER as const,
+        content: 'Can you give examples?',
+      },
       {
         role: ContentGeneratorRole.USER as const,
         content: 'How about neural networks specifically?',

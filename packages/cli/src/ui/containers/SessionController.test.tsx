@@ -362,7 +362,10 @@ describe('SessionController', () => {
     vi.runAllTimers();
     await Promise.resolve();
 
-    expect((mockConfig as unknown as { getUserTier: ReturnType<typeof vi.fn> }).getUserTier).not.toHaveBeenCalled();
+    expect(
+      (mockConfig as unknown as { getUserTier: ReturnType<typeof vi.fn> })
+        .getUserTier,
+    ).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -375,7 +378,9 @@ describe('SessionController', () => {
     ) => Promise<boolean>;
 
     let flashFallbackHandler: FlashFallbackHandler | undefined;
-    (mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>)?.mockImplementation((handler: FlashFallbackHandler) => {
+    (
+      mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>
+    )?.mockImplementation((handler: FlashFallbackHandler) => {
       flashFallbackHandler = handler;
     });
 
@@ -451,7 +456,9 @@ describe('SessionController', () => {
     );
 
     // Change the model
-    (mockConfig.getModel as ReturnType<typeof vi.fn>)?.mockReturnValue('new-model');
+    (mockConfig.getModel as ReturnType<typeof vi.fn>)?.mockReturnValue(
+      'new-model',
+    );
     mockGetProviderManager.mockReturnValue({
       hasActiveProvider: () => true,
       getActiveProvider: () =>
@@ -515,7 +522,9 @@ describe('SessionController', () => {
     ) => Promise<boolean>;
 
     let flashFallbackHandler: FlashFallbackHandler | undefined;
-    (mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>)?.mockImplementation((handler: FlashFallbackHandler) => {
+    (
+      mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>
+    )?.mockImplementation((handler: FlashFallbackHandler) => {
       flashFallbackHandler = handler;
     });
 
@@ -706,7 +715,9 @@ describe('SessionController', () => {
     ) => Promise<boolean>;
 
     let flashFallbackHandler: FlashFallbackHandler | undefined;
-    (mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>)?.mockImplementation((handler: FlashFallbackHandler) => {
+    (
+      mockConfig.setFlashFallbackHandler as ReturnType<typeof vi.fn>
+    )?.mockImplementation((handler: FlashFallbackHandler) => {
       flashFallbackHandler = handler;
     });
 

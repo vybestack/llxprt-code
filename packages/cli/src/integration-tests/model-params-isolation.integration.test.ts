@@ -368,15 +368,35 @@ describe('Model Parameters Isolation Between Providers', () => {
     it('should set default model when switching providers', async () => {
       const openai = createMockProvider('openai');
       openai.getModels = async () => [
-        { id: 'gpt-4', name: 'GPT-4', provider: 'openai', supportedToolFormats: [] },
-        { id: 'gpt-4o-mini', name: 'GPT-4.0 Mini', provider: 'openai', supportedToolFormats: [] },
+        {
+          id: 'gpt-4',
+          name: 'GPT-4',
+          provider: 'openai',
+          supportedToolFormats: [],
+        },
+        {
+          id: 'gpt-4o-mini',
+          name: 'GPT-4.0 Mini',
+          provider: 'openai',
+          supportedToolFormats: [],
+        },
       ];
       openai.getDefaultModel = () => 'gpt-4';
 
       const anthropic = createMockProvider('anthropic');
       anthropic.getModels = async () => [
-        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic', supportedToolFormats: [] },
-        { id: 'claude-3-sonnet', name: 'Claude 3 Sonnet', provider: 'anthropic', supportedToolFormats: [] },
+        {
+          id: 'claude-3-opus-20240229',
+          name: 'Claude 3 Opus',
+          provider: 'anthropic',
+          supportedToolFormats: [],
+        },
+        {
+          id: 'claude-3-sonnet',
+          name: 'Claude 3 Sonnet',
+          provider: 'anthropic',
+          supportedToolFormats: [],
+        },
       ];
       anthropic.getDefaultModel = () => 'claude-3-opus-20240229';
 
@@ -508,7 +528,14 @@ describe('Model Parameters Isolation Between Providers', () => {
     it('should handle providers without model parameter support', async () => {
       const basicProvider: IProvider = {
         name: 'basic-provider',
-        getModels: async () => [{ id: 'basic-model', name: 'Basic Model', provider: 'basic-provider', supportedToolFormats: [] }],
+        getModels: async () => [
+          {
+            id: 'basic-model',
+            name: 'Basic Model',
+            provider: 'basic-provider',
+            supportedToolFormats: [],
+          },
+        ],
         getDefaultModel: () => 'basic-model',
         async *generateChatCompletion() {
           yield { content: 'test' };
@@ -633,8 +660,18 @@ function createMockProvider(name: string): IProvider {
     },
 
     getModels: async () => [
-      { id: `${name}-model-1`, name: `${name} Model 1`, provider: name, supportedToolFormats: [] },
-      { id: `${name}-model-2`, name: `${name} Model 2`, provider: name, supportedToolFormats: [] },
+      {
+        id: `${name}-model-1`,
+        name: `${name} Model 1`,
+        provider: name,
+        supportedToolFormats: [],
+      },
+      {
+        id: `${name}-model-2`,
+        name: `${name} Model 2`,
+        provider: name,
+        supportedToolFormats: [],
+      },
     ],
 
     getDefaultModel: () => `${name}-model-1`,

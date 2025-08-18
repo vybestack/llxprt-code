@@ -22,8 +22,18 @@ describe('Provider-Gemini Switching', () => {
       name: 'test-provider',
       async getModels(): Promise<IModel[]> {
         return [
-          { id: 'model-1', name: 'Test Model 1', provider: 'test-provider', supportedToolFormats: ['json'] },
-          { id: 'model-2', name: 'Test Model 2', provider: 'test-provider', supportedToolFormats: ['json'] },
+          {
+            id: 'model-1',
+            name: 'Test Model 1',
+            provider: 'test-provider',
+            supportedToolFormats: ['json'],
+          },
+          {
+            id: 'model-2',
+            name: 'Test Model 2',
+            provider: 'test-provider',
+            supportedToolFormats: ['json'],
+          },
         ];
       },
       async *generateChatCompletion() {

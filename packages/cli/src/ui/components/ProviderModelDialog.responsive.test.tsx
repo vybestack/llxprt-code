@@ -20,17 +20,42 @@ import { IModel } from '../../providers/index.js';
 vi.mock('../hooks/useTerminalSize.js');
 
 const testModels: IModel[] = [
-  { id: 'gpt-4', name: 'GPT-4', provider: 'openai', supportedToolFormats: ['openai'] },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'openai', supportedToolFormats: ['openai'] },
-  { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', provider: 'anthropic', supportedToolFormats: ['anthropic'] },
-  { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', provider: 'anthropic', supportedToolFormats: ['anthropic'] },
+  {
+    id: 'gpt-4',
+    name: 'GPT-4',
+    provider: 'openai',
+    supportedToolFormats: ['openai'],
+  },
+  {
+    id: 'gpt-3.5-turbo',
+    name: 'GPT-3.5 Turbo',
+    provider: 'openai',
+    supportedToolFormats: ['openai'],
+  },
+  {
+    id: 'claude-3-opus-20240229',
+    name: 'Claude 3 Opus',
+    provider: 'anthropic',
+    supportedToolFormats: ['anthropic'],
+  },
+  {
+    id: 'claude-3-sonnet-20240229',
+    name: 'Claude 3 Sonnet',
+    provider: 'anthropic',
+    supportedToolFormats: ['anthropic'],
+  },
   {
     id: 'gemini-pro-very-long-model-name-that-should-be-truncated',
     name: 'Gemini Pro Long',
     provider: 'google',
     supportedToolFormats: ['google'],
   },
-  { id: 'text-embedding-ada-002', name: 'Ada Embedding', provider: 'openai', supportedToolFormats: ['openai'] },
+  {
+    id: 'text-embedding-ada-002',
+    name: 'Ada Embedding',
+    provider: 'openai',
+    supportedToolFormats: ['openai'],
+  },
   {
     id: 'another-very-long-model-identifier-for-testing-truncation',
     name: 'Long Model',

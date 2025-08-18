@@ -15,11 +15,23 @@ import { SettingScope } from '../config/settings.js';
 
 // Stub implementations for missing commands
 const saveCommand = {
-  action: vi.fn().mockResolvedValue({ type: 'message', messageType: 'success', content: 'Profile saved' })
+  action: vi
+    .fn()
+    .mockResolvedValue({
+      type: 'message',
+      messageType: 'success',
+      content: 'Profile saved',
+    }),
 };
 
 const loadCommand = {
-  action: vi.fn().mockResolvedValue({ type: 'message', messageType: 'success', content: 'Profile loaded' })
+  action: vi
+    .fn()
+    .mockResolvedValue({
+      type: 'message',
+      messageType: 'success',
+      content: 'Profile loaded',
+    }),
 };
 import { getProviderManager } from '../providers/providerManagerInstance.js';
 import {
@@ -160,15 +172,19 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       }),
     };
 
-    vi.mocked(getProviderManager).mockReturnValue(mockProviderManager as unknown as ProviderManager);
+    vi.mocked(getProviderManager).mockReturnValue(
+      mockProviderManager as unknown as ProviderManager,
+    );
 
     // Load real settings and config
     settings = {
       merged: { ...testEphemeralSettings } as Record<string, unknown>,
-      setValue: vi.fn().mockImplementation((scope: unknown, key: string, value: unknown) => {
-        // Simulate setting values
-        settings.merged[key] = value;
-      }),
+      setValue: vi
+        .fn()
+        .mockImplementation((scope: unknown, key: string, value: unknown) => {
+          // Simulate setting values
+          settings.merged[key] = value;
+        }),
       errors: [],
     };
 
@@ -272,9 +288,11 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       // Create a fresh settings mock for loading
       const loadSettings = {
         merged: {} as Record<string, unknown>,
-        setValue: vi.fn().mockImplementation((scope: unknown, key: string, value: unknown) => {
-          loadSettings.merged[key] = value;
-        }),
+        setValue: vi
+          .fn()
+          .mockImplementation((scope: unknown, key: string, value: unknown) => {
+            loadSettings.merged[key] = value;
+          }),
       };
 
       // Update context with fresh settings
@@ -403,9 +421,11 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       mockProvider.setModelParams = vi.fn();
       const devSettings = {
         merged: {} as Record<string, unknown>,
-        setValue: vi.fn().mockImplementation((scope: unknown, key: string, value: unknown) => {
-          devSettings.merged[key] = value;
-        }),
+        setValue: vi
+          .fn()
+          .mockImplementation((scope: unknown, key: string, value: unknown) => {
+            devSettings.merged[key] = value;
+          }),
       };
       context.services.settings =
         devSettings as unknown as CommandContext['services']['settings'];
@@ -431,9 +451,11 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       mockProvider.setModelParams = vi.fn();
       const prodSettings = {
         merged: {} as Record<string, unknown>,
-        setValue: vi.fn().mockImplementation((scope: unknown, key: string, value: unknown) => {
-          prodSettings.merged[key] = value;
-        }),
+        setValue: vi
+          .fn()
+          .mockImplementation((scope: unknown, key: string, value: unknown) => {
+            prodSettings.merged[key] = value;
+          }),
       };
       context.services.settings =
         prodSettings as unknown as CommandContext['services']['settings'];
@@ -638,10 +660,12 @@ describe('Model Parameters and Profiles Integration Tests', () => {
         callOrder.push('setModelParams');
       });
 
-      (mockProvider.generateChatCompletion as any).mockImplementation(async () => {
-        callOrder.push('generateChatCompletion');
-        return { content: 'Response' };
-      });
+      (mockProvider.generateChatCompletion as any).mockImplementation(
+        async () => {
+          callOrder.push('generateChatCompletion');
+          return { content: 'Response' };
+        },
+      );
 
       // Simulate CLI initialization sequence
       await mockProviderManager.setActiveProvider('openai');
@@ -882,7 +906,8 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       await loadCommand.action!(context, '"Precision Profile"');
 
       // Verify precision was preserved
-      const calledParams = (mockProvider.setModelParams as any).mock.calls[0][0];
+      const calledParams = (mockProvider.setModelParams as any).mock
+        .calls[0][0];
       expect(calledParams.temperature).toBe(0.123456789);
       expect(calledParams.top_p).toBe(0.999999999);
       expect(calledParams.frequency_penalty).toBe(-0.000000001);
@@ -910,8 +935,12 @@ describe('Model Parameters and Profiles Integration Tests', () => {
         settings.setValue(SettingScope.User, 'compression-threshold', 0.82);
 
         // Update context settings merged to include these values
-        (context.services.settings as unknown as MockSettings).merged['context-limit'] = 25000;
-        (context.services.settings as unknown as MockSettings).merged['compression-threshold'] = 0.82;
+        (context.services.settings as unknown as MockSettings).merged[
+          'context-limit'
+        ] = 25000;
+        (context.services.settings as unknown as MockSettings).merged[
+          'compression-threshold'
+        ] = 0.82;
 
         // 3. Save profile
         mockProvider.getModelParams = vi.fn().mockReturnValue({
@@ -926,9 +955,13 @@ describe('Model Parameters and Profiles Integration Tests', () => {
         mockProvider.setModelParams = vi.fn();
         const freshSettings = {
           merged: {} as Record<string, unknown>,
-          setValue: vi.fn().mockImplementation((scope: unknown, key: string, value: unknown) => {
-            freshSettings.merged[key] = value;
-          }),
+          setValue: vi
+            .fn()
+            .mockImplementation(
+              (scope: unknown, key: string, value: unknown) => {
+                freshSettings.merged[key] = value;
+              },
+            ),
         };
         context.services.settings =
           freshSettings as unknown as CommandContext['services']['settings'];

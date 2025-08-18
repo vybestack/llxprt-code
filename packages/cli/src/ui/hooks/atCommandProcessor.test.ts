@@ -404,7 +404,11 @@ describe('handleAtCommand', () => {
     });
 
     // Check that both files are included but don't enforce order
-    const queryText = (Array.isArray(processedQuery) ? processedQuery : [processedQuery]).map((p: any) => p.text).join('');
+    const queryText = (
+      Array.isArray(processedQuery) ? processedQuery : [processedQuery]
+    )
+      .map((p: any) => p.text)
+      .join('');
     expect(queryText).toContain('--- Content from referenced files ---');
     expect(queryText).toContain(`Content from @${file1Path}:`);
     expect(queryText).toContain(content1);
@@ -522,10 +526,7 @@ describe('handleAtCommand', () => {
         '# Project README',
       );
       const relativePath2 = '.env';
-      await createTestFile(
-        path.join(testRootDir, relativePath2),
-        'SECRET=123',
-      );
+      await createTestFile(path.join(testRootDir, relativePath2), 'SECRET=123');
       const query = `@${relativePath1} @${relativePath2}`;
 
       const result = await handleAtCommand({

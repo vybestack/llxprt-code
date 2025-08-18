@@ -1157,9 +1157,12 @@ export const useGeminiStream = (
                 queuedSystemFeedbackRef.current.join('\n');
               queuedSystemFeedbackRef.current = []; // Clear the queue
 
-              // Since we need to return a single Part (functionResponse), 
+              // Since we need to return a single Part (functionResponse),
               // we can't append text directly. Log a warning instead.
-              console.warn('[Warning] System feedback queued but cannot be appended to function response:', feedbackMessages);
+              console.warn(
+                '[Warning] System feedback queued but cannot be appended to function response:',
+                feedbackMessages,
+              );
             }
 
             // Each responseParts should be a functionResponse object

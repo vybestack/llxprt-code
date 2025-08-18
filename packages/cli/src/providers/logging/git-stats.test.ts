@@ -226,11 +226,7 @@ describe('Git Statistics Tracking', () => {
       });
       const tracker = new GitStatsTracker(config);
 
-      await tracker.trackFileEdit(
-        'file.ts',
-        'old',
-        'new\ncontent',
-      );
+      await tracker.trackFileEdit('file.ts', 'old', 'new\ncontent');
 
       const logEntry = tracker.getLogEntry();
       expect(logEntry).toMatchObject({

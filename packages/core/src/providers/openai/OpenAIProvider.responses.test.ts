@@ -59,7 +59,9 @@ interface MockResponse {
   }>;
 }
 
-const skipTests = !process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'test-key-for-mocked-tests';
+const skipTests =
+  !process.env.OPENAI_API_KEY ||
+  process.env.OPENAI_API_KEY === 'test-key-for-mocked-tests';
 
 describe.skipIf(skipTests)('OpenAIProvider - Responses API Tool Calls', () => {
   let provider: OpenAIProvider;

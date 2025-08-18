@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import type { SandboxConfig, ApprovalMode, MCPServerConfig } from '@vybestack/llxprt-code-core';
+import type {
+  SandboxConfig,
+  ApprovalMode,
+  MCPServerConfig,
+} from '@vybestack/llxprt-code-core';
 
 // Mock the Config class to add conversation logging methods that will be implemented
 interface ExtendedConfig {

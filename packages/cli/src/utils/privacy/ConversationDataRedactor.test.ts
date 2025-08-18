@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { IMessage, ITool, ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import {
+  IMessage,
+  ITool,
+  ContentGeneratorRole,
+} from '@vybestack/llxprt-code-core';
 import { ConversationDataRedactor } from './ConversationDataRedactor.js';
 
 // Note: Interface will be implemented in the next phase
@@ -244,8 +248,12 @@ describe('Conversation Data Redaction', () => {
     };
 
     const redacted = redactor.redactToolCall(tool);
-    expect((redacted.function.parameters as { file_path: string }).file_path).toBe('[REDACTED-SENSITIVE-PATH]');
-    expect((redacted.function.parameters as { encoding: string }).encoding).toBe('utf-8'); // Non-sensitive preserved
+    expect(
+      (redacted.function.parameters as { file_path: string }).file_path,
+    ).toBe('[REDACTED-SENSITIVE-PATH]');
+    expect(
+      (redacted.function.parameters as { encoding: string }).encoding,
+    ).toBe('utf-8'); // Non-sensitive preserved
   });
 
   /**
@@ -269,8 +277,12 @@ describe('Conversation Data Redaction', () => {
     };
 
     const redacted = redactor.redactToolCall(tool);
-    expect((redacted.function.parameters as { file_path: string }).file_path).toBe('[REDACTED-SENSITIVE-PATH]');
-    expect((redacted.function.parameters as { format: string }).format).toBe('text');
+    expect(
+      (redacted.function.parameters as { file_path: string }).file_path,
+    ).toBe('[REDACTED-SENSITIVE-PATH]');
+    expect((redacted.function.parameters as { format: string }).format).toBe(
+      'text',
+    );
   });
 
   /**
@@ -326,7 +338,10 @@ describe('Conversation Data Redaction', () => {
         role: ContentGeneratorRole.ASSISTANT,
         content: 'I cannot store API keys for security reasons',
       },
-      { role: ContentGeneratorRole.USER, content: 'Please read /home/john/.ssh/id_rsa for me' },
+      {
+        role: ContentGeneratorRole.USER,
+        content: 'Please read /home/john/.ssh/id_rsa for me',
+      },
       {
         role: ContentGeneratorRole.ASSISTANT,
         content: 'I cannot access SSH keys or other sensitive files',

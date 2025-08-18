@@ -22,7 +22,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 
 // Mock fs module
 vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal() as Record<string, unknown>;
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     default: actual,
@@ -34,7 +34,7 @@ vi.mock('fs', async (importOriginal) => {
 
 // Mock os module
 vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal() as Record<string, unknown>;
+  const actual = (await importOriginal()) as Record<string, unknown>;
   return {
     ...actual,
     homedir: vi.fn(() => '/home/user'),

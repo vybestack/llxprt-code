@@ -238,27 +238,26 @@ describe('Todo Continuation Integration Tests', () => {
       let capturedOptions: unknown = null;
 
       const originalSendMessageStream = geminiClient.sendMessageStream;
-      geminiClient.sendMessageStream = vi.fn(
-        async function* (
-          request: PartListUnion,
-          signal: AbortSignal,
-          prompt_id: string,
-          turns?: number,
-          originalModel?: string
-        ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
-          capturedMessage = typeof request === 'string' ? request : JSON.stringify(request);
-          capturedOptions = { signal, prompt_id, turns, originalModel };
-          // Create a mock Turn object
-          const mockTurn = {} as Turn;
-          return mockTurn;
-        }
-      );
+      geminiClient.sendMessageStream = vi.fn(async function* (
+        request: PartListUnion,
+        signal: AbortSignal,
+        prompt_id: string,
+        turns?: number,
+        originalModel?: string,
+      ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
+        capturedMessage =
+          typeof request === 'string' ? request : JSON.stringify(request);
+        capturedOptions = { signal, prompt_id, turns, originalModel };
+        // Create a mock Turn object
+        const mockTurn = {} as Turn;
+        return mockTurn;
+      });
 
       // When: Send ephemeral message
       const generator = geminiClient.sendMessageStream(
         'Test continuation prompt',
         new AbortController().signal,
-        'test-prompt-id'
+        'test-prompt-id',
       );
       await generator.next();
 
@@ -268,7 +267,7 @@ describe('Todo Continuation Integration Tests', () => {
         signal: expect.any(AbortSignal),
         prompt_id: 'test-prompt-id',
         turns: undefined,
-        originalModel: undefined
+        originalModel: undefined,
       });
 
       // Restore original method

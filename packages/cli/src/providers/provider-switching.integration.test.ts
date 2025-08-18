@@ -35,7 +35,14 @@ describe('Provider Switching Integration', () => {
     const mockProvider: IProvider = {
       name: 'test-provider',
       async getModels() {
-        return [{ id: 'test-model', name: 'Test Model', provider: 'test-provider', supportedToolFormats: ['json'] }];
+        return [
+          {
+            id: 'test-model',
+            name: 'Test Model',
+            provider: 'test-provider',
+            supportedToolFormats: ['json'],
+          },
+        ];
       },
       async *generateChatCompletion() {
         yield { role: 'assistant', content: 'test response' };

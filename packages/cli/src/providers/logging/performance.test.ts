@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
-  IProvider, 
-  IMessage, 
-  ITool, 
-  ContentGeneratorRole 
+import {
+  IProvider,
+  IMessage,
+  ITool,
+  ContentGeneratorRole,
 } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
@@ -103,7 +103,10 @@ function createMockProvider(name: string, responseDelay = 0): IProvider {
       if (responseDelay > 0) {
         await new Promise((resolve) => setTimeout(resolve, responseDelay));
       }
-      yield { content: `Response from ${name}`, role: ContentGeneratorRole.ASSISTANT };
+      yield {
+        content: `Response from ${name}`,
+        role: ContentGeneratorRole.ASSISTANT,
+      };
     },
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default`),
     getServerTools: vi.fn().mockReturnValue([]),
@@ -131,7 +134,10 @@ function createTypicalConversation(messageCount: number): IMessage[] {
   const messages: IMessage[] = [];
   for (let i = 0; i < messageCount; i++) {
     messages.push({
-      role: i % 2 === 0 ? ContentGeneratorRole.USER : ContentGeneratorRole.ASSISTANT,
+      role:
+        i % 2 === 0
+          ? ContentGeneratorRole.USER
+          : ContentGeneratorRole.ASSISTANT,
       content: `Message ${i + 1}: This is a typical conversation message with moderate length content.`,
     });
   }
@@ -263,7 +269,9 @@ describe('Conversation Logging Performance Impact', () => {
       storage,
     );
 
-    const message: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test message' }];
+    const message: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test message' },
+    ];
 
     // Measure wrapped provider with logging disabled
     measurer.reset();

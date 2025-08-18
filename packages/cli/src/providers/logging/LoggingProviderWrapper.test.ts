@@ -5,12 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
-  IProvider, 
-  IMessage, 
-  ITool, 
+import {
+  IProvider,
+  IMessage,
+  ITool,
   ContentGeneratorRole,
-  type Config 
+  type Config,
 } from '@vybestack/llxprt-code-core';
 
 // These interfaces will be implemented in the next phase
@@ -42,7 +42,10 @@ function createMockProvider(name: string): IProvider {
     name,
     getModels: vi.fn().mockResolvedValue([]),
     generateChatCompletion: vi.fn().mockImplementation(async function* () {
-      yield { content: `Response from ${name}`, role: ContentGeneratorRole.ASSISTANT };
+      yield {
+        content: `Response from ${name}`,
+        role: ContentGeneratorRole.ASSISTANT,
+      };
     }),
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default-model`),
     getServerTools: vi.fn().mockReturnValue([]),
@@ -145,7 +148,9 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test prompt' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test prompt' },
+    ];
 
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
 
@@ -157,7 +162,10 @@ describe('Multi-Provider Conversation Logging', () => {
       expect.objectContaining({
         provider_name: 'openai',
         redacted_messages: expect.arrayContaining([
-          expect.objectContaining({ role: ContentGeneratorRole.USER, content: 'Test prompt' }),
+          expect.objectContaining({
+            role: ContentGeneratorRole.USER,
+            content: 'Test prompt',
+          }),
         ]),
       }),
     );
@@ -251,7 +259,10 @@ describe('Multi-Provider Conversation Logging', () => {
         provider_name: 'gemini',
         redacted_messages: expect.arrayContaining([
           expect.objectContaining({ role: 'system' }),
-          expect.objectContaining({ role: ContentGeneratorRole.USER, content: 'Hello' }),
+          expect.objectContaining({
+            role: ContentGeneratorRole.USER,
+            content: 'Hello',
+          }),
         ]),
       }),
     );
@@ -274,7 +285,9 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test prompt' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test prompt' },
+    ];
 
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
 
@@ -301,7 +314,9 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test' },
+    ];
     const tools: ITool[] = [
       {
         type: 'function',
@@ -347,7 +362,9 @@ describe('Multi-Provider Conversation Logging', () => {
       config,
       redactor,
     );
-    const messages: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Test' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Test' },
+    ];
 
     // Should not throw despite logging error
     const stream = wrapper.generateChatCompletion(messages);
@@ -387,7 +404,9 @@ describe('Multi-Provider Conversation Logging', () => {
     );
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
 
-    const messages: IMessage[] = [{ role: ContentGeneratorRole.USER, content: 'Stream test' }];
+    const messages: IMessage[] = [
+      { role: ContentGeneratorRole.USER, content: 'Stream test' },
+    ];
     const results = await consumeAsyncIterable(
       wrapper.generateChatCompletion(messages),
     );

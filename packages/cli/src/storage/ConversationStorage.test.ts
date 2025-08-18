@@ -193,8 +193,14 @@ function createTypicalConversationEntry(): ConversationLogEntry {
     conversation_id: 'conv_456',
     provider_name: 'anthropic',
     messages: [
-      { role: ContentGeneratorRole.USER, content: 'Hello, how can you help me?' },
-      { role: ContentGeneratorRole.ASSISTANT, content: 'I can help you with various tasks...' },
+      {
+        role: ContentGeneratorRole.USER,
+        content: 'Hello, how can you help me?',
+      },
+      {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: 'I can help you with various tasks...',
+      },
     ],
     session_id: 'session_789',
   };

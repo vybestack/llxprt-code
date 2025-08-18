@@ -18,9 +18,9 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
 
 describe('setCommand', () => {
   let context: CommandContext;
-  let mockProvider: IProvider & { 
-    setModelParams: ReturnType<typeof vi.fn>; 
-    getModelParams: ReturnType<typeof vi.fn>; 
+  let mockProvider: IProvider & {
+    setModelParams: ReturnType<typeof vi.fn>;
+    getModelParams: ReturnType<typeof vi.fn>;
   };
   let mockProviderManager: {
     getActiveProvider: ReturnType<typeof vi.fn>;
@@ -45,9 +45,9 @@ describe('setCommand', () => {
       invokeServerTool: vi.fn().mockResolvedValue(undefined),
       setModelParams: vi.fn(),
       getModelParams: vi.fn(),
-    } as IProvider & { 
-      setModelParams: ReturnType<typeof vi.fn>; 
-      getModelParams: ReturnType<typeof vi.fn>; 
+    } as IProvider & {
+      setModelParams: ReturnType<typeof vi.fn>;
+      getModelParams: ReturnType<typeof vi.fn>;
     };
 
     // Create a mock provider manager
