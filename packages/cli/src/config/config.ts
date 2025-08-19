@@ -807,6 +807,7 @@ export async function loadCliConfig(
     folderTrust,
     trustedFolder,
     shellReplacement: effectiveSettings.shellReplacement,
+    shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
   });
 
   const enhancedConfig = config;

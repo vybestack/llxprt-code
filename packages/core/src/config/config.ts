@@ -266,6 +266,7 @@ export interface ConfigParameters {
   interactive?: boolean;
   shellReplacement?: boolean;
   trustedFolder?: boolean;
+  shouldUseNodePtyShell?: boolean;
 }
 
 export class Config {
@@ -348,6 +349,7 @@ export class Config {
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
+  private readonly shouldUseNodePtyShell: boolean;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
 
@@ -432,6 +434,7 @@ export class Config {
     this.interactive = params.interactive ?? false;
     this.shellReplacement = params.shellReplacement ?? false;
     this.trustedFolder = params.trustedFolder;
+    this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -1034,6 +1037,10 @@ export class Config {
       return true;
     }
     return this.shellReplacement;
+  }
+
+  getShouldUseNodePtyShell(): boolean {
+    return this.shouldUseNodePtyShell;
   }
 
   async getGitService(): Promise<GitService> {
