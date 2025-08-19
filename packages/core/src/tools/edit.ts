@@ -327,20 +327,9 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       return false;
     }
 
-    // Apply emoji filtering to the newContent for preview
-    // NOTE: We only filter new_string, not old_string which must match exactly
-    const filter = getEmojiFilter(this.config);
-    const filterResult = filter.filterFileContent(editData.newContent, 'edit');
-
-    // If blocked in error mode, return false to prevent confirmation
-    if (filterResult.blocked) {
-      return false;
-    }
-
-    const filteredNewContent =
-      typeof filterResult.filtered === 'string'
-        ? filterResult.filtered
-        : editData.newContent;
+    // NOTE: Emoji filtering was already applied to new_string in calculateEdit()
+    // We should NOT filter the entire file content here
+    const filteredNewContent = editData.newContent;
 
     const fileName = path.basename(this.params.file_path);
     const fileDiff = Diff.createPatch(
