@@ -86,6 +86,9 @@ export const SemanticColors: SemanticColorsInterface = {
       get secondary() {
         return themeManager.getSemanticColors().text.secondary;
       },
+      get link() {
+        return themeManager.getSemanticColors().text.link;
+      },
       get accent() {
         return themeManager.getSemanticColors().text.accent;
       },
@@ -109,8 +112,28 @@ export const SemanticColors: SemanticColorsInterface = {
       get primary() {
         return themeManager.getSemanticColors().background.primary;
       },
-      get secondary() {
-        return themeManager.getSemanticColors().background.secondary;
+      get diff() {
+        return {
+          get added() {
+            return themeManager.getSemanticColors().background.diff.added;
+          },
+          get removed() {
+            return themeManager.getSemanticColors().background.diff.removed;
+          },
+        };
+      },
+    };
+  },
+  get ui() {
+    return {
+      get comment() {
+        return themeManager.getSemanticColors().ui.comment;
+      },
+      get symbol() {
+        return themeManager.getSemanticColors().ui.symbol;
+      },
+      get gradient() {
+        return themeManager.getSemanticColors().ui.gradient;
       },
     };
   },

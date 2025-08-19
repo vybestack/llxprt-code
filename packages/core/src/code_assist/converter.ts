@@ -118,13 +118,13 @@ export function toGenerateContentRequest(
   req: GenerateContentParameters,
   userPromptId: string,
   project?: string,
-  sessionId?: string,
+  _sessionId?: string,
 ): CAGenerateContentRequest {
   return {
     model: req.model,
     project,
     user_prompt_id: userPromptId,
-    request: toVertexGenerateContentRequest(req, sessionId),
+    request: toVertexGenerateContentRequest(req, _sessionId),
   };
 }
 
@@ -142,7 +142,7 @@ export function fromGenerateContentResponse(
 
 function toVertexGenerateContentRequest(
   req: GenerateContentParameters,
-  sessionId?: string,
+  _sessionId?: string,
 ): VertexGenerateContentRequest {
   return {
     contents: toContents(req.contents),

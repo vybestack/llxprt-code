@@ -15,7 +15,7 @@ export async function createCodeAssistContentGenerator(
   authType: AuthType,
   config: Config,
   baseURL?: string, // Add baseURL parameter
-  sessionId?: string, // PRIVACY FIX: parameter kept for backward compatibility but not used
+  _sessionId?: string, // PRIVACY FIX: parameter kept for backward compatibility but not used
 ): Promise<ContentGenerator> {
   if (
     authType === AuthType.LOGIN_WITH_GOOGLE ||
