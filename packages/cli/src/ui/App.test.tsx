@@ -166,6 +166,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getIdeClient: vi.fn(() => ({
           getCurrentIde: vi.fn(() => 'vscode'),
           getDetectedIdeDisplayName: vi.fn(() => 'VSCode'),
+          addStatusChangeListener: vi.fn(),
+          removeStatusChangeListener: vi.fn(),
+          getConnectionStatus: vi.fn(() => 'connected'),
         })),
         isTrustedFolder: vi.fn(() => true),
       };

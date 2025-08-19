@@ -63,6 +63,7 @@ export class IdeClient {
   private readonly currentIde: DetectedIde | undefined;
   private readonly currentIdeDisplayName: string | undefined;
   private diffResponses = new Map<string, (result: DiffUpdateResult) => void>();
+  private statusListeners = new Set<(state: IDEConnectionState) => void>();
 
   private constructor() {
     this.currentIde = detectIde();
@@ -80,6 +81,14 @@ export class IdeClient {
 
   static resetInstance(): void {
     IdeClient.instance = undefined as unknown as IdeClient;
+  }
+
+  addStatusChangeListener(listener: (state: IDEConnectionState) => void) {
+    this.statusListeners.add(listener);
+  }
+
+  removeStatusChangeListener(listener: (state: IDEConnectionState) => void) {
+    this.statusListeners.delete(listener);
   }
 
   async connect(): Promise<void> {
@@ -241,6 +250,9 @@ export class IdeClient {
     // disconnected, so that the first detail message is preserved.
     if (!isAlreadyDisconnected) {
       this.state = { status, details };
+      for (const listener of this.statusListeners) {
+        listener(this.state);
+      }
       if (details) {
         if (logToConsole) {
           logger.error(details);
@@ -394,7 +406,6 @@ export class IdeClient {
           logger.debug('Failed to close transport:', closeError);
         }
       }
-      logger.error(`Failed to connect: ${_error}`);
       return false;
     }
   }
