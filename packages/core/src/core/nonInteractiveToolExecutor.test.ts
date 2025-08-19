@@ -52,7 +52,7 @@ describe('executeToolCall', () => {
       returnDisplay: 'Success!',
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.spyOn(mockTool, 'validateBuildAndExecute').mockResolvedValue(toolResult);
+    mockTool.buildAndExecute = vi.fn().mockResolvedValue(toolResult);
 
     const response = await executeToolCall(
       mockConfig,
@@ -132,9 +132,7 @@ describe('executeToolCall', () => {
       },
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.spyOn(mockTool, 'buildAndExecute').mockResolvedValue(
-      validationErrorResult,
-    );
+    mockTool.buildAndExecute = vi.fn().mockResolvedValue(validationErrorResult);
 
     const response = await executeToolCall(
       mockConfig,
@@ -176,9 +174,7 @@ describe('executeToolCall', () => {
       },
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.spyOn(mockTool, 'validateBuildAndExecute').mockResolvedValue(
-      executionErrorResult,
-    );
+    mockTool.buildAndExecute = vi.fn().mockResolvedValue(executionErrorResult);
 
     const response = await executeToolCall(
       mockConfig,
@@ -213,9 +209,7 @@ describe('executeToolCall', () => {
     };
     const executionError = new Error('Something went very wrong');
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.spyOn(mockTool, 'validateBuildAndExecute').mockRejectedValue(
-      executionError,
-    );
+    mockTool.buildAndExecute = vi.fn().mockRejectedValue(executionError);
 
     const response = await executeToolCall(
       mockConfig,
@@ -253,7 +247,7 @@ describe('executeToolCall', () => {
       returnDisplay: 'Image processed',
     };
     vi.mocked(mockToolRegistry.getTool).mockReturnValue(mockTool);
-    vi.spyOn(mockTool, 'validateBuildAndExecute').mockResolvedValue(toolResult);
+    mockTool.buildAndExecute = vi.fn().mockResolvedValue(toolResult);
 
     const response = await executeToolCall(
       mockConfig,
@@ -269,6 +263,7 @@ describe('executeToolCall', () => {
         id: 'call6',
         response: {
           output: 'Binary content of type image/png was processed.',
+          binaryContent: imageDataPart,
         },
       },
     });

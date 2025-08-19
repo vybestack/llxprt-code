@@ -1733,6 +1733,10 @@ ${JSON.stringify(
           },
         ];
         vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
+        // Also spy on the client's getHistory to ensure it returns the right value
+        vi.spyOn(client, 'getHistory').mockResolvedValue(
+          historyWithPendingCall,
+        );
 
         // Act: Simulate sending the tool's response back
         const stream = client.sendMessageStream(
@@ -1806,6 +1810,9 @@ ${JSON.stringify(
           },
         ];
         vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
+        vi.spyOn(client, 'getHistory').mockResolvedValue(
+          historyWithPendingCall,
+        );
 
         // Arrange: Set the initial IDE context
         const initialIdeContext = {
@@ -1864,6 +1871,10 @@ ${JSON.stringify(
         vi.mocked(mockChat.getHistory!).mockReturnValue(
           historyAfterToolResponse,
         );
+        // Also update the client's getHistory spy
+        vi.mocked(client.getHistory).mockResolvedValue(
+          historyAfterToolResponse,
+        );
         vi.mocked(mockChat.addHistory!).mockClear(); // Clear previous calls for the next assertion
 
         // Arrange: The IDE context has now changed
@@ -1902,6 +1913,7 @@ ${JSON.stringify(
       it('should send a context DELTA on the next message after a skipped context', async () => {
         // --- Step 0: Establish an initial context ---
         vi.mocked(mockChat.getHistory!).mockReturnValue([]); // Start with empty history
+        vi.spyOn(client, 'getHistory').mockResolvedValue([]);
         const contextA = {
           workspaceState: {
             openFiles: [
@@ -1943,6 +1955,9 @@ ${JSON.stringify(
           },
         ];
         vi.mocked(mockChat.getHistory!).mockReturnValue(historyWithPendingCall);
+        vi.spyOn(client, 'getHistory').mockResolvedValue(
+          historyWithPendingCall,
+        );
 
         // Arrange: IDE context changes, but this should be skipped
         const contextB = {
@@ -1995,6 +2010,10 @@ ${JSON.stringify(
           { role: 'model', parts: [{ text: 'The tool ran successfully.' }] },
         ];
         vi.mocked(mockChat.getHistory!).mockReturnValue(
+          historyAfterToolResponse,
+        );
+        // Also update the client's getHistory spy
+        vi.mocked(client.getHistory).mockResolvedValue(
           historyAfterToolResponse,
         );
 

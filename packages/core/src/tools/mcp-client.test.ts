@@ -658,7 +658,7 @@ describe('mcp-client', () => {
             false,
           ),
         ).rejects.toThrow(
-          'URL must be provided in the config for Google Credentials provider',
+          'No URL configured for Google Credentials MCP server',
         );
       });
     });

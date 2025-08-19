@@ -383,7 +383,7 @@ describe('oauth2', () => {
       const defaultCreds = { refresh_token: 'default-cached-token' };
       const defaultCredsPath = path.join(
         tempHomeDir,
-        '.gemini',
+        '.llxprt',
         'oauth_creds.json',
       );
       await fs.promises.mkdir(path.dirname(defaultCredsPath), {

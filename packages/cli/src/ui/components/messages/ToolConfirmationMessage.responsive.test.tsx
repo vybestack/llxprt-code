@@ -16,6 +16,8 @@ import {
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
+import { KeypressProvider } from '../../contexts/KeypressContext.js';
+import React from 'react';
 
 vi.mock('../../hooks/useTerminalSize.js');
 
@@ -278,13 +280,15 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       // Press 'd' to show details
       stdin.write('d');
 
-      // Re-render with same props
+      // Re-render with same props - need to wrap in provider again
       rerender(
-        <ToolConfirmationMessage
-          confirmationDetails={mockExecuteDetails}
-          terminalWidth={60}
-          isFocused={true}
-        />,
+        <KeypressProvider kittyProtocolEnabled={true}>
+          <ToolConfirmationMessage
+            confirmationDetails={mockExecuteDetails}
+            terminalWidth={60}
+            isFocused={true}
+          />
+        </KeypressProvider>,
       );
 
       const output = lastFrame();
