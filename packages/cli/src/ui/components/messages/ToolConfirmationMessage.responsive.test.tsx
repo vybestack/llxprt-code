@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
+import { renderWithProviders } from '../../../test-utils/render.js';
 import {
   describe,
   it,
@@ -61,7 +61,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should show summary with details toggle for exec commands at narrow width', () => {
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={60}
@@ -83,7 +83,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should show summary with details toggle for info commands at narrow width', () => {
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockInfoDetails}
           terminalWidth={60}
@@ -106,7 +106,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should toggle to show full details when d key is pressed', async () => {
-      const { lastFrame, stdin } = render(
+      const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={60}
@@ -132,7 +132,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should toggle back to summary when d key is pressed again', async () => {
-      const { lastFrame, stdin } = render(
+      const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={60}
@@ -154,7 +154,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should show full URLs when details are toggled for info commands', async () => {
-      const { lastFrame, stdin } = render(
+      const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockInfoDetails}
           terminalWidth={60}
@@ -177,7 +177,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should not respond to d key when not focused', async () => {
-      const { lastFrame, stdin } = render(
+      const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={60}
@@ -201,7 +201,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should still offer details toggle at standard width for very long commands', () => {
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={100}
@@ -222,7 +222,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should show more details by default at wide width', () => {
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={180}
@@ -251,7 +251,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
 
       mockUseTerminalSize.mockReturnValue({ columns: 60, rows: 20 });
 
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={simpleDetails}
           terminalWidth={60}
@@ -267,7 +267,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
     });
 
     it('should maintain details state when component re-renders', async () => {
-      const { lastFrame, stdin, rerender } = render(
+      const { lastFrame, stdin, rerender } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
           terminalWidth={60}
@@ -288,7 +288,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       );
 
       const output = lastFrame();
-      // Should still show details after re-render
+      // Should still show details after re-renderWithProviders
       expect(output).toContain('npm install --save-dev typescript');
       expect(output).toContain('Full Parameters:');
     });

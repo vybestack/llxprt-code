@@ -228,15 +228,13 @@ describe('executeToolCall', () => {
     expect(response.error).toBe(executionError);
     expect(response.errorType).toBe(ToolErrorType.UNHANDLED_EXCEPTION);
     expect(response.resultDisplay).toBe('Something went very wrong');
-    expect(response.responseParts).toEqual([
-      {
-        functionResponse: {
-          name: 'testTool',
-          id: 'call5',
-          response: { error: 'Something went very wrong' },
-        },
+    expect(response.responseParts).toEqual({
+      functionResponse: {
+        name: 'testTool',
+        id: 'call5',
+        response: { error: 'Something went very wrong' },
       },
-    ]);
+    });
   });
 
   it('should correctly format llmContent with inlineData', async () => {
@@ -265,14 +263,12 @@ describe('executeToolCall', () => {
     );
 
     expect(response.resultDisplay).toBe('Image processed');
-    expect(response.responseParts).toEqual([
-      {
-        functionResponse: {
-          name: 'testTool',
-          id: 'call6',
-          response: {
-            output: 'Binary content of type image/png was processed.',
-          },
+    expect(response.responseParts).toEqual({
+      functionResponse: {
+        name: 'testTool',
+        id: 'call6',
+        response: {
+          output: 'Binary content of type image/png was processed.',
         },
       },
     });
