@@ -318,13 +318,20 @@ const renderDiffContent = (
                 <Text
                   color={
                     line.type === 'add'
-                      ? SemanticColors.status.success
-                      : SemanticColors.status.error
+                      ? Colors.DiffAddedForeground
+                      : Colors.DiffRemovedForeground
                   }
                 >
                   {prefixSymbol}
                 </Text>{' '}
-                {colorizeLine(displayContent, language)}
+                {colorizeLine(
+                  displayContent,
+                  language,
+                  undefined,
+                  line.type === 'add'
+                    ? Colors.DiffAddedForeground
+                    : Colors.DiffRemovedForeground,
+                )}
               </Text>
             )}
           </Box>,

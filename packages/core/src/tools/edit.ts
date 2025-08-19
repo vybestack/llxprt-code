@@ -312,6 +312,16 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
         ? filterResult.filtered
         : editData.newContent;
 
+    // Also filter the original new_string parameter for use in onConfirm
+    const filteredNewStringParam = filter.filterFileContent(
+      this.params.new_string,
+      'edit',
+    );
+    const filteredNewString =
+      typeof filteredNewStringParam.filtered === 'string'
+        ? filteredNewStringParam.filtered
+        : this.params.new_string;
+
     const fileName = path.basename(this.params.file_path);
     const fileDiff = Diff.createPatch(
       fileName,
@@ -346,13 +356,17 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
           if (result.status === 'accepted' && result.content) {
             // TODO(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
             // for info on a possible race condition where the file is modified on disk while being edited.
-            this.params.old_string = editData.currentContent ?? '';
-            this.params.new_string = result.content;
+            // FIX: IDE confirmation is for visual review only
+            // The IDE returns the entire file content, not just the replacement text
+            // We should use our original calculated replacement, not the IDE's full file content
+            // Otherwise we'd replace a small string with the entire file, causing duplication
+            // Use the filtered version of the original new_string parameter
+            this.params.new_string = filteredNewString;
           }
         } else {
-          // Update params.new_string with the filtered content so execute() uses it
+          // Update params.new_string with the filtered version of the original new_string parameter
           // Keep old_string unchanged as it needs to match exactly
-          this.params.new_string = filteredNewContent;
+          this.params.new_string = filteredNewString;
         }
       },
       ideConfirmation,

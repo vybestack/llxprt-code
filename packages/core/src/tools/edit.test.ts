@@ -824,7 +824,7 @@ describe('EditTool', () => {
       (mockConfig as any).getIdeClient = () => ideClient;
     });
 
-    it('should call ideClient.openDiff and update params on confirmation', async () => {
+    it('should call ideClient.openDiff and NOT corrupt params on confirmation', async () => {
       const initialContent = 'some old content here';
       const newContent = 'some new content here';
       const modifiedContent = 'some modified content here';
@@ -840,7 +840,7 @@ describe('EditTool', () => {
       });
       ideClient.openDiff.mockResolvedValueOnce({
         status: 'accepted',
-        content: modifiedContent,
+        content: modifiedContent, // IDE returns entire file content
       });
 
       const invocation = tool.build(params);
@@ -854,8 +854,11 @@ describe('EditTool', () => {
         await confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
       }
 
-      expect(params.old_string).toBe(initialContent);
-      expect(params.new_string).toBe(modifiedContent);
+      // FIX: params should NOT be corrupted by IDE's full file content
+      // old_string should remain the specific text to replace
+      // new_string should remain the specific replacement text
+      expect(params.old_string).toBe('old');
+      expect(params.new_string).toBe('new');
     });
   });
 });
