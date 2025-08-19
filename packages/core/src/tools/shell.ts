@@ -19,7 +19,6 @@ import {
   ToolCallConfirmationDetails,
   Kind,
 } from './tools.js';
-import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
   limitOutputTokens,
@@ -380,7 +379,7 @@ export class ShellTool extends BaseDeclarativeTool<
     );
   }
 
-  protected override validateToolParams(
+  protected override validateToolParamValues(
     params: ShellToolParams,
   ): string | null {
     const commandCheck = isCommandAllowed(params.command, this.config);
@@ -392,13 +391,6 @@ export class ShellTool extends BaseDeclarativeTool<
         return `Command is not allowed: ${params.command}`;
       }
       return commandCheck.reason;
-    }
-    const errors = SchemaValidator.validate(
-      this.schema.parametersJsonSchema,
-      params,
-    );
-    if (errors) {
-      return errors;
     }
     if (!params.command.trim()) {
       return 'Command cannot be empty.';

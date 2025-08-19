@@ -21,7 +21,6 @@ import {
   ToolInvocation,
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
-import { SchemaValidator } from '../utils/schemaValidator.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import {
@@ -542,15 +541,9 @@ export class WriteFileTool
     );
   }
 
-  override validateToolParams(params: WriteFileToolParams): string | null {
-    const errors = SchemaValidator.validate(
-      this.schema.parametersJsonSchema,
-      params,
-    );
-    if (errors) {
-      return errors;
-    }
-
+  protected override validateToolParamValues(
+    params: WriteFileToolParams,
+  ): string | null {
     const filePath = params.file_path;
     if (!path.isAbsolute(filePath)) {
       return `File path must be absolute: ${filePath}`;
