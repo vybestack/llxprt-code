@@ -380,9 +380,8 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
             this.params.new_string = result.content;
           }
         } else {
-          // Update params.new_string with the filtered content so execute() uses it
-          // Keep old_string unchanged as it needs to match exactly
-          this.params.new_string = filteredNewContent;
+          // DON'T modify params - they need to stay as the original strings
+          // The filtering has already been applied in calculateEdit()
         }
       },
       ideConfirmation,
