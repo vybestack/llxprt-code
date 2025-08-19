@@ -510,16 +510,16 @@ describe('CoreToolScheduler queue handling', () => {
       getTool: (name: string) => (name === 'tool1' ? mockTool1 : mockTool2),
       getFunctionDeclarations: () => [],
       tools: new Map(),
-      discovery: {} as any,
+      discovery: {},
       registerTool: () => {},
       getToolByName: (name: string) =>
         name === 'tool1' ? mockTool1 : mockTool2,
       getToolByDisplayName: () => mockTool1,
     };
 
-    const completedCalls: any[][] = [];
+    const completedCalls: ToolCall[][] = [];
     const scheduler = new CoreToolScheduler({
-      toolRegistry: Promise.resolve(toolRegistry as any),
+      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
       onAllToolCallsComplete: (calls) => {
         completedCalls.push(calls);
       },
@@ -590,7 +590,7 @@ describe('CoreToolScheduler queue handling', () => {
     let activeExecutions = 0;
     let maxConcurrentExecutions = 0;
 
-    mockTool.executeFn.mockImplementation(async (args: any) => {
+    mockTool.executeFn.mockImplementation(async (args: { id: string }) => {
       activeExecutions++;
       maxConcurrentExecutions = Math.max(
         maxConcurrentExecutions,
@@ -606,14 +606,14 @@ describe('CoreToolScheduler queue handling', () => {
       getTool: () => mockTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
-      discovery: {} as any,
+      discovery: {},
       registerTool: () => {},
       getToolByName: () => mockTool,
       getToolByDisplayName: () => mockTool,
     };
 
     const scheduler = new CoreToolScheduler({
-      toolRegistry: Promise.resolve(toolRegistry as any),
+      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
       getPreferredEditor: () => undefined,
       config: {
         getApprovalMode: () => ApprovalMode.YOLO,

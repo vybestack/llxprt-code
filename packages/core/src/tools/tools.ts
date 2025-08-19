@@ -447,3 +447,105 @@ export interface ToolLocation {
   // Which line (if known)
   line?: number;
 }
+
+/**
+ * Legacy BaseTool class for backward compatibility with existing LLxprt tools.
+ * New tools should use BaseDeclarativeTool instead.
+ * @deprecated Use BaseDeclarativeTool for new tools
+ */
+export abstract class BaseTool<
+  TParams extends object,
+  TResult extends ToolResult,
+> extends DeclarativeTool<TParams, TResult> implements ContextAwareTool {
+  context?: ToolContext;
+
+  constructor(
+    name: string,
+    displayName: string,
+    description: string,
+    kind: Kind,
+    parameterSchema: unknown,
+    isOutputMarkdown: boolean = true,
+    canUpdateOutput: boolean = false,
+  ) {
+    super(name, displayName, description, kind, parameterSchema, isOutputMarkdown, canUpdateOutput);
+  }
+
+  /**
+   * Get the schema for this tool. Maintains backward compatibility.
+   */
+  override get schema(): FunctionDeclaration {
+    return super.schema;
+  }
+
+  /**
+   * Legacy method signature for getDescription.
+   * Subclasses can override this method.
+   */
+  getDescription(_params: TParams): string {
+    return `Execute ${this.displayName}`;
+  }
+
+  /**
+   * Legacy method signature for validateToolParams.
+   * Subclasses can override this method.
+   * Note: The base class expects TParams, but legacy tools pass unknown.
+   */
+  override validateToolParams(params: TParams): string | null {
+    return super.validateToolParams(params);
+  }
+
+  /**
+   * Legacy validateToolParams method that accepts unknown params.
+   * This maintains compatibility with existing tool implementations.
+   */
+  validateToolParamsLegacy?(params: unknown): string | null;
+
+  /**
+   * Legacy execute method signature.
+   * Subclasses should implement this method.
+   */
+  abstract execute(
+    params: TParams,
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<TResult>;
+
+  /**
+   * Implementation of the new declarative pattern.
+   * Creates a tool invocation that bridges to the legacy execute method.
+   */
+  override build(params: TParams): ToolInvocation<TParams, TResult> {
+    const validationError = this.validateToolParams(params);
+    if (validationError) {
+      throw new Error(validationError);
+    }
+    return new BaseToolLegacyInvocation(this, params);
+  }
+}
+
+/**
+ * Tool invocation wrapper for BaseTool legacy API.
+ */
+class BaseToolLegacyInvocation<
+  TParams extends object,
+  TResult extends ToolResult,
+> extends BaseToolInvocation<TParams, TResult> {
+  constructor(
+    private readonly tool: BaseTool<TParams, TResult>,
+    params: TParams,
+  ) {
+    super(params);
+  }
+
+  getDescription(): string {
+    return this.tool.getDescription(this.params);
+  }
+
+  async execute(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<TResult> {
+    return this.tool.execute(this.params, signal, updateOutput);
+  }
+}
