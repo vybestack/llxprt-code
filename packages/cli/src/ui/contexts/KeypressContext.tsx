@@ -15,6 +15,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
 } from 'react';
 import readline from 'readline';
@@ -402,8 +403,16 @@ export function KeypressProvider({
     };
   }, [stdin, setRawMode, kittyProtocolEnabled, config, subscribers]);
 
+  const contextValue = useMemo(
+    () => ({
+      subscribe,
+      unsubscribe,
+    }),
+    [subscribe, unsubscribe],
+  );
+
   return (
-    <KeypressContext.Provider value={{ subscribe, unsubscribe }}>
+    <KeypressContext.Provider value={contextValue}>
       {children}
     </KeypressContext.Provider>
   );

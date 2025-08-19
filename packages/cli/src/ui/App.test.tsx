@@ -28,6 +28,8 @@ import { checkForUpdates, UpdateObject } from './utils/updateCheck.js';
 import { EventEmitter } from 'events';
 import { updateEventEmitter } from '../utils/updateEventEmitter.js';
 import * as auth from '../config/auth.js';
+import { useTerminalSize } from './hooks/useTerminalSize.js';
+import { useFolderTrust } from './hooks/useFolderTrust.js';
 
 // Define a more complete mock server config based on actual Config
 interface MockServerConfig {
@@ -267,6 +269,20 @@ vi.mock('./utils/updateCheck.js', () => ({
 
 vi.mock('../config/auth.js', () => ({
   validateAuthMethod: vi.fn(),
+}));
+
+vi.mock('./hooks/useTerminalSize.js', () => ({
+  useTerminalSize: vi.fn(() => ({
+    columns: 80,
+    rows: 24,
+  })),
+}));
+
+vi.mock('./hooks/useFolderTrust.js', () => ({
+  useFolderTrust: vi.fn(() => ({
+    isFolderTrustDialogOpen: false,
+    handleFolderTrustSelect: vi.fn(),
+  })),
 }));
 
 const mockedCheckForUpdates = vi.mocked(checkForUpdates);
@@ -959,8 +975,8 @@ describe('App UI', () => {
     const output = lastFrame();
     // Check the structure without exact memory percentage
     expect(output).toContain('The first rule of Fight Club');
-    expect(output).toMatch(/Mem: \d+%/);
-    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toMatch(/Memory: \d+%/);
+    expect(output).toContain('Context: 0.0k/1049k');
     expect(output).toContain('/test/dir');
   });
 
@@ -988,8 +1004,8 @@ describe('App UI', () => {
       output.includes('Type your message or @path/to/file') ||
         output.includes('Type your message, @path/to/file or +path/to/file'),
     ).toBe(true);
-    expect(output).toMatch(/Mem: \d+%/);
-    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toMatch(/Memory: \d+%/);
+    expect(output).toContain('Context: 0.0k/1049k');
     expect(output).toContain('/test/dir');
   });
 
@@ -1117,7 +1133,7 @@ describe('App UI', () => {
 
   describe('when in a narrow terminal', () => {
     it('should render with a column layout', () => {
-      vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
+      vi.mocked(useTerminalSize).mockReturnValue({
         columns: 60,
         rows: 24,
       });
@@ -1136,7 +1152,6 @@ describe('App UI', () => {
 
   describe('FolderTrustDialog', () => {
     it('should display the folder trust dialog when isFolderTrustDialogOpen is true', async () => {
-      const { useFolderTrust } = await import('./hooks/useFolderTrust.js');
       vi.mocked(useFolderTrust).mockReturnValue({
         isFolderTrustDialogOpen: true,
         handleFolderTrustSelect: vi.fn(),
@@ -1155,7 +1170,6 @@ describe('App UI', () => {
     });
 
     it('should display the folder trust dialog when the feature is enabled but the folder is not trusted', async () => {
-      const { useFolderTrust } = await import('./hooks/useFolderTrust.js');
       vi.mocked(useFolderTrust).mockReturnValue({
         isFolderTrustDialogOpen: true,
         handleFolderTrustSelect: vi.fn(),
@@ -1175,7 +1189,6 @@ describe('App UI', () => {
     });
 
     it('should not display the folder trust dialog when the feature is disabled', async () => {
-      const { useFolderTrust } = await import('./hooks/useFolderTrust.js');
       vi.mocked(useFolderTrust).mockReturnValue({
         isFolderTrustDialogOpen: false,
         handleFolderTrustSelect: vi.fn(),
