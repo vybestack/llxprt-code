@@ -370,25 +370,29 @@ fileDiff Index: Dockerfile
         colors: {
           DiffAddedBackground: '#6a9955',
           DiffAddedForeground: '#000000',
-          DiffRemovedBackground: '#6a9955', 
+          DiffRemovedBackground: '#6a9955',
           DiffRemovedForeground: '#000000',
           Foreground: '#6a9955',
           AccentGreen: '#00ff00',
-          AccentRed: '#ff0000'
-        }
+          AccentRed: '#ff0000',
+        },
       }),
       getSemanticColors: () => ({
         status: {
           success: '#00ff00',
-          error: '#ff0000'
-        }
-      })
+          error: '#ff0000',
+        },
+      }),
     };
 
     // We need to test that the content text uses DiffAddedForeground, not SemanticColors.status.success
     // This would require a more sophisticated test setup to verify the actual color props
     // For now, this documents the expected behavior
-    expect(mockThemeManager.getActiveTheme().colors.DiffAddedForeground).toBe('#000000');
-    expect(mockThemeManager.getActiveTheme().colors.DiffRemovedForeground).toBe('#000000');
+    expect(mockThemeManager.getActiveTheme().colors.DiffAddedForeground).toBe(
+      '#000000',
+    );
+    expect(mockThemeManager.getActiveTheme().colors.DiffRemovedForeground).toBe(
+      '#000000',
+    );
   });
 });

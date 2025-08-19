@@ -37,7 +37,10 @@ export interface ColorMigrationMapping {
   readonly colorToSemanticMapping: Record<string, string>;
 
   /** Maps semantic color paths to their current values */
-  readonly semanticToValueMapping: Record<string, string | string[] | undefined>;
+  readonly semanticToValueMapping: Record<
+    string,
+    string | string[] | undefined
+  >;
 }
 
 /**

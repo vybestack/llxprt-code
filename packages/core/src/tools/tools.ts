@@ -512,9 +512,12 @@ export interface ToolLocation {
  * @deprecated Use BaseDeclarativeTool for new tools
  */
 export abstract class BaseTool<
-  TParams extends object,
-  TResult extends ToolResult,
-> extends DeclarativeTool<TParams, TResult> implements ContextAwareTool {
+    TParams extends object,
+    TResult extends ToolResult,
+  >
+  extends DeclarativeTool<TParams, TResult>
+  implements ContextAwareTool
+{
   context?: ToolContext;
 
   constructor(
@@ -526,7 +529,15 @@ export abstract class BaseTool<
     isOutputMarkdown: boolean = true,
     canUpdateOutput: boolean = false,
   ) {
-    super(name, displayName, description, kind, parameterSchema, isOutputMarkdown, canUpdateOutput);
+    super(
+      name,
+      displayName,
+      description,
+      kind,
+      parameterSchema,
+      isOutputMarkdown,
+      canUpdateOutput,
+    );
   }
 
   /**

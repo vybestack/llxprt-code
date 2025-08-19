@@ -177,11 +177,11 @@ describe('EditTool', () => {
         'hello new world old',
       );
     });
-    
+
     it('should replace multiple occurrences when expectedReplacements is specified', () => {
-      expect(applyReplacement('hello old world old', 'old', 'new', false, 2)).toBe(
-        'hello new world new',
-      );
+      expect(
+        applyReplacement('hello old world old', 'old', 'new', false, 2),
+      ).toBe('hello new world new');
     });
 
     it('should return currentContent if oldString is empty and not a new file', () => {

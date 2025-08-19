@@ -534,6 +534,17 @@ export const setCommand: SlashCommand = {
       parsedValue = normalizedValue;
     }
 
+    // Validate shell-replacement setting
+    if (key === 'shell-replacement') {
+      if (typeof parsedValue !== 'boolean') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `shell-replacement must be either 'true' or 'false'`,
+        };
+      }
+    }
+
     // Get the config to apply settings
     const config = context.services.config;
     if (!config) {
@@ -612,6 +623,17 @@ export const setCommand: SlashCommand = {
             );
           }
           return modes;
+        }
+
+        // Provide completions for shell-replacement
+        if (key === 'shell-replacement') {
+          const values = ['true', 'false'];
+          if (parts[1]) {
+            return values.filter((value) =>
+              value.startsWith(parts[1].toLowerCase()),
+            );
+          }
+          return values;
         }
       }
     }

@@ -9,7 +9,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useAtCompletion } from './useAtCompletion.js';
-import { Config, FileSearch, FileSearchFactory } from '@vybestack/llxprt-code-core';
+import {
+  Config,
+  FileSearch,
+  FileSearchFactory,
+} from '@vybestack/llxprt-code-core';
 import {
   createTmpDir,
   cleanupTmpDir,
