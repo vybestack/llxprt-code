@@ -21,6 +21,7 @@ import {
   isWithinRoot,
   getErrorStatus,
   MCPServerConfig,
+  DiscoveredMCPTool,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -343,6 +344,10 @@ class Session {
         duration_ms: durationMs,
         success: false,
         error: error.message,
+        tool_type:
+          typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+            ? 'mcp'
+            : 'native',
       });
 
       return [
@@ -456,6 +461,10 @@ class Session {
         duration_ms: durationMs,
         success: true,
         prompt_id: promptId,
+        tool_type:
+          typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+            ? 'mcp'
+            : 'native',
       });
 
       return convertToFunctionResponse(fc.name, callId, toolResult.llmContent);

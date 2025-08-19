@@ -12,6 +12,7 @@ import {
   ToolErrorType,
   ToolResult,
 } from '../index.js';
+import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolCallDecision } from '../telemetry/types.js';
@@ -148,6 +149,7 @@ export async function executeToolCall(
       success: false,
       error: error.message,
       prompt_id: toolCallRequest.prompt_id,
+      tool_type: 'native',
     });
     // Ensure the response structure matches what the API expects for an error
     return {
@@ -291,6 +293,10 @@ export async function executeToolCall(
       prompt_id: toolCallRequest.prompt_id,
       metadata,
       decision: ToolCallDecision.AUTO_ACCEPT,
+      tool_type:
+        typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+          ? 'mcp'
+          : 'native',
     });
 
     // Add system feedback for warn mode if emojis were detected and filtered
@@ -330,6 +336,10 @@ export async function executeToolCall(
       error_type: ToolErrorType.UNHANDLED_EXCEPTION,
       prompt_id: toolCallRequest.prompt_id,
       decision: ToolCallDecision.AUTO_ACCEPT,
+      tool_type:
+        typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+          ? 'mcp'
+          : 'native',
     });
     return {
       callId: toolCallRequest.callId,
