@@ -144,22 +144,13 @@ describe('Multi-Provider Integration Tests', () => {
 
         const models = await manager.getAvailableModels();
 
-        // Should have multiple models
+        // Should have at least one model
         expect(models.length).toBeGreaterThan(0);
 
-        // Check for models based on whether we're using OpenRouter or not
+        // Verify models have expected structure
         const modelIds = models.map((m) => m.id);
-        if (baseURL?.includes('openrouter')) {
-          // OpenRouter uses prefixed model names
-          expect(
-            modelIds.some(
-              (id) => id.includes('openai/') || id.includes('google/'),
-            ),
-          ).toBe(true);
-        } else {
-          // Direct OpenAI API
-          expect(modelIds).toContain('gpt-4.1');
-        }
+        expect(modelIds.every((id) => typeof id === 'string')).toBe(true);
+        expect(modelIds.every((id) => id.length > 0)).toBe(true);
 
         console.log(`\n✅ Found ${models.length} models`);
         console.log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
@@ -171,26 +162,25 @@ describe('Multi-Provider Integration Tests', () => {
       async () => {
         const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
-        // Default model
-        expect(openaiProvider.getCurrentModel()).toBe('gpt-4.1');
+        // Get initial model and available models
+        const initialModel = openaiProvider.getCurrentModel();
+        const models = await openaiProvider.getModels();
 
-        // Switch to different models based on provider
-        if (baseURL?.includes('openrouter')) {
-          // OpenRouter models
-          openaiProvider.setModel('openai/gpt-4o');
-          expect(openaiProvider.getCurrentModel()).toBe('openai/gpt-4o');
+        // Should have models available
+        expect(models.length).toBeGreaterThan(0);
 
-          openaiProvider.setModel('google/gemini-2.5-flash');
-          expect(openaiProvider.getCurrentModel()).toBe(
-            'google/gemini-2.5-flash',
-          );
+        // Test switching to a different model (pick first different model from list)
+        const differentModel = models.find((m) => m.id !== initialModel);
+        if (differentModel) {
+          openaiProvider.setModel(differentModel.id);
+          expect(openaiProvider.getCurrentModel()).toBe(differentModel.id);
+
+          // Switch back to initial model
+          openaiProvider.setModel(initialModel);
+          expect(openaiProvider.getCurrentModel()).toBe(initialModel);
         } else {
-          // Direct OpenAI models
-          openaiProvider.setModel('gpt-4');
-          expect(openaiProvider.getCurrentModel()).toBe('gpt-4');
-
-          openaiProvider.setModel('gpt-4.1');
-          expect(openaiProvider.getCurrentModel()).toBe('gpt-4.1');
+          // If only one model available, at least verify the current model works
+          expect(openaiProvider.getCurrentModel()).toBe(initialModel);
         }
       },
     );
@@ -273,12 +263,15 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toMatch(/5/);
     });
 
-    it.skipIf(skipTests)('should work with GPT-4 model', async () => {
+    it.skipIf(skipTests)('should work with a specific model', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
-      // Use appropriate model based on provider
-      const model = baseURL?.includes('openrouter') ? 'openai/gpt-4o' : 'gpt-4';
-      openaiProvider.setModel(model);
+
+      // Get available models and pick the first one (or use default)
+      const models = await openaiProvider.getModels();
+      const testModel =
+        models.length > 0 ? models[0].id : openaiProvider.getCurrentModel();
+      openaiProvider.setModel(testModel);
 
       const messages = [
         {
@@ -297,7 +290,7 @@ describe('Multi-Provider Integration Tests', () => {
       }
 
       const fullResponse = chunks.join('').trim();
-      console.log(`\n✅ GPT-4 response: "${fullResponse}"`);
+      console.log(`\n✅ Model ${testModel} response: "${fullResponse}"`);
 
       expect(fullResponse).toContain('4');
     });

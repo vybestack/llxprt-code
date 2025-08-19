@@ -45,7 +45,8 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 export class OpenAIProvider extends BaseProvider {
   private openai: OpenAI;
-  private currentModel: string = 'gpt-4.1';
+  private currentModel: string =
+    process.env.LLXPRT_DEFAULT_MODEL || 'llama3-70b-8192';
   private baseURL?: string;
   private providerConfig?: IProviderConfig;
   private toolFormatter: ToolFormatter;
@@ -108,6 +109,9 @@ export class OpenAIProvider extends BaseProvider {
     if (shouldEnableQwenOAuth || isQwenEndpoint(baseURL || '')) {
       // Default to Qwen model when using Qwen endpoints
       this.currentModel = 'qwen3-coder-plus';
+    } else if (process.env.LLXPRT_DEFAULT_MODEL) {
+      // Use environment variable if set
+      this.currentModel = process.env.LLXPRT_DEFAULT_MODEL;
     }
 
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
@@ -994,7 +998,7 @@ export class OpenAIProvider extends BaseProvider {
     if (this.isUsingQwen()) {
       return 'qwen3-coder-plus';
     }
-    return 'gpt-4.1';
+    return process.env.LLXPRT_DEFAULT_MODEL || 'llama3-70b-8192';
   }
 
   override setApiKey(apiKey: string): void {
