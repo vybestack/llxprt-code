@@ -41,7 +41,7 @@ export function AuthDialog({
   const initialError = (() => {
     if (initialErrorMessage) return initialErrorMessage;
     if (defaultAuthTypeEnv && !parsedDefaultAuthType) {
-      return `Invalid value for GEMINI_DEFAULT_AUTH_TYPE: \"${defaultAuthTypeEnv}\"`;
+      return `Invalid value for GEMINI_DEFAULT_AUTH_TYPE: "${defaultAuthTypeEnv}"`;
     }
     return null;
   })();
@@ -80,19 +80,19 @@ export function AuthDialog({
   });
 
   // Determine if we should show API key detection or OAuth interface
-  const shouldShowApiKeyDetection = useMemo(() => {
+  const shouldShowApiKeyDetection = useMemo(() => 
     // Show API key detection if:
     // 1. GEMINI_API_KEY is present AND
     // 2. Either no default auth type is set, or it's set to USE_GEMINI
-    return hasGeminiApiKey && (!parsedDefaultAuthType || parsedDefaultAuthType === AuthType.USE_GEMINI);
-  }, [hasGeminiApiKey, parsedDefaultAuthType]);
+    hasGeminiApiKey && (!parsedDefaultAuthType || parsedDefaultAuthType === AuthType.USE_GEMINI)
+  , [hasGeminiApiKey, parsedDefaultAuthType]);
 
   // Determine if we should show OAuth interface instead
-  const shouldShowOAuthInterface = useMemo(() => {
+  const shouldShowOAuthInterface = useMemo(() => 
     // For now, don't show OAuth interface by default - keep traditional behavior
     // OAuth can be enabled through specific settings or commands
-    return false;
-  }, []);
+    false
+  , []);
 
   // Create different item lists based on what we're showing
   const oauthItems = [

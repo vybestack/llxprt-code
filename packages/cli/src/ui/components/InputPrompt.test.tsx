@@ -1439,7 +1439,7 @@ describe('InputPrompt', () => {
       mockBuffer.cursor = [0, 6];
       mockBuffer.lines = ['Line 1'];
 
-      const { stdin, unmount } = render(<InputPrompt {...props} />);
+      const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
       // Send Alt+Enter (Meta+Return) using the escape sequence
       stdin.write('\x1B\r');
@@ -1459,7 +1459,7 @@ describe('InputPrompt', () => {
       mockBuffer.cursor = [0, 10];
       mockBuffer.lines = ['echo hello'];
 
-      const { stdin, unmount } = render(<InputPrompt {...props} />);
+      const { stdin, unmount } = renderWithProviders(<InputPrompt {...props} />);
 
       stdin.write('\r');
       await wait();
