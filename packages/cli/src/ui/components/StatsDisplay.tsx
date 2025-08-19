@@ -8,6 +8,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import Gradient from 'ink-gradient';
 import { Colors } from '../colors.js';
+import { theme } from '../semantic-colors.js';
 import { formatDuration } from '../utils/formatters.js';
 import { useSessionStats, ModelMetrics } from '../contexts/SessionContext.js';
 import {
@@ -163,7 +164,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
 }) => {
   const { stats } = useSessionStats();
   const { metrics } = stats;
-  const { models, tools } = metrics;
+  const { models, tools, files } = metrics;
   const computed = computeSessionStats(metrics);
 
   const successThresholds = {
@@ -182,18 +183,18 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
 
   const renderTitle = () => {
     if (title) {
-      return Colors.GradientColors && Colors.GradientColors.length > 0 ? (
-        <Gradient colors={Colors.GradientColors}>
+      return theme.ui.gradient && theme.ui.gradient.length > 0 ? (
+        <Gradient colors={theme.ui.gradient}>
           <Text bold>{title}</Text>
         </Gradient>
       ) : (
-        <Text bold color={Colors.AccentPurple}>
+        <Text bold color={theme.text.accent}>
           {title}
         </Text>
       );
     }
     return (
-      <Text bold color={Colors.AccentPurple}>
+      <Text bold color={theme.text.accent}>
         Session Stats
       </Text>
     );
@@ -210,30 +211,48 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       {renderTitle()}
       <Box height={1} />
 
-      {tools.totalCalls > 0 && (
-        <Section title="Interaction Summary">
-          <StatRow title="Tool Calls:">
-            <Text color={Colors.Foreground}>
-              {tools.totalCalls} ({' '}
-              <Text color={Colors.AccentGreen}>✔ {tools.totalSuccess}</Text>{' '}
-              <Text color={Colors.AccentRed}>✖ {tools.totalFail}</Text> )
-            </Text>
-          </StatRow>
-          <StatRow title="Success Rate:">
-            <Text color={successColor}>{computed.successRate.toFixed(1)}%</Text>
-          </StatRow>
-          {computed.totalDecisions > 0 && (
-            <StatRow title="User Agreement:">
-              <Text color={agreementColor}>
-                {computed.agreementRate.toFixed(1)}%{' '}
-                <Text color={Colors.Comment}>
-                  ({computed.totalDecisions} reviewed)
+      <Section title="Interaction Summary">
+        <StatRow title="Session ID:">
+          <Text color={Colors.Foreground}>{stats.sessionId}</Text>
+        </StatRow>
+        {tools.totalCalls > 0 && (
+          <>
+            <StatRow title="Tool Calls:">
+              <Text color={Colors.Foreground}>
+                {tools.totalCalls} ({' '}
+                <Text color={Colors.AccentGreen}>✔ {tools.totalSuccess}</Text>{' '}
+                <Text color={Colors.AccentRed}>✖ {tools.totalFail}</Text> )
+              </Text>
+            </StatRow>
+            <StatRow title="Success Rate:">
+              <Text color={successColor}>{computed.successRate.toFixed(1)}%</Text>
+            </StatRow>
+            {computed.totalDecisions > 0 && (
+              <StatRow title="User Agreement:">
+                <Text color={agreementColor}>
+                  {computed.agreementRate.toFixed(1)}%{' '}
+                  <Text color={Colors.Comment}>
+                    ({computed.totalDecisions} reviewed)
+                  </Text>
+                </Text>
+              </StatRow>
+            )}
+          </>
+        )}
+        {files &&
+          (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0) && (
+            <StatRow title="Code Changes:">
+              <Text>
+                <Text color={Colors.AccentGreen}>
+                  +{files.totalLinesAdded}
+                </Text>{' '}
+                <Text color={Colors.AccentRed}>
+                  -{files.totalLinesRemoved}
                 </Text>
               </Text>
             </StatRow>
           )}
-        </Section>
-      )}
+      </Section>
 
       <Section title="Performance">
         <StatRow title="Wall Time:">
