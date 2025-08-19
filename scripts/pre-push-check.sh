@@ -77,7 +77,7 @@ if command -v shellcheck &> /dev/null; then
         
         if [[ -n "${shell_scripts}" ]]; then
             # Run shellcheck on the found scripts
-            # shellcheck disable=SC2086
+            # shellcheck disable=SC2086,SC2312
             if ! shellcheck \
                 --check-sourced \
                 --enable=all \
