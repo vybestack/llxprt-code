@@ -451,7 +451,7 @@ export class Config {
       console.log(`[CONFIG] Telemetry disabled`);
     }
 
-    // Data collection is disabled
+    logCliConfiguration(this, new StartSessionEvent(this));
   }
 
   /**
