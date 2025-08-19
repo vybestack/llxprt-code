@@ -329,7 +329,7 @@ const renderDiffContent = (
                 >
                   {prefixSymbol}
                 </Text>{' '}
-                {colorizeLine(displayContent, language)}
+                {displayContent}
               </Text>
             )}
           </Box>,
