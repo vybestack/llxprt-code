@@ -172,7 +172,14 @@ describe('EditTool', () => {
     });
 
     it('should replace oldString with newString in currentContent', () => {
+      // With default expected_replacements=1, should only replace first occurrence
       expect(applyReplacement('hello old world old', 'old', 'new', false)).toBe(
+        'hello new world old',
+      );
+    });
+    
+    it('should replace multiple occurrences when expectedReplacements is specified', () => {
+      expect(applyReplacement('hello old world old', 'old', 'new', false, 2)).toBe(
         'hello new world new',
       );
     });

@@ -61,6 +61,7 @@ export function applyReplacement(
   oldString: string,
   newString: string,
   isNewFile: boolean,
+  expectedReplacements: number = 1,
 ): string {
   if (isNewFile) {
     return newString;
@@ -73,7 +74,35 @@ export function applyReplacement(
   if (oldString === '' && !isNewFile) {
     return currentContent;
   }
-  return currentContent.replaceAll(oldString, newString);
+  
+  // Use a more precise replacement that only replaces the expected number of occurrences
+  if (expectedReplacements === 1) {
+    // For single replacement, use replace() instead of replaceAll()
+    return currentContent.replace(oldString, newString);
+  } else {
+    // For multiple replacements, we need to count and limit replacements
+    let result = currentContent;
+    let replacementCount = 0;
+    let searchIndex = 0;
+    
+    while (replacementCount < expectedReplacements) {
+      const foundIndex = result.indexOf(oldString, searchIndex);
+      if (foundIndex === -1) {
+        break; // No more occurrences found
+      }
+      
+      // Replace only this specific occurrence
+      result = result.substring(0, foundIndex) + 
+               newString + 
+               result.substring(foundIndex + oldString.length);
+      
+      replacementCount++;
+      // Update search index to continue after the replacement
+      searchIndex = foundIndex + newString.length;
+    }
+    
+    return result;
+  }
 }
 
 /**
@@ -258,6 +287,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       finalOldString,
       finalNewString,
       isNewFile,
+      expectedReplacements,
     );
 
     return {
@@ -630,6 +660,7 @@ Expectation for required parameters:
             params.old_string,
             params.new_string,
             params.old_string === '' && currentContent === '',
+            params.expected_replacements ?? 1,
           );
         } catch (err) {
           if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
