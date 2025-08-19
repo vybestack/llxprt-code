@@ -216,6 +216,9 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
         (files &&
           (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0))) && (
         <Section title="Interaction Summary">
+          <StatRow title="Session ID:">
+            <Text color={Colors.Foreground}>{stats.sessionId}</Text>
+          </StatRow>
           {tools.totalCalls > 0 && (
             <>
               <StatRow title="Tool Calls:">
