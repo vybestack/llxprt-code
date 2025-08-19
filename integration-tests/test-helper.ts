@@ -214,6 +214,8 @@ export class TestRig {
       'node',
       this.bundlePath,
       '--yolo',
+      '--ide-mode',
+      'disable',
       '--provider',
       provider,
       '--model',
@@ -245,6 +247,8 @@ export class TestRig {
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
+        // Ensure IDE detection doesn't trigger in tests
+        TERM_PROGRAM: '',
       },
     };
 

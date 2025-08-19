@@ -82,6 +82,7 @@ export interface CliArgs {
   includeDirectories: string[] | undefined;
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
+  ideMode: string | undefined;
 }
 
 export async function parseArguments(): Promise<CliArgs> {
@@ -305,8 +306,9 @@ export async function parseArguments(): Promise<CliArgs> {
       // Don't set default here, handle it in loadCliConfig
     })
     .option('ide-mode', {
-      type: 'boolean',
-      description: 'Run in IDE mode?',
+      type: 'string',
+      choices: ['enable', 'disable'],
+      description: 'Enable or disable IDE mode',
     })
     .option('key', {
       type: 'string',
@@ -399,6 +401,7 @@ export async function parseArguments(): Promise<CliArgs> {
     profileLoad: result.profileLoad as string | undefined,
     loadMemoryFromIncludeDirectories:
       result.loadMemoryFromIncludeDirectories as boolean | undefined,
+    ideMode: result.ideMode as string | undefined,
   };
 
   return cliArgs;
@@ -525,7 +528,25 @@ export async function loadCliConfig(
     false;
 
   const memoryImportFormat = effectiveSettings.memoryImportFormat || 'tree';
-  const ideMode = effectiveSettings.ideMode ?? false;
+
+  // Handle IDE mode: CLI flag overrides settings
+  let ideMode: boolean;
+  if (argv.ideMode === 'enable') {
+    ideMode = true;
+  } else if (argv.ideMode === 'disable') {
+    ideMode = false;
+  } else {
+    // No CLI flag, use settings
+    ideMode = effectiveSettings.ideMode ?? false;
+  }
+
+  if (debugMode) {
+    console.debug('[DEBUG] IDE mode configuration:', {
+      'argv.ideMode': argv.ideMode,
+      'effectiveSettings.ideMode': effectiveSettings.ideMode,
+      'final ideMode': ideMode,
+    });
+  }
 
   // ideModeFeature flag removed - now using ideMode directly
 
