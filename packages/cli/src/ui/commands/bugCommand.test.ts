@@ -42,6 +42,10 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => undefined,
+          getIdeClient: () => ({
+            getDetectedIdeDisplayName: () => 'VSCode',
+          }),
+          getIdeMode: () => true,
         },
       },
     });
@@ -56,6 +60,7 @@ describe('bugCommand', () => {
 * **Sandbox Environment:** test
 * **Model Version:** gemini-pro
 * **Memory Usage:** 100 MB
+* **IDE Client:** VSCode
 `;
     const expectedUrl =
       'https://github.com/acoliver/llxprt-code/issues/new?template=bug_report.yml&title=A%20test%20bug&info=' +
@@ -72,15 +77,30 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => ({ urlTemplate: customTemplate }),
+          getIdeClient: () => ({
+            getDetectedIdeDisplayName: () => 'VSCode',
+          }),
+          getIdeMode: () => true,
         },
       },
     });
     if (!bugCommand.action) throw new Error('Action is not defined');
-    await bugCommand.action(mockContext, 'A test bug');
-    expect(open).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'https://internal.bug-tracker.com/new?desc=A%20test%20bug&details=',
-      ),
-    );
+    await bugCommand.action(mockContext, 'A custom bug');
+
+    const expectedInfo = `
+* **CLI Version:** 0.1.0
+* **Git Commit:** ${GIT_COMMIT_INFO}
+* **Session ID:** test-session-id
+* **Operating System:** test-platform v20.0.0
+* **Sandbox Environment:** test
+* **Model Version:** gemini-pro
+* **Memory Usage:** 100 MB
+* **IDE Client:** VSCode
+`;
+    const expectedUrl = customTemplate
+      .replace('{title}', encodeURIComponent('A custom bug'))
+      .replace('{info}', encodeURIComponent(expectedInfo));
+
+    expect(open).toHaveBeenCalledWith(expectedUrl);
   });
 });
