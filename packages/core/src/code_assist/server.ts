@@ -48,7 +48,8 @@ export class CodeAssistServer implements ContentGenerator {
     readonly client: OAuth2Client,
     readonly projectId?: string,
     readonly httpOptions: HttpOptions = {},
-    readonly sessionId?: string,
+    // PRIVACY FIX: sessionId parameter removed to prevent any potential transmission
+    // readonly sessionId?: string,
     readonly userTier?: UserTierId,
     readonly baseURL?: string,
   ) {}
@@ -59,11 +60,12 @@ export class CodeAssistServer implements ContentGenerator {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const resps = await this.requestStreamingPost<CaGenerateContentResponse>(
       'streamGenerateContent',
+      // PRIVACY FIX: sessionId removed from request to prevent transmission to Google servers
       toGenerateContentRequest(
         req,
         userPromptId,
         this.projectId,
-        this.sessionId,
+        // this.sessionId, // removed
       ),
       req.config?.abortSignal,
     );
@@ -80,11 +82,12 @@ export class CodeAssistServer implements ContentGenerator {
   ): Promise<GenerateContentResponse> {
     const resp = await this.requestPost<CaGenerateContentResponse>(
       'generateContent',
+      // PRIVACY FIX: sessionId removed from request to prevent transmission to Google servers
       toGenerateContentRequest(
         req,
         userPromptId,
         this.projectId,
-        this.sessionId,
+        // this.sessionId, // removed
       ),
       req.config?.abortSignal,
     );

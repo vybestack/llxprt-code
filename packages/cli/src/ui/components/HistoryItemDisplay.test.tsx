@@ -73,6 +73,7 @@ describe('<HistoryItemDisplay />', () => {
       gcpProject: 'test-project',
       keyfile: 'test-keyfile',
       key: 'test-key',
+      ideClient: 'test-ide',
     };
     const { lastFrame } = render(
       <HistoryItemDisplay {...baseItem} item={item} />,

@@ -44,7 +44,6 @@ describe('converter', () => {
           labels: undefined,
           safetySettings: undefined,
           generationConfig: undefined,
-          session_id: 'my-session',
         },
         user_prompt_id: 'my-prompt',
       });
@@ -73,7 +72,6 @@ describe('converter', () => {
           labels: undefined,
           safetySettings: undefined,
           generationConfig: undefined,
-          session_id: 'my-session',
         },
         user_prompt_id: 'my-prompt',
       });
@@ -102,7 +100,6 @@ describe('converter', () => {
           labels: undefined,
           safetySettings: undefined,
           generationConfig: undefined,
-          session_id: 'session-123',
         },
         user_prompt_id: 'my-prompt',
       });

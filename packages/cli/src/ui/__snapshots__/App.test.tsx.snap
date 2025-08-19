@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`App UI > when in a narrow terminal > should render with a column layout 1`] = `
+"
+
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                 │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                 Mem: 8% | Ctx: 0.0k/1049k
+/test/dir                                               | ✖ 5 errors (ctrl+o for details)"
+`;

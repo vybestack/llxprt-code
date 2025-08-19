@@ -18,6 +18,7 @@ export const WITTY_LOADING_PHRASES = [
   "We're consumers. We are the by-products of a lifestyle obsession.",
   'I want you to hit me as hard as you can.',
   'On a long enough timeline, the survival rate for everybody drops to zero.',
+  "What...what if you're not absolutely right?",
 
   // Salvador Dalí quotes
   "Don't be afraid of perfection—you will never attain it.",

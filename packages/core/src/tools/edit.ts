@@ -61,6 +61,7 @@ export function applyReplacement(
   oldString: string,
   newString: string,
   isNewFile: boolean,
+  expectedReplacements: number = 1,
 ): string {
   if (isNewFile) {
     return newString;
@@ -73,7 +74,36 @@ export function applyReplacement(
   if (oldString === '' && !isNewFile) {
     return currentContent;
   }
-  return currentContent.replaceAll(oldString, newString);
+
+  // Use a more precise replacement that only replaces the expected number of occurrences
+  if (expectedReplacements === 1) {
+    // For single replacement, use replace() instead of replaceAll()
+    return currentContent.replace(oldString, newString);
+  } else {
+    // For multiple replacements, we need to count and limit replacements
+    let result = currentContent;
+    let replacementCount = 0;
+    let searchIndex = 0;
+
+    while (replacementCount < expectedReplacements) {
+      const foundIndex = result.indexOf(oldString, searchIndex);
+      if (foundIndex === -1) {
+        break; // No more occurrences found
+      }
+
+      // Replace only this specific occurrence
+      result =
+        result.substring(0, foundIndex) +
+        newString +
+        result.substring(foundIndex + oldString.length);
+
+      replacementCount++;
+      // Update search index to continue after the replacement
+      searchIndex = foundIndex + newString.length;
+    }
+
+    return result;
+  }
 }
 
 /**
@@ -258,6 +288,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       finalOldString,
       finalNewString,
       isNewFile,
+      expectedReplacements,
     );
 
     return {
@@ -297,20 +328,20 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       return false;
     }
 
-    // Apply emoji filtering to the newContent for preview
-    // NOTE: We only filter new_string, not old_string which must match exactly
+    // NOTE: Emoji filtering was already applied to new_string in calculateEdit()
+    // We should NOT filter the entire file content here
+    const filteredNewContent = editData.newContent;
+
+    // Also filter the original new_string parameter for use in onConfirm
     const filter = getEmojiFilter(this.config);
-    const filterResult = filter.filterFileContent(editData.newContent, 'edit');
-
-    // If blocked in error mode, return false to prevent confirmation
-    if (filterResult.blocked) {
-      return false;
-    }
-
-    const filteredNewContent =
-      typeof filterResult.filtered === 'string'
-        ? filterResult.filtered
-        : editData.newContent;
+    const filteredNewStringParam = filter.filterFileContent(
+      this.params.new_string,
+      'edit',
+    );
+    const filteredNewString =
+      typeof filteredNewStringParam.filtered === 'string'
+        ? filteredNewStringParam.filtered
+        : this.params.new_string;
 
     const fileName = path.basename(this.params.file_path);
     const fileDiff = Diff.createPatch(
@@ -346,13 +377,16 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
           if (result.status === 'accepted' && result.content) {
             // TODO(chrstn): See https://github.com/google-gemini/gemini-cli/pull/5618#discussion_r2255413084
             // for info on a possible race condition where the file is modified on disk while being edited.
-            this.params.old_string = editData.currentContent ?? '';
-            this.params.new_string = result.content;
+            // FIX: IDE confirmation is for visual review only
+            // The IDE returns the entire file content, not just the replacement text
+            // We should use our original calculated replacement, not the IDE's full file content
+            // Otherwise we'd replace a small string with the entire file, causing duplication
+            // Use the filtered version of the original new_string parameter
+            this.params.new_string = filteredNewString;
           }
         } else {
-          // Update params.new_string with the filtered content so execute() uses it
-          // Keep old_string unchanged as it needs to match exactly
-          this.params.new_string = filteredNewContent;
+          // DON'T modify params - they need to stay as the original strings
+          // The filtering has already been applied in calculateEdit()
         }
       },
       ideConfirmation,
@@ -630,6 +664,7 @@ Expectation for required parameters:
             params.old_string,
             params.new_string,
             params.old_string === '' && currentContent === '',
+            params.expected_replacements ?? 1,
           );
         } catch (err) {
           if (!isNodeError(err) || err.code !== 'ENOENT') throw err;

@@ -105,6 +105,12 @@ export type HistoryItemAbout = HistoryItemBase & {
    * "active" when an API key is configured for the active provider, otherwise empty string.
    */
   key: string;
+  ideClient: string;
+};
+
+export type HistoryItemHelp = HistoryItemBase & {
+  type: 'help';
+  timestamp: Date;
 };
 
 export type HistoryItemStats = HistoryItemBase & {
@@ -152,6 +158,7 @@ export type HistoryItemWithoutId =
   | HistoryItemInfo
   | HistoryItemError
   | HistoryItemAbout
+  | HistoryItemHelp
   | HistoryItemToolGroup
   | HistoryItemStats
   | HistoryItemModelStats
@@ -167,6 +174,7 @@ export enum MessageType {
   ERROR = 'error',
   USER = 'user',
   ABOUT = 'about',
+  HELP = 'help',
   STATS = 'stats',
   MODEL_STATS = 'model_stats',
   TOOL_STATS = 'tool_stats',
@@ -193,7 +201,13 @@ export type Message =
       gcpProject: string;
       keyfile: string;
       key: string;
+      ideClient: string;
       content?: string; // Optional content, not really used for ABOUT
+    }
+  | {
+      type: MessageType.HELP;
+      timestamp: Date;
+      content?: string;
     }
   | {
       type: MessageType.STATS;

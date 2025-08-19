@@ -88,50 +88,6 @@ export abstract class BaseToolInvocation<
 export type AnyToolInvocation = ToolInvocation<object, ToolResult>;
 
 /**
- * An adapter that wraps the legacy `Tool` interface to make it compatible
- * with the new `ToolInvocation` pattern.
- */
-export class LegacyToolInvocation<
-  TParams extends object,
-  TResult extends ToolResult,
-> implements ToolInvocation<TParams, TResult>
-{
-  constructor(
-    private readonly legacyTool: BaseTool<TParams, TResult>,
-    readonly params: TParams,
-  ) {}
-
-  getDescription(): string {
-    return this.legacyTool.getDescription(this.params);
-  }
-
-  toolLocations(): ToolLocation[] {
-    return this.legacyTool.toolLocations(this.params);
-  }
-
-  shouldConfirmExecute(
-    abortSignal: AbortSignal,
-  ): Promise<ToolCallConfirmationDetails | false> {
-    return this.legacyTool.shouldConfirmExecute(this.params, abortSignal);
-  }
-
-  execute(
-    signal: AbortSignal,
-    updateOutput?: (output: string) => void,
-    terminalColumns?: number,
-    terminalRows?: number,
-  ): Promise<TResult> {
-    return this.legacyTool.execute(
-      this.params,
-      signal,
-      updateOutput,
-      terminalColumns,
-      terminalRows,
-    );
-  }
-}
-
-/**
  * Interface for a tool builder that validates parameters and creates invocations.
  */
 export interface ToolBuilder<
@@ -245,6 +201,64 @@ export abstract class DeclarativeTool<
     const invocation = this.build(params);
     return invocation.execute(signal, updateOutput);
   }
+
+  /**
+   * Similar to `build` but never throws.
+   * @param params The raw, untrusted parameters from the model.
+   * @returns A `ToolInvocation` instance.
+   */
+  private silentBuild(
+    params: TParams,
+  ): ToolInvocation<TParams, TResult> | Error {
+    try {
+      return this.build(params);
+    } catch (e) {
+      if (e instanceof Error) {
+        return e;
+      }
+      return new Error(String(e));
+    }
+  }
+
+  /**
+   * A convenience method that builds and executes the tool in one step.
+   * Never throws.
+   * @param params The raw, untrusted parameters from the model.
+   * @params abortSignal a signal to abort.
+   * @returns The result of the tool execution.
+   */
+  async validateBuildAndExecute(
+    params: TParams,
+    abortSignal: AbortSignal,
+  ): Promise<ToolResult> {
+    const invocationOrError = this.silentBuild(params);
+    if (invocationOrError instanceof Error) {
+      const errorMessage = invocationOrError.message;
+      return {
+        llmContent: `Error: Invalid parameters provided. Reason: ${errorMessage}`,
+        returnDisplay: errorMessage,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        },
+      };
+    }
+
+    try {
+      return await invocationOrError.execute(abortSignal);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        llmContent: `Error: Tool call execution failed. Reason: ${errorMessage}`,
+        returnDisplay: errorMessage,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.EXECUTION_FAILED,
+        },
+      };
+    }
+  }
 }
 
 /**
@@ -274,124 +288,6 @@ export abstract class BaseDeclarativeTool<
  * A type alias for a declarative tool where the specific parameter and result types are not known.
  */
 export type AnyDeclarativeTool = DeclarativeTool<object, ToolResult>;
-
-/**
- * Base implementation for tools with common functionality
- * @deprecated Use `DeclarativeTool` for new tools.
- */
-export abstract class BaseTool<
-    TParams extends object = object,
-    TResult extends ToolResult = ToolResult,
-  >
-  extends DeclarativeTool<TParams, TResult>
-  implements ContextAwareTool
-{
-  /** Tool execution context containing session and agent information */
-  context?: ToolContext;
-  /**
-   * Creates a new instance of BaseTool
-   * @param name Internal name of the tool (used for API calls)
-   * @param displayName User-friendly display name of the tool
-   * @param description Description of what the tool does
-   * @param isOutputMarkdown Whether the tool's output should be rendered as markdown
-   * @param canUpdateOutput Whether the tool supports live (streaming) output
-   * @param parameterSchema JSON Schema defining the parameters
-   */
-  constructor(
-    override readonly name: string,
-    override readonly displayName: string,
-    override readonly description: string,
-    override readonly kind: Kind,
-    override readonly parameterSchema: unknown,
-    override readonly isOutputMarkdown: boolean = true,
-    override readonly canUpdateOutput: boolean = false,
-  ) {
-    super(
-      name,
-      displayName,
-      description,
-      kind,
-      parameterSchema,
-      isOutputMarkdown,
-      canUpdateOutput,
-    );
-  }
-
-  build(params: TParams): ToolInvocation<TParams, TResult> {
-    const validationError = this.validateToolParams(params);
-    if (validationError) {
-      throw new Error(validationError);
-    }
-    return new LegacyToolInvocation(this, params);
-  }
-
-  /**
-   * Validates the parameters for the tool
-   * This is a placeholder implementation and should be overridden
-   * Should be called from both `shouldConfirmExecute` and `execute`
-   * `shouldConfirmExecute` should return false immediately if invalid
-   * @param params Parameters to validate
-   * @returns An error message string if invalid, null otherwise
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  override validateToolParams(params: TParams): string | null {
-    // Implementation would typically use a JSON Schema validator
-    // This is a placeholder that should be implemented by derived classes
-    return null;
-  }
-
-  /**
-   * Gets a pre-execution description of the tool operation
-   * Default implementation that should be overridden by derived classes
-   * @param params Parameters for the tool execution
-   * @returns A markdown string describing what the tool will do
-   */
-  getDescription(params: TParams): string {
-    return JSON.stringify(params);
-  }
-
-  /**
-   * Determines if the tool should prompt for confirmation before execution
-   * @param params Parameters for the tool execution
-   * @returns Whether or not execute should be confirmed by the user.
-   */
-  shouldConfirmExecute(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    params: TParams,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    abortSignal: AbortSignal,
-  ): Promise<ToolCallConfirmationDetails | false> {
-    return Promise.resolve(false);
-  }
-
-  /**
-   * Determines what file system paths the tool will affect
-   * @param params Parameters for the tool execution
-   * @returns A list of such paths
-   */
-  toolLocations(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    params: TParams,
-  ): ToolLocation[] {
-    return [];
-  }
-
-  /**
-   * Abstract method to execute the tool with the given parameters
-   * Must be implemented by derived classes
-   * @param params Parameters for the tool execution
-   * @param signal AbortSignal for tool cancellation
-   * @returns Result of the tool execution
-   */
-  abstract execute(
-    params: TParams,
-    signal: AbortSignal,
-    updateOutput?: (output: string) => void,
-    terminalColumns?: number,
-    terminalRows?: number,
-  ): Promise<TResult>;
-}
-
 export interface ToolResult {
   /**
    * A short, one-line summary of the tool's action and result.
@@ -608,4 +504,117 @@ export interface ToolLocation {
   path: string;
   // Which line (if known)
   line?: number;
+}
+
+/**
+ * Legacy BaseTool class for backward compatibility with existing LLxprt tools.
+ * New tools should use BaseDeclarativeTool instead.
+ * @deprecated Use BaseDeclarativeTool for new tools
+ */
+export abstract class BaseTool<
+    TParams extends object,
+    TResult extends ToolResult,
+  >
+  extends DeclarativeTool<TParams, TResult>
+  implements ContextAwareTool
+{
+  context?: ToolContext;
+
+  constructor(
+    name: string,
+    displayName: string,
+    description: string,
+    kind: Kind,
+    parameterSchema: unknown,
+    isOutputMarkdown: boolean = true,
+    canUpdateOutput: boolean = false,
+  ) {
+    super(
+      name,
+      displayName,
+      description,
+      kind,
+      parameterSchema,
+      isOutputMarkdown,
+      canUpdateOutput,
+    );
+  }
+
+  /**
+   * Get the schema for this tool. Maintains backward compatibility.
+   */
+  override get schema(): FunctionDeclaration {
+    return super.schema;
+  }
+
+  /**
+   * Legacy method signature for getDescription.
+   * Subclasses can override this method.
+   */
+  getDescription(_params: TParams): string {
+    return `Execute ${this.displayName}`;
+  }
+
+  /**
+   * Legacy method signature for validateToolParams.
+   * Subclasses can override this method.
+   * Note: The base class expects TParams, but legacy tools pass unknown.
+   */
+  override validateToolParams(params: TParams): string | null {
+    return super.validateToolParams(params);
+  }
+
+  /**
+   * Legacy validateToolParams method that accepts unknown params.
+   * This maintains compatibility with existing tool implementations.
+   */
+  validateToolParamsLegacy?(params: unknown): string | null;
+
+  /**
+   * Legacy execute method signature.
+   * Subclasses should implement this method.
+   */
+  abstract execute(
+    params: TParams,
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<TResult>;
+
+  /**
+   * Implementation of the new declarative pattern.
+   * Creates a tool invocation that bridges to the legacy execute method.
+   */
+  override build(params: TParams): ToolInvocation<TParams, TResult> {
+    const validationError = this.validateToolParams(params);
+    if (validationError) {
+      throw new Error(validationError);
+    }
+    return new BaseToolLegacyInvocation(this, params);
+  }
+}
+
+/**
+ * Tool invocation wrapper for BaseTool legacy API.
+ */
+class BaseToolLegacyInvocation<
+  TParams extends object,
+  TResult extends ToolResult,
+> extends BaseToolInvocation<TParams, TResult> {
+  constructor(
+    private readonly tool: BaseTool<TParams, TResult>,
+    params: TParams,
+  ) {
+    super(params);
+  }
+
+  getDescription(): string {
+    return this.tool.getDescription(this.params);
+  }
+
+  async execute(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<TResult> {
+    return this.tool.execute(this.params, signal, updateOutput);
+  }
 }

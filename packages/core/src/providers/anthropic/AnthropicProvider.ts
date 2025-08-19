@@ -11,6 +11,7 @@ import { IProviderConfig } from '../types/IProviderConfig.js';
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 export class AnthropicProvider extends BaseProvider {
   private anthropic: Anthropic;
@@ -217,6 +218,11 @@ export class AnthropicProvider extends BaseProvider {
       );
     }
 
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting =
+      this._config?.getEphemeralSettings?.()?.['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
     // Update Anthropic client with resolved authentication if needed
     await this.updateClientWithResolvedAuth();
 
@@ -343,9 +349,7 @@ ${llxprtPrompts}`;
         ? this.toolFormatter.toProviderFormat(tools, 'anthropic')
         : undefined;
 
-      // Create the stream with proper typing
-      // Note: Anthropic's streaming API includes usage by default in message_start and message_delta events
-      // But we need to ensure we're not overriding the stream parameter with modelParams
+      // Create the request options with proper typing
       const createOptions: Parameters<
         typeof this.anthropic.messages.create
       >[0] = {
@@ -353,7 +357,7 @@ ${llxprtPrompts}`;
         messages: anthropicMessages,
         max_tokens: this.getMaxTokensForModel(resolvedModel),
         ...this.modelParams, // Apply model params first
-        stream: true, // Ensure stream is always true (don't let modelParams override it)
+        stream: streamingEnabled, // Use ephemeral streaming setting
       };
 
       // Set system message based on auth mode
@@ -373,168 +377,224 @@ ${llxprtPrompts}`;
         >[0]['tools'];
       }
 
-      return this.anthropic.messages.create(createOptions) as Promise<
-        Stream<Anthropic.MessageStreamEvent>
-      >;
+      if (streamingEnabled) {
+        return this.anthropic.messages.create(createOptions) as Promise<
+          Stream<Anthropic.MessageStreamEvent>
+        >;
+      } else {
+        return this.anthropic.messages.create(
+          createOptions,
+        ) as Promise<Anthropic.Message>;
+      }
     };
 
     try {
-      const stream = await retryWithBackoff(apiCall, {
+      const response = await retryWithBackoff(apiCall, {
         shouldRetry: (error: Error) => this.isRetryableError(error),
       });
 
-      let currentUsage:
-        | { input_tokens: number; output_tokens: number }
-        | undefined;
-      // Track current tool call being streamed
-      let currentToolCall:
-        | { id: string; name: string; input: string }
-        | undefined;
+      if (streamingEnabled) {
+        // Handle streaming response
+        const stream = response as Stream<Anthropic.MessageStreamEvent>;
+        let currentUsage:
+          | { input_tokens: number; output_tokens: number }
+          | undefined;
+        // Track current tool call being streamed
+        let currentToolCall:
+          | { id: string; name: string; input: string }
+          | undefined;
 
-      // Process the stream
-      for await (const chunk of stream) {
-        if (process.env.DEBUG) {
-          console.log(
-            `[ANTHROPIC DEBUG] Received chunk type: ${chunk.type}`,
-            chunk.type === 'message_start'
-              ? JSON.stringify(chunk, null, 2)
-              : '',
-          );
-        }
-        if (chunk.type === 'message_start') {
-          // Initial usage info
+        // Process the stream
+        for await (const chunk of stream) {
           if (process.env.DEBUG) {
             console.log(
-              '[ANTHROPIC DEBUG] message_start chunk:',
-              JSON.stringify(chunk, null, 2),
+              `[ANTHROPIC DEBUG] Received chunk type: ${chunk.type}`,
+              chunk.type === 'message_start'
+                ? JSON.stringify(chunk, null, 2)
+                : '',
             );
           }
-          if (chunk.message?.usage) {
-            const usage = chunk.message.usage;
-            // Don't require both fields - Anthropic might send them separately
-            currentUsage = {
-              input_tokens: usage.input_tokens ?? 0,
-              output_tokens: usage.output_tokens ?? 0,
-            };
+          if (chunk.type === 'message_start') {
+            // Initial usage info
             if (process.env.DEBUG) {
               console.log(
-                '[ANTHROPIC DEBUG] Set currentUsage from message_start:',
-                currentUsage,
+                '[ANTHROPIC DEBUG] message_start chunk:',
+                JSON.stringify(chunk, null, 2),
               );
             }
-            yield {
-              role: 'assistant',
-              content: '',
-              usage: {
-                prompt_tokens: currentUsage.input_tokens,
-                completion_tokens: currentUsage.output_tokens,
-                total_tokens:
-                  currentUsage.input_tokens + currentUsage.output_tokens,
-              },
-            } as IMessage;
-          }
-        } else if (chunk.type === 'content_block_start') {
-          // Handle tool use blocks
-          if (chunk.content_block.type === 'tool_use') {
-            currentToolCall = {
-              id: chunk.content_block.id,
-              name: chunk.content_block.name,
-              input: '',
-            };
-          }
-        } else if (chunk.type === 'content_block_delta') {
-          // Yield content chunks
-          if (chunk.delta.type === 'text_delta') {
-            yield {
-              role: 'assistant',
-              content: chunk.delta.text,
-            } as IMessage;
-          } else if (
-            chunk.delta.type === 'input_json_delta' &&
-            currentToolCall
-          ) {
-            // Handle input deltas for tool calls
-            currentToolCall.input += chunk.delta.partial_json;
-          }
-        } else if (chunk.type === 'content_block_stop') {
-          // Complete the tool call
-          if (currentToolCall) {
-            const toolCallResult = this.toolFormatter.fromProviderFormat(
-              {
-                id: currentToolCall.id,
-                type: 'tool_use',
-                name: currentToolCall.name,
-                input: currentToolCall.input
-                  ? JSON.parse(currentToolCall.input)
-                  : undefined,
-              },
-              'anthropic',
-            );
-            yield {
-              role: 'assistant',
-              content: '',
-              tool_calls: toolCallResult,
-            } as IMessage;
-            currentToolCall = undefined;
-          }
-        } else if (chunk.type === 'message_delta') {
-          // Update usage if provided
-          if (process.env.DEBUG && chunk.usage) {
-            console.log(
-              '[ANTHROPIC DEBUG] message_delta usage:',
-              JSON.stringify(chunk.usage, null, 2),
-            );
-          }
-          if (chunk.usage) {
-            // Anthropic may send partial usage data - merge with existing
-            currentUsage = {
-              input_tokens:
-                chunk.usage.input_tokens ?? currentUsage?.input_tokens ?? 0,
-              output_tokens:
-                chunk.usage.output_tokens ?? currentUsage?.output_tokens ?? 0,
-            };
-            if (process.env.DEBUG) {
+            if (chunk.message?.usage) {
+              const usage = chunk.message.usage;
+              // Don't require both fields - Anthropic might send them separately
+              currentUsage = {
+                input_tokens: usage.input_tokens ?? 0,
+                output_tokens: usage.output_tokens ?? 0,
+              };
+              if (process.env.DEBUG) {
+                console.log(
+                  '[ANTHROPIC DEBUG] Set currentUsage from message_start:',
+                  currentUsage,
+                );
+              }
+              yield {
+                role: 'assistant',
+                content: '',
+                usage: {
+                  prompt_tokens: currentUsage.input_tokens,
+                  completion_tokens: currentUsage.output_tokens,
+                  total_tokens:
+                    currentUsage.input_tokens + currentUsage.output_tokens,
+                },
+              } as IMessage;
+            }
+          } else if (chunk.type === 'content_block_start') {
+            // Handle tool use blocks
+            if (chunk.content_block.type === 'tool_use') {
+              currentToolCall = {
+                id: chunk.content_block.id,
+                name: chunk.content_block.name,
+                input: '',
+              };
+            }
+          } else if (chunk.type === 'content_block_delta') {
+            // Yield content chunks
+            if (chunk.delta.type === 'text_delta') {
+              yield {
+                role: 'assistant',
+                content: chunk.delta.text,
+              } as IMessage;
+            } else if (
+              chunk.delta.type === 'input_json_delta' &&
+              currentToolCall
+            ) {
+              // Handle input deltas for tool calls
+              currentToolCall.input += chunk.delta.partial_json;
+            }
+          } else if (chunk.type === 'content_block_stop') {
+            // Complete the tool call
+            if (currentToolCall) {
+              const toolCallResult = this.toolFormatter.fromProviderFormat(
+                {
+                  id: currentToolCall.id,
+                  type: 'tool_use',
+                  name: currentToolCall.name,
+                  input: currentToolCall.input
+                    ? JSON.parse(currentToolCall.input)
+                    : undefined,
+                },
+                'anthropic',
+              );
+              yield {
+                role: 'assistant',
+                content: '',
+                tool_calls: toolCallResult,
+              } as IMessage;
+              currentToolCall = undefined;
+            }
+          } else if (chunk.type === 'message_delta') {
+            // Update usage if provided
+            if (process.env.DEBUG && chunk.usage) {
               console.log(
-                '[ANTHROPIC DEBUG] Updated currentUsage from message_delta:',
-                currentUsage,
+                '[ANTHROPIC DEBUG] message_delta usage:',
+                JSON.stringify(chunk.usage, null, 2),
               );
             }
-            yield {
-              role: 'assistant',
-              content: '',
-              usage: {
-                prompt_tokens: currentUsage.input_tokens,
-                completion_tokens: currentUsage.output_tokens,
-                total_tokens:
-                  currentUsage.input_tokens + currentUsage.output_tokens,
-              },
-            } as IMessage;
-          }
-        } else if (chunk.type === 'message_stop') {
-          // Final usage info
-          if (currentUsage) {
-            if (process.env.DEBUG) {
+            if (chunk.usage) {
+              // Anthropic may send partial usage data - merge with existing
+              currentUsage = {
+                input_tokens:
+                  chunk.usage.input_tokens ?? currentUsage?.input_tokens ?? 0,
+                output_tokens:
+                  chunk.usage.output_tokens ?? currentUsage?.output_tokens ?? 0,
+              };
+              if (process.env.DEBUG) {
+                console.log(
+                  '[ANTHROPIC DEBUG] Updated currentUsage from message_delta:',
+                  currentUsage,
+                );
+              }
+              yield {
+                role: 'assistant',
+                content: '',
+                usage: {
+                  prompt_tokens: currentUsage.input_tokens,
+                  completion_tokens: currentUsage.output_tokens,
+                  total_tokens:
+                    currentUsage.input_tokens + currentUsage.output_tokens,
+                },
+              } as IMessage;
+            }
+          } else if (chunk.type === 'message_stop') {
+            // Final usage info
+            if (currentUsage) {
+              if (process.env.DEBUG) {
+                console.log(
+                  '[ANTHROPIC DEBUG] Yielding final usage:',
+                  currentUsage,
+                );
+              }
+              yield {
+                role: 'assistant',
+                content: '',
+                usage: {
+                  prompt_tokens: currentUsage.input_tokens,
+                  completion_tokens: currentUsage.output_tokens,
+                  total_tokens:
+                    currentUsage.input_tokens + currentUsage.output_tokens,
+                },
+              } as IMessage;
+            } else if (process.env.DEBUG) {
               console.log(
-                '[ANTHROPIC DEBUG] Yielding final usage:',
-                currentUsage,
+                '[ANTHROPIC DEBUG] No currentUsage data at message_stop',
               );
             }
-            yield {
-              role: 'assistant',
-              content: '',
-              usage: {
-                prompt_tokens: currentUsage.input_tokens,
-                completion_tokens: currentUsage.output_tokens,
-                total_tokens:
-                  currentUsage.input_tokens + currentUsage.output_tokens,
-              },
-            } as IMessage;
-          } else if (process.env.DEBUG) {
-            console.log(
-              '[ANTHROPIC DEBUG] No currentUsage data at message_stop',
-            );
           }
         }
+      } else {
+        // Handle non-streaming response
+        const message = response as Anthropic.Message;
+        let fullContent = '';
+        const toolCalls: Array<{
+          id: string;
+          type: 'function';
+          function: { name: string; arguments: string };
+        }> = [];
+
+        // Process content blocks
+        for (const content of message.content) {
+          if (content.type === 'text') {
+            fullContent += content.text;
+          } else if (content.type === 'tool_use') {
+            toolCalls.push({
+              id: content.id,
+              type: 'function',
+              function: {
+                name: content.name,
+                arguments: JSON.stringify(content.input),
+              },
+            });
+          }
+        }
+
+        // Build response message
+        const responseMessage: IMessage = {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: fullContent,
+        };
+
+        if (toolCalls.length > 0) {
+          responseMessage.tool_calls = toolCalls;
+        }
+
+        if (message.usage) {
+          responseMessage.usage = {
+            prompt_tokens: message.usage.input_tokens,
+            completion_tokens: message.usage.output_tokens,
+            total_tokens:
+              message.usage.input_tokens + message.usage.output_tokens,
+          };
+        }
+
+        yield responseMessage;
       }
     } catch (error) {
       const errorMessage =

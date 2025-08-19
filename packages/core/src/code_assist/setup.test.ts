@@ -60,7 +60,6 @@ describe('setupUser for existing user', () => {
       {},
       'test-project',
       {},
-      '',
       undefined,
     );
   });
@@ -76,7 +75,6 @@ describe('setupUser for existing user', () => {
       {},
       'test-project',
       {},
-      '',
       undefined,
     );
     expect(projectId).toEqual({
@@ -132,7 +130,6 @@ describe('setupUser for new user', () => {
       {},
       'test-project',
       {},
-      '',
       undefined,
     );
     expect(mockLoad).toHaveBeenCalled();
@@ -158,13 +155,7 @@ describe('setupUser for new user', () => {
       allowedTiers: [mockFreeTier],
     });
     const userData = await setupUser({} as OAuth2Client);
-    expect(CodeAssistServer).toHaveBeenCalledWith(
-      {},
-      undefined,
-      {},
-      '',
-      undefined,
-    );
+    expect(CodeAssistServer).toHaveBeenCalledWith({}, undefined, {}, undefined);
     expect(mockLoad).toHaveBeenCalled();
     expect(mockOnboardUser).toHaveBeenCalledWith({
       tierId: 'free-tier',

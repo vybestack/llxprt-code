@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
-import { render } from 'ink-testing-library';
+import { renderWithProviders } from '../test-utils/render.js';
 import { AppWrapper as App } from './App.js';
 import {
   Config as ServerConfig,
@@ -28,6 +28,8 @@ import { checkForUpdates, UpdateObject } from './utils/updateCheck.js';
 import { EventEmitter } from 'events';
 import { updateEventEmitter } from '../utils/updateEventEmitter.js';
 import * as auth from '../config/auth.js';
+import { useTerminalSize } from './hooks/useTerminalSize.js';
+import { useFolderTrust } from './hooks/useFolderTrust.js';
 
 // Define a more complete mock server config based on actual Config
 interface MockServerConfig {
@@ -269,6 +271,20 @@ vi.mock('../config/auth.js', () => ({
   validateAuthMethod: vi.fn(),
 }));
 
+vi.mock('./hooks/useTerminalSize.js', () => ({
+  useTerminalSize: vi.fn(() => ({
+    columns: 80,
+    rows: 24,
+  })),
+}));
+
+vi.mock('./hooks/useFolderTrust.js', () => ({
+  useFolderTrust: vi.fn(() => ({
+    isFolderTrustDialogOpen: false,
+    handleFolderTrustSelect: vi.fn(),
+  })),
+}));
+
 const mockedCheckForUpdates = vi.mocked(checkForUpdates);
 const { isGitRepository: mockedIsGitRepository } = vi.mocked(
   await import('@vybestack/llxprt-code-core'),
@@ -388,7 +404,7 @@ describe('App UI', () => {
       mockedCheckForUpdates.mockResolvedValue(info);
       const { spawn } = await import('node:child_process');
 
-      const { unmount } = render(
+      const { unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -414,7 +430,7 @@ describe('App UI', () => {
       };
       mockedCheckForUpdates.mockResolvedValue(info);
 
-      const { lastFrame, unmount } = render(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -444,7 +460,7 @@ describe('App UI', () => {
       };
       mockedCheckForUpdates.mockResolvedValue(info);
 
-      const { lastFrame, unmount } = render(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -474,7 +490,7 @@ describe('App UI', () => {
       };
       mockedCheckForUpdates.mockResolvedValue(info);
 
-      const { lastFrame, unmount } = render(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -508,7 +524,7 @@ describe('App UI', () => {
       mockedCheckForUpdates.mockResolvedValue(info);
       const { spawn } = await import('node:child_process');
 
-      const { unmount } = render(
+      const { unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -537,7 +553,7 @@ describe('App UI', () => {
       },
     });
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -556,7 +572,7 @@ describe('App UI', () => {
       },
     });
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -592,7 +608,7 @@ describe('App UI', () => {
       },
     });
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -620,7 +636,7 @@ describe('App UI', () => {
     mockConfig.getLlxprtMdFileCount.mockReturnValue(1);
     mockConfig.getAllLlxprtMdFilenames.mockReturnValue(['LLXPRT.md']);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -641,7 +657,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -662,7 +678,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -683,7 +699,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -710,7 +726,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -735,7 +751,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -756,7 +772,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -780,7 +796,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -802,7 +818,7 @@ describe('App UI', () => {
     mockConfig.getDebugMode.mockReturnValue(false);
     mockConfig.getShowMemoryUsage.mockReturnValue(false);
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -815,7 +831,7 @@ describe('App UI', () => {
   });
 
   it('should display Tips component by default', async () => {
-    const { unmount } = render(
+    const { unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -834,7 +850,7 @@ describe('App UI', () => {
       },
     });
 
-    const { unmount } = render(
+    const { unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -848,7 +864,7 @@ describe('App UI', () => {
 
   it('should display Header component by default', async () => {
     const { Header } = await import('./components/Header.js');
-    const { unmount } = render(
+    const { unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -866,7 +882,7 @@ describe('App UI', () => {
       user: { hideBanner: true },
     });
 
-    const { unmount } = render(
+    const { unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -885,7 +901,7 @@ describe('App UI', () => {
       workspace: { hideTips: true },
     });
 
-    const { unmount } = render(
+    const { unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -915,7 +931,7 @@ describe('App UI', () => {
     it('should display theme dialog if NO_COLOR is not set', async () => {
       delete process.env.NO_COLOR;
 
-      const { lastFrame, unmount } = render(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -931,7 +947,7 @@ describe('App UI', () => {
     it('should display a message if NO_COLOR is set', async () => {
       process.env.NO_COLOR = 'true';
 
-      const { lastFrame, unmount } = render(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -948,7 +964,7 @@ describe('App UI', () => {
   });
 
   it('should render the initial UI correctly', () => {
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -959,8 +975,8 @@ describe('App UI', () => {
     const output = lastFrame();
     // Check the structure without exact memory percentage
     expect(output).toContain('The first rule of Fight Club');
-    expect(output).toMatch(/Mem: \d+%/);
-    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toMatch(/Memory: \d+%/);
+    expect(output).toContain('Context: 0.0k/1049k');
     expect(output).toContain('/test/dir');
   });
 
@@ -973,7 +989,7 @@ describe('App UI', () => {
       thought: null,
     });
 
-    const { lastFrame, unmount } = render(
+    const { lastFrame, unmount } = renderWithProviders(
       <App
         config={mockConfig as unknown as ServerConfig}
         settings={mockSettings}
@@ -988,8 +1004,8 @@ describe('App UI', () => {
       output.includes('Type your message or @path/to/file') ||
         output.includes('Type your message, @path/to/file or +path/to/file'),
     ).toBe(true);
-    expect(output).toMatch(/Mem: \d+%/);
-    expect(output).toContain('Ctx: 0.0k/1049k');
+    expect(output).toMatch(/Memory: \d+%/);
+    expect(output).toContain('Context: 0.0k/1049k');
     expect(output).toContain('/test/dir');
   });
 
@@ -1012,7 +1028,7 @@ describe('App UI', () => {
         getUserTier: vi.fn(),
       } as unknown as GeminiClient);
 
-      const { unmount, rerender } = render(
+      const { unmount, rerender } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -1054,7 +1070,7 @@ describe('App UI', () => {
         clearConsoleMessages: vi.fn(),
       });
 
-      const { lastFrame, unmount } = render(
+      const { lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -1080,7 +1096,7 @@ describe('App UI', () => {
         },
       });
 
-      const { unmount } = render(
+      const { unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -1102,7 +1118,7 @@ describe('App UI', () => {
         },
       });
 
-      const { unmount } = render(
+      const { unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -1112,6 +1128,83 @@ describe('App UI', () => {
       currentUnmount = unmount;
 
       expect(validateAuthMethodSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when in a narrow terminal', () => {
+    it('should render with a column layout', () => {
+      vi.mocked(useTerminalSize).mockReturnValue({
+        columns: 60,
+        rows: 24,
+      });
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+      expect(lastFrame()).toMatchSnapshot();
+    });
+  });
+
+  describe('FolderTrustDialog', () => {
+    it('should display the folder trust dialog when isFolderTrustDialogOpen is true', async () => {
+      vi.mocked(useFolderTrust).mockReturnValue({
+        isFolderTrustDialogOpen: true,
+        handleFolderTrustSelect: vi.fn(),
+      });
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+      await Promise.resolve();
+      expect(lastFrame()).toContain('Do you trust this folder?');
+    });
+
+    it('should display the folder trust dialog when the feature is enabled but the folder is not trusted', async () => {
+      vi.mocked(useFolderTrust).mockReturnValue({
+        isFolderTrustDialogOpen: true,
+        handleFolderTrustSelect: vi.fn(),
+      });
+      mockConfig.isTrustedFolder.mockReturnValue(false);
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+      await Promise.resolve();
+      expect(lastFrame()).toContain('Do you trust this folder?');
+    });
+
+    it('should not display the folder trust dialog when the feature is disabled', async () => {
+      vi.mocked(useFolderTrust).mockReturnValue({
+        isFolderTrustDialogOpen: false,
+        handleFolderTrustSelect: vi.fn(),
+      });
+      mockConfig.isTrustedFolder.mockReturnValue(false);
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+      await Promise.resolve();
+      expect(lastFrame()).not.toContain('Do you trust this folder?');
     });
   });
 });

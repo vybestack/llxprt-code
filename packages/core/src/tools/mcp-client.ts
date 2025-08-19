@@ -36,7 +36,7 @@ import { MCPOAuthTokenStorage } from '../mcp/oauth-token-storage.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { WorkspaceContext } from '../utils/workspaceContext.js';
+import { Unsubscribe, WorkspaceContext } from '../utils/workspaceContext.js';
 
 export const MCP_DEFAULT_TIMEOUT_MSEC = 10 * 60 * 1000; // default to 10 minutes
 
@@ -189,7 +189,7 @@ async function handleAutomaticOAuth(
   wwwAuthenticate: string,
 ): Promise<boolean> {
   try {
-    console.log(`[AUTH] '${mcpServerName}' requires OAuth authentication`);
+    console.log(`🔐 '${mcpServerName}' requires OAuth authentication`);
 
     // Always try to parse the resource metadata URI from the www-authenticate header
     let oauthConfig;
@@ -227,10 +227,16 @@ async function handleAutomaticOAuth(
     };
 
     // Perform OAuth authentication
+    // Pass the server URL for proper discovery
+    const serverUrl = mcpServerConfig.httpUrl || mcpServerConfig.url;
     console.log(
       `Starting OAuth authentication for server '${mcpServerName}'...`,
     );
-    await MCPOAuthProvider.authenticate(mcpServerName, oauthAuthConfig);
+    await MCPOAuthProvider.authenticate(
+      mcpServerName,
+      oauthAuthConfig,
+      serverUrl,
+    );
 
     console.log(
       `OAuth authentication successful for server '${mcpServerName}'`,
@@ -572,6 +578,9 @@ export async function discoverPrompts(
   promptRegistry: PromptRegistry,
 ): Promise<Prompt[]> {
   try {
+    // Only request prompts if the server supports them.
+    if (mcpClient.getServerCapabilities()?.prompts == null) return [];
+
     const response = await mcpClient.request(
       { method: 'prompts/list', params: {} },
       ListPromptsResultSchema,
@@ -668,7 +677,9 @@ export async function connectToMcpServer(
   });
 
   mcpClient.registerCapabilities({
-    roots: {},
+    roots: {
+      listChanged: true,
+    },
   });
 
   mcpClient.setRequestHandler(ListRootsRequestSchema, async () => {
@@ -683,6 +694,32 @@ export async function connectToMcpServer(
       roots,
     };
   });
+
+  let unlistenDirectories: Unsubscribe | undefined =
+    workspaceContext.onDirectoriesChanged(async () => {
+      try {
+        await mcpClient.notification({
+          method: 'notifications/roots/list_changed',
+        });
+      } catch (_) {
+        // If this fails, its almost certainly because the connection was closed
+        // and we should just stop listening for future directory changes.
+        unlistenDirectories?.();
+        unlistenDirectories = undefined;
+      }
+    });
+
+  // Attempt to pro-actively unsubscribe if the mcp client closes. This API is
+  // very brittle though so we don't have any guarantees, hence the try/catch
+  // above as well.
+  //
+  // Be a good steward and don't just bash over onclose.
+  const oldOnClose = mcpClient.onclose;
+  mcpClient.onclose = () => {
+    oldOnClose?.();
+    unlistenDirectories?.();
+    unlistenDirectories = undefined;
+  };
 
   // patch Client.callTool to use request timeout as genai McpCallTool.callTool does not do it
   // TODO: remove this hack once GenAI SDK does callTool with request options
@@ -758,11 +795,9 @@ export async function connectToMcpServer(
 
       // If we didn't get the header from the error string, try to get it from the server
       if (!wwwAuthenticate && mcpServerConfig.url) {
-        if (process.env.DEBUG) {
-          console.log(
-            `No www-authenticate header in error, trying to fetch it from server...`,
-          );
-        }
+        console.log(
+          `No www-authenticate header in error, trying to fetch it from server...`,
+        );
         try {
           const response = await fetch(mcpServerConfig.url, {
             method: 'HEAD',
@@ -775,11 +810,9 @@ export async function connectToMcpServer(
           if (response.status === 401) {
             wwwAuthenticate = response.headers.get('www-authenticate');
             if (wwwAuthenticate) {
-              if (process.env.DEBUG) {
-                console.log(
-                  `Found www-authenticate header from server: ${wwwAuthenticate}`,
-                );
-              }
+              console.log(
+                `Found www-authenticate header from server: ${wwwAuthenticate}`,
+              );
             }
           }
         } catch (fetchError) {
@@ -790,11 +823,9 @@ export async function connectToMcpServer(
       }
 
       if (wwwAuthenticate) {
-        if (process.env.DEBUG) {
-          console.log(
-            `Received 401 with www-authenticate header: ${wwwAuthenticate}`,
-          );
-        }
+        console.log(
+          `Received 401 with www-authenticate header: ${wwwAuthenticate}`,
+        );
 
         // Try automatic OAuth discovery and authentication
         const oauthSuccess = await handleAutomaticOAuth(
@@ -804,11 +835,9 @@ export async function connectToMcpServer(
         );
         if (oauthSuccess) {
           // Retry connection with OAuth token
-          if (process.env.DEBUG) {
-            console.log(
-              `Retrying connection to '${mcpServerName}' with OAuth token...`,
-            );
-          }
+          console.log(
+            `Retrying connection to '${mcpServerName}' with OAuth token...`,
+          );
 
           // Get the valid token - we need to create a proper OAuth config
           // The token should already be available from the authentication process
@@ -915,11 +944,7 @@ export async function connectToMcpServer(
         }
 
         // For SSE servers, try to discover OAuth configuration from the base URL
-        if (process.env.DEBUG) {
-          console.log(
-            `[DISCOVERY] Attempting OAuth discovery for '${mcpServerName}'...`,
-          );
-        }
+        console.log(`🔍 Attempting OAuth discovery for '${mcpServerName}'...`);
 
         if (mcpServerConfig.url) {
           const sseUrl = new URL(mcpServerConfig.url);
@@ -929,11 +954,9 @@ export async function connectToMcpServer(
             // Try to discover OAuth configuration from the base URL
             const oauthConfig = await OAuthUtils.discoverOAuthConfig(baseUrl);
             if (oauthConfig) {
-              if (process.env.DEBUG) {
-                console.log(
-                  `Discovered OAuth configuration from base URL for server '${mcpServerName}'`,
-                );
-              }
+              console.log(
+                `Discovered OAuth configuration from base URL for server '${mcpServerName}'`,
+              );
 
               // Create OAuth configuration for authentication
               const oauthAuthConfig = {
@@ -944,14 +967,15 @@ export async function connectToMcpServer(
               };
 
               // Perform OAuth authentication
-              if (process.env.DEBUG) {
-                console.log(
-                  `Starting OAuth authentication for server '${mcpServerName}'...`,
-                );
-              }
+              // Pass the server URL for proper discovery
+              const serverUrl = mcpServerConfig.httpUrl || mcpServerConfig.url;
+              console.log(
+                `Starting OAuth authentication for server '${mcpServerName}'...`,
+              );
               await MCPOAuthProvider.authenticate(
                 mcpServerName,
                 oauthAuthConfig,
+                serverUrl,
               );
 
               // Retry connection with OAuth token
@@ -1119,9 +1143,7 @@ export async function createTransport(
 
       if (accessToken) {
         hasOAuthConfig = true;
-        if (process.env.DEBUG) {
-          console.log(`Found stored OAuth token for server '${mcpServerName}'`);
-        }
+        console.log(`Found stored OAuth token for server '${mcpServerName}'`);
       }
     }
   }
@@ -1186,9 +1208,7 @@ export async function createTransport(
     if (debugMode) {
       transport.stderr!.on('data', (data) => {
         const stderrStr = data.toString().trim();
-        if (process.env.DEBUG) {
-          console.debug(`[DEBUG] [MCP STDERR (${mcpServerName})]: `, stderrStr);
-        }
+        console.debug(`[DEBUG] [MCP STDERR (${mcpServerName})]: `, stderrStr);
       });
     }
     return transport;

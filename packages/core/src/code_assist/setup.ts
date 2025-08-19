@@ -34,7 +34,8 @@ export interface UserData {
  */
 export async function setupUser(client: OAuth2Client): Promise<UserData> {
   const projectId = process.env.GOOGLE_CLOUD_PROJECT || undefined;
-  const caServer = new CodeAssistServer(client, projectId, {}, '', undefined);
+  // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
+  const caServer = new CodeAssistServer(client, projectId, {}, undefined);
   const coreClientMetadata: ClientMetadata = {
     ideType: 'IDE_UNSPECIFIED',
     platform: 'PLATFORM_UNSPECIFIED',

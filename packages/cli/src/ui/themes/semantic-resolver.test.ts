@@ -35,20 +35,29 @@ describe('semantic-resolver', () => {
         text: {
           primary: '#CDD6F4',
           secondary: '#6C7086',
-          accent: '#89B4FA',
-        },
-        status: {
-          success: '#A6E3A1',
-          warning: '#F9E2AF',
-          error: '#F38BA8',
+          link: '#89B4FA',
+          accent: '#CBA6F7',
         },
         background: {
           primary: '#1E1E2E',
-          secondary: '#28350B',
+          diff: {
+            added: '#28350B',
+            removed: '#430000',
+          },
         },
         border: {
           default: '#6C7086',
           focused: '#89B4FA',
+        },
+        ui: {
+          comment: '#6C7086',
+          symbol: '#6C7086',
+          gradient: undefined,
+        },
+        status: {
+          error: '#F38BA8',
+          success: '#A6E3A1',
+          warning: '#F9E2AF',
         },
       } satisfies SemanticColors);
     });
@@ -77,20 +86,29 @@ describe('semantic-resolver', () => {
         text: {
           primary: '#3C3C43',
           secondary: '#97a0b0',
-          accent: '#3B82F6',
-        },
-        status: {
-          success: '#3CA84B',
-          warning: '#D5A40A',
-          error: '#DD4C4C',
+          link: '#3B82F6',
+          accent: '#8B5CF6',
         },
         background: {
           primary: '#FAFAFA',
-          secondary: '#C6EAD8',
+          diff: {
+            added: '#C6EAD8',
+            removed: '#FFCCCC',
+          },
         },
         border: {
           default: '#97a0b0',
           focused: '#3B82F6',
+        },
+        ui: {
+          comment: '#008000',
+          symbol: '#97a0b0',
+          gradient: undefined,
+        },
+        status: {
+          error: '#DD4C4C',
+          success: '#3CA84B',
+          warning: '#D5A40A',
         },
       } satisfies SemanticColors);
     });
@@ -119,20 +137,29 @@ describe('semantic-resolver', () => {
         text: {
           primary: 'white',
           secondary: 'gray',
-          accent: 'blue',
-        },
-        status: {
-          success: 'green',
-          warning: 'yellow',
-          error: 'red',
+          link: 'blue',
+          accent: 'magenta',
         },
         background: {
           primary: 'black',
-          secondary: 'green',
+          diff: {
+            added: 'green',
+            removed: 'red',
+          },
         },
         border: {
           default: 'gray',
           focused: 'blue',
+        },
+        ui: {
+          comment: 'gray',
+          symbol: 'gray',
+          gradient: undefined,
+        },
+        status: {
+          error: 'red',
+          success: 'green',
+          warning: 'yellow',
         },
       } satisfies SemanticColors);
     });
@@ -161,20 +188,29 @@ describe('semantic-resolver', () => {
         text: {
           primary: '#EDF2F4',
           secondary: '#6C757D',
-          accent: '#457B9D',
-        },
-        status: {
-          success: '#2A9D8F',
-          warning: '#E9C46A',
-          error: '#E76F51',
+          link: '#457B9D',
+          accent: '#A663CC',
         },
         background: {
           primary: '#2B2D42',
-          secondary: '#264653',
+          diff: {
+            added: '#264653',
+            removed: '#E76F51',
+          },
         },
         border: {
           default: '#6C757D',
           focused: '#457B9D',
+        },
+        ui: {
+          comment: '#6C757D',
+          symbol: '#6C757D',
+          gradient: undefined,
+        },
+        status: {
+          error: '#E76F51',
+          success: '#2A9D8F',
+          warning: '#E9C46A',
         },
       } satisfies SemanticColors);
     });
@@ -199,8 +235,8 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffAdded);
 
-      // DiffAdded should be used for secondary background
-      expect(semanticColors.background.secondary).toBe('#A6E3A1');
+      // DiffAdded should be used for diff.added background
+      expect(semanticColors.background.diff.added).toBe('#A6E3A1');
     });
 
     it('should handle theme with missing DiffRemoved by using AccentRed', () => {
@@ -223,8 +259,8 @@ describe('semantic-resolver', () => {
 
       const semanticColors = resolveSemanticColors(themeWithoutDiffRemoved);
 
-      // Secondary background should use DiffAdded when available
-      expect(semanticColors.background.secondary).toBe('#28350B');
+      // Diff added background should use DiffAdded when available
+      expect(semanticColors.background.diff.added).toBe('#28350B');
     });
   });
 });

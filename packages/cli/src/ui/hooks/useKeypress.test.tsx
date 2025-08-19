@@ -8,6 +8,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { EventEmitter } from 'events';
 import { Key, useKeypress } from './useKeypress.js';
 import { vi } from 'vitest';
+import { KeypressProvider } from '../contexts/KeypressContext.js';
 
 // Mock ink module at the top level
 vi.mock('ink', () => ({
@@ -55,6 +56,11 @@ describe('useKeypress', () => {
         ({ onKeypress, isActive }) => useKeypress(onKeypress, { isActive }),
         {
           initialProps: { onKeypress, isActive: true },
+          wrapper: ({ children }) => (
+            <KeypressProvider kittyProtocolEnabled={true}>
+              {children}
+            </KeypressProvider>
+          ),
         },
       );
 
@@ -135,6 +141,11 @@ describe('useKeypress', () => {
         ({ onKeypress, isActive }) => useKeypress(onKeypress, { isActive }),
         {
           initialProps: { onKeypress, isActive: true },
+          wrapper: ({ children }) => (
+            <KeypressProvider kittyProtocolEnabled={true}>
+              {children}
+            </KeypressProvider>
+          ),
         },
       );
 
@@ -170,6 +181,11 @@ describe('useKeypress', () => {
         ({ onKeypress, isActive }) => useKeypress(onKeypress, { isActive }),
         {
           initialProps: { onKeypress, isActive: true },
+          wrapper: ({ children }) => (
+            <KeypressProvider kittyProtocolEnabled={true}>
+              {children}
+            </KeypressProvider>
+          ),
         },
       );
 

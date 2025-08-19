@@ -13,7 +13,7 @@ import {
   afterEach,
   MockInstance,
 } from 'vitest';
-import { getOauthClient } from './oauth2.js';
+import { getOauthClient, resetOauthClientForTesting } from './oauth2.js';
 import { getCachedGoogleAccount } from '../utils/user_account.js';
 import { OAuth2Client, Compute } from 'google-auth-library';
 import * as fs from 'fs';
@@ -66,6 +66,7 @@ describe('oauth2', () => {
   afterEach(() => {
     fs.rmSync(tempHomeDir, { recursive: true, force: true });
     vi.clearAllMocks();
+    resetOauthClientForTesting();
     delete process.env.CLOUD_SHELL;
     delete process.env.GOOGLE_GENAI_USE_GCA;
     delete process.env.GOOGLE_CLOUD_ACCESS_TOKEN;
@@ -373,6 +374,70 @@ describe('oauth2', () => {
       ).rejects.toThrow(
         'Could not authenticate using Cloud Shell credentials. Please select a different authentication method or ensure you are in a properly configured environment. Error: ADC Failed',
       );
+    });
+  });
+
+  describe('credential loading order', () => {
+    it('should prioritize default cached credentials over GOOGLE_APPLICATION_CREDENTIALS', async () => {
+      // Setup default cached credentials
+      const defaultCreds = { refresh_token: 'default-cached-token' };
+      const defaultCredsPath = path.join(
+        tempHomeDir,
+        '.llxprt',
+        'oauth_creds.json',
+      );
+      await fs.promises.mkdir(path.dirname(defaultCredsPath), {
+        recursive: true,
+      });
+      await fs.promises.writeFile(
+        defaultCredsPath,
+        JSON.stringify(defaultCreds),
+      );
+
+      // Setup credentials via environment variable
+      const envCreds = { refresh_token: 'env-var-token' };
+      const envCredsPath = path.join(tempHomeDir, 'env_creds.json');
+      await fs.promises.writeFile(envCredsPath, JSON.stringify(envCreds));
+      vi.stubEnv('GOOGLE_APPLICATION_CREDENTIALS', envCredsPath);
+
+      const mockClient = {
+        setCredentials: vi.fn(),
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'test-token' }),
+        getTokenInfo: vi.fn().mockResolvedValue({}),
+        on: vi.fn(),
+      };
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockClient as unknown as OAuth2Client,
+      );
+
+      await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+
+      // Assert the correct credentials were used
+      expect(mockClient.setCredentials).toHaveBeenCalledWith(defaultCreds);
+      expect(mockClient.setCredentials).not.toHaveBeenCalledWith(envCreds);
+    });
+
+    it('should fall back to GOOGLE_APPLICATION_CREDENTIALS if default cache is missing', async () => {
+      // Setup credentials via environment variable
+      const envCreds = { refresh_token: 'env-var-token' };
+      const envCredsPath = path.join(tempHomeDir, 'env_creds.json');
+      await fs.promises.writeFile(envCredsPath, JSON.stringify(envCreds));
+      vi.stubEnv('GOOGLE_APPLICATION_CREDENTIALS', envCredsPath);
+
+      const mockClient = {
+        setCredentials: vi.fn(),
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'test-token' }),
+        getTokenInfo: vi.fn().mockResolvedValue({}),
+        on: vi.fn(),
+      };
+      (OAuth2Client as unknown as Mock).mockImplementation(
+        () => mockClient as unknown as OAuth2Client,
+      );
+
+      await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
+
+      // Assert the correct credentials were used
+      expect(mockClient.setCredentials).toHaveBeenCalledWith(envCreds);
     });
   });
 

@@ -46,7 +46,11 @@ describe('semantic tokens system', () => {
         expect(semanticColors.status.warning).toBeDefined();
         expect(semanticColors.status.error).toBeDefined();
         expect(semanticColors.background.primary).toBeDefined();
-        expect(semanticColors.background.secondary).toBeDefined();
+        expect(semanticColors.background.diff.added).toBeDefined();
+        expect(semanticColors.background.diff.removed).toBeDefined();
+        expect(semanticColors.ui.comment).toBeDefined();
+        expect(semanticColors.ui.symbol).toBeDefined();
+        expect(semanticColors.text.link).toBeDefined();
         expect(semanticColors.border.default).toBeDefined();
         expect(semanticColors.border.focused).toBeDefined();
 
@@ -58,7 +62,11 @@ describe('semantic tokens system', () => {
         expect(typeof semanticColors.status.warning).toBe('string');
         expect(typeof semanticColors.status.error).toBe('string');
         expect(typeof semanticColors.background.primary).toBe('string');
-        expect(typeof semanticColors.background.secondary).toBe('string');
+        expect(typeof semanticColors.background.diff.added).toBe('string');
+        expect(typeof semanticColors.background.diff.removed).toBe('string');
+        expect(typeof semanticColors.ui.comment).toBe('string');
+        expect(typeof semanticColors.ui.symbol).toBe('string');
+        expect(typeof semanticColors.text.link).toBe('string');
         expect(typeof semanticColors.border.default).toBe('string');
         expect(typeof semanticColors.border.focused).toBe('string');
       }
@@ -111,7 +119,7 @@ describe('semantic tokens system', () => {
       expect(semanticColors.status.success).toBe('#27AE60');
       expect(semanticColors.status.warning).toBe('#F1C40F');
       expect(semanticColors.status.error).toBe('#E74C3C');
-      expect(semanticColors.text.accent).toBe('#3498DB');
+      expect(semanticColors.text.accent).toBe('#9B59B6');
     });
 
     it('should handle custom themes without DiffAdded gracefully', () => {
@@ -140,7 +148,7 @@ describe('semantic tokens system', () => {
       const semanticColors = themeManager.getSemanticColors();
 
       // Custom theme now has DiffAdded property set
-      expect(semanticColors.background.secondary).toBe('#27AE60'); // Using AccentGreen fallback
+      expect(semanticColors.background.diff.added).toBe('#27AE60'); // Using AccentGreen fallback
     });
   });
 
@@ -245,6 +253,7 @@ describe('semantic tokens system', () => {
         text: {
           primary: expect.any(String),
           secondary: expect.any(String),
+          link: expect.any(String),
           accent: expect.any(String),
         },
         status: {
@@ -254,7 +263,15 @@ describe('semantic tokens system', () => {
         },
         background: {
           primary: expect.any(String),
-          secondary: expect.any(String),
+          diff: {
+            added: expect.any(String),
+            removed: expect.any(String),
+          },
+        },
+        ui: {
+          comment: expect.any(String),
+          symbol: expect.any(String),
+          gradient: expect.anything(),
         },
         border: {
           default: expect.any(String),

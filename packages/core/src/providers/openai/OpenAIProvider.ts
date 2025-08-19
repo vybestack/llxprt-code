@@ -760,22 +760,27 @@ export class OpenAIProvider extends BaseProvider {
     const finalStreamOptions =
       streamOptions !== undefined ? streamOptions : { include_usage: true };
 
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting =
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
     // Get resolved authentication and update client if needed
     await this.updateClientWithResolvedAuth();
 
     if (process.env.DEBUG) {
       console.log(
-        `[OpenAI] About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}...`,
+        `[OpenAI] About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${streamingEnabled}`,
       );
     }
 
     // Build request params with exact order from original
-    const stream = await this.openai.chat.completions.create({
+    const response = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-      stream: true,
-      ...(finalStreamOptions !== null
+      stream: streamingEnabled,
+      ...(streamingEnabled && finalStreamOptions !== null
         ? { stream_options: finalStreamOptions }
         : {}),
       tools: formattedTools as
@@ -799,77 +804,120 @@ export class OpenAIProvider extends BaseProvider {
     // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
     let pendingWhitespace: string | null = null;
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
+    // Handle streaming vs non-streaming response
+    if (streamingEnabled) {
+      // Streaming response - iterate over chunks
+      for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+        const delta = chunk.choices[0]?.delta;
 
-      if (delta?.content) {
-        // Enhanced debug logging to understand streaming behavior
-        if (process.env.DEBUG && this.isUsingQwen()) {
-          console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
-            content: delta.content,
-            contentLength: delta.content.length,
-            isWhitespaceOnly: delta.content.trim() === '',
-            chunkIndex: chunk.choices[0]?.index,
-          });
-        }
-
-        // For text-based models, don't yield content chunks yet
-        if (!parser) {
-          if (this.isUsingQwen()) {
-            const isWhitespaceOnly = delta.content.trim() === '';
-            if (isWhitespaceOnly) {
-              // Buffer whitespace-only chunk
-              pendingWhitespace = (pendingWhitespace || '') + delta.content;
-              if (process.env.DEBUG) {
-                console.log(
-                  `[OpenAIProvider/${this.currentModel}] Buffered whitespace-only chunk (len=${delta.content.length}). pendingWhitespace now len=${pendingWhitespace.length}`,
-                );
-              }
-              continue;
-            } else if (pendingWhitespace) {
-              // Flush buffered whitespace before non-empty chunk to preserve spacing
-              if (process.env.DEBUG) {
-                console.log(
-                  `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
-                );
-              }
-              yield {
-                role: ContentGeneratorRole.ASSISTANT,
-                content: pendingWhitespace,
-              };
-              hasStreamedContent = true;
-              fullContent += pendingWhitespace;
-              pendingWhitespace = null;
-            }
+        if (delta?.content) {
+          // Enhanced debug logging to understand streaming behavior
+          if (process.env.DEBUG && this.isUsingQwen()) {
+            console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
+              content: delta.content,
+              contentLength: delta.content.length,
+              isWhitespaceOnly: delta.content.trim() === '',
+              chunkIndex: chunk.choices[0]?.index,
+            });
           }
 
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: delta.content,
+          // For text-based models, don't yield content chunks yet
+          if (!parser) {
+            if (this.isUsingQwen()) {
+              const isWhitespaceOnly = delta.content.trim() === '';
+              if (isWhitespaceOnly) {
+                // Buffer whitespace-only chunk
+                pendingWhitespace = (pendingWhitespace || '') + delta.content;
+                if (process.env.DEBUG) {
+                  console.log(
+                    `[OpenAIProvider/${this.currentModel}] Buffered whitespace-only chunk (len=${delta.content.length}). pendingWhitespace now len=${pendingWhitespace.length}`,
+                  );
+                }
+                continue;
+              } else if (pendingWhitespace) {
+                // Flush buffered whitespace before non-empty chunk to preserve spacing
+                if (process.env.DEBUG) {
+                  console.log(
+                    `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
+                  );
+                }
+                yield {
+                  role: ContentGeneratorRole.ASSISTANT,
+                  content: pendingWhitespace,
+                };
+                hasStreamedContent = true;
+                fullContent += pendingWhitespace;
+                pendingWhitespace = null;
+              }
+            }
+
+            yield {
+              role: ContentGeneratorRole.ASSISTANT,
+              content: delta.content,
+            };
+            hasStreamedContent = true;
+          }
+
+          fullContent += delta.content;
+        }
+
+        if (delta?.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            this.toolFormatter.accumulateStreamingToolCall(
+              toolCall,
+              accumulatedToolCalls,
+              currentToolFormat,
+            );
+          }
+        }
+
+        // Check for usage data in the chunk
+        if (chunk.usage) {
+          usageData = {
+            prompt_tokens: chunk.usage.prompt_tokens,
+            completion_tokens: chunk.usage.completion_tokens,
+            total_tokens: chunk.usage.total_tokens,
           };
-          hasStreamedContent = true;
-        }
-
-        fullContent += delta.content;
-      }
-
-      if (delta?.tool_calls) {
-        for (const toolCall of delta.tool_calls) {
-          this.toolFormatter.accumulateStreamingToolCall(
-            toolCall,
-            accumulatedToolCalls,
-            currentToolFormat,
-          );
         }
       }
+    } else {
+      // Non-streaming response - handle as a single completion
+      const completionResponse =
+        response as OpenAI.Chat.Completions.ChatCompletion;
+      const choice = completionResponse.choices[0];
 
-      // Check for usage data in the chunk
-      if (chunk.usage) {
+      if (choice?.message.content) {
+        fullContent = choice.message.content;
+      }
+
+      if (choice?.message.tool_calls) {
+        // Convert tool calls to the standard format
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === 'function' && toolCall.function) {
+            accumulatedToolCalls.push({
+              id: toolCall.id,
+              type: 'function' as const,
+              function: toolCall.function,
+            });
+          }
+        }
+      }
+
+      if (completionResponse.usage) {
         usageData = {
-          prompt_tokens: chunk.usage.prompt_tokens,
-          completion_tokens: chunk.usage.completion_tokens,
-          total_tokens: chunk.usage.total_tokens,
+          prompt_tokens: completionResponse.usage.prompt_tokens,
+          completion_tokens: completionResponse.usage.completion_tokens,
+          total_tokens: completionResponse.usage.total_tokens,
         };
+      }
+
+      // For non-streaming, we yield the full content at once if there's no parser
+      if (!parser && fullContent) {
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: fullContent,
+        };
+        hasStreamedContent = true;
       }
     }
 

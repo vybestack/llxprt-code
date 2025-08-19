@@ -37,7 +37,10 @@ export interface ColorMigrationMapping {
   readonly colorToSemanticMapping: Record<string, string>;
 
   /** Maps semantic color paths to their current values */
-  readonly semanticToValueMapping: Record<string, string>;
+  readonly semanticToValueMapping: Record<
+    string,
+    string | string[] | undefined
+  >;
 }
 
 /**
@@ -57,7 +60,7 @@ export function getColorMigrationMapping(): ColorMigrationMapping {
     'Colors.AccentYellow': 'status.warning',
     'Colors.AccentRed': 'status.error',
     'Colors.Background': 'background.primary',
-    'Colors.DiffAdded': 'background.secondary',
+    'Colors.DiffAdded': 'background.diff.added',
   } as const;
 
   const semanticToValueMapping = {
@@ -68,7 +71,12 @@ export function getColorMigrationMapping(): ColorMigrationMapping {
     'status.warning': semanticColors.status.warning,
     'status.error': semanticColors.status.error,
     'background.primary': semanticColors.background.primary,
-    'background.secondary': semanticColors.background.secondary,
+    'background.diff.added': semanticColors.background.diff.added,
+    'background.diff.removed': semanticColors.background.diff.removed,
+    'text.link': semanticColors.text.link,
+    'ui.comment': semanticColors.ui.comment,
+    'ui.symbol': semanticColors.ui.symbol,
+    'ui.gradient': semanticColors.ui.gradient ?? 'undefined',
     'border.default': semanticColors.border.default,
     'border.focused': semanticColors.border.focused,
     // Also include current Colors API values for comparison
