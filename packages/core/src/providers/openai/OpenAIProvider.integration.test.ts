@@ -9,24 +9,8 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { ITool } from '../ITool.js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
 
-// Helper to load API key from file
-function loadApiKey(filename: string): string | undefined {
-  const keyPath = path.join(os.homedir(), filename);
-  try {
-    if (fs.existsSync(keyPath)) {
-      return fs.readFileSync(keyPath, 'utf8').trim();
-    }
-  } catch (error) {
-    console.error(`Failed to read ${filename}:`, error);
-  }
-  return undefined;
-}
-
-const OPENAI_API_KEY = loadApiKey('.openai_key');
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const skipTests = !OPENAI_API_KEY;
 
 describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
