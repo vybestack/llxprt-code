@@ -67,6 +67,12 @@ describe('handleAtCommand', () => {
         getDirectories: () => [testRootDir],
       }),
       getEphemeralSettings: () => ({}), // No disabled tools
+      getMcpServers: () => ({}),
+      getMcpServerCommand: () => undefined,
+      getPromptRegistry: () => ({
+        getPromptsByServer: () => [],
+      }),
+      getDebugMode: () => false,
     } as unknown as Config;
 
     const registry = new ToolRegistry(mockConfig);
