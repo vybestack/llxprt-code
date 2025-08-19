@@ -154,6 +154,27 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
+   * Helper method to determine if we're using Cerebras
+   */
+  private isCerebras(): boolean {
+    // Check if baseURL contains cerebras.ai
+    if (this.baseURL?.toLowerCase().includes('cerebras.ai')) {
+      return true;
+    }
+    // Check if model name contains cerebras
+    if (this.currentModel?.toLowerCase().includes('cerebras')) {
+      return true;
+    }
+    // Check for specific Cerebras model names that might be used
+    const cerebrasModels = ['qwen-3-coder-480b'];
+    return cerebrasModels.some(
+      (model) =>
+        this.currentModel?.toLowerCase() === model.toLowerCase() &&
+        this.baseURL?.includes('cerebras'),
+    );
+  }
+
+  /**
    * Update the OpenAI client with resolved authentication if needed
    */
   private async updateClientWithResolvedAuth(): Promise<void> {
@@ -562,6 +583,69 @@ export class OpenAIProvider extends BaseProvider {
     const data = (await response.json()) as OpenAIResponse;
     const resultMessages: IMessage[] = [];
 
+    // CEREBRAS FIX: Handle potential array response from Cerebras
+    // If Cerebras returns an array of responses, aggregate them
+    if (this.isCerebras() && Array.isArray(data)) {
+      if (process.env.DEBUG) {
+        console.log(
+          '[OpenAIProvider/Cerebras] Detected array response, aggregating...',
+        );
+      }
+      const aggregatedContent: string[] = [];
+      let aggregatedToolCalls: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }> = [];
+      let aggregatedUsage:
+        | {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            total_tokens?: number;
+          }
+        | undefined = undefined;
+
+      for (const item of data as OpenAIResponse[]) {
+        if (item.choices?.[0]?.message?.content) {
+          aggregatedContent.push(item.choices[0].message.content);
+        }
+        if (item.choices?.[0]?.message?.tool_calls) {
+          aggregatedToolCalls = item.choices[0].message.tool_calls;
+        }
+        if (item.usage) {
+          aggregatedUsage = item.usage;
+        }
+      }
+
+      const message: IMessage = {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: aggregatedContent.join(''),
+      };
+
+      if (aggregatedToolCalls.length > 0) {
+        message.tool_calls = aggregatedToolCalls;
+      }
+
+      if (aggregatedUsage) {
+        message.usage = {
+          prompt_tokens: aggregatedUsage.prompt_tokens || 0,
+          completion_tokens: aggregatedUsage.completion_tokens || 0,
+          total_tokens: aggregatedUsage.total_tokens || 0,
+        };
+      }
+
+      resultMessages.push(message);
+      // Convert to async iterator for consistent return type
+      return (async function* () {
+        for (const msg of resultMessages) {
+          yield msg;
+        }
+      })();
+    }
+
     if (data.choices && data.choices.length > 0) {
       const choice = data.choices[0];
       const message: IMessage = {
@@ -799,7 +883,113 @@ export class OpenAIProvider extends BaseProvider {
     // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
     let pendingWhitespace: string | null = null;
 
+    // CEREBRAS ALTERNATIVE: If Cerebras is severely broken, aggregate all chunks first
+    // Uncomment this block if the delta conversion above doesn't work
+    /*
+    if (this.isCerebras()) {
+      const contentParts: string[] = [];
+      let aggregatedToolCalls: any[] = [];
+      let finalUsageData: any = undefined;
+      
+      for await (const chunk of stream) {
+        // Handle both message and delta formats
+        const message = chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
+        if (message?.content) {
+          contentParts.push(message.content);
+        }
+        if (message?.tool_calls) {
+          // For streaming, tool calls might be incremental or complete
+          aggregatedToolCalls = message.tool_calls;
+        }
+        if (chunk.usage) {
+          finalUsageData = {
+            prompt_tokens: chunk.usage.prompt_tokens,
+            completion_tokens: chunk.usage.completion_tokens,
+            total_tokens: chunk.usage.total_tokens,
+          };
+        }
+      }
+      
+      // Yield single reconstructed message
+      yield {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: contentParts.join(''),
+        tool_calls: aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
+        usage: finalUsageData,
+      };
+      return;
+    }
+    */
+
     for await (const chunk of stream) {
+      // CEREBRAS FIX: Detect and fix malformed streaming chunks
+      // Cerebras sends full message format instead of delta format in streaming
+      interface CerebrasChunk {
+        id?: string;
+        object?: string;
+        created?: number;
+        model?: string;
+        choices: Array<{
+          delta?: {
+            content?: string;
+            tool_calls?: Array<{
+              id: string;
+              type: 'function';
+              function: {
+                name: string;
+                arguments: string;
+              };
+              index: number;
+            }>;
+            role?: string;
+          };
+          message?: {
+            content?: string;
+            tool_calls?: Array<{
+              id: string;
+              type: 'function';
+              function: {
+                name: string;
+                arguments: string;
+              };
+            }>;
+            role?: string;
+          };
+          index: number;
+          finish_reason: string | null;
+        }>;
+        usage?: {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+        };
+      }
+
+      const cerebrasChunk = chunk as CerebrasChunk;
+      if (
+        this.isCerebras() &&
+        cerebrasChunk.choices?.[0]?.message &&
+        !cerebrasChunk.choices[0].delta
+      ) {
+        if (process.env.DEBUG) {
+          console.log(
+            '[OpenAIProvider/Cerebras] Converting malformed chunk from message to delta format',
+          );
+        }
+        // Convert full message format to delta format
+        const message = cerebrasChunk.choices[0].message;
+        chunk.choices[0].delta = {
+          content: message.content,
+          tool_calls: message.tool_calls?.map((tc, index) => ({
+            ...tc,
+            index,
+          })),
+          role: message.role as 'system' | 'user' | 'assistant' | 'tool',
+        };
+        // Remove the message field to prevent confusion
+        delete (cerebrasChunk.choices[0] as { message?: unknown }).message;
+      }
+
       const delta = chunk.choices[0]?.delta;
 
       if (delta?.content) {
