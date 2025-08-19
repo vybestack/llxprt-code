@@ -34,6 +34,7 @@ vi.mock('child_process', async (orig) => {
 
 vi.mock('../utils/systemEncoding.js', () => ({
   getSystemEncoding: vi.fn().mockReturnValue('shift_jis'),
+  getCachedEncodingForBuffer: vi.fn().mockReturnValue('shift_jis'),
 }));
 
 vi.mock('strip-ansi', () => ({ default: (s: string) => s }));

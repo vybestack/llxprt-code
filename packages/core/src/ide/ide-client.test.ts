@@ -69,7 +69,7 @@ describe('IdeClient.validateWorkspacePath', () => {
 
   it.skipIf(process.platform !== 'win32')('should handle windows paths', () => {
     const result = IdeClient.validateWorkspacePath(
-      'c:/some/other/path;d:/Users/person/gemini-cli',
+      'c:/some/other/path;d:/Users/person/llxprt-code',
       'VS Code',
       'd:/Users/person/llxprt-code/sub-dir',
     );

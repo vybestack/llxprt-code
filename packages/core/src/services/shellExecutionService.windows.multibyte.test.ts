@@ -16,6 +16,10 @@ vi.mock('os');
 vi.mock('child_process');
 vi.mock('../utils/textUtils.js', () => ({ isBinary: () => false }));
 vi.mock('strip-ansi', () => ({ default: (s: string) => s }));
+vi.mock('../utils/systemEncoding.js', () => ({
+  getSystemEncoding: vi.fn().mockReturnValue('utf-8'),
+  getCachedEncodingForBuffer: vi.fn().mockReturnValue('utf-8'),
+}));
 
 describe('ShellExecutionService Windows multibyte regression tests', () => {
   let mockChildProcess: EventEmitter & Partial<ChildProcess>;

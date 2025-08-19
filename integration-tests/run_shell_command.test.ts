@@ -12,7 +12,7 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should be able to run a shell command');
 
-    const prompt = `Please run the command "echo hello-world" and show me the output`;
+    const prompt = `Please run the command "echo hello-world" (without specifying any directory parameter) and show me the output`;
 
     const result = await rig.run(prompt);
 
@@ -44,7 +44,7 @@ describe('run_shell_command', () => {
     const rig = new TestRig();
     await rig.setup('should be able to run a shell command via stdin');
 
-    const prompt = `Please run the command "echo test-stdin" and show me what it outputs`;
+    const prompt = `Please run the command "echo test-stdin" (without specifying any directory parameter) and show me what it outputs`;
 
     const result = await rig.run({ stdin: prompt });
 
