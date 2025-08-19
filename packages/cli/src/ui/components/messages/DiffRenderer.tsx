@@ -313,6 +313,11 @@ const renderDiffContent = (
                     ? Colors.DiffAddedBackground
                     : Colors.DiffRemovedBackground
                 }
+                color={
+                  line.type === 'add'
+                    ? Colors.DiffAddedForeground
+                    : Colors.DiffRemovedForeground
+                }
                 wrap="wrap"
               >
                 <Text
