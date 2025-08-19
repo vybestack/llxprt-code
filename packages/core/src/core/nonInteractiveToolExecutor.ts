@@ -10,7 +10,6 @@ import {
   ToolCallRequestInfo,
   ToolCallResponseInfo,
   ToolErrorType,
-  ToolRegistry,
   ToolResult,
 } from '../index.js';
 import { Config } from '../config/config.js';
@@ -131,19 +130,9 @@ function filterFileModificationArgs(
 export async function executeToolCall(
   config: Config,
   toolCallRequest: ToolCallRequestInfo,
-  toolRegistry: ToolRegistry,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
-  // Create context from config
-  const context: ToolContext = {
-    sessionId:
-      typeof config.getSessionId === 'function'
-        ? config.getSessionId()
-        : 'default-session',
-    // TODO: Add agentId when available in the request
-  };
-
-  const tool = toolRegistry.getTool(toolCallRequest.name, context);
+  const tool = config.getToolRegistry().getTool(toolCallRequest.name);
 
   const startTime = Date.now();
   if (!tool) {
