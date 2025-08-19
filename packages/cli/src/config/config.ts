@@ -92,7 +92,7 @@ export async function parseArguments(): Promise<CliArgs> {
       '$0 [options]',
       'LLxprt Code - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
     )
-    .command('$0', 'Launch Gemini CLI', (yargsInstance) =>
+    .command('$0', 'Launch LLxprt CLI', (yargsInstance) =>
       yargsInstance
         .option('model', {
           alias: 'm',
@@ -223,7 +223,7 @@ export async function parseArguments(): Promise<CliArgs> {
         .option('proxy', {
           type: 'string',
           description:
-            'Proxy for gemini client, like schema://user:password@host:port',
+            'Proxy for LLxprt client, like schema://user:password@host:port',
         })
         .option('include-directories', {
           type: 'array',

@@ -56,6 +56,7 @@ fi
 # Shell script linting (if shellcheck is installed)
 if command -v shellcheck &> /dev/null; then
     echo -e "\n${YELLOW}Running shellcheck...${NC}"
+    # shellcheck disable=SC2312
     SHELL_FILES=$(git ls-files | grep -E '^([^.]+|.*\.(sh|zsh|bash))$' | xargs file --mime-type 2>/dev/null | grep "text/x-shellscript" | awk '{ print substr($1, 1, length($1)-1) }' || true)
     
     if [[ -n "${SHELL_FILES}" ]]; then

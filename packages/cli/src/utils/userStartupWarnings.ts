@@ -24,7 +24,7 @@ const homeDirectoryCheck: WarningCheck = {
       ]);
 
       if (workspaceRealPath === homeRealPath) {
-        return 'You are running Gemini CLI in your home directory. It is recommended to run in a project-specific directory.';
+        return 'You are running LLxprt CLI in your home directory. It is recommended to run in a project-specific directory.';
       }
       return null;
     } catch (_err: unknown) {
@@ -39,7 +39,7 @@ const rootDirectoryCheck: WarningCheck = {
     try {
       const workspaceRealPath = await fs.realpath(workspaceRoot);
       const errorMessage =
-        'Warning: You are running Gemini CLI in the root directory. Your entire folder structure will be used for context. It is strongly recommended to run in a project-specific directory.';
+        'Warning: You are running LLxprt CLI in the root directory. Your entire folder structure will be used for context. It is strongly recommended to run in a project-specific directory.';
 
       // Check for Unix root directory
       if (path.dirname(workspaceRealPath) === workspaceRealPath) {

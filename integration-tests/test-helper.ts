@@ -233,6 +233,17 @@ export class TestRig {
       commandArgs.push('--key', apiKey);
     }
 
+    // Filter out TERM_PROGRAM to prevent IDE detection
+    const filteredEnv = Object.entries(process.env).reduce(
+      (acc, [key, value]) => {
+        if (key !== 'TERM_PROGRAM' && key !== 'TERM_PROGRAM_VERSION') {
+          acc[key] = value;
+        }
+        return acc;
+      },
+      {} as NodeJS.ProcessEnv,
+    );
+
     const execOptions: {
       cwd: string;
       encoding: 'utf-8';
@@ -242,24 +253,22 @@ export class TestRig {
       cwd: this.testDir!,
       encoding: 'utf-8',
       env: {
-        ...process.env,
+        ...filteredEnv,
         // Ensure browser launch is suppressed in tests
         NO_BROWSER: 'true',
         LLXPRT_NO_BROWSER_AUTH: 'true',
         CI: 'true',
-        // Ensure IDE detection doesn't trigger in tests
-        TERM_PROGRAM: '',
       },
     };
 
     if (typeof promptOrOptions === 'string') {
-      commandArgs.push('--prompt', JSON.stringify(promptOrOptions));
+      commandArgs.push('--prompt', promptOrOptions);
     } else if (
       typeof promptOrOptions === 'object' &&
       promptOrOptions !== null
     ) {
       if (promptOrOptions.prompt) {
-        commandArgs.push('--prompt', JSON.stringify(promptOrOptions.prompt));
+        commandArgs.push('--prompt', promptOrOptions.prompt);
       }
       if (promptOrOptions.stdin) {
         execOptions.input = promptOrOptions.stdin;
@@ -283,8 +292,9 @@ export class TestRig {
     // Handle stdin if provided
     if (execOptions.input) {
       child.stdin!.write(execOptions.input);
-      child.stdin!.end();
     }
+    // Always end stdin to prevent hanging
+    child.stdin!.end();
 
     child.stdout!.on('data', (data: Buffer) => {
       stdout += data;

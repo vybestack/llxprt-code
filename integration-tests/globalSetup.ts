@@ -14,14 +14,6 @@ const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
 
 export async function setup() {
-  // Skip integration tests when using Groq - they're designed for Gemini/OpenAI
-  if (process.env.OPENAI_BASE_URL?.includes('groq')) {
-    console.log(
-      '\n⚠️  Skipping integration tests for Groq provider (not fully compatible)\n',
-    );
-    process.exit(0);
-  }
-
   runDir = join(integrationTestsDir, `${Date.now()}`);
   await mkdir(runDir, { recursive: true });
 
