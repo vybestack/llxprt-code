@@ -31,7 +31,7 @@ describe('CoreToolScheduler', () => {
     const mockTool = new MockTool();
     mockTool.shouldConfirm = true;
     const declarativeTool = mockTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
@@ -43,7 +43,7 @@ describe('CoreToolScheduler', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -58,7 +58,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -88,7 +88,7 @@ describe('CoreToolScheduler with payload', () => {
   it('should update args and diff and execute tool when payload is provided', async () => {
     const mockTool = new MockModifiableTool();
     const declarativeTool = mockTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
@@ -100,7 +100,7 @@ describe('CoreToolScheduler with payload', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -115,7 +115,7 @@ describe('CoreToolScheduler with payload', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -411,7 +411,7 @@ describe('CoreToolScheduler edit cancellation', () => {
   it('should preserve diff when an edit is cancelled', async () => {
     const mockEditTool = new MockEditTool();
     const declarativeTool = mockEditTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
@@ -423,7 +423,7 @@ describe('CoreToolScheduler edit cancellation', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -438,7 +438,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -681,7 +681,7 @@ describe('CoreToolScheduler YOLO mode', () => {
     mockTool.shouldConfirm = true;
     const declarativeTool = mockTool;
 
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getToolByName: () => declarativeTool,
       // Other properties are not needed for this test but are included for type consistency.
@@ -694,7 +694,7 @@ describe('CoreToolScheduler YOLO mode', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -710,7 +710,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -770,7 +770,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
     mockTool.executeFn.mockImplementation(() => firstCallPromise);
     const declarativeTool = mockTool;
 
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getToolByName: () => declarativeTool,
       getFunctionDeclarations: () => [],
@@ -782,7 +782,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -796,7 +796,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -879,7 +879,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
   it('should handle two synchronous calls to schedule', async () => {
     const mockTool = new MockTool();
     const declarativeTool = mockTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getToolByName: () => declarativeTool,
       getFunctionDeclarations: () => [],
@@ -891,7 +891,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -905,7 +905,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

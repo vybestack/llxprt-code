@@ -266,7 +266,7 @@ const createErrorResponse = (
 });
 
 interface CoreToolSchedulerOptions {
-  toolRegistry: Promise<ToolRegistry>;
+  toolRegistry: ToolRegistry;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -276,7 +276,7 @@ interface CoreToolSchedulerOptions {
 }
 
 export class CoreToolScheduler {
-  private toolRegistry: Promise<ToolRegistry>;
+  private toolRegistry: ToolRegistry;
   private toolCalls: ToolCall[] = [];
   private outputUpdateHandler?: OutputUpdateHandler;
   private onAllToolCallsComplete?: AllToolCallsCompleteHandler;

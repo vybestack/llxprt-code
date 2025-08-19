@@ -10,7 +10,6 @@ import {
   AuthType,
   Config,
   GeminiChat,
-  ToolRegistry,
   logToolCall,
   ToolResult,
   convertToFunctionResponse,
@@ -361,7 +360,7 @@ class Session {
       return errorResponse(new Error('Missing function name'));
     }
 
-    const toolRegistry: ToolRegistry = await this.config.getToolRegistry();
+    const toolRegistry = this.config.getToolRegistry();
     const tool = toolRegistry.getTool(fc.name as string);
 
     if (!tool) {
@@ -522,7 +521,7 @@ class Session {
     const contentLabelsForDisplay: string[] = [];
     const ignoredPaths: string[] = [];
 
-    const toolRegistry = await this.config.getToolRegistry();
+    const toolRegistry = this.config.getToolRegistry();
     const readManyFilesTool = toolRegistry.getTool('read_many_files');
     const globTool = toolRegistry.getTool('glob');
 

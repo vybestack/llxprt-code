@@ -39,7 +39,7 @@ export async function runNonInteractive(
     });
 
     const geminiClient = config.getGeminiClient();
-    const toolRegistry: ToolRegistry = await config.getToolRegistry();
+    const toolRegistry: ToolRegistry = config.getToolRegistry();
 
     const abortController = new AbortController();
     // Add context about current working directory
