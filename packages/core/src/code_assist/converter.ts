@@ -153,7 +153,8 @@ function toVertexGenerateContentRequest(
     labels: req.config?.labels,
     safetySettings: req.config?.safetySettings,
     generationConfig: toVertexGenerationConfig(req.config),
-    session_id: sessionId,
+    // PRIVACY FIX: session_id removed to prevent transmission to Google servers
+    // session_id: sessionId,
   };
 }
 

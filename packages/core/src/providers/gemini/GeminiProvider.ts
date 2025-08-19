@@ -449,9 +449,10 @@ export class GeminiProvider extends BaseProvider {
         };
 
         // Use the content generator stream
+        // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
         const streamResult = await contentGenerator.generateContentStream(
           request,
-          this.geminiConfig?.getSessionId() || 'default',
+          'oauth-session', // userPromptId for OAuth mode
         );
 
         // Convert the stream to our format
@@ -1171,9 +1172,10 @@ export class GeminiProvider extends BaseProvider {
               tools: [{ googleSearch: {} }],
             },
           };
+          // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
           const result = await oauthContentGenerator.generateContent(
             oauthRequest,
-            this.geminiConfig?.getSessionId() || 'default',
+            'web-search-oauth', // userPromptId for OAuth web search
           );
           return result;
         }
@@ -1289,9 +1291,10 @@ export class GeminiProvider extends BaseProvider {
               tools: [{ urlContext: {} }],
             },
           };
+          // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
           const result = await oauthContentGenerator.generateContent(
             oauthRequest,
-            this.geminiConfig?.getSessionId() || 'default',
+            'web-fetch-oauth', // userPromptId for OAuth web fetch
           );
           return result;
         }
