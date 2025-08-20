@@ -254,8 +254,17 @@ export const useGeminiStream = (
           );
         }
         // Otherwise, don't add empty/incomplete messages that could corrupt context
+      } else if (pendingItem.type === 'tool_group') {
+        // Don't add incomplete tool groups - these can corrupt context
+        // Tool groups are only valid if they have completed tool calls
+        if (process.env.DEBUG) {
+          console.log(
+            '[useGeminiStream] Skipping incomplete tool_group on cancel',
+          );
+        }
+        // Don't add incomplete tool groups to history
       } else {
-        // For other types (tool groups, etc), add as-is
+        // For other types that are complete (info, error, etc), add as-is
         addItem(pendingHistoryItemRef.current, Date.now());
       }
     }
