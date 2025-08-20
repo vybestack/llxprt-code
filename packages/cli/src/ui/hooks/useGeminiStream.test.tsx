@@ -32,6 +32,7 @@ import {
   GeminiClient,
   GeminiEventType as ServerGeminiEventType,
   AnyToolInvocation,
+  ToolErrorType, // <-- Import ToolErrorType
 } from '@vybestack/llxprt-code-core';
 import { Part, PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -508,6 +509,49 @@ describe('useGeminiStream', () => {
     const list2: PartListUnion = [
       { text: 'Some text' },
       { functionResponse: { name: 'func3', response: { result: 'data3' } } },
+    ];
+    const toolCall2ResponseParts: PartListUnion = [
+      { text: 'tool 2 final response' },
+    ];
+    const completedToolCalls: TrackedToolCall[] = [
+      {
+        request: {
+          callId: 'call1',
+          name: 'tool1',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-id-2',
+        },
+        status: 'success',
+        responseSubmittedToGemini: false,
+        response: {
+          callId: 'call1',
+          responseParts: toolCall1ResponseParts,
+          errorType: undefined, // FIX: Added missing property
+        },
+        tool: {
+          displayName: 'MockTool',
+        },
+        invocation: {
+          getDescription: () => `Mock description`,
+        } as unknown as AnyToolInvocation,
+      } as TrackedCompletedToolCall,
+      {
+        request: {
+          callId: 'call2',
+          name: 'tool2',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'prompt-id-2',
+        },
+        status: 'error',
+        responseSubmittedToGemini: false,
+        response: {
+          callId: 'call2',
+          responseParts: toolCall2ResponseParts,
+          errorType: ToolErrorType.UNHANDLED_EXCEPTION, // FIX: Added missing property
+        },
+      } as TrackedCompletedToolCall, // Treat error as a form of completion for submission
     ];
 
     const result = mergePartListUnions([list1, list2]);
@@ -1770,6 +1814,7 @@ describe('useGeminiStream', () => {
     const userMessageTimestamp = Date.now();
     vi.spyOn(Date, 'now').mockReturnValue(userMessageTimestamp);
 
+    // Mock the behavior of handleAtCommand
     handleAtCommandSpy.mockResolvedValue({
       processedQuery: processedQueryParts,
       shouldProceed: true,
@@ -1784,27 +1829,31 @@ describe('useGeminiStream', () => {
         mockConfig,
         mockOnDebugMessage,
         mockHandleSlashCommand,
-        false,
-        vi.fn(),
-        vi.fn(),
-        vi.fn(),
-        false,
-        vi.fn(),
-        vi.fn(),
-        vi.fn(),
+        false, // shellModeActive
+        vi.fn(), // getPreferredEditor
+        vi.fn(), // onAuthError
+        vi.fn(), // performMemoryRefresh
+        false, // modelSwitched
+        vi.fn(), // setModelSwitched
+        vi.fn(), // onEditorClose
+        vi.fn(), // onCancelSubmit
       ),
     );
 
+    // Act: Submit the query
     await act(async () => {
       await result.current.submitQuery(rawQuery);
     });
 
+    // Assert
+    // 1. Verify handleAtCommand was called with the raw query.
     expect(handleAtCommandSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         query: rawQuery,
       }),
     );
 
+    // 2. Verify the user's turn was added to history *after* processing.
     expect(mockAddItem).toHaveBeenCalledWith(
       {
         type: MessageType.USER,
@@ -1813,11 +1862,11 @@ describe('useGeminiStream', () => {
       userMessageTimestamp,
     );
 
-    // FIX: This expectation now correctly matches the actual function call signature.
+    // 3. Verify the *processed* query was sent to the model, not the raw one.
     expect(mockSendMessageStream).toHaveBeenCalledWith(
-      processedQueryParts, // Argument 1: The parts array directly
-      expect.any(AbortSignal), // Argument 2: An AbortSignal
-      expect.any(String), // Argument 3: The prompt_id string
+      processedQueryParts,
+      expect.any(AbortSignal),
+      expect.any(String),
     );
   });
 });
