@@ -14,7 +14,6 @@ import {
 } from '../index.js';
 import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
-import { ToolContext } from '../tools/tool-context.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
 

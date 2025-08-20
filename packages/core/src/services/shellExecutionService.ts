@@ -32,6 +32,10 @@ export interface ShellExecutionResult {
   rawOutput: Buffer;
   /** The combined, decoded output as a string. */
   output: string;
+  /** The decoded stdout as a string. */
+  stdout: string;
+  /** The decoded stderr as a string. */
+  stderr: string;
   /** The process exit code, or null if terminated by a signal. */
   exitCode: number | null;
   /** The signal that terminated the process, if any. */
@@ -213,8 +217,10 @@ export class ShellExecutionService {
           resolve({
             rawOutput: finalBuffer,
             output: combinedOutput.trim(),
+            stdout: stdout,
+            stderr: stderr,
             exitCode: code,
-            signal: signal ? os.constants.signals[signal] : null,
+            signal: signal ? (os.constants.signals[signal] ?? null) : null,
             error,
             aborted: abortSignal.aborted,
             pid: child.pid,
@@ -284,6 +290,8 @@ export class ShellExecutionService {
           error,
           rawOutput: Buffer.from(''),
           output: '',
+          stdout: '',
+          stderr: '',
           exitCode: 1,
           signal: null,
           aborted: false,
@@ -407,6 +415,8 @@ export class ShellExecutionService {
               resolve({
                 rawOutput: finalBuffer,
                 output,
+                stdout: output,
+                stderr: '',
                 exitCode,
                 signal: signal ?? null,
                 error,
@@ -436,6 +446,8 @@ export class ShellExecutionService {
           error,
           rawOutput: Buffer.from(''),
           output: '',
+          stdout: '',
+          stderr: '',
           exitCode: 1,
           signal: null,
           aborted: false,

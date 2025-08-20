@@ -832,7 +832,6 @@ export class GeminiChat {
     return lastChunkWithMetadata?.usageMetadata;
   }
 
-
   private async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
     inputContent: Content,

@@ -39,6 +39,7 @@ describe('executeToolCall', () => {
         authType: 'oauth-personal',
       }),
       getToolRegistry: () => mockToolRegistry,
+      getEphemeralSetting: vi.fn().mockReturnValue('auto'),
     } as unknown as Config;
 
     abortController = new AbortController();
@@ -65,9 +66,7 @@ describe('executeToolCall', () => {
       abortController.signal,
     );
 
-    expect(mockToolRegistry.getTool).toHaveBeenCalledWith('testTool', {
-      sessionId: 'test-session-id',
-    });
+    expect(mockToolRegistry.getTool).toHaveBeenCalledWith('testTool');
     expect(mockTool.buildAndExecute).toHaveBeenCalledWith(
       request.args,
       abortController.signal,

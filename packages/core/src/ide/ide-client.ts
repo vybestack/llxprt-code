@@ -345,10 +345,15 @@ export class IdeClient {
       };
       const options = fetchOptions as unknown as import('undici').RequestInit;
       const response = await fetchFn(url, options);
+      // Convert undici headers to standard headers format
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value: string, key: string) => {
+        headers[key] = value;
+      });
       return new Response(response.body as ReadableStream<unknown> | null, {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
+        headers: headers,
       });
     };
   }

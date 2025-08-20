@@ -23,12 +23,29 @@ vi.mock('../utils/textUtils.js', () => ({
   isBinary: mockIsBinary,
 }));
 
+const mockGetPty = vi.hoisted(() => vi.fn());
+vi.mock('../utils/getPty.js', () => ({
+  getPty: mockGetPty,
+}));
+
 const mockPlatform = vi.hoisted(() => vi.fn());
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
+    constants: {
+      signals: {
+        SIGTERM: 15,
+        SIGKILL: 9,
+      },
+    },
   },
   platform: mockPlatform,
+  constants: {
+    signals: {
+      SIGTERM: 15,
+      SIGKILL: 9,
+    },
+  },
 }));
 
 describe('ShellExecutionService multibyte', () => {
@@ -40,6 +57,7 @@ describe('ShellExecutionService multibyte', () => {
 
     mockIsBinary.mockReturnValue(false);
     mockPlatform.mockReturnValue('darwin');
+    mockGetPty.mockResolvedValue(null); // Don't use PTY for these tests
 
     onOutputEventMock = vi.fn();
 
@@ -66,6 +84,7 @@ describe('ShellExecutionService multibyte', () => {
       '/tmp',
       onOutputEventMock,
       ac.signal,
+      false, // shouldUseNodePty = false for these tests
     );
     await new Promise((r) => setImmediate(r));
     simulation(mockChildProcess);
@@ -84,6 +103,8 @@ describe('ShellExecutionService multibyte', () => {
     });
 
     const result = await resultPromise;
+    console.log('DEBUG: result is', result);
+    expect(result).toBeDefined();
     expect(result.stdout).toContain('ありがとう 世界');
   });
 
