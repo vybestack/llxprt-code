@@ -24,6 +24,7 @@ import {
   limitOutputTokens,
   formatLimitedOutput,
 } from '../utils/toolOutputLimiter.js';
+import { summarizeToolOutput } from '../utils/summarizer.js';
 import {
   ShellExecutionService,
   ShellOutputEvent,
@@ -277,7 +278,22 @@ class ShellToolInvocation extends BaseToolInvocation<
         }
       }
 
-      // Apply token-based limiting first
+      // Check if summarization is configured
+      const summarizeConfig = this.config.getSummarizeToolOutputConfig();
+      if (summarizeConfig && summarizeConfig[ShellTool.Name]) {
+        const summary = await summarizeToolOutput(
+          llmContent,
+          this.config.getGeminiClient(),
+          signal,
+          summarizeConfig[ShellTool.Name].tokenBudget,
+        );
+        return {
+          llmContent: summary,
+          returnDisplay: returnDisplayMessage,
+        };
+      }
+
+      // Apply token-based limiting if no summarization
       const limitedResult = limitOutputTokens(
         llmContent,
         this.config,
@@ -285,10 +301,7 @@ class ShellToolInvocation extends BaseToolInvocation<
       );
 
       if (limitedResult.wasTruncated) {
-        // For now, just return the truncated output without summarization
-        // since we don't have direct access to a Gemini client here
         const formatted = formatLimitedOutput(limitedResult);
-
         return {
           llmContent: formatted.llmContent,
           returnDisplay: returnDisplayMessage,
