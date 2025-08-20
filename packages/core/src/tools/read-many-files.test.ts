@@ -584,6 +584,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -618,6 +619,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -658,6 +660,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -703,6 +706,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -740,6 +744,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -777,6 +782,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -814,6 +820,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -847,6 +854,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -883,6 +891,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,
@@ -921,6 +930,7 @@ Content of file[1]
 
         const mockConfig = {
           getFileService: () => new FileDiscoveryService(tempRootDir),
+          getFileSystemService: () => new StandardFileSystemService(),
           getFileFilteringOptions: () => ({
             respectGitIgnore: true,
             respectLlxprtIgnore: true,

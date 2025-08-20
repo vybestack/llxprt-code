@@ -354,7 +354,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
       await this.config
         .getFileSystemService()
-        .writeTextFile(file_path, fileContent);
+        .writeTextFile(filteredParams.file_path, fileContent);
 
       // Track git stats if logging is enabled and service is available
       let gitStats = null;
@@ -363,7 +363,7 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         if (gitStatsService) {
           try {
             gitStats = await gitStatsService.trackFileEdit(
-              file_path,
+              filteredParams.file_path,
               originalContent || '',
               fileContent,
             );

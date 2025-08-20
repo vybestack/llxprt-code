@@ -33,6 +33,7 @@ import {
 } from '../utils/editCorrector.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
+import { ToolErrorType } from './tool-error.js';
 
 const rootDir = path.resolve(os.tmpdir(), 'gemini-cli-test-root');
 
