@@ -79,7 +79,7 @@ describe('ShellExecutionService multibyte', () => {
     simulation: (cp: typeof mockChildProcess) => void,
   ) => {
     const ac = new AbortController();
-    const handle = ShellExecutionService.execute(
+    const handle = await ShellExecutionService.execute(
       command,
       '/tmp',
       onOutputEventMock,

@@ -226,6 +226,10 @@ export async function executeToolCall(
           success: false,
           error: filterResult.error,
           prompt_id: toolCallRequest.prompt_id,
+          tool_type:
+            typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+              ? 'mcp'
+              : 'native',
         });
 
         return {
