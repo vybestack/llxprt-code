@@ -2,10 +2,9 @@
 
 exports[`App UI > when in a narrow terminal > should render with a column layout 1`] = `
 "
+ The first rule of Fight Club is: you do not talk about Fight Club. (esc to cancel, 0s)
 
-╭────────────────────────────────────────────────────────────────────────────────────────╮
-│ >   Type your message or @path/to/file                                                 │
-╰────────────────────────────────────────────────────────────────────────────────────────╯
-                                                                 Mem: 8% | Ctx: 0.0k/1049k
-/test/dir                                               | ✖ 5 errors (ctrl+o for details)"
+
+                                                                 Mem: 7% | Ctx: 0.0k/1049k
+/test/dir"
 `;

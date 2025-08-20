@@ -134,7 +134,7 @@ jobs:
 
       - name: Commit and Conditionally Push package versions
         run: |
-          git add package.json package-lock.json packages/*/package.json packages/*/package-lock.json
+          git add package.json package-lock.json packages/*/package.json || true
           git commit -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }}"
           if [[ "${{ steps.vars.outputs.is_dry_run }}" == "false" ]]; then
             echo "Pushing release branch to remote..."

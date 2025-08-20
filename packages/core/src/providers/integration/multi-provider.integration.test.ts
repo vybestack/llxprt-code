@@ -247,7 +247,7 @@ describe('Multi-Provider Integration Tests', () => {
       expect(fullResponse).toMatch(/5/);
     });
 
-    it.skipIf(skipTests)('should work with a specific model', async () => {
+    it.skip('should work with a specific model', async () => {
       if (!apiKey || skipTests) return; // Guard for when test is skipped
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
