@@ -1040,23 +1040,27 @@ export class OpenAIProvider extends BaseProvider {
           const message = cerebrasChunk.choices[0].message;
           const originalChunk = chunk as StreamChunk;
           // Create a completely new object to avoid JSONResponse mutation issues
-          processedChunk = {
-            choices: [
-              {
-                delta: {
-                  content: message.content,
-                  tool_calls: message.tool_calls?.map((tc, index) => ({
+          // Deep copy all properties to ensure no mutation of the original response
+          const newChoice = {
+            delta: {
+              content: message.content || undefined,
+              tool_calls: message.tool_calls
+                ? message.tool_calls.map((tc, idx) => ({
                     id: tc.id,
-                    type: tc.type,
+                    type: tc.type as 'function',
                     function: {
                       name: tc.function.name,
                       arguments: tc.function.arguments,
                     },
-                    index,
-                  })),
-                },
-              },
-            ],
+                    index: idx,
+                  }))
+                : undefined,
+            },
+            message: undefined, // Explicitly clear the message field
+          };
+
+          processedChunk = {
+            choices: [newChoice],
             usage: originalChunk.usage
               ? {
                   prompt_tokens: originalChunk.usage.prompt_tokens,
