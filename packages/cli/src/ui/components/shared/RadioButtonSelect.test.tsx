@@ -39,11 +39,7 @@ describe('<RadioButtonSelect />', () => {
 
   it('renders with numbers hidden and matches snapshot', () => {
     const { lastFrame } = renderWithProviders(
-      <RadioButtonSelect
-        items={ITEMS}
-        onSelect={noop}
-        showNumbers={false}
-      />,
+      <RadioButtonSelect items={ITEMS} onSelect={noop} showNumbers={false} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
