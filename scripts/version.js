@@ -23,16 +23,20 @@ function writeJson(filePath, data) {
   writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n');
 }
 
-// 1. Get the version type from the command line arguments.
-const versionType = process.argv[2];
-if (!versionType) {
-  console.error('Error: No version type specified.');
-  console.error('Usage: npm run version <patch|minor|major|prerelease>');
+// 1. Get the version type or specific version from the command line arguments.
+const versionArg = process.argv[2];
+if (!versionArg) {
+  console.error('Error: No version specified.');
+  console.error('Usage: npm run version <patch|minor|major|prerelease|X.Y.Z>');
   process.exit(1);
 }
 
+// Check if it's a specific version number (X.Y.Z format) or a version type
+const isSpecificVersion = /^\d+\.\d+\.\d+/.test(versionArg);
+const versionCommand = isSpecificVersion ? versionArg : versionArg;
+
 // 2. Bump the version in the root and all workspace package.json files.
-run(`npm version ${versionType} --no-git-tag-version --allow-same-version`);
+run(`npm version ${versionCommand} --no-git-tag-version --allow-same-version`);
 
 // 3. Get all workspaces and filter out the one we don't want to version.
 // Now we version the companion extension too, so the exclude list is empty
@@ -47,7 +51,7 @@ const workspacesToVersion = allWorkspaces.filter(
 
 for (const workspaceName of workspacesToVersion) {
   run(
-    `npm version ${versionType} --workspace ${workspaceName} --no-git-tag-version --allow-same-version`,
+    `npm version ${versionCommand} --workspace ${workspaceName} --no-git-tag-version --allow-same-version`,
   );
 }
 

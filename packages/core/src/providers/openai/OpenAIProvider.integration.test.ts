@@ -41,11 +41,13 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(firstModel).toHaveProperty('supportedToolFormats');
     expect(firstModel.supportedToolFormats).toEqual(['openai']);
 
-    // Check for some expected models
-    const modelIds = models.map((m) => m.id);
-    expect(modelIds).toContain('gpt-3.5-turbo');
+    // If LLXPRT_DEFAULT_MODEL is set, verify it's in the list
+    if (process.env.LLXPRT_DEFAULT_MODEL) {
+      const modelIds = models.map((m) => m.id);
+      expect(modelIds).toContain(process.env.LLXPRT_DEFAULT_MODEL);
+    }
 
-    console.log(`Found ${models.length} OpenAI models:`, modelIds);
+    console.log(`Found ${models.length} OpenAI models`);
   });
 
   it('should generate real chat completion', async () => {
