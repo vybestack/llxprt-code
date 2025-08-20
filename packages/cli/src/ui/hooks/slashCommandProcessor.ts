@@ -220,6 +220,10 @@ export const useSlashCommandProcessor = (
     }
 
     const ideClient = config.getIdeClient();
+    if (!ideClient) {
+      return;
+    }
+
     const listener = () => {
       reloadCommands();
     };

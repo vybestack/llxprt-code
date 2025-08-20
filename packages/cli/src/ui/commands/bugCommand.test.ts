@@ -90,7 +90,6 @@ describe('bugCommand', () => {
     const expectedInfo = `
 * **CLI Version:** 0.1.0
 * **Git Commit:** ${GIT_COMMIT_INFO}
-* **Session ID:** test-session-id
 * **Operating System:** test-platform v20.0.0
 * **Sandbox Environment:** test
 * **Model Version:** gemini-pro
