@@ -21,6 +21,7 @@ import {
   processSingleFileContent,
   DEFAULT_ENCODING,
   getSpecificMimeType,
+  ProcessedFileReadResult,
 } from '../utils/fileUtils.js';
 import { PartListUnion } from '@google/genai';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
@@ -81,6 +82,25 @@ export interface ReadManyFilesParams {
     respect_llxprt_ignore?: boolean;
   };
 }
+
+/**
+ * Result type for file processing operations
+ */
+type FileProcessingResult =
+  | {
+      success: true;
+      filePath: string;
+      relativePathForDisplay: string;
+      fileReadResult: ProcessedFileReadResult;
+      reason?: undefined;
+    }
+  | {
+      success: false;
+      filePath: string;
+      relativePathForDisplay: string;
+      fileReadResult?: undefined;
+      reason: string;
+    };
 
 /**
  * Default exclusion patterns for commonly ignored directories and binary file types.
