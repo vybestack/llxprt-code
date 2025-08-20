@@ -789,8 +789,15 @@ export class OpenAIProvider extends BaseProvider {
       return;
     }
 
+    // Patch messages to include synthetic responses for cancelled tools (just like responses endpoint)
+    const { SyntheticToolResponseHandler } = await import(
+      './syntheticToolResponses.js'
+    );
+    const patchedMessages =
+      SyntheticToolResponseHandler.patchMessageHistory(messages);
+
     // Validate tool messages have required tool_call_id
-    const toolMessages = messages.filter((msg) => msg.role === 'tool');
+    const toolMessages = patchedMessages.filter((msg) => msg.role === 'tool');
     const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
 
     if (missingIds.length > 0) {
@@ -841,7 +848,7 @@ export class OpenAIProvider extends BaseProvider {
     const response = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
-        messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+        patchedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
       stream: streamingEnabled,
       ...(streamingEnabled && finalStreamOptions !== null
         ? { stream_options: finalStreamOptions }
@@ -1032,21 +1039,31 @@ export class OpenAIProvider extends BaseProvider {
           // Convert full message format to delta format - create new object instead of modifying
           const message = cerebrasChunk.choices[0].message;
           const originalChunk = chunk as StreamChunk;
+          // Create a completely new object to avoid JSONResponse mutation issues
           processedChunk = {
-            ...originalChunk,
             choices: [
               {
                 delta: {
                   content: message.content,
                   tool_calls: message.tool_calls?.map((tc, index) => ({
-                    ...tc,
+                    id: tc.id,
+                    type: tc.type,
+                    function: {
+                      name: tc.function.name,
+                      arguments: tc.function.arguments,
+                    },
                     index,
                   })),
                 },
-                message: undefined, // Remove message field
               },
             ],
-            usage: originalChunk.usage,
+            usage: originalChunk.usage
+              ? {
+                  prompt_tokens: originalChunk.usage.prompt_tokens,
+                  completion_tokens: originalChunk.usage.completion_tokens,
+                  total_tokens: originalChunk.usage.total_tokens,
+                }
+              : undefined,
           };
         }
 

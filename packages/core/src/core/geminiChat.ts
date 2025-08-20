@@ -68,23 +68,43 @@ function createUserContentWithFunctionResponseFix(
 
   // If the message is an array, process each element
   if (Array.isArray(message)) {
-    for (const item of message) {
-      if (typeof item === 'string') {
-        parts.push({ text: item });
-      } else if (Array.isArray(item)) {
-        // Nested array case - flatten it
-        if (process.env.DEBUG) {
-          console.log(
-            '[DEBUG] createUserContentWithFunctionResponseFix - flattening nested array:',
-            JSON.stringify(item, null, 2),
-          );
+    // First check if this is an array of functionResponse Parts
+    // This happens when multiple tool responses are sent together
+    const allFunctionResponses = message.every(
+      (item) => item && typeof item === 'object' && 'functionResponse' in item,
+    );
+
+    if (allFunctionResponses) {
+      // This is already a properly formatted array of function response Parts
+      // Just use them directly without any wrapping
+      if (process.env.DEBUG) {
+        console.log(
+          '[DEBUG] createUserContentWithFunctionResponseFix - array of functionResponse Parts, using directly:',
+          JSON.stringify(message, null, 2),
+        );
+      }
+      // Cast is safe here because we've checked all items are objects with functionResponse
+      parts.push(...(message as Part[]));
+    } else {
+      // Process mixed content
+      for (const item of message) {
+        if (typeof item === 'string') {
+          parts.push({ text: item });
+        } else if (Array.isArray(item)) {
+          // Nested array case - flatten it
+          if (process.env.DEBUG) {
+            console.log(
+              '[DEBUG] createUserContentWithFunctionResponseFix - flattening nested array:',
+              JSON.stringify(item, null, 2),
+            );
+          }
+          for (const subItem of item) {
+            parts.push(subItem);
+          }
+        } else if (item && typeof item === 'object') {
+          // Individual part (function response, text, etc.)
+          parts.push(item);
         }
-        for (const subItem of item) {
-          parts.push(subItem);
-        }
-      } else if (item && typeof item === 'object') {
-        // Individual part (function response, text, etc.)
-        parts.push(item);
       }
     }
   } else {

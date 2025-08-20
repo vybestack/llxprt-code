@@ -483,11 +483,17 @@ export async function* parseResponsesStream(
                 textAccumulator = '';
                 // Extract usage data and the final response ID
                 if (event.response) {
+                  // Build the message object step by step to avoid read-only issues
                   const finalMessage: IMessage = {
-                    id: event.response.id,
                     role: ContentGeneratorRole.ASSISTANT,
                     content: '',
                   };
+
+                  // Only add id if it exists
+                  if (event.response.id) {
+                    finalMessage.id = event.response.id;
+                  }
+
                   if (event.response.usage) {
                     finalMessage.usage = {
                       prompt_tokens: event.response.usage.input_tokens || 0,

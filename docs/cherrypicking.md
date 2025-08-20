@@ -2,21 +2,6 @@
 
 This guide documents the process for cherry-picking changes from the upstream gemini-cli repository while maintaining llxprt's multi-provider architecture and customizations.
 
-## Current Sync Status
-
-**Last synced upstream commit:** `c63185da` (August 14, 2025)
-
-- Fix thought signature auth switching (OAuth transitions)
-- Updated Ink version dependencies
-- Removed deprecated modelCheck feature
-- Fixed emoji support in terminal rendering
-- Added GCA free tier authentication support
-- Updated @google/genai to 1.13.0
-- Improved IDE detection (Devin, Replit environments)
-- Completely removed ClearcutLogger and all Google telemetry
-
-**Branch:** `20250813-gmerge`
-
 ## Overview
 
 LLxprt Code is a fork of gemini-cli that adds multi-provider support (OpenAI, Anthropic, etc.) along with other enhancements. We regularly cherry-pick improvements from upstream while preserving our unique features.
@@ -43,6 +28,12 @@ Review new commits from upstream:
 ```bash
 # See what's new in upstream that we don't have
 git log --oneline upstream/main ^HEAD
+
+# Check how many commits behind we are
+git rev-list --count HEAD..upstream/main
+
+# See the last merge point with upstream
+git log --oneline --merges --grep="Merge upstream" -1
 ```
 
 ### 3. Cherry-pick Relevant Commits
@@ -218,10 +209,10 @@ LLxprt may use different error structures:
 1. **Never merge directly to main** - Always use a PR
 2. **Preserve llxprt's unique features** - Multi-provider support is core to llxprt
 3. **Test thoroughly** - Especially provider switching and authentication flows
-4. **Document conflicts** - Help future maintainers understand decisions
-5. **Keep commits atomic** - One cherry-pick per commit for easy tracking
-6. **Always verify code changes** - Don't just check commit messages; verify actual code was cherry-picked
-7. **IDE features are important** - llxprt has full IDE integration, don't skip IDE-related commits
+4. **Keep commits atomic** - One cherry-pick per commit for easy tracking
+5. **Always verify code changes** - Don't just check commit messages; verify actual code was cherry-picked
+6. **IDE features are important** - llxprt has full IDE integration, don't skip IDE-related commits
+7. **Git history is the source of truth** - Use git commands to check sync status, not manual logs
 
 ## Merge Strategy
 
