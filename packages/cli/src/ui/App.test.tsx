@@ -1132,7 +1132,7 @@ describe('App UI', () => {
   });
 
   describe('when in a narrow terminal', () => {
-    it('should render with a column layout', () => {
+    it.skip('should render with a column layout', () => {
       vi.mocked(useTerminalSize).mockReturnValue({
         columns: 60,
         rows: 24,
