@@ -1841,10 +1841,10 @@ export function useTextBuffer({
     }): void => {
       const { sequence: input } = key;
 
-      // Handle paste content atomically
-      if (key.paste && input) {
-        // For paste, insert the entire content at once, preserving newlines
-        insert(input);
+      if (key.paste) {
+        // Do not do any other processing on pastes so ensure we handle them
+        // before all other cases.
+        insert(input, { paste: key.paste });
         return;
       }
 

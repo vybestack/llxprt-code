@@ -8,7 +8,7 @@
 import { DiagConsoleLogger, DiagLogLevel, diag } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import {
   BatchSpanProcessor,
   ConsoleSpanExporter,
@@ -58,7 +58,7 @@ export function initializeTelemetry(config: Config): void {
     );
   }
 
-  const resource = new Resource({
+  const resource = resourceFromAttributes({
     [SemanticResourceAttributes.SERVICE_NAME]: SERVICE_NAME,
     [SemanticResourceAttributes.SERVICE_VERSION]: process.version,
     'session.id': config.getSessionId(),
@@ -103,7 +103,7 @@ export function initializeTelemetry(config: Config): void {
   sdk = new NodeSDK({
     resource,
     spanProcessors: [spanProcessor],
-    logRecordProcessor: logProcessor,
+    logRecordProcessors: [logProcessor],
     metricReader,
     instrumentations: [new HttpInstrumentation()],
   });

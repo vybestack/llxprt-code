@@ -10,12 +10,11 @@ import {
   ToolCallRequestInfo,
   ToolCallResponseInfo,
   ToolErrorType,
-  ToolRegistry,
   ToolResult,
 } from '../index.js';
+import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
-import { ToolContext } from '../tools/tool-context.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
 
@@ -131,19 +130,9 @@ function filterFileModificationArgs(
 export async function executeToolCall(
   config: Config,
   toolCallRequest: ToolCallRequestInfo,
-  toolRegistry: ToolRegistry,
   abortSignal?: AbortSignal,
 ): Promise<ToolCallResponseInfo> {
-  // Create context from config
-  const context: ToolContext = {
-    sessionId:
-      typeof config.getSessionId === 'function'
-        ? config.getSessionId()
-        : 'default-session',
-    // TODO: Add agentId when available in the request
-  };
-
-  const tool = toolRegistry.getTool(toolCallRequest.name, context);
+  const tool = config.getToolRegistry().getTool(toolCallRequest.name);
 
   const startTime = Date.now();
   if (!tool) {
@@ -160,6 +149,7 @@ export async function executeToolCall(
       success: false,
       error: error.message,
       prompt_id: toolCallRequest.prompt_id,
+      tool_type: 'native',
     });
     // Ensure the response structure matches what the API expects for an error
     return {
@@ -236,6 +226,10 @@ export async function executeToolCall(
           success: false,
           error: filterResult.error,
           prompt_id: toolCallRequest.prompt_id,
+          tool_type:
+            typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+              ? 'mcp'
+              : 'native',
         });
 
         return {
@@ -303,6 +297,10 @@ export async function executeToolCall(
       prompt_id: toolCallRequest.prompt_id,
       metadata,
       decision: ToolCallDecision.AUTO_ACCEPT,
+      tool_type:
+        typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+          ? 'mcp'
+          : 'native',
     });
 
     // Add system feedback for warn mode if emojis were detected and filtered
@@ -342,6 +340,10 @@ export async function executeToolCall(
       error_type: ToolErrorType.UNHANDLED_EXCEPTION,
       prompt_id: toolCallRequest.prompt_id,
       decision: ToolCallDecision.AUTO_ACCEPT,
+      tool_type:
+        typeof tool !== 'undefined' && tool instanceof DiscoveredMCPTool
+          ? 'mcp'
+          : 'native',
     });
     return {
       callId: toolCallRequest.callId,

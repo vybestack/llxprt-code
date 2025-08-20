@@ -12,6 +12,7 @@ import fs from 'fs';
 import fsp from 'fs/promises';
 import { Config } from '../config/config.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { ToolInvocation, ToolResult } from './tools.js';
 
@@ -27,6 +28,7 @@ describe('ReadFileTool', () => {
     );
     const mockConfigInstance = {
       getFileService: () => new FileDiscoveryService(tempRootDir),
+      getFileSystemService: () => new StandardFileSystemService(),
       getTargetDir: () => tempRootDir,
       getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
       getConversationLoggingEnabled: () => false,
@@ -79,7 +81,16 @@ describe('ReadFileTool', () => {
       );
     });
 
-    it('should throw error for negative offset', () => {
+    it('should throw error if path is empty', () => {
+      const params: ReadFileToolParams = {
+        absolute_path: '',
+      };
+      expect(() => tool.build(params)).toThrow(
+        /The 'absolute_path' parameter must be non-empty./,
+      );
+    });
+
+    it('should throw error if offset is negative', () => {
       const params: ReadFileToolParams = {
         absolute_path: path.join(tempRootDir, 'test.txt'),
         offset: -1,

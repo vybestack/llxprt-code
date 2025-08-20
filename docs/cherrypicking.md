@@ -121,6 +121,42 @@ npm test
 npm run format
 ```
 
+### 5a. Batch Verification Phase (When Cherry-picking Multiple Commits)
+
+When cherry-picking multiple commits, **verify after each batch of 5 commits**:
+
+**Verification Process**:
+
+1. After cherry-picking 5 commits (or fewer if it's the last batch)
+2. Run full verification suite:
+   ```bash
+   # Full verification in order
+   npm run lint
+   npm run build
+   npm test
+   npm run format
+   git add -A  # Stage formatted changes if any
+   ```
+3. Verify commits were actually applied:
+   ```bash
+   # Check that all expected commits are present
+   git log --oneline -10  # Review recent commits
+   git diff HEAD~5..HEAD --stat  # Check changes in last 5 commits
+   ```
+4. Fix any issues before proceeding to next batch
+5. Create a fix commit if needed:
+   ```bash
+   git add -A
+   git commit -m "fix: resolve issues from batch N cherry-picks"
+   ```
+
+**Why Batch Verification?**
+
+- Catches integration issues early
+- Prevents accumulation of errors
+- Ensures each batch is stable before proceeding
+- Makes troubleshooting easier by isolating problematic commits
+
 ### 6. Commit Fixes
 
 If you made fixes after cherry-picking:

@@ -42,6 +42,8 @@ import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
   TelemetryTarget,
+  logCliConfiguration,
+  StartSessionEvent,
 } from '../telemetry/index.js';
 import {
   DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -54,6 +56,10 @@ import { IdeClient } from '../ide/ide-client.js';
 import type { Content } from '@google/genai';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { SettingsService } from '../settings/SettingsService.js';
+import {
+  FileSystemService,
+  StandardFileSystemService,
+} from '../services/fileSystemService.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig };
@@ -260,6 +266,7 @@ export interface ConfigParameters {
   interactive?: boolean;
   shellReplacement?: boolean;
   trustedFolder?: boolean;
+  shouldUseNodePtyShell?: boolean;
 }
 
 export class Config {
@@ -268,6 +275,7 @@ export class Config {
   private readonly sessionId: string;
   // Line 80: Get service instance
   private settingsService = getSettingsService();
+  private fileSystemService: FileSystemService;
   private contentGeneratorConfig!: ContentGeneratorConfig;
   private readonly embeddingModel: string;
   private readonly sandbox: SandboxConfig | undefined;
@@ -341,6 +349,7 @@ export class Config {
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
+  private readonly shouldUseNodePtyShell: boolean;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
 
@@ -348,6 +357,7 @@ export class Config {
     this.sessionId = params.sessionId;
     this.embeddingModel =
       params.embeddingModel ?? DEFAULT_GEMINI_EMBEDDING_MODEL;
+    this.fileSystemService = new StandardFileSystemService();
     this.sandbox = params.sandbox;
     this.targetDir = path.resolve(params.targetDir);
     this.workspaceContext = new WorkspaceContext(
@@ -424,6 +434,7 @@ export class Config {
     this.interactive = params.interactive ?? false;
     this.shellReplacement = params.shellReplacement ?? false;
     this.trustedFolder = params.trustedFolder;
+    this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -445,7 +456,7 @@ export class Config {
       console.log(`[CONFIG] Telemetry disabled`);
     }
 
-    // Data collection is disabled
+    logCliConfiguration(this, new StartSessionEvent(this));
   }
 
   /**
@@ -624,8 +635,8 @@ export class Config {
     return this.workspaceContext;
   }
 
-  getToolRegistry(): Promise<ToolRegistry> {
-    return Promise.resolve(this.toolRegistry);
+  getToolRegistry(): ToolRegistry {
+    return this.toolRegistry;
   }
 
   getPromptRegistry(): PromptRegistry {
@@ -989,6 +1000,20 @@ export class Config {
     return this.interactive;
   }
 
+  /**
+   * Get the current FileSystemService
+   */
+  getFileSystemService(): FileSystemService {
+    return this.fileSystemService;
+  }
+
+  /**
+   * Set a custom FileSystemService
+   */
+  setFileSystemService(fileSystemService: FileSystemService): void {
+    this.fileSystemService = fileSystemService;
+  }
+
   getChatCompression(): ChatCompressionSettings | undefined {
     return this.chatCompression;
   }
@@ -1012,6 +1037,10 @@ export class Config {
       return true;
     }
     return this.shellReplacement;
+  }
+
+  getShouldUseNodePtyShell(): boolean {
+    return this.shouldUseNodePtyShell;
   }
 
   async getGitService(): Promise<GitService> {

@@ -255,8 +255,13 @@ describe('InputPrompt paste functionality', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
-    // The buffer should have been updated with the paste content using insert
-    expect(mockBuffer.insert).toHaveBeenCalledWith(multiLineContent);
+    // The buffer should have been updated with the paste content through handleInput
+    expect(mockBuffer.handleInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paste: true,
+        sequence: multiLineContent,
+      }),
+    );
 
     // Check that submit was NOT called automatically
     expect(mockOnSubmit).not.toHaveBeenCalled();
@@ -361,8 +366,13 @@ describe('InputPrompt paste functionality', () => {
     // Wait for the event to be processed
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    // The buffer should have been updated with the paste content using insert
-    expect(mockBuffer.insert).toHaveBeenCalledWith(singleLineContent);
+    // The buffer should have been updated with the paste content through handleInput
+    expect(mockBuffer.handleInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paste: true,
+        sequence: singleLineContent,
+      }),
+    );
 
     // Check that submit was NOT called automatically
     expect(mockOnSubmit).not.toHaveBeenCalled();

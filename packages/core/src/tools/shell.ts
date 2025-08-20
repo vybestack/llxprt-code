@@ -19,12 +19,12 @@ import {
   ToolCallConfirmationDetails,
   Kind,
 } from './tools.js';
-import { SchemaValidator } from '../utils/schemaValidator.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
   limitOutputTokens,
   formatLimitedOutput,
 } from '../utils/toolOutputLimiter.js';
+import { summarizeToolOutput } from '../utils/summarizer.js';
 import {
   ShellExecutionService,
   ShellOutputEvent,
@@ -112,6 +112,8 @@ class ShellToolInvocation extends BaseToolInvocation<
   async execute(
     signal: AbortSignal,
     updateOutput?: (output: string) => void,
+    terminalColumns?: number,
+    terminalRows?: number,
   ): Promise<ToolResult> {
     const strippedCommand = stripShellWrapper(this.params.command);
 
@@ -144,13 +146,11 @@ class ShellToolInvocation extends BaseToolInvocation<
         this.params.directory || '',
       );
 
-      let cumulativeStdout = '';
-      let cumulativeStderr = '';
-
+      let cumulativeOutput = '';
       let lastUpdateTime = Date.now();
       let isBinaryStream = false;
 
-      const { result: resultPromise } = ShellExecutionService.execute(
+      const { result: resultPromise } = await ShellExecutionService.execute(
         commandToExecute,
         cwd,
         (event: ShellOutputEvent) => {
@@ -163,15 +163,9 @@ class ShellToolInvocation extends BaseToolInvocation<
 
           switch (event.type) {
             case 'data':
-              if (isBinaryStream) break; // Don't process text if we are in binary mode
-              if (event.stream === 'stdout') {
-                cumulativeStdout += event.chunk;
-              } else {
-                cumulativeStderr += event.chunk;
-              }
-              currentDisplayOutput =
-                cumulativeStdout +
-                (cumulativeStderr ? `\n${cumulativeStderr}` : '');
+              if (isBinaryStream) break;
+              cumulativeOutput = event.chunk;
+              currentDisplayOutput = cumulativeOutput;
               if (Date.now() - lastUpdateTime > OUTPUT_UPDATE_INTERVAL_MS) {
                 shouldUpdate = true;
               }
@@ -202,6 +196,9 @@ class ShellToolInvocation extends BaseToolInvocation<
           }
         },
         signal,
+        this.config.getShouldUseNodePtyShell(),
+        terminalColumns,
+        terminalRows,
       );
 
       const result = await resultPromise;
@@ -233,7 +230,7 @@ class ShellToolInvocation extends BaseToolInvocation<
       if (result.aborted) {
         llmContent = 'Command was cancelled by user before it could complete.';
         if (result.output.trim()) {
-          llmContent += ` Below is the output (on stdout and stderr) before it was cancelled:\n${result.output}`;
+          llmContent += ` Below is the output before it was cancelled:\n${result.output}`;
         } else {
           llmContent += ' There was no output before it was cancelled.';
         }
@@ -247,8 +244,7 @@ class ShellToolInvocation extends BaseToolInvocation<
         llmContent = [
           `Command: ${this.params.command}`,
           `Directory: ${this.params.directory || '(root)'}`,
-          `Stdout: ${result.stdout || '(empty)'}`,
-          `Stderr: ${result.stderr || '(empty)'}`,
+          `Output: ${result.output || '(empty)'}`,
           `Error: ${finalError}`, // Use the cleaned error string.
           `Exit Code: ${result.exitCode ?? '(none)'}`,
           `Signal: ${result.signal ?? '(none)'}`,
@@ -282,18 +278,42 @@ class ShellToolInvocation extends BaseToolInvocation<
         }
       }
 
-      // Apply token-based limiting first
+      let processedContent = llmContent;
+
+      // Check if summarization is configured
+      const summarizeConfig = this.config.getSummarizeToolOutputConfig();
+      if (summarizeConfig && summarizeConfig[ShellTool.Name]) {
+        // Get the ServerToolsProvider for summarization
+        const contentGenConfig = this.config.getContentGeneratorConfig();
+        if (contentGenConfig?.providerManager) {
+          const serverToolsProvider = contentGenConfig.providerManager.getServerToolsProvider();
+          
+          // If we have a ServerToolsProvider that can handle summarization
+          if (serverToolsProvider) {
+            // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
+            // For now, check if it's a Gemini provider and use the existing function
+            if (serverToolsProvider.name === 'gemini') {
+              processedContent = await summarizeToolOutput(
+                llmContent,
+                this.config.getGeminiClient(),
+                signal,
+                summarizeConfig[ShellTool.Name].tokenBudget,
+              );
+            }
+            // If not Gemini, we can't summarize yet - need provider-agnostic summarization
+          }
+        }
+      }
+
+      // ALWAYS apply token-based limiting at the end to protect the outer model
       const limitedResult = limitOutputTokens(
-        llmContent,
+        processedContent,
         this.config,
         'run_shell_command',
       );
 
       if (limitedResult.wasTruncated) {
-        // For now, just return the truncated output without summarization
-        // since we don't have direct access to a Gemini client here
         const formatted = formatLimitedOutput(limitedResult);
-
         return {
           llmContent: formatted.llmContent,
           returnDisplay: returnDisplayMessage,
@@ -380,7 +400,7 @@ export class ShellTool extends BaseDeclarativeTool<
     );
   }
 
-  protected override validateToolParams(
+  protected override validateToolParamValues(
     params: ShellToolParams,
   ): string | null {
     const commandCheck = isCommandAllowed(params.command, this.config);
@@ -392,13 +412,6 @@ export class ShellTool extends BaseDeclarativeTool<
         return `Command is not allowed: ${params.command}`;
       }
       return commandCheck.reason;
-    }
-    const errors = SchemaValidator.validate(
-      this.schema.parametersJsonSchema,
-      params,
-    );
-    if (errors) {
-      return errors;
     }
     if (!params.command.trim()) {
       return 'Command cannot be empty.';

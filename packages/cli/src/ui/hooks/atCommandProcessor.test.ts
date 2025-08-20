@@ -11,6 +11,7 @@ import {
   FileDiscoveryService,
   GlobTool,
   ReadManyFilesTool,
+  StandardFileSystemService,
   ToolRegistry,
 } from '@vybestack/llxprt-code-core';
 import * as os from 'os';
@@ -59,18 +60,25 @@ describe('handleAtCommand', () => {
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       }),
+      getFileSystemService: () => new StandardFileSystemService(),
       getEnableRecursiveFileSearch: vi.fn(() => true),
       getWorkspaceContext: () => ({
         isPathWithinWorkspace: () => true,
         getDirectories: () => [testRootDir],
       }),
       getEphemeralSettings: () => ({}), // No disabled tools
+      getMcpServers: () => ({}),
+      getMcpServerCommand: () => undefined,
+      getPromptRegistry: () => ({
+        getPromptsByServer: () => [],
+      }),
+      getDebugMode: () => false,
     } as unknown as Config;
 
     const registry = new ToolRegistry(mockConfig);
     registry.registerTool(new ReadManyFilesTool(mockConfig));
     registry.registerTool(new GlobTool(mockConfig));
-    getToolRegistry.mockResolvedValue(registry);
+    getToolRegistry.mockReturnValue(registry);
   });
 
   afterEach(async () => {
@@ -126,7 +134,7 @@ describe('handleAtCommand', () => {
   });
 
   it('tool registry should be properly configured', async () => {
-    const registry = await mockConfig.getToolRegistry();
+    const registry = mockConfig.getToolRegistry();
     expect(registry).toBeDefined();
     expect(registry.getTool('read_many_files')).toBeDefined();
     expect(registry.getTool('glob')).toBeDefined();

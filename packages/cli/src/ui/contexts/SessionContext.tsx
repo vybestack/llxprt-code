@@ -25,6 +25,7 @@ import {
 export type { SessionMetrics, ModelMetrics };
 
 export interface SessionStatsState {
+  sessionId: string;
   sessionStartTime: Date;
   metrics: SessionMetrics;
   lastPromptTokenCount: number;
@@ -43,6 +44,8 @@ export interface ComputedSessionStats {
   agreementRate: number;
   totalCachedTokens: number;
   totalPromptTokens: number;
+  totalLinesAdded: number;
+  totalLinesRemoved: number;
 }
 
 // Defines the final "value" of our context, including the state
@@ -65,6 +68,7 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [stats, setStats] = useState<SessionStatsState>({
+    sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     sessionStartTime: new Date(),
     metrics: uiTelemetryService.getMetrics(),
     lastPromptTokenCount: 0,

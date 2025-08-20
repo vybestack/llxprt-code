@@ -30,8 +30,7 @@ describe('toolsCommand', () => {
     const mockContext = createMockCommandContext({
       services: {
         config: {
-          getToolRegistry: () => Promise.resolve(undefined),
-          getEphemeralSettings: () => ({}),
+          getToolRegistry: () => undefined,
         },
       },
     });
@@ -52,8 +51,7 @@ describe('toolsCommand', () => {
     const mockContext = createMockCommandContext({
       services: {
         config: {
-          getToolRegistry: () =>
-            Promise.resolve({ getAllTools: () => [] as Tool[] }),
+          getToolRegistry: () => ({ getAllTools: () => [] as Tool[] }),
           getEphemeralSettings: () => ({}),
         },
       },
@@ -74,8 +72,7 @@ describe('toolsCommand', () => {
     const mockContext = createMockCommandContext({
       services: {
         config: {
-          getToolRegistry: () =>
-            Promise.resolve({ getAllTools: () => mockTools }),
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getEphemeralSettings: () => ({}),
         },
       },
@@ -94,8 +91,7 @@ describe('toolsCommand', () => {
     const mockContext = createMockCommandContext({
       services: {
         config: {
-          getToolRegistry: () =>
-            Promise.resolve({ getAllTools: () => mockTools }),
+          getToolRegistry: () => ({ getAllTools: () => mockTools }),
           getEphemeralSettings: () => ({}),
         },
       },

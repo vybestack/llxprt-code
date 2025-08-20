@@ -1547,25 +1547,31 @@ You can switch authentication methods by typing /auth or switch to a different m
               )}
             </Box>
           )}
-          <Footer
-            model={currentModel}
-            targetDir={config.getTargetDir()}
-            debugMode={config.getDebugMode()}
-            branchName={branchName}
-            debugMessage={debugMessage}
-            errorCount={errorCount}
-            showErrorDetails={showErrorDetails}
-            showMemoryUsage={
-              config.getDebugMode() || settings.merged.showMemoryUsage || false
-            }
-            promptTokenCount={sessionStats.lastPromptTokenCount}
-            nightly={nightly}
-            vimMode={vimModeEnabled ? vimMode : undefined}
-            contextLimit={
-              config.getEphemeralSetting('context-limit') as number | undefined
-            }
-            isTrustedFolder={config.isTrustedFolder()}
-          />
+          {!settings.merged.hideFooter && (
+            <Footer
+              model={currentModel}
+              targetDir={config.getTargetDir()}
+              debugMode={config.getDebugMode()}
+              branchName={branchName}
+              debugMessage={debugMessage}
+              errorCount={errorCount}
+              showErrorDetails={showErrorDetails}
+              showMemoryUsage={
+                config.getDebugMode() ||
+                settings.merged.showMemoryUsage ||
+                false
+              }
+              promptTokenCount={sessionStats.lastPromptTokenCount}
+              nightly={nightly}
+              vimMode={vimModeEnabled ? vimMode : undefined}
+              contextLimit={
+                config.getEphemeralSetting('context-limit') as
+                  | number
+                  | undefined
+              }
+              isTrustedFolder={config.isTrustedFolder()}
+            />
+          )}
         </Box>
       </Box>
     </StreamingContext.Provider>

@@ -46,7 +46,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     const command = 'echo "こんにちは世界"';
     const expectedOutput = 'こんにちは世界\r\n';
 
-    const promise = ShellExecutionService.execute(
+    const promise = await ShellExecutionService.execute(
       command,
       '.',
       () => {},
@@ -83,7 +83,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
   it('should handle commands with Japanese filenames', async () => {
     const command = 'dir "テストファイル.txt"';
 
-    const promise = ShellExecutionService.execute(
+    const promise = await ShellExecutionService.execute(
       command,
       '.',
       () => {},
@@ -110,7 +110,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
       const command = 'echo "Hello 世界"';
       const mixedOutput = 'Hello 世界\r\n';
 
-      const promise = ShellExecutionService.execute(
+      const promise = await ShellExecutionService.execute(
         command,
         '.',
         () => {},
@@ -135,7 +135,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
   it('should not escape quotes excessively in commands', async () => {
     const command = 'git commit -m "日本語のコミットメッセージ"';
 
-    ShellExecutionService.execute(
+    await ShellExecutionService.execute(
       command,
       '.',
       () => {},
@@ -163,7 +163,7 @@ describe('ShellExecutionService Windows multibyte regression tests', () => {
     const errorMessage =
       "'badcommand' は、内部コマンドまたは外部コマンド、\r\n操作可能なプログラムまたはバッチ ファイルとして認識されていません。\r\n";
 
-    const promise = ShellExecutionService.execute(
+    const promise = await ShellExecutionService.execute(
       command,
       '.',
       () => {},
