@@ -14,6 +14,7 @@ import { connectAndDiscover } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { parse } from 'shell-quote';
+import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 
 type ToolParams = Record<string, unknown>;
 
@@ -53,10 +54,17 @@ Signal: Signal number or \`(none)\` if no signal was received.
     );
   }
 
-  async execute(params: ToolParams): Promise<ToolResult> {
+  getDescription(): string {
+    return safeJsonStringify(this.params);
+  }
+
+  async execute(
+    _signal: AbortSignal,
+    _updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
     const callCommand = this.config.getToolCallCommand()!;
     const child = spawn(callCommand, [this.name]);
-    child.stdin.write(JSON.stringify(params));
+    child.stdin.write(JSON.stringify(this.params));
     child.stdin.end();
 
     let stdout = '';

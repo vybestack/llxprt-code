@@ -414,4 +414,14 @@ describe('ToolRegistry', () => {
       expect(allTools).toHaveLength(2);
     });
   });
+
+  describe('DiscoveredToolInvocation', () => {
+    it('should return the stringified params from getDescription', () => {
+      const tool = new DiscoveredTool(config, 'test-tool', 'A test tool', {});
+      const params = { param: 'testValue' };
+      const invocation = tool.build(params);
+      const description = invocation.getDescription();
+      expect(description).toBe(JSON.stringify(params));
+    });
+  });
 });
