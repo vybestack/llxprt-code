@@ -43,9 +43,15 @@ export function getReleaseVersion() {
     console.error(`Using manual version: ${manualVersion}`);
     releaseTag = manualVersion;
   } else {
-    throw new Error(
-      'Error: No version specified and this is not a nightly release.',
+    // Auto-increment patch version for automated releases
+    const currentVersion = getPackageVersion();
+    const versionParts = currentVersion.split('.');
+    versionParts[2] = (parseInt(versionParts[2]) + 1).toString();
+    const nextVersion = versionParts.join('.');
+    console.error(
+      `Auto-incrementing version from ${currentVersion} to ${nextVersion}`,
     );
+    releaseTag = `v${nextVersion}`;
   }
 
   if (!releaseTag) {
