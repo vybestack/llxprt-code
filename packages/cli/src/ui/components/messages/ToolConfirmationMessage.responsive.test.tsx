@@ -17,7 +17,6 @@ import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
 import { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { KeypressProvider } from '../../contexts/KeypressContext.js';
-import React from 'react';
 
 vi.mock('../../hooks/useTerminalSize.js');
 

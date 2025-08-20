@@ -6,6 +6,6 @@ exports[`App UI > when in a narrow terminal > should render with a column layout
 ╭────────────────────────────────────────────────────────────────────────────────────────╮
 │ >   Type your message or @path/to/file                                                 │
 ╰────────────────────────────────────────────────────────────────────────────────────────╯
-                                                                 Mem: 8% | Ctx: 0.0k/1049k
+                                                                 Mem: 9% | Ctx: 0.0k/1049k
 /test/dir                                               | ✖ 5 errors (ctrl+o for details)"
 `;
