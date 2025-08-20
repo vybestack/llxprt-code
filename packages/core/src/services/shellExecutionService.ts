@@ -217,8 +217,8 @@ export class ShellExecutionService {
           resolve({
             rawOutput: finalBuffer,
             output: combinedOutput.trim(),
-            stdout: stdout,
-            stderr: stderr,
+            stdout,
+            stderr,
             exitCode: code,
             signal: signal ? (os.constants.signals[signal] ?? null) : null,
             error,
