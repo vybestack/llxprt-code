@@ -36,6 +36,7 @@ import * as crypto from 'crypto';
 import { ToolConfirmationOutcome } from './tools.js';
 import { OUTPUT_UPDATE_INTERVAL_MS } from './shell.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
+import * as summarizer from '../utils/summarizer.js';
 
 describe('ShellTool', () => {
   let shellTool: ShellTool;
