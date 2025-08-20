@@ -11,14 +11,12 @@ import * as path from 'node:path';
 import * as net from 'node:net';
 import * as child_process from 'node:child_process';
 import { IdeClient } from '../packages/core/src/ide/ide-client.js';
-
-// import { TestMcpServer } from './test-mcp-server.js';
+import { TestMcpServer } from './test-mcp-server.js';
 
 describe.skip('IdeClient', () => {
   it('reads port from file and connects', async () => {
-    // const server = new TestMcpServer();
-    // const port = await server.start();
-    const port = 12345; // dummy port for skipped test
+    const server = new TestMcpServer();
+    const port = await server.start();
     const pid = process.pid;
     const portFile = path.join(os.tmpdir(), `llxprt-ide-server-${pid}.json`);
     fs.writeFileSync(portFile, JSON.stringify({ port }));
@@ -34,7 +32,7 @@ describe.skip('IdeClient', () => {
     });
 
     fs.unlinkSync(portFile);
-    // await server.stop();
+    await server.stop();
     delete process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
     // Reset instance
     IdeClient.instance = undefined;
@@ -56,7 +54,7 @@ const getFreePort = (): Promise<number> => {
 };
 
 describe.skip('IdeClient fallback connection logic', () => {
-  // let server: TestMcpServer;
+  let server: TestMcpServer;
   let envPort: number;
   let pid: number;
   let portFile: string;
@@ -64,9 +62,8 @@ describe.skip('IdeClient fallback connection logic', () => {
   beforeEach(async () => {
     pid = process.pid;
     portFile = path.join(os.tmpdir(), `llxprt-ide-server-${pid}.json`);
-    // server = new TestMcpServer();
-    // envPort = await server.start();
-    envPort = 12345; // dummy port for skipped test
+    server = new TestMcpServer();
+    envPort = await server.start();
     process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = String(envPort);
     process.env['TERM_PROGRAM'] = 'vscode';
     process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = process.cwd();
@@ -75,7 +72,7 @@ describe.skip('IdeClient fallback connection logic', () => {
   });
 
   afterEach(async () => {
-    // await server.stop();
+    await server.stop();
     delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     delete process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
     if (fs.existsSync(portFile)) {
