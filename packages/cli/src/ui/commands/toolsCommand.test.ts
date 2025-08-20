@@ -52,6 +52,7 @@ describe('toolsCommand', () => {
       services: {
         config: {
           getToolRegistry: () => ({ getAllTools: () => [] as Tool[] }),
+          getEphemeralSettings: () => ({}),
         },
       },
     });
@@ -72,6 +73,7 @@ describe('toolsCommand', () => {
       services: {
         config: {
           getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getEphemeralSettings: () => ({}),
         },
       },
     });
@@ -90,6 +92,7 @@ describe('toolsCommand', () => {
       services: {
         config: {
           getToolRegistry: () => ({ getAllTools: () => mockTools }),
+          getEphemeralSettings: () => ({}),
         },
       },
     });

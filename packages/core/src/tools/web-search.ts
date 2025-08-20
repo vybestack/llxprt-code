@@ -4,21 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-<<<<<<< HEAD
 import { BaseDeclarativeTool, Kind, ToolInvocation } from './tools.js';
-import { SchemaValidator } from '../utils/schemaValidator.js';
-=======
-import { GroundingMetadata } from '@google/genai';
-import {
-  BaseDeclarativeTool,
-  BaseToolInvocation,
-  Kind,
-  ToolInvocation,
-  ToolResult,
-} from './tools.js';
-
-import { getErrorMessage } from '../utils/errors.js';
->>>>>>> b9cece767 (feat(core): Cleanup after migrating tools. (#6199))
 import { Config } from '../config/config.js';
 import {
   WebSearchToolInvocation,

@@ -78,7 +78,7 @@ describe('handleAtCommand', () => {
     const registry = new ToolRegistry(mockConfig);
     registry.registerTool(new ReadManyFilesTool(mockConfig));
     registry.registerTool(new GlobTool(mockConfig));
-    getToolRegistry.mockResolvedValue(registry);
+    getToolRegistry.mockReturnValue(registry);
   });
 
   afterEach(async () => {
@@ -134,7 +134,7 @@ describe('handleAtCommand', () => {
   });
 
   it('tool registry should be properly configured', async () => {
-    const registry = await mockConfig.getToolRegistry();
+    const registry = mockConfig.getToolRegistry();
     expect(registry).toBeDefined();
     expect(registry.getTool('read_many_files')).toBeDefined();
     expect(registry.getTool('glob')).toBeDefined();

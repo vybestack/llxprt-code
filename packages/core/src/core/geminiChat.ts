@@ -832,33 +832,6 @@ export class GeminiChat {
     return lastChunkWithMetadata?.usageMetadata;
   }
 
-  async maybeIncludeSchemaDepthContext(error: StructuredError): Promise<void> {
-    // Check for potentially problematic cyclic tools with cyclic schemas
-    // and include a recommendation to remove potentially problematic tools.
-    if (
-      isSchemaDepthError(error.message) ||
-      isInvalidArgumentError(error.message)
-    ) {
-      const tools = this.config.getToolRegistry().getAllTools();
-      const cyclicSchemaTools: string[] = [];
-      for (const tool of tools) {
-        if (
-          (tool.schema.parametersJsonSchema &&
-            hasCycleInSchema(tool.schema.parametersJsonSchema)) ||
-          (tool.schema.parameters && hasCycleInSchema(tool.schema.parameters))
-        ) {
-          cyclicSchemaTools.push(tool.displayName);
-        }
-      }
-      if (cyclicSchemaTools.length > 0) {
-        const extraDetails =
-          `\n\nThis error was probably caused by cyclic schema references in one of the following tools, try disabling them with excludeTools:\n\n - ` +
-          cyclicSchemaTools.join(`\n - `) +
-          `\n`;
-        error.message += extraDetails;
-      }
-    }
-  }
 
   private async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
