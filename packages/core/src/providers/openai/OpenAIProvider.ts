@@ -833,7 +833,7 @@ export class OpenAIProvider extends BaseProvider {
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
       this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
-    const streamingEnabled = streamingSetting !== 'disabled';
+    let streamingEnabled = streamingSetting !== 'disabled';
 
     // Get resolved authentication and update client if needed
     await this.updateClientWithResolvedAuth();
@@ -844,21 +844,56 @@ export class OpenAIProvider extends BaseProvider {
       );
     }
 
-    // Build request params with exact order from original
-    const response = await this.openai.chat.completions.create({
-      model: this.currentModel,
-      messages:
-        patchedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-      stream: streamingEnabled,
-      ...(streamingEnabled && finalStreamOptions !== null
-        ? { stream_options: finalStreamOptions }
-        : {}),
-      tools: formattedTools as
-        | OpenAI.Chat.Completions.ChatCompletionTool[]
-        | undefined,
-      tool_choice: this.getToolChoiceForFormat(tools),
-      ...this.modelParams,
-    });
+    let response;
+    try {
+      // Build request params with exact order from original
+      response = await this.openai.chat.completions.create({
+        model: this.currentModel,
+        messages:
+          patchedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+        stream: streamingEnabled,
+        ...(streamingEnabled && finalStreamOptions !== null
+          ? { stream_options: finalStreamOptions }
+          : {}),
+        tools: formattedTools as
+          | OpenAI.Chat.Completions.ChatCompletionTool[]
+          | undefined,
+        tool_choice: this.getToolChoiceForFormat(tools),
+        ...this.modelParams,
+      });
+    } catch (error) {
+      // Check for JSONResponse mutation errors
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      if (
+        errorMessage?.includes('JSONResponse') &&
+        errorMessage?.includes('does not support item assignment')
+      ) {
+        if (process.env.DEBUG) {
+          console.error(
+            '[OpenAIProvider] JSONResponse mutation error detected. This typically occurs with certain providers like Cerebras.',
+            'Falling back to non-streaming mode.',
+          );
+        }
+        // Retry with streaming disabled
+        response = await this.openai.chat.completions.create({
+          model: this.currentModel,
+          messages:
+            patchedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+          stream: false, // Force non-streaming
+          tools: formattedTools as
+            | OpenAI.Chat.Completions.ChatCompletionTool[]
+            | undefined,
+          tool_choice: this.getToolChoiceForFormat(tools),
+          ...this.modelParams,
+        });
+        // Override streamingEnabled for the rest of this function
+        streamingEnabled = false;
+      } else {
+        // Re-throw other errors
+        throw error;
+      }
+    }
 
     let fullContent = '';
     const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
@@ -875,32 +910,37 @@ export class OpenAIProvider extends BaseProvider {
     interface StreamChunk {
       choices?: Array<{
         delta?: {
-          content?: string;
+          content?: string | null;
+          role?: string;
           tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            function: {
-              name: string;
-              arguments: string;
+            id?: string;
+            type?: string;
+            function?: {
+              name?: string;
+              arguments?: string;
             };
+            index?: number;
           }>;
         };
         message?: {
-          content?: string;
+          content?: string | null;
+          role?: string;
           tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            function: {
-              name: string;
-              arguments: string;
+            id?: string;
+            type?: string;
+            function?: {
+              name?: string;
+              arguments?: string;
             };
           }>;
         };
+        index?: number;
+        finish_reason?: string | null;
       }>;
       usage?: {
-        prompt_tokens: number;
-        completion_tokens: number;
-        total_tokens: number;
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
       };
     }
 
@@ -913,7 +953,93 @@ export class OpenAIProvider extends BaseProvider {
       // Some providers (like Cerebras) send message format instead of delta
       const allChunks: StreamChunk[] = [];
       for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
-        allChunks.push(chunk as StreamChunk);
+        // CRITICAL: Create a deep copy to avoid JSONResponse mutation issues
+        // Cerebras and other providers may return immutable JSONResponse objects
+        // Cast to unknown first to bypass type checking, then to our extended type
+        const extendedChunk = chunk as unknown as {
+          choices?: Array<{
+            delta?: {
+              content?: string | null;
+              role?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: string;
+                function: {
+                  name: string;
+                  arguments: string;
+                };
+                index?: number;
+              }>;
+            };
+            message?: {
+              content?: string | null;
+              role?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: string;
+                function: {
+                  name: string;
+                  arguments: string;
+                };
+              }>;
+            };
+            index: number;
+            finish_reason: string | null;
+          }>;
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            total_tokens?: number;
+          };
+        };
+
+        const safeChunk: StreamChunk = {
+          choices: extendedChunk.choices?.map((choice) => ({
+            delta: choice.delta
+              ? {
+                  content: choice.delta.content ?? undefined,
+                  role: choice.delta.role,
+                  tool_calls: choice.delta.tool_calls?.map((tc, idx) => ({
+                    id: tc.id,
+                    type: tc.type,
+                    function: tc.function
+                      ? {
+                          name: tc.function.name,
+                          arguments: tc.function.arguments,
+                        }
+                      : undefined,
+                    index: tc.index !== undefined ? tc.index : idx,
+                  })),
+                }
+              : undefined,
+            message: choice.message
+              ? {
+                  content: choice.message.content ?? undefined,
+                  role: choice.message.role,
+                  tool_calls: choice.message.tool_calls?.map((tc) => ({
+                    id: tc.id,
+                    type: tc.type,
+                    function: tc.function
+                      ? {
+                          name: tc.function.name,
+                          arguments: tc.function.arguments,
+                        }
+                      : undefined,
+                  })),
+                }
+              : undefined,
+            index: choice.index,
+            finish_reason: choice.finish_reason,
+          })),
+          usage: extendedChunk.usage
+            ? {
+                prompt_tokens: extendedChunk.usage.prompt_tokens,
+                completion_tokens: extendedChunk.usage.completion_tokens,
+                total_tokens: extendedChunk.usage.total_tokens,
+              }
+            : undefined,
+        };
+        allChunks.push(safeChunk);
       }
 
       // Check first chunk to see if we have malformed stream
@@ -960,10 +1086,22 @@ export class OpenAIProvider extends BaseProvider {
             contentParts.push(message.content);
           }
           if (message?.tool_calls) {
-            aggregatedToolCalls = message.tool_calls;
+            // Ensure tool_calls match the expected format
+            aggregatedToolCalls = message.tool_calls.map((tc) => ({
+              id: tc.id || `call_${Date.now()}`,
+              type: (tc.type || 'function') as 'function',
+              function: {
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+              },
+            }));
           }
           if (chunk.usage) {
-            finalUsageData = chunk.usage;
+            finalUsageData = {
+              prompt_tokens: chunk.usage.prompt_tokens || 0,
+              completion_tokens: chunk.usage.completion_tokens || 0,
+              total_tokens: chunk.usage.total_tokens || 0,
+            };
           }
         }
 
@@ -980,94 +1118,28 @@ export class OpenAIProvider extends BaseProvider {
 
       // Process chunks normally - stream them as they come
       for (const chunk of allChunks) {
-        // CEREBRAS FIX: Detect and fix malformed streaming chunks
-        // Cerebras sends full message format instead of delta format in streaming
-        interface CerebrasChunk {
-          id?: string;
-          object?: string;
-          created?: number;
-          model?: string;
-          choices: Array<{
-            delta?: {
-              content?: string;
-              tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                function: {
-                  name: string;
-                  arguments: string;
-                };
-                index: number;
-              }>;
-              role?: string;
-            };
-            message?: {
-              content?: string;
-              tool_calls?: Array<{
-                id: string;
-                type: 'function';
-                function: {
-                  name: string;
-                  arguments: string;
-                };
-              }>;
-              role?: string;
-            };
-            index: number;
-            finish_reason: string | null;
-          }>;
-          usage?: {
-            prompt_tokens: number;
-            completion_tokens: number;
-            total_tokens: number;
-          };
-        }
-
-        const cerebrasChunk = chunk as CerebrasChunk;
-        // DEFENSIVE FIX: Some providers send full message format instead of delta in streaming
-        // This violates OpenAI spec but we handle it gracefully
+        // Since we created safe copies during buffering, chunks are now mutable
+        // Check if this chunk has message format instead of delta (malformed stream)
         let processedChunk: StreamChunk = chunk;
-        if (
-          cerebrasChunk.choices?.[0]?.message &&
-          !cerebrasChunk.choices[0].delta
-        ) {
+        if (chunk.choices?.[0]?.message && !chunk.choices?.[0]?.delta) {
           if (process.env.DEBUG) {
             console.log(
               '[OpenAIProvider] Converting malformed chunk from message to delta format',
             );
           }
-          // Convert full message format to delta format - create new object instead of modifying
-          const message = cerebrasChunk.choices[0].message;
-          const originalChunk = chunk as StreamChunk;
-          // Create a completely new object to avoid JSONResponse mutation issues
-          // Deep copy all properties to ensure no mutation of the original response
-          const newChoice = {
-            delta: {
-              content: message.content || undefined,
-              tool_calls: message.tool_calls
-                ? message.tool_calls.map((tc, idx) => ({
-                    id: tc.id,
-                    type: tc.type as 'function',
-                    function: {
-                      name: tc.function.name,
-                      arguments: tc.function.arguments,
-                    },
-                    index: idx,
-                  }))
-                : undefined,
-            },
-            message: undefined, // Explicitly clear the message field
-          };
-
+          // Convert message format to delta format for consistent processing
+          const message = chunk.choices[0].message;
           processedChunk = {
-            choices: [newChoice],
-            usage: originalChunk.usage
-              ? {
-                  prompt_tokens: originalChunk.usage.prompt_tokens,
-                  completion_tokens: originalChunk.usage.completion_tokens,
-                  total_tokens: originalChunk.usage.total_tokens,
-                }
-              : undefined,
+            choices: [
+              {
+                delta: {
+                  content: message?.content ?? undefined,
+                  role: message?.role,
+                  tool_calls: message?.tool_calls,
+                },
+              },
+            ],
+            usage: chunk.usage,
           };
         }
 
@@ -1137,9 +1209,9 @@ export class OpenAIProvider extends BaseProvider {
         // Check for usage data in the chunk
         if (processedChunk.usage) {
           usageData = {
-            prompt_tokens: processedChunk.usage.prompt_tokens,
-            completion_tokens: processedChunk.usage.completion_tokens,
-            total_tokens: processedChunk.usage.total_tokens,
+            prompt_tokens: processedChunk.usage.prompt_tokens || 0,
+            completion_tokens: processedChunk.usage.completion_tokens || 0,
+            total_tokens: processedChunk.usage.total_tokens || 0,
           };
         }
       }
