@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { ShellExecutionService } from '../packages/core/src/services/shellExecutionService.js';
+import { ShellExecutionService } from './packages/core/src/services/shellExecutionService.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { vi } from 'vitest';
@@ -16,7 +16,7 @@ describe('ShellExecutionService programmatic integration tests', () => {
   beforeAll(async () => {
     // Create a dedicated directory for this test suite to avoid conflicts.
     testDir = path.join(
-      process.env.INTEGRATION_TEST_FILE_DIR!,
+      process.env['INTEGRATION_TEST_FILE_DIR']!,
       'shell-service-tests',
     );
     await fs.mkdir(testDir, { recursive: true });
@@ -27,11 +27,12 @@ describe('ShellExecutionService programmatic integration tests', () => {
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
-    const handle = ShellExecutionService.execute(
+    const handle = await ShellExecutionService.execute(
       command,
       testDir,
       onOutputEvent,
       abortController.signal,
+      false,
     );
 
     const result = await handle.result;
@@ -52,11 +53,12 @@ describe('ShellExecutionService programmatic integration tests', () => {
       const onOutputEvent = vi.fn();
       const abortController = new AbortController();
 
-      const handle = ShellExecutionService.execute(
+      const handle = await ShellExecutionService.execute(
         command,
         testDir,
         onOutputEvent,
         abortController.signal,
+        false,
       );
 
       const result = await handle.result;
@@ -77,11 +79,12 @@ describe('ShellExecutionService programmatic integration tests', () => {
       const onOutputEvent = vi.fn();
       const abortController = new AbortController();
 
-      const handle = ShellExecutionService.execute(
+      const handle = await ShellExecutionService.execute(
         command,
         testDir,
         onOutputEvent,
         abortController.signal,
+        false,
       );
 
       const result = await handle.result;
@@ -102,11 +105,12 @@ describe('ShellExecutionService programmatic integration tests', () => {
     const onOutputEvent = vi.fn();
     const abortController = new AbortController();
 
-    const handle = ShellExecutionService.execute(
+    const handle = await ShellExecutionService.execute(
       command,
       testDir,
       onOutputEvent,
       abortController.signal,
+      false,
     );
 
     // Abort shortly after starting
