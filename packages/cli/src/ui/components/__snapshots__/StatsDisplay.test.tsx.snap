@@ -6,7 +6,6 @@ exports[`<StatsDisplay /> > Code Changes Display > displays Code Changes when li
 │  Session Stats                                                                                   │
 │                                                                                                  │
 │  Interaction Summary                                                                             │
-│  Session ID:                 test-session-id                                                     │
 │  Tool Calls:                 1 ( ✔ 1 ✖ 0 )                                                       │
 │  Success Rate:               100.0%                                                              │
 │  Code Changes:               +42 -18                                                             │
@@ -27,7 +26,6 @@ exports[`<StatsDisplay /> > Code Changes Display > hides Code Changes when no li
 │  Session Stats                                                                                   │
 │                                                                                                  │
 │  Interaction Summary                                                                             │
-│  Session ID:                 test-session-id                                                     │
 │  Tool Calls:                 1 ( ✔ 1 ✖ 0 )                                                       │
 │  Success Rate:               100.0%                                                              │
 │                                                                                                  │

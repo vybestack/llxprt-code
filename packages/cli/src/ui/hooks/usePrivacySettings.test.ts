@@ -13,12 +13,12 @@ import {
   UserTierId,
   GeminiClient,
   ContentGenerator,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { OAuth2Client } from 'google-auth-library';
 import { usePrivacySettings } from './usePrivacySettings.js';
 
 // Mock the dependencies
-vi.mock('@google/gemini-cli-core', () => {
+vi.mock('@vybestack/llxprt-code-core', () => {
   // Mock classes for instanceof checks
   class MockCodeAssistServer {
     projectId = 'test-project-id';
