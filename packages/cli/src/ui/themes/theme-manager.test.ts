@@ -116,6 +116,7 @@ describe('ThemeManager', () => {
         text: {
           primary: expect.any(String),
           secondary: expect.any(String),
+          link: expect.any(String),
           accent: expect.any(String),
         },
         status: {
@@ -125,7 +126,15 @@ describe('ThemeManager', () => {
         },
         background: {
           primary: expect.any(String),
-          secondary: expect.any(String),
+          diff: {
+            added: expect.any(String),
+            removed: expect.any(String),
+          },
+        },
+        ui: {
+          comment: expect.any(String),
+          symbol: expect.any(String),
+          gradient: expect.anything(),
         },
         border: {
           default: expect.any(String),

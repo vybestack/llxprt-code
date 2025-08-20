@@ -376,6 +376,8 @@ const ephemeralSettingHelp: Record<string, string> = {
   'custom-headers': 'Custom HTTP headers as JSON object',
   'stream-options':
     'Stream options for OpenAI API (default: { include_usage: true })',
+  streaming:
+    'Enable or disable streaming responses (enabled/disabled, default: enabled)',
   'shell-replacement':
     'Allow command substitution ($(), <(), backticks) in shell commands (default: false)',
   // Tool output limit settings - apply to all tools that can return large outputs
@@ -534,6 +536,32 @@ export const setCommand: SlashCommand = {
       parsedValue = normalizedValue;
     }
 
+    // Validate shell-replacement setting
+    if (key === 'shell-replacement') {
+      if (typeof parsedValue !== 'boolean') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `shell-replacement must be either 'true' or 'false'`,
+        };
+      }
+    }
+
+    // Validate streaming mode
+    if (key === 'streaming') {
+      const validModes = ['enabled', 'disabled'];
+      const normalizedValue = (parsedValue as string).toLowerCase();
+      if (!validModes.includes(normalizedValue)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Invalid streaming mode '${parsedValue}'. Valid modes are: ${validModes.join(', ')}`,
+        };
+      }
+      // Override the parsed value with normalized lowercase version
+      parsedValue = normalizedValue;
+    }
+
     // Get the config to apply settings
     const config = context.services.config;
     if (!config) {
@@ -606,6 +634,28 @@ export const setCommand: SlashCommand = {
         // Provide completions for emojifilter
         if (key === 'emojifilter') {
           const modes = ['allowed', 'auto', 'warn', 'error'];
+          if (parts[1]) {
+            return modes.filter((mode) =>
+              mode.startsWith(parts[1].toLowerCase()),
+            );
+          }
+          return modes;
+        }
+
+        // Provide completions for shell-replacement
+        if (key === 'shell-replacement') {
+          const values = ['true', 'false'];
+          if (parts[1]) {
+            return values.filter((value) =>
+              value.startsWith(parts[1].toLowerCase()),
+            );
+          }
+          return values;
+        }
+
+        // Provide completions for streaming
+        if (key === 'streaming') {
+          const modes = ['enabled', 'disabled'];
           if (parts[1]) {
             return modes.filter((mode) =>
               mode.startsWith(parts[1].toLowerCase()),

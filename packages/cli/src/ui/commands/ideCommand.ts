@@ -198,8 +198,8 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     },
   };
 
-  const connectionStatus = ideClient.getConnectionStatus().status;
-  if (connectionStatus === IDEConnectionStatus.Connected) {
+  const ideModeEnabled = config.getIdeMode();
+  if (ideModeEnabled) {
     ideSlashCommand.subCommands = [
       disableCommand,
       statusCommand,

@@ -633,8 +633,20 @@ export class GeminiClient {
       yield { type: GeminiEventType.ChatCompressed, value: compressed };
     }
 
-    if (this.config.getIdeMode()) {
-      const history = await this.getHistory();
+    // Prevent context updates from being sent while a tool call is
+    // waiting for a response. The Gemini API requires that a functionResponse
+    // part from the user immediately follows a functionCall part from the model
+    // in the conversation history . The IDE context is not discarded; it will
+    // be included in the next regular message sent to the model.
+    const history = await this.getHistory();
+    const lastMessage =
+      history.length > 0 ? history[history.length - 1] : undefined;
+    const hasPendingToolCall =
+      !!lastMessage &&
+      lastMessage.role === 'model' &&
+      (lastMessage.parts?.some((p) => 'functionCall' in p) || false);
+
+    if (this.config.getIdeMode() && !hasPendingToolCall) {
       const { contextParts, newIdeContext } = this.getIdeContextParts(
         this.forceFullIdeContext || history.length === 0,
       );

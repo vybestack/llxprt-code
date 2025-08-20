@@ -1006,6 +1006,11 @@ export class Config {
   }
 
   getShellReplacement(): boolean {
+    // Check ephemeral setting first, fall back to constructor value
+    const ephemeralValue = this.getEphemeralSetting('shell-replacement');
+    if (ephemeralValue === true) {
+      return true;
+    }
     return this.shellReplacement;
   }
 

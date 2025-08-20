@@ -66,7 +66,9 @@ export interface OauthWebLogin {
   loginCompletePromise: Promise<void>;
 }
 
-export async function getOauthClient(
+const oauthClientPromises = new Map<AuthType, Promise<OAuth2Client>>();
+
+async function initOauthClient(
   authType: AuthType,
   config: Config,
 ): Promise<OAuth2Client> {
@@ -193,6 +195,16 @@ export async function getOauthClient(
   }
 
   return client;
+}
+
+export async function getOauthClient(
+  authType: AuthType,
+  config: Config,
+): Promise<OAuth2Client> {
+  if (!oauthClientPromises.has(authType)) {
+    oauthClientPromises.set(authType, initOauthClient(authType, config));
+  }
+  return oauthClientPromises.get(authType)!;
 }
 
 async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
@@ -347,26 +359,32 @@ export function getAvailablePort(): Promise<number> {
 }
 
 async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
-  try {
-    const keyFile =
-      process.env.GOOGLE_APPLICATION_CREDENTIALS || getCachedCredentialPath();
+  const pathsToTry = [
+    getCachedCredentialPath(),
+    process.env['GOOGLE_APPLICATION_CREDENTIALS'],
+  ].filter((p): p is string => !!p);
 
-    const creds = await fs.readFile(keyFile, 'utf-8');
-    client.setCredentials(JSON.parse(creds));
+  for (const keyFile of pathsToTry) {
+    try {
+      const creds = await fs.readFile(keyFile, 'utf-8');
+      client.setCredentials(JSON.parse(creds));
 
-    // This will verify locally that the credentials look good.
-    const { token } = await client.getAccessToken();
-    if (!token) {
-      return false;
+      // This will verify locally that the credentials look good.
+      const { token } = await client.getAccessToken();
+      if (!token) {
+        continue;
+      }
+
+      // This will check with the server to see if it hasn't been revoked.
+      await client.getTokenInfo(token);
+
+      return true;
+    } catch (_) {
+      // Ignore and try next path.
     }
-
-    // This will check with the server to see if it hasn't been revoked.
-    await client.getTokenInfo(token);
-
-    return true;
-  } catch (_) {
-    return false;
   }
+
+  return false;
 }
 
 async function cacheCredentials(credentials: Credentials) {
@@ -446,4 +464,9 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
   } catch (error) {
     console.error('Error retrieving user info:', error);
   }
+}
+
+// Helper to ensure test isolation
+export function resetOauthClientForTesting() {
+  oauthClientPromises.clear();
 }

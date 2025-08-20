@@ -16,20 +16,29 @@ export function resolveSemanticColors(theme: ColorsTheme): SemanticColors {
     text: {
       primary: theme.Foreground,
       secondary: theme.Gray,
-      accent: theme.AccentBlue,
-    },
-    status: {
-      success: theme.AccentGreen,
-      warning: theme.AccentYellow,
-      error: theme.AccentRed,
+      link: theme.AccentBlue,
+      accent: theme.AccentPurple,
     },
     background: {
       primary: theme.Background,
-      secondary: theme.DiffAdded ?? theme.AccentGreen,
+      diff: {
+        added: theme.DiffAdded,
+        removed: theme.DiffRemoved,
+      },
     },
     border: {
       default: theme.Gray,
       focused: theme.AccentBlue,
+    },
+    ui: {
+      comment: theme.Comment,
+      symbol: theme.Gray,
+      gradient: theme.GradientColors,
+    },
+    status: {
+      error: theme.AccentRed,
+      success: theme.AccentGreen,
+      warning: theme.AccentYellow,
     },
   };
 }

@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthDialog } from './AuthDialog.js';
 import { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
+import { renderWithProviders } from '../../test-utils/render.js';
 
 describe('AuthDialog', () => {
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,7 +48,7 @@ describe('AuthDialog', () => {
     );
 
     const mockOnSelect = vi.fn();
-    const { lastFrame } = render(
+    const { lastFrame } = renderWithProviders(
       <AuthDialog
         onSelect={mockOnSelect}
         settings={settings}
@@ -86,7 +86,7 @@ describe('AuthDialog', () => {
       );
 
       const mockOnSelect = vi.fn();
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <AuthDialog onSelect={mockOnSelect} settings={settings} />,
       );
 
@@ -120,7 +120,7 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
@@ -155,7 +155,7 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
@@ -192,7 +192,7 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
@@ -221,7 +221,7 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
@@ -252,7 +252,7 @@ describe('AuthDialog', () => {
         [],
       );
 
-      const { lastFrame } = render(
+      const { lastFrame } = renderWithProviders(
         <AuthDialog onSelect={vi.fn()} settings={settings} />,
       );
 
@@ -288,7 +288,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { stdin, unmount } = render(
+    const { stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={onSelect} settings={settings} />,
     );
     await wait();
@@ -324,7 +324,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { lastFrame, stdin, unmount } = render(
+    const { lastFrame, stdin, unmount } = renderWithProviders(
       <AuthDialog
         onSelect={onSelect}
         settings={settings}
@@ -366,7 +366,7 @@ describe('AuthDialog', () => {
       [],
     );
 
-    const { stdin, unmount } = render(
+    const { stdin, unmount } = renderWithProviders(
       <AuthDialog onSelect={onSelect} settings={settings} />,
     );
     await wait();

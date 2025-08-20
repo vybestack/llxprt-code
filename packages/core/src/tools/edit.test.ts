@@ -172,9 +172,16 @@ describe('EditTool', () => {
     });
 
     it('should replace oldString with newString in currentContent', () => {
+      // With default expected_replacements=1, should only replace first occurrence
       expect(applyReplacement('hello old world old', 'old', 'new', false)).toBe(
-        'hello new world new',
+        'hello new world old',
       );
+    });
+
+    it('should replace multiple occurrences when expectedReplacements is specified', () => {
+      expect(
+        applyReplacement('hello old world old', 'old', 'new', false, 2),
+      ).toBe('hello new world new');
     });
 
     it('should return currentContent if oldString is empty and not a new file', () => {
@@ -824,7 +831,7 @@ describe('EditTool', () => {
       (mockConfig as any).getIdeClient = () => ideClient;
     });
 
-    it('should call ideClient.openDiff and update params on confirmation', async () => {
+    it('should call ideClient.openDiff and NOT corrupt params on confirmation', async () => {
       const initialContent = 'some old content here';
       const newContent = 'some new content here';
       const modifiedContent = 'some modified content here';
@@ -840,7 +847,7 @@ describe('EditTool', () => {
       });
       ideClient.openDiff.mockResolvedValueOnce({
         status: 'accepted',
-        content: modifiedContent,
+        content: modifiedContent, // IDE returns entire file content
       });
 
       const invocation = tool.build(params);
@@ -854,8 +861,11 @@ describe('EditTool', () => {
         await confirmation.onConfirm(ToolConfirmationOutcome.ProceedOnce);
       }
 
-      expect(params.old_string).toBe(initialContent);
-      expect(params.new_string).toBe(modifiedContent);
+      // FIX: params should NOT be corrupted by IDE's full file content
+      // old_string should remain the specific text to replace
+      // new_string should remain the specific replacement text
+      expect(params.old_string).toBe('old');
+      expect(params.new_string).toBe('new');
     });
   });
 });

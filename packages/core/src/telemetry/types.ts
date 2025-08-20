@@ -505,6 +505,20 @@ export class ProviderCapabilityEvent {
   }
 }
 
+export class KittySequenceOverflowEvent {
+  'event.name': 'kitty_sequence_overflow';
+  'event.timestamp': string;
+  sequence_length: number;
+  sequence: string;
+
+  constructor(sequence_length: number, sequence: string) {
+    this['event.name'] = 'kitty_sequence_overflow';
+    this['event.timestamp'] = new Date().toISOString();
+    this.sequence_length = sequence_length;
+    this.sequence = sequence;
+  }
+}
+
 export type TelemetryEvent =
   | StartSessionEvent
   | EndSessionEvent
@@ -522,4 +536,5 @@ export type TelemetryEvent =
   | ConversationResponseEvent
   | EnhancedConversationResponseEvent
   | ProviderSwitchEvent
-  | ProviderCapabilityEvent;
+  | ProviderCapabilityEvent
+  | KittySequenceOverflowEvent;

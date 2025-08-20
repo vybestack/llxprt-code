@@ -823,22 +823,27 @@ export class OpenAIProvider extends BaseProvider {
     const finalStreamOptions =
       streamOptions !== undefined ? streamOptions : { include_usage: true };
 
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting =
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
     // Get resolved authentication and update client if needed
     await this.updateClientWithResolvedAuth();
 
     if (process.env.DEBUG) {
       console.log(
-        `[OpenAI] About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}...`,
+        `[OpenAI] About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${streamingEnabled}`,
       );
     }
 
     // Build request params with exact order from original
-    const stream = await this.openai.chat.completions.create({
+    const response = await this.openai.chat.completions.create({
       model: this.currentModel,
       messages:
         messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-      stream: true,
-      ...(finalStreamOptions !== null
+      stream: streamingEnabled,
+      ...(streamingEnabled && finalStreamOptions !== null
         ? { stream_options: finalStreamOptions }
         : {}),
       tools: formattedTools as
@@ -858,9 +863,6 @@ export class OpenAIProvider extends BaseProvider {
           total_tokens: number;
         }
       | undefined;
-
-    // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
-    let pendingWhitespace: string | null = null;
 
     // Type for chunks that may have message instead of delta
     interface StreamChunk {
@@ -895,221 +897,269 @@ export class OpenAIProvider extends BaseProvider {
       };
     }
 
-    // We need to buffer all chunks to detect and handle malformed streams
-    // Some providers (like Cerebras) send message format instead of delta
-    const allChunks: StreamChunk[] = [];
-    for await (const chunk of stream) {
-      allChunks.push(chunk as StreamChunk);
-    }
+    // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
+    let pendingWhitespace: string | null = null;
 
-    // Check first chunk to see if we have malformed stream
-    let detectedMalformedStream = false;
-    if (allChunks.length > 0) {
-      const firstChunk = allChunks[0];
-      if (firstChunk.choices?.[0]?.message && !firstChunk.choices?.[0]?.delta) {
-        detectedMalformedStream = true;
-        if (process.env.DEBUG) {
-          console.log(
-            '[OpenAIProvider] Detected malformed stream (message instead of delta), using aggregation mode',
-          );
+    // Handle streaming vs non-streaming response
+    if (streamingEnabled) {
+      // We need to buffer all chunks to detect and handle malformed streams
+      // Some providers (like Cerebras) send message format instead of delta
+      const allChunks: StreamChunk[] = [];
+      for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+        allChunks.push(chunk as StreamChunk);
+      }
+
+      // Check first chunk to see if we have malformed stream
+      let detectedMalformedStream = false;
+      if (allChunks.length > 0) {
+        const firstChunk = allChunks[0];
+        if (
+          firstChunk.choices?.[0]?.message &&
+          !firstChunk.choices?.[0]?.delta
+        ) {
+          detectedMalformedStream = true;
+          if (process.env.DEBUG) {
+            console.log(
+              '[OpenAIProvider] Detected malformed stream (message instead of delta), using aggregation mode',
+            );
+          }
         }
       }
-    }
 
-    // If we detected issues, aggregate everything
-    if (detectedMalformedStream) {
-      const contentParts: string[] = [];
-      let aggregatedToolCalls: Array<{
-        id: string;
-        type: 'function';
-        function: {
-          name: string;
-          arguments: string;
+      // If we detected issues, aggregate everything
+      if (detectedMalformedStream) {
+        const contentParts: string[] = [];
+        let aggregatedToolCalls: Array<{
+          id: string;
+          type: 'function';
+          function: {
+            name: string;
+            arguments: string;
+          };
+        }> = [];
+        let finalUsageData:
+          | {
+              prompt_tokens: number;
+              completion_tokens: number;
+              total_tokens: number;
+            }
+          | undefined = undefined;
+
+        // Process all buffered chunks
+        for (const chunk of allChunks) {
+          const message =
+            chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
+          if (message?.content) {
+            contentParts.push(message.content);
+          }
+          if (message?.tool_calls) {
+            aggregatedToolCalls = message.tool_calls;
+          }
+          if (chunk.usage) {
+            finalUsageData = chunk.usage;
+          }
+        }
+
+        // Yield single reconstructed message
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: contentParts.join(''),
+          tool_calls:
+            aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
+          usage: finalUsageData,
         };
-      }> = [];
-      let finalUsageData:
-        | {
+        return;
+      }
+
+      // Process chunks normally - stream them as they come
+      for (const chunk of allChunks) {
+        // CEREBRAS FIX: Detect and fix malformed streaming chunks
+        // Cerebras sends full message format instead of delta format in streaming
+        interface CerebrasChunk {
+          id?: string;
+          object?: string;
+          created?: number;
+          model?: string;
+          choices: Array<{
+            delta?: {
+              content?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                function: {
+                  name: string;
+                  arguments: string;
+                };
+                index: number;
+              }>;
+              role?: string;
+            };
+            message?: {
+              content?: string;
+              tool_calls?: Array<{
+                id: string;
+                type: 'function';
+                function: {
+                  name: string;
+                  arguments: string;
+                };
+              }>;
+              role?: string;
+            };
+            index: number;
+            finish_reason: string | null;
+          }>;
+          usage?: {
             prompt_tokens: number;
             completion_tokens: number;
             total_tokens: number;
+          };
+        }
+
+        const cerebrasChunk = chunk as CerebrasChunk;
+        // DEFENSIVE FIX: Some providers send full message format instead of delta in streaming
+        // This violates OpenAI spec but we handle it gracefully
+        let processedChunk: StreamChunk = chunk;
+        if (
+          cerebrasChunk.choices?.[0]?.message &&
+          !cerebrasChunk.choices[0].delta
+        ) {
+          if (process.env.DEBUG) {
+            console.log(
+              '[OpenAIProvider] Converting malformed chunk from message to delta format',
+            );
           }
-        | undefined = undefined;
-
-      // Process all buffered chunks
-      for (const chunk of allChunks) {
-        const message =
-          chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
-        if (message?.content) {
-          contentParts.push(message.content);
-        }
-        if (message?.tool_calls) {
-          aggregatedToolCalls = message.tool_calls;
-        }
-        if (chunk.usage) {
-          finalUsageData = chunk.usage;
-        }
-      }
-
-      // Yield single reconstructed message
-      yield {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: contentParts.join(''),
-        tool_calls:
-          aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
-        usage: finalUsageData,
-      };
-      return;
-    }
-
-    // Process chunks normally - stream them as they come
-    for (const chunk of allChunks) {
-      // CEREBRAS FIX: Detect and fix malformed streaming chunks
-      // Cerebras sends full message format instead of delta format in streaming
-      interface CerebrasChunk {
-        id?: string;
-        object?: string;
-        created?: number;
-        model?: string;
-        choices: Array<{
-          delta?: {
-            content?: string;
-            tool_calls?: Array<{
-              id: string;
-              type: 'function';
-              function: {
-                name: string;
-                arguments: string;
-              };
-              index: number;
-            }>;
-            role?: string;
-          };
-          message?: {
-            content?: string;
-            tool_calls?: Array<{
-              id: string;
-              type: 'function';
-              function: {
-                name: string;
-                arguments: string;
-              };
-            }>;
-            role?: string;
-          };
-          index: number;
-          finish_reason: string | null;
-        }>;
-        usage?: {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        };
-      }
-
-      const cerebrasChunk = chunk as CerebrasChunk;
-      // DEFENSIVE FIX: Some providers send full message format instead of delta in streaming
-      // This violates OpenAI spec but we handle it gracefully
-      let processedChunk: StreamChunk = chunk;
-      if (
-        cerebrasChunk.choices?.[0]?.message &&
-        !cerebrasChunk.choices[0].delta
-      ) {
-        if (process.env.DEBUG) {
-          console.log(
-            '[OpenAIProvider] Converting malformed chunk from message to delta format',
-          );
-        }
-        // Convert full message format to delta format - create new object instead of modifying
-        const message = cerebrasChunk.choices[0].message;
-        const originalChunk = chunk as StreamChunk;
-        processedChunk = {
-          ...originalChunk,
-          choices: [
-            {
-              delta: {
-                content: message.content,
-                tool_calls: message.tool_calls?.map((tc, index) => ({
-                  ...tc,
-                  index,
-                })),
+          // Convert full message format to delta format - create new object instead of modifying
+          const message = cerebrasChunk.choices[0].message;
+          const originalChunk = chunk as StreamChunk;
+          processedChunk = {
+            ...originalChunk,
+            choices: [
+              {
+                delta: {
+                  content: message.content,
+                  tool_calls: message.tool_calls?.map((tc, index) => ({
+                    ...tc,
+                    index,
+                  })),
+                },
+                message: undefined, // Remove message field
               },
-              message: undefined, // Remove message field
-            },
-          ],
-          usage: originalChunk.usage,
-        };
-      }
-
-      const delta = processedChunk.choices?.[0]?.delta;
-
-      if (delta?.content) {
-        // Enhanced debug logging to understand streaming behavior
-        if (process.env.DEBUG && this.isUsingQwen()) {
-          console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
-            content: delta.content,
-            contentLength: delta.content.length,
-            isWhitespaceOnly: delta.content.trim() === '',
-            chunkIndex: 0,
-          });
+            ],
+            usage: originalChunk.usage,
+          };
         }
 
-        // For text-based models, don't yield content chunks yet
-        if (!parser) {
-          if (this.isUsingQwen()) {
-            const isWhitespaceOnly = delta.content.trim() === '';
-            if (isWhitespaceOnly) {
-              // Buffer whitespace-only chunk
-              pendingWhitespace = (pendingWhitespace || '') + delta.content;
-              if (process.env.DEBUG) {
-                console.log(
-                  `[OpenAIProvider/${this.currentModel}] Buffered whitespace-only chunk (len=${delta.content.length}). pendingWhitespace now len=${pendingWhitespace.length}`,
-                );
-              }
-              continue;
-            } else if (pendingWhitespace) {
-              // Flush buffered whitespace before non-empty chunk to preserve spacing
-              if (process.env.DEBUG) {
-                console.log(
-                  `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
-                );
-              }
-              yield {
-                role: ContentGeneratorRole.ASSISTANT,
-                content: pendingWhitespace,
-              };
-              hasStreamedContent = true;
-              fullContent += pendingWhitespace;
-              pendingWhitespace = null;
-            }
+        const delta = processedChunk.choices?.[0]?.delta;
+
+        if (delta?.content) {
+          // Enhanced debug logging to understand streaming behavior
+          if (process.env.DEBUG && this.isUsingQwen()) {
+            console.log(`[OpenAIProvider/${this.currentModel}] Chunk:`, {
+              content: delta.content,
+              contentLength: delta.content.length,
+              isWhitespaceOnly: delta.content.trim() === '',
+              chunkIndex: 0,
+            });
           }
 
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: delta.content,
+          // For text-based models, don't yield content chunks yet
+          if (!parser) {
+            if (this.isUsingQwen()) {
+              const isWhitespaceOnly = delta.content.trim() === '';
+              if (isWhitespaceOnly) {
+                // Buffer whitespace-only chunk
+                pendingWhitespace = (pendingWhitespace || '') + delta.content;
+                if (process.env.DEBUG) {
+                  console.log(
+                    `[OpenAIProvider/${this.currentModel}] Buffered whitespace-only chunk (len=${delta.content.length}). pendingWhitespace now len=${pendingWhitespace.length}`,
+                  );
+                }
+                continue;
+              } else if (pendingWhitespace) {
+                // Flush buffered whitespace before non-empty chunk to preserve spacing
+                if (process.env.DEBUG) {
+                  console.log(
+                    `[OpenAIProvider/${this.currentModel}] Flushing pending whitespace (len=${pendingWhitespace.length}) before non-empty chunk`,
+                  );
+                }
+                yield {
+                  role: ContentGeneratorRole.ASSISTANT,
+                  content: pendingWhitespace,
+                };
+                hasStreamedContent = true;
+                fullContent += pendingWhitespace;
+                pendingWhitespace = null;
+              }
+            }
+
+            yield {
+              role: ContentGeneratorRole.ASSISTANT,
+              content: delta.content,
+            };
+            hasStreamedContent = true;
+          }
+
+          fullContent += delta.content;
+        }
+
+        if (delta?.tool_calls) {
+          for (const toolCall of delta.tool_calls) {
+            this.toolFormatter.accumulateStreamingToolCall(
+              toolCall,
+              accumulatedToolCalls,
+              currentToolFormat,
+            );
+          }
+        }
+
+        // Check for usage data in the chunk
+        if (processedChunk.usage) {
+          usageData = {
+            prompt_tokens: processedChunk.usage.prompt_tokens,
+            completion_tokens: processedChunk.usage.completion_tokens,
+            total_tokens: processedChunk.usage.total_tokens,
           };
-          hasStreamedContent = true;
-        }
-
-        fullContent += delta.content;
-      }
-
-      if (delta?.tool_calls) {
-        for (const toolCall of delta.tool_calls) {
-          this.toolFormatter.accumulateStreamingToolCall(
-            toolCall,
-            accumulatedToolCalls,
-            currentToolFormat,
-          );
         }
       }
+    } else {
+      // Non-streaming response - handle as a single completion
+      const completionResponse =
+        response as OpenAI.Chat.Completions.ChatCompletion;
+      const choice = completionResponse.choices[0];
 
-      // Check for usage data in the chunk
-      if (processedChunk.usage) {
+      if (choice?.message.content) {
+        fullContent = choice.message.content;
+      }
+
+      if (choice?.message.tool_calls) {
+        // Convert tool calls to the standard format
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === 'function' && toolCall.function) {
+            accumulatedToolCalls.push({
+              id: toolCall.id,
+              type: 'function' as const,
+              function: toolCall.function,
+            });
+          }
+        }
+      }
+
+      if (completionResponse.usage) {
         usageData = {
-          prompt_tokens: processedChunk.usage.prompt_tokens,
-          completion_tokens: processedChunk.usage.completion_tokens,
-          total_tokens: processedChunk.usage.total_tokens,
+          prompt_tokens: completionResponse.usage.prompt_tokens,
+          completion_tokens: completionResponse.usage.completion_tokens,
+          total_tokens: completionResponse.usage.total_tokens,
         };
+      }
+
+      // For non-streaming, we yield the full content at once if there's no parser
+      if (!parser && fullContent) {
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: fullContent,
+        };
+        hasStreamedContent = true;
       }
     }
 

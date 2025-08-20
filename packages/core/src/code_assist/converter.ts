@@ -61,6 +61,7 @@ interface VertexGenerationConfig {
   seed?: number;
   responseMimeType?: string;
   responseJsonSchema?: unknown;
+  responseSchema?: unknown;
   routingConfig?: GenerationConfigRoutingConfig;
   modelSelectionConfig?: ModelSelectionConfig;
   responseModalities?: string[];
@@ -117,13 +118,13 @@ export function toGenerateContentRequest(
   req: GenerateContentParameters,
   userPromptId: string,
   project?: string,
-  sessionId?: string,
+  _sessionId?: string,
 ): CAGenerateContentRequest {
   return {
     model: req.model,
     project,
     user_prompt_id: userPromptId,
-    request: toVertexGenerateContentRequest(req, sessionId),
+    request: toVertexGenerateContentRequest(req, _sessionId),
   };
 }
 
@@ -141,7 +142,7 @@ export function fromGenerateContentResponse(
 
 function toVertexGenerateContentRequest(
   req: GenerateContentParameters,
-  sessionId?: string,
+  _sessionId?: string,
 ): VertexGenerateContentRequest {
   return {
     contents: toContents(req.contents),
@@ -152,7 +153,8 @@ function toVertexGenerateContentRequest(
     labels: req.config?.labels,
     safetySettings: req.config?.safetySettings,
     generationConfig: toVertexGenerationConfig(req.config),
-    session_id: sessionId,
+    // PRIVACY FIX: session_id removed to prevent transmission to Google servers
+    // session_id: sessionId,
   };
 }
 
@@ -229,6 +231,7 @@ function toVertexGenerationConfig(
     frequencyPenalty: config.frequencyPenalty,
     seed: config.seed,
     responseMimeType: config.responseMimeType,
+    responseSchema: config.responseSchema,
     responseJsonSchema: config.responseJsonSchema,
     routingConfig: config.routingConfig,
     modelSelectionConfig: config.modelSelectionConfig,

@@ -11,9 +11,6 @@ import {
   ContentGeneratorRole,
 } from '../../index.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
-import { existsSync, readFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
 
 describe('Multi-Provider Integration Tests', () => {
   let apiKey: string | null = null;
@@ -22,30 +19,16 @@ describe('Multi-Provider Integration Tests', () => {
   let manager: ProviderManager;
 
   beforeAll(() => {
-    // Try to load OpenAI API key from environment first
+    // Only load OpenAI API key from environment variable
     apiKey = process.env.OPENAI_API_KEY || null;
     baseURL = process.env.OPENAI_BASE_URL || undefined;
 
-    // If not in environment, try to load from file
-    if (!apiKey) {
-      try {
-        const apiKeyPath = join(homedir(), '.openai_key');
-        if (existsSync(apiKeyPath)) {
-          apiKey = readFileSync(apiKeyPath, 'utf-8').trim();
-        }
-      } catch (_error) {
-        // No API key available
-      }
-    }
-
     if (!apiKey) {
       console.log(
-        '\n⚠️  Skipping Multi-Provider Integration Tests: No OpenAI API key found',
+        '\nWARNING:  Skipping Multi-Provider Integration Tests: No OpenAI API key found',
       );
       console.log(
-        '   To run these tests, either:\n' +
-          '   - Set the OPENAI_API_KEY environment variable, or\n' +
-          '   - Create ~/.openai_key with your OpenAI API key\n',
+        '   To run these tests, set the OPENAI_API_KEY environment variable\n',
       );
       skipTests = true;
     }
@@ -53,7 +36,7 @@ describe('Multi-Provider Integration Tests', () => {
     // Skip tests when using OpenRouter for now
     if (baseURL?.includes('openrouter')) {
       console.log(
-        '\n⚠️  Skipping Multi-Provider Integration Tests: OpenRouter detected',
+        '\nWARNING:  Skipping Multi-Provider Integration Tests: OpenRouter detected',
       );
       console.log(
         '   These tests are currently not compatible with OpenRouter\n',
@@ -152,7 +135,7 @@ describe('Multi-Provider Integration Tests', () => {
         expect(modelIds.every((id) => typeof id === 'string')).toBe(true);
         expect(modelIds.every((id) => id.length > 0)).toBe(true);
 
-        console.log(`\n✅ Found ${models.length} models`);
+        console.log(`\n[OK] Found ${models.length} models`);
         console.log(`   Sample models: ${modelIds.slice(0, 5).join(', ')}...`);
       },
     );
@@ -160,6 +143,7 @@ describe('Multi-Provider Integration Tests', () => {
     it.skipIf(skipTests)(
       'should switch between models within provider',
       async () => {
+        if (!apiKey || skipTests) return; // Guard for when test is skipped
         const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
 
         // Get initial model and available models
@@ -218,7 +202,7 @@ describe('Multi-Provider Integration Tests', () => {
         const providerName = baseURL?.includes('openrouter')
           ? 'OpenRouter'
           : 'OpenAI';
-        console.log(`\n✅ ${providerName} response: "${fullResponse}"`);
+        console.log(`\n[OK] ${providerName} response: "${fullResponse}"`);
 
         expect(fullResponse.toLowerCase()).toContain(
           'hello from openai integration test',
@@ -249,7 +233,7 @@ describe('Multi-Provider Integration Tests', () => {
       }
 
       const fullResponse = chunks.join('');
-      console.log(`\n✅ Streaming test received ${chunkCount} chunks`);
+      console.log(`\n[OK] Streaming test received ${chunkCount} chunks`);
       console.log(`   Response: "${fullResponse.trim()}"`);
 
       // Should receive multiple chunks (streaming)
@@ -290,7 +274,7 @@ describe('Multi-Provider Integration Tests', () => {
       }
 
       const fullResponse = chunks.join('').trim();
-      console.log(`\n✅ Model ${testModel} response: "${fullResponse}"`);
+      console.log(`\n[OK] Model ${testModel} response: "${fullResponse}"`);
 
       expect(fullResponse).toContain('4');
     });
@@ -334,7 +318,9 @@ describe('Multi-Provider Integration Tests', () => {
             if (message.tool_calls && message.tool_calls.length > 0) {
               toolCallReceived = true;
               const toolCall = message.tool_calls[0];
-              console.log(`\n✅ Tool call received: ${toolCall.function.name}`);
+              console.log(
+                `\n[OK] Tool call received: ${toolCall.function.name}`,
+              );
               console.log(`   Arguments: ${toolCall.function.arguments}`);
 
               expect(toolCall.function.name).toBe('get_weather');
@@ -353,7 +339,7 @@ describe('Multi-Provider Integration Tests', () => {
             errorMessage.includes('not supported')
           ) {
             console.log(
-              `\n⚠️  Skipping tool call test: Model doesn't support tool calling`,
+              `\nWARNING:  Skipping tool call test: Model doesn't support tool calling`,
             );
             return; // Skip test gracefully
           }
@@ -384,7 +370,7 @@ describe('Multi-Provider Integration Tests', () => {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         console.log(
-          `\n✅ Correctly caught error for invalid model: ${errorMessage}`,
+          `\n[OK] Correctly caught error for invalid model: ${errorMessage}`,
         );
         expect(errorMessage).toMatch(/model|invalid/i);
       }
