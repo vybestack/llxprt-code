@@ -58,7 +58,6 @@ import {
   FileSystemService,
   StandardFileSystemService,
 } from '../services/fileSystemService.js';
-import { logCliConfiguration } from '../telemetry/loggers.js';
 
 // Re-export OAuth config type
 export type { MCPOAuthConfig };
