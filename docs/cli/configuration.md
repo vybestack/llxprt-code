@@ -29,6 +29,8 @@ LLxprt Code uses `settings.json` files for persistent configuration. There are t
 
 **Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"apiKey": "$MY_API_TOKEN"`.
 
+> **Note for Enterprise Users:** For guidance on deploying and managing LLxprt Code in a corporate environment, please see the [Enterprise Configuration](./enterprise.md) documentation.
+
 ### The `.llxprt` directory in your project
 
 In addition to a project settings file, a project's `.llxprt` directory can contain other project-specific files related to LLxprt Code's operation, such as:
