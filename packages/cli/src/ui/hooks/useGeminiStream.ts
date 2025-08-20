@@ -140,7 +140,8 @@ export const useGeminiStream = (
   }, [history]);
 
   const { startNewPrompt, getPromptCount } = useSessionStats();
-  const logger = useLogger();
+  const storage = config.storage;
+  const logger = useLogger(storage);
 
   // Todo continuation hook integration - stub implementation
   const { handleStreamCompleted: _handleStreamCompleted } = useTodoContinuation(
@@ -153,8 +154,8 @@ export const useGeminiStream = (
     if (!config.getProjectRoot()) {
       return;
     }
-    return new GitService(config.getProjectRoot());
-  }, [config]);
+    return new GitService(config.getProjectRoot(), storage);
+  }, [config, storage]);
 
   const [toolCalls, scheduleToolCalls, markToolsAsSubmitted] =
     useReactToolScheduler(
@@ -1300,9 +1301,7 @@ export const useGeminiStream = (
       );
 
       if (restorableToolCalls.length > 0) {
-        const checkpointDir = config.getProjectTempDir()
-          ? path.join(config.getProjectTempDir(), 'checkpoints')
-          : undefined;
+        const checkpointDir = storage.getProjectTempCheckpointsDir();
 
         if (!checkpointDir) {
           return;
@@ -1387,7 +1386,7 @@ export const useGeminiStream = (
     saveRestorableToolCalls();
     // FIX: Removed 'history' from dependencies to prevent infinite loops
     // We use historyRef.current to access the latest history value
-  }, [toolCalls, config, onDebugMessage, gitService, geminiClient]);
+  }, [toolCalls, config, onDebugMessage, gitService, geminiClient, storage]);
 
   return {
     streamingState,

@@ -1063,7 +1063,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     }
   }, [config, config.getLlxprtMdFileCount]);
 
-  const logger = useLogger();
+  const logger = useLogger(config.storage);
 
   useEffect(() => {
     const fetchUserMessages = async () => {

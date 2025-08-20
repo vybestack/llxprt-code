@@ -18,6 +18,8 @@ import { type CommandContext } from './types.js';
 import { type Config, DetectedIde } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
+vi.mock('child_process');
+vi.mock('glob');
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual = await importOriginal();
   return {

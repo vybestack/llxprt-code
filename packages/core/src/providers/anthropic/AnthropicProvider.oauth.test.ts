@@ -224,7 +224,7 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       const generator = providerNoAuth.generateChatCompletion(messages);
 
       await expect(generator.next()).rejects.toThrow(
-        /No API key found and OAuth is available but not authenticated/,
+        /No authentication available for Anthropic API calls/,
       );
     });
 
@@ -291,13 +291,12 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
     });
 
-    it('should throw error when getting models fails due to no authentication', async () => {
+    it('should return empty array when getting models with no authentication', async () => {
       // Mock OAuth manager returning null
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
-      await expect(provider.getModels()).rejects.toThrow(
-        /No API key found and OAuth is available but not authenticated/,
-      );
+      const models = await provider.getModels();
+      expect(models).toEqual([]);
     });
   });
 

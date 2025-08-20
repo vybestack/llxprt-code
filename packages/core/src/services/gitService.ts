@@ -6,27 +6,24 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import * as os from 'os';
 import { isNodeError } from '../utils/errors.js';
 import { exec } from 'node:child_process';
 import { simpleGit, SimpleGit, CheckRepoActions } from 'simple-git';
-import {
-  getProjectHash,
-  LLXPRT_DIR,
-  ensureLlxprtDirExists,
-} from '../utils/paths.js';
+import { ensureLlxprtDirExists } from '../utils/paths.js';
+import { Storage } from '../config/storage.js';
 
 export class GitService {
   private projectRoot: string;
+  private storage: Storage;
 
-  constructor(projectRoot: string) {
+  constructor(projectRoot: string, storage: Storage) {
     this.projectRoot = path.resolve(projectRoot);
+    this.storage = storage;
   }
 
   private getHistoryDir(): string {
     ensureLlxprtDirExists();
-    const hash = getProjectHash(this.projectRoot);
-    return path.join(os.homedir(), LLXPRT_DIR, 'history', hash);
+    return this.storage.getHistoryDir();
   }
 
   async initialize(): Promise<void> {

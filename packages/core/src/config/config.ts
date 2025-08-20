@@ -34,7 +34,6 @@ import { TodoPause } from '../tools/todo-pause.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
-import { getProjectTempDir } from '../utils/paths.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import {
   // TELEMETRY: Re-enabled for local file logging only
@@ -64,6 +63,7 @@ import {
 // Re-export OAuth config type
 export type { MCPOAuthConfig };
 import { WorkspaceContext } from '../utils/workspaceContext.js';
+import { Storage } from './storage.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -352,6 +352,7 @@ export class Config {
   private readonly shouldUseNodePtyShell: boolean;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
+  readonly storage: Storage;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -435,6 +436,7 @@ export class Config {
     this.shellReplacement = params.shellReplacement ?? false;
     this.trustedFolder = params.trustedFolder;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
+    this.storage = new Storage(this.targetDir);
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -844,7 +846,7 @@ export class Config {
   }
 
   getProjectTempDir(): string {
-    return getProjectTempDir(this.getProjectRoot());
+    return this.storage.getProjectTempDir();
   }
 
   getEnableRecursiveFileSearch(): boolean {
@@ -1045,7 +1047,7 @@ export class Config {
 
   async getGitService(): Promise<GitService> {
     if (!this.gitService) {
-      this.gitService = new GitService(this.targetDir);
+      this.gitService = new GitService(this.targetDir, this.storage);
       await this.gitService.initialize();
     }
     return this.gitService;

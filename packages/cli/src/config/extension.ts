@@ -7,12 +7,12 @@
 import {
   MCPServerConfig,
   GeminiCLIExtension,
+  Storage,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
-export const EXTENSIONS_DIRECTORY_NAME = path.join('.llxprt', 'extensions');
 export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
 
 export interface Extension {
@@ -46,7 +46,8 @@ export function loadExtensions(workspaceDir: string): Extension[] {
 }
 
 function loadExtensionsFromDir(dir: string): Extension[] {
-  const extensionsDir = path.join(dir, EXTENSIONS_DIRECTORY_NAME);
+  const storage = new Storage(dir);
+  const extensionsDir = storage.getExtensionsDir();
   if (!fs.existsSync(extensionsDir)) {
     return [];
   }
