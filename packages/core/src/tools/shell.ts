@@ -286,8 +286,9 @@ class ShellToolInvocation extends BaseToolInvocation<
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
         if (contentGenConfig?.providerManager) {
-          const serverToolsProvider = contentGenConfig.providerManager.getServerToolsProvider();
-          
+          const serverToolsProvider =
+            contentGenConfig.providerManager.getServerToolsProvider();
+
           // If we have a ServerToolsProvider that can handle summarization
           if (serverToolsProvider) {
             // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
