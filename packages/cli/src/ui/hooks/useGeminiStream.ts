@@ -232,9 +232,34 @@ export const useGeminiStream = (
     }
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
+
+    // Don't add incomplete/partial assistant messages to history
+    // These can corrupt the context and cause 400 errors
     if (pendingHistoryItemRef.current) {
-      addItem(pendingHistoryItemRef.current, Date.now());
+      // Only add if there's actual content worth preserving
+      const pendingItem = pendingHistoryItemRef.current;
+      if (
+        pendingItem.type === 'gemini' ||
+        pendingItem.type === 'gemini_content'
+      ) {
+        // Check if the message has meaningful content
+        if (pendingItem.text && pendingItem.text.trim().length > 0) {
+          // Add the partial response with a cancellation marker
+          addItem(
+            {
+              ...pendingItem,
+              text: pendingItem.text + '\n\n[Response cancelled by user]',
+            },
+            Date.now(),
+          );
+        }
+        // Otherwise, don't add empty/incomplete messages that could corrupt context
+      } else {
+        // For other types (tool groups, etc), add as-is
+        addItem(pendingHistoryItemRef.current, Date.now());
+      }
     }
+
     addItem(
       {
         type: MessageType.INFO,
