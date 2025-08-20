@@ -38,6 +38,11 @@ import { OUTPUT_UPDATE_INTERVAL_MS } from './shell.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import * as summarizer from '../utils/summarizer.js';
 
+// Mock the summarizer module
+vi.mock('../utils/summarizer.js', () => ({
+  summarizeToolOutput: vi.fn(),
+}));
+
 describe('ShellTool', () => {
   let shellTool: ShellTool;
   let mockConfig: Config;
@@ -233,6 +238,8 @@ describe('ShellTool', () => {
       const promise = invocation.execute(mockAbortSignal);
       resolveExecutionPromise({
         output: 'long output',
+        stdout: 'long output',
+        stderr: '',
         rawOutput: Buffer.from('long output'),
         exitCode: 0,
         signal: null,
