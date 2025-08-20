@@ -177,8 +177,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
         context.services.settings.setValue(SettingScope.User, 'ideMode', true);
         // Poll for up to 5 seconds for the extension to activate.
         for (let i = 0; i < 10; i++) {
-          config.setIdeMode(true);
-          await ideClient.connect();
+          await config.setIdeModeAndSyncConnection(true);
           if (
             ideClient.getConnectionStatus().status ===
             IDEConnectionStatus.Connected
