@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* eslint-disable react/jsx-no-bind */
+
 import { renderWithProviders } from '../../../test-utils/render.js';
 import { waitFor } from '@testing-library/react';
 import {
@@ -19,16 +21,18 @@ const ITEMS: Array<RadioSelectItem<string>> = [
 ];
 
 describe('<RadioButtonSelect />', () => {
+  const noop = () => {};
+
   it('renders a list of items and matches snapshot', () => {
     const { lastFrame } = renderWithProviders(
-      <RadioButtonSelect items={ITEMS} onSelect={() => {}} isFocused={true} />,
+      <RadioButtonSelect items={ITEMS} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
 
   it('renders with the second item selected and matches snapshot', () => {
     const { lastFrame } = renderWithProviders(
-      <RadioButtonSelect items={ITEMS} initialIndex={1} onSelect={() => {}} />,
+      <RadioButtonSelect items={ITEMS} initialIndex={1} onSelect={noop} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -37,7 +41,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = renderWithProviders(
       <RadioButtonSelect
         items={ITEMS}
-        onSelect={() => {}}
+        onSelect={noop}
         showNumbers={false}
       />,
     );
@@ -52,7 +56,7 @@ describe('<RadioButtonSelect />', () => {
     const { lastFrame } = renderWithProviders(
       <RadioButtonSelect
         items={manyItems}
-        onSelect={() => {}}
+        onSelect={noop}
         showScrollArrows={true}
         maxItemsToShow={5}
       />,
@@ -76,7 +80,7 @@ describe('<RadioButtonSelect />', () => {
       },
     ];
     const { lastFrame } = renderWithProviders(
-      <RadioButtonSelect items={themeItems} onSelect={() => {}} />,
+      <RadioButtonSelect items={themeItems} onSelect={noop} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
@@ -87,14 +91,14 @@ describe('<RadioButtonSelect />', () => {
       value: `item-${i + 1}`,
     }));
     const { lastFrame } = renderWithProviders(
-      <RadioButtonSelect items={manyItems} onSelect={() => {}} />,
+      <RadioButtonSelect items={manyItems} onSelect={noop} />,
     );
     expect(lastFrame()).toMatchSnapshot();
   });
 
   it('renders nothing when no items are provided', () => {
     const { lastFrame } = renderWithProviders(
-      <RadioButtonSelect items={[]} onSelect={() => {}} isFocused={true} />,
+      <RadioButtonSelect items={[]} onSelect={noop} isFocused={true} />,
     );
     expect(lastFrame()).toBe('');
   });
