@@ -154,27 +154,6 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Helper method to determine if we're using Cerebras
-   */
-  private isCerebras(): boolean {
-    // Check if baseURL contains cerebras.ai
-    if (this.baseURL?.toLowerCase().includes('cerebras.ai')) {
-      return true;
-    }
-    // Check if model name contains cerebras
-    if (this.currentModel?.toLowerCase().includes('cerebras')) {
-      return true;
-    }
-    // Check for specific Cerebras model names that might be used
-    const cerebrasModels = ['qwen-3-coder-480b'];
-    return cerebrasModels.some(
-      (model) =>
-        this.currentModel?.toLowerCase() === model.toLowerCase() &&
-        this.baseURL?.includes('cerebras'),
-    );
-  }
-
-  /**
    * Update the OpenAI client with resolved authentication if needed
    */
   private async updateClientWithResolvedAuth(): Promise<void> {
@@ -583,12 +562,12 @@ export class OpenAIProvider extends BaseProvider {
     const data = (await response.json()) as OpenAIResponse;
     const resultMessages: IMessage[] = [];
 
-    // CEREBRAS FIX: Handle potential array response from Cerebras
-    // If Cerebras returns an array of responses, aggregate them
-    if (this.isCerebras() && Array.isArray(data)) {
+    // DEFENSIVE FIX: Handle potential array response from providers that violate OpenAI spec
+    // Some providers (like Cerebras) may return an array of responses instead of a single response
+    if (Array.isArray(data)) {
       if (process.env.DEBUG) {
         console.log(
-          '[OpenAIProvider/Cerebras] Detected array response, aggregating...',
+          '[OpenAIProvider] Detected malformed array response, aggregating...',
         );
       }
       const aggregatedContent: string[] = [];
@@ -883,45 +862,107 @@ export class OpenAIProvider extends BaseProvider {
     // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
     let pendingWhitespace: string | null = null;
 
-    // CEREBRAS ALTERNATIVE: If Cerebras is severely broken, aggregate all chunks first
-    // Uncomment this block if the delta conversion above doesn't work
-    /*
-    if (this.isCerebras()) {
+    // Type for chunks that may have message instead of delta
+    interface StreamChunk {
+      choices?: Array<{
+        delta?: {
+          content?: string;
+          tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            function: {
+              name: string;
+              arguments: string;
+            };
+          }>;
+        };
+        message?: {
+          content?: string;
+          tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            function: {
+              name: string;
+              arguments: string;
+            };
+          }>;
+        };
+      }>;
+      usage?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+      };
+    }
+
+    // We need to buffer all chunks to detect and handle malformed streams
+    // Some providers (like Cerebras) send message format instead of delta
+    const allChunks: StreamChunk[] = [];
+    for await (const chunk of stream) {
+      allChunks.push(chunk as StreamChunk);
+    }
+
+    // Check first chunk to see if we have malformed stream
+    let detectedMalformedStream = false;
+    if (allChunks.length > 0) {
+      const firstChunk = allChunks[0];
+      if (firstChunk.choices?.[0]?.message && !firstChunk.choices?.[0]?.delta) {
+        detectedMalformedStream = true;
+        if (process.env.DEBUG) {
+          console.log(
+            '[OpenAIProvider] Detected malformed stream (message instead of delta), using aggregation mode',
+          );
+        }
+      }
+    }
+
+    // If we detected issues, aggregate everything
+    if (detectedMalformedStream) {
       const contentParts: string[] = [];
-      let aggregatedToolCalls: any[] = [];
-      let finalUsageData: any = undefined;
-      
-      for await (const chunk of stream) {
-        // Handle both message and delta formats
-        const message = chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
+      let aggregatedToolCalls: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }> = [];
+      let finalUsageData:
+        | {
+            prompt_tokens: number;
+            completion_tokens: number;
+            total_tokens: number;
+          }
+        | undefined = undefined;
+
+      // Process all buffered chunks
+      for (const chunk of allChunks) {
+        const message =
+          chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
         if (message?.content) {
           contentParts.push(message.content);
         }
         if (message?.tool_calls) {
-          // For streaming, tool calls might be incremental or complete
           aggregatedToolCalls = message.tool_calls;
         }
         if (chunk.usage) {
-          finalUsageData = {
-            prompt_tokens: chunk.usage.prompt_tokens,
-            completion_tokens: chunk.usage.completion_tokens,
-            total_tokens: chunk.usage.total_tokens,
-          };
+          finalUsageData = chunk.usage;
         }
       }
-      
+
       // Yield single reconstructed message
       yield {
         role: ContentGeneratorRole.ASSISTANT,
         content: contentParts.join(''),
-        tool_calls: aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
+        tool_calls:
+          aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
         usage: finalUsageData,
       };
       return;
     }
-    */
 
-    for await (const chunk of stream) {
+    // Process chunks normally - stream them as they come
+    for (const chunk of allChunks) {
       // CEREBRAS FIX: Detect and fix malformed streaming chunks
       // Cerebras sends full message format instead of delta format in streaming
       interface CerebrasChunk {
@@ -966,31 +1007,40 @@ export class OpenAIProvider extends BaseProvider {
       }
 
       const cerebrasChunk = chunk as CerebrasChunk;
+      // DEFENSIVE FIX: Some providers send full message format instead of delta in streaming
+      // This violates OpenAI spec but we handle it gracefully
+      let processedChunk: StreamChunk = chunk;
       if (
-        this.isCerebras() &&
         cerebrasChunk.choices?.[0]?.message &&
         !cerebrasChunk.choices[0].delta
       ) {
         if (process.env.DEBUG) {
           console.log(
-            '[OpenAIProvider/Cerebras] Converting malformed chunk from message to delta format',
+            '[OpenAIProvider] Converting malformed chunk from message to delta format',
           );
         }
-        // Convert full message format to delta format
+        // Convert full message format to delta format - create new object instead of modifying
         const message = cerebrasChunk.choices[0].message;
-        chunk.choices[0].delta = {
-          content: message.content,
-          tool_calls: message.tool_calls?.map((tc, index) => ({
-            ...tc,
-            index,
-          })),
-          role: message.role as 'system' | 'user' | 'assistant' | 'tool',
+        const originalChunk = chunk as StreamChunk;
+        processedChunk = {
+          ...originalChunk,
+          choices: [
+            {
+              delta: {
+                content: message.content,
+                tool_calls: message.tool_calls?.map((tc, index) => ({
+                  ...tc,
+                  index,
+                })),
+              },
+              message: undefined, // Remove message field
+            },
+          ],
+          usage: originalChunk.usage,
         };
-        // Remove the message field to prevent confusion
-        delete (cerebrasChunk.choices[0] as { message?: unknown }).message;
       }
 
-      const delta = chunk.choices[0]?.delta;
+      const delta = processedChunk.choices?.[0]?.delta;
 
       if (delta?.content) {
         // Enhanced debug logging to understand streaming behavior
@@ -999,7 +1049,7 @@ export class OpenAIProvider extends BaseProvider {
             content: delta.content,
             contentLength: delta.content.length,
             isWhitespaceOnly: delta.content.trim() === '',
-            chunkIndex: chunk.choices[0]?.index,
+            chunkIndex: 0,
           });
         }
 
@@ -1054,11 +1104,11 @@ export class OpenAIProvider extends BaseProvider {
       }
 
       // Check for usage data in the chunk
-      if (chunk.usage) {
+      if (processedChunk.usage) {
         usageData = {
-          prompt_tokens: chunk.usage.prompt_tokens,
-          completion_tokens: chunk.usage.completion_tokens,
-          total_tokens: chunk.usage.total_tokens,
+          prompt_tokens: processedChunk.usage.prompt_tokens,
+          completion_tokens: processedChunk.usage.completion_tokens,
+          total_tokens: processedChunk.usage.total_tokens,
         };
       }
     }
@@ -1125,12 +1175,25 @@ export class OpenAIProvider extends BaseProvider {
           );
         }
         // For Qwen models, don't duplicate content if we've already streamed it
-        const shouldOmitContent = hasStreamedContent && this.isUsingQwen();
+        // BUT Cerebras needs at least a space to continue after tool responses
+        const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
+        const shouldOmitContent =
+          hasStreamedContent && this.isUsingQwen() && !isCerebras;
+
         if (shouldOmitContent) {
           // Only yield tool calls with empty content to avoid duplication
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: '',
+            tool_calls: accumulatedToolCalls,
+            usage: usageData,
+          };
+        } else if (isCerebras && hasStreamedContent) {
+          // Cerebras: Send just a space to prevent duplication but allow continuation
+          // This prevents the repeated "Let me search..." text
+          yield {
+            role: ContentGeneratorRole.ASSISTANT,
+            content: ' ', // Single space instead of full content
             tool_calls: accumulatedToolCalls,
             usage: usageData,
           };

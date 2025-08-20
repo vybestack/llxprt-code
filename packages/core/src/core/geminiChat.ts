@@ -567,10 +567,31 @@ export class GeminiChat {
         // Add the warning as the first message so LLM knows about the truncation
         trimmedContents.unshift(warningMessage);
 
-        // Log the trimming action
+        // Log the trimming action with more detail
+        const trimmedTokens = estimateTokens(JSON.stringify(trimmedContents));
         console.log(
-          `TRIMMED: Trimmed prompt from ${estimatedTokens} to ~${estimateTokens(JSON.stringify(trimmedContents))} tokens`,
+          `INFO: TRIMMED: Trimmed prompt from ${estimatedTokens} to ~${trimmedTokens} tokens`,
         );
+
+        // Count function calls in original vs trimmed
+        let originalFunctionCalls = 0;
+        let trimmedFunctionCalls = 0;
+        requestContents.forEach((c) =>
+          c.parts?.forEach((p) => {
+            if ('functionCall' in p) originalFunctionCalls++;
+          }),
+        );
+        trimmedContents.forEach((c) =>
+          c.parts?.forEach((p) => {
+            if ('functionCall' in p) trimmedFunctionCalls++;
+          }),
+        );
+
+        if (originalFunctionCalls !== trimmedFunctionCalls) {
+          console.warn(
+            `WARNING: Trimming removed ${originalFunctionCalls - trimmedFunctionCalls} function calls (${originalFunctionCalls} -> ${trimmedFunctionCalls})`,
+          );
+        }
 
         // Use trimmed contents instead
         requestContents.length = 0;
@@ -988,7 +1009,10 @@ export class GeminiChat {
       } else if (remainingTokens > 100) {
         // Try to truncate this content to fit
         const truncated = this.truncateContent(content, remainingTokens);
-        result.unshift(truncated);
+        // Only add if we actually got some content back
+        if (truncated.parts && truncated.parts.length > 0) {
+          result.unshift(truncated);
+        }
         break;
       } else {
         // No room left, stop
@@ -1033,12 +1057,43 @@ export class GeminiChat {
           break;
         }
       } else {
-        // Non-text parts (function calls, responses, etc) - include if we have room
+        // Non-text parts (function calls, responses, etc) - NEVER truncate these
+        // Either include them fully or skip them entirely to avoid breaking JSON
         const partTokens = estimateTokens(JSON.stringify(part));
         if (currentTokens + partTokens <= maxTokens) {
           truncatedParts.push(part);
           currentTokens += partTokens;
         } else {
+          // Skip this part entirely - DO NOT truncate function calls/responses
+          // Log what we're skipping for debugging
+          if (process.env.DEBUG || process.env.VERBOSE) {
+            let skipInfo = 'unknown part';
+            if ('functionCall' in part) {
+              const funcPart = part as { functionCall?: { name?: string } };
+              skipInfo = `functionCall: ${funcPart.functionCall?.name || 'unnamed'}`;
+            } else if ('functionResponse' in part) {
+              const respPart = part as { functionResponse?: { name?: string } };
+              skipInfo = `functionResponse: ${respPart.functionResponse?.name || 'unnamed'}`;
+            }
+            console.warn(
+              `INFO: Skipping ${skipInfo} due to token limit (needs ${partTokens} tokens, only ${maxTokens - currentTokens} available)`,
+            );
+          }
+          // Add a marker that content was omitted
+          if (
+            truncatedParts.length > 0 &&
+            !truncatedParts.some(
+              (p) =>
+                'text' in p &&
+                p.text?.includes(
+                  '[...function calls omitted due to token limit...]',
+                ),
+            )
+          ) {
+            truncatedParts.push({
+              text: '[...function calls omitted due to token limit...]',
+            });
+          }
           break;
         }
       }
