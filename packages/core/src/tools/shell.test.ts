@@ -62,6 +62,15 @@ describe('ShellTool', () => {
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getContentGeneratorConfig: vi.fn().mockReturnValue({
+        providerManager: {
+          getServerToolsProvider: vi.fn().mockReturnValue({
+            name: 'gemini',
+            getServerTools: vi.fn().mockReturnValue([]),
+            invokeServerTool: vi.fn(),
+          }),
+        },
+      }),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);

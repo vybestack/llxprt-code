@@ -278,24 +278,36 @@ class ShellToolInvocation extends BaseToolInvocation<
         }
       }
 
+      let processedContent = llmContent;
+
       // Check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
       if (summarizeConfig && summarizeConfig[ShellTool.Name]) {
-        const summary = await summarizeToolOutput(
-          llmContent,
-          this.config.getGeminiClient(),
-          signal,
-          summarizeConfig[ShellTool.Name].tokenBudget,
-        );
-        return {
-          llmContent: summary,
-          returnDisplay: returnDisplayMessage,
-        };
+        // Get the ServerToolsProvider for summarization
+        const contentGenConfig = this.config.getContentGeneratorConfig();
+        if (contentGenConfig?.providerManager) {
+          const serverToolsProvider = contentGenConfig.providerManager.getServerToolsProvider();
+          
+          // If we have a ServerToolsProvider that can handle summarization
+          if (serverToolsProvider) {
+            // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
+            // For now, check if it's a Gemini provider and use the existing function
+            if (serverToolsProvider.name === 'gemini') {
+              processedContent = await summarizeToolOutput(
+                llmContent,
+                this.config.getGeminiClient(),
+                signal,
+                summarizeConfig[ShellTool.Name].tokenBudget,
+              );
+            }
+            // If not Gemini, we can't summarize yet - need provider-agnostic summarization
+          }
+        }
       }
 
-      // Apply token-based limiting if no summarization
+      // ALWAYS apply token-based limiting at the end to protect the outer model
       const limitedResult = limitOutputTokens(
-        llmContent,
+        processedContent,
         this.config,
         'run_shell_command',
       );
