@@ -970,6 +970,8 @@ describe('Settings Loading and Merging', () => {
         theme: 'light',
       };
 
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {
           if (p === getSystemSettingsPath()) {
@@ -1001,7 +1003,8 @@ describe('Settings Loading and Merging', () => {
       // @ts-expect-error: dynamic property for test
       expect(settings.workspace.settings.workspaceOnly).toBe('workspace_value');
 
-      // Check merged values (system > workspace > user)
+      // Check merged values (workspace > user > system for themes)
+      expect(settings.merged.theme).toBe('light');
       // @ts-expect-error: dynamic property for test
       expect(settings.merged.configValue).toBe('final_value');
       // @ts-expect-error: dynamic property for test
@@ -1010,13 +1013,12 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.userOnly).toBe('user_value');
       // @ts-expect-error: dynamic property for test
       expect(settings.merged.workspaceOnly).toBe('workspace_value');
-      expect(settings.merged.theme).toBe('light'); // workspace overrides user
 
+      // Clean up
       delete process.env['SYSTEM_VAR'];
       delete process.env['USER_VAR'];
       delete process.env['WORKSPACE_VAR'];
       delete process.env['SHARED_VAR'];
-    });
     });
 
     it('should correctly merge dnsResolutionOrder with workspace taking precedence', () => {
