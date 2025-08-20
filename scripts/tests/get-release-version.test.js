@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getReleaseVersion } from '../get-release-version';
+import { getReleaseVersion } from '../get-release-version.js';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 
@@ -82,10 +82,10 @@ describe('getReleaseVersion', () => {
     );
   });
 
-  it('should throw an error if no version is provided for non-nightly release', () => {
-    expect(() => getReleaseVersion()).toThrow(
-      'Error: No version specified and this is not a nightly release.',
-    );
+  it('should auto-increment version if no version is provided for non-nightly release', () => {
+    const result = getReleaseVersion();
+    expect(result.releaseTag).toMatch(/^v\d+\.\d+\.\d+$/);
+    expect(result.npmTag).toBe('latest');
   });
 
   it('should throw an error for versions with build metadata', () => {

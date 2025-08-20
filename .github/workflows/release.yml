@@ -138,7 +138,7 @@ jobs:
           git commit -m "chore(release): ${{ steps.version.outputs.RELEASE_TAG }}"
           if [[ "${{ steps.vars.outputs.is_dry_run }}" == "false" ]]; then
             echo "Pushing release branch to remote..."
-            git push --set-upstream origin ${{ steps.release_branch.outputs.BRANCH_NAME }} --follow-tags
+            git push --set-upstream origin ${{ steps.release_branch.outputs.BRANCH_NAME }} --follow-tags --force
           else
             echo "Dry run enabled. Skipping push."
           fi
