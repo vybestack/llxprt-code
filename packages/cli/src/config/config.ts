@@ -818,6 +818,8 @@ export async function loadCliConfig(
     trustedFolder,
     shellReplacement: effectiveSettings.shellReplacement,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
+    skipNextSpeakerCheck: effectiveSettings.skipNextSpeakerCheck,
+    enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
   });
 
   const enhancedConfig = config;

@@ -4,24 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useState,
-  useMemo,
-  useRef,
-} from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Box, Text } from 'ink';
-import { Colors } from '../colors.js';
+import { theme } from '../semantic-colors.js';
 import { SuggestionsDisplay } from './SuggestionsDisplay.js';
 import { useInputHistory } from '../hooks/useInputHistory.js';
 import { TextBuffer, logicalPosToOffset } from './shared/text-buffer.js';
-import { cpSlice, cpLen } from '../utils/textUtils.js';
+import { cpSlice, cpLen, toCodePoints } from '../utils/textUtils.js';
 import chalk from 'chalk';
 import stringWidth from 'string-width';
 import { useShellHistory } from '../hooks/useShellHistory.js';
 import { useReverseSearchCompletion } from '../hooks/useReverseSearchCompletion.js';
-import { useSlashCompletion } from '../hooks/useSlashCompletion.js';
+import { useCommandCompletion } from '../hooks/useCommandCompletion.js';
 import { useKeypress, Key } from '../hooks/useKeypress.js';
 import { keyMatchers, Command } from '../keyMatchers.js';
 import { CommandContext, SlashCommand } from '../commands/types.js';
@@ -32,7 +26,6 @@ import {
   cleanupOldClipboardImages,
 } from '../utils/clipboardUtils.js';
 import * as path from 'path';
-import { secureInputHandler } from '../utils/secureInputHandler.js';
 
 export interface InputPromptProps {
   buffer: TextBuffer;
@@ -70,7 +63,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   vimHandleInput,
 }) => {
   const [justNavigatedHistory, setJustNavigatedHistory] = useState(false);
-  const [pasteMessage, setPasteMessage] = useState<string | null>(null);
   const [escPressCount, setEscPressCount] = useState(0);
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const escapeTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -92,7 +84,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const shellHistory = useShellHistory(config.getProjectRoot(), config.storage);
   const historyData = shellHistory.history;
 
-  const completion = useSlashCompletion(
+  const completion = useCommandCompletion(
     buffer,
     dirs,
     config.getTargetDir(),
@@ -139,27 +131,14 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
 
   const handleSubmitAndClear = useCallback(
     (submittedValue: string) => {
-      // Get the actual value if in secure mode
-      const actualValue = secureInputHandler.isInSecureMode()
-        ? secureInputHandler.getActualValue()
-        : submittedValue;
-
       if (shellModeActive) {
-        // Sanitize for history if it's a secure command
-        const historyValue = secureInputHandler.sanitizeForHistory(actualValue);
-        shellHistory.addCommandToHistory(historyValue);
+        shellHistory.addCommandToHistory(submittedValue);
       }
-
       // Clear the buffer *before* calling onSubmit to prevent potential re-submission
       // if onSubmit triggers a re-render while the buffer still holds the old value.
       buffer.setText('');
-
-      // Reset secure input handler
-      secureInputHandler.reset();
-
-      onSubmit(actualValue);
+      onSubmit(submittedValue);
       resetCompletionState();
-      setPasteMessage(null);
       resetReverseSearchCompletionState();
     },
     [
@@ -169,7 +148,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       shellModeActive,
       shellHistory,
       resetReverseSearchCompletionState,
-      setPasteMessage,
     ],
   );
 
@@ -177,8 +155,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     (newText: string) => {
       buffer.setText(newText);
       setJustNavigatedHistory(true);
-      // Process through secure handler to update its state
-      secureInputHandler.processInput(newText);
     },
     [buffer, setJustNavigatedHistory],
   );
@@ -264,19 +240,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       }
 
       if (key.paste) {
-        // Always call handleInput for paste events (for compatibility with existing tests)
+        // Ensure we never accidentally interpret paste as regular input.
         buffer.handleInput(key);
-
-        // Additionally show paste message for multi-line content
-        if (key.sequence) {
-          const lines = key.sequence.split('\n');
-          if (lines.length > 1) {
-            setPasteMessage(`[${lines.length} lines pasted]`);
-          }
-
-          // Update secure input handler state after paste
-          secureInputHandler.processInput(buffer.text);
-        }
         return;
       }
 
@@ -438,6 +403,16 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         }
       }
 
+      // Handle Tab key for ghost text acceptance
+      if (
+        key.name === 'tab' &&
+        !completion.showSuggestions &&
+        completion.promptCompletion.text
+      ) {
+        completion.promptCompletion.accept();
+        return;
+      }
+
       if (!shellModeActive) {
         if (keyMatchers[Command.HISTORY_UP](key)) {
           inputHistory.navigateUp();
@@ -514,7 +489,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         if (buffer.text.length > 0) {
           buffer.setText('');
           resetCompletionState();
-          secureInputHandler.reset();
         }
         return;
       }
@@ -528,6 +502,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         buffer.killLineLeft();
         return;
       }
+
       // External editor
       if (keyMatchers[Command.OPEN_EXTERNAL_EDITOR](key)) {
         buffer.openInExternalEditor();
@@ -543,9 +518,16 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       // Fall back to the text buffer's default input handling for all other keys
       buffer.handleInput(key);
 
-      // Update secure input handler state after any input
-      // This ensures the handler always has the current text
-      secureInputHandler.processInput(buffer.text);
+      // Clear ghost text when user types regular characters (not navigation/control keys)
+      if (
+        completion.promptCompletion.text &&
+        key.sequence &&
+        key.sequence.length === 1 &&
+        !key.ctrl &&
+        !key.meta
+      ) {
+        completion.promptCompletion.clear();
+      }
     },
     [
       focus,
@@ -574,46 +556,139 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     isActive: true,
   });
 
-  // Process buffer text through secure input handler
-  // This will return masked text if it detects /key command, otherwise returns original text
-  const textToDisplay = useMemo(
-    () => secureInputHandler.processInput(buffer.text),
-    [buffer.text],
-  );
-
-  // Calculate visual lines for the display text
-  const displayLines = useMemo(() => {
-    if (!secureInputHandler.isInSecureMode()) {
-      return buffer.viewportVisualLines;
-    }
-
-    // In secure mode, simply return the masked text as a single line
-    // The issue is that buffer.viewportVisualLines are calculated from buffer.text
-    // but we need to display textToDisplay instead
-
-    // For now, let's just return the masked text as a single visual line
-    // This works for single-line inputs (which is the common case for API keys)
-    return [textToDisplay];
-  }, [buffer.viewportVisualLines, textToDisplay]);
-
-  const linesToRender = displayLines;
+  const linesToRender = buffer.viewportVisualLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =
     buffer.visualCursor;
   const scrollVisualRow = buffer.visualScrollRow;
+
+  const getGhostTextLines = useCallback(() => {
+    if (
+      !completion.promptCompletion.text ||
+      !buffer.text ||
+      !completion.promptCompletion.text.startsWith(buffer.text)
+    ) {
+      return { inlineGhost: '', additionalLines: [] };
+    }
+
+    const ghostSuffix = completion.promptCompletion.text.slice(
+      buffer.text.length,
+    );
+    if (!ghostSuffix) {
+      return { inlineGhost: '', additionalLines: [] };
+    }
+
+    const currentLogicalLine = buffer.lines[buffer.cursor[0]] || '';
+    const cursorCol = buffer.cursor[1];
+
+    const textBeforeCursor = cpSlice(currentLogicalLine, 0, cursorCol);
+    const usedWidth = stringWidth(textBeforeCursor);
+    const remainingWidth = Math.max(0, inputWidth - usedWidth);
+
+    const ghostTextLinesRaw = ghostSuffix.split('\n');
+    const firstLineRaw = ghostTextLinesRaw.shift() || '';
+
+    let inlineGhost = '';
+    let remainingFirstLine = '';
+
+    if (stringWidth(firstLineRaw) <= remainingWidth) {
+      inlineGhost = firstLineRaw;
+    } else {
+      const words = firstLineRaw.split(' ');
+      let currentLine = '';
+      let wordIdx = 0;
+      for (const word of words) {
+        const prospectiveLine = currentLine ? `${currentLine} ${word}` : word;
+        if (stringWidth(prospectiveLine) > remainingWidth) {
+          break;
+        }
+        currentLine = prospectiveLine;
+        wordIdx++;
+      }
+      inlineGhost = currentLine;
+      if (words.length > wordIdx) {
+        remainingFirstLine = words.slice(wordIdx).join(' ');
+      }
+    }
+
+    const linesToWrap = [];
+    if (remainingFirstLine) {
+      linesToWrap.push(remainingFirstLine);
+    }
+    linesToWrap.push(...ghostTextLinesRaw);
+    const remainingGhostText = linesToWrap.join('\n');
+
+    const additionalLines: string[] = [];
+    if (remainingGhostText) {
+      const textLines = remainingGhostText.split('\n');
+      for (const textLine of textLines) {
+        const words = textLine.split(' ');
+        let currentLine = '';
+
+        for (const word of words) {
+          const prospectiveLine = currentLine ? `${currentLine} ${word}` : word;
+          const prospectiveWidth = stringWidth(prospectiveLine);
+
+          if (prospectiveWidth > inputWidth) {
+            if (currentLine) {
+              additionalLines.push(currentLine);
+            }
+
+            let wordToProcess = word;
+            while (stringWidth(wordToProcess) > inputWidth) {
+              let part = '';
+              const wordCP = toCodePoints(wordToProcess);
+              let partWidth = 0;
+              let splitIndex = 0;
+              for (let i = 0; i < wordCP.length; i++) {
+                const char = wordCP[i];
+                const charWidth = stringWidth(char);
+                if (partWidth + charWidth > inputWidth) {
+                  break;
+                }
+                part += char;
+                partWidth += charWidth;
+                splitIndex = i + 1;
+              }
+              additionalLines.push(part);
+              wordToProcess = cpSlice(wordToProcess, splitIndex);
+            }
+            currentLine = wordToProcess;
+          } else {
+            currentLine = prospectiveLine;
+          }
+        }
+        if (currentLine) {
+          additionalLines.push(currentLine);
+        }
+      }
+    }
+
+    return { inlineGhost, additionalLines };
+  }, [
+    completion.promptCompletion.text,
+    buffer.text,
+    buffer.lines,
+    buffer.cursor,
+    inputWidth,
+  ]);
+
+  const { inlineGhost, additionalLines } = getGhostTextLines();
 
   return (
     <>
       <Box
         borderStyle="round"
-        borderColor={shellModeActive ? Colors.AccentYellow : Colors.AccentBlue}
+        borderColor={
+          shellModeActive ? theme.status.warning : theme.border.focused
+        }
         paddingX={1}
       >
         <Text
-          color={shellModeActive ? Colors.AccentYellow : Colors.AccentPurple}
+          color={shellModeActive ? theme.status.warning : theme.text.accent}
         >
           {shellModeActive ? (
             reverseSearchActive ? (
-              <Text color={Colors.AccentCyan}>(r:) </Text>
+              <Text color={theme.text.link}>(r:) </Text>
             ) : (
               '! '
             )
@@ -622,26 +697,27 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
           )}
         </Text>
         <Box flexGrow={1} flexDirection="column">
-          {textToDisplay.length === 0 && placeholder ? (
+          {buffer.text.length === 0 && placeholder ? (
             focus ? (
               <Text>
                 {chalk.inverse(placeholder.slice(0, 1))}
-                <Text color={Colors.Gray}>{placeholder.slice(1)}</Text>
+                <Text color={theme.text.secondary}>{placeholder.slice(1)}</Text>
               </Text>
             ) : (
-              <Text color={Colors.Gray}>{placeholder}</Text>
+              <Text color={theme.text.secondary}>{placeholder}</Text>
             )
           ) : (
-            linesToRender.map(
-              (lineText: string, visualIdxInRenderedSet: number) => {
+            linesToRender
+              .map((lineText, visualIdxInRenderedSet) => {
                 const cursorVisualRow =
                   cursorVisualRowAbsolute - scrollVisualRow;
                 let display = cpSlice(lineText, 0, inputWidth);
-                const currentVisualWidth = stringWidth(display);
-                if (currentVisualWidth < inputWidth) {
-                  display =
-                    display + ' '.repeat(inputWidth - currentVisualWidth);
-                }
+
+                const isOnCursorLine =
+                  focus && visualIdxInRenderedSet === cursorVisualRow;
+                const currentLineGhost = isOnCursorLine ? inlineGhost : '';
+
+                const ghostWidth = stringWidth(currentLineGhost);
 
                 if (focus && visualIdxInRenderedSet === cursorVisualRow) {
                   const relativeVisualColForHighlight = cursorVisualColAbsolute;
@@ -660,45 +736,79 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                         highlighted +
                         cpSlice(display, relativeVisualColForHighlight + 1);
                     } else if (
-                      relativeVisualColForHighlight === cpLen(display) &&
-                      cpLen(display) === inputWidth
+                      relativeVisualColForHighlight === cpLen(display)
                     ) {
-                      display = display + chalk.inverse(' ');
+                      if (!currentLineGhost) {
+                        display = display + chalk.inverse(' ');
+                      }
                     }
                   }
                 }
+
+                const showCursorBeforeGhost =
+                  focus &&
+                  visualIdxInRenderedSet === cursorVisualRow &&
+                  cursorVisualColAbsolute ===
+                    // eslint-disable-next-line no-control-regex
+                    cpLen(display.replace(/\x1b\[[0-9;]*m/g, '')) &&
+                  currentLineGhost;
+
+                const actualDisplayWidth = stringWidth(display);
+                const cursorWidth = showCursorBeforeGhost ? 1 : 0;
+                const totalContentWidth =
+                  actualDisplayWidth + cursorWidth + ghostWidth;
+                const trailingPadding = Math.max(
+                  0,
+                  inputWidth - totalContentWidth,
+                );
+
                 return (
-                  <Text
-                    color={Colors.Foreground}
-                    key={`line-${visualIdxInRenderedSet}`}
-                  >
+                  <Text key={`line-${visualIdxInRenderedSet}`}>
                     {display}
+                    {showCursorBeforeGhost && chalk.inverse(' ')}
+                    {currentLineGhost && (
+                      <Text color={theme.text.secondary}>
+                        {currentLineGhost}
+                      </Text>
+                    )}
+                    {trailingPadding > 0 && ' '.repeat(trailingPadding)}
                   </Text>
                 );
-              },
-            )
+              })
+              .concat(
+                additionalLines.map((ghostLine, index) => {
+                  const padding = Math.max(
+                    0,
+                    inputWidth - stringWidth(ghostLine),
+                  );
+                  return (
+                    <Text
+                      key={`ghost-line-${index}`}
+                      color={theme.text.secondary}
+                    >
+                      {ghostLine}
+                      {' '.repeat(padding)}
+                    </Text>
+                  );
+                }),
+              )
           )}
         </Box>
       </Box>
       {completion.showSuggestions && (
-        <Box>
+        <Box paddingRight={2}>
           <SuggestionsDisplay
             suggestions={completion.suggestions}
             activeIndex={completion.activeSuggestionIndex}
             isLoading={completion.isLoadingSuggestions}
             width={suggestionsWidth}
             scrollOffset={completion.visibleStartIndex}
-            userInput={textToDisplay}
+            userInput={buffer.text}
           />
         </Box>
       )}
-      {pasteMessage && (
-        <Box marginTop={1}>
-          <Text color={Colors.Comment}>{pasteMessage}</Text>
-        </Box>
-      )}
       {reverseSearchActive && (
-        <Box>
+        <Box paddingRight={2}>
           <SuggestionsDisplay
             suggestions={reverseSearchCompletion.suggestions}
             activeIndex={reverseSearchCompletion.activeSuggestionIndex}

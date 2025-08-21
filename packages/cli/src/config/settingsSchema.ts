@@ -625,6 +625,16 @@ export const SETTINGS_SCHEMA = {
     description: 'OAuth enablement configuration per provider.',
     showInDialog: false,
   },
+  enablePromptCompletion: {
+    type: 'boolean',
+    label: 'Enable Prompt Completion',
+    category: 'General',
+    requiresRestart: true,
+    default: false,
+    description:
+      'Enable AI-powered prompt completion suggestions while typing.',
+    showInDialog: true,
+  },
 } as const;
 
 type InferSettings<T extends SettingsSchema> = {
