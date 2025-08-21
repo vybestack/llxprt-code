@@ -147,7 +147,10 @@ export class ConfigurationManager {
   }
 
   setEphemeralConfig(config: Partial<DebugSettings>): void {
-    this.ephemeralConfig = config;
+    this.ephemeralConfig = {
+      ...this.ephemeralConfig,
+      ...config,
+    };
     this.mergeConfigurations();
   }
 
