@@ -136,8 +136,24 @@ export abstract class BaseProvider implements IProvider {
    * Checks if OAuth is enabled for this provider
    */
   protected isOAuthEnabled(): boolean {
-    // OAuth is enabled if we have a manager AND it's enabled in settings
-    return !!this.baseProviderConfig.oauthManager;
+    // OAuth is enabled if we have a manager AND it's enabled for this provider
+    if (this.baseProviderConfig.oauthManager) {
+      // First check the manager's state (which reads from settings)
+      const manager = this.baseProviderConfig.oauthManager as OAuthManager & {
+        isOAuthEnabled?(provider: string): boolean;
+      };
+      if (
+        manager.isOAuthEnabled &&
+        typeof manager.isOAuthEnabled === 'function'
+      ) {
+        const oauthProvider =
+          this.baseProviderConfig.oauthProvider || this.name;
+        return manager.isOAuthEnabled(oauthProvider);
+      }
+      // Fall back to local config
+      return this.baseProviderConfig.isOAuthEnabled === true;
+    }
+    return false;
   }
 
   /**

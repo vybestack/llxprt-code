@@ -43,6 +43,18 @@ export function AuthDialog({
     return enabled;
   });
 
+  // Update enabledProviders state when settings change
+  React.useEffect(() => {
+    const oauthProviders = settings.merged.oauthEnabledProviders || {};
+    const enabled = new Set<string>();
+    for (const [provider, isEnabled] of Object.entries(oauthProviders)) {
+      if (isEnabled) {
+        enabled.add(`oauth_${provider}`);
+      }
+    }
+    setEnabledProviders(enabled);
+  }, [settings.merged.oauthEnabledProviders]);
+
   const items = [
     {
       label: `Gemini (Google OAuth) ${enabledProviders.has('oauth_gemini') ? '[ON]' : '[OFF]'}`,
@@ -89,14 +101,14 @@ export function AuthDialog({
 
       if (oauthManager) {
         try {
-          await oauthManager.toggleOAuthEnabled(providerName);
+          const newState = await oauthManager.toggleOAuthEnabled(providerName);
 
           // Update local state to reflect the change
           const newEnabledProviders = new Set(enabledProviders);
-          if (newEnabledProviders.has(authMethod)) {
-            newEnabledProviders.delete(authMethod);
-          } else {
+          if (newState) {
             newEnabledProviders.add(authMethod);
+          } else {
+            newEnabledProviders.delete(authMethod);
           }
           setEnabledProviders(newEnabledProviders);
         } catch (error) {

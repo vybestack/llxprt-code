@@ -69,12 +69,28 @@ export class OpenAIProvider extends BaseProvider {
   ) {
     // Initialize base provider with auth configuration
     // Check if we should enable OAuth for Qwen
-    // Enable OAuth if: 1) we have an oauth manager, and 2) either the baseURL is a Qwen endpoint OR no baseURL/apiKey is provided
-    const shouldEnableQwenOAuth =
-      !!oauthManager &&
-      (isQwenEndpoint(baseURL || '') ||
-        (!baseURL && (!apiKey || apiKey === '')) ||
-        baseURL === 'https://portal.qwen.ai/v1');
+    // Check OAuth enablement from OAuth manager if available
+    let shouldEnableQwenOAuth = false;
+    if (oauthManager) {
+      // Check if OAuth is enabled for qwen in the OAuth manager (from settings)
+      const manager = oauthManager as OAuthManager & {
+        isOAuthEnabled?(provider: string): boolean;
+      };
+      if (
+        manager.isOAuthEnabled &&
+        typeof manager.isOAuthEnabled === 'function'
+      ) {
+        shouldEnableQwenOAuth = manager.isOAuthEnabled('qwen');
+      }
+
+      // Also enable if this looks like a Qwen endpoint
+      if (!shouldEnableQwenOAuth) {
+        shouldEnableQwenOAuth =
+          isQwenEndpoint(baseURL || '') ||
+          (!baseURL && (!apiKey || apiKey === '')) ||
+          baseURL === 'https://portal.qwen.ai/v1';
+      }
+    }
 
     const baseConfig: BaseProviderConfig = {
       name: 'openai',
@@ -790,6 +806,20 @@ export class OpenAIProvider extends BaseProvider {
         () =>
           `[Synthetic] Added ${missingToolIds.length} synthetic responses to conversation history: ${JSON.stringify(missingToolIds)}`,
       );
+
+      // Log the actual tool calls and their IDs for debugging
+      const assistantMessagesWithTools = messages.filter(
+        (m) =>
+          m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
+      );
+      const lastAssistantWithTools =
+        assistantMessagesWithTools[assistantMessagesWithTools.length - 1];
+      if (lastAssistantWithTools?.tool_calls) {
+        this.logger.debug(
+          () =>
+            `[Synthetic] Last assistant tool calls: ${JSON.stringify(lastAssistantWithTools.tool_calls?.map((tc) => ({ id: tc.id, name: tc.function.name })) ?? [])}`,
+        );
+      }
     }
 
     // Now messages array has been modified in place with synthetic responses
@@ -854,6 +884,14 @@ export class OpenAIProvider extends BaseProvider {
         _synthetic?: boolean;
         _cancelled?: boolean;
       };
+
+      // Log synthetic tool responses for debugging
+      if ((msg as IMessage & { _synthetic?: boolean })._synthetic) {
+        this.logger.debug(
+          () => `[Synthetic Tool Response] ${JSON.stringify(cleanMsg)}`,
+        );
+      }
+
       return cleanMsg;
     });
 
@@ -907,6 +945,30 @@ export class OpenAIProvider extends BaseProvider {
         () =>
           `[Cancellation 400] Error response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
       );
+
+      // Log the last few messages to understand what's being sent
+      if (
+        (error as { status?: number })?.status === 400 ||
+        (error as { response?: { status?: number } })?.response?.status === 400
+      ) {
+        this.logger.error(
+          () => `[Cancellation 400] Last 5 messages being sent:`,
+        );
+        const lastMessages = cleanedMessages.slice(-5);
+        lastMessages.forEach((msg, idx) => {
+          this.logger.error(
+            () =>
+              `  [${cleanedMessages.length - 5 + idx}] ${msg.role}${msg.tool_call_id ? ` (tool response for ${msg.tool_call_id})` : ''}${msg.tool_calls ? ` (${msg.tool_calls.length} tool calls)` : ''}`,
+          );
+          if (msg.tool_calls) {
+            msg.tool_calls.forEach((tc) => {
+              this.logger.error(
+                () => `    - Tool call: ${tc.id} -> ${tc.function.name}`,
+              );
+            });
+          }
+        });
+      }
 
       // Check for JSONResponse mutation errors
       const errorMessage =
@@ -1497,6 +1559,7 @@ export class OpenAIProvider extends BaseProvider {
                   if (typeof value === 'string') {
                     const trimmed = value.trim();
                     // Check if it looks like a stringified array or object
+                    // Also check for Python-style dictionaries with single quotes
                     if (
                       (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
                       (trimmed.startsWith('{') && trimmed.endsWith('}'))
@@ -1511,8 +1574,24 @@ export class OpenAIProvider extends BaseProvider {
                             `[Qwen Fix] Fixed nested stringification in property '${key}' for ${toolCall.function.name}`,
                         );
                       } catch {
-                        // Not valid JSON, keep as string
-                        fixedArgs[key] = value;
+                        // Try to convert Python-style to JSON (single quotes to double quotes)
+                        try {
+                          const jsonified = value
+                            .replace(/'/g, '"')
+                            .replace(/: True/g, ': true')
+                            .replace(/: False/g, ': false')
+                            .replace(/: None/g, ': null');
+                          const nestedParsed = JSON.parse(jsonified);
+                          fixedArgs[key] = nestedParsed;
+                          hasNestedStringification = true;
+                          this.logger.debug(
+                            () =>
+                              `[Qwen Fix] Fixed Python-style nested stringification in property '${key}' for ${toolCall.function.name}`,
+                          );
+                        } catch {
+                          // Not valid JSON even after conversion, keep as string
+                          fixedArgs[key] = value;
+                        }
                       }
                     } else {
                       fixedArgs[key] = value;
@@ -1802,8 +1881,34 @@ export class OpenAIProvider extends BaseProvider {
       const msg = messages[i];
 
       if (msg.role === 'assistant' && msg.tool_calls) {
-        // Track tool calls from assistant
-        pendingToolCalls.length = 0; // Clear previous pending calls
+        // If we have pending tool calls from a previous assistant message,
+        // add synthetic responses for them before processing this new assistant message
+        if (pendingToolCalls.length > 0) {
+          const syntheticResponses = pendingToolCalls.map(
+            (tc) =>
+              ({
+                role: 'tool' as const,
+                tool_call_id: tc.id,
+                content: 'Tool execution cancelled by user',
+                _synthetic: true,
+                _cancelled: true,
+              }) as IMessage & { _synthetic: boolean; _cancelled: boolean },
+          );
+
+          // Insert synthetic responses before the current assistant message
+          messages.splice(i, 0, ...syntheticResponses);
+
+          // Track what we fixed
+          fixedIds.push(...pendingToolCalls.map((tc) => tc.id));
+
+          // Adjust index to account for inserted messages
+          i += syntheticResponses.length;
+
+          // Clear pending tool calls
+          pendingToolCalls.length = 0;
+        }
+
+        // Now track the new tool calls from this assistant message
         msg.tool_calls.forEach((toolCall) => {
           if (toolCall.id) {
             pendingToolCalls.push({
@@ -1829,7 +1934,9 @@ export class OpenAIProvider extends BaseProvider {
               role: 'tool' as const,
               tool_call_id: tc.id,
               content: 'Tool execution cancelled by user',
-            }) as IMessage,
+              _synthetic: true,
+              _cancelled: true,
+            }) as IMessage & { _synthetic: boolean; _cancelled: boolean },
         );
 
         // Insert synthetic responses before the current message
@@ -1854,7 +1961,9 @@ export class OpenAIProvider extends BaseProvider {
             role: 'tool' as const,
             tool_call_id: tc.id,
             content: 'Tool execution cancelled by user',
-          }) as IMessage,
+            _synthetic: true,
+            _cancelled: true,
+          }) as IMessage & { _synthetic: boolean; _cancelled: boolean },
       );
 
       // Add to the end of messages

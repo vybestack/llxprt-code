@@ -254,11 +254,38 @@ const renderTodo = (
 
       if (subtask.toolCalls && subtask.toolCalls.length > 0) {
         const grouped = groupToolCalls(subtask.toolCalls);
-        grouped.forEach((group, index) => {
+
+        // Limit to last 5 tool calls, with overflow message
+        if (grouped.length > 5) {
+          const extraCount = grouped.length - 5;
+          // Show "...n more tool calls..." message above the last 5
           elements.push(
-            renderToolCall(group.toolCall, group.count, '      ', index),
+            <Box
+              key={`${todo.id}-subtask-${subtask.content}-overflow`}
+              flexDirection="row"
+              minHeight={1}
+            >
+              <Text color={SemanticColors.text.secondary}>
+                {'      '}↳ ...{extraCount} more tool calls...
+              </Text>
+            </Box>,
           );
-        });
+
+          // Show only the last 5 tool calls
+          const lastFive = grouped.slice(-5);
+          lastFive.forEach((group, index) => {
+            elements.push(
+              renderToolCall(group.toolCall, group.count, '      ', index),
+            );
+          });
+        } else {
+          // Show all tool calls if 5 or fewer
+          grouped.forEach((group, index) => {
+            elements.push(
+              renderToolCall(group.toolCall, group.count, '      ', index),
+            );
+          });
+        }
       }
     }
   }
@@ -266,9 +293,30 @@ const renderTodo = (
   // Group and render all tool calls from memory (only for in_progress tasks)
   if (allToolCalls.length > 0 && todo.status === 'in_progress') {
     const grouped = groupToolCalls(allToolCalls);
-    grouped.forEach((group, index) => {
-      elements.push(renderToolCall(group.toolCall, group.count, '  ', index));
-    });
+
+    // Limit to last 5 tool calls, with overflow message
+    if (grouped.length > 5) {
+      const extraCount = grouped.length - 5;
+      // Show "...n more tool calls..." message above the last 5
+      elements.push(
+        <Box key="tool-overflow" flexDirection="row" minHeight={1}>
+          <Text color={SemanticColors.text.secondary}>
+            {'  '}↳ ...{extraCount} more tool calls...
+          </Text>
+        </Box>,
+      );
+
+      // Show only the last 5 tool calls
+      const lastFive = grouped.slice(-5);
+      lastFive.forEach((group, index) => {
+        elements.push(renderToolCall(group.toolCall, group.count, '  ', index));
+      });
+    } else {
+      // Show all tool calls if 5 or fewer
+      grouped.forEach((group, index) => {
+        elements.push(renderToolCall(group.toolCall, group.count, '  ', index));
+      });
+    }
   }
 
   return elements;

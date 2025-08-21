@@ -70,34 +70,39 @@ function getFileSystem(): IFileSystem {
 export function getProviderManager(
   config?: Config,
   allowBrowserEnvironment = false,
+  settings?: LoadedSettings,
 ): ProviderManager {
   if (!providerManagerInstance) {
     providerManagerInstance = new ProviderManager();
     const fs = getFileSystem();
 
-    // Load user settings
-    let userSettings: Settings | undefined;
-    try {
-      if (fs.existsSync(USER_SETTINGS_PATH)) {
-        const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
-        userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
+    // If settings weren't passed in, try to load them
+    let loadedSettings = settings;
+    if (!loadedSettings) {
+      // Load user settings
+      let userSettings: Settings | undefined;
+      try {
+        if (fs.existsSync(USER_SETTINGS_PATH)) {
+          const userContent = fs.readFileSync(USER_SETTINGS_PATH, 'utf-8');
+          userSettings = JSON.parse(stripJsonComments(userContent)) as Settings;
+        }
+      } catch (_error) {
+        // Failed to load user settings, that's OK
       }
-    } catch (_error) {
-      // Failed to load user settings, that's OK
+
+      // Create LoadedSettings from user settings for OAuth manager
+      loadedSettings = userSettings
+        ? new LoadedSettings(
+            { path: '', settings: {} }, // system
+            { path: USER_SETTINGS_PATH, settings: userSettings }, // user
+            { path: '', settings: {} }, // workspace
+            [], // errors
+          )
+        : undefined;
     }
 
     // Create OAuth manager for providers
     const tokenStore = new MultiProviderTokenStore();
-    // Create LoadedSettings from user settings for OAuth manager
-    const loadedSettings = userSettings
-      ? new LoadedSettings(
-          { path: '', settings: {} }, // system
-          { path: USER_SETTINGS_PATH, settings: userSettings }, // user
-          { path: '', settings: {} }, // workspace
-          [], // errors
-        )
-      : undefined;
-
     const oauthManager = new OAuthManager(tokenStore, loadedSettings);
     oauthManagerInstance = oauthManager;
 
@@ -164,12 +169,13 @@ export function getProviderManager(
         baseUrl: openaiBaseUrl || 'default',
       });
     }
-    // Create provider config from user settings
+    // Create provider config from loaded settings
+    const settingsData = loadedSettings?.merged || {};
     const openaiProviderConfig = {
-      enableTextToolCallParsing: userSettings?.enableTextToolCallParsing,
-      textToolCallModels: userSettings?.textToolCallModels,
-      providerToolFormatOverrides: userSettings?.providerToolFormatOverrides,
-      openaiResponsesEnabled: userSettings?.openaiResponsesEnabled,
+      enableTextToolCallParsing: settingsData.enableTextToolCallParsing,
+      textToolCallModels: settingsData.textToolCallModels,
+      providerToolFormatOverrides: settingsData.providerToolFormatOverrides,
+      openaiResponsesEnabled: settingsData.openaiResponsesEnabled,
       allowBrowserEnvironment,
       getEphemeralSettings: config
         ? () => config.getEphemeralSettings()

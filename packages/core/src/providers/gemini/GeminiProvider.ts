@@ -62,28 +62,13 @@ export class GeminiProvider extends BaseProvider {
     oauthManager?: OAuthManager,
   ) {
     // Initialize base provider with auth configuration
-    // Check if OAuth is enabled for Gemini
-    let oauthEnabled = false;
-    if (oauthManager) {
-      // Cast to specific interface with isOAuthEnabled method
-      const manager = oauthManager as OAuthManager & {
-        isOAuthEnabled?(provider: string): boolean;
-      };
-      if (
-        manager.isOAuthEnabled &&
-        typeof manager.isOAuthEnabled === 'function'
-      ) {
-        oauthEnabled = manager.isOAuthEnabled('gemini');
-      }
-    }
-
     const baseConfig: BaseProviderConfig = {
       name: 'gemini',
       apiKey,
       baseURL,
       cliKey: apiKey, // CLI --key argument
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-      isOAuthEnabled: oauthEnabled, // Check if OAuth is enabled
+      isOAuthEnabled: false, // OAuth enablement will be checked dynamically
       oauthProvider: 'gemini',
       oauthManager, // Keep the manager for checking enablement
     };
@@ -113,7 +98,7 @@ export class GeminiProvider extends BaseProvider {
         typeof manager.isOAuthEnabled === 'function'
       ) {
         const isEnabled = manager.isOAuthEnabled('gemini');
-        // Update the OAuth configuration if state has changed
+        // Update the OAuth configuration
         this.updateOAuthConfig(isEnabled, 'gemini', this.geminiOAuthManager);
       }
     }
@@ -215,13 +200,9 @@ export class GeminiProvider extends BaseProvider {
       this.currentModel = configModel;
     }
 
-    // Update OAuth configuration based on config
-    const authType = config.getContentGeneratorConfig()?.authType;
-    this.updateOAuthConfig(
-      authType === AuthType.LOGIN_WITH_GOOGLE,
-      'gemini',
-      this.geminiOAuthManager,
-    );
+    // Update OAuth configuration based on OAuth manager state, not config authType
+    // This ensures that if OAuth is disabled via /auth gemini disable, it stays disabled
+    this.updateOAuthState();
 
     // Clear auth cache when config changes to allow re-determination
   }

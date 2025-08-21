@@ -180,7 +180,7 @@ export async function main() {
   consolePatcher.patch();
   registerCleanup(consolePatcher.cleanup);
 
-  const providerManager = getProviderManager(config);
+  const providerManager = getProviderManager(config, false, settings);
   config.setProviderManager(providerManager);
 
   // Initialize git stats service for tracking file changes when logging is enabled

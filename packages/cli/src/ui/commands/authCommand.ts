@@ -139,7 +139,7 @@ export class AuthCommandExecutor {
         };
       }
 
-      // Toggle to achieve desired state
+      // Toggle to achieve desired state using the settings service
       await this.oauthManager.toggleOAuthEnabled(provider);
 
       // Check for higher priority auth warning
@@ -200,7 +200,8 @@ export const authCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context, args) => {
     // Ensure provider manager is initialized (which creates the OAuth manager)
-    getProviderManager();
+    // Pass settings to ensure OAuth state is properly initialized
+    getProviderManager(undefined, false, context.services.settings);
 
     // Get the shared OAuth manager instance
     let oauthManager = getOAuthManager();

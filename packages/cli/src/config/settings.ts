@@ -181,6 +181,26 @@ export class LoadedSettings {
     delete keyfiles[providerName];
     this.setValue(SettingScope.User, 'providerKeyfiles', keyfiles);
   }
+
+  // OAuth enablement methods
+  getOAuthEnabledProviders(): Record<string, boolean> {
+    return this.merged.oauthEnabledProviders || {};
+  }
+
+  setOAuthEnabledProvider(providerName: string, enabled: boolean): void {
+    const oauthEnabledProviders = this.getOAuthEnabledProviders();
+    oauthEnabledProviders[providerName] = enabled;
+    this.setValue(
+      SettingScope.User,
+      'oauthEnabledProviders',
+      oauthEnabledProviders,
+    );
+  }
+
+  isOAuthEnabledForProvider(providerName: string): boolean {
+    const oauthEnabledProviders = this.getOAuthEnabledProviders();
+    return oauthEnabledProviders[providerName] ?? false;
+  }
 }
 
 function resolveEnvVarsInString(value: string): string {

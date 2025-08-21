@@ -426,7 +426,7 @@ const App = (props: AppInternalProps) => {
     exitEditorDialog,
   } = useEditorSettings(settings, appState, addItem);
 
-  const providerManager = getProviderManager(config);
+  const providerManager = getProviderManager(config, false, settings);
   const {
     showDialog: isProviderDialogOpen,
     openDialog: openProviderDialog,
