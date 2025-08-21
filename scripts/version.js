@@ -39,15 +39,24 @@ const versionCommand = isSpecificVersion ? versionArg : versionArg;
 run(`npm version ${versionCommand} --no-git-tag-version --allow-same-version`);
 
 // 3. Get all workspaces and filter out the one we don't want to version.
-// Now we version the companion extension too, so the exclude list is empty
-const workspacesToExclude = [];
-const lsOutput = JSON.parse(
-  execSync('npm ls --workspaces --json --depth=0').toString(),
-);
-const allWorkspaces = Object.keys(lsOutput.dependencies || {});
-const workspacesToVersion = allWorkspaces.filter(
-  (wsName) => !workspacesToExclude.includes(wsName),
-);
+// Define the actual workspaces in our monorepo (not external dependencies)
+const actualWorkspaces = [
+  '@vybestack/llxprt-code',
+  '@vybestack/llxprt-code-core',
+  '@vybestack/llxprt-code-test-utils',
+  'llxprt-code-vscode-ide-companion',
+];
+
+// Filter for workspaces that actually exist (in case some are optional)
+const workspacesToVersion = actualWorkspaces.filter((wsName) => {
+  try {
+    execSync(`npm ls ${wsName} --depth=0`, { stdio: 'pipe' });
+    return true;
+  } catch {
+    // Workspace doesn't exist, skip it
+    return false;
+  }
+});
 
 for (const workspaceName of workspacesToVersion) {
   run(

@@ -26,7 +26,7 @@ on:
         type: boolean
         default: false
       create_preview_release:
-        description: 'Create a preview release with incremented minor version (e.g., 0.2.0-preview.0).'
+        description: 'Create a beta release with current version (e.g., 0.1.21-beta.0).'
         required: false
         type: boolean
         default: false

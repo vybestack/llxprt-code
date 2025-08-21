@@ -30,14 +30,11 @@ export function getNightlyTagName() {
   return `v${version}-nightly.${date}.${sha}`;
 }
 
-export function getPreviewVersion() {
+export function getBetaVersion() {
   const currentVersion = getPackageVersion();
-  const versionParts = currentVersion.split('.');
-  // Increment minor version and reset patch to 0
-  versionParts[1] = (parseInt(versionParts[1]) + 1).toString();
-  versionParts[2] = '0';
-  const nextVersion = versionParts.join('.');
-  return `${nextVersion}-preview.0`;
+  // Stay in current version, add -beta suffix
+  // This keeps us independent from upstream's -preview releases
+  return `${currentVersion}-beta.0`;
 }
 
 export function getReleaseVersion() {
@@ -51,10 +48,10 @@ export function getReleaseVersion() {
     console.error('Calculating next nightly version...');
     releaseTag = getNightlyTagName();
   } else if (isPreview) {
-    console.error('Calculating next preview version...');
-    const previewVersion = getPreviewVersion();
-    console.error(`Next preview version: ${previewVersion}`);
-    releaseTag = `v${previewVersion}`;
+    console.error('Calculating next beta version...');
+    const betaVersion = getBetaVersion();
+    console.error(`Next beta version: ${betaVersion}`);
+    releaseTag = `v${betaVersion}`;
   } else if (manualVersion) {
     console.error(`Using manual version: ${manualVersion}`);
     releaseTag = manualVersion;
