@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import type { Stream } from '@anthropic-ai/sdk/streaming';
+import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
@@ -14,6 +15,7 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 export class AnthropicProvider extends BaseProvider {
+  private logger: DebugLogger;
   private anthropic: Anthropic;
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
@@ -66,6 +68,7 @@ export class AnthropicProvider extends BaseProvider {
 
     super(baseConfig);
 
+    this.logger = new DebugLogger('llxprt:anthropic:provider');
     this.baseURL = baseURL;
     this._config = config;
 
@@ -131,7 +134,9 @@ export class AnthropicProvider extends BaseProvider {
     const authToken = await this.getAuthToken();
     if (!authToken) {
       // Return empty array if no auth - models aren't critical for operation
-      console.warn('No authentication available for fetching Anthropic models');
+      this.logger.debug(
+        () => 'No authentication available for fetching Anthropic models',
+      );
       return [];
     }
 
@@ -143,8 +148,8 @@ export class AnthropicProvider extends BaseProvider {
 
     if (isOAuthToken) {
       // For OAuth, return only the two working models
-      console.log(
-        '[OAuth] Using hardcoded model list for OAuth authentication',
+      this.logger.debug(
+        () => 'Using hardcoded model list for OAuth authentication',
       );
       return [
         {
@@ -201,7 +206,7 @@ export class AnthropicProvider extends BaseProvider {
 
       return models;
     } catch (error) {
-      console.error('Failed to fetch Anthropic models:', error);
+      this.logger.debug(() => `Failed to fetch Anthropic models: ${error}`);
       return []; // Return empty array on error
     }
   }
@@ -406,22 +411,19 @@ ${llxprtPrompts}`;
 
         // Process the stream
         for await (const chunk of stream) {
-          if (process.env.DEBUG) {
-            console.log(
-              `[ANTHROPIC DEBUG] Received chunk type: ${chunk.type}`,
-              chunk.type === 'message_start'
-                ? JSON.stringify(chunk, null, 2)
-                : '',
-            );
-          }
+          this.logger.debug(
+            () =>
+              `Received chunk type: ${chunk.type}${
+                chunk.type === 'message_start'
+                  ? ` - ${JSON.stringify(chunk, null, 2)}`
+                  : ''
+              }`,
+          );
           if (chunk.type === 'message_start') {
             // Initial usage info
-            if (process.env.DEBUG) {
-              console.log(
-                '[ANTHROPIC DEBUG] message_start chunk:',
-                JSON.stringify(chunk, null, 2),
-              );
-            }
+            this.logger.debug(
+              () => `message_start chunk: ${JSON.stringify(chunk, null, 2)}`,
+            );
             if (chunk.message?.usage) {
               const usage = chunk.message.usage;
               // Don't require both fields - Anthropic might send them separately
@@ -429,12 +431,10 @@ ${llxprtPrompts}`;
                 input_tokens: usage.input_tokens ?? 0,
                 output_tokens: usage.output_tokens ?? 0,
               };
-              if (process.env.DEBUG) {
-                console.log(
-                  '[ANTHROPIC DEBUG] Set currentUsage from message_start:',
-                  currentUsage,
-                );
-              }
+              this.logger.debug(
+                () =>
+                  `Set currentUsage from message_start: ${JSON.stringify(currentUsage)}`,
+              );
               yield {
                 role: 'assistant',
                 content: '',
@@ -492,10 +492,10 @@ ${llxprtPrompts}`;
             }
           } else if (chunk.type === 'message_delta') {
             // Update usage if provided
-            if (process.env.DEBUG && chunk.usage) {
-              console.log(
-                '[ANTHROPIC DEBUG] message_delta usage:',
-                JSON.stringify(chunk.usage, null, 2),
+            if (chunk.usage) {
+              this.logger.debug(
+                () =>
+                  `message_delta usage: ${JSON.stringify(chunk.usage, null, 2)}`,
               );
             }
             if (chunk.usage) {
@@ -506,12 +506,10 @@ ${llxprtPrompts}`;
                 output_tokens:
                   chunk.usage.output_tokens ?? currentUsage?.output_tokens ?? 0,
               };
-              if (process.env.DEBUG) {
-                console.log(
-                  '[ANTHROPIC DEBUG] Updated currentUsage from message_delta:',
-                  currentUsage,
-                );
-              }
+              this.logger.debug(
+                () =>
+                  `Updated currentUsage from message_delta: ${JSON.stringify(currentUsage)}`,
+              );
               yield {
                 role: 'assistant',
                 content: '',
@@ -526,12 +524,9 @@ ${llxprtPrompts}`;
           } else if (chunk.type === 'message_stop') {
             // Final usage info
             if (currentUsage) {
-              if (process.env.DEBUG) {
-                console.log(
-                  '[ANTHROPIC DEBUG] Yielding final usage:',
-                  currentUsage,
-                );
-              }
+              this.logger.debug(
+                () => `Yielding final usage: ${JSON.stringify(currentUsage)}`,
+              );
               yield {
                 role: 'assistant',
                 content: '',
@@ -542,10 +537,8 @@ ${llxprtPrompts}`;
                     currentUsage.input_tokens + currentUsage.output_tokens,
                 },
               } as IMessage;
-            } else if (process.env.DEBUG) {
-              console.log(
-                '[ANTHROPIC DEBUG] No currentUsage data at message_stop',
-              );
+            } else {
+              this.logger.debug(() => 'No currentUsage data at message_stop');
             }
           }
         }
@@ -637,9 +630,9 @@ ${llxprtPrompts}`;
       const settingsService = getSettingsService();
       settingsService.setProviderSetting(this.name, 'model', modelId);
     } catch (error) {
-      if (process.env.DEBUG) {
-        console.warn('Failed to persist model to SettingsService:', error);
-      }
+      this.logger.debug(
+        () => `Failed to persist model to SettingsService: ${error}`,
+      );
     }
     // Keep local cache for performance
     this.currentModel = modelId;
@@ -654,9 +647,9 @@ ${llxprtPrompts}`;
         return providerSettings.model as string;
       }
     } catch (error) {
-      if (process.env.DEBUG) {
-        console.warn('Failed to get model from SettingsService:', error);
-      }
+      this.logger.debug(
+        () => `Failed to get model from SettingsService: ${error}`,
+      );
     }
     // Fall back to cached value or default
     return this.currentModel || this.getDefaultModel();
@@ -738,8 +731,8 @@ ${llxprtPrompts}`;
       return realModel ? realModel.id : modelId;
     } catch (_error) {
       // If we can't fetch models, just use simple fallback like Claude Code does
-      console.log(
-        'Failed to fetch models for latest resolution, using fallback',
+      this.logger.debug(
+        () => 'Failed to fetch models for latest resolution, using fallback',
       );
       if (modelId.includes('opus')) {
         return 'opus';

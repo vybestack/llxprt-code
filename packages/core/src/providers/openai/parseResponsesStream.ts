@@ -1,3 +1,8 @@
+/**
+ * @plan PLAN-20250120-DEBUGLOGGING.P15
+ * @requirement REQ-INT-001.1
+ */
+import { DebugLogger } from '../../debug/index.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
@@ -78,6 +83,9 @@ interface ResponsesApiEvent {
 function looksLikeJSONObjectOrArray(s: string): boolean {
   return /^[[{]/.test(s.trim());
 }
+
+// Create a single logger instance for the module (following singleton pattern)
+const logger = new DebugLogger('llxprt:providers:openai');
 
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
@@ -511,12 +519,7 @@ export async function* parseResponsesStream(
                 break;
             }
           } catch (parseError) {
-            if (process.env.DEBUG) {
-              console.error(
-                '[parseResponsesStream] Failed to parse event:',
-                parseError,
-              );
-            }
+            logger.debug(() => `Failed to parse event: ${parseError}`);
           }
         }
       }

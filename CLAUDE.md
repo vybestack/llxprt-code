@@ -6,6 +6,10 @@
 
 - **Don't use `any`** - Always specify proper types. Use `unknown` if the type is truly unknown and add proper type guards.
 
+## logging
+
+- We have a whole sophisticated logging system you designed do not use console.out or debug -- use our debug logging system
+
 ## Linting and Formatting
 
 - **Always run `npm run format` FROM THE MAIN llxprt-code directory before committing** - Never push without formatting

@@ -10,6 +10,7 @@ import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
+import { Content, Part } from '@google/genai';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -367,13 +368,116 @@ Please analyze the conversation history to determine the possibility that the co
     return originalChunk === currentChunk;
   }
 
+  /**
+   * Sanitizes conversation history before sending to loop detection LLM.
+   * Removes or fixes invalid tool calls and responses that could cause API errors.
+   */
+  private sanitizeHistoryForLoopDetection(history: Content[]): Content[] {
+    return history
+      .map((message) => {
+        // Type guard to check if message has expected structure
+        if (!message || typeof message !== 'object') {
+          return message;
+        }
+
+        const msg = message as Content;
+
+        // Check if this is a message with parts
+        if (!msg.role || !Array.isArray(msg.parts)) {
+          return message;
+        }
+
+        // Create a sanitized copy of the message
+        const sanitizedParts: Part[] = [];
+
+        for (const part of msg.parts) {
+          if (!part || typeof part !== 'object') {
+            sanitizedParts.push(part);
+            continue;
+          }
+
+          const p = part as Record<string, unknown>;
+
+          // Handle functionCall parts
+          if (p.functionCall && typeof p.functionCall === 'object') {
+            const fc = p.functionCall as Record<string, unknown>;
+
+            // If the function call has validation errors or malformed args,
+            // replace with a simplified version
+            if (fc.name === 'todo_write' && fc.args) {
+              const args = fc.args as Record<string, unknown>;
+
+              // Check if todos is a string that should be an array
+              if (typeof args.todos === 'string') {
+                try {
+                  // Try to parse the stringified JSON
+                  const parsed = JSON.parse(args.todos as string);
+                  // Return a fixed version
+                  sanitizedParts.push({
+                    functionCall: {
+                      name: fc.name as string,
+                      args: { todos: parsed },
+                      id: (fc.id as string) || 'sanitized',
+                    },
+                  } as Part);
+                } catch {
+                  // If parsing fails, replace with placeholder
+                  sanitizedParts.push({
+                    text: '[Invalid tool call removed for loop detection]',
+                  } as Part);
+                }
+                continue;
+              }
+            }
+          }
+
+          // Handle functionResponse parts with errors
+          if (p.functionResponse && typeof p.functionResponse === 'object') {
+            const fr = p.functionResponse as Record<string, unknown>;
+
+            // If there's an error in the response, simplify it
+            if (fr.response && typeof fr.response === 'object') {
+              const resp = fr.response as Record<string, unknown>;
+              if (resp.error) {
+                sanitizedParts.push({
+                  functionResponse: {
+                    id: (fr.id as string) || 'sanitized',
+                    name: (fr.name as string) || 'unknown',
+                    response: {
+                      error: 'Tool validation failed',
+                    },
+                  },
+                } as Part);
+                continue;
+              }
+            }
+          }
+
+          // Return the part as-is if no issues detected
+          sanitizedParts.push(part as Part);
+        }
+
+        const sanitizedMessage: Content = {
+          role: msg.role,
+          parts: sanitizedParts,
+        };
+
+        return sanitizedMessage;
+      })
+      .filter(Boolean); // Remove any null/undefined messages
+  }
+
   private async checkForLoopWithLLM(signal: AbortSignal) {
     const fullHistory = await this.config.getGeminiClient().getHistory();
     const recentHistory = fullHistory.slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
 
+    // Sanitize the history to remove invalid tool responses that can cause 400 errors
+    const sanitizedHistory =
+      this.sanitizeHistoryForLoopDetection(recentHistory);
+
     const prompt = await this.getLoopDetectionPrompt();
     const contents = [
-      ...recentHistory,
+      ...sanitizedHistory,
       { role: 'user', parts: [{ text: prompt }] },
     ];
     const schema: Record<string, unknown> = {

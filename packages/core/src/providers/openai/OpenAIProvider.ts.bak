@@ -51,7 +51,8 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 export class OpenAIProvider extends BaseProvider {
   private logger: DebugLogger;
   private openai: OpenAI;
-  private currentModel: string = process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
+  private currentModel: string =
+    process.env.LLXPRT_DEFAULT_MODEL || 'llama3-70b-8192';
   private baseURL?: string;
   private providerConfig?: IProviderConfig;
   private toolFormatter: ToolFormatter;
@@ -89,7 +90,7 @@ export class OpenAIProvider extends BaseProvider {
 
     super(baseConfig);
 
-    this.logger = new DebugLogger('llxprt:providers:openai');
+    this.logger = new DebugLogger('llxprt:openai:provider');
     this.logger.debug(
       () =>
         `Constructor - baseURL: ${baseURL}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, oauthManager: ${!!oauthManager}, shouldEnableQwenOAuth: ${shouldEnableQwenOAuth}`,
@@ -557,13 +558,8 @@ export class OpenAIProvider extends BaseProvider {
     // DEFENSIVE FIX: Handle potential array response from providers that violate OpenAI spec
     // Some providers (like Cerebras) may return an array of responses instead of a single response
     if (Array.isArray(data)) {
-      this.logger.error(
-        () =>
-          '[Cerebras Corruption] Detected malformed array response from provider, aggregating...',
-        {
-          provider: this.baseURL,
-          arrayLength: data.length,
-        },
+      this.logger.debug(
+        () => 'Detected malformed array response, aggregating...',
       );
       const aggregatedContent: string[] = [];
       let aggregatedToolCalls: Array<{
@@ -782,41 +778,24 @@ export class OpenAIProvider extends BaseProvider {
       return;
     }
 
-    // Fix messages in place like AnthropicProvider does - this ensures synthetic responses persist
-    // This is critical for preventing 400 errors on subsequent calls with Qwen/Cerebras
-    const missingToolIds = this.identifyAndFixMissingToolResponses(messages);
-    if (missingToolIds.length > 0) {
-      this.logger.debug(
-        () =>
-          `[Synthetic] Added ${missingToolIds.length} synthetic responses to conversation history: ${JSON.stringify(missingToolIds)}`,
-      );
-    }
-
-    // Now messages array has been modified in place with synthetic responses
-    const patchedMessages = messages;
+    // Patch messages to include synthetic responses for cancelled tools (just like responses endpoint)
+    const { SyntheticToolResponseHandler } = await import(
+      './syntheticToolResponses.js'
+    );
+    const patchedMessages =
+      SyntheticToolResponseHandler.patchMessageHistory(messages);
 
     // Validate tool messages have required tool_call_id
     const toolMessages = patchedMessages.filter((msg) => msg.role === 'tool');
     const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
 
     if (missingIds.length > 0) {
-      this.logger.error(
+      this.logger.debug(
         () =>
           `FATAL: Tool messages missing tool_call_id: ${JSON.stringify(missingIds)}`,
       );
       throw new Error(
         `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
-      );
-    }
-
-    // Log synthetic responses for debugging
-    const syntheticMessages = patchedMessages.filter(
-      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
-    );
-    if (syntheticMessages.length > 0) {
-      this.logger.debug(
-        () =>
-          `[Synthetic] Added ${syntheticMessages.length} synthetic tool responses`,
       );
     }
 
@@ -862,17 +841,6 @@ export class OpenAIProvider extends BaseProvider {
         `About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${streamingEnabled}`,
     );
 
-    // Debug: Log message roles being sent
-    this.logger.debug(
-      () =>
-        `Messages being sent to OpenAI (${cleanedMessages.length} total): ${cleanedMessages
-          .map(
-            (m) =>
-              `${m.role}${m.role === 'system' ? ` (length: ${m.content?.length})` : ''}`,
-          )
-          .join(', ')}`,
-    );
-
     let response;
     try {
       // Build request params with exact order from original
@@ -891,23 +859,6 @@ export class OpenAIProvider extends BaseProvider {
         ...this.modelParams,
       });
     } catch (error) {
-      // Debug the error
-      this.logger.error(
-        () => `[Cancellation 400] Error caught in API call: ${error}`,
-      );
-      this.logger.error(
-        () =>
-          `[Cancellation 400] Error type: ${(error as Error)?.constructor?.name}`,
-      );
-      this.logger.error(
-        () =>
-          `[Cancellation 400] Error status: ${(error as { status?: number })?.status || (error as { response?: { status?: number } })?.response?.status}`,
-      );
-      this.logger.error(
-        () =>
-          `[Cancellation 400] Error response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
-      );
-
       // Check for JSONResponse mutation errors
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -917,16 +868,7 @@ export class OpenAIProvider extends BaseProvider {
       ) {
         this.logger.debug(
           () =>
-            '[Cancellation 400] Detected JSONResponse mutation error, retrying without streaming',
-        );
-        this.logger.error(
-          () =>
-            '[Cerebras Corruption] JSONResponse mutation error detected. This typically occurs with certain providers like Cerebras. Falling back to non-streaming mode.',
-          {
-            errorMessage,
-            provider: this.baseURL,
-            streamingEnabled,
-          },
+            'JSONResponse mutation error detected. This typically occurs with certain providers like Cerebras. Falling back to non-streaming mode.',
         );
         // Retry with streaming disabled
         response = await this.openai.chat.completions.create({
@@ -943,10 +885,6 @@ export class OpenAIProvider extends BaseProvider {
         // Override streamingEnabled for the rest of this function
         streamingEnabled = false;
       } else {
-        this.logger.debug(
-          () =>
-            '[Cancellation 400] Re-throwing error (not a JSONResponse mutation)',
-        );
         // Re-throw other errors
         throw error;
       }
@@ -1009,15 +947,6 @@ export class OpenAIProvider extends BaseProvider {
       // We need to buffer all chunks to detect and handle malformed streams
       // Some providers (like Cerebras) send message format instead of delta
       const allChunks: StreamChunk[] = [];
-
-      this.logger.debug(
-        () =>
-          '[Stream Detection] Starting to buffer chunks for corruption detection',
-        {
-          provider: this.baseURL,
-          streamingEnabled,
-        },
-      );
 
       try {
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
@@ -1117,14 +1046,9 @@ export class OpenAIProvider extends BaseProvider {
           errorMessage?.includes('JSONResponse') &&
           errorMessage?.includes('does not support item assignment')
         ) {
-          this.logger.error(
+          this.logger.debug(
             () =>
-              '[Cerebras Corruption] JSONResponse mutation error during stream iteration. This is a known issue with Cerebras. The OpenAI client library is trying to mutate immutable response objects. Falling back to non-streaming mode.',
-            {
-              error: errorMessage,
-              provider: this.baseURL,
-              chunksCollected: allChunks.length,
-            },
+              'JSONResponse mutation error during stream iteration. This is a known issue with Cerebras. The OpenAI client library is trying to mutate immutable response objects. Falling back to non-streaming mode.',
           );
 
           // Retry the entire request with streaming disabled
@@ -1267,18 +1191,8 @@ export class OpenAIProvider extends BaseProvider {
         // Check if this chunk has message format instead of delta (malformed stream)
         let processedChunk: StreamChunk = chunk;
         if (chunk.choices?.[0]?.message && !chunk.choices?.[0]?.delta) {
-          this.logger.error(
-            () =>
-              '[Cerebras Corruption] Converting malformed chunk from message to delta format',
-            {
-              provider: this.baseURL,
-              hasMessage: true,
-              hasDelta: false,
-              messageContent: chunk.choices[0].message?.content?.substring(
-                0,
-                100,
-              ),
-            },
+          this.logger.debug(
+            () => 'Converting malformed chunk from message to delta format',
           );
           // Convert message format to delta format for consistent processing
           const message = chunk.choices[0].message;
@@ -1383,12 +1297,39 @@ export class OpenAIProvider extends BaseProvider {
         // Convert tool calls to the standard format
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function' && toolCall.function) {
-            // Don't fix double stringification here - it's handled later in the final processing
-            accumulatedToolCalls.push({
-              id: toolCall.id,
-              type: 'function' as const,
-              function: toolCall.function,
-            });
+            // For Qwen models, fix double stringification of arguments
+            if (this.isUsingQwen()) {
+              let fixedArguments = toolCall.function.arguments;
+              if (
+                typeof toolCall.function.arguments === 'string' &&
+                toolCall.function.arguments.startsWith('"') &&
+                toolCall.function.arguments.endsWith('"')
+              ) {
+                try {
+                  // Parse and re-stringify to fix double stringification
+                  const parsedArgs = JSON.parse(toolCall.function.arguments);
+                  fixedArguments = JSON.stringify(parsedArgs);
+                } catch (_e) {
+                  // If parsing fails, leave arguments as-is
+                }
+              }
+              
+              accumulatedToolCalls.push({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: {
+                  name: toolCall.function.name,
+                  arguments: fixedArguments,
+                },
+              });
+            } else {
+              // For non-Qwen models, use the original logic
+              accumulatedToolCalls.push({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: toolCall.function,
+              });
+            }
           }
         }
       }
@@ -1458,118 +1399,6 @@ export class OpenAIProvider extends BaseProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
-        // Fix double stringification for Qwen tool calls
-        // Qwen models pre-stringify arguments values, but later in the process
-        // they are being JSON.stringify'd again
-        let fixedToolCalls = accumulatedToolCalls;
-        if (this.isUsingQwen()) {
-          this.logger.debug(
-            () =>
-              `[Qwen Fix] Processing ${accumulatedToolCalls.length} tool calls for double-stringification fix`,
-          );
-          fixedToolCalls = accumulatedToolCalls.map((toolCall, index) => {
-            this.logger.debug(
-              () =>
-                `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
-                  name: toolCall.function.name,
-                  argumentsType: typeof toolCall.function.arguments,
-                  argumentsLength: toolCall.function.arguments?.length,
-                  argumentsSample: toolCall.function.arguments?.substring(
-                    0,
-                    100,
-                  ),
-                })}`,
-            );
-            // For Qwen, check for nested double-stringification
-            // Qwen models stringify array/object values WITHIN the JSON arguments
-            if (
-              toolCall.function.arguments &&
-              typeof toolCall.function.arguments === 'string'
-            ) {
-              try {
-                // First, parse the arguments to get the JSON object
-                const parsedArgs = JSON.parse(toolCall.function.arguments);
-                let hasNestedStringification = false;
-
-                // Check each property to see if it's a stringified array/object
-                const fixedArgs: Record<string, unknown> = {};
-                for (const [key, value] of Object.entries(parsedArgs)) {
-                  if (typeof value === 'string') {
-                    const trimmed = value.trim();
-                    // Check if it looks like a stringified array or object
-                    if (
-                      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
-                      (trimmed.startsWith('{') && trimmed.endsWith('}'))
-                    ) {
-                      try {
-                        // Try to parse it as JSON
-                        const nestedParsed = JSON.parse(value);
-                        fixedArgs[key] = nestedParsed;
-                        hasNestedStringification = true;
-                        this.logger.debug(
-                          () =>
-                            `[Qwen Fix] Fixed nested stringification in property '${key}' for ${toolCall.function.name}`,
-                        );
-                      } catch {
-                        // Not valid JSON, keep as string
-                        fixedArgs[key] = value;
-                      }
-                    } else {
-                      fixedArgs[key] = value;
-                    }
-                  } else {
-                    fixedArgs[key] = value;
-                  }
-                }
-
-                if (hasNestedStringification) {
-                  this.logger.debug(
-                    () =>
-                      `[Qwen Fix] Fixed nested double-stringification for ${toolCall.function.name}`,
-                  );
-                  return {
-                    ...toolCall,
-                    function: {
-                      ...toolCall.function,
-                      arguments: JSON.stringify(fixedArgs),
-                    },
-                  };
-                }
-              } catch (_e) {
-                // If parsing fails, check for old-style double-stringification
-                if (
-                  toolCall.function.arguments.startsWith('"') &&
-                  toolCall.function.arguments.endsWith('"')
-                ) {
-                  try {
-                    // Old fix: entire arguments were double-stringified
-                    const parsedArgs = JSON.parse(toolCall.function.arguments);
-                    this.logger.debug(
-                      () =>
-                        `[Qwen Fix] Fixed whole-argument double-stringification for ${toolCall.function.name}`,
-                    );
-                    return {
-                      ...toolCall,
-                      function: {
-                        ...toolCall.function,
-                        arguments: JSON.stringify(parsedArgs),
-                      },
-                    };
-                  } catch {
-                    // Leave as-is if we can't parse
-                  }
-                }
-              }
-            }
-            // No fix needed
-            this.logger.debug(
-              () =>
-                `[Qwen Fix] No double-stringification detected for ${toolCall.function.name}, keeping original`,
-            );
-            return toolCall;
-          });
-        }
-
         if (this.isUsingQwen()) {
           this.logger.debug(
             () =>
@@ -1582,22 +1411,42 @@ export class OpenAIProvider extends BaseProvider {
                 hasStreamedContent,
               })}`,
           );
+          
+          // Fix double stringification for Qwen tool calls
+          // Qwen models pre-stringify arguments values, but later in the process 
+          // they are being JSON.stringify'd again
+          const fixedToolCalls = accumulatedToolCalls.map((toolCall) => {
+            // For Qwen, check if arguments are already JSON strings and parse them back
+            // to prevent double-stringification
+            if (
+              toolCall.function.arguments &&
+              typeof toolCall.function.arguments === 'string' &&
+              toolCall.function.arguments.startsWith('"') &&
+              toolCall.function.arguments.endsWith('"')
+            ) {
+              try {
+                // Attempt to parse the arguments and stringify them once
+                const parsedArgs = JSON.parse(toolCall.function.arguments);
+                return {
+                  ...toolCall,
+                  function: {
+                    ...toolCall.function,
+                    arguments: JSON.stringify(parsedArgs),
+                  },
+                };
+              } catch (_e) {
+                // If parsing fails, leave arguments as-is
+                return toolCall;
+              }
+            }
+            // For all other cases, return toolCall unchanged
+            return toolCall;
+          });
         }
-
+        
         // For Qwen models, don't duplicate content if we've already streamed it
         // BUT Cerebras needs at least a space to continue after tool responses
         const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
-
-        if (isCerebras) {
-          this.logger.debug(
-            () =>
-              '[Cerebras] Special handling for Cerebras provider after tool responses',
-            {
-              hasStreamedContent,
-              willSendSpace: hasStreamedContent,
-            },
-          );
-        }
         const shouldOmitContent =
           hasStreamedContent && this.isUsingQwen() && !isCerebras;
 
@@ -1606,20 +1455,16 @@ export class OpenAIProvider extends BaseProvider {
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: '',
-            tool_calls: fixedToolCalls,
+            tool_calls: this.isUsingQwen() ? fixedToolCalls : accumulatedToolCalls,
             usage: usageData,
           };
         } else if (isCerebras && hasStreamedContent) {
           // Cerebras: Send just a space to prevent duplication but allow continuation
           // This prevents the repeated "Let me search..." text
-          this.logger.debug(
-            () =>
-              '[Cerebras] Sending minimal space content to prevent duplication',
-          );
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: ' ', // Single space instead of full content
-            tool_calls: fixedToolCalls,
+            tool_calls: this.isUsingQwen() ? fixedToolCalls : accumulatedToolCalls,
             usage: usageData,
           };
         } else {
@@ -1627,7 +1472,7 @@ export class OpenAIProvider extends BaseProvider {
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: fullContent || '',
-            tool_calls: fixedToolCalls,
+            tool_calls: this.isUsingQwen() ? fixedToolCalls : accumulatedToolCalls,
             usage: usageData,
           };
         }
@@ -1676,7 +1521,7 @@ export class OpenAIProvider extends BaseProvider {
     if (this.isUsingQwen()) {
       return 'qwen3-coder-plus';
     }
-    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
+    return process.env.LLXPRT_DEFAULT_MODEL || 'llama3-70b-8192';
   }
 
   override setApiKey(apiKey: string): void {
@@ -1784,87 +1629,6 @@ export class OpenAIProvider extends BaseProvider {
    */
   getConversationCache(): ConversationCache {
     return this.conversationCache;
-  }
-
-  /**
-   * Identifies and fixes missing tool responses by adding synthetic responses in place.
-   * Similar to AnthropicProvider's validateAndFixMessages approach.
-   * This ensures synthetic responses persist in the conversation history.
-   * @param messages The message array to fix in place
-   * @returns Array of tool call IDs that were fixed
-   */
-  private identifyAndFixMissingToolResponses(messages: IMessage[]): string[] {
-    const fixedIds: string[] = [];
-    const pendingToolCalls: Array<{ id: string; name: string }> = [];
-
-    // Process messages in order, tracking tool calls and responses
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-
-      if (msg.role === 'assistant' && msg.tool_calls) {
-        // Track tool calls from assistant
-        pendingToolCalls.length = 0; // Clear previous pending calls
-        msg.tool_calls.forEach((toolCall) => {
-          if (toolCall.id) {
-            pendingToolCalls.push({
-              id: toolCall.id,
-              name: toolCall.function.name,
-            });
-          }
-        });
-      } else if (msg.role === 'tool' && pendingToolCalls.length > 0) {
-        // Match tool responses with pending tool calls
-        pendingToolCalls.splice(
-          pendingToolCalls.findIndex((tc) => tc.id === msg.tool_call_id),
-          1,
-        );
-      } else if (
-        (msg.role === 'assistant' || msg.role === 'user') &&
-        pendingToolCalls.length > 0
-      ) {
-        // We hit a non-tool message with pending tool calls - need to add synthetic responses
-        const syntheticResponses = pendingToolCalls.map(
-          (tc) =>
-            ({
-              role: 'tool' as const,
-              tool_call_id: tc.id,
-              content: 'Tool execution cancelled by user',
-            }) as IMessage,
-        );
-
-        // Insert synthetic responses before the current message
-        messages.splice(i, 0, ...syntheticResponses);
-
-        // Track what we fixed
-        fixedIds.push(...pendingToolCalls.map((tc) => tc.id));
-
-        // Adjust index to account for inserted messages
-        i += syntheticResponses.length;
-
-        // Clear pending tool calls
-        pendingToolCalls.length = 0;
-      }
-    }
-
-    // Handle any remaining pending tool calls at the end
-    if (pendingToolCalls.length > 0) {
-      const syntheticResponses = pendingToolCalls.map(
-        (tc) =>
-          ({
-            role: 'tool' as const,
-            tool_call_id: tc.id,
-            content: 'Tool execution cancelled by user',
-          }) as IMessage,
-      );
-
-      // Add to the end of messages
-      messages.push(...syntheticResponses);
-
-      // Track what we fixed
-      fixedIds.push(...pendingToolCalls.map((tc) => tc.id));
-    }
-
-    return fixedIds;
   }
 
   /**

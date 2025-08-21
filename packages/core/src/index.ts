@@ -197,3 +197,12 @@ export type {
   FilterResult,
   EmojiFilterMode,
 } from './filters/EmojiFilter.js';
+
+// Export debug system
+export {
+  ConfigurationManager,
+  DebugLogger,
+  FileOutput,
+} from './debug/index.js';
+export type { DebugSettings, DebugOutputConfig } from './debug/index.js';
+export type { LogEntry as DebugLogEntry } from './debug/index.js';

@@ -4,9 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/**
+ * @plan PLAN-20250120-DEBUGLOGGING.P15
+ * @requirement REQ-INT-001.1
+ */
+import { DebugLogger } from '../../debug/index.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
+
+// Create a single logger instance for the module (following singleton pattern)
+const logger = new DebugLogger('llxprt:openai:provider');
 
 // Helper types leveraging public APIs
 
@@ -93,9 +101,7 @@ export function getOpenAIProviderInfo(
     // Note: Remote token info would need to be tracked separately during API calls
     // This is a placeholder for where that information would be stored
   } catch (error) {
-    if (process.env.DEBUG) {
-      console.error('Error accessing OpenAI provider info:', error);
-    }
+    logger.debug(() => `Error accessing OpenAI provider info: ${error}`);
   }
 
   return result;

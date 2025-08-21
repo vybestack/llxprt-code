@@ -344,9 +344,8 @@ describe.skipIf(skipTests)('OpenAIProvider - Responses API Tool Calls', () => {
     // Verify it's a synthetic cancellation response
     const syntheticOutput = functionCallOutputs[0];
     expect(syntheticOutput.call_id).toBe('call_missing');
-    const outputContent = JSON.parse(syntheticOutput.output || '{}');
-    expect(outputContent.status).toBe('cancelled');
-    expect(outputContent.message).toBe('Tool execution cancelled by user');
+    // The synthetic response is now plain text, not JSON
+    expect(syntheticOutput.output).toBe('Tool execution cancelled by user');
   });
 
   test('should include function_call_output in responses API format', async () => {
