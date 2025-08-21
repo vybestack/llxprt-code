@@ -1297,12 +1297,39 @@ export class OpenAIProvider extends BaseProvider {
         // Convert tool calls to the standard format
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function' && toolCall.function) {
-            // Don't fix double stringification here - it's handled later in the final processing
-            accumulatedToolCalls.push({
-              id: toolCall.id,
-              type: 'function' as const,
-              function: toolCall.function,
-            });
+            // For Qwen models, fix double stringification of arguments
+            if (this.isUsingQwen()) {
+              let fixedArguments = toolCall.function.arguments;
+              if (
+                typeof toolCall.function.arguments === 'string' &&
+                toolCall.function.arguments.startsWith('"') &&
+                toolCall.function.arguments.endsWith('"')
+              ) {
+                try {
+                  // Parse and re-stringify to fix double stringification
+                  const parsedArgs = JSON.parse(toolCall.function.arguments);
+                  fixedArguments = JSON.stringify(parsedArgs);
+                } catch (_e) {
+                  // If parsing fails, leave arguments as-is
+                }
+              }
+              
+              accumulatedToolCalls.push({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: {
+                  name: toolCall.function.name,
+                  arguments: fixedArguments,
+                },
+              });
+            } else {
+              // For non-Qwen models, use the original logic
+              accumulatedToolCalls.push({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: toolCall.function,
+              });
+            }
           }
         }
       }
@@ -1373,38 +1400,35 @@ export class OpenAIProvider extends BaseProvider {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
         // Fix double stringification for Qwen tool calls
-        // Qwen models pre-stringify arguments values, but later in the process
+        // Qwen models pre-stringify arguments values, but later in the process 
         // they are being JSON.stringify'd again
-        let fixedToolCalls = accumulatedToolCalls;
-        if (this.isUsingQwen()) {
-          fixedToolCalls = accumulatedToolCalls.map((toolCall) => {
-            // For Qwen, check if arguments are already JSON strings and parse them back
-            // to prevent double-stringification
-            if (
-              toolCall.function.arguments &&
-              typeof toolCall.function.arguments === 'string' &&
-              toolCall.function.arguments.startsWith('"') &&
-              toolCall.function.arguments.endsWith('"')
-            ) {
-              try {
-                // Attempt to parse the arguments and stringify them once
-                const parsedArgs = JSON.parse(toolCall.function.arguments);
-                return {
-                  ...toolCall,
-                  function: {
-                    ...toolCall.function,
-                    arguments: JSON.stringify(parsedArgs),
-                  },
-                };
-              } catch (_e) {
-                // If parsing fails, leave arguments as-is
-                return toolCall;
-              }
+        const fixedToolCalls = this.isUsingQwen() ? accumulatedToolCalls.map((toolCall) => {
+          // For Qwen, check if arguments are already JSON strings and parse them back
+          // to prevent double-stringification
+          if (
+            toolCall.function.arguments &&
+            typeof toolCall.function.arguments === 'string' &&
+            toolCall.function.arguments.startsWith('"') &&
+            toolCall.function.arguments.endsWith('"')
+          ) {
+            try {
+              // Attempt to parse the arguments and stringify them once
+              const parsedArgs = JSON.parse(toolCall.function.arguments);
+              return {
+                ...toolCall,
+                function: {
+                  ...toolCall.function,
+                  arguments: JSON.stringify(parsedArgs),
+                },
+              };
+            } catch (_e) {
+              // If parsing fails, leave arguments as-is
+              return toolCall;
             }
-            // For all other cases, return toolCall unchanged
-            return toolCall;
-          });
-        }
+          }
+          // For all other cases, return toolCall unchanged
+          return toolCall;
+        }) : accumulatedToolCalls;
 
         if (this.isUsingQwen()) {
           this.logger.debug(
@@ -1419,7 +1443,7 @@ export class OpenAIProvider extends BaseProvider {
               })}`,
           );
         }
-
+        
         // For Qwen models, don't duplicate content if we've already streamed it
         // BUT Cerebras needs at least a space to continue after tool responses
         const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
@@ -1451,8 +1475,7 @@ export class OpenAIProvider extends BaseProvider {
             tool_calls: fixedToolCalls,
             usage: usageData,
           };
-        }
-      } else if (usageData) {
+        }      } else if (usageData) {
         // Always emit usage data so downstream consumers can update stats
         yield {
           role: ContentGeneratorRole.ASSISTANT,

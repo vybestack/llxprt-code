@@ -1,3 +1,8 @@
+/**
+ * @plan PLAN-20250120-DEBUGLOGGING.P15
+ * @requirement REQ-INT-001.1
+ */
+import { DebugLogger } from '../../debug/index.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
 import { ResponsesTool } from '../../tools/IToolFormatter.js';
@@ -89,6 +94,7 @@ const MAX_JSON_SIZE_KB = 32;
 export function buildResponsesRequest(
   params: ResponsesRequestParams,
 ): ResponsesRequest {
+  const logger = new DebugLogger('llxprt:openai:provider');
   const {
     messages,
     prompt,
@@ -209,11 +215,10 @@ export function buildResponsesRequest(
           // Sanitize content to ensure it's safe for JSON/API transmission
           let sanitizedContent = msg.content;
           if (hasUnicodeReplacements(msg.content)) {
-            if (process.env.DEBUG) {
-              console.warn(
-                '[buildResponsesRequest] Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
-              );
-            }
+            logger.debug(
+              () =>
+                'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
+            );
             sanitizedContent = ensureJsonSafe(msg.content);
           }
 
@@ -248,11 +253,10 @@ export function buildResponsesRequest(
         // Sanitize content for safe API transmission
         let sanitizedContent = cleanMsg.content;
         if (hasUnicodeReplacements(cleanMsg.content)) {
-          if (process.env.DEBUG) {
-            console.warn(
-              `[buildResponsesRequest] Message content contains Unicode replacement characters (U+FFFD), sanitizing...`,
-            );
-          }
+          logger.debug(
+            () =>
+              'Message content contains Unicode replacement characters (U+FFFD), sanitizing...',
+          );
           sanitizedContent = ensureJsonSafe(cleanMsg.content);
         }
 

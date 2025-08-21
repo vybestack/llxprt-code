@@ -269,8 +269,20 @@ export class ToolFormatter implements IToolFormatter {
           if (deltaToolCall.id) tc.id = deltaToolCall.id;
           if (deltaToolCall.function?.name)
             tc.function.name = deltaToolCall.function.name;
-          if (deltaToolCall.function?.arguments)
+          if (deltaToolCall.function?.arguments) {
+            // Debug logging for Qwen to diagnose double-stringification
+            if (format === 'qwen' && process.env.DEBUG) {
+              console.log('[ToolFormatter] Qwen argument chunk:', {
+                chunk: deltaToolCall.function.arguments,
+                currentAccumulated: tc.function.arguments,
+                chunkLength: deltaToolCall.function.arguments.length,
+                startsWithQuote:
+                  deltaToolCall.function.arguments.startsWith('"'),
+                endsWithQuote: deltaToolCall.function.arguments.endsWith('"'),
+              });
+            }
             tc.function.arguments += deltaToolCall.function.arguments;
+          }
         }
         break;
       case 'hermes':

@@ -1,3 +1,8 @@
+/**
+ * @plan PLAN-20250120-DEBUGLOGGING.P15
+ * @requirement REQ-INT-001.1
+ */
+import { DebugLogger } from '../../debug/index.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
@@ -82,6 +87,7 @@ function looksLikeJSONObjectOrArray(s: string): boolean {
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
 ): AsyncIterableIterator<IMessage> {
+  const logger = new DebugLogger('llxprt:openai:streaming');
   const decoder = new TextDecoder();
   const reader = stream.getReader();
   let buffer = '';
@@ -511,12 +517,7 @@ export async function* parseResponsesStream(
                 break;
             }
           } catch (parseError) {
-            if (process.env.DEBUG) {
-              console.error(
-                '[parseResponsesStream] Failed to parse event:',
-                parseError,
-              );
-            }
+            logger.debug(() => `Failed to parse event: ${parseError}`);
           }
         }
       }

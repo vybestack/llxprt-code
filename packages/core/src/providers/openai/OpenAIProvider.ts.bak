@@ -1297,12 +1297,39 @@ export class OpenAIProvider extends BaseProvider {
         // Convert tool calls to the standard format
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function' && toolCall.function) {
-            // Don't fix double stringification here - it's handled later in the final processing
-            accumulatedToolCalls.push({
-              id: toolCall.id,
-              type: 'function' as const,
-              function: toolCall.function,
-            });
+            // For Qwen models, fix double stringification of arguments
+            if (this.isUsingQwen()) {
+              let fixedArguments = toolCall.function.arguments;
+              if (
+                typeof toolCall.function.arguments === 'string' &&
+                toolCall.function.arguments.startsWith('"') &&
+                toolCall.function.arguments.endsWith('"')
+              ) {
+                try {
+                  // Parse and re-stringify to fix double stringification
+                  const parsedArgs = JSON.parse(toolCall.function.arguments);
+                  fixedArguments = JSON.stringify(parsedArgs);
+                } catch (_e) {
+                  // If parsing fails, leave arguments as-is
+                }
+              }
+              
+              accumulatedToolCalls.push({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: {
+                  name: toolCall.function.name,
+                  arguments: fixedArguments,
+                },
+              });
+            } else {
+              // For non-Qwen models, use the original logic
+              accumulatedToolCalls.push({
+                id: toolCall.id,
+                type: 'function' as const,
+                function: toolCall.function,
+              });
+            }
           }
         }
       }
@@ -1372,12 +1399,23 @@ export class OpenAIProvider extends BaseProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
-        // Fix double stringification for Qwen tool calls
-        // Qwen models pre-stringify arguments values, but later in the process
-        // they are being JSON.stringify'd again
-        let fixedToolCalls = accumulatedToolCalls;
         if (this.isUsingQwen()) {
-          fixedToolCalls = accumulatedToolCalls.map((toolCall) => {
+          this.logger.debug(
+            () =>
+              `Final message with tool calls: ${JSON.stringify({
+                contentLength: fullContent.length,
+                content:
+                  fullContent.substring(0, 200) +
+                  (fullContent.length > 200 ? '...' : ''),
+                toolCallCount: accumulatedToolCalls.length,
+                hasStreamedContent,
+              })}`,
+          );
+          
+          // Fix double stringification for Qwen tool calls
+          // Qwen models pre-stringify arguments values, but later in the process 
+          // they are being JSON.stringify'd again
+          const fixedToolCalls = accumulatedToolCalls.map((toolCall) => {
             // For Qwen, check if arguments are already JSON strings and parse them back
             // to prevent double-stringification
             if (
@@ -1405,21 +1443,7 @@ export class OpenAIProvider extends BaseProvider {
             return toolCall;
           });
         }
-
-        if (this.isUsingQwen()) {
-          this.logger.debug(
-            () =>
-              `Final message with tool calls: ${JSON.stringify({
-                contentLength: fullContent.length,
-                content:
-                  fullContent.substring(0, 200) +
-                  (fullContent.length > 200 ? '...' : ''),
-                toolCallCount: accumulatedToolCalls.length,
-                hasStreamedContent,
-              })}`,
-          );
-        }
-
+        
         // For Qwen models, don't duplicate content if we've already streamed it
         // BUT Cerebras needs at least a space to continue after tool responses
         const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
@@ -1431,7 +1455,7 @@ export class OpenAIProvider extends BaseProvider {
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: '',
-            tool_calls: fixedToolCalls,
+            tool_calls: this.isUsingQwen() ? fixedToolCalls : accumulatedToolCalls,
             usage: usageData,
           };
         } else if (isCerebras && hasStreamedContent) {
@@ -1440,7 +1464,7 @@ export class OpenAIProvider extends BaseProvider {
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: ' ', // Single space instead of full content
-            tool_calls: fixedToolCalls,
+            tool_calls: this.isUsingQwen() ? fixedToolCalls : accumulatedToolCalls,
             usage: usageData,
           };
         } else {
@@ -1448,7 +1472,7 @@ export class OpenAIProvider extends BaseProvider {
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: fullContent || '',
-            tool_calls: fixedToolCalls,
+            tool_calls: this.isUsingQwen() ? fixedToolCalls : accumulatedToolCalls,
             usage: usageData,
           };
         }

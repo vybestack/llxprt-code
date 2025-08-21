@@ -414,9 +414,9 @@ Each feature follows strict 3-phase TDD cycle:
 
 **CRITICAL RULES**:
 
-- NO `throw new Error('NotYetImplemented')`
-- Return empty values: `{} as any`, `[]`, `Promise.resolve()`
-- Tests will fail naturally with "undefined is not a function"
+- Stubs can throw `new Error('NotYetImplemented')` OR return empty values
+- Tests MUST NOT expect/catch NotYetImplemented (no reverse testing)
+- Tests will fail naturally when stub throws or returns empty
 - NEVER create `ServiceV2` or `ServiceNew` - UPDATE existing files
 
 **Worker Prompt**:
@@ -429,8 +429,10 @@ Implement stub for <feature> based on:
 
 Requirements:
 1. UPDATE existing files (do not create new versions)
-2. All methods return empty values (NO error throwing)
-3. Return dummy values of correct type:
+2. Methods can either:
+   - Throw new Error('NotYetImplemented')
+   - OR return empty values of correct type
+3. If returning empty values:
    - Objects: return {} as any
    - Arrays: return []
    - Promises: return Promise.resolve()
@@ -440,10 +442,8 @@ Requirements:
 5. Must compile with strict TypeScript
 
 FORBIDDEN:
-- throw new Error('NotYetImplemented')
-- throw new Error('Not implemented')
-- TODO comments
 - Creating ServiceV2 or parallel versions
+- TODO comments in production code
 
 Output status to workers/phase-03.json
 "
@@ -452,9 +452,9 @@ Output status to workers/phase-03.json
 **Verification MUST**:
 
 ```bash
-# Check for forbidden patterns
-grep -r "NotYetImplemented\|not.*implemented\|TODO" src/
-[ $? -eq 0 ] && echo "FAIL: Stub markers found"
+# Check for TODO comments (NotYetImplemented is OK in stubs)
+grep -r "TODO" src/
+[ $? -eq 0 ] && echo "FAIL: TODO comments found"
 
 # Check for version duplication
 find src -name "*V2*" -o -name "*New*" -o -name "*Copy*"
@@ -463,9 +463,9 @@ find src -name "*V2*" -o -name "*New*" -o -name "*Copy*"
 # Verify TypeScript compiles
 npm run typecheck || exit 1
 
-# Verify tests fail naturally (not with NotYetImplemented)
-npm test 2>&1 | grep -i "notyet"
-[ $? -eq 0 ] && echo "FAIL: Tests failing with NotYetImplemented"
+# Verify tests don't EXPECT NotYetImplemented (reverse testing)
+grep -r "expect.*NotYetImplemented\|toThrow.*NotYetImplemented" test/
+[ $? -eq 0 ] && echo "FAIL: Tests expecting NotYetImplemented (reverse testing)"
 ```
 
 ### B. TDD Phase
@@ -1087,9 +1087,9 @@ After creating a plan, a subagent MUST evaluate it for:
 
 ### 3. Stub Implementation
 
-- [ ] Stubs return empty values, not errors
-- [ ] No `throw new Error('NotYetImplemented')`
-- [ ] Tests fail naturally with undefined/null errors
+- [ ] Stubs can throw NotYetImplemented OR return empty values
+- [ ] Tests MUST NOT expect/catch NotYetImplemented
+- [ ] Tests fail naturally when encountering stubs
 - [ ] Files are UPDATED not created as new versions
 
 ### 4. TDD Phase
@@ -1153,13 +1153,12 @@ If ANY of these are found, the plan MUST be rejected and recreated:
 3. **NO USER ACCESS** - No clear path for users to actually use the feature
 4. **NO REPLACEMENT PLAN** - Doesn't identify what old code gets removed
 5. **Pseudocode not used** - Implementation doesn't reference line numbers
-6. **NotYetImplemented in stubs** - Stubs throw errors instead of returning empty
-7. **Reverse testing** - Tests check for NotYetImplemented or stub behavior
-8. **Version duplication** - Creating ServiceV2 instead of updating Service
-9. **Test modification** - Tests changed during implementation
-10. **Mock theater** - Tests only verify mocks were called
-11. **Missing verification** - No mutation/property testing requirements
-12. **Ignored pseudocode** - Pseudocode created but never referenced
+6. **Reverse testing** - Tests check for/expect NotYetImplemented or stub behavior
+7. **Version duplication** - Creating ServiceV2 instead of updating Service
+8. **Test modification** - Tests changed during implementation
+9. **Mock theater** - Tests only verify mocks were called
+10. **Missing verification** - No mutation/property testing requirements
+11. **Ignored pseudocode** - Pseudocode created but never referenced
 
 **THE BIGGEST RED FLAG**: If you can implement the entire feature without touching ANY existing code except adding exports, you're building a useless isolated feature that won't solve the actual problem. This is like building a perfect new engine and leaving it in the garage.
 
