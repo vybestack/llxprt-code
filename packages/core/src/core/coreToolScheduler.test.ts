@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   CoreToolScheduler,
   ToolCall,
+  WaitingToolCall,
   convertToFunctionResponse,
 } from './coreToolScheduler.js';
 import {
@@ -26,12 +27,83 @@ import {
 import { Part, PartListUnion } from '@google/genai';
 import { MockModifiableTool, MockTool } from '../test-utils/tools.js';
 
+class TestApprovalTool extends BaseDeclarativeTool<{ id: string }, ToolResult> {
+  static readonly Name = 'testApprovalTool';
+
+  constructor(private config: Config) {
+    super(
+      TestApprovalTool.Name,
+      'TestApprovalTool',
+      'A tool for testing approval logic',
+      Kind.Edit,
+      {
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+        type: 'object',
+      },
+    );
+  }
+
+  protected createInvocation(params: {
+    id: string;
+  }): ToolInvocation<{ id: string }, ToolResult> {
+    return new TestApprovalInvocation(this.config, params);
+  }
+}
+
+class TestApprovalInvocation extends BaseToolInvocation<
+  { id: string },
+  ToolResult
+> {
+  constructor(
+    private config: Config,
+    params: { id: string },
+  ) {
+    super(params);
+  }
+
+  getDescription(): string {
+    return `Test tool ${this.params.id}`;
+  }
+
+  override async shouldConfirmExecute(): Promise<
+    ToolCallConfirmationDetails | false
+  > {
+    // Need confirmation unless approval mode is AUTO_EDIT
+    if (this.config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
+      return false;
+    }
+
+    return {
+      type: 'edit',
+      title: `Confirm Test Tool ${this.params.id}`,
+      fileName: `test-${this.params.id}.txt`,
+      filePath: `/test-${this.params.id}.txt`,
+      fileDiff: 'Test diff content',
+      originalContent: '',
+      newContent: 'Test content',
+      onConfirm: async (outcome: ToolConfirmationOutcome) => {
+        if (outcome === ToolConfirmationOutcome.ProceedAlways) {
+          this.config.setApprovalMode(ApprovalMode.AUTO_EDIT);
+        }
+      },
+    };
+  }
+
+  async execute(): Promise<ToolResult> {
+    return {
+      llmContent: `Executed test tool ${this.params.id}`,
+      returnDisplay: `Executed test tool ${this.params.id}`,
+    };
+  }
+}
+
 describe('CoreToolScheduler', () => {
   it('should cancel a tool call if the signal is aborted before confirmation', async () => {
     const mockTool = new MockTool();
     mockTool.shouldConfirm = true;
     const declarativeTool = mockTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
@@ -43,7 +115,7 @@ describe('CoreToolScheduler', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -58,7 +130,7 @@ describe('CoreToolScheduler', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -88,7 +160,7 @@ describe('CoreToolScheduler with payload', () => {
   it('should update args and diff and execute tool when payload is provided', async () => {
     const mockTool = new MockModifiableTool();
     const declarativeTool = mockTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
@@ -100,7 +172,7 @@ describe('CoreToolScheduler with payload', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -115,7 +187,7 @@ describe('CoreToolScheduler with payload', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -411,7 +483,7 @@ describe('CoreToolScheduler edit cancellation', () => {
   it('should preserve diff when an edit is cancelled', async () => {
     const mockEditTool = new MockEditTool();
     const declarativeTool = mockEditTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getFunctionDeclarations: () => [],
       tools: new Map(),
@@ -423,7 +495,7 @@ describe('CoreToolScheduler edit cancellation', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -438,7 +510,7 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -681,7 +753,7 @@ describe('CoreToolScheduler YOLO mode', () => {
     mockTool.shouldConfirm = true;
     const declarativeTool = mockTool;
 
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getToolByName: () => declarativeTool,
       // Other properties are not needed for this test but are included for type consistency.
@@ -694,7 +766,7 @@ describe('CoreToolScheduler YOLO mode', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -710,7 +782,7 @@ describe('CoreToolScheduler YOLO mode', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -770,7 +842,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
     mockTool.executeFn.mockImplementation(() => firstCallPromise);
     const declarativeTool = mockTool;
 
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getToolByName: () => declarativeTool,
       getFunctionDeclarations: () => [],
@@ -782,7 +854,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -796,7 +868,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -879,7 +951,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
   it('should handle two synchronous calls to schedule', async () => {
     const mockTool = new MockTool();
     const declarativeTool = mockTool;
-    const toolRegistry = {
+    const mockToolRegistry = {
       getTool: () => declarativeTool,
       getToolByName: () => declarativeTool,
       getFunctionDeclarations: () => [],
@@ -891,7 +963,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
       discoverTools: async () => {},
       getAllTools: () => [],
       getToolsByServer: () => [],
-    };
+    } as unknown as ToolRegistry;
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
@@ -905,7 +977,7 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     const scheduler = new CoreToolScheduler({
       config: mockConfig,
-      toolRegistry: Promise.resolve(toolRegistry as unknown as ToolRegistry),
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -948,5 +1020,132 @@ describe.skip('CoreToolScheduler request queueing', () => {
 
     // Ensure completion callbacks were called twice.
     expect(onAllToolCallsComplete).toHaveBeenCalledTimes(2);
+  });
+
+  it('should auto-approve remaining tool calls when first tool call is approved with ProceedAlways', async () => {
+    let approvalMode = ApprovalMode.DEFAULT;
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => approvalMode,
+      setApprovalMode: (mode: ApprovalMode) => {
+        approvalMode = mode;
+      },
+    } as unknown as Config;
+
+    const testTool = new TestApprovalTool(mockConfig);
+    const toolRegistry = {
+      getTool: () => testTool,
+      getFunctionDeclarations: () => [],
+      getFunctionDeclarationsFiltered: () => [],
+      registerTool: () => {},
+      discoverAllTools: async () => {},
+      discoverMcpTools: async () => {},
+      discoverToolsForServer: async () => {},
+      removeMcpToolsByServer: () => {},
+      getAllTools: () => [],
+      getToolsByServer: () => [],
+      tools: new Map(),
+      config: mockConfig,
+      mcpClientManager: undefined,
+      getToolByName: () => testTool,
+      getToolByDisplayName: () => testTool,
+      getTools: () => [],
+      discoverTools: async () => {},
+      discovery: {},
+    };
+
+    const onAllToolCallsComplete = vi.fn();
+    const onToolCallsUpdate = vi.fn();
+    const pendingConfirmations: Array<
+      (outcome: ToolConfirmationOutcome) => void
+    > = [];
+
+    const scheduler = new CoreToolScheduler({
+      config: mockConfig,
+      toolRegistry: toolRegistry as unknown as ToolRegistry,
+      onAllToolCallsComplete,
+      onToolCallsUpdate: (toolCalls) => {
+        onToolCallsUpdate(toolCalls);
+        // Capture confirmation handlers for awaiting_approval tools
+        toolCalls.forEach((call) => {
+          if (call.status === 'awaiting_approval') {
+            const waitingCall = call as WaitingToolCall;
+            if (waitingCall.confirmationDetails?.onConfirm) {
+              const originalHandler = pendingConfirmations.find(
+                (h) => h === waitingCall.confirmationDetails.onConfirm,
+              );
+              if (!originalHandler) {
+                pendingConfirmations.push(
+                  waitingCall.confirmationDetails.onConfirm,
+                );
+              }
+            }
+          }
+        });
+      },
+      getPreferredEditor: () => 'vscode',
+      onEditorClose: vi.fn(),
+    });
+
+    const abortController = new AbortController();
+
+    // Schedule multiple tools that need confirmation
+    const requests = [
+      {
+        callId: '1',
+        name: 'testApprovalTool',
+        args: { id: 'first' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-1',
+      },
+      {
+        callId: '2',
+        name: 'testApprovalTool',
+        args: { id: 'second' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-2',
+      },
+      {
+        callId: '3',
+        name: 'testApprovalTool',
+        args: { id: 'third' },
+        isClientInitiated: false,
+        prompt_id: 'prompt-3',
+      },
+    ];
+
+    await scheduler.schedule(requests, abortController.signal);
+
+    // Wait for all tools to be awaiting approval
+    await vi.waitFor(() => {
+      const calls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
+      expect(calls?.length).toBe(3);
+      expect(calls?.every((call) => call.status === 'awaiting_approval')).toBe(
+        true,
+      );
+    });
+
+    expect(pendingConfirmations.length).toBe(3);
+
+    // Approve the first tool with ProceedAlways
+    const firstConfirmation = pendingConfirmations[0];
+    firstConfirmation(ToolConfirmationOutcome.ProceedAlways);
+
+    // Wait for all tools to be completed
+    await vi.waitFor(() => {
+      expect(onAllToolCallsComplete).toHaveBeenCalled();
+      const completedCalls = onAllToolCallsComplete.mock.calls.at(
+        -1,
+      )?.[0] as ToolCall[];
+      expect(completedCalls?.length).toBe(3);
+      expect(completedCalls?.every((call) => call.status === 'success')).toBe(
+        true,
+      );
+    });
+
+    // Verify approval mode was changed
+    expect(approvalMode).toBe(ApprovalMode.AUTO_EDIT);
   });
 });

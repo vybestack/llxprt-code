@@ -486,6 +486,7 @@ describe('loggers', () => {
           success: true,
           decision: ToolCallDecision.ACCEPT,
           prompt_id: 'prompt-id-1',
+          tool_type: 'native',
         },
       });
 
@@ -495,6 +496,7 @@ describe('loggers', () => {
         100,
         true,
         ToolCallDecision.ACCEPT,
+        'native',
       );
 
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
@@ -549,6 +551,7 @@ describe('loggers', () => {
           success: false,
           decision: ToolCallDecision.REJECT,
           prompt_id: 'prompt-id-2',
+          tool_type: 'native',
         },
       });
 
@@ -558,6 +561,7 @@ describe('loggers', () => {
         100,
         false,
         ToolCallDecision.REJECT,
+        'native',
       );
 
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
@@ -615,6 +619,7 @@ describe('loggers', () => {
           success: true,
           decision: ToolCallDecision.MODIFY,
           prompt_id: 'prompt-id-3',
+          tool_type: 'native',
         },
       });
 
@@ -624,6 +629,7 @@ describe('loggers', () => {
         100,
         true,
         ToolCallDecision.MODIFY,
+        'native',
       );
 
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
@@ -679,6 +685,7 @@ describe('loggers', () => {
           duration_ms: 100,
           success: true,
           prompt_id: 'prompt-id-4',
+          tool_type: 'native',
         },
       });
 
@@ -688,6 +695,7 @@ describe('loggers', () => {
         100,
         true,
         undefined,
+        'native',
       );
 
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith({
@@ -748,6 +756,7 @@ describe('loggers', () => {
           error_type: ToolErrorType.UNKNOWN,
           'error.type': ToolErrorType.UNKNOWN,
           prompt_id: 'prompt-id-5',
+          tool_type: 'native',
         },
       });
 
@@ -757,6 +766,7 @@ describe('loggers', () => {
         100,
         false,
         undefined,
+        'native',
       );
 
       expect(mockUiEvent.addEvent).toHaveBeenCalledWith({

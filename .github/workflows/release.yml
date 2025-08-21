@@ -25,6 +25,11 @@ on:
         required: false
         type: boolean
         default: false
+      create_preview_release:
+        description: 'Create a preview release with incremented minor version (e.g., 0.2.0-preview.0).'
+        required: false
+        type: boolean
+        default: false
       force_skip_tests:
         description: 'Select to skip the "Run Tests" step in testing. Prod releases should run tests'
         required: false
@@ -62,6 +67,12 @@ jobs:
           fi
           echo "is_nightly=${is_nightly}" >> "$GITHUB_OUTPUT"
 
+          is_preview="false"
+          if [[ "${{ github.event.inputs.create_preview_release }}" == "true" ]]; then
+            is_preview="true"
+          fi
+          echo "is_preview=${is_preview}" >> "$GITHUB_OUTPUT"
+
           is_dry_run="false"
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
             is_dry_run="true"
@@ -86,6 +97,7 @@ jobs:
           echo "NPM_TAG=$(echo "$VERSION_JSON" | jq -r .npmTag)" >> "$GITHUB_OUTPUT"
         env:
           IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
+          IS_PREVIEW: ${{ steps.vars.outputs.is_preview }}
           MANUAL_VERSION: ${{ inputs.version }}
 
       - name: Run Preflight Checks

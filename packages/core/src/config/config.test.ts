@@ -103,6 +103,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     on: vi.fn(),
     off: vi.fn(),
     emit: vi.fn(),
+    getProviderSettings: vi.fn(() => ({})),
   };
   return {
     getSettingsService: vi.fn(() => mockSettingsService),
@@ -568,6 +569,8 @@ describe('Server Config (config.ts)', () => {
     it('should delegate getEphemeralSetting to SettingsService', () => {
       const config = new Config(baseParams);
 
+      // Reset mock after construction to isolate test
+      vi.clearAllMocks();
       mockSettingsService.get.mockReturnValue('gpt-4');
 
       const result = config.getEphemeralSetting('model');
@@ -642,6 +645,9 @@ describe('Server Config (config.ts)', () => {
      */
     it('should handle multiple synchronous operations', () => {
       const config = new Config(baseParams);
+
+      // Reset mock after construction to isolate test
+      vi.clearAllMocks();
       mockSettingsService.get
         .mockReturnValueOnce('provider1')
         .mockReturnValueOnce('model1')
@@ -674,6 +680,8 @@ describe('Server Config (config.ts)', () => {
     it('should delegate get operations for various data types', () => {
       const config = new Config(baseParams);
 
+      // Reset mock after construction to isolate test
+      vi.clearAllMocks();
       mockSettingsService.get.mockImplementation((key: string) => {
         switch (key) {
           case 'stringValue':

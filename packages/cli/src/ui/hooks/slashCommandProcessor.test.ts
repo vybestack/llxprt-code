@@ -110,6 +110,7 @@ describe('useSlashCommandProcessor', () => {
     })),
     getExtensions: vi.fn(() => []),
     getIdeMode: vi.fn(() => false),
+    getIdeClient: vi.fn(() => undefined),
   } as unknown as Config;
 
   const mockSettings = {} as LoadedSettings;

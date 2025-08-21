@@ -166,6 +166,9 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getIdeClient: vi.fn(() => ({
           getCurrentIde: vi.fn(() => 'vscode'),
           getDetectedIdeDisplayName: vi.fn(() => 'VSCode'),
+          addStatusChangeListener: vi.fn(),
+          removeStatusChangeListener: vi.fn(),
+          getConnectionStatus: vi.fn(() => 'connected'),
         })),
         isTrustedFolder: vi.fn(() => true),
       };
@@ -894,6 +897,58 @@ describe('App UI', () => {
     expect(vi.mocked(Header)).not.toHaveBeenCalled();
   });
 
+  it('should display Footer component by default', async () => {
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    // Footer should render - look for target directory which is always shown
+    expect(lastFrame()).toContain('/test/dir');
+  });
+
+  it('should not display Footer component when hideFooter is true', async () => {
+    mockSettings = createMockSettings({
+      user: { hideFooter: true },
+    });
+
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    // Footer should not render - target directory should not appear
+    expect(lastFrame()).not.toContain('/test/dir');
+  });
+
+  it('should show footer if system says show, but workspace and user settings say hide', async () => {
+    mockSettings = createMockSettings({
+      system: { hideFooter: false },
+      user: { hideFooter: true },
+      workspace: { hideFooter: true },
+    });
+
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    // Footer should render because system overrides - look for target directory
+    expect(lastFrame()).toContain('/test/dir');
+  });
+
   it('should show tips if system says show, but workspace and user settings say hide', async () => {
     mockSettings = createMockSettings({
       system: { hideTips: false },
@@ -1147,6 +1202,37 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
       expect(lastFrame()).toMatchSnapshot();
+    });
+  });
+
+  describe('NO_COLOR smoke test', () => {
+    let originalNoColor: string | undefined;
+
+    beforeEach(() => {
+      originalNoColor = process.env.NO_COLOR;
+    });
+
+    afterEach(() => {
+      process.env.NO_COLOR = originalNoColor;
+    });
+
+    it('should render without errors when NO_COLOR is set', async () => {
+      process.env.NO_COLOR = 'true';
+
+      const { lastFrame, unmount } = renderWithProviders(
+        <App
+          config={mockConfig as unknown as ServerConfig}
+          settings={mockSettings}
+          version={mockVersion}
+        />,
+      );
+      currentUnmount = unmount;
+
+      expect(lastFrame()).toBeTruthy();
+      // The prompt text appears in the UI box - just check for the key parts
+      const frame = lastFrame();
+      expect(frame).toContain('Type your message');
+      expect(frame).toContain('@path/to/file');
     });
   });
 

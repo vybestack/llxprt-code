@@ -263,6 +263,23 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
+      if (key.paste) {
+        // Always call handleInput for paste events (for compatibility with existing tests)
+        buffer.handleInput(key);
+
+        // Additionally show paste message for multi-line content
+        if (key.sequence) {
+          const lines = key.sequence.split('\n');
+          if (lines.length > 1) {
+            setPasteMessage(`[${lines.length} lines pasted]`);
+          }
+
+          // Update secure input handler state after paste
+          secureInputHandler.processInput(buffer.text);
+        }
+        return;
+      }
+
       if (vimHandleInput && vimHandleInput(key)) {
         return;
       }
@@ -520,23 +537,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       // Ctrl+V for clipboard image paste
       if (keyMatchers[Command.PASTE_CLIPBOARD_IMAGE](key)) {
         handleClipboardImage();
-        return;
-      }
-
-      // Check for multi-line paste
-      if (key.paste && key.sequence) {
-        const lines = key.sequence.split('\n');
-        if (lines.length > 1) {
-          setPasteMessage(`[${lines.length} lines pasted]`);
-        }
-
-        // Insert the paste content at cursor position
-        buffer.insert(key.sequence);
-
-        // Update secure input handler state after paste
-        // This ensures the handler knows about the pasted content
-        secureInputHandler.processInput(buffer.text);
-
         return;
       }
 

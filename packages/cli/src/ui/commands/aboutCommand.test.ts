@@ -47,6 +47,7 @@ describe('aboutCommand', () => {
         config: {
           getModel: vi.fn(),
           getIdeClient: vi.fn(),
+          getIdeMode: vi.fn().mockReturnValue(true),
         },
         settings: {
           merged: {

@@ -36,6 +36,12 @@ import * as crypto from 'crypto';
 import { ToolConfirmationOutcome } from './tools.js';
 import { OUTPUT_UPDATE_INTERVAL_MS } from './shell.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
+import * as summarizer from '../utils/summarizer.js';
+
+// Mock the summarizer module
+vi.mock('../utils/summarizer.js', () => ({
+  summarizeToolOutput: vi.fn(),
+}));
 
 describe('ShellTool', () => {
   let shellTool: ShellTool;
@@ -55,6 +61,16 @@ describe('ShellTool', () => {
       getWorkspaceContext: () => createMockWorkspaceContext('.'),
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getContentGeneratorConfig: vi.fn().mockReturnValue({
+        providerManager: {
+          getServerToolsProvider: vi.fn().mockReturnValue({
+            name: 'gemini',
+            getServerTools: vi.fn().mockReturnValue([]),
+            invokeServerTool: vi.fn(),
+          }),
+        },
+      }),
     } as unknown as Config;
 
     shellTool = new ShellTool(mockConfig);
@@ -122,13 +138,12 @@ describe('ShellTool', () => {
       const fullResult: ShellExecutionResult = {
         rawOutput: Buffer.from(result.output || ''),
         output: 'Success',
-        stdout: 'Success',
-        stderr: '',
         exitCode: 0,
         signal: null,
         error: null,
         aborted: false,
         pid: 12345,
+        executionMethod: 'child_process',
         ...result,
       };
       resolveExecutionPromise(fullResult);
@@ -151,6 +166,9 @@ describe('ShellTool', () => {
         expect.any(String),
         expect.any(Function),
         mockAbortSignal,
+        false,
+        undefined,
+        undefined,
       );
       expect(result.llmContent).toContain('Background PIDs: 54322');
       expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
@@ -163,13 +181,12 @@ describe('ShellTool', () => {
       resolveShellExecution({
         rawOutput: Buffer.from(''),
         output: '',
-        stdout: '',
-        stderr: '',
         exitCode: 0,
         signal: null,
         error: null,
         aborted: false,
         pid: 12345,
+        executionMethod: 'child_process',
       });
       await promise;
       expect(mockShellExecutionService).toHaveBeenCalledWith(
@@ -177,6 +194,9 @@ describe('ShellTool', () => {
         expect.any(String),
         expect.any(Function),
         mockAbortSignal,
+        false,
+        undefined,
+        undefined,
       );
     });
 
@@ -188,16 +208,14 @@ describe('ShellTool', () => {
         error,
         exitCode: 1,
         output: 'err',
-        stderr: 'err',
         rawOutput: Buffer.from('err'),
-        stdout: '',
         signal: null,
         aborted: false,
         pid: 12345,
+        executionMethod: 'child_process',
       });
 
       const result = await promise;
-      // The final llmContent should contain the user's command, not the wrapper
       expect(result.llmContent).toContain('Error: wrapped command failed');
       expect(result.llmContent).not.toContain('pgrep');
     });
@@ -217,8 +235,40 @@ describe('ShellTool', () => {
       );
     });
 
-    // Removed obsolete test: summarization feature was removed from shell tool
-    // The tool now only does token-based truncation without summarization
+    it('should summarize output when configured', async () => {
+      (mockConfig.getSummarizeToolOutputConfig as Mock).mockReturnValue({
+        [shellTool.name]: { tokenBudget: 1000 },
+      });
+      vi.mocked(summarizer.summarizeToolOutput).mockResolvedValue(
+        'summarized output',
+      );
+
+      const invocation = shellTool.build({ command: 'ls' });
+      const promise = invocation.execute(mockAbortSignal);
+      resolveExecutionPromise({
+        output: 'long output',
+        stdout: 'long output',
+        stderr: '',
+        rawOutput: Buffer.from('long output'),
+        exitCode: 0,
+        signal: null,
+        error: null,
+        aborted: false,
+        pid: 12345,
+        executionMethod: 'child_process',
+      });
+
+      const result = await promise;
+
+      expect(summarizer.summarizeToolOutput).toHaveBeenCalledWith(
+        expect.any(String),
+        mockConfig.getGeminiClient(),
+        mockAbortSignal,
+        1000,
+      );
+      expect(result.llmContent).toBe('summarized output');
+      expect(result.returnDisplay).toBe('long output');
+    });
 
     it('should clean up the temp file on synchronous execution error', async () => {
       const error = new Error('sync spawn error');
@@ -251,7 +301,6 @@ describe('ShellTool', () => {
         // First chunk, should be throttled.
         mockShellOutputCallback({
           type: 'data',
-          stream: 'stdout',
           chunk: 'hello ',
         });
         expect(updateOutputMock).not.toHaveBeenCalled();
@@ -262,24 +311,22 @@ describe('ShellTool', () => {
         // Send a second chunk. THIS event triggers the update with the CUMULATIVE content.
         mockShellOutputCallback({
           type: 'data',
-          stream: 'stderr',
-          chunk: 'world',
+          chunk: 'hello world',
         });
 
         // It should have been called once now with the combined output.
         expect(updateOutputMock).toHaveBeenCalledOnce();
-        expect(updateOutputMock).toHaveBeenCalledWith('hello \nworld');
+        expect(updateOutputMock).toHaveBeenCalledWith('hello world');
 
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),
           output: '',
-          stdout: '',
-          stderr: '',
           exitCode: 0,
           signal: null,
           error: null,
           aborted: false,
           pid: 12345,
+          executionMethod: 'child_process',
         });
         await promise;
       });
@@ -318,13 +365,12 @@ describe('ShellTool', () => {
         resolveExecutionPromise({
           rawOutput: Buffer.from(''),
           output: '',
-          stdout: '',
-          stderr: '',
           exitCode: 0,
           signal: null,
           error: null,
           aborted: false,
           pid: 12345,
+          executionMethod: 'child_process',
         });
         await promise;
       });

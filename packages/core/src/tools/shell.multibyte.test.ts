@@ -36,6 +36,7 @@ type ExecResult = {
   error: Error | null;
   aborted: boolean;
   pid: number | undefined;
+  executionMethod: 'lydell-node-pty' | 'node-pty' | 'child_process' | 'none';
 };
 
 describe('ShellTool multibyte handling', () => {
@@ -53,6 +54,7 @@ describe('ShellTool multibyte handling', () => {
       getSummarizeToolOutputConfig: vi.fn().mockReturnValue(undefined),
       getGeminiClient: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
     } as unknown as Config;
 
     tool = new ShellTool(config);
@@ -110,6 +112,7 @@ describe('ShellTool multibyte handling', () => {
       error: null,
       aborted: false,
       pid: 11111,
+      executionMethod: 'child_process',
     });
 
     const result = await execPromise;

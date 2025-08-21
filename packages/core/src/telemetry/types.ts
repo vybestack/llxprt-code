@@ -7,7 +7,8 @@
 import { GenerateContentResponseUsageMetadata } from '@google/genai';
 import { Config } from '../config/config.js';
 import { CompletedToolCall } from '../core/coreToolScheduler.js';
-import { ToolConfirmationOutcome } from '../tools/tools.js';
+import { ToolConfirmationOutcome, FileDiff } from '../tools/tools.js';
+import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { AuthType } from '../core/contentGenerator.js';
 import type { IMessage, ITool } from '../providers/IProvider.js';
 import type {
@@ -134,6 +135,7 @@ export class ToolCallEvent {
   error?: string;
   error_type?: string;
   prompt_id: string;
+  tool_type: 'native' | 'mcp';
   metadata?: Record<string, unknown>;
 
   constructor(call: CompletedToolCall) {
@@ -149,6 +151,27 @@ export class ToolCallEvent {
     this.error = call.response.error?.message;
     this.error_type = call.response.errorType;
     this.prompt_id = call.request.prompt_id;
+    this.tool_type =
+      typeof call.tool !== 'undefined' && call.tool instanceof DiscoveredMCPTool
+        ? 'mcp'
+        : 'native';
+
+    if (
+      call.status === 'success' &&
+      typeof call.response.resultDisplay === 'object' &&
+      call.response.resultDisplay !== null &&
+      'diffStat' in call.response.resultDisplay
+    ) {
+      const diffStat = (call.response.resultDisplay as FileDiff).diffStat;
+      if (diffStat) {
+        this.metadata = {
+          ai_added_lines: diffStat.ai_added_lines,
+          ai_removed_lines: diffStat.ai_removed_lines,
+          user_added_lines: diffStat.user_added_lines,
+          user_removed_lines: diffStat.user_removed_lines,
+        };
+      }
+    }
   }
 }
 

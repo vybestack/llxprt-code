@@ -4,21 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as net from 'node:net';
 import * as child_process from 'node:child_process';
 import { IdeClient } from '../packages/core/src/ide/ide-client.js';
-
-// import { TestMcpServer } from './test-mcp-server.js';
+import { TestMcpServer } from './test-mcp-server.js';
 
 describe.skip('IdeClient', () => {
   it('reads port from file and connects', async () => {
-    // const server = new TestMcpServer();
-    // const port = await server.start();
-    const port = 12345; // dummy port for skipped test
+    const server = new TestMcpServer();
+    const port = await server.start();
     const pid = process.pid;
     const portFile = path.join(os.tmpdir(), `llxprt-ide-server-${pid}.json`);
     fs.writeFileSync(portFile, JSON.stringify({ port }));
@@ -34,7 +32,7 @@ describe.skip('IdeClient', () => {
     });
 
     fs.unlinkSync(portFile);
-    // await server.stop();
+    await server.stop();
     delete process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
     // Reset instance
     IdeClient.instance = undefined;
@@ -56,7 +54,7 @@ const getFreePort = (): Promise<number> => {
 };
 
 describe.skip('IdeClient fallback connection logic', () => {
-  // let server: TestMcpServer;
+  let server: TestMcpServer;
   let envPort: number;
   let pid: number;
   let portFile: string;
@@ -64,9 +62,8 @@ describe.skip('IdeClient fallback connection logic', () => {
   beforeEach(async () => {
     pid = process.pid;
     portFile = path.join(os.tmpdir(), `llxprt-ide-server-${pid}.json`);
-    // server = new TestMcpServer();
-    // envPort = await server.start();
-    envPort = 12345; // dummy port for skipped test
+    server = new TestMcpServer();
+    envPort = await server.start();
     process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = String(envPort);
     process.env['TERM_PROGRAM'] = 'vscode';
     process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = process.cwd();
@@ -75,7 +72,7 @@ describe.skip('IdeClient fallback connection logic', () => {
   });
 
   afterEach(async () => {
-    // await server.stop();
+    await server.stop();
     delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     delete process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'];
     if (fs.existsSync(portFile)) {
@@ -158,4 +155,47 @@ describe.skip('getIdeProcessId', () => {
 
     expect(parseInt(output, 10)).toBe(parentPid);
   }, 10000);
+});
+
+describe('IdeClient with proxy', () => {
+  let mcpServer: TestMcpServer;
+  let proxyServer: net.Server;
+  let mcpServerPort: number;
+  let proxyServerPort: number;
+
+  beforeEach(async () => {
+    mcpServer = new TestMcpServer();
+    mcpServerPort = await mcpServer.start();
+
+    proxyServer = net.createServer().listen();
+    proxyServerPort = (proxyServer.address() as net.AddressInfo).port;
+
+    vi.stubEnv('LLXPRT_CODE_IDE_SERVER_PORT', String(mcpServerPort));
+    vi.stubEnv('TERM_PROGRAM', 'vscode');
+    vi.stubEnv('LLXPRT_CODE_IDE_WORKSPACE_PATH', process.cwd());
+
+    // Reset instance
+    IdeClient.instance = undefined;
+  });
+
+  afterEach(async () => {
+    IdeClient.getInstance().disconnect();
+    await mcpServer.stop();
+    proxyServer.close();
+    vi.unstubAllEnvs();
+  });
+
+  it('should connect to IDE server when HTTP_PROXY, HTTPS_PROXY and NO_PROXY are set', async () => {
+    vi.stubEnv('HTTP_PROXY', `http://localhost:${proxyServerPort}`);
+    vi.stubEnv('HTTPS_PROXY', `http://localhost:${proxyServerPort}`);
+    vi.stubEnv('NO_PROXY', 'example.com,127.0.0.1,::1');
+
+    const ideClient = IdeClient.getInstance();
+    await ideClient.connect();
+
+    expect(ideClient.getConnectionStatus()).toEqual({
+      status: 'connected',
+      details: undefined,
+    });
+  });
 });

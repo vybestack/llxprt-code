@@ -36,6 +36,7 @@ import os from 'os';
 import { ApprovalMode, Config } from '../config/config.js';
 import { Content, Part } from '@google/genai';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
+import { StandardFileSystemService } from '../services/fileSystemService.js';
 
 describe('EditTool', () => {
   let tool: EditTool;
@@ -60,6 +61,7 @@ describe('EditTool', () => {
       getApprovalMode: vi.fn(),
       setApprovalMode: vi.fn(),
       getWorkspaceContext: () => createMockWorkspaceContext(rootDir),
+      getFileSystemService: () => new StandardFileSystemService(),
       getIdeClient: () => undefined,
       getIdeMode: () => false,
       // getGeminiConfig: () => ({ apiKey: 'test-api-key' }), // This was not a real Config method
@@ -401,7 +403,7 @@ describe('EditTool', () => {
       });
     });
 
-    it('should return error if params are invalid', async () => {
+    it('should throw error if file path is not absolute', async () => {
       const params: EditToolParams = {
         file_path: 'relative.txt',
         old_string: 'old',
@@ -409,6 +411,17 @@ describe('EditTool', () => {
       };
       // Invalid params should throw during build
       expect(() => tool.build(params)).toThrow(/File path must be absolute/);
+    });
+
+    it('should throw error if file path is empty', async () => {
+      const params: EditToolParams = {
+        file_path: '',
+        old_string: 'old',
+        new_string: 'new',
+      };
+      expect(() => tool.build(params)).toThrow(
+        /The 'file_path' parameter must be non-empty./,
+      );
     });
 
     it('should edit an existing file and return diff with fileName', async () => {

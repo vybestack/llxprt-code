@@ -37,8 +37,8 @@ import {
 } from '../types.js';
 
 // Mocks
-vi.mock('@google/gemini-cli-core', async () => {
-  const actual = await vi.importActual('@google/gemini-cli-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
     ToolRegistry: vi.fn(),

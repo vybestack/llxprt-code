@@ -30,8 +30,19 @@ export function getNightlyTagName() {
   return `v${version}-nightly.${date}.${sha}`;
 }
 
+export function getPreviewVersion() {
+  const currentVersion = getPackageVersion();
+  const versionParts = currentVersion.split('.');
+  // Increment minor version and reset patch to 0
+  versionParts[1] = (parseInt(versionParts[1]) + 1).toString();
+  versionParts[2] = '0';
+  const nextVersion = versionParts.join('.');
+  return `${nextVersion}-preview.0`;
+}
+
 export function getReleaseVersion() {
   const isNightly = process.env.IS_NIGHTLY === 'true';
+  const isPreview = process.env.IS_PREVIEW === 'true';
   const manualVersion = process.env.MANUAL_VERSION;
 
   let releaseTag;
@@ -39,6 +50,11 @@ export function getReleaseVersion() {
   if (isNightly) {
     console.error('Calculating next nightly version...');
     releaseTag = getNightlyTagName();
+  } else if (isPreview) {
+    console.error('Calculating next preview version...');
+    const previewVersion = getPreviewVersion();
+    console.error(`Next preview version: ${previewVersion}`);
+    releaseTag = `v${previewVersion}`;
   } else if (manualVersion) {
     console.error(`Using manual version: ${manualVersion}`);
     releaseTag = manualVersion;
@@ -78,7 +94,9 @@ export function getReleaseVersion() {
   const releaseVersion = releaseTag.substring(1);
   let npmTag = 'latest';
   if (releaseVersion.includes('-')) {
-    npmTag = releaseVersion.split('-')[1].split('.')[0];
+    // Extract the pre-release identifier (e.g., 'preview', 'nightly', 'alpha')
+    const preReleaseId = releaseVersion.split('-')[1].split('.')[0];
+    npmTag = preReleaseId;
   }
 
   return { releaseTag, releaseVersion, npmTag };

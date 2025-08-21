@@ -1,4 +1,0 @@
-logging:
-  enabled: true
-  level: debug
-  file: /Volumes/XS1000/acoliver/projects/20250731-merge/llxprt-code/.llxprt/logs/llxprt.log
