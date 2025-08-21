@@ -22,8 +22,10 @@ import {
 } from './IToolFormatter.js';
 import { ITool } from '../providers/ITool.js';
 import { IMessage } from '../providers/IMessage.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 
 export class ToolFormatter implements IToolFormatter {
+  private logger = new DebugLogger('llxprt:tools:formatter');
   /**
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
@@ -69,16 +71,29 @@ export class ToolFormatter implements IToolFormatter {
       case 'openai':
       case 'deepseek': // DeepSeek uses same format as OpenAI for now
       case 'qwen': // Qwen uses same format as OpenAI for now
-        return tools.map((tool) => ({
-          type: 'function',
-          function: {
-            name: tool.function.name,
-            description: tool.function.description,
-            parameters: this.convertGeminiSchemaToStandard(
-              tool.function.parameters,
-            ),
-          },
-        }));
+        this.logger.debug(
+          () => `Converting ${tools.length} tools to ${format} format`,
+        );
+        return tools.map((tool) => {
+          const converted = {
+            type: 'function' as const,
+            function: {
+              name: tool.function.name,
+              description: tool.function.description,
+              parameters: this.convertGeminiSchemaToStandard(
+                tool.function.parameters,
+              ),
+            },
+          };
+          this.logger.debug(
+            () => `Converted tool ${tool.function.name} to ${format} format:`,
+            {
+              original: tool.function.parameters,
+              converted: converted.function.parameters,
+            },
+          );
+          return converted;
+        });
       case 'anthropic':
         return tools.map((tool) => ({
           name: tool.function.name,
@@ -143,6 +158,57 @@ export class ToolFormatter implements IToolFormatter {
           !openAiToolCall.function.arguments
         ) {
           throw new Error(`Invalid ${format} tool call format`);
+        }
+
+        // Debug logging for tool call conversion
+        this.logger.debug(
+          () => `Converting ${format} tool call from provider format:`,
+          {
+            format,
+            toolName: openAiToolCall.function.name,
+            argumentsType: typeof openAiToolCall.function.arguments,
+            argumentsLength: openAiToolCall.function.arguments.length,
+            argumentsPreview:
+              openAiToolCall.function.arguments.length > 100
+                ? openAiToolCall.function.arguments.substring(0, 100) + '...'
+                : openAiToolCall.function.arguments,
+            rawArguments: openAiToolCall.function.arguments,
+          },
+        );
+
+        // Check if arguments look double-stringified
+        if (format === 'qwen') {
+          const args = openAiToolCall.function.arguments;
+          try {
+            const parsed = JSON.parse(args);
+            if (typeof parsed === 'string') {
+              // Arguments were stringified, let's check if they're double-stringified
+              try {
+                const doubleParsed = JSON.parse(parsed);
+                this.logger.error(
+                  () =>
+                    `[Qwen] Arguments appear to be double-stringified for ${openAiToolCall.function.name}`,
+                  {
+                    firstParse: parsed,
+                    secondParse: doubleParsed,
+                    originalLength: args.length,
+                  },
+                );
+              } catch {
+                // Not double-stringified, just single stringified
+                this.logger.debug(
+                  () =>
+                    `[Qwen] Arguments are single-stringified for ${openAiToolCall.function.name}`,
+                );
+              }
+            }
+          } catch (e) {
+            this.logger.error(
+              () =>
+                `[Qwen] Failed to parse arguments for ${openAiToolCall.function.name}:`,
+              e,
+            );
+          }
         }
 
         return [
@@ -270,18 +336,62 @@ export class ToolFormatter implements IToolFormatter {
           if (deltaToolCall.function?.name)
             tc.function.name = deltaToolCall.function.name;
           if (deltaToolCall.function?.arguments) {
-            // Debug logging for Qwen to diagnose double-stringification
-            if (format === 'qwen' && process.env.DEBUG) {
-              console.log('[ToolFormatter] Qwen argument chunk:', {
+            // Enhanced debug logging for all formats, especially Qwen
+            this.logger.debug(
+              () =>
+                `[${format}] Accumulating argument chunk for tool ${tc.function.name}:`,
+              {
+                format,
+                toolName: tc.function.name,
+                index: deltaToolCall.index,
                 chunk: deltaToolCall.function.arguments,
-                currentAccumulated: tc.function.arguments,
                 chunkLength: deltaToolCall.function.arguments.length,
+                currentAccumulated: tc.function.arguments,
+                currentAccumulatedLength: tc.function.arguments.length,
                 startsWithQuote:
                   deltaToolCall.function.arguments.startsWith('"'),
                 endsWithQuote: deltaToolCall.function.arguments.endsWith('"'),
-              });
+                containsEscapedQuote:
+                  deltaToolCall.function.arguments.includes('\\"'),
+                containsDoubleEscapedQuote:
+                  deltaToolCall.function.arguments.includes('\\\\"'),
+              },
+            );
+
+            // Special Qwen double-stringification detection
+            if (format === 'qwen') {
+              // Check if this looks like a double-stringified value
+              const chunk = deltaToolCall.function.arguments;
+              if (
+                chunk.includes('\\"[') ||
+                chunk.includes('\\\\"') ||
+                (chunk.startsWith('"\\"') && chunk.endsWith('\\""'))
+              ) {
+                this.logger.error(
+                  () =>
+                    `[Qwen] Detected potential double-stringification in chunk for ${tc.function.name}`,
+                  {
+                    chunk,
+                    pattern:
+                      'Contains escaped quotes that suggest double-stringification',
+                  },
+                );
+              }
             }
+
             tc.function.arguments += deltaToolCall.function.arguments;
+
+            // Log the accumulated state after adding chunk
+            this.logger.debug(
+              () => `[${format}] After accumulation for ${tc.function.name}:`,
+              {
+                totalLength: tc.function.arguments.length,
+                preview:
+                  tc.function.arguments.length > 100
+                    ? tc.function.arguments.substring(0, 100) + '...'
+                    : tc.function.arguments,
+              },
+            );
           }
         }
         break;

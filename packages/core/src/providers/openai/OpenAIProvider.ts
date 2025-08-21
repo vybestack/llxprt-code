@@ -558,8 +558,13 @@ export class OpenAIProvider extends BaseProvider {
     // DEFENSIVE FIX: Handle potential array response from providers that violate OpenAI spec
     // Some providers (like Cerebras) may return an array of responses instead of a single response
     if (Array.isArray(data)) {
-      this.logger.debug(
-        () => 'Detected malformed array response, aggregating...',
+      this.logger.error(
+        () =>
+          '[Cerebras Corruption] Detected malformed array response from provider, aggregating...',
+        {
+          provider: this.baseURL,
+          arrayLength: data.length,
+        },
       );
       const aggregatedContent: string[] = [];
       let aggregatedToolCalls: Array<{
@@ -866,9 +871,14 @@ export class OpenAIProvider extends BaseProvider {
         errorMessage?.includes('JSONResponse') &&
         errorMessage?.includes('does not support item assignment')
       ) {
-        this.logger.debug(
+        this.logger.error(
           () =>
-            'JSONResponse mutation error detected. This typically occurs with certain providers like Cerebras. Falling back to non-streaming mode.',
+            '[Cerebras Corruption] JSONResponse mutation error detected. This typically occurs with certain providers like Cerebras. Falling back to non-streaming mode.',
+          {
+            errorMessage,
+            provider: this.baseURL,
+            streamingEnabled,
+          },
         );
         // Retry with streaming disabled
         response = await this.openai.chat.completions.create({
@@ -947,6 +957,15 @@ export class OpenAIProvider extends BaseProvider {
       // We need to buffer all chunks to detect and handle malformed streams
       // Some providers (like Cerebras) send message format instead of delta
       const allChunks: StreamChunk[] = [];
+
+      this.logger.debug(
+        () =>
+          '[Stream Detection] Starting to buffer chunks for corruption detection',
+        {
+          provider: this.baseURL,
+          streamingEnabled,
+        },
+      );
 
       try {
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
@@ -1046,9 +1065,14 @@ export class OpenAIProvider extends BaseProvider {
           errorMessage?.includes('JSONResponse') &&
           errorMessage?.includes('does not support item assignment')
         ) {
-          this.logger.debug(
+          this.logger.error(
             () =>
-              'JSONResponse mutation error during stream iteration. This is a known issue with Cerebras. The OpenAI client library is trying to mutate immutable response objects. Falling back to non-streaming mode.',
+              '[Cerebras Corruption] JSONResponse mutation error during stream iteration. This is a known issue with Cerebras. The OpenAI client library is trying to mutate immutable response objects. Falling back to non-streaming mode.',
+            {
+              error: errorMessage,
+              provider: this.baseURL,
+              chunksCollected: allChunks.length,
+            },
           );
 
           // Retry the entire request with streaming disabled
@@ -1191,8 +1215,18 @@ export class OpenAIProvider extends BaseProvider {
         // Check if this chunk has message format instead of delta (malformed stream)
         let processedChunk: StreamChunk = chunk;
         if (chunk.choices?.[0]?.message && !chunk.choices?.[0]?.delta) {
-          this.logger.debug(
-            () => 'Converting malformed chunk from message to delta format',
+          this.logger.error(
+            () =>
+              '[Cerebras Corruption] Converting malformed chunk from message to delta format',
+            {
+              provider: this.baseURL,
+              hasMessage: true,
+              hasDelta: false,
+              messageContent: chunk.choices[0].message?.content?.substring(
+                0,
+                100,
+              ),
+            },
           );
           // Convert message format to delta format for consistent processing
           const message = chunk.choices[0].message;
@@ -1377,7 +1411,23 @@ export class OpenAIProvider extends BaseProvider {
         // they are being JSON.stringify'd again
         let fixedToolCalls = accumulatedToolCalls;
         if (this.isUsingQwen()) {
-          fixedToolCalls = accumulatedToolCalls.map((toolCall) => {
+          this.logger.debug(
+            () =>
+              `[Qwen Fix] Processing ${accumulatedToolCalls.length} tool calls for double-stringification fix`,
+          );
+          fixedToolCalls = accumulatedToolCalls.map((toolCall, index) => {
+            this.logger.debug(
+              () =>
+                `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
+                  name: toolCall.function.name,
+                  argumentsType: typeof toolCall.function.arguments,
+                  argumentsLength: toolCall.function.arguments?.length,
+                  argumentsSample: toolCall.function.arguments?.substring(
+                    0,
+                    100,
+                  ),
+                })}`,
+            );
             // For Qwen, check if arguments are already JSON strings and parse them back
             // to prevent double-stringification
             if (
@@ -1389,6 +1439,10 @@ export class OpenAIProvider extends BaseProvider {
               try {
                 // Attempt to parse the arguments and stringify them once
                 const parsedArgs = JSON.parse(toolCall.function.arguments);
+                this.logger.debug(
+                  () =>
+                    `[Qwen Fix] Successfully parsed double-stringified arguments for ${toolCall.function.name}: ${JSON.stringify(parsedArgs)}`,
+                );
                 return {
                   ...toolCall,
                   function: {
@@ -1396,12 +1450,20 @@ export class OpenAIProvider extends BaseProvider {
                     arguments: JSON.stringify(parsedArgs),
                   },
                 };
-              } catch (_e) {
+              } catch (e) {
                 // If parsing fails, leave arguments as-is
+                this.logger.debug(
+                  () =>
+                    `[Qwen Fix] Failed to parse arguments for ${toolCall.function.name}: ${e instanceof Error ? e.message : String(e)}`,
+                );
                 return toolCall;
               }
             }
             // For all other cases, return toolCall unchanged
+            this.logger.debug(
+              () =>
+                `[Qwen Fix] No double-stringification detected for ${toolCall.function.name}, keeping original`,
+            );
             return toolCall;
           });
         }
@@ -1423,6 +1485,17 @@ export class OpenAIProvider extends BaseProvider {
         // For Qwen models, don't duplicate content if we've already streamed it
         // BUT Cerebras needs at least a space to continue after tool responses
         const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
+
+        if (isCerebras) {
+          this.logger.debug(
+            () =>
+              '[Cerebras] Special handling for Cerebras provider after tool responses',
+            {
+              hasStreamedContent,
+              willSendSpace: hasStreamedContent,
+            },
+          );
+        }
         const shouldOmitContent =
           hasStreamedContent && this.isUsingQwen() && !isCerebras;
 
@@ -1437,6 +1510,10 @@ export class OpenAIProvider extends BaseProvider {
         } else if (isCerebras && hasStreamedContent) {
           // Cerebras: Send just a space to prevent duplication but allow continuation
           // This prevents the repeated "Let me search..." text
+          this.logger.debug(
+            () =>
+              '[Cerebras] Sending minimal space content to prevent duplication',
+          );
           yield {
             role: ContentGeneratorRole.ASSISTANT,
             content: ' ', // Single space instead of full content
