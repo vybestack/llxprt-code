@@ -30,6 +30,7 @@ import {
   FileOperation,
 } from '../telemetry/metrics.js';
 import { stat } from 'fs/promises';
+import { ToolErrorType } from './tool-error.js';
 
 // Simple token estimation - roughly 4 characters per token
 function estimateTokens(text: string): number {
@@ -246,13 +247,6 @@ ${finalExclusionPatternsForDescription
       : [...exclude, ...this.llxprtIgnorePatterns];
 
     const searchPatterns = [...inputPatterns, ...include];
-    if (searchPatterns.length === 0) {
-      return {
-        llmContent: 'No search paths or include patterns provided.',
-        returnDisplay: `## Information\n\nNo search paths or include patterns were specified. Nothing to read or concatenate.`,
-      };
-    }
-
     try {
       const allEntries = new Set<string>();
       const workspaceDirs = this.config.getWorkspaceContext().getDirectories();
@@ -366,9 +360,14 @@ ${finalExclusionPatternsForDescription
         });
       }
     } catch (error) {
+      const errorMessage = `Error during file search: ${getErrorMessage(error)}`;
       return {
-        llmContent: `Error during file search: ${getErrorMessage(error)}`,
+        llmContent: errorMessage,
         returnDisplay: `## File Search Error\n\nAn error occurred while searching for files:\n\`\`\`\n${getErrorMessage(error)}\n\`\`\``,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.READ_MANY_FILES_SEARCH_ERROR,
+        },
       };
     }
 

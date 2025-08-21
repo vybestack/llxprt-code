@@ -21,11 +21,7 @@ import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { Config } from '../config/config.js';
-import {
-  limitOutputTokens,
-  formatLimitedOutput,
-  getOutputLimits,
-} from '../utils/toolOutputLimiter.js';
+import { ToolErrorType } from './tool-error.js';
 
 // --- Interfaces ---
 
@@ -47,11 +43,6 @@ export interface GrepToolParams {
    * File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")
    */
   include?: string;
-
-  /**
-   * Maximum number of matches to return (optional, helps prevent overwhelming output)
-   */
-  max_matches?: number;
 }
 
 /**
@@ -168,99 +159,39 @@ class GrepToolInvocation extends BaseToolInvocation<
         return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
       }
 
-      const matchCount = allMatches.length;
-      const matchTerm = matchCount === 1 ? 'match' : 'matches';
-
-      // Get output limits configuration
-      const limits = getOutputLimits(this.config);
-
-      // Check if we should limit by number of matches
-      // Priority: 1. User-specified max_matches, 2. tool-output-max-items setting, 3. default
-      const ephemeralSettings = this.config.getEphemeralSettings();
-      const configMaxItems = ephemeralSettings['tool-output-max-items'] as
-        | number
-        | undefined;
-      const maxItems = this.params.max_matches ?? configMaxItems ?? 50;
-
-      let itemsToProcess = allMatches;
-      let itemLimitMessage = '';
-
-      if (allMatches.length > maxItems) {
-        // If user explicitly set max_matches, always truncate. Otherwise follow configured mode
-        if (this.params.max_matches) {
-          // User explicitly set a limit, so truncate to that limit
-          itemsToProcess = allMatches.slice(0, maxItems);
-          itemLimitMessage = `\n[Showing first ${maxItems} of ${allMatches.length} matches as requested]`;
-        } else if (limits.truncateMode === 'warn') {
-          const warnMsg = `Found ${allMatches.length} matches exceeding the ${maxItems} item limit. The search completed but results are too numerous to display. To get useful results:
-1. Use the max_matches parameter to increase the limit (e.g., max_matches: 200)
-2. Search for the EXACT function/class/variable name (e.g., "handleCompletedTools" not "completed")
-3. Include the file extension in your search path (e.g., "**/*.ts" not "**/*")
-4. Search in a specific directory (e.g., "packages/cli/src/ui" not ".")
-5. Use more unique search terms that appear less frequently`;
-          return {
-            llmContent: warnMsg,
-            returnDisplay: `## Match Limit Exceeded\n\n${warnMsg}`,
-          };
-        } else if (limits.truncateMode === 'sample') {
-          // Sample evenly across matches
-          const step = Math.ceil(allMatches.length / maxItems);
-          itemsToProcess = [];
-          for (let i = 0; i < allMatches.length; i += step) {
-            if (itemsToProcess.length < maxItems) {
-              itemsToProcess.push(allMatches[i]);
-            }
-          }
-          itemLimitMessage = `\n[Sampled ${itemsToProcess.length} of ${allMatches.length} matches]`;
-        } else {
-          // truncate mode
-          itemsToProcess = allMatches.slice(0, maxItems);
-          itemLimitMessage = `\n[Showing first ${maxItems} of ${allMatches.length} matches]`;
-        }
-      }
-
-      // Group the limited matches by file
-      const limitedMatchesByFile = itemsToProcess.reduce(
+      // Group matches by file
+      const matchesByFile = allMatches.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
           if (!acc[fileKey]) {
             acc[fileKey] = [];
           }
           acc[fileKey].push(match);
+          acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
           return acc;
         },
         {} as Record<string, GrepMatch[]>,
       );
 
-      let llmContent = `Found ${allMatches.length} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:${itemLimitMessage}
+      const matchCount = allMatches.length;
+      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+
+      let llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:
 ---
 `;
 
-      for (const filePath in limitedMatchesByFile) {
+      for (const filePath in matchesByFile) {
         llmContent += `File: ${filePath}\n`;
-        limitedMatchesByFile[filePath].forEach((match) => {
+        matchesByFile[filePath].forEach((match) => {
           const trimmedLine = match.line.trim();
           llmContent += `L${match.lineNumber}: ${trimmedLine}\n`;
         });
         llmContent += '---\n';
       }
 
-      // Apply token-based limiting
-      const limitedResult = limitOutputTokens(
-        llmContent.trim(),
-        this.config,
-        'search_file_content',
-      );
-      const formatted = formatLimitedOutput(limitedResult);
-
-      // If we hit token limits, override the display to be more informative
-      if (limitedResult.wasTruncated && !limitedResult.content) {
-        return formatted;
-      }
-
       return {
-        llmContent: formatted.llmContent,
-        returnDisplay: `Found ${allMatches.length} ${matchTerm}${itemLimitMessage}`,
+        llmContent: llmContent.trim(),
+        returnDisplay: `Found ${matchCount} ${matchTerm}`,
       };
     } catch (error) {
       console.error(`Error during GrepLogic execution: ${error}`);
@@ -268,6 +199,10 @@ class GrepToolInvocation extends BaseToolInvocation<
       return {
         llmContent: `Error during grep search operation: ${errorMessage}`,
         returnDisplay: `Error: ${errorMessage}`,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.GREP_EXECUTION_ERROR,
+        },
       };
     }
   }
@@ -610,14 +545,14 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
   constructor(private readonly config: Config) {
     super(
       GrepTool.Name,
-      'SearchFileContent',
-      'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers. IMPORTANT: This tool expects regular expression patterns, not literal strings.',
+      'SearchText',
+      'Searches for a regular expression pattern within the content of files in a specified directory (or current working directory). Can filter files by a glob pattern. Returns the lines containing matches, along with their file paths and line numbers.',
       Kind.Search,
       {
         properties: {
           pattern: {
             description:
-              "The regular expression (regex) pattern to search for within file contents. Special characters like ( ) [ ] { } . * + ? ^ $ \\ | must be escaped with a backslash. Examples: 'openModelDialog\\(' to find 'openModelDialog(', 'function\\s+myFunction' to find function declarations, '\\.test\\.' to find '.test.' in filenames.",
+              "The regular expression (regex) pattern to search for within file contents (e.g., 'function\\s+myFunction', 'import\\s+\\{.*\\}\\s+from\\s+.*').",
             type: 'string',
           },
           path: {
@@ -629,11 +564,6 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
             description:
               "Optional: A glob pattern to filter which files are searched (e.g., '*.js', '*.{ts,tsx}', 'src/**'). If omitted, searches all files (respecting potential global ignores).",
             type: 'string',
-          },
-          max_matches: {
-            description:
-              'Optional: Maximum number of matches to return. If omitted, uses the configured limit (default 50). Set a lower number if you expect many matches to avoid overwhelming output.',
-            type: 'number',
           },
         },
         required: ['pattern'],

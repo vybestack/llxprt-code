@@ -13,7 +13,7 @@ import {
   ToolInvocation,
   ToolResult,
 } from './tools.js';
-import { GenerateContentResponse } from '@google/genai';
+import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { ApprovalMode, Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
@@ -72,14 +72,8 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     super(params);
   }
 
-  private async executeFallback(_signal: AbortSignal): Promise<ToolResult> {
+  private async executeFallback(signal: AbortSignal): Promise<ToolResult> {
     const urls = extractUrls(this.params.prompt);
-    if (urls.length === 0) {
-      return {
-        llmContent: 'Error: No URL found in the prompt for fallback.',
-        returnDisplay: 'Error: No URL found in the prompt for fallback.',
-      };
-    }
     // For now, we only support one URL for fallback
     let url = urls[0];
 
@@ -92,22 +86,38 @@ class WebFetchToolInvocation extends BaseToolInvocation<
 
     try {
       const response = await fetchWithTimeout(url, URL_FETCH_TIMEOUT_MS);
+      if (!response.ok) {
+        throw new Error(
+          `Request failed with status code ${response.status} ${response.statusText}`,
+        );
+      }
       const html = await response.text();
       const textContent = convert(html, {
-        wordwrap: 130,
+        wordwrap: false,
         selectors: [
           { selector: 'a', options: { ignoreHref: true } },
           { selector: 'img', format: 'skip' },
-          { selector: 'script', format: 'skip' },
-          { selector: 'style', format: 'skip' },
         ],
       }).substring(0, MAX_CONTENT_LENGTH);
 
-      // In llxprt, we can't use Gemini client directly for fallback processing
-      // Return the raw content with a note about the limitation
+      const geminiClient = this.config.getGeminiClient();
+      const fallbackPrompt = `The user requested the following: "${this.params.prompt}".
+
+I was unable to access the URL directly. Instead, I have fetched the raw content of the page. Please use the following content to answer the request. Do not attempt to access the URL again.
+
+---
+${textContent}
+---
+`;
+      const result = await geminiClient.generateContent(
+        [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
+        {},
+        signal,
+      );
+      const resultText = getResponseText(result) || '';
       return {
-        llmContent: `Private/local URLs cannot be processed with AI. Raw content provided below.\n\nContent from ${url}:\n\n${textContent.substring(0, 5000)}${textContent.length > 5000 ? '...[truncated]' : ''}`,
-        returnDisplay: `Private/local URLs cannot be processed with AI. Raw content provided below.`,
+        llmContent: resultText,
+        returnDisplay: `Content for ${url} processed using fallback fetch.`,
       };
     } catch (e) {
       const error = e as Error;
@@ -115,6 +125,10 @@ class WebFetchToolInvocation extends BaseToolInvocation<
       return {
         llmContent: `Error: ${errorMessage}`,
         returnDisplay: `Error: ${errorMessage}`,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.WEB_FETCH_FALLBACK_FAILED,
+        },
       };
     }
   }
@@ -130,11 +144,7 @@ class WebFetchToolInvocation extends BaseToolInvocation<
   override async shouldConfirmExecute(): Promise<
     ToolCallConfirmationDetails | false
   > {
-    const approvalMode = this.config.getApprovalMode();
-    if (
-      approvalMode === ApprovalMode.AUTO_EDIT ||
-      approvalMode === ApprovalMode.YOLO
-    ) {
+    if (this.config.getApprovalMode() === ApprovalMode.AUTO_EDIT) {
       return false;
     }
 
@@ -173,82 +183,26 @@ class WebFetchToolInvocation extends BaseToolInvocation<
       return this.executeFallback(signal);
     }
 
-    // Get the content generator config to access the provider manager
-    const contentGenConfig = this.config.getContentGeneratorConfig();
-
-    // Get the serverToolsProvider from the provider manager
-    if (!contentGenConfig?.providerManager) {
-      return {
-        llmContent: `Web fetch requires a provider. Please use --provider gemini with authentication.`,
-        returnDisplay: 'Web fetch requires a provider.',
-      };
-    }
-
-    // Use serverToolsProvider for web fetch
-    const serverToolsProvider =
-      contentGenConfig.providerManager.getServerToolsProvider();
-    if (!serverToolsProvider) {
-      return {
-        llmContent: `Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.`,
-        returnDisplay: 'Web fetch requires Gemini provider.',
-      };
-    }
-
-    // Check if the provider supports web_fetch
-    const serverTools = serverToolsProvider.getServerTools();
-    if (!serverTools.includes('web_fetch')) {
-      return {
-        llmContent: `Web fetch is not available. The server tools provider does not support web fetch.`,
-        returnDisplay: `Web fetch not available.`,
-      };
-    }
+    const geminiClient = this.config.getGeminiClient();
 
     try {
-      // Invoke the server tool
-      const response = await serverToolsProvider.invokeServerTool(
-        'web_fetch',
-        { prompt: this.params.prompt },
-        { signal },
+      const response = await geminiClient.generateContent(
+        [{ role: 'user', parts: [{ text: userPrompt }] }],
+        { tools: [{ urlContext: {} }] },
+        signal, // Pass signal
       );
 
-      if (process.env.DEBUG) {
-        console.log(
-          '[WEB-FETCH] Raw response:',
-          JSON.stringify(response, null, 2),
-        );
-      }
+      console.debug(
+        `[WebFetchTool] Full response for prompt "${userPrompt.substring(
+          0,
+          50,
+        )}...":`,
+        JSON.stringify(response, null, 2),
+      );
 
-      // Cast response to expected type for better type safety
-      const geminiResponse = response as GenerateContentResponse;
-
-      // Check if response has the expected structure
-      if (
-        !geminiResponse.candidates ||
-        geminiResponse.candidates.length === 0
-      ) {
-        return {
-          llmContent: `Error: The backend API did not return any response candidates. This may indicate an issue with the urlContext tool configuration.`,
-          returnDisplay: 'No response from backend API.',
-        };
-      }
-
-      // Remove the error checking - just let the LLM's response through
-      // The LLM is smart enough to handle failures appropriately
-
-      // Extract text using utility function
-      const responseText = getResponseText(geminiResponse);
-
-      // Simple check - if no text, return error
-      if (!responseText || !responseText.trim()) {
-        return {
-          llmContent: `No content found for the provided URL(s). The site may have blocked access or returned empty content.`,
-          returnDisplay: 'No content found.',
-        };
-      }
-
-      // Process grounding metadata (geminiResponse already cast above)
-      const groundingMetadata =
-        geminiResponse.candidates?.[0]?.groundingMetadata;
+      let responseText = getResponseText(response) || '';
+      const urlContextMeta = response.candidates?.[0]?.urlContextMetadata;
+      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;
@@ -256,13 +210,42 @@ class WebFetchToolInvocation extends BaseToolInvocation<
         | GroundingSupportItem[]
         | undefined;
 
-      let modifiedResponseText = responseText;
-      const sourceListFormatted: string[] = [];
+      // Error Handling
+      let processingError = false;
 
+      if (
+        urlContextMeta?.urlMetadata &&
+        urlContextMeta.urlMetadata.length > 0
+      ) {
+        const allStatuses = urlContextMeta.urlMetadata.map(
+          (m) => m.urlRetrievalStatus,
+        );
+        if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
+          processingError = true;
+        }
+      } else if (!responseText.trim() && !sources?.length) {
+        // No URL metadata and no content/sources
+        processingError = true;
+      }
+
+      if (
+        !processingError &&
+        !responseText.trim() &&
+        (!sources || sources.length === 0)
+      ) {
+        // Successfully retrieved some URL (or no specific error from urlContextMeta), but no usable text or grounding data.
+        processingError = true;
+      }
+
+      if (processingError) {
+        return this.executeFallback(signal);
+      }
+
+      const sourceListFormatted: string[] = [];
       if (sources && sources.length > 0) {
         sources.forEach((source: GroundingChunkItem, index: number) => {
           const title = source.web?.title || 'Untitled';
-          const uri = source.web?.uri || 'Unknown URI';
+          const uri = source.web?.uri || 'Unknown URI'; // Fallback if URI is missing
           sourceListFormatted.push(`[${index + 1}] ${title} (${uri})`);
         });
 
@@ -281,32 +264,45 @@ class WebFetchToolInvocation extends BaseToolInvocation<
           });
 
           insertions.sort((a, b) => b.index - a.index);
-          insertions.forEach(({ index, marker }) => {
-            modifiedResponseText =
-              modifiedResponseText.slice(0, index) +
-              marker +
-              modifiedResponseText.slice(index);
+          const responseChars = responseText.split('');
+          insertions.forEach((insertion) => {
+            responseChars.splice(insertion.index, 0, insertion.marker);
           });
+          responseText = responseChars.join('');
+        }
+
+        if (sourceListFormatted.length > 0) {
+          responseText += `
+
+Sources:
+${sourceListFormatted.join('\n')}`;
         }
       }
 
-      // Prepare the final response
-      const finalResponse = sourceListFormatted.length
-        ? `${modifiedResponseText}\n\n### Sources:\n${sourceListFormatted.join('\n')}`
-        : modifiedResponseText;
+      const llmContent = responseText;
+
+      console.debug(
+        `[WebFetchTool] Formatted tool response for prompt "${userPrompt}:\n\n":`,
+        llmContent,
+      );
 
       return {
-        llmContent: finalResponse,
-        returnDisplay: finalResponse,
+        llmContent,
+        returnDisplay: `Content processed from prompt.`,
       };
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      if (process.env.DEBUG) {
-        console.error('[WEB-FETCH] Error:', error);
-      }
+    } catch (error: unknown) {
+      const errorMessage = `Error processing web content for prompt "${userPrompt.substring(
+        0,
+        50,
+      )}...": ${getErrorMessage(error)}`;
+      console.error(errorMessage, error);
       return {
-        llmContent: `Error during web fetch: ${errorMessage}`,
-        returnDisplay: `Error during web fetch: ${errorMessage}`,
+        llmContent: `Error: ${errorMessage}`,
+        returnDisplay: `Error: ${errorMessage}`,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+        },
       };
     }
   }

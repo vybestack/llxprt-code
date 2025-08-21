@@ -15,7 +15,7 @@ import {
 } from './tools.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
-// Tool output limiter imports removed - not currently used
+import { ToolErrorType } from './tool-error.js';
 
 /**
  * Parameters for the LS tool
@@ -32,17 +32,12 @@ export interface LSToolParams {
   ignore?: string[];
 
   /**
-   * Whether to respect .gitignore and .llxprtignore patterns (optional, defaults to true)
+   * Whether to respect .gitignore and .geminiignore patterns (optional, defaults to true)
    */
   file_filtering_options?: {
     respect_git_ignore?: boolean;
-    respect_llxprt_ignore?: boolean;
+    respect_gemini_ignore?: boolean;
   };
-
-  /**
-   * Maximum number of entries to return (optional, helps prevent overwhelming output)
-   */
-  max_entries?: number;
 }
 
 /**
@@ -120,11 +115,19 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
   }
 
   // Helper for consistent error formatting
-  private errorResult(llmContent: string, returnDisplay: string): ToolResult {
+  private errorResult(
+    llmContent: string,
+    returnDisplay: string,
+    type: ToolErrorType,
+  ): ToolResult {
     return {
       llmContent,
       // Keep returnDisplay simpler in core logic
       returnDisplay: `Error: ${returnDisplay}`,
+      error: {
+        message: llmContent,
+        type,
+      },
     };
   }
 
@@ -141,12 +144,14 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         return this.errorResult(
           `Error: Directory not found or inaccessible: ${this.params.path}`,
           `Directory not found or inaccessible.`,
+          ToolErrorType.FILE_NOT_FOUND,
         );
       }
       if (!stats.isDirectory()) {
         return this.errorResult(
           `Error: Path is not a directory: ${this.params.path}`,
           `Path is not a directory.`,
+          ToolErrorType.PATH_IS_NOT_A_DIRECTORY,
         );
       }
 
@@ -159,9 +164,9 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         respectGitIgnore:
           this.params.file_filtering_options?.respect_git_ignore ??
           defaultFileIgnores.respectGitIgnore,
-        respectLlxprtIgnore:
-          this.params.file_filtering_options?.respect_llxprt_ignore ??
-          defaultFileIgnores.respectLlxprtIgnore,
+        respectGeminiIgnore:
+          this.params.file_filtering_options?.respect_gemini_ignore ??
+          defaultFileIgnores.respectGeminiIgnore,
       };
 
       // Get centralized file discovery service
@@ -170,7 +175,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
 
       const entries: FileEntry[] = [];
       let gitIgnoredCount = 0;
-      let llxprtIgnoredCount = 0;
+      let geminiIgnoredCount = 0;
 
       if (files.length === 0) {
         // Changed error message to be more neutral for LLM
@@ -191,7 +196,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           fullPath,
         );
 
-        // Check if this file should be ignored based on git or llxprt ignore rules
+        // Check if this file should be ignored based on git or gemini ignore rules
         if (
           fileFilteringOptions.respectGitIgnore &&
           fileDiscovery.shouldGitIgnoreFile(relativePath)
@@ -200,10 +205,10 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           continue;
         }
         if (
-          fileFilteringOptions.respectLlxprtIgnore &&
-          fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
+          fileFilteringOptions.respectGeminiIgnore &&
+          fileDiscovery.shouldGeminiIgnoreFile(relativePath)
         ) {
-          llxprtIgnoredCount++;
+          geminiIgnoredCount++;
           continue;
         }
 
@@ -240,8 +245,8 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       if (gitIgnoredCount > 0) {
         ignoredMessages.push(`${gitIgnoredCount} git-ignored`);
       }
-      if (llxprtIgnoredCount > 0) {
-        ignoredMessages.push(`${llxprtIgnoredCount} llxprt-ignored`);
+      if (geminiIgnoredCount > 0) {
+        ignoredMessages.push(`${geminiIgnoredCount} gemini-ignored`);
       }
 
       if (ignoredMessages.length > 0) {
@@ -259,7 +264,11 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
       };
     } catch (error) {
       const errorMsg = `Error listing directory: ${error instanceof Error ? error.message : String(error)}`;
-      return this.errorResult(errorMsg, 'Failed to list directory.');
+      return this.errorResult(
+        errorMsg,
+        'Failed to list directory.',
+        ToolErrorType.LS_EXECUTION_ERROR,
+      );
     }
   }
 }
@@ -292,7 +301,7 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
           },
           file_filtering_options: {
             description:
-              'Optional: Whether to respect ignore patterns from .gitignore or .llxprtignore',
+              'Optional: Whether to respect ignore patterns from .gitignore or .geminiignore',
             type: 'object',
             properties: {
               respect_git_ignore: {
@@ -300,9 +309,9 @@ export class LSTool extends BaseDeclarativeTool<LSToolParams, ToolResult> {
                   'Optional: Whether to respect .gitignore patterns when listing files. Only available in git repositories. Defaults to true.',
                 type: 'boolean',
               },
-              respect_llxprt_ignore: {
+              respect_gemini_ignore: {
                 description:
-                  'Optional: Whether to respect .llxprtignore patterns when listing files. Defaults to true.',
+                  'Optional: Whether to respect .geminiignore patterns when listing files. Defaults to true.',
                 type: 'boolean',
               },
             },
