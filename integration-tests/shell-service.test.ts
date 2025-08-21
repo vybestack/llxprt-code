@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { ShellExecutionService } from './packages/core/src/services/shellExecutionService.js';
+import { ShellExecutionService } from '../packages/core/src/services/shellExecutionService.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { vi } from 'vitest';
