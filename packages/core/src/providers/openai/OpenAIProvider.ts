@@ -119,6 +119,9 @@ export class OpenAIProvider extends BaseProvider {
       apiKey: apiKey || 'placeholder', // OpenAI client requires a string, use placeholder if OAuth will be used
       // Allow browser environment if explicitly configured
       dangerouslyAllowBrowser: config?.allowBrowserEnvironment || false,
+      // Add timeout for LM Studio compatibility
+      timeout: 60000, // 60 seconds timeout for local LLM servers
+      maxRetries: 2, // Reduce retries for faster failure
     };
     // Only include baseURL if it's defined
     if (baseURL) {
@@ -208,6 +211,9 @@ export class OpenAIProvider extends BaseProvider {
         // Allow browser environment if explicitly configured
         dangerouslyAllowBrowser:
           this.providerConfig?.allowBrowserEnvironment || false,
+        // Add timeout for LM Studio compatibility
+        timeout: 60000, // 60 seconds timeout for local LLM servers
+        maxRetries: 2, // Reduce retries for faster failure
       };
       // Only include baseURL if it's defined
       if (effectiveBaseURL) {
@@ -1695,6 +1701,9 @@ export class OpenAIProvider extends BaseProvider {
       apiKey,
       dangerouslyAllowBrowser:
         this.providerConfig?.allowBrowserEnvironment || false,
+      // Add timeout for LM Studio compatibility
+      timeout: 60000, // 60 seconds timeout for local LLM servers
+      maxRetries: 2, // Reduce retries for faster failure
     };
     // Only include baseURL if it's defined
     if (this.baseURL) {
@@ -1737,6 +1746,9 @@ export class OpenAIProvider extends BaseProvider {
       apiKey: this._cachedClientKey || 'placeholder',
       dangerouslyAllowBrowser:
         this.providerConfig?.allowBrowserEnvironment || false,
+      // Add timeout for LM Studio compatibility
+      timeout: 60000, // 60 seconds timeout for local LLM servers
+      maxRetries: 2, // Reduce retries for faster failure
     };
     // Only include baseURL if it's defined
     if (this.baseURL) {
