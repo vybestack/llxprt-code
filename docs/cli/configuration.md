@@ -359,6 +359,20 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     ```
   - **Note:** When set, the specified profile will be loaded automatically each time LLxprt Code starts
 
+- **`accessibility`** (object):
+  - **Description:** Configures accessibility features for the CLI.
+  - **Properties:**
+    - **`screenReader`** (boolean): Enables screen reader mode, which adjusts the TUI for better compatibility with screen readers. This can also be enabled with the `--screen-reader` command-line flag, which will take precedence over the setting.
+    - **`disableLoadingPhrases`** (boolean): Disables the display of loading phrases during operations.
+  - **Default:** `{"screenReader": false, "disableLoadingPhrases": false}`
+  - **Example:**
+    ```json
+    "accessibility": {
+      "screenReader": true,
+      "disableLoadingPhrases": true
+    }
+    ```
+
 ### Example `settings.json`:
 
 ```json
@@ -611,6 +625,7 @@ Arguments passed directly when running the CLI can override other configurations
   - Can be specified multiple times or as comma-separated values.
   - 5 directories can be added at maximum.
   - Example: `--include-directories /path/to/project1,/path/to/project2` or `--include-directories /path/to/project1 --include-directories /path/to/project2`
+<<<<<<< HEAD
 - **`--profile-load <profile_name>`**:
   - Load a saved profile configuration on startup.
   - Example: `llxprt --profile-load my-project`
@@ -624,6 +639,11 @@ Arguments passed directly when running the CLI can override other configurations
   - Example: `llxprt --experimental-acp`
   - **Note:** This is an experimental feature primarily used by the Zed editor integration.
 - **`--version`** (**`-v`**):
+=======
+- **`--screen-reader`**:
+  - Enables screen reader mode for accessibility.
+- **`--version`**:
+>>>>>>> 10286934e (Introduce initial screen reader mode handling and flag (#6653))
   - Displays the version of the CLI.
 
 ## Provider API Keys

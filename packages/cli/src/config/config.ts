@@ -79,6 +79,7 @@ export interface CliArgs {
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
+  screenReader: boolean | undefined;
 }
 
 export async function parseArguments(): Promise<CliArgs> {
@@ -229,6 +230,11 @@ export async function parseArguments(): Promise<CliArgs> {
           coerce: (dirs: string[]) =>
             // Handle comma-separated values
             dirs.flatMap((dir) => dir.split(',').map((d) => d.trim())),
+        })
+        .option('screen-reader', {
+          type: 'boolean',
+          description: 'Enable screen reader mode for accessibility.',
+          default: false,
         })
         .check((argv) => {
           if (argv.prompt && argv.promptInteractive) {
@@ -698,6 +704,7 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
 
+<<<<<<< HEAD
   // Handle provider selection FIRST with proper precedence
   // Priority: CLI arg > Profile > Environment > Default
   let finalProvider: string;
@@ -729,6 +736,10 @@ export async function loadCliConfig(
     // For other providers, let them use their own default models (empty string means use provider default)
     (finalProvider === 'gemini' ? DEFAULT_GEMINI_MODEL : '');
 
+  // The screen reader argument takes precedence over the accessibility setting.
+  const screenReader =
+    argv.screenReader ?? effectiveSettings.accessibility?.screenReader ?? false;
+
   const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -756,7 +767,10 @@ export async function loadCliConfig(
       argv.show_memory_usage ||
       effectiveSettings.showMemoryUsage ||
       false,
-    accessibility: effectiveSettings.accessibility,
+    accessibility: {
+      ...effectiveSettings.accessibility,
+      screenReader,
+    },
     telemetry: {
       enabled: argv.telemetry ?? effectiveSettings.telemetry?.enabled,
       target: (argv.telemetryTarget ??

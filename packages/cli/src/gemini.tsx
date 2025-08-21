@@ -682,7 +682,7 @@ export async function main() {
           </SettingsContext.Provider>
         </ErrorBoundary>
       </React.StrictMode>,
-      { exitOnCtrlC: false },
+      { exitOnCtrlC: false, isScreenReaderEnabled: config.getScreenReader() },
     );
 
     checkForUpdates()
