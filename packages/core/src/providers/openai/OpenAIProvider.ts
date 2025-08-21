@@ -51,8 +51,7 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 export class OpenAIProvider extends BaseProvider {
   private logger: DebugLogger;
   private openai: OpenAI;
-  private currentModel: string =
-    process.env.LLXPRT_DEFAULT_MODEL || 'llama3-70b-8192';
+  private currentModel: string = process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
   private baseURL?: string;
   private providerConfig?: IProviderConfig;
   private toolFormatter: ToolFormatter;
@@ -1465,13 +1464,11 @@ export class OpenAIProvider extends BaseProvider {
                 const fixedArgs: Record<string, unknown> = {};
                 for (const [key, value] of Object.entries(parsedArgs)) {
                   if (typeof value === 'string') {
-                    // ONLY parse if the string contains escaped quotes, indicating double-stringification
-                    // This is more strict to avoid breaking o3 which might have strings that look like JSON
                     const trimmed = value.trim();
+                    // Check if it looks like a stringified array or object
                     if (
-                      ((trimmed.startsWith('[') && trimmed.endsWith(']')) ||
-                        (trimmed.startsWith('{') && trimmed.endsWith('}'))) &&
-                      (value.includes('\\"') || value.includes("\\'")) // Must have escaped quotes
+                      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+                      (trimmed.startsWith('{') && trimmed.endsWith('}'))
                     ) {
                       try {
                         // Try to parse it as JSON
@@ -1648,7 +1645,7 @@ export class OpenAIProvider extends BaseProvider {
     if (this.isUsingQwen()) {
       return 'qwen3-coder-plus';
     }
-    return process.env.LLXPRT_DEFAULT_MODEL || 'llama3-70b-8192';
+    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
   }
 
   override setApiKey(apiKey: string): void {

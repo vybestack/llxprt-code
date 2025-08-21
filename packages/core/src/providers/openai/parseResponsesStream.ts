@@ -85,7 +85,7 @@ function looksLikeJSONObjectOrArray(s: string): boolean {
 }
 
 // Create a single logger instance for the module (following singleton pattern)
-const logger = new DebugLogger('llxprt:openai:streaming');
+const logger = new DebugLogger('llxprt:providers:openai');
 
 export async function* parseResponsesStream(
   stream: ReadableStream<Uint8Array>,
