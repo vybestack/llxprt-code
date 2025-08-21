@@ -90,7 +90,7 @@ export class OpenAIProvider extends BaseProvider {
 
     super(baseConfig);
 
-    this.logger = new DebugLogger('llxprt:openai:provider');
+    this.logger = new DebugLogger('llxprt:providers:openai');
     this.logger.debug(
       () =>
         `Constructor - baseURL: ${baseURL}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, oauthManager: ${!!oauthManager}, shouldEnableQwenOAuth: ${shouldEnableQwenOAuth}`,
