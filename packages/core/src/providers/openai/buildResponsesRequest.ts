@@ -91,10 +91,12 @@ export interface ResponsesRequest {
 const MAX_TOOLS = 16;
 const MAX_JSON_SIZE_KB = 32;
 
+// Create a single logger instance for the module (following singleton pattern)
+const logger = new DebugLogger('llxprt:openai:provider');
+
 export function buildResponsesRequest(
   params: ResponsesRequestParams,
 ): ResponsesRequest {
-  const logger = new DebugLogger('llxprt:openai:provider');
   const {
     messages,
     prompt,

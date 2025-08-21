@@ -13,6 +13,9 @@ import { ProviderManager } from '../ProviderManager.js';
 import { ConversationCache } from './ConversationCache.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 
+// Create a single logger instance for the module (following singleton pattern)
+const logger = new DebugLogger('llxprt:openai:provider');
+
 // Helper types leveraging public APIs
 
 type OpenAIProviderLike = {
@@ -44,7 +47,6 @@ export interface OpenAIProviderInfo {
 export function getOpenAIProviderInfo(
   providerManager: ProviderManager | null | undefined,
 ): OpenAIProviderInfo {
-  const logger = new DebugLogger('llxprt:openai:provider');
   const result: OpenAIProviderInfo = {
     provider: null,
     conversationCache: null,

@@ -225,10 +225,17 @@ export class DebugLogger {
       return true;
     }
 
-    if (pattern.endsWith('*')) {
-      // Line 92-95
-      const prefix = pattern.slice(0, -1);
-      return namespace.startsWith(prefix);
+    // Support wildcards anywhere in the pattern
+    if (pattern.includes('*')) {
+      // Convert pattern to regex:
+      // - Escape special regex chars except *
+      // - Replace * with .* for regex wildcard matching
+      const regexPattern = pattern
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape special chars
+        .replace(/\*/g, '.*'); // Convert * to regex wildcard
+
+      const regex = new RegExp(`^${regexPattern}$`);
+      return regex.test(namespace);
     }
 
     return false; // Line 97

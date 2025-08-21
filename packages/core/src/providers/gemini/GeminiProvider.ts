@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import { IMessage } from '../IMessage.js';
 import { ITool } from '../ITool.js';
@@ -36,6 +37,7 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 type GeminiAuthMode = 'oauth' | 'gemini-api-key' | 'vertex-ai' | 'none';
 
 export class GeminiProvider extends BaseProvider {
+  private logger: DebugLogger;
   private authMode: GeminiAuthMode = 'none';
   private geminiConfig?: Config;
   private currentModel: string = 'gemini-2.5-pro';
@@ -88,6 +90,7 @@ export class GeminiProvider extends BaseProvider {
 
     super(baseConfig);
 
+    this.logger = new DebugLogger('llxprt:gemini:provider');
     // Store Gemini-specific configuration
     this.geminiConfig = config;
     this.baseURL = baseURL;
@@ -317,25 +320,18 @@ export class GeminiProvider extends BaseProvider {
     _toolFormat?: string,
   ): AsyncIterableIterator<unknown> {
     // Comprehensive debug logging
-    if (process.env.DEBUG) {
-      console.log('[GEMINI] generateChatCompletion called with:');
-      console.log('[GEMINI] messages:', JSON.stringify(messages, null, 2));
-      console.log('[GEMINI] messages length:', messages.length);
-      console.log(
-        '[GEMINI] first message:',
-        messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE',
-      );
-      console.log(
-        '[GEMINI] tools:',
-        tools ? JSON.stringify(tools.map((t) => t.function.name)) : 'NO TOOLS',
-      );
-      if (process.env.DEBUG) {
-        console.log(
-          'DEBUG: GeminiProvider.generateChatCompletion called with messages:',
-          JSON.stringify(messages, null, 2),
-        );
-      }
-    }
+    this.logger.debug(
+      () => `generateChatCompletion called with ${messages.length} messages`,
+    );
+    this.logger.debug(() => `Messages: ${JSON.stringify(messages, null, 2)}`);
+    this.logger.debug(
+      () =>
+        `First message: ${messages[0] ? JSON.stringify(messages[0], null, 2) : 'NO FIRST MESSAGE'}`,
+    );
+    this.logger.debug(
+      () =>
+        `Tools: ${tools ? JSON.stringify(tools.map((t) => t.function.name)) : 'NO TOOLS'}`,
+    );
     // Lazily determine the best auth method now that it's needed.
     // This implements lazy OAuth triggering - OAuth is only triggered when making API calls
     let authToken: string;
@@ -645,12 +641,10 @@ export class GeminiProvider extends BaseProvider {
       // Handle tool responses - each in its own Content object
       if (msg.role === ContentGeneratorRole.TOOL) {
         if (!msg.tool_call_id) {
-          if (process.env.DEBUG) {
-            console.warn(
-              `Tool response at index ${i} missing tool_call_id, skipping:`,
-              msg,
-            );
-          }
+          this.logger.debug(
+            () =>
+              `Tool response at index ${i} missing tool_call_id, skipping: ${JSON.stringify(msg)}`,
+          );
           continue;
         }
 
@@ -741,12 +735,10 @@ export class GeminiProvider extends BaseProvider {
 
           // Ensure tool call has an ID
           if (!toolCall.id) {
-            if (process.env.DEBUG) {
-              console.warn(
-                `Tool call at message ${i} missing ID, generating one:`,
-                toolCall,
-              );
-            }
+            this.logger.debug(
+              () =>
+                `Tool call at message ${i} missing ID, generating one: ${JSON.stringify(toolCall)}`,
+            );
             // Generate a unique ID for the function call
             toolCall.id = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
           }
@@ -794,11 +786,10 @@ export class GeminiProvider extends BaseProvider {
     for (const [callId, callInfo] of Array.from(functionCalls.entries())) {
       if (!functionResponses.has(callId)) {
         // Create a placeholder response for missing function response
-        if (process.env.DEBUG) {
-          console.warn(
+        this.logger.debug(
+          () =>
             `Function call ${callInfo.name} (id: ${callId}) has no matching response, adding placeholder`,
-          );
-        }
+        );
 
         // Add each function response as a separate content object (same as regular tool responses)
         contents.push({
@@ -874,15 +865,22 @@ export class GeminiProvider extends BaseProvider {
     }
 
     if (totalFunctionCalls !== totalFunctionResponses) {
-      if (process.env.DEBUG) {
-        console.warn(
+      this.logger.debug(
+        () =>
           `Function parts count mismatch: ${totalFunctionCalls} calls vs ${totalFunctionResponses} responses`,
-        );
-        console.warn('Function calls:', callsDetail);
-        console.warn('Function responses:', responsesDetail);
-        console.warn('Unmatched call IDs:', Array.from(unmatchedCalls));
-        console.warn('Unmatched response IDs:', Array.from(unmatchedResponses));
-      }
+      );
+      this.logger.debug(() => `Function calls: ${JSON.stringify(callsDetail)}`);
+      this.logger.debug(
+        () => `Function responses: ${JSON.stringify(responsesDetail)}`,
+      );
+      this.logger.debug(
+        () =>
+          `Unmatched call IDs: ${JSON.stringify(Array.from(unmatchedCalls))}`,
+      );
+      this.logger.debug(
+        () =>
+          `Unmatched response IDs: ${JSON.stringify(Array.from(unmatchedResponses))}`,
+      );
 
       // This is now just a warning, not an error, since we've added placeholders
       // The Gemini API should handle this gracefully
@@ -908,12 +906,10 @@ export class GeminiProvider extends BaseProvider {
       },
     ];
 
-    if (process.env.DEBUG) {
-      console.log(
-        'DEBUG [GeminiProvider]: Converted tools to Gemini format:',
-        JSON.stringify(result, null, 2),
-      );
-    }
+    this.logger.debug(
+      () =>
+        `Converted tools to Gemini format: ${JSON.stringify(result, null, 2)}`,
+    );
 
     return result;
   }
@@ -968,9 +964,9 @@ export class GeminiProvider extends BaseProvider {
         return providerSettings.model as string;
       }
     } catch (error) {
-      if (process.env.DEBUG) {
-        console.warn('Failed to get model from SettingsService:', error);
-      }
+      this.logger.debug(
+        () => `Failed to get model from SettingsService: ${error}`,
+      );
     }
     // Fall back to cached value or default
     return this.currentModel || this.getDefaultModel();
@@ -992,9 +988,9 @@ export class GeminiProvider extends BaseProvider {
       const settingsService = getSettingsService();
       settingsService.setProviderSetting(this.name, 'model', modelId);
     } catch (error) {
-      if (process.env.DEBUG) {
-        console.warn('Failed to persist model to SettingsService:', error);
-      }
+      this.logger.debug(
+        () => `Failed to persist model to SettingsService: ${error}`,
+      );
     }
 
     // Keep local cache for performance

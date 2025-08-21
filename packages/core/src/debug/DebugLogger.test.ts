@@ -672,4 +672,107 @@ describe('DebugLogger', () => {
       }),
     );
   });
+
+  describe('enhanced pattern matching', () => {
+    /**
+     * @requirement REQ-002.5
+     * @scenario Wildcard in middle of pattern
+     * @given namespace 'llxprt:openai:provider'
+     * @when pattern 'llxprt:*:provider' configured
+     * @then Logger is enabled
+     */
+    it('should match wildcards in middle of pattern', () => {
+      const logger = new DebugLogger('llxprt:openai:provider');
+      logger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: ['llxprt:*:provider'],
+      });
+
+      expect(logger.checkEnabled()).toBe(true);
+    });
+
+    /**
+     * @requirement REQ-002.6
+     * @scenario Multiple wildcards in pattern
+     * @given namespace 'llxprt:openai:streaming:chunk'
+     * @when pattern 'llxprt:*:*:chunk' configured
+     * @then Logger is enabled
+     */
+    it('should match multiple wildcards in pattern', () => {
+      const logger = new DebugLogger('llxprt:openai:streaming:chunk');
+      logger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: ['llxprt:*:*:chunk'],
+      });
+
+      expect(logger.checkEnabled()).toBe(true);
+    });
+
+    /**
+     * @requirement REQ-002.7
+     * @scenario Pattern with wildcard at start
+     * @given namespace 'test:llxprt:debug'
+     * @when pattern '*:llxprt:debug' configured
+     * @then Logger is enabled
+     */
+    it('should match wildcard at start of pattern', () => {
+      const logger = new DebugLogger('test:llxprt:debug');
+      logger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: ['*:llxprt:debug'],
+      });
+
+      expect(logger.checkEnabled()).toBe(true);
+    });
+
+    /**
+     * @requirement REQ-002.8
+     * @scenario Pattern should not match partial without wildcard
+     * @given namespace 'llxprt:openai:provider'
+     * @when pattern 'llxprt:openai' configured (no wildcard)
+     * @then Logger is NOT enabled
+     */
+    it('should not match partial namespace without wildcard', () => {
+      const logger = new DebugLogger('llxprt:openai:provider');
+      logger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: ['llxprt:openai'],
+      });
+
+      expect(logger.checkEnabled()).toBe(false);
+    });
+
+    /**
+     * @requirement REQ-002.9
+     * @scenario Mixed patterns with wildcards
+     * @given multiple loggers with different namespaces
+     * @when pattern 'llxprt:*:provider' configured
+     * @then Only matching loggers are enabled
+     */
+    it('should correctly filter with mixed wildcard patterns', () => {
+      const pattern = 'llxprt:*:provider';
+
+      const openaiLogger = new DebugLogger('llxprt:openai:provider');
+      openaiLogger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: [pattern],
+      });
+
+      const anthropicLogger = new DebugLogger('llxprt:anthropic:provider');
+      anthropicLogger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: [pattern],
+      });
+
+      const streamingLogger = new DebugLogger('llxprt:openai:streaming');
+      streamingLogger.configManager.setEphemeralConfig({
+        enabled: true,
+        namespaces: [pattern],
+      });
+
+      expect(openaiLogger.checkEnabled()).toBe(true);
+      expect(anthropicLogger.checkEnabled()).toBe(true);
+      expect(streamingLogger.checkEnabled()).toBe(false);
+    });
+  });
 });

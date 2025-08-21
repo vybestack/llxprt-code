@@ -25,7 +25,16 @@ function handleDebugEnable(
   args: string,
 ): MessageActionReturn {
   const configManager = ConfigurationManager.getInstance();
-  const namespace = args.trim() || '*';
+  const namespace = args.trim() || 'llxprt:*';
+
+  // Validate namespace pattern
+  if (!isValidNamespace(namespace)) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Invalid namespace pattern: ${namespace}\nNamespaces should use colons as separators (e.g., llxprt:*:provider)`,
+    };
+  }
 
   try {
     const currentConfig = configManager.getEffectiveConfig();
@@ -35,6 +44,12 @@ function handleDebugEnable(
 
     if (!namespaces.includes(namespace)) {
       namespaces.push(namespace);
+    } else {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Debug logging already enabled for namespace: ${namespace}`,
+      };
     }
 
     configManager.setEphemeralConfig({
@@ -45,7 +60,7 @@ function handleDebugEnable(
     return {
       type: 'message',
       messageType: 'info',
-      content: `Debug logging enabled for namespace: ${namespace}`,
+      content: `✓ Debug logging enabled for namespace: ${namespace}`,
     };
   } catch (error) {
     return {
@@ -67,6 +82,16 @@ function handleDebugDisable(
   const namespace = args.trim();
 
   try {
+    const currentConfig = configManager.getEffectiveConfig();
+
+    if (!currentConfig.enabled) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: 'Debug logging is already disabled',
+      };
+    }
+
     if (!namespace) {
       // Disable all debug logging
       configManager.setEphemeralConfig({
@@ -75,14 +100,33 @@ function handleDebugDisable(
       return {
         type: 'message',
         messageType: 'info',
-        content: 'Debug logging disabled for all namespaces',
+        content: '✓ Debug logging disabled for all namespaces',
       };
     }
 
-    const currentConfig = configManager.getEffectiveConfig();
+    // Validate namespace pattern
+    if (!isValidNamespace(namespace)) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Invalid namespace pattern: ${namespace}`,
+      };
+    }
+
     const namespaces = Array.isArray(currentConfig.namespaces)
       ? currentConfig.namespaces.filter((ns) => ns !== namespace)
       : [];
+
+    if (
+      !Array.isArray(currentConfig.namespaces) ||
+      !currentConfig.namespaces.includes(namespace)
+    ) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Namespace ${namespace} was not enabled`,
+      };
+    }
 
     configManager.setEphemeralConfig({
       namespaces,
@@ -92,7 +136,7 @@ function handleDebugDisable(
     return {
       type: 'message',
       messageType: 'info',
-      content: `Debug logging disabled for namespace: ${namespace}`,
+      content: `✓ Debug logging disabled for namespace: ${namespace}`,
     };
   } catch (error) {
     return {
@@ -113,14 +157,14 @@ function handleDebugLevel(
   const configManager = ConfigurationManager.getInstance();
   const level = args.trim().toLowerCase();
 
-  const validLevels = ['debug', 'info', 'warn', 'error'];
+  const validLevels = ['verbose', 'debug', 'info', 'error'];
 
   if (!level) {
     const currentLevel = configManager.getEffectiveConfig().level;
     return {
       type: 'message',
       messageType: 'info',
-      content: `Current debug level: ${currentLevel}\nValid levels: ${validLevels.join(', ')}`,
+      content: `Current debug level: **${currentLevel}**\n\nValid levels:\n  • verbose - All debug output including detailed traces\n  • debug - Debug messages and above\n  • info - Informational messages and above\n  • error - Only error messages`,
     };
   }
 
@@ -128,11 +172,20 @@ function handleDebugLevel(
     return {
       type: 'message',
       messageType: 'error',
-      content: `Invalid debug level: ${level}\nValid levels: ${validLevels.join(', ')}`,
+      content: `Invalid debug level: ${level}\n\nValid levels: ${validLevels.join(', ')}\n\nExample: /debug level verbose`,
     };
   }
 
   try {
+    const currentLevel = configManager.getEffectiveConfig().level;
+    if (currentLevel === level) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Debug level is already set to: ${level}`,
+      };
+    }
+
     configManager.setEphemeralConfig({
       level,
     });
@@ -140,7 +193,7 @@ function handleDebugLevel(
     return {
       type: 'message',
       messageType: 'info',
-      content: `Debug level set to: ${level}`,
+      content: `✓ Debug level changed from ${currentLevel} to ${level}`,
     };
   } catch (error) {
     return {
@@ -219,12 +272,26 @@ function handleDebugPersist(
   const configManager = ConfigurationManager.getInstance();
 
   try {
+    const config = configManager.getEffectiveConfig();
+    const hasEphemeralChanges =
+      (configManager as unknown as { ephemeralConfig: unknown })
+        .ephemeralConfig !== null;
+
+    if (!hasEphemeralChanges) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content:
+          'No ephemeral settings to persist. Use /debug enable, /debug level, or /debug output first.',
+      };
+    }
+
     configManager.persistEphemeralConfig();
 
     return {
       type: 'message',
       messageType: 'info',
-      content: 'Ephemeral debug settings saved to user configuration',
+      content: `✓ Debug settings saved to user configuration:\n  • Enabled: ${config.enabled}\n  • Level: ${config.level}\n  • Namespaces: ${Array.isArray(config.namespaces) ? config.namespaces.join(', ') : 'none'}`,
     };
   } catch (error) {
     return {
@@ -285,15 +352,63 @@ export function handleDebugCommand(args: string[]): MessageActionReturn {
       type: 'message',
       messageType: 'info',
       content:
-        'Debug commands available:\n  /debug enable [namespace] - Enable debug logging\n  /debug disable [namespace] - Disable debug logging\n  /debug level [level] - Set debug log level\n  /debug output [target] - Set output target\n  /debug persist - Save settings to user config\n  /debug status - Show current configuration',
+        '## Debug Commands\n\n' +
+        '• `/debug enable [namespace]` - Enable debug logging (default: llxprt:*)\n' +
+        '• `/debug disable [namespace]` - Disable debug logging\n' +
+        '• `/debug level [level]` - Set log level (verbose, debug, info, error)\n' +
+        '• `/debug output [target]` - Set output (file, stderr, both)\n' +
+        '• `/debug persist` - Save current settings permanently\n' +
+        '• `/debug status` - Show current configuration\n\n' +
+        '### Examples\n' +
+        '```\n' +
+        '/debug enable llxprt:openai:*\n' +
+        '/debug level verbose\n' +
+        '/debug persist\n' +
+        '```',
+    };
+  }
+
+  const subcommand = args[0]?.toLowerCase();
+  const validSubcommands = [
+    'enable',
+    'disable',
+    'level',
+    'output',
+    'persist',
+    'status',
+  ];
+
+  if (!validSubcommands.includes(subcommand)) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Unknown debug subcommand: ${subcommand}\n\nValid subcommands: ${validSubcommands.join(', ')}\n\nUse /debug for help.`,
     };
   }
 
   return {
     type: 'message',
     messageType: 'error',
-    content: 'Invalid debug command. Use /debug without arguments for help.',
+    content: 'This subcommand should be handled by the subcommand system.',
   };
+}
+
+/**
+ * Validate namespace pattern
+ */
+function isValidNamespace(namespace: string): boolean {
+  // Allow alphanumeric, colons, hyphens, underscores, and wildcards
+  const validPattern = /^[a-zA-Z0-9:_\-*]+$/;
+  if (!validPattern.test(namespace)) {
+    return false;
+  }
+
+  // Check for common mistakes
+  if (namespace.includes('**') || namespace.includes('::')) {
+    return false;
+  }
+
+  return true;
 }
 
 /**
