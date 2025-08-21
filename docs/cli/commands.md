@@ -1,6 +1,6 @@
 # CLI Commands
 
-LLxprt Code supports several built-in commands to help you manage your session, customize the interface, and control its behavior. These commands are prefixed with a forward slash (`/`), an at symbol (`@`), or an exclamation mark (`!`).
+Gemini CLI supports several built-in commands to help you manage your session, customize the interface, and control its behavior. These commands are prefixed with a forward slash (`/`), an at symbol (`@`), or an exclamation mark (`!`).
 
 ## Slash commands (`/`)
 
@@ -9,7 +9,7 @@ Slash commands provide meta-level control over the CLI itself.
 ### Built-in Commands
 
 - **`/bug`**
-  - **Description:** File an issue about LLxprt Code. By default, the issue is filed within the GitHub repository for LLxprt Code. The string you enter after `/bug` will become the headline for the bug being filed. The default `/bug` behavior can be modified using the `bugCommand` setting in your `.llxprt/settings.json` files.
+  - **Description:** File an issue about Gemini CLI. By default, the issue is filed within the GitHub repository for Gemini CLI. The string you enter after `/bug` will become the headline for the bug being filed. The default `/bug` behavior can be modified using the `bugCommand` setting in your `.gemini/settings.json` files.
 
 - **`/chat`**
   - **Description:** Save and resume conversation history for branching conversation state interactively, or resuming a previous state from a later session.
@@ -17,10 +17,9 @@ Slash commands provide meta-level control over the CLI itself.
     - **`save`**
       - **Description:** Saves the current conversation history. You must add a `<tag>` for identifying the conversation state.
       - **Usage:** `/chat save <tag>`
-      - **Details on Checkpoint Location:**
-        - Linux: `/home/username/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
-        - macOS: `/Users/username/.llxprt/tmp/{project-hash}/checkpoint-{tag}.json`
-        - Windows: `C:\Users\username\.llxprt\tmp\{project-hash}\checkpoint-{tag}.json`
+      - **Details on Checkpoint Location:** The default locations for saved chat checkpoints are:
+        - Linux/macOS: `~/.gemini/tmp/<project_hash>/`
+        - Windows: `C:\Users\<YourUsername>\.gemini\tmp\<project_hash>\`
         - When you run `/chat list`, the CLI only scans these specific directories to find available checkpoints.
         - **Note:** These checkpoints are for manually saving and resuming conversation states. For automatic checkpoints created before file modifications, see the [Checkpointing documentation](../checkpointing.md).
     - **`resume`**
@@ -40,7 +39,7 @@ Slash commands provide meta-level control over the CLI itself.
   - **Description:** Replace the entire chat context with a summary. This saves on tokens used for future tasks while retaining a high level summary of what has happened.
 
 - **`/copy`**
-  - **Description:** Copies the last output produced by LLxprt Code to your clipboard, for easy sharing or reuse.
+  - **Description:** Copies the last output produced by Gemini CLI to your clipboard, for easy sharing or reuse.
 
 - **`/directory`** (or **`/dir`**)
   - **Description:** Manage workspace directories for multi-directory support.
@@ -57,10 +56,10 @@ Slash commands provide meta-level control over the CLI itself.
   - **Description:** Open a dialog for selecting supported editors.
 
 - **`/extensions`**
-  - **Description:** Lists all active extensions in the current LLxprt Code session. See [LLxprt Code Extensions](../extension.md).
+  - **Description:** Lists all active extensions in the current Gemini CLI session. See [Gemini CLI Extensions](../extension.md).
 
 - **`/help`** (or **`/?`**)
-  - **Description:** Display help information about the LLxprt Code, including available commands and their usage.
+  - **Description:** Display help information about Gemini CLI, including available commands and their usage.
 
 - **`/mcp`**
   - **Description:** List configured Model Context Protocol (MCP) servers, their connection status, server details, and available tools.
@@ -74,15 +73,15 @@ Slash commands provide meta-level control over the CLI itself.
   - **Keyboard Shortcut:** Press **Ctrl+T** at any time to toggle between showing and hiding tool descriptions.
 
 - **`/memory`**
-  - **Description:** Manage the AI's instructional context (hierarchical memory loaded from `LLXPRT.md` files).
+  - **Description:** Manage the AI's instructional context (hierarchical memory loaded from `GEMINI.md` files).
   - **Sub-commands:**
     - **`add`**:
       - **Description:** Adds the following text to the AI's memory. Usage: `/memory add <text to remember>`
     - **`show`**:
-      - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `LLXPRT.md` files. This lets you inspect the instructional context being provided to the model.
+      - **Description:** Display the full, concatenated content of the current hierarchical memory that has been loaded from all `GEMINI.md` files. This lets you inspect the instructional context being provided to the Gemini model.
     - **`refresh`**:
-      - **Description:** Reload the hierarchical instructional memory from all `LLXPRT.md` files found in the configured locations (global, project/ancestors, and sub-directories). This command updates the model with the latest `LLXPRT.md` content.
-    - **Note:** For more details on how `LLXPRT.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-geminimd-files-hierarchical-instructional-context).
+      - **Description:** Reload the hierarchical instructional memory from all `GEMINI.md` files found in the configured locations (global, project/ancestors, and sub-directories). This command updates the model with the latest `GEMINI.md` content.
+    - **Note:** For more details on how `GEMINI.md` files contribute to hierarchical memory, see the [CLI Configuration documentation](./configuration.md#4-geminimd-files-hierarchical-instructional-context).
 
 - **`/restore`**
   - **Description:** Restores the project files to the state they were in just before a tool was executed. This is particularly useful for undoing file edits made by a tool. If run without a tool call ID, it will list available checkpoints to restore from.
@@ -90,138 +89,24 @@ Slash commands provide meta-level control over the CLI itself.
   - **Note:** Only available if the CLI is invoked with the `--checkpointing` option or configured via [settings](./configuration.md). See [Checkpointing documentation](../checkpointing.md) for more details.
 
 - **`/settings`**
-  - **Description:** Open the settings editor to view and modify LLxprt Code settings.
-  - **Details:** This command provides a user-friendly interface for changing settings that control the behavior and appearance of LLxprt Code. It is equivalent to manually editing the `.llxprt/settings.json` file, but with validation and guidance to prevent errors.
+  - **Description:** Open the settings editor to view and modify Gemini CLI settings.
+  - **Details:** This command provides a user-friendly interface for changing settings that control the behavior and appearance of Gemini CLI. It is equivalent to manually editing the `.gemini/settings.json` file, but with validation and guidance to prevent errors.
   - **Usage:** Simply run `/settings` and the editor will open. You can then browse or search for specific settings, view their current values, and modify them as desired. Changes to some settings are applied immediately, while others require a restart.
 
 - **`/stats`**
-  - **Description:** Display detailed statistics for the current LLxprt Code session, including token usage, cached token savings (when available), and session duration. Note: Cached token information is only displayed when cached tokens are being used, which occurs with API key authentication but not with OAuth authentication at this time.
+  - **Description:** Display detailed statistics for the current Gemini CLI session, including token usage, cached token savings (when available), and session duration. Note: Cached token information is only displayed when cached tokens are being used, which occurs with API key authentication but not with OAuth authentication at this time.
 
 - [**`/theme`**](./themes.md)
-  - **Description:** Open a dialog that lets you change the visual theme of LLxprt Code.
+  - **Description:** Open a dialog that lets you change the visual theme of Gemini CLI.
 
 - **`/auth`**
-  - **Description:** Manage authentication for different LLM providers.
-  - **Usage:** `/auth` (opens provider selection dialog) or `/auth <provider> <command>`
-  - **Sub-commands:**
-    - **`enable`**:
-      - **Description:** Enable OAuth authentication for a provider (lazy - browser opens on first request).
-      - **Usage:** `/auth <provider> enable`
-      - **Providers:** gemini, anthropic, qwen
-      - **Example:** `/auth gemini enable` - Enables OAuth for Google (browser opens when needed)
-    - **`disable`**:
-      - **Description:** Disable OAuth authentication for a provider.
-      - **Usage:** `/auth <provider> disable`
-      - **Example:** `/auth anthropic disable` - Disables OAuth for Anthropic
-    - **`logout`**:
-      - **Description:** Clear stored OAuth credentials for a provider.
-      - **Usage:** `/auth <provider> logout`
-      - **Example:** `/auth qwen logout` - Clears Qwen OAuth credentials
-  - **Note:** OAuth authentication is lazy - the browser will only open when you make your first request to the provider, not when you enable it.
-
-### Provider Management Commands (LLxprt-specific)
-
-These commands are unique to LLxprt Code and enable multi-provider support:
-
-- **`/provider`**
-  - **Description:** List available providers or switch to a different LLM provider.
-  - **Usage:** `/provider` (lists providers) or `/provider <provider_name>` (switches provider)
-  - **Available providers:** gemini, openai, anthropic, and others
-  - **Example:** `/provider openai` switches to OpenAI provider
-
-- **`/model`**
-  - **Description:** List available models for the current provider or switch to a different model.
-  - **Usage:** `/model` (lists models) or `/model <model_name>` (switches model)
-  - **Note:** Available models depend on your current provider
-  - **Example:** `/model o3-mini` switches to OpenAI's o3-mini model
-
-- **`/baseurl`**
-  - **Usage:** `/baseurl <url>`
-  - **Description:** Sets a custom base URL for the current provider's API endpoint, overriding the default URL. Note that when using a custom base URL with the OpenAI provider, some advanced features like the Responses API will be automatically disabled as they are specific to the official OpenAI API.
-  - **Example custom endpoints:**
-    - `/baseurl http://localhost:1234/v1/` for local LM Studio
-    - `/baseurl https://openrouter.ai/api/v1/` for OpenRouter
-    - `/baseurl https://api.fireworks.ai/inference/v1/` for Fireworks
-    - `/baseurl https://api.x.ai/v1/` for xAI (Grok models)
-
-- **`/key`**
-  - **Description:** Set the API key for the current provider session.
-  - **Usage:** `/key <your-api-key>`
-  - **Note:** The key is only stored for the current session
-  - **Example:** `/key sk-your-openai-key-here`
-
-- **`/keyfile`**
-  - **Description:** Load an API key from a file for the current provider.
-  - **Usage:** `/keyfile <path_to_key_file>`
-  - **Example:** `/keyfile ~/.keys/openai.txt`
-  - **Note:** The file should contain only the API key as plain text
-
-- **`/set`**
-  - **Description:** Set model parameters or ephemeral settings for the current session.
-  - **Usage:** `/set <key> <value>` or `/set modelparam <key> <value>`
-  - **Sub-commands:**
-    - **`modelparam`**:
-      - **Description:** Set model parameters like temperature, max_tokens, etc.
-      - **Usage:** `/set modelparam <key> <value>`
-      - **Example:** `/set modelparam temperature 0.7`
-      - **Common parameters:** temperature, max_tokens, maxOutputTokens, top_p, top_k, presence_penalty, frequency_penalty, stop_sequences, seed, enable_thinking
-    - **`unset`**:
-      - **Description:** Remove an ephemeral setting or model parameter.
-      - **Usage:** `/set unset <key> [subkey]`
-      - **Examples:** `/set unset context-limit` or `/set unset modelparam temperature`
-  - **Ephemeral settings (session-only, persist with `/profile save`):**
-    - `context-limit`: Maximum number of tokens for the context window (e.g., 100000)
-    - `compression-threshold`: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)
-    - `base-url`: Base URL for API requests
-    - `tool-format`: Tool format override for the provider
-    - `api-version`: API version to use
-    - `custom-headers`: Custom HTTP headers as JSON object
-    - `tool-output-max-items`: Maximum number of items/files/matches returned by tools (default: 50)
-    - `tool-output-max-tokens`: Maximum tokens in tool output (default: 50000)
-    - `tool-output-truncate-mode`: How to handle exceeding limits: warn, truncate, or sample (default: warn)
-    - `tool-output-item-size-limit`: Maximum size per item/file in bytes (default: 524288 = 512KB)
-    - `max-prompt-tokens`: Maximum tokens allowed in any prompt sent to LLM (default: 200000)
-  - **Examples:**
-    - `/set context-limit 100000` - Set context window to 100k tokens
-    - `/set compression-threshold 0.7` - Trigger compression at 70% capacity
-    - `/set tool-output-max-items 100` - Increase tool output items limit
-    - `/set modelparam temperature 0.5` - Set model temperature
-    - `/set unset context-limit` - Remove context limit setting
-
-- **`/profile`**
-  - **Description:** Manage configuration profiles to save and restore session settings.
-  - **Sub-commands:**
-    - **`save`**:
-      - **Description:** Save current configuration to a profile.
-      - **Usage:** `/profile save "<profile-name>"`
-      - **Example:** `/profile save "development"` - Saves current provider, model, model parameters, and ephemeral settings
-    - **`load`**:
-      - **Description:** Load configuration from a saved profile.
-      - **Usage:** `/profile load "<profile-name>"` or `/profile load` (opens interactive dialog)
-      - **Example:** `/profile load "development"` - Restores all settings from the profile
-    - **`delete`**:
-      - **Description:** Delete a saved profile.
-      - **Usage:** `/profile delete "<profile-name>"`
-      - **Example:** `/profile delete "old-config"`
-    - **`set-default`**:
-      - **Description:** Set a profile to load automatically on startup.
-      - **Usage:** `/profile set-default "<profile-name>"` or `/profile set-default none`
-      - **Example:** `/profile set-default "development"` - Auto-loads this profile on startup
-    - **`list`**:
-      - **Description:** List all saved profiles.
-      - **Usage:** `/profile list`
-  - **Note:** Profiles save the complete session state including:
-    - Provider and model selection
-    - Model parameters (temperature, max_tokens, etc.)
-    - Ephemeral settings (context limits, tool output settings, etc.)
-    - API keys or keyfile paths (if set)
-    - Base URL overrides
+  - **Description:** Open a dialog that lets you change the authentication method.
 
 - **`/about`**
   - **Description:** Show version info. Please share this information when filing issues.
 
 - [**`/tools`**](../tools/index.md)
-  - **Description:** Display a list of tools that are currently available within LLxprt Code.
+  - **Description:** Display a list of tools that are currently available within Gemini CLI.
   - **Sub-commands:**
     - **`desc`** or **`descriptions`**:
       - **Description:** Show detailed descriptions of each tool, including each tool's name with its full description as provided to the model.
@@ -232,7 +117,7 @@ These commands are unique to LLxprt Code and enable multi-provider support:
   - **Description:** Display the Privacy Notice and allow users to select whether they consent to the collection of their data for service improvement purposes.
 
 - **`/quit`** (or **`/exit`**)
-  - **Description:** Exit LLxprt Code.
+  - **Description:** Exit Gemini CLI.
 
 - **`/vim`**
   - **Description:** Toggle vim mode on or off. When vim mode is enabled, the input area supports vim-style navigation and editing commands in both NORMAL and INSERT modes.
@@ -242,24 +127,24 @@ These commands are unique to LLxprt Code and enable multi-provider support:
     - **Editing commands:** Delete with `x`, change with `c`, insert with `i`, `a`, `o`, `O`; complex operations like `dd`, `cc`, `dw`, `cw`
     - **Count support:** Prefix commands with numbers (e.g., `3h`, `5w`, `10G`)
     - **Repeat last command:** Use `.` to repeat the last editing operation
-    - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
+    - **Persistent setting:** Vim mode preference is saved to `~/.gemini/settings.json` and restored between sessions
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 - **`/init`**
-  - **Description:** To help users easily create a `LLXPRT.md` file, this command analyzes the current directory and generates a tailored context file, making it simpler for them to provide project-specific instructions to the LLxprt Code agent.
+  - **Description:** To help users easily create a `GEMINI.md` file, this command analyzes the current directory and generates a tailored context file, making it simpler for them to provide project-specific instructions to the Gemini agent.
 
 ### Custom Commands
 
 For a quick start, see the [example](#example-a-pure-function-refactoring-command) below.
 
-Custom commands allow you to save and reuse your favorite or most frequently used prompts as personal shortcuts within LLxprt Code. You can create commands that are specific to a single project or commands that are available globally across all your projects, streamlining your workflow and ensuring consistency.
+Custom commands allow you to save and reuse your favorite or most frequently used prompts as personal shortcuts within Gemini CLI. You can create commands that are specific to a single project or commands that are available globally across all your projects, streamlining your workflow and ensuring consistency.
 
 #### File Locations & Precedence
 
-LLxprt Code discovers commands from two locations, loaded in a specific order:
+Gemini CLI discovers commands from two locations, loaded in a specific order:
 
-1.  **User Commands (Global):** Located in `~/.llxprt/commands/`. These commands are available in any project you are working on.
-2.  **Project Commands (Local):** Located in `<your-project-root>/.llxprt/commands/`. These commands are specific to the current project and can be checked into version control to be shared with your team.
+1.  **User Commands (Global):** Located in `~/.gemini/commands/`. These commands are available in any project you are working on.
+2.  **Project Commands (Local):** Located in `<your-project-root>/.gemini/commands/`. These commands are specific to the current project and can be checked into version control to be shared with your team.
 
 If a command in the project directory has the same name as a command in the user directory, the **project command will always be used.** This allows projects to override global commands with project-specific versions.
 
@@ -267,8 +152,8 @@ If a command in the project directory has the same name as a command in the user
 
 The name of a command is determined by its file path relative to its `commands` directory. Subdirectories are used to create namespaced commands, with the path separator (`/` or `\`) being converted to a colon (`:`).
 
-- A file at `~/.llxprt/commands/test.toml` becomes the command `/test`.
-- A file at `<project>/.llxprt/commands/git/commit.toml` becomes the namespaced command `/git:commit`.
+- A file at `~/.gemini/commands/test.toml` becomes the command `/test`.
+- A file at `<project>/.gemini/commands/git/commit.toml` becomes the namespaced command `/git:commit`.
 
 #### TOML File Format (v1)
 
@@ -276,7 +161,7 @@ Your command definition files must be written in the TOML format and use the `.t
 
 ##### Required Fields
 
-- `prompt` (String): The prompt that will be sent to the model when the command is executed. This can be a single-line or multi-line string.
+- `prompt` (String): The prompt that will be sent to the Gemini model when the command is executed. This can be a single-line or multi-line string.
 
 ##### Optional Fields
 
@@ -299,8 +184,7 @@ When used in the main body of the prompt, the arguments are injected exactly as 
 **Example (`git/fix.toml`):**
 
 ```toml
-# In: ~/.llxprt/commands/git/fix.toml
-# Invoked via: /git:fix "Button is misaligned on mobile"
+# Invoked via: /git:fix "Button is misaligned"
 
 description = "Generates a fix for a given issue."
 prompt = "Please provide a code fix for the issue described here: {{args}}."
@@ -345,7 +229,7 @@ If you do **not** provide any arguments (e.g., `/mycommand`), the prompt is sent
 This example shows how to create a robust command by defining a role for the model, explaining where to find the user's input, and specifying the expected format and behavior.
 
 ```toml
-# In: <project>/.llxprt/commands/changelog.toml
+# In: <project>/.gemini/commands/changelog.toml
 # Invoked via: /changelog 1.2.0 added "Support for default argument parsing."
 
 description = "Adds a new entry to the project's CHANGELOG.md file."
@@ -377,7 +261,7 @@ When you run `/changelog 1.2.0 added "New feature"`, the final text sent to the 
 
 You can make your commands dynamic by executing shell commands directly within your `prompt` and injecting their output. This is ideal for gathering context from your local environment, like reading file content or checking the status of Git.
 
-When a custom command attempts to execute a shell command, LLxprt Code will now prompt you for confirmation before proceeding. This is a security measure to ensure that only intended commands can be run.
+When a custom command attempts to execute a shell command, Gemini CLI will now prompt you for confirmation before proceeding. This is a security measure to ensure that only intended commands can be run.
 
 **How It Works:**
 
@@ -392,7 +276,7 @@ When a custom command attempts to execute a shell command, LLxprt Code will now 
 This command gets the staged git diff and uses it to ask the model to write a commit message.
 
 ````toml
-# In: <project>/.llxprt/commands/git/commit.toml
+# In: <project>/.gemini/commands/git/commit.toml
 # Invoked via: /git:commit
 
 description = "Generates a Git commit message based on staged changes."
@@ -422,16 +306,16 @@ Let's create a global command that asks the model to refactor a piece of code.
 First, ensure the user commands directory exists, then create a `refactor` subdirectory for organization and the final TOML file.
 
 ```bash
-mkdir -p ~/.llxprt/commands/refactor
-touch ~/.llxprt/commands/refactor/pure.toml
+mkdir -p ~/.gemini/commands/refactor
+touch ~/.gemini/commands/refactor/pure.toml
 ```
 
 **2. Add the content to the file:**
 
-Open `~/.llxprt/commands/refactor/pure.toml` in your editor and add the following content. We are including the optional `description` for best practice.
+Open `~/.gemini/commands/refactor/pure.toml` in your editor and add the following content. We are including the optional `description` for best practice.
 
 ```toml
-# In: ~/.llxprt/commands/refactor/pure.toml
+# In: ~/.gemini/commands/refactor/pure.toml
 # This command will be invoked via: /refactor:pure
 
 description = "Asks the model to refactor the current context into a pure function."
@@ -455,11 +339,11 @@ That's it! You can now run your command in the CLI. First, you might add a file 
 > /refactor:pure
 ```
 
-LLxprt Code will then execute the multi-line prompt defined in your TOML file.
+Gemini CLI will then execute the multi-line prompt defined in your TOML file.
 
 ## At commands (`@`)
 
-At commands are used to include the content of files or directories as part of your prompt to the model. These commands include git-aware filtering.
+At commands are used to include the content of files or directories as part of your prompt to Gemini. These commands include git-aware filtering.
 
 - **`@<path_to_file_or_directory>`**
   - **Description:** Inject the content of the specified file or files into your current prompt. This is useful for asking questions about specific code, text, or collections of files.
@@ -471,28 +355,28 @@ At commands are used to include the content of files or directories as part of y
     - If a path to a single file is provided, the content of that file is read.
     - If a path to a directory is provided, the command attempts to read the content of files within that directory and any subdirectories.
     - Spaces in paths should be escaped with a backslash (e.g., `@My\ Documents/file.txt`).
-    - The command uses the `read_many_files` tool internally. The content is fetched and then inserted into your query before being sent to the model.
+    - The command uses the `read_many_files` tool internally. The content is fetched and then inserted into your query before being sent to the Gemini model.
     - **Git-aware filtering:** By default, git-ignored files (like `node_modules/`, `dist/`, `.env`, `.git/`) are excluded. This behavior can be changed via the `fileFiltering` settings.
     - **File types:** The command is intended for text-based files. While it might attempt to read any file, binary files or very large files might be skipped or truncated by the underlying `read_many_files` tool to ensure performance and relevance. The tool indicates if files were skipped.
   - **Output:** The CLI will show a tool call message indicating that `read_many_files` was used, along with a message detailing the status and the path(s) that were processed.
 
 - **`@` (Lone at symbol)**
-  - **Description:** If you type a lone `@` symbol without a path, the query is passed as-is to the model. This might be useful if you are specifically talking _about_ the `@` symbol in your prompt.
+  - **Description:** If you type a lone `@` symbol without a path, the query is passed as-is to the Gemini model. This might be useful if you are specifically talking _about_ the `@` symbol in your prompt.
 
 ### Error handling for `@` commands
 
-- If the path specified after `@` is not found or is invalid, an error message will be displayed, and the query might not be sent to the model, or it will be sent without the file content.
+- If the path specified after `@` is not found or is invalid, an error message will be displayed, and the query might not be sent to the Gemini model, or it will be sent without the file content.
 - If the `read_many_files` tool encounters an error (e.g., permission issues), this will also be reported.
 
 ## Shell mode & passthrough commands (`!`)
 
-The `!` prefix lets you interact with your system's shell directly from within LLxprt Code.
+The `!` prefix lets you interact with your system's shell directly from within Gemini CLI.
 
 - **`!<shell_command>`**
-  - **Description:** Execute the given `<shell_command>` in your system's default shell. Any output or errors from the command are displayed in the terminal.
+  - **Description:** Execute the given `<shell_command>` using `bash` on Linux/macOS or `cmd.exe` on Windows. Any output or errors from the command are displayed in the terminal.
   - **Examples:**
-    - `!ls -la` (executes `ls -la` and returns to LLxprt Code)
-    - `!git status` (executes `git status` and returns to LLxprt Code)
+    - `!ls -la` (executes `ls -la` and returns to Gemini CLI)
+    - `!git status` (executes `git status` and returns to Gemini CLI)
 
 - **`!` (Toggle shell mode)**
   - **Description:** Typing `!` on its own toggles shell mode.
@@ -500,6 +384,8 @@ The `!` prefix lets you interact with your system's shell directly from within L
       - When active, shell mode uses a different coloring and a "Shell Mode Indicator".
       - While in shell mode, text you type is interpreted directly as a shell command.
     - **Exiting shell mode:**
-      - When exited, the UI reverts to its standard appearance and normal LLxprt Code behavior resumes.
+      - When exited, the UI reverts to its standard appearance and normal Gemini CLI behavior resumes.
 
 - **Caution for all `!` usage:** Commands you execute in shell mode have the same permissions and impact as if you ran them directly in your terminal.
+
+- **Environment Variable:** When a command is executed via `!` or in shell mode, the `GEMINI_CLI=1` environment variable is set in the subprocess's environment. This allows scripts or tools to detect if they are being run from within the Gemini CLI.
