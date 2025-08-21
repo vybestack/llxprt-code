@@ -12,10 +12,11 @@ import {
   isTelemetrySdkInitialized,
   GeminiEventType,
   parseAndFormatApiError,
-} from '@vybestack/llxprt-code-core';
+} from '@google/gemini-cli-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
+import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 
 export async function runNonInteractive(
   config: Config,
@@ -40,11 +41,27 @@ export async function runNonInteractive(
     const geminiClient = config.getGeminiClient();
 
     const abortController = new AbortController();
-    // Add context about current working directory
-    const contextMessage = `The current working directory is: ${process.cwd()}`;
+
+    const { processedQuery, shouldProceed } = await handleAtCommand({
+      query: input,
+      config,
+      addItem: (_item, _timestamp) => 0,
+      onDebugMessage: () => {},
+      messageId: Date.now(),
+      signal: abortController.signal,
+    });
+
+    if (!shouldProceed || !processedQuery) {
+      // An error occurred during @include processing (e.g., file not found).
+      // The error message is already logged by handleAtCommand.
+      console.error('Exiting due to an error processing the @ command.');
+      process.exit(1);
+    }
+
     let currentMessages: Content[] = [
-      { role: 'user', parts: [{ text: `${contextMessage}\n\n${input}` }] },
+      { role: 'user', parts: processedQuery as Part[] },
     ];
+
     let turnCount = 0;
     while (true) {
       turnCount++;
@@ -109,41 +126,22 @@ export async function runNonInteractive(
             );
           }
 
-          // Emit resultDisplay to stdout exactly as produced when available (string only)
-          if (typeof toolResponse.resultDisplay === 'string') {
-            process.stdout.write(toolResponse.resultDisplay);
-          }
-
           if (toolResponse.responseParts) {
-            // Handle responseParts as PartListUnion (can be Part, Part[], or string)
-            const parts = toolResponse.responseParts;
-
-            if (Array.isArray(parts)) {
-              // Handle each part in the array
-              for (let i = 0; i < parts.length; i++) {
-                const part = parts[i];
-                if (typeof part === 'string') {
-                  toolResponseParts.push({ text: part });
-                } else {
-                  toolResponseParts.push(part as Part);
-                }
+            const parts = Array.isArray(toolResponse.responseParts)
+              ? toolResponse.responseParts
+              : [toolResponse.responseParts];
+            for (const part of parts) {
+              if (typeof part === 'string') {
+                toolResponseParts.push({ text: part });
+              } else if (part) {
+                toolResponseParts.push(part);
               }
-            } else if (typeof parts === 'string') {
-              toolResponseParts.push({ text: parts });
-            } else {
-              toolResponseParts.push(parts as Part);
             }
           }
         }
-
-        // Don't wrap in Content structure - send parts directly like interactive mode
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
       } else {
         process.stdout.write('\n'); // Ensure a final newline
-        // Ensure telemetry is flushed before exiting
-        if (isTelemetrySdkInitialized()) {
-          await shutdownTelemetry(config);
-        }
         return;
       }
     }
