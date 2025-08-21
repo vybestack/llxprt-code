@@ -38,13 +38,9 @@ export class SyntheticToolResponseHandler {
         ({
           role: 'tool' as const,
           tool_call_id: tool.toolCallId,
-          content: JSON.stringify({
-            status: 'cancelled',
-            message: 'Tool execution cancelled by user',
-            error_type: 'user_interruption',
-            tool_name: tool.toolName,
-            timestamp: tool.timestamp || new Date().toISOString(),
-          }),
+          // Use simpler content format for better compatibility with strict providers
+          // Fireworks and Cerebras may reject complex JSON structures
+          content: 'Tool execution cancelled by user',
           // Mark as synthetic for debugging/filtering
           _synthetic: true,
           _cancelled: true,

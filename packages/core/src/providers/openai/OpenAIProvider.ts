@@ -787,6 +787,17 @@ export class OpenAIProvider extends BaseProvider {
     const { SyntheticToolResponseHandler } = await import(
       './syntheticToolResponses.js'
     );
+
+    // Log the missing tool responses before patching
+    const missingToolIds =
+      SyntheticToolResponseHandler.identifyMissingToolResponses(messages);
+    if (missingToolIds.length > 0) {
+      this.logger.debug(
+        () =>
+          `[Synthetic] Creating synthetic responses for ${missingToolIds.length} cancelled tool calls: ${JSON.stringify(missingToolIds)}`,
+      );
+    }
+
     const patchedMessages =
       SyntheticToolResponseHandler.patchMessageHistory(messages);
 
@@ -795,12 +806,23 @@ export class OpenAIProvider extends BaseProvider {
     const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
 
     if (missingIds.length > 0) {
-      this.logger.debug(
+      this.logger.error(
         () =>
           `FATAL: Tool messages missing tool_call_id: ${JSON.stringify(missingIds)}`,
       );
       throw new Error(
         `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
+      );
+    }
+
+    // Log synthetic responses for debugging
+    const syntheticMessages = patchedMessages.filter(
+      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
+    );
+    if (syntheticMessages.length > 0) {
+      this.logger.debug(
+        () =>
+          `[Synthetic] Added ${syntheticMessages.length} synthetic tool responses`,
       );
     }
 

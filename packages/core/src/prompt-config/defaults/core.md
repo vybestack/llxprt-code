@@ -38,6 +38,7 @@ Technology preferences when unspecified:
 - **File Operations:** Always construct absolute paths by combining project root with relative paths.
 - **Shell Commands:** Explain destructive operations before executing. Use `&` for background processes.
 - **Task Management:** Use todo tools for complex tasks. Update status in real-time.
+- **Tool Call Formatting:** All tool calls must be formatted as JSON. Do not use Python syntax for tool calls, especially for arrays and objects. For example, use `{"files": ["file1.txt", "file2.txt"]}` instead of `list_files(files=["file1.txt", "file2.txt"])`.
 
 # Examples
 
