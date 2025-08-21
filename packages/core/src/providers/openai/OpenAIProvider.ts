@@ -1428,38 +1428,88 @@ export class OpenAIProvider extends BaseProvider {
                   ),
                 })}`,
             );
-            // For Qwen, check if arguments are already JSON strings and parse them back
-            // to prevent double-stringification
+            // For Qwen, check for nested double-stringification
+            // Qwen models stringify array/object values WITHIN the JSON arguments
             if (
               toolCall.function.arguments &&
-              typeof toolCall.function.arguments === 'string' &&
-              toolCall.function.arguments.startsWith('"') &&
-              toolCall.function.arguments.endsWith('"')
+              typeof toolCall.function.arguments === 'string'
             ) {
               try {
-                // Attempt to parse the arguments and stringify them once
+                // First, parse the arguments to get the JSON object
                 const parsedArgs = JSON.parse(toolCall.function.arguments);
-                this.logger.debug(
-                  () =>
-                    `[Qwen Fix] Successfully parsed double-stringified arguments for ${toolCall.function.name}: ${JSON.stringify(parsedArgs)}`,
-                );
-                return {
-                  ...toolCall,
-                  function: {
-                    ...toolCall.function,
-                    arguments: JSON.stringify(parsedArgs),
-                  },
-                };
-              } catch (e) {
-                // If parsing fails, leave arguments as-is
-                this.logger.debug(
-                  () =>
-                    `[Qwen Fix] Failed to parse arguments for ${toolCall.function.name}: ${e instanceof Error ? e.message : String(e)}`,
-                );
-                return toolCall;
+                let hasNestedStringification = false;
+
+                // Check each property to see if it's a stringified array/object
+                const fixedArgs: Record<string, unknown> = {};
+                for (const [key, value] of Object.entries(parsedArgs)) {
+                  if (typeof value === 'string') {
+                    // Check if this string looks like JSON (starts with [ or {)
+                    const trimmed = value.trim();
+                    if (
+                      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+                      (trimmed.startsWith('{') && trimmed.endsWith('}'))
+                    ) {
+                      try {
+                        // Try to parse it as JSON
+                        const nestedParsed = JSON.parse(value);
+                        fixedArgs[key] = nestedParsed;
+                        hasNestedStringification = true;
+                        this.logger.debug(
+                          () =>
+                            `[Qwen Fix] Fixed nested stringification in property '${key}' for ${toolCall.function.name}`,
+                        );
+                      } catch {
+                        // Not valid JSON, keep as string
+                        fixedArgs[key] = value;
+                      }
+                    } else {
+                      fixedArgs[key] = value;
+                    }
+                  } else {
+                    fixedArgs[key] = value;
+                  }
+                }
+
+                if (hasNestedStringification) {
+                  this.logger.debug(
+                    () =>
+                      `[Qwen Fix] Fixed nested double-stringification for ${toolCall.function.name}`,
+                  );
+                  return {
+                    ...toolCall,
+                    function: {
+                      ...toolCall.function,
+                      arguments: JSON.stringify(fixedArgs),
+                    },
+                  };
+                }
+              } catch (_e) {
+                // If parsing fails, check for old-style double-stringification
+                if (
+                  toolCall.function.arguments.startsWith('"') &&
+                  toolCall.function.arguments.endsWith('"')
+                ) {
+                  try {
+                    // Old fix: entire arguments were double-stringified
+                    const parsedArgs = JSON.parse(toolCall.function.arguments);
+                    this.logger.debug(
+                      () =>
+                        `[Qwen Fix] Fixed whole-argument double-stringification for ${toolCall.function.name}`,
+                    );
+                    return {
+                      ...toolCall,
+                      function: {
+                        ...toolCall.function,
+                        arguments: JSON.stringify(parsedArgs),
+                      },
+                    };
+                  } catch {
+                    // Leave as-is if we can't parse
+                  }
+                }
               }
             }
-            // For all other cases, return toolCall unchanged
+            // No fix needed
             this.logger.debug(
               () =>
                 `[Qwen Fix] No double-stringification detected for ${toolCall.function.name}, keeping original`,
