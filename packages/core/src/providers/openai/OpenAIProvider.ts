@@ -1465,11 +1465,13 @@ export class OpenAIProvider extends BaseProvider {
                 const fixedArgs: Record<string, unknown> = {};
                 for (const [key, value] of Object.entries(parsedArgs)) {
                   if (typeof value === 'string') {
-                    // Check if this string looks like JSON (starts with [ or {)
+                    // ONLY parse if the string contains escaped quotes, indicating double-stringification
+                    // This is more strict to avoid breaking o3 which might have strings that look like JSON
                     const trimmed = value.trim();
                     if (
-                      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
-                      (trimmed.startsWith('{') && trimmed.endsWith('}'))
+                      ((trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+                        (trimmed.startsWith('{') && trimmed.endsWith('}'))) &&
+                      (value.includes('\\"') || value.includes("\\'")) // Must have escaped quotes
                     ) {
                       try {
                         // Try to parse it as JSON

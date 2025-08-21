@@ -90,33 +90,51 @@ export class ConfigurationManager {
 
   // Line 66-79: Load user config from ~/.llxprt/settings.json
   private loadUserConfig(): void {
-    const configPath = path.join(os.homedir(), '.llxprt', 'settings.json');
-    if (fs.existsSync(configPath)) {
-      try {
-        const content = fs.readFileSync(configPath, 'utf8');
-        const parsed = JSON.parse(content);
-        if (parsed.debug) {
-          this.userConfig = parsed.debug;
-        }
-      } catch (error) {
-        console.warn('Failed to load user config:', error);
+    try {
+      const homeDir = os.homedir();
+      if (!homeDir) {
+        // In test environments, os.homedir() might not be available
+        return;
       }
+      const configPath = path.join(homeDir, '.llxprt', 'settings.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          const content = fs.readFileSync(configPath, 'utf8');
+          const parsed = JSON.parse(content);
+          if (parsed.debug) {
+            this.userConfig = parsed.debug;
+          }
+        } catch (error) {
+          console.warn('Failed to load user config:', error);
+        }
+      }
+    } catch (_error) {
+      // Silently skip if we can't determine home directory (e.g., in tests)
+      // This allows the debug system to work with default config
     }
   }
 
   // Line 81-94: Load project config from .llxprt/config.json
   private loadProjectConfig(): void {
-    const configPath = path.join(process.cwd(), '.llxprt', 'config.json');
-    if (fs.existsSync(configPath)) {
-      try {
-        const content = fs.readFileSync(configPath, 'utf8');
-        const parsed = JSON.parse(content);
-        if (parsed.debug) {
-          this.projectConfig = parsed.debug;
-        }
-      } catch (error) {
-        console.warn('Failed to load project config:', error);
+    try {
+      const cwd = process.cwd();
+      if (!cwd) {
+        return;
       }
+      const configPath = path.join(cwd, '.llxprt', 'config.json');
+      if (fs.existsSync(configPath)) {
+        try {
+          const content = fs.readFileSync(configPath, 'utf8');
+          const parsed = JSON.parse(content);
+          if (parsed.debug) {
+            this.projectConfig = parsed.debug;
+          }
+        } catch (error) {
+          console.warn('Failed to load project config:', error);
+        }
+      }
+    } catch (_error) {
+      // Silently skip if we can't determine working directory (e.g., in tests)
     }
   }
 
