@@ -5,6 +5,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { LLXPRT_DIR } from '../utils/paths.js';
 import { DebugSettings } from './types.js';
 
 export class ConfigurationManager {
@@ -35,7 +36,7 @@ export class ConfigurationManager {
       enabled: false,
       namespaces: [],
       level: 'info',
-      output: { target: 'file', directory: '~/.llxprt/debug' },
+      output: { target: 'file', directory: `~/${LLXPRT_DIR}/debug` },
       lazyEvaluation: true,
       redactPatterns: ['apiKey', 'token', 'password'],
     };
@@ -96,7 +97,7 @@ export class ConfigurationManager {
         // In test environments, os.homedir() might not be available
         return;
       }
-      const configPath = path.join(homeDir, '.llxprt', 'settings.json');
+      const configPath = path.join(homeDir, LLXPRT_DIR, 'settings.json');
       if (fs.existsSync(configPath)) {
         try {
           const content = fs.readFileSync(configPath, 'utf8');
@@ -121,7 +122,7 @@ export class ConfigurationManager {
       if (!cwd) {
         return;
       }
-      const configPath = path.join(cwd, '.llxprt', 'config.json');
+      const configPath = path.join(cwd, LLXPRT_DIR, 'config.json');
       if (fs.existsSync(configPath)) {
         try {
           const content = fs.readFileSync(configPath, 'utf8');
@@ -178,7 +179,7 @@ export class ConfigurationManager {
       return;
     }
 
-    const userConfigPath = path.join(os.homedir(), '.llxprt', 'settings.json');
+    const userConfigPath = path.join(os.homedir(), LLXPRT_DIR, 'settings.json');
     let existing: Record<string, unknown> = {};
 
     if (fs.existsSync(userConfigPath)) {
