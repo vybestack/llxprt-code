@@ -27,9 +27,9 @@ const { mockProcessExit } = vi.hoisted(() => ({
 vi.mock('node:process', () => {
   const mockProcess = {
     exit: mockProcessExit,
-    platform: 'test-platform',
-    cwd: vi.fn(() => '/test/workspace'),
-  };
+    platform: 'sunos',
+    cwd: vi.fn(() => '/fake/dir'),
+  } as unknown as NodeJS.Process;
   return {
     ...mockProcess,
     default: mockProcess,
