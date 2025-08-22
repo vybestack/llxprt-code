@@ -159,6 +159,7 @@ export {
   getApiKeyForUrl,
   getConfiguredAgents,
   getHttpAgentForUrl,
+  configureLocalAIClientOptions,
   LOCAL_AI_DEFAULT_KEY
 } from './utils/localAI.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';

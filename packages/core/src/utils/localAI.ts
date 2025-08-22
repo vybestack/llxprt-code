@@ -145,7 +145,7 @@ export function getConfiguredAgents() {
 export function createLocalAIFetch(): typeof fetch {
   console.log('[LocalAI] Creating custom fetch wrapper with socket configuration');
   
-  return async function localAIFetch(
+  const customFetch = async function localAIFetch(
     input: RequestInfo | URL,
     init?: RequestInit
   ): Promise<Response> {
@@ -154,7 +154,7 @@ export function createLocalAIFetch(): typeof fetch {
                 input instanceof URL ? input.toString() :
                 (input as Request).url;
     
-    console.log(`[LocalAI] Fetch called for URL: ${url}`);
+    console.log(`[LocalAI] Custom fetch called for URL: ${url}`);
     
     // Check if this is a local server request
     if (isLocalServerUrl(url)) {
@@ -239,6 +239,9 @@ export function createLocalAIFetch(): typeof fetch {
     // For non-local servers, use the default fetch
     return fetch(input, init);
   };
+  
+  console.log('[LocalAI] Custom fetch wrapper created and ready');
+  return customFetch;
 }
 
 /**
@@ -284,4 +287,36 @@ export function getHttpAgentForUrl(baseUrl?: string): any {
     return isHttps ? httpsAgent : httpAgent;
   }
   return undefined;
+}
+
+/**
+ * Configure OpenAI client options for local AI servers
+ * This applies all necessary settings for robust local AI server connections
+ */
+export function configureLocalAIClientOptions(
+  clientOptions: any,
+  baseUrl?: string,
+  context?: string
+): void {
+  if (!baseUrl || !isLocalServerUrl(baseUrl)) {
+    return;
+  }
+
+  // Use our custom fetch that handles socket configuration
+  const customFetch = getFetchForUrl(baseUrl);
+  clientOptions.fetch = customFetch;
+  
+  const logContext = context ? `[${context}]` : '[LocalAI]';
+  console.log(`${logContext} Configuring local AI server: ${baseUrl}`);
+  console.log(`${logContext} Custom fetch attached:`, typeof customFetch === 'function' ? 'YES' : 'NO');
+  
+  // Use undici dispatcher for connection pooling
+  clientOptions.fetchOptions = {
+    dispatcher: getLocalAIAgent()
+  };
+  
+  // Try httpAgent option (undocumented but might work)
+  clientOptions.httpAgent = getHttpAgentForUrl(baseUrl);
+  
+  console.log(`${logContext} Socket configuration applied for local AI server`);
 }
