@@ -32,7 +32,8 @@ import {
   isLocalServerUrl, 
   getFetchForUrl,
   getApiKeyForUrl,
-  getConfiguredAgents
+  getLocalAIAgent,
+  getHttpAgentForUrl
 } from '../../utils/localAI.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 import { ConversationCache } from './ConversationCache.js';
@@ -136,24 +137,23 @@ export class OpenAIProvider extends BaseProvider {
       // Use our custom fetch that ensures both dispatcher AND socket configuration
       clientOptions.fetch = getFetchForUrl(baseURL);
       
-      // Also add fetchOptions with agent for additional compatibility
-      const { httpAgent, httpsAgent } = getConfiguredAgents();
+      // CRITICAL: Use 'dispatcher' not 'agent' - this is what undici expects
+      // The dispatcher is an undici Agent that will handle socket configuration
       clientOptions.fetchOptions = {
-        agent: (parsedUrl: any) => {
-          // Handle various URL format inputs more robustly
-          const protocol = typeof parsedUrl === 'string' 
-            ? new URL(parsedUrl).protocol
-            : parsedUrl?.protocol || 'http:';
-          return protocol === 'https:' ? httpsAgent : httpAgent;
-        }
+        dispatcher: getLocalAIAgent() // This returns the undici Agent with socket config
       };
+      
+      // Also try httpAgent option (undocumented but might work for non-Azure clients)
+      // This uses Node's native HTTP agent with socket configuration
+      (clientOptions as any).httpAgent = getHttpAgentForUrl(baseURL);
       
       console.log(`[OpenAIProvider] Configuring local AI server: ${baseURL}`);
       console.log(`[OpenAIProvider] Using API key: ${clientOptions.apiKey}`);
       console.log(`[OpenAIProvider] Custom fetch with socket configuration attached`);
+      console.log(`[OpenAIProvider] httpAgent with socket configuration also attached (experimental)`);
       
       this.logger.debug(() => 
-        `Configured local AI server ${baseURL} with socket-configured fetch and agents`
+        `Configured local AI server ${baseURL} with socket-configured fetch, dispatcher, and httpAgent`
       );
     }
     
@@ -255,24 +255,23 @@ export class OpenAIProvider extends BaseProvider {
         // Use our custom fetch that ensures both dispatcher AND socket configuration
         clientOptions.fetch = getFetchForUrl(effectiveBaseURL);
         
-        // Also add fetchOptions with agent for additional compatibility
-        const { httpAgent, httpsAgent } = getConfiguredAgents();
+        // CRITICAL: Use 'dispatcher' not 'agent' - this is what undici expects
+        // The dispatcher is an undici Agent that will handle socket configuration
         clientOptions.fetchOptions = {
-          agent: (parsedUrl: any) => {
-            // Handle various URL format inputs more robustly
-            const protocol = typeof parsedUrl === 'string' 
-              ? new URL(parsedUrl).protocol
-              : parsedUrl?.protocol || 'http:';
-            return protocol === 'https:' ? httpsAgent : httpAgent;
-          }
+          dispatcher: getLocalAIAgent() // This returns the undici Agent with socket config
         };
+        
+        // Also try httpAgent option (undocumented but might work for non-Azure clients)
+        // This uses Node's native HTTP agent with socket configuration
+        (clientOptions as any).httpAgent = getHttpAgentForUrl(effectiveBaseURL);
         
         console.log(`[OpenAIProvider.updateClient] Recreating client for local AI server: ${effectiveBaseURL}`);
         console.log(`[OpenAIProvider.updateClient] Using API key: ${clientOptions.apiKey}`);
         console.log(`[OpenAIProvider.updateClient] Custom fetch with socket configuration attached`);
+        console.log(`[OpenAIProvider.updateClient] httpAgent with socket configuration also attached (experimental)`);
         
         this.logger.debug(() => 
-          `Configured local AI server ${effectiveBaseURL} with socket-configured fetch and agents`
+          `Configured local AI server ${effectiveBaseURL} with socket-configured fetch, dispatcher, and httpAgent`
         );
       }
       
@@ -1772,20 +1771,18 @@ export class OpenAIProvider extends BaseProvider {
       // Use our custom fetch that ensures both dispatcher AND socket configuration
       clientOptions.fetch = getFetchForUrl(this.baseURL);
       
-      // Also add fetchOptions with agent for additional compatibility
-      const { httpAgent, httpsAgent } = getConfiguredAgents();
+      // CRITICAL: Use 'dispatcher' not 'agent' - this is what undici expects
+      // The dispatcher is an undici Agent that will handle socket configuration
       clientOptions.fetchOptions = {
-        agent: (parsedUrl: any) => {
-          // Handle various URL format inputs more robustly
-          const protocol = typeof parsedUrl === 'string' 
-            ? new URL(parsedUrl).protocol
-            : parsedUrl?.protocol || 'http:';
-          return protocol === 'https:' ? httpsAgent : httpAgent;
-        }
+        dispatcher: getLocalAIAgent() // This returns the undici Agent with socket config
       };
       
+      // Also try httpAgent option (undocumented but might work for non-Azure clients)
+      // This uses Node's native HTTP agent with socket configuration  
+      (clientOptions as any).httpAgent = getHttpAgentForUrl(this.baseURL);
+      
       this.logger.debug(() => 
-        `Configured local AI server ${this.baseURL} with socket-configured fetch and agents`
+        `Configured local AI server ${this.baseURL} with socket-configured fetch, dispatcher, and httpAgent`
       );
     }
     
@@ -1840,20 +1837,18 @@ export class OpenAIProvider extends BaseProvider {
       // Use our custom fetch that ensures both dispatcher AND socket configuration
       clientOptions.fetch = getFetchForUrl(this.baseURL);
       
-      // Also add fetchOptions with agent for additional compatibility
-      const { httpAgent, httpsAgent } = getConfiguredAgents();
+      // CRITICAL: Use 'dispatcher' not 'agent' - this is what undici expects
+      // The dispatcher is an undici Agent that will handle socket configuration
       clientOptions.fetchOptions = {
-        agent: (parsedUrl: any) => {
-          // Handle various URL format inputs more robustly
-          const protocol = typeof parsedUrl === 'string' 
-            ? new URL(parsedUrl).protocol
-            : parsedUrl?.protocol || 'http:';
-          return protocol === 'https:' ? httpsAgent : httpAgent;
-        }
+        dispatcher: getLocalAIAgent() // This returns the undici Agent with socket config
       };
       
+      // Also try httpAgent option (undocumented but might work for non-Azure clients)
+      // This uses Node's native HTTP agent with socket configuration
+      (clientOptions as any).httpAgent = getHttpAgentForUrl(this.baseURL);
+      
       this.logger.debug(() => 
-        `Configured local AI server ${this.baseURL} with socket-configured fetch and agents`
+        `Configured local AI server ${this.baseURL} with socket-configured fetch, dispatcher, and httpAgent`
       );
     }
     

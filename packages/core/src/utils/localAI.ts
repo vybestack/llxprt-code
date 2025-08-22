@@ -214,3 +214,18 @@ export function getApiKeyForUrl(baseUrl?: string, providedKey?: string): string 
   // Otherwise return the provided key or placeholder
   return providedKey || 'placeholder';
 }
+
+/**
+ * Get the appropriate HTTP agent for OpenAI SDK
+ * Returns socket-configured agent for local servers
+ * This is for the httpAgent option (which might work even though undocumented)
+ */
+export function getHttpAgentForUrl(baseUrl?: string): any {
+  if (baseUrl && isLocalServerUrl(baseUrl)) {
+    const urlObj = new URL(baseUrl);
+    const isHttps = urlObj.protocol === 'https:';
+    const { httpAgent, httpsAgent } = getConfiguredAgents();
+    return isHttps ? httpsAgent : httpAgent;
+  }
+  return undefined;
+}
