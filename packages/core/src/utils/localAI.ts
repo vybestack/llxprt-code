@@ -5,9 +5,21 @@
 import { Agent } from 'undici';
 import * as http from 'http';
 import * as https from 'https';
+import { DebugLogger } from '../debug/index.js';
 
-// Singleton instance
+// Singleton instances
 let localAIAgentInstance: Agent | null = null;
+let debugLogger: DebugLogger | null = null;
+
+/**
+ * Get or create debug logger for local AI operations
+ */
+function getDebugLogger(): DebugLogger {
+  if (!debugLogger) {
+    debugLogger = new DebugLogger('llxprt:localai');
+  }
+  return debugLogger;
+}
 
 /**
  * Default API key for local AI servers
@@ -62,7 +74,7 @@ export function getLocalAIAgent(): Agent {
       const originalOnConnect = handler.onConnect;
       handler.onConnect = function(abort: any, context: any) {
         if (context?.socket) {
-          console.log('[LocalAI] Configuring socket in undici dispatcher');
+          getDebugLogger().debug(() => 'Configuring socket in undici dispatcher');
           context.socket.setNoDelay(true);
           context.socket.setKeepAlive(true, 1000);
         }
@@ -119,19 +131,19 @@ export function getConfiguredAgents() {
     
     // Configure sockets when created - this is the critical fix
     httpAgent.on('socket', (socket: any) => {
-      console.log('[LocalAI] Socket event fired for HTTP agent');
+      getDebugLogger().debug(() => 'Socket event fired for HTTP agent');
       socket.setNoDelay(true);
       socket.setKeepAlive(true, 1000);
       socket.setTimeout(60000); // 60s timeout like successful tests
-      console.log('[LocalAI] Configured HTTP socket with NoDelay, KeepAlive, and 60s timeout - success');
+      getDebugLogger().debug(() => 'Configured HTTP socket with NoDelay, KeepAlive, and 60s timeout');
     });
     
     httpsAgent.on('socket', (socket: any) => {
-      console.log('[LocalAI] Socket event fired for HTTPS agent');
+      getDebugLogger().debug(() => 'Socket event fired for HTTPS agent');
       socket.setNoDelay(true);
       socket.setKeepAlive(true, 1000);
       socket.setTimeout(60000); // 60s timeout like successful tests
-      console.log('[LocalAI] Configured HTTPS socket with NoDelay, KeepAlive, and 60s timeout - success');
+      getDebugLogger().debug(() => 'Configured HTTPS socket with NoDelay, KeepAlive, and 60s timeout');
     });
     
     configuredAgents = { httpAgent, httpsAgent };
@@ -163,7 +175,7 @@ async function makeLocalAIRequest(
     const isHttps = urlObj.protocol === 'https:';
     const httpModule = isHttps ? https : http;
     
-    console.log(`[LocalAI] Attempt ${attemptNumber}: Making ${isStreamingRequest ? 'streaming' : 'non-streaming'} request to ${url}`);
+    getDebugLogger().debug(() => `Attempt ${attemptNumber}: Making ${isStreamingRequest ? 'streaming' : 'non-streaming'} request to ${url}`);
     
     // Parse request body
     const requestBody = init?.body ? 
@@ -171,6 +183,7 @@ async function makeLocalAIRequest(
        init.body instanceof Buffer ? init.body.toString() :
        JSON.stringify(init.body)) : '';
     
+    // Headers compliant with OpenAI API streaming standards
     const options = {
       hostname: urlObj.hostname,
       port: urlObj.port || (isHttps ? 443 : 80),
@@ -179,8 +192,9 @@ async function makeLocalAIRequest(
       headers: {
         ...(init?.headers as any || {}),
         'Content-Type': 'application/json',
+        // For streaming: Accept text/event-stream, for non-streaming: application/json
         'Accept': isStreamingRequest ? 'text/event-stream' : 'application/json',
-        'Cache-Control': 'no-cache',
+        'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'User-Agent': 'llxprt-local-ai/1.0',
       },
@@ -188,15 +202,15 @@ async function makeLocalAIRequest(
     };
     
     const req = httpModule.request(options, (res) => {
-      console.log(`[LocalAI] Attempt ${attemptNumber}: Response received: ${res.statusCode}`);
+      getDebugLogger().debug(() => `Attempt ${attemptNumber}: Response received: ${res.statusCode}`);
       
       let responseStream: ReadableStream;
       
       if (isStreamingRequest) {
-        console.log(`[LocalAI] Attempt ${attemptNumber}: Creating SSE streaming response`);
+        getDebugLogger().debug(() => `Attempt ${attemptNumber}: Creating SSE streaming response`);
         responseStream = new ReadableStream({
           start(controller) {
-            console.log(`[LocalAI] Attempt ${attemptNumber}: Starting SSE streaming response`);
+            getDebugLogger().debug(() => `Attempt ${attemptNumber}: Starting SSE streaming response`);
             let chunkCount = 0;
             let buffer = '';
             let hasReceivedData = false;
@@ -205,7 +219,7 @@ async function makeLocalAIRequest(
               chunkCount++;
               hasReceivedData = true;
               const chunkStr = chunk.toString();
-              console.log(`[LocalAI] Attempt ${attemptNumber}: SSE chunk ${chunkCount}: ${chunk.length} bytes`);
+              getDebugLogger().debug(() => `Attempt ${attemptNumber}: SSE chunk ${chunkCount}: ${chunk.length} bytes`);
               
               try {
                 buffer += chunkStr;
@@ -218,13 +232,13 @@ async function makeLocalAIRequest(
                   }
                 }
               } catch (error) {
-                console.error(`[LocalAI] Attempt ${attemptNumber}: Error processing SSE chunk:`, error);
+                getDebugLogger().error(`Attempt ${attemptNumber}: Error processing SSE chunk`, error);
                 controller.error(error);
               }
             });
             
             res.on('end', () => {
-              console.log(`[LocalAI] Attempt ${attemptNumber}: SSE stream completed normally after ${chunkCount} chunks`);
+              getDebugLogger().debug(() => `Attempt ${attemptNumber}: SSE stream completed normally after ${chunkCount} chunks`);
               try {
                 if (buffer.trim()) {
                   controller.enqueue(new TextEncoder().encode(buffer + '\n\n'));
@@ -232,16 +246,16 @@ async function makeLocalAIRequest(
                 controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
                 controller.close();
               } catch (error) {
-                console.error(`[LocalAI] Attempt ${attemptNumber}: Error closing SSE stream:`, error);
+                getDebugLogger().error(`Attempt ${attemptNumber}: Error closing SSE stream`, error);
               }
             });
             
             res.on('error', (error) => {
-              console.error(`[LocalAI] Attempt ${attemptNumber}: SSE stream error after ${chunkCount} chunks:`, error);
+              getDebugLogger().error(`Attempt ${attemptNumber}: SSE stream error after ${chunkCount} chunks`, error);
               
               // Check if this was a partial response that should be retried
               if (hasReceivedData && chunkCount >= RETRY_CONFIG.partialResponseThreshold) {
-                console.log(`[LocalAI] Attempt ${attemptNumber}: Partial response detected (${chunkCount} chunks) - will trigger retry`);
+                getDebugLogger().debug(() => `Attempt ${attemptNumber}: Partial response detected (${chunkCount} chunks) - will trigger retry`);
                 // Signal this as a retriable partial response
                 const partialError = new Error('Partial response - retry needed');
                 (partialError as any).isPartialResponse = true;
@@ -255,7 +269,7 @@ async function makeLocalAIRequest(
                   }
                   controller.close();
                 } catch (closeError) {
-                  console.error(`[LocalAI] Attempt ${attemptNumber}: Error during SSE error handling:`, closeError);
+                  getDebugLogger().error(`Attempt ${attemptNumber}: Error during SSE error handling`, closeError);
                   controller.error(error);
                 }
               }
@@ -263,33 +277,33 @@ async function makeLocalAIRequest(
           }
         });
       } else {
-        console.log(`[LocalAI] Attempt ${attemptNumber}: Creating buffered non-streaming response`);
+        getDebugLogger().debug(() => `Attempt ${attemptNumber}: Creating buffered non-streaming response`);
         responseStream = new ReadableStream({
           start(controller) {
-            console.log(`[LocalAI] Attempt ${attemptNumber}: Starting buffered response collection`);
+            getDebugLogger().debug(() => `Attempt ${attemptNumber}: Starting buffered response collection`);
             let chunkCount = 0;
             const chunks: Buffer[] = [];
             
             res.on('data', (chunk) => {
               chunkCount++;
-              console.log(`[LocalAI] Attempt ${attemptNumber}: Buffered chunk ${chunkCount}: ${chunk.length} bytes`);
+              getDebugLogger().debug(() => `Attempt ${attemptNumber}: Buffered chunk ${chunkCount}: ${chunk.length} bytes`);
               chunks.push(chunk);
             });
             
             res.on('end', () => {
-              console.log(`[LocalAI] Attempt ${attemptNumber}: Buffered response completed after ${chunkCount} chunks`);
+              getDebugLogger().debug(() => `Attempt ${attemptNumber}: Buffered response completed after ${chunkCount} chunks`);
               try {
                 const fullResponse = Buffer.concat(chunks);
                 controller.enqueue(fullResponse);
                 controller.close();
               } catch (error) {
-                console.error(`[LocalAI] Attempt ${attemptNumber}: Error sending buffered response:`, error);
+                getDebugLogger().error(`Attempt ${attemptNumber}: Error sending buffered response`, error);
                 controller.error(error);
               }
             });
             
             res.on('error', (error) => {
-              console.error(`[LocalAI] Attempt ${attemptNumber}: Buffered response error after ${chunkCount} chunks:`, error);
+              getDebugLogger().error(`Attempt ${attemptNumber}: Buffered response error after ${chunkCount} chunks`, error);
               controller.error(error);
             });
           }
@@ -302,27 +316,27 @@ async function makeLocalAIRequest(
         headers: res.headers as any,
       });
       
-      console.log(`[LocalAI] Attempt ${attemptNumber}: ${isStreamingRequest ? 'SSE streaming' : 'Buffered'} response created`);
+      getDebugLogger().debug(() => `Attempt ${attemptNumber}: ${isStreamingRequest ? 'SSE streaming' : 'Buffered'} response created`);
       resolve(response);
     });
     
     // Configure socket when it's assigned
     req.on('socket', (socket) => {
-      console.log(`[LocalAI] Attempt ${attemptNumber}: Socket event fired - configuring socket`);
+      getDebugLogger().debug(() => `Attempt ${attemptNumber}: Socket event fired - configuring socket`);
       socket.setNoDelay(true);
       socket.setKeepAlive(true, 1000);
       socket.setTimeout(60000);
-      console.log(`[LocalAI] Attempt ${attemptNumber}: Socket configured with NoDelay, KeepAlive, and 60s timeout`);
+      getDebugLogger().debug(() => `Attempt ${attemptNumber}: Socket configured with NoDelay, KeepAlive, and 60s timeout`);
     });
     
     req.on('error', (error) => {
-      console.error(`[LocalAI] Attempt ${attemptNumber}: Request error:`, error);
+      getDebugLogger().error(`Attempt ${attemptNumber}: Request error`, error);
       reject(error);
     });
     
     // Write request body if present
     if (init?.body && requestBody) {
-      console.log(`[LocalAI] Attempt ${attemptNumber}: Writing ${isStreamingRequest ? 'streaming' : 'non-streaming'} request body (${Buffer.byteLength(requestBody)} bytes)`);
+      getDebugLogger().debug(() => `Attempt ${attemptNumber}: Writing ${isStreamingRequest ? 'streaming' : 'non-streaming'} request body (${Buffer.byteLength(requestBody)} bytes)`);
       
       if (!options.headers['content-length'] && !options.headers['Content-Length']) {
         req.setHeader('Content-Length', Buffer.byteLength(requestBody));
@@ -341,7 +355,7 @@ async function makeLocalAIRequest(
  * Includes intelligent retry logic for LM Studio streaming disconnections
  */
 export function createLocalAIFetch(): typeof fetch {
-  console.log('[LocalAI] Creating robust fetch wrapper with retry logic and socket configuration');
+  getDebugLogger().debug(() => 'Creating robust fetch wrapper with retry logic and socket configuration');
   
   const customFetch = async function localAIFetch(
     input: RequestInfo | URL,
@@ -352,7 +366,7 @@ export function createLocalAIFetch(): typeof fetch {
                 input instanceof URL ? input.toString() :
                 (input as Request).url;
     
-    console.log(`[LocalAI] Robust fetch called for URL: ${url}`);
+    getDebugLogger().debug(() => `Robust fetch called for URL: ${url}`);
     
     // Check if this is a local server request
     if (isLocalServerUrl(url)) {
@@ -364,11 +378,11 @@ export function createLocalAIFetch(): typeof fetch {
       
       const isStreamingRequest = requestBody.includes('"stream":true') || requestBody.includes('"stream": true');
       
-      console.log(`[LocalAI] Detected ${isStreamingRequest ? 'streaming' : 'non-streaming'} request to local server`);
+      getDebugLogger().debug(() => `Detected ${isStreamingRequest ? 'streaming' : 'non-streaming'} request to local server`);
       
       // For non-streaming requests, use single attempt (they work perfectly)
       if (!isStreamingRequest) {
-        console.log(`[LocalAI] Using single attempt for non-streaming request`);
+        getDebugLogger().debug(() => 'Using single attempt for non-streaming request');
         return makeLocalAIRequest(url, init, false, 1);
       }
       
@@ -377,7 +391,7 @@ export function createLocalAIFetch(): typeof fetch {
       
       for (let attempt = 1; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
         try {
-          console.log(`[LocalAI] Streaming attempt ${attempt}/${RETRY_CONFIG.maxRetries}`);
+          getDebugLogger().debug(() => `Streaming attempt ${attempt}/${RETRY_CONFIG.maxRetries}`);
           
           // Create a promise that resolves when the stream completes or rejects on partial response
           const result = await new Promise<Response>((resolve, reject) => {
@@ -398,7 +412,7 @@ export function createLocalAIFetch(): typeof fetch {
                       const { done, value } = await reader.read();
                       
                       if (done) {
-                        console.log(`[LocalAI] Streaming attempt ${attempt}: Completed successfully with ${chunkCount} total chunks`);
+                        getDebugLogger().debug(() => `Streaming attempt ${attempt}: Completed successfully with ${chunkCount} total chunks`);
                         
                         // Create a successful response with all the chunks
                         const fullData = new Uint8Array(chunks.reduce((acc, chunk) => acc + chunk.length, 0));
@@ -420,20 +434,20 @@ export function createLocalAIFetch(): typeof fetch {
                       
                       chunkCount++;
                       chunks.push(value);
-                      console.log(`[LocalAI] Streaming attempt ${attempt}: Buffering chunk ${chunkCount}: ${value.length} bytes`);
+                      getDebugLogger().debug(() => `Streaming attempt ${attempt}: Buffering chunk ${chunkCount}: ${value.length} bytes`);
                     }
                   } catch (error: any) {
-                    console.error(`[LocalAI] Streaming attempt ${attempt}: Stream error after ${chunkCount} chunks:`, error);
+                    getDebugLogger().error(`Streaming attempt ${attempt}: Stream error after ${chunkCount} chunks`, error);
                     
                     // Check if this qualifies as a partial response worth retrying
                     if (chunkCount >= RETRY_CONFIG.partialResponseThreshold && attempt < RETRY_CONFIG.maxRetries) {
-                      console.log(`[LocalAI] Streaming attempt ${attempt}: Partial response detected (${chunkCount} chunks) - will retry`);
+                      getDebugLogger().debug(() => `Streaming attempt ${attempt}: Partial response detected (${chunkCount} chunks) - will retry`);
                       const partialError = new Error(`Partial response - got ${chunkCount} chunks before disconnect`);
                       (partialError as any).isPartialResponse = true;
                       (partialError as any).chunkCount = chunkCount;
                       reject(partialError);
                     } else {
-                      console.log(`[LocalAI] Streaming attempt ${attempt}: Not enough chunks (${chunkCount}) or final attempt - failing`);
+                      getDebugLogger().debug(() => `Streaming attempt ${attempt}: Not enough chunks (${chunkCount}) or final attempt - failing`);
                       reject(error);
                     }
                   }
@@ -445,7 +459,7 @@ export function createLocalAIFetch(): typeof fetch {
           });
           
           // If we get here, the request succeeded completely
-          console.log(`[LocalAI] Streaming attempt ${attempt}: Successfully completed`);
+          getDebugLogger().debug(() => `Streaming attempt ${attempt}: Successfully completed`);
           return result;
           
         } catch (error: any) {
@@ -458,26 +472,26 @@ export function createLocalAIFetch(): typeof fetch {
                               error.message?.includes('aborted'));
           
           if (shouldRetry) {
-            console.log(`[LocalAI] Streaming attempt ${attempt}: Retrying after ${error.isPartialResponse ? 'partial response' : 'error'} (${error.message}) in ${RETRY_CONFIG.retryDelay}ms`);
+            getDebugLogger().debug(() => `Streaming attempt ${attempt}: Retrying after ${error.isPartialResponse ? 'partial response' : 'error'} (${error.message}) in ${RETRY_CONFIG.retryDelay}ms`);
             await new Promise(resolve => setTimeout(resolve, RETRY_CONFIG.retryDelay));
           } else {
-            console.error(`[LocalAI] Streaming attempt ${attempt}: Final failure, no more retries`);
+            getDebugLogger().error(`Streaming attempt ${attempt}: Final failure, no more retries`, error);
             throw error;
           }
         }
       }
       
       // If we get here, all retries failed
-      console.error(`[LocalAI] All ${RETRY_CONFIG.maxRetries} streaming attempts failed`);
+      getDebugLogger().error(`All ${RETRY_CONFIG.maxRetries} streaming attempts failed`, lastError || new Error('All streaming attempts failed'));
       throw lastError || new Error('All streaming attempts failed');
     }
     
-    console.log(`[LocalAI] Using default fetch for non-local URL: ${url}`);
+    getDebugLogger().debug(() => `Using default fetch for non-local URL: ${url}`);
     // For non-local servers, use the default fetch
     return fetch(input, init);
   };
   
-  console.log('[LocalAI] Custom fetch wrapper created and ready');
+  getDebugLogger().debug(() => 'Custom fetch wrapper created and ready');
   return customFetch;
 }
 
@@ -543,9 +557,10 @@ export function configureLocalAIClientOptions(
   const customFetch = getFetchForUrl(baseUrl);
   clientOptions.fetch = customFetch;
   
-  const logContext = context ? `[${context}]` : '[LocalAI]';
-  console.log(`${logContext} Configuring local AI server: ${baseUrl}`);
-  console.log(`${logContext} Custom fetch attached:`, typeof customFetch === 'function' ? 'YES' : 'NO');
+  const logger = getDebugLogger();
+  const logContext = context || 'LocalAI';
+  logger.debug(() => `[${logContext}] Configuring local AI server: ${baseUrl}`);
+  logger.debug(() => `[${logContext}] Custom fetch attached: ${typeof customFetch === 'function' ? 'YES' : 'NO'}`);
   
   // Use undici dispatcher for connection pooling
   clientOptions.fetchOptions = {
@@ -555,5 +570,5 @@ export function configureLocalAIClientOptions(
   // Try httpAgent option (undocumented but might work)
   clientOptions.httpAgent = getHttpAgentForUrl(baseUrl);
   
-  console.log(`${logContext} Socket configuration applied for local AI server`);
+  logger.debug(() => `[${logContext}] Socket configuration applied for local AI server`);
 }
