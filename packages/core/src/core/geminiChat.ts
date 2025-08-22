@@ -132,6 +132,21 @@ function createUserContentWithFunctionResponseFix(
 }
 
 /**
+ * Options for retrying due to invalid content from the model.
+ */
+interface ContentRetryOptions {
+  /** Total number of attempts to make (1 initial + N retries). */
+  maxAttempts: number;
+  /** The base delay in milliseconds for linear backoff. */
+  initialDelayMs: number;
+}
+
+const INVALID_CONTENT_RETRY_OPTIONS: ContentRetryOptions = {
+  maxAttempts: 3, // 1 initial call + 2 retries
+  initialDelayMs: 500,
+};
+
+/**
  * Returns true if the response is valid, false otherwise.
  */
 function isValidResponse(response: GenerateContentResponse): boolean {
@@ -205,13 +220,21 @@ function extractCuratedHistory(comprehensiveHistory: Content[]): Content[] {
       }
       if (isValid) {
         curatedHistory.push(...modelOutput);
-      } else {
-        // Remove the last user input when model content is invalid.
-        curatedHistory.pop();
       }
     }
   }
   return curatedHistory;
+}
+
+/**
+ * Custom error to signal that a stream completed without valid content,
+ * which should trigger a retry.
+ */
+export class EmptyStreamError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmptyStreamError';
+  }
 }
 
 /**
@@ -515,255 +538,121 @@ export class GeminiChat {
       );
     }
     await this.sendPromise;
-    const userContent = createUserContentWithFunctionResponseFix(
-      params.message,
-    );
 
-    // Debug: Check if this is a function response submission
-    if (Array.isArray(params.message)) {
-      let functionResponseCount = 0;
-      params.message.forEach((part: Part | string) => {
-        if (part && typeof part === 'object' && 'functionResponse' in part) {
-          functionResponseCount++;
-        }
-      });
-      if (functionResponseCount > 0) {
-        if (process.env.DEBUG) {
-          console.log(
-            `[DEBUG geminiChat] Sending ${functionResponseCount} function response(s) in array`,
-          );
-        }
-      }
-    }
+    let streamDoneResolver: () => void;
+    const streamDonePromise = new Promise<void>((resolve) => {
+      streamDoneResolver = resolve;
+    });
+    this.sendPromise = streamDonePromise;
 
-    if (process.env.DEBUG) {
-      console.log(
-        'DEBUG [geminiChat]: Created userContent:',
-        JSON.stringify(userContent, null, 2),
-      );
-    }
+    const userContent = createUserContent(params.message);
 
-    if (process.env.DEBUG) {
-      console.log(
-        'DEBUG: GeminiChat.sendMessageStream userContent:',
-        JSON.stringify(userContent, null, 2),
-      );
-    }
-    const requestContents = this.getHistory(true).concat(userContent);
+    // Add user content to history ONCE before any attempts.
+    this.history.push(userContent);
+    const requestContents = this.getHistory(true);
 
-    // Apply max-prompt-tokens limit if configured
-    const ephemeralSettings = this.config.getEphemeralSettings();
-    const maxPromptTokens = ephemeralSettings['max-prompt-tokens'] as
-      | number
-      | undefined;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    return (async function* () {
+      try {
+        let lastError: unknown = new Error('Request failed after all retries.');
 
-    if (maxPromptTokens) {
-      // Estimate tokens in the full request
-      const fullPromptText = JSON.stringify(requestContents);
-      const estimatedTokens = estimateTokens(fullPromptText);
-
-      if (estimatedTokens > maxPromptTokens) {
-        console.warn(
-          `WARNING: Prompt size (${estimatedTokens} tokens) exceeds max-prompt-tokens limit (${maxPromptTokens}). Trimming...`,
-        );
-
-        // Add a warning message to the request that will be visible to the LLM
-        const warningMessage = {
-          role: 'user',
-          parts: [
-            {
-              text: `WARNING: SYSTEM WARNING: The original prompt exceeded the ${maxPromptTokens} token limit (estimated ${estimatedTokens} tokens). Some conversation history and tool outputs have been truncated to fit. This may affect context continuity. Please be aware that some information from earlier in the conversation or from tool outputs may be missing.`,
-            },
-          ],
-        };
-
-        // Strategy: Keep the most recent messages and the current user message
-        // Remove older messages and truncate tool outputs in the middle
-        const trimmedContents = this.trimPromptContents(
-          requestContents,
-          maxPromptTokens,
-        );
-
-        // Add the warning as the first message so LLM knows about the truncation
-        trimmedContents.unshift(warningMessage);
-
-        // Log the trimming action with more detail
-        const trimmedTokens = estimateTokens(JSON.stringify(trimmedContents));
-        console.log(
-          `INFO: TRIMMED: Trimmed prompt from ${estimatedTokens} to ~${trimmedTokens} tokens`,
-        );
-
-        // Count function calls in original vs trimmed
-        let originalFunctionCalls = 0;
-        let trimmedFunctionCalls = 0;
-        requestContents.forEach((c) =>
-          c.parts?.forEach((p) => {
-            if ('functionCall' in p) originalFunctionCalls++;
-          }),
-        );
-        trimmedContents.forEach((c) =>
-          c.parts?.forEach((p) => {
-            if ('functionCall' in p) trimmedFunctionCalls++;
-          }),
-        );
-
-        if (originalFunctionCalls !== trimmedFunctionCalls) {
-          console.warn(
-            `WARNING: Trimming removed ${originalFunctionCalls - trimmedFunctionCalls} function calls (${originalFunctionCalls} -> ${trimmedFunctionCalls})`,
-          );
-        }
-
-        // Use trimmed contents instead
-        requestContents.length = 0;
-        requestContents.push(...trimmedContents);
-      }
-    }
-
-    // Debug: Log the last few messages to see the function call/response pattern
-    if (process.env.DEBUG && requestContents.length > 2) {
-      const recentContents = requestContents.slice(-3);
-      console.log('[DEBUG geminiChat] Recent conversation turns:');
-      recentContents.forEach((content, idx) => {
-        let summary = `  ${idx}: role=${content.role}, parts=${content.parts?.length || 0}`;
-        content.parts?.forEach((part: Part) => {
-          if ('functionCall' in part && part.functionCall) {
-            summary += ` [functionCall: ${part.functionCall.name}]`;
-          } else if ('functionResponse' in part && part.functionResponse) {
-            summary += ` [functionResponse: ${part.functionResponse.name}]`;
-          } else if ('text' in part && part.text) {
-            summary += ` [text: ${part.text.substring(0, 50)}...]`;
-          }
-        });
-        console.log(summary);
-      });
-    }
-
-    if (process.env.DEBUG) {
-      console.log(
-        'DEBUG: GeminiChat.sendMessageStream requestContents:',
-        JSON.stringify(requestContents, null, 2),
-      );
-    }
-    this._logApiRequest(requestContents, this.config.getModel(), prompt_id);
-
-    const startTime = Date.now();
-
-    try {
-      const apiCall = () => {
-        const modelToUse = this.config.getModel();
-        const authType = this.config.getContentGeneratorConfig()?.authType;
-
-        // Prevent Flash model calls immediately after quota error (only for Gemini providers)
-        if (
-          authType !== AuthType.USE_PROVIDER &&
-          this.config.getQuotaErrorOccurred() &&
-          modelToUse === DEFAULT_GEMINI_FLASH_MODEL
+        for (
+          let attempt = 0;
+          attempt <= INVALID_CONTENT_RETRY_OPTIONS.maxAttempts;
+          attempt++
         ) {
-          throw new Error(
-            'Please submit a new query to continue with the Flash model.',
-          );
+          try {
+            const stream = await self.makeApiCallAndProcessStream(
+              requestContents,
+              params,
+              prompt_id,
+              userContent,
+            );
+
+            for await (const chunk of stream) {
+              yield chunk;
+            }
+
+            lastError = null;
+            break;
+          } catch (error) {
+            lastError = error;
+            const isContentError = error instanceof EmptyStreamError;
+
+            if (isContentError) {
+              // Check if we have more attempts left.
+              if (attempt < INVALID_CONTENT_RETRY_OPTIONS.maxAttempts - 1) {
+                await new Promise((res) =>
+                  setTimeout(
+                    res,
+                    INVALID_CONTENT_RETRY_OPTIONS.initialDelayMs *
+                      (attempt + 1),
+                  ),
+                );
+                continue;
+              }
+            }
+            break;
+          }
         }
 
-        if (process.env.DEBUG) {
-          console.log(
-            'DEBUG [geminiChat]: About to call generateContentStream with:',
-          );
-          console.log('DEBUG [geminiChat]: - Model:', modelToUse);
-          console.log(
-            'DEBUG [geminiChat]: - Contents:',
-            JSON.stringify(requestContents, null, 2),
-          );
-          console.log(
-            'DEBUG [geminiChat]: - Config:',
-            JSON.stringify(
-              { ...this.generationConfig, ...params.config },
-              null,
-              2,
-            ),
-          );
-          console.log(
-            'DEBUG [geminiChat]: - Tools in generationConfig:',
-            JSON.stringify(this.generationConfig.tools, null, 2),
-          );
-          console.log(
-            'DEBUG [geminiChat]: - Tools in params.config:',
-            JSON.stringify(params.config?.tools, null, 2),
-          );
+        if (lastError) {
+          // If the stream fails, remove the user message that was added.
+          if (self.history[self.history.length - 1] === userContent) {
+            self.history.pop();
+          }
+          throw lastError;
         }
+      } finally {
+        streamDoneResolver!();
+      }
+    })();
+  }
 
-        // Check if this is a model-specific issue
-        const isFlashModel = modelToUse && modelToUse.includes('flash');
-        if (process.env.DEBUG) {
-          console.log('DEBUG [geminiChat]: - Is Flash model:', isFlashModel);
-        }
+  private async makeApiCallAndProcessStream(
+    requestContents: Content[],
+    params: SendMessageParameters,
+    prompt_id: string,
+    userContent: Content,
+  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+    const apiCall = () => {
+      const modelToUse = this.config.getModel();
 
-        // Extract systemInstruction from generationConfig if it exists
-        const { systemInstruction, ...restGenerationConfig } =
-          this.generationConfig;
+      if (
+        this.config.getQuotaErrorOccurred() &&
+        modelToUse === DEFAULT_GEMINI_FLASH_MODEL
+      ) {
+        throw new Error(
+          'Please submit a new query to continue with the Flash model.',
+        );
+      }
 
-        // Create properly typed request parameters
-        const mergedConfig: GenerateContentConfig = {
-          ...restGenerationConfig,
-          ...params.config,
-        };
-
-        // Add systemInstruction to the config if it exists
-        if (systemInstruction) {
-          mergedConfig.systemInstruction = systemInstruction;
-        }
-
-        const requestParams: GenerateContentParameters = {
+      return this.contentGenerator.generateContentStream(
+        {
           model: modelToUse,
           contents: requestContents,
-          config: mergedConfig,
-        };
-
-        return this.contentGenerator.generateContentStream(
-          requestParams,
-          prompt_id,
-        );
-      };
-
-      // Note: Retrying streams can be complex. If generateContentStream itself doesn't handle retries
-      // for transient issues internally before yielding the async generator, this retry will re-initiate
-      // the stream. For simple 429/500 errors on initial call, this is fine.
-      // If errors occur mid-stream, this setup won't resume the stream; it will restart it.
-      const streamResponse = await retryWithBackoff(apiCall, {
-        shouldRetry: (error: unknown) => {
-          // Check for known error messages and codes.
-          if (error instanceof Error && error.message) {
-            if (isSchemaDepthError(error.message)) return false;
-            if (error.message.includes('429')) return true;
-            if (error.message.match(/5\d{2}/)) return true;
-          }
-          return false; // Don't retry other errors by default
+          config: { ...this.generationConfig, ...params.config },
         },
-        onPersistent429: async (authType?: string, error?: unknown) =>
-          await this.handleFlashFallback(authType, error),
-        authType: this.config.getContentGeneratorConfig()?.authType,
-      });
-
-      // Resolve the internal tracking of send completion promise - `sendPromise`
-      // for both success and failure response. The actual failure is still
-      // propagated by the `await streamResponse`.
-      this.sendPromise = Promise.resolve(streamResponse)
-        .then(() => undefined)
-        .catch(() => undefined);
-
-      const result = this.processStreamResponse(
-        streamResponse,
-        userContent,
-        startTime,
         prompt_id,
       );
-      return result;
-    } catch (error) {
-      const durationMs = Date.now() - startTime;
-      this._logApiError(durationMs, error, prompt_id);
-      this.sendPromise = Promise.resolve();
-      await this.maybeIncludeSchemaDepthContext(error);
-      throw error;
-    }
+    };
+
+    const streamResponse = await retryWithBackoff(apiCall, {
+      shouldRetry: (error: unknown) => {
+        if (error instanceof Error && error.message) {
+          if (isSchemaDepthError(error.message)) return false;
+          if (error.message.includes('429')) return true;
+          if (error.message.match(/5\d{2}/)) return true;
+        }
+        return false;
+      },
+      onPersistent429: async (authType?: string, error?: unknown) =>
+        await this.handleFlashFallback(authType, error),
+      authType: this.config.getContentGeneratorConfig()?.authType,
+    });
+
+    return this.processStreamResponse(streamResponse, userContent);
   }
 
   /**
@@ -807,8 +696,6 @@ export class GeminiChat {
 
   /**
    * Adds a new entry to the chat history.
-   *
-   * @param content - The content to add to the history.
    */
   addHistory(content: Content): void {
     this.history.push(content);
@@ -834,52 +721,41 @@ export class GeminiChat {
 
   private async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
-    inputContent: Content,
-    startTime: number,
-    prompt_id: string,
-  ) {
-    const outputContent: Content[] = [];
-    const chunks: GenerateContentResponse[] = [];
-    let errorOccurred = false;
+    userInput: Content,
+  ): AsyncGenerator<GenerateContentResponse> {
+    const modelResponseParts: Part[] = [];
+    let isStreamInvalid = false;
+    let hasReceivedAnyChunk = false;
 
-    try {
-      for await (const chunk of streamResponse) {
-        if (isValidResponse(chunk)) {
-          chunks.push(chunk);
-          const content = chunk.candidates?.[0]?.content;
-          if (content !== undefined) {
-            if (this.isThoughtContent(content)) {
-              yield chunk;
-              continue;
-            }
-            outputContent.push(content);
+    for await (const chunk of streamResponse) {
+      hasReceivedAnyChunk = true;
+      if (isValidResponse(chunk)) {
+        const content = chunk.candidates?.[0]?.content;
+        if (content) {
+          // Filter out thought parts from being added to history.
+          if (!this.isThoughtContent(content) && content.parts) {
+            modelResponseParts.push(...content.parts);
           }
         }
-        yield chunk;
+      } else {
+        isStreamInvalid = true;
       }
-    } catch (error) {
-      errorOccurred = true;
-      const durationMs = Date.now() - startTime;
-      this._logApiError(durationMs, error, prompt_id);
-      throw error;
+      yield chunk; // Yield every chunk to the UI immediately.
     }
 
-    if (!errorOccurred) {
-      const durationMs = Date.now() - startTime;
-      const allParts: Part[] = [];
-      for (const content of outputContent) {
-        if (content.parts) {
-          allParts.push(...content.parts);
-        }
-      }
-      await this._logApiResponse(
-        durationMs,
-        prompt_id,
-        this.getFinalUsageMetadata(chunks),
-        JSON.stringify(chunks),
+    // Now that the stream is finished, make a decision.
+    // Throw an error if the stream was invalid OR if it was completely empty.
+    if (isStreamInvalid || !hasReceivedAnyChunk) {
+      throw new EmptyStreamError(
+        'Model stream was invalid or completed without valid content.',
       );
     }
-    this.recordHistory(inputContent, outputContent);
+
+    // Use recordHistory to correctly save the conversation turn.
+    const modelOutput: Content[] = [
+      { role: 'model', parts: modelResponseParts },
+    ];
+    this.recordHistory(userInput, modelOutput);
   }
 
   private recordHistory(
@@ -887,88 +763,65 @@ export class GeminiChat {
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
   ) {
+    const newHistoryEntries: Content[] = [];
+
+    // Part 1: Handle the user's part of the turn.
+    if (
+      automaticFunctionCallingHistory &&
+      automaticFunctionCallingHistory.length > 0
+    ) {
+      newHistoryEntries.push(
+        ...extractCuratedHistory(automaticFunctionCallingHistory),
+      );
+    } else {
+      // Guard for streaming calls where the user input might already be in the history.
+      if (
+        this.history.length === 0 ||
+        this.history[this.history.length - 1] !== userInput
+      ) {
+        newHistoryEntries.push(userInput);
+      }
+    }
+
+    // Part 2: Handle the model's part of the turn, filtering out thoughts.
     const nonThoughtModelOutput = modelOutput.filter(
       (content) => !this.isThoughtContent(content),
     );
 
     let outputContents: Content[] = [];
-    if (
-      nonThoughtModelOutput.length > 0 &&
-      nonThoughtModelOutput.every((content) => content.role !== undefined)
-    ) {
+    if (nonThoughtModelOutput.length > 0) {
       outputContents = nonThoughtModelOutput;
-    } else if (nonThoughtModelOutput.length === 0 && modelOutput.length > 0) {
-      // This case handles when the model returns only a thought.
-      // We don't want to add an empty model response in this case.
-    } else {
-      // When not a function response appends an empty content when model returns empty response, so that the
-      // history is always alternating between user and model.
-      // Workaround for: https://b.corp.google.com/issues/420354090
-      if (!isFunctionResponse(userInput)) {
-        outputContents.push({
-          role: 'model',
-          parts: [],
-        } as Content);
-      }
-    }
-    if (
-      automaticFunctionCallingHistory &&
-      automaticFunctionCallingHistory.length > 0
+    } else if (
+      modelOutput.length === 0 &&
+      !isFunctionResponse(userInput) &&
+      !automaticFunctionCallingHistory
     ) {
-      this.history.push(
-        ...extractCuratedHistory(automaticFunctionCallingHistory),
-      );
-    } else {
-      this.history.push(userInput);
+      // Add an empty model response if the model truly returned nothing.
+      outputContents.push({ role: 'model', parts: [] } as Content);
     }
 
-    // Consolidate adjacent model roles in outputContents
+    // Part 3: Consolidate the parts of this turn's model response.
     const consolidatedOutputContents: Content[] = [];
-    for (const content of outputContents) {
-      if (this.isThoughtContent(content)) {
-        continue;
-      }
-      const lastContent =
-        consolidatedOutputContents[consolidatedOutputContents.length - 1];
-      if (this.isTextContent(lastContent) && this.isTextContent(content)) {
-        // If both current and last are text, combine their text into the lastContent's first part
-        // and append any other parts from the current content.
-        lastContent.parts[0].text += content.parts[0].text || '';
-        if (content.parts.length > 1) {
-          lastContent.parts.push(...content.parts.slice(1));
+    if (outputContents.length > 0) {
+      for (const content of outputContents) {
+        const lastContent =
+          consolidatedOutputContents[consolidatedOutputContents.length - 1];
+        if (this.hasTextContent(lastContent) && this.hasTextContent(content)) {
+          lastContent.parts[0].text += content.parts[0].text || '';
+          if (content.parts.length > 1) {
+            lastContent.parts.push(...content.parts.slice(1));
+          }
+        } else {
+          consolidatedOutputContents.push(content);
         }
-      } else {
-        consolidatedOutputContents.push(content);
       }
     }
 
-    if (consolidatedOutputContents.length > 0) {
-      const lastHistoryEntry = this.history[this.history.length - 1];
-      const canMergeWithLastHistory =
-        !automaticFunctionCallingHistory ||
-        automaticFunctionCallingHistory.length === 0;
-
-      if (
-        canMergeWithLastHistory &&
-        this.isTextContent(lastHistoryEntry) &&
-        this.isTextContent(consolidatedOutputContents[0])
-      ) {
-        // If both current and last are text, combine their text into the lastHistoryEntry's first part
-        // and append any other parts from the current content.
-        lastHistoryEntry.parts[0].text +=
-          consolidatedOutputContents[0].parts[0].text || '';
-        if (consolidatedOutputContents[0].parts.length > 1) {
-          lastHistoryEntry.parts.push(
-            ...consolidatedOutputContents[0].parts.slice(1),
-          );
-        }
-        consolidatedOutputContents.shift(); // Remove the first element as it's merged
-      }
-      this.history.push(...consolidatedOutputContents);
-    }
+    // Part 4: Add the new turn (user and model parts) to the main history.
+    this.history.push(...newHistoryEntries, ...consolidatedOutputContents);
   }
 
-  private isTextContent(
+  private hasTextContent(
     content: Content | undefined,
   ): content is Content & { parts: [{ text: string }, ...Part[]] } {
     return !!(
