@@ -29,11 +29,7 @@ import { ToolFormat } from '../../tools/IToolFormatter.js';
 import OpenAI from 'openai';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { 
-  isLocalServerUrl, 
-  getFetchForUrl,
   getApiKeyForUrl,
-  getLocalAIAgent,
-  getHttpAgentForUrl,
   configureLocalAIClientOptions
 } from '../../utils/localAI.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
