@@ -5,6 +5,7 @@
  */
 import * as http from 'http';
 import * as https from 'https';
+import * as net from 'net';
 import { DebugLogger } from '../debug/index.js';
 
 // Singleton debug logger instance
@@ -34,6 +35,18 @@ interface RetryConfig {
   maxRetries: number;
   retryDelay: number;
   partialResponseThreshold: number;  // Retry if >= N chunks received before disconnect
+}
+
+/**
+ * OpenAI client configuration options interface
+ */
+interface OpenAIClientOptions {
+  fetch?: typeof fetch;
+  timeout?: number;
+  maxRetries?: number;
+  apiKey?: string;
+  baseURL?: string | null;  // OpenAI SDK allows null
+  [key: string]: any;  // Allow additional properties for flexibility
 }
 
 const DEFAULT_RETRY_CONFIG: RetryConfig = {
@@ -114,7 +127,7 @@ export function isLocalServerUrl(url: string | undefined): boolean {
  * Essential socket configuration that eliminates "terminated" errors
  * Based on documented 100% success rate evidence
  */
-function configureSocket(socket: any): void {
+function configureSocket(socket: net.Socket): void {
   socket.setNoDelay(true);        // ESSENTIAL - disable Nagle algorithm  
   socket.setKeepAlive(true, 1000); // ESSENTIAL - enable keepalive with 1s interval
   socket.setTimeout(60000);        // CRITICAL - 60s timeout (vs default)
@@ -169,7 +182,14 @@ async function makeLocalAIRequest(
   const logger = getDebugLogger();
   
   return new Promise((resolve, reject) => {
-    const urlParsed = new URL(url);
+    let urlParsed: URL;
+    try {
+      urlParsed = new URL(url);
+    } catch (error) {
+      reject(new Error(`Invalid URL provided to makeLocalAIRequest: ${url}`));
+      return;
+    }
+    
     const isHttps = urlParsed.protocol === 'https:';
     const httpModule = isHttps ? https : http;
 
@@ -201,13 +221,13 @@ async function makeLocalAIRequest(
       });
 
       res.on('error', async (error) => {
-        // Check if this was a partial response that should be retried
+        // Response stream error - check if this was a partial response that should be retried
         const isPartialResponse = chunkCount >= config.partialResponseThreshold;
         const canRetry = retryCount < config.maxRetries;
 
         if (isPartialResponse && canRetry) {
           logger.debug(() => 
-            `Retrying ${retryCount + 1}/${config.maxRetries} after ${chunkCount} chunks (partial response)`
+            `Retrying ${retryCount + 1}/${config.maxRetries} after ${chunkCount} chunks (response stream interrupted)`
           );
           
           // Wait before retry
@@ -220,8 +240,8 @@ async function makeLocalAIRequest(
             reject(retryError);
           }
         } else {
-          // No retry - reject with original error
-          reject(error);
+          // No retry - reject with original response stream error
+          reject(new Error(`Response stream error: ${error.message}`));
         }
       });
     });
@@ -235,7 +255,10 @@ async function makeLocalAIRequest(
       );
     });
 
-    req.on('error', reject);
+    // Request-level errors (connection failures, DNS issues, etc.)
+    req.on('error', (error) => {
+      reject(new Error(`Request failed: ${error.message}`));
+    });
 
     // Send request body if provided
     if (init?.body) {
@@ -276,7 +299,7 @@ function createLocalAIFetch(): typeof fetch {
  * - Optimized headers for SSE streaming compatibility
  */
 export function configureLocalAIClientOptions(
-  clientOptions: any,
+  clientOptions: OpenAIClientOptions,
   baseUrl?: string,
   context?: string
 ): void {
@@ -337,7 +360,7 @@ export function getApiKeyForUrl(url?: string, providedKey?: string): string {
  * Get configured agents (legacy export - no-op for compatibility)
  * @deprecated Custom agents no longer needed with enhanced implementation
  */
-export function getConfiguredAgents(): Record<string, any> {
+export function getConfiguredAgents(): Record<string, unknown> {
   return {};
 }
 
@@ -345,6 +368,6 @@ export function getConfiguredAgents(): Record<string, any> {
  * Get HTTP agent for URL (legacy export - no-op for compatibility)
  * @deprecated HTTP agents no longer needed with custom fetch
  */
-export function getHttpAgentForUrl(url?: string): any {
+export function getHttpAgentForUrl(url?: string): undefined {
   return undefined;
 }
