@@ -385,6 +385,7 @@ export class OpenAIProvider extends BaseProvider {
       conversationId: options?.conversationId,
       parentId: options?.parentId,
       tool_choice: options?.tool_choice,
+      ...(this.modelParams || {}),
     });
 
     // Make the API call
@@ -437,6 +438,7 @@ export class OpenAIProvider extends BaseProvider {
           stream: options?.stream ?? true,
           // Omit conversationId and parentId for stateless retry
           tool_choice: options?.tool_choice,
+          ...(this.modelParams || {}),
         });
 
         // Ensure proper UTF-8 encoding for retry request as well
