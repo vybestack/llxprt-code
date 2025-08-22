@@ -23,10 +23,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@08eba0b140c186e29c46e24a03f01bb528e83beb # v4.3.0
+        uses: actions/checkout@v4
 
       - name: Log in to Container Registry
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -34,7 +34,7 @@ jobs:
 
       - name: Extract metadata
         id: meta
-        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -43,7 +43,7 @@ jobs:
             type=raw,value=${{ github.event.inputs.tag || 'latest' }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
@@ -59,7 +59,7 @@ jobs:
           npm pack -w @vybestack/llxprt-code-core --pack-destination ./packages/core/dist
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0ac930e # v5.1.0
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
