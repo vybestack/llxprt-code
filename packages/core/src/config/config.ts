@@ -239,6 +239,7 @@ export interface ConfigParameters {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
+    disableFuzzySearch?: boolean;
   };
   checkpointing?: boolean;
   proxy?: string;
@@ -307,6 +308,7 @@ export class Config {
     respectGitIgnore: boolean;
     respectLlxprtIgnore: boolean;
     enableRecursiveFileSearch: boolean;
+    disableFuzzySearch: boolean;
   };
   private alwaysAllowedCommands: Set<string> = new Set();
   private fileDiscoveryService: FileDiscoveryService | null = null;
@@ -408,6 +410,7 @@ export class Config {
       respectLlxprtIgnore: params.fileFiltering?.respectLlxprtIgnore ?? true,
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
+      disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
     };
     this.checkpointing = params.checkpointing ?? false;
     this.proxy = params.proxy;
@@ -862,6 +865,10 @@ export class Config {
 
   getEnableRecursiveFileSearch(): boolean {
     return this.fileFiltering.enableRecursiveFileSearch;
+  }
+
+  getFileFilteringDisableFuzzySearch(): boolean {
+    return this.fileFiltering.disableFuzzySearch;
   }
 
   getFileFilteringRespectGitIgnore(): boolean {
