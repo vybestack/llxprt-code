@@ -16,6 +16,7 @@ import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
 import { GrepTool } from '../tools/grep.js';
+import { RipGrepTool } from '../tools/ripGrep.js';
 import { GlobTool } from '../tools/glob.js';
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
@@ -267,6 +268,7 @@ export interface ConfigParameters {
   interactive?: boolean;
   shellReplacement?: boolean;
   trustedFolder?: boolean;
+  useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
   skipNextSpeakerCheck?: boolean;
   enablePromptCompletion?: boolean;
@@ -352,6 +354,7 @@ export class Config {
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
+  private readonly useRipgrep: boolean;
   private readonly shouldUseNodePtyShell: boolean;
   private readonly skipNextSpeakerCheck: boolean;
   private readonly enablePromptCompletion: boolean = false;
@@ -440,6 +443,7 @@ export class Config {
     this.interactive = params.interactive ?? false;
     this.shellReplacement = params.shellReplacement ?? false;
     this.trustedFolder = params.trustedFolder;
+    this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
     this.storage = new Storage(this.targetDir);
@@ -1048,6 +1052,10 @@ export class Config {
     return this.shellReplacement;
   }
 
+  getUseRipgrep(): boolean {
+    return this.useRipgrep;
+  }
+
   getShouldUseNodePtyShell(): boolean {
     return this.shouldUseNodePtyShell;
   }
@@ -1134,7 +1142,13 @@ export class Config {
 
     registerCoreTool(LSTool, this);
     registerCoreTool(ReadFileTool, this);
-    registerCoreTool(GrepTool, this);
+
+    if (this.getUseRipgrep()) {
+      registerCoreTool(RipGrepTool, this);
+    } else {
+      registerCoreTool(GrepTool, this);
+    }
+
     registerCoreTool(GlobTool, this);
     registerCoreTool(EditTool, this);
     registerCoreTool(WriteFileTool, this);

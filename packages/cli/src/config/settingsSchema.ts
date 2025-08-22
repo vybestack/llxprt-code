@@ -635,6 +635,16 @@ export const SETTINGS_SCHEMA = {
     description: 'OAuth enablement configuration per provider.',
     showInDialog: false,
   },
+  useRipgrep: {
+    type: 'boolean',
+    label: 'Use Ripgrep',
+    category: 'Tools',
+    requiresRestart: false,
+    default: false,
+    description:
+      'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+    showInDialog: true,
+  },
   enablePromptCompletion: {
     type: 'boolean',
     label: 'Enable Prompt Completion',

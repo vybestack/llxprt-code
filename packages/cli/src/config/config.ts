@@ -831,6 +831,7 @@ export async function loadCliConfig(
     folderTrust,
     trustedFolder,
     shellReplacement: effectiveSettings.shellReplacement,
+    useRipgrep: effectiveSettings.useRipgrep,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     skipNextSpeakerCheck: effectiveSettings.skipNextSpeakerCheck,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
