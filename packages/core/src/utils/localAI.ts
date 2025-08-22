@@ -175,6 +175,8 @@ export function createLocalAIFetch(): typeof fetch {
           method: init?.method || 'GET',
           headers: {
             ...(init?.headers as any || {}),
+            // Ensure Content-Type is set for JSON requests
+            'Content-Type': 'application/json',
           },
           // Use our configured agent with socket settings
           agent: isHttps ? getConfiguredAgents().httpsAgent : getConfiguredAgents().httpAgent,
@@ -219,6 +221,13 @@ export function createLocalAIFetch(): typeof fetch {
           const bodyData = typeof init.body === 'string' ? init.body :
                           init.body instanceof Buffer ? init.body :
                           JSON.stringify(init.body);
+          
+          
+          // Set Content-Length header if not already set
+          if (!options.headers['content-length'] && !options.headers['Content-Length']) {
+            req.setHeader('Content-Length', Buffer.byteLength(bodyData));
+          }
+          
           req.write(bodyData);
         }
         
