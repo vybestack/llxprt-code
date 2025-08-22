@@ -149,6 +149,7 @@ export const AppWrapper = (props: AppProps) => {
     <KeypressProvider
       kittyProtocolEnabled={kittyProtocolStatus.enabled}
       config={props.config}
+      debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
     >
       <SessionStatsProvider>
         <VimModeProvider settings={props.settings}>
@@ -985,6 +986,11 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const handleGlobalKeypress = useCallback(
     (key: Key) => {
+      // Debug log keystrokes if enabled
+      if (settings.merged.debugKeystrokeLogging) {
+        console.log('[DEBUG] Keystroke:', JSON.stringify(key));
+      }
+
       let enteringConstrainHeightMode = false;
       if (!constrainHeight) {
         enteringConstrainHeightMode = true;
@@ -1048,6 +1054,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       handleSlashCommand,
       isAuthenticating,
       cancelOngoingRequest,
+      settings.merged.debugKeystrokeLogging,
     ],
   );
 
