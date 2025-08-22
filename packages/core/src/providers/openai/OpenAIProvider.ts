@@ -31,7 +31,8 @@ import { IProviderConfig } from '../types/IProviderConfig.js';
 import { 
   isLocalServerUrl, 
   getFetchForUrl,
-  getApiKeyForUrl
+  getApiKeyForUrl,
+  getConfiguredAgents
 } from '../../utils/localAI.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 import { ConversationCache } from './ConversationCache.js';
@@ -130,17 +131,29 @@ export class OpenAIProvider extends BaseProvider {
       maxRetries: 2, // Reduce retries for faster failure
     };
     
-    // For local servers, use custom fetch that properly handles the Agent
+    // For local servers, use custom fetch with socket configuration
     if (isLocalServerUrl(baseURL)) {
-      // Use our custom fetch that ensures the dispatcher is used
+      // Use our custom fetch that ensures both dispatcher AND socket configuration
       clientOptions.fetch = getFetchForUrl(baseURL);
+      
+      // Also add fetchOptions with agent for additional compatibility
+      const { httpAgent, httpsAgent } = getConfiguredAgents();
+      clientOptions.fetchOptions = {
+        agent: (parsedUrl: any) => {
+          // Handle various URL format inputs more robustly
+          const protocol = typeof parsedUrl === 'string' 
+            ? new URL(parsedUrl).protocol
+            : parsedUrl?.protocol || 'http:';
+          return protocol === 'https:' ? httpsAgent : httpAgent;
+        }
+      };
       
       console.log(`[OpenAIProvider] Configuring local AI server: ${baseURL}`);
       console.log(`[OpenAIProvider] Using API key: ${clientOptions.apiKey}`);
-      console.log(`[OpenAIProvider] Custom fetch function attached: ${typeof clientOptions.fetch}`);
+      console.log(`[OpenAIProvider] Custom fetch with socket configuration attached`);
       
       this.logger.debug(() => 
-        `Configured local AI server ${baseURL} with custom fetch and default key`
+        `Configured local AI server ${baseURL} with socket-configured fetch and agents`
       );
     }
     
@@ -237,17 +250,29 @@ export class OpenAIProvider extends BaseProvider {
         maxRetries: 2, // Reduce retries for faster failure
       };
       
-      // For local servers, use custom fetch that properly handles the Agent
+      // For local servers, use custom fetch with socket configuration
       if (isLocalServerUrl(effectiveBaseURL)) {
-        // Use our custom fetch that ensures the dispatcher is used
+        // Use our custom fetch that ensures both dispatcher AND socket configuration
         clientOptions.fetch = getFetchForUrl(effectiveBaseURL);
+        
+        // Also add fetchOptions with agent for additional compatibility
+        const { httpAgent, httpsAgent } = getConfiguredAgents();
+        clientOptions.fetchOptions = {
+          agent: (parsedUrl: any) => {
+            // Handle various URL format inputs more robustly
+            const protocol = typeof parsedUrl === 'string' 
+              ? new URL(parsedUrl).protocol
+              : parsedUrl?.protocol || 'http:';
+            return protocol === 'https:' ? httpsAgent : httpAgent;
+          }
+        };
         
         console.log(`[OpenAIProvider.updateClient] Recreating client for local AI server: ${effectiveBaseURL}`);
         console.log(`[OpenAIProvider.updateClient] Using API key: ${clientOptions.apiKey}`);
-        console.log(`[OpenAIProvider.updateClient] Custom fetch attached: ${typeof clientOptions.fetch}`);
+        console.log(`[OpenAIProvider.updateClient] Custom fetch with socket configuration attached`);
         
         this.logger.debug(() => 
-          `Configured local AI server ${effectiveBaseURL} with custom fetch and default key`
+          `Configured local AI server ${effectiveBaseURL} with socket-configured fetch and agents`
         );
       }
       
@@ -1742,12 +1767,25 @@ export class OpenAIProvider extends BaseProvider {
       maxRetries: 2, // Reduce retries for faster failure
     };
     
-    // For local servers, use custom fetch that properly handles the Agent
+    // For local servers, use custom fetch with socket configuration
     if (isLocalServerUrl(this.baseURL)) {
+      // Use our custom fetch that ensures both dispatcher AND socket configuration
       clientOptions.fetch = getFetchForUrl(this.baseURL);
       
+      // Also add fetchOptions with agent for additional compatibility
+      const { httpAgent, httpsAgent } = getConfiguredAgents();
+      clientOptions.fetchOptions = {
+        agent: (parsedUrl: any) => {
+          // Handle various URL format inputs more robustly
+          const protocol = typeof parsedUrl === 'string' 
+            ? new URL(parsedUrl).protocol
+            : parsedUrl?.protocol || 'http:';
+          return protocol === 'https:' ? httpsAgent : httpAgent;
+        }
+      };
+      
       this.logger.debug(() => 
-        `Configured local AI server ${this.baseURL} with custom fetch and default key`
+        `Configured local AI server ${this.baseURL} with socket-configured fetch and agents`
       );
     }
     
@@ -1797,12 +1835,25 @@ export class OpenAIProvider extends BaseProvider {
       maxRetries: 2, // Reduce retries for faster failure
     };
     
-    // For local servers, use custom fetch that properly handles the Agent
+    // For local servers, use custom fetch with socket configuration
     if (isLocalServerUrl(this.baseURL)) {
+      // Use our custom fetch that ensures both dispatcher AND socket configuration
       clientOptions.fetch = getFetchForUrl(this.baseURL);
       
+      // Also add fetchOptions with agent for additional compatibility
+      const { httpAgent, httpsAgent } = getConfiguredAgents();
+      clientOptions.fetchOptions = {
+        agent: (parsedUrl: any) => {
+          // Handle various URL format inputs more robustly
+          const protocol = typeof parsedUrl === 'string' 
+            ? new URL(parsedUrl).protocol
+            : parsedUrl?.protocol || 'http:';
+          return protocol === 'https:' ? httpsAgent : httpAgent;
+        }
+      };
+      
       this.logger.debug(() => 
-        `Configured local AI server ${this.baseURL} with custom fetch and default key`
+        `Configured local AI server ${this.baseURL} with socket-configured fetch and agents`
       );
     }
     

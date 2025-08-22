@@ -49,21 +49,78 @@ export function getLocalAIAgent(): Agent {
 }
 
 /**
- * Resets the singleton instance (mainly for testing)
+ * Resets the singleton instances (mainly for testing)
  */
 export function resetLocalAIAgent(): void {
   if (localAIAgentInstance) {
     localAIAgentInstance.close();
     localAIAgentInstance = null;
   }
+  
+  // Also reset configured agents
+  if (configuredAgents) {
+    // Destroy the agents to clean up resources
+    if (configuredAgents.httpAgent && typeof configuredAgents.httpAgent.destroy === 'function') {
+      configuredAgents.httpAgent.destroy();
+    }
+    if (configuredAgents.httpsAgent && typeof configuredAgents.httpsAgent.destroy === 'function') {
+      configuredAgents.httpsAgent.destroy();
+    }
+    configuredAgents = null;
+  }
+}
+
+// Singleton socket-configured agents
+let configuredAgents: { httpAgent: any; httpsAgent: any } | null = null;
+
+/**
+ * Creates HTTP/HTTPS agents with socket configuration for local servers
+ * This ensures proper TCP socket settings (NoDelay and KeepAlive)
+ * Returns singleton instances to avoid creating multiple event listeners
+ */
+export function getConfiguredAgents() {
+  if (!configuredAgents) {
+    const http = require('http');
+    const https = require('https');
+    
+    const httpAgent = new http.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 1000,
+    });
+    
+    const httpsAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 1000,
+    });
+    
+    // Configure sockets when created - this is the critical fix
+    httpAgent.on('socket', (socket: any) => {
+      socket.setNoDelay(true);
+      socket.setKeepAlive(true, 1000);
+      console.log('[LocalAI] Configured HTTP socket with NoDelay and KeepAlive');
+    });
+    
+    httpsAgent.on('socket', (socket: any) => {
+      socket.setNoDelay(true);
+      socket.setKeepAlive(true, 1000);
+      console.log('[LocalAI] Configured HTTPS socket with NoDelay and KeepAlive');
+    });
+    
+    configuredAgents = { httpAgent, httpsAgent };
+  }
+  
+  return configuredAgents;
 }
 
 /**
- * Creates a fetch function that uses undici with our custom Agent for local servers
- * This is a simpler approach that wraps fetch for local server compatibility
+ * Creates a fetch function that uses both undici Agent AND socket configuration
+ * This combines undici's connection management with proper socket-level settings
  */
 export function createLocalAIFetch(): typeof fetch {
-  console.log('[LocalAI] Creating custom fetch wrapper');
+  console.log('[LocalAI] Creating custom fetch wrapper with socket configuration');
+  
+  // Get socket-configured agents for proper TCP settings
+  const { httpAgent, httpsAgent } = getConfiguredAgents();
   
   return async function localAIFetch(
     input: RequestInfo | URL,
@@ -78,18 +135,21 @@ export function createLocalAIFetch(): typeof fetch {
     
     // Check if this is a local server request
     if (isLocalServerUrl(url)) {
-      // Use undici fetch with our custom Agent
-      const localAgent = getLocalAIAgent();
+      const urlObj = new URL(url);
+      const isHttps = urlObj.protocol === 'https:';
       
-      console.log(`[LocalAI] Using custom fetch for local server ${url}`);
+      // Use the socket-configured agent based on protocol
+      const socketAgent = isHttps ? httpsAgent : httpAgent;
+      
+      console.log(`[LocalAI] Using custom fetch for local server ${url} with socket configuration`);
       console.log(`[LocalAI] Agent config:`, LOCAL_AI_AGENT_CONFIG);
       
-      // Use undici's fetch directly with our Agent
-      // The 'as any' casts handle TypeScript's strict type checking between
-      // Node's global fetch and undici's fetch
+      // Use undici fetch with BOTH the dispatcher AND the socket-configured agent
+      // The agent ensures socket settings, dispatcher handles connection pooling
       return undiciFetch(input as any, {
         ...init,
-        dispatcher: localAgent
+        dispatcher: getLocalAIAgent(),
+        agent: socketAgent  // This is the critical addition for socket configuration
       } as any) as unknown as Response;
     }
     
