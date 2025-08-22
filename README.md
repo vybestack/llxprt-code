@@ -144,6 +144,25 @@ For advanced users who need API access:
    /model qwen3-coder-pro
    ```
 
+### Using Cerebras Code Max/Pro
+
+Access Cerebras Code Max/Pro plan with the powerful qwen-3-coder-480b model:
+
+1. Get your API key from [Cerebras](https://cloud.cerebras.ai/)
+2. Configure LLxprt Code:
+   ```
+   /provider openai
+   /baseurl https://api.cerebras.ai/v1
+   /key your-cerebras-api-key
+   /model qwen-3-coder-480b
+   ```
+
+For optimal performance with this model, consider setting a high context limit:
+
+```
+/set context-limit 100000
+```
+
 ### Using Local Models
 
 Run models locally for complete privacy and control. LLxprt Code works with any OpenAI-compatible server.
