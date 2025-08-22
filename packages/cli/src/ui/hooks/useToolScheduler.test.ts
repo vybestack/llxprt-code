@@ -29,7 +29,7 @@ import {
   ToolInvocation,
   AnyDeclarativeTool,
   AnyToolInvocation,
-} from '@vybestack/llxprt-code-core';
+} from '@google/gemini-cli-core';
 import {
   HistoryItemWithoutId,
   ToolCallStatus,
@@ -37,8 +37,8 @@ import {
 } from '../types.js';
 
 // Mocks
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
+vi.mock('@google/gemini-cli-core', async () => {
+  const actual = await vi.importActual('@google/gemini-cli-core');
   return {
     ...actual,
     ToolRegistry: vi.fn(),
@@ -55,6 +55,11 @@ const mockConfig = {
   getApprovalMode: vi.fn(() => ApprovalMode.DEFAULT),
   getUsageStatisticsEnabled: () => true,
   getDebugMode: () => false,
+  getSessionId: () => 'test-session-id',
+  getContentGeneratorConfig: () => ({
+    model: 'test-model',
+    authType: 'oauth-personal',
+  }),
 };
 
 class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
@@ -236,13 +241,6 @@ describe('useReactToolScheduler in YOLO Mode', () => {
           resultDisplay: 'YOLO Formatted tool output',
           responseParts: [
             {
-              functionCall: {
-                id: 'yoloCall',
-                name: 'mockToolRequiresConfirmation',
-                args: { data: 'any data' },
-              },
-            },
-            {
               functionResponse: {
                 id: 'yoloCall',
                 name: 'mockToolRequiresConfirmation',
@@ -393,13 +391,6 @@ describe('useReactToolScheduler', () => {
         response: expect.objectContaining({
           resultDisplay: 'Formatted tool output',
           responseParts: [
-            {
-              functionCall: {
-                id: 'call1',
-                name: 'mockTool',
-                args: { param: 'value' },
-              },
-            },
             {
               functionResponse: {
                 id: 'call1',
@@ -784,13 +775,6 @@ describe('useReactToolScheduler', () => {
         resultDisplay: 'Display 1',
         responseParts: [
           {
-            functionCall: {
-              id: 'multi1',
-              name: 'tool1',
-              args: { p: 1 },
-            },
-          },
-          {
             functionResponse: {
               id: 'multi1',
               name: 'tool1',
@@ -806,13 +790,6 @@ describe('useReactToolScheduler', () => {
       response: expect.objectContaining({
         resultDisplay: 'Display 2',
         responseParts: [
-          {
-            functionCall: {
-              id: 'multi2',
-              name: 'tool2',
-              args: { p: 2 },
-            },
-          },
           {
             functionResponse: {
               id: 'multi2',

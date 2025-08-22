@@ -30,7 +30,7 @@ import {
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { Readable, Writable } from 'node:stream';
-import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
+import { Content, Part, FunctionCall } from '@google/genai';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -565,16 +565,7 @@ class Session {
           }
 
           const response = await this.runTool(pendingSend.signal, promptId, fc);
-
-          const parts = Array.isArray(response) ? response : [response];
-
-          for (const part of parts) {
-            if (typeof part === 'string') {
-              toolResponseParts.push({ text: part });
-            } else if (part) {
-              toolResponseParts.push(part);
-            }
-          }
+          toolResponseParts.push(...response);
         }
 
         // For multiple tool responses, send them all together as the TUI does
@@ -603,7 +594,7 @@ class Session {
     abortSignal: AbortSignal,
     promptId: string,
     fc: FunctionCall,
-  ): Promise<PartListUnion> {
+  ): Promise<Part[]> {
     const callId = fc.id ?? `${fc.name}-${Date.now()}`;
     const args = (fc.args ?? {}) as Record<string, unknown>;
 

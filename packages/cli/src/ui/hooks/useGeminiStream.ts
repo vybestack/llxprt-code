@@ -81,7 +81,6 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
 }
 
 const debugLogger = new DebugLogger('llxprt:cli:gemini-stream');
-
 enum StreamProcessingStatus {
   Completed,
   UserCancelled,
@@ -1091,6 +1090,7 @@ export const useGeminiStream = (
       // Group tools by prompt_id to ensure we send all tools from the same turn together
       const toolsByPromptId = new Map<string, typeof geminiTools>();
 
+<<<<<<< HEAD
       geminiTools.forEach((tool) => {
         const promptId = tool.request.prompt_id;
         if (!toolsByPromptId.has(promptId)) {
@@ -1127,6 +1127,19 @@ export const useGeminiStream = (
               `Waiting for ${pendingTools.length} more tools to complete for prompt ${promptId}: ${JSON.stringify(pendingTools.map((t: TrackedToolCall) => t.request.name))}`,
           );
           continue;
+=======
+      if (allToolsCancelled) {
+        if (geminiClient) {
+          // We need to manually add the function responses to the history
+          // so the model knows the tools were cancelled.
+          const combinedParts = geminiTools.flatMap(
+            (toolCall) => toolCall.response.responseParts,
+          );
+          geminiClient.addHistory({
+            role: 'user',
+            parts: combinedParts,
+          });
+>>>>>>> 75822d350 (Change the type of ToolResult.responseParts (#6875))
         }
 
         // If all tools for this prompt_id in the current batch are complete, use them all
@@ -1216,7 +1229,16 @@ export const useGeminiStream = (
           (toolCall) => toolCall.request.callId,
         );
 
+<<<<<<< HEAD
         // Don't mark as submitted yet - wait until after responses are actually sent
+=======
+      const responsesToSend: Part[] = geminiTools.flatMap(
+        (toolCall) => toolCall.response.responseParts,
+      );
+      const callIdsToMarkAsSubmitted = geminiTools.map(
+        (toolCall) => toolCall.request.callId,
+      );
+>>>>>>> 75822d350 (Change the type of ToolResult.responseParts (#6875))
 
         // Don't continue if model was switched due to quota error
         if (modelSwitchedFromQuotaError) {
@@ -1256,6 +1278,7 @@ export const useGeminiStream = (
               `Multiple function responses (${responsesToSend.length}), sending as array: ${JSON.stringify(responsesToSend, null, 2)}`,
           );
 
+<<<<<<< HEAD
           // Send all function responses as an array of parts
           // Gemini expects multiple function responses as separate parts in the same message
           submitQuery(
@@ -1270,6 +1293,15 @@ export const useGeminiStream = (
           markToolsAsSubmitted(callIdsToMarkAsSubmitted);
         }
       } // End of prompt_id loop
+=======
+      submitQuery(
+        responsesToSend,
+        {
+          isContinuation: true,
+        },
+        prompt_ids[0],
+      );
+>>>>>>> 75822d350 (Change the type of ToolResult.responseParts (#6875))
     },
     [
       isResponding,

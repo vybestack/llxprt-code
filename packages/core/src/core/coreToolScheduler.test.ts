@@ -242,37 +242,43 @@ describe('convertToFunctionResponse', () => {
   it('should handle simple string llmContent', () => {
     const llmContent = 'Simple text output';
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual({
-      functionResponse: {
-        name: toolName,
-        id: callId,
-        response: { output: 'Simple text output' },
+    expect(result).toEqual([
+      {
+        functionResponse: {
+          name: toolName,
+          id: callId,
+          response: { output: 'Simple text output' },
+        },
       },
-    });
+    ]);
   });
 
   it('should handle llmContent as a single Part with text', () => {
     const llmContent: Part = { text: 'Text from Part object' };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual({
-      functionResponse: {
-        name: toolName,
-        id: callId,
-        response: { output: 'Text from Part object' },
+    expect(result).toEqual([
+      {
+        functionResponse: {
+          name: toolName,
+          id: callId,
+          response: { output: 'Text from Part object' },
+        },
       },
-    });
+    ]);
   });
 
   it('should handle llmContent as a PartListUnion array with a single text Part', () => {
     const llmContent: PartListUnion = [{ text: 'Text from array' }];
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual({
-      functionResponse: {
-        name: toolName,
-        id: callId,
-        response: { output: 'Text from array' },
+    expect(result).toEqual([
+      {
+        functionResponse: {
+          name: toolName,
+          id: callId,
+          response: { output: 'Text from array' },
+        },
       },
-    });
+    ]);
   });
 
   it('should handle llmContent with inlineData', () => {
@@ -346,25 +352,29 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as a generic Part (not text, inlineData, or fileData)', () => {
     const llmContent: Part = { functionCall: { name: 'test', args: {} } };
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual({
-      functionResponse: {
-        name: toolName,
-        id: callId,
-        response: { output: 'Tool execution succeeded.' },
+    expect(result).toEqual([
+      {
+        functionResponse: {
+          name: toolName,
+          id: callId,
+          response: { output: 'Tool execution succeeded.' },
+        },
       },
-    });
+    ]);
   });
 
   it('should handle empty string llmContent', () => {
     const llmContent = '';
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual({
-      functionResponse: {
-        name: toolName,
-        id: callId,
-        response: { output: '' },
+    expect(result).toEqual([
+      {
+        functionResponse: {
+          name: toolName,
+          id: callId,
+          response: { output: '' },
+        },
       },
-    });
+    ]);
   });
 
   it('should handle llmContent as an empty array', () => {
@@ -383,13 +393,15 @@ describe('convertToFunctionResponse', () => {
   it('should handle llmContent as a Part with undefined inlineData/fileData/text', () => {
     const llmContent: Part = {}; // An empty part object
     const result = convertToFunctionResponse(toolName, callId, llmContent);
-    expect(result).toEqual({
-      functionResponse: {
-        name: toolName,
-        id: callId,
-        response: { output: 'Tool execution succeeded.' },
+    expect(result).toEqual([
+      {
+        functionResponse: {
+          name: toolName,
+          id: callId,
+          response: { output: 'Tool execution succeeded.' },
+        },
       },
-    });
+    ]);
   });
 
   it('should ensure correct id when llmContent contains functionResponse without id', () => {
