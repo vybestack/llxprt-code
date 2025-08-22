@@ -3,6 +3,8 @@
  * Provides undici Agent configuration and fetch wrapper to prevent connection termination
  */
 import { Agent, fetch as undiciFetch } from 'undici';
+import * as http from 'http';
+import * as https from 'https';
 
 // Singleton instance
 let localAIAgentInstance: Agent | null = null;
@@ -43,7 +45,31 @@ export function isLocalServerUrl(url: string | undefined): boolean {
  */
 export function getLocalAIAgent(): Agent {
   if (!localAIAgentInstance) {
-    localAIAgentInstance = new Agent(LOCAL_AI_AGENT_CONFIG);
+    // Create Agent with socket configuration interceptor
+    localAIAgentInstance = new Agent({
+      ...LOCAL_AI_AGENT_CONFIG,
+      connect: {
+        timeout: LOCAL_AI_AGENT_CONFIG.connectTimeout,
+        // Apply socket configuration on connect
+        lookup: undefined,
+        // Note: We'll handle socket config in the dispatcher intercept below
+      }
+    });
+    
+    // Intercept dispatcher to configure sockets
+    const originalDispatch = localAIAgentInstance.dispatch.bind(localAIAgentInstance);
+    (localAIAgentInstance as any).dispatch = function(opts: any, handler: any) {
+      const originalOnConnect = handler.onConnect;
+      handler.onConnect = function(abort: any, context: any) {
+        if (context?.socket) {
+          console.log('[LocalAI] Configuring socket in undici dispatcher');
+          context.socket.setNoDelay(true);
+          context.socket.setKeepAlive(true, 1000);
+        }
+        return originalOnConnect?.call(this, abort, context);
+      };
+      return originalDispatch(opts, handler);
+    };
   }
   return localAIAgentInstance;
 }
@@ -80,8 +106,6 @@ let configuredAgents: { httpAgent: any; httpsAgent: any } | null = null;
  */
 export function getConfiguredAgents() {
   if (!configuredAgents) {
-    const http = require('http');
-    const https = require('https');
     
     const httpAgent = new http.Agent({
       keepAlive: true,
@@ -95,15 +119,17 @@ export function getConfiguredAgents() {
     
     // Configure sockets when created - this is the critical fix
     httpAgent.on('socket', (socket: any) => {
+      console.log('[LocalAI] Socket event fired for HTTP agent');
       socket.setNoDelay(true);
       socket.setKeepAlive(true, 1000);
-      console.log('[LocalAI] Configured HTTP socket with NoDelay and KeepAlive');
+      console.log('[LocalAI] Configured HTTP socket with NoDelay and KeepAlive - success');
     });
     
     httpsAgent.on('socket', (socket: any) => {
+      console.log('[LocalAI] Socket event fired for HTTPS agent');
       socket.setNoDelay(true);
       socket.setKeepAlive(true, 1000);
-      console.log('[LocalAI] Configured HTTPS socket with NoDelay and KeepAlive');
+      console.log('[LocalAI] Configured HTTPS socket with NoDelay and KeepAlive - success');
     });
     
     configuredAgents = { httpAgent, httpsAgent };
