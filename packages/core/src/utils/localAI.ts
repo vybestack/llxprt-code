@@ -2,7 +2,7 @@
  * Local AI server utilities for LM Studio and similar local servers
  * Provides undici Agent configuration and fetch wrapper to prevent connection termination
  */
-import { Agent, fetch as undiciFetch } from 'undici';
+import { Agent } from 'undici';
 import * as http from 'http';
 import * as https from 'https';
 
@@ -139,14 +139,11 @@ export function getConfiguredAgents() {
 }
 
 /**
- * Creates a fetch function that uses both undici Agent AND socket configuration
- * This combines undici's connection management with proper socket-level settings
+ * Creates a fetch function that uses Node's native http/https with socket configuration
+ * This gives us direct control over socket settings for local AI servers
  */
 export function createLocalAIFetch(): typeof fetch {
   console.log('[LocalAI] Creating custom fetch wrapper with socket configuration');
-  
-  // Get socket-configured agents for proper TCP settings
-  const { httpAgent, httpsAgent } = getConfiguredAgents();
   
   return async function localAIFetch(
     input: RequestInfo | URL,
@@ -164,19 +161,69 @@ export function createLocalAIFetch(): typeof fetch {
       const urlObj = new URL(url);
       const isHttps = urlObj.protocol === 'https:';
       
-      // Use the socket-configured agent based on protocol
-      const socketAgent = isHttps ? httpsAgent : httpAgent;
+      console.log(`[LocalAI] Using Node.js http/https for local server ${url} with socket configuration`);
       
-      console.log(`[LocalAI] Using custom fetch for local server ${url} with socket configuration`);
-      console.log(`[LocalAI] Agent config:`, LOCAL_AI_AGENT_CONFIG);
-      
-      // Use undici fetch with BOTH the dispatcher AND the socket-configured agent
-      // The agent ensures socket settings, dispatcher handles connection pooling
-      return undiciFetch(input as any, {
-        ...init,
-        dispatcher: getLocalAIAgent(),
-        agent: socketAgent  // This is the critical addition for socket configuration
-      } as any) as unknown as Response;
+      // Use Node's native http/https with socket configuration
+      return new Promise((resolve, reject) => {
+        const httpModule = isHttps ? https : http;
+        
+        // Parse request options
+        const options = {
+          hostname: urlObj.hostname,
+          port: urlObj.port || (isHttps ? 443 : 80),
+          path: urlObj.pathname + urlObj.search,
+          method: init?.method || 'GET',
+          headers: {
+            ...(init?.headers as any || {}),
+          },
+          // Use our configured agent with socket settings
+          agent: isHttps ? getConfiguredAgents().httpsAgent : getConfiguredAgents().httpAgent,
+        };
+        
+        console.log(`[LocalAI] Making ${options.method} request to ${options.hostname}:${options.port}${options.path}`);
+        
+        const req = httpModule.request(options, (res) => {
+          console.log(`[LocalAI] Response received: ${res.statusCode}`);
+          
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () => {
+            const body = Buffer.concat(chunks);
+            
+            // Create a Response-like object
+            const response = new Response(body, {
+              status: res.statusCode,
+              statusText: res.statusMessage,
+              headers: res.headers as any,
+            });
+            
+            resolve(response);
+          });
+        });
+        
+        // CRITICAL: Configure socket when it's assigned
+        req.on('socket', (socket) => {
+          console.log('[LocalAI] Socket event fired - configuring socket');
+          socket.setNoDelay(true);
+          socket.setKeepAlive(true, 1000);
+          console.log('[LocalAI] Socket configured with NoDelay and KeepAlive');
+        });
+        
+        req.on('error', (error) => {
+          console.error('[LocalAI] Request error:', error);
+          reject(error);
+        });
+        
+        // Write request body if present
+        if (init?.body) {
+          const bodyData = typeof init.body === 'string' ? init.body :
+                          init.body instanceof Buffer ? init.body :
+                          JSON.stringify(init.body);
+          req.write(bodyData);
+        }
+        
+        req.end();
+      });
     }
     
     console.log(`[LocalAI] Using default fetch for non-local URL: ${url}`);
