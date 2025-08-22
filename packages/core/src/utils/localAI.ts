@@ -102,13 +102,14 @@ export function isLocalServerUrl(url: string | undefined): boolean {
     }
     
     // Common local AI server ports - but only on localhost/private networks
-    // This prevents false positives on external servers
+    // This prevents false positives on external servers (enhanced qwen-code logic)
     const isLocalHost = hostname === 'localhost' || 
                        hostname === '127.0.0.1' || 
                        hostname === '0.0.0.0' ||
                        hostname === '::1' ||
                        hostname === '[::1]' ||
-                       hostname.endsWith('.local');
+                       hostname.endsWith('.local') ||
+                       hostname.endsWith('.localhost');  // Enhanced from qwen-code
     
     if (isLocalHost && LOCAL_AI_COMMON_PORTS.includes(port)) {
       return true;
@@ -152,21 +153,47 @@ function getApiKeyForLocalServer(baseURL?: string, providedKey?: string): string
 /**
  * Get optimized headers for local AI servers
  * Based on documented OpenAI SSE streaming standards
+ * Enhanced with superior TypeScript-safe header processing from qwen-code
  */
 function getLocalAIHeaders(init?: RequestInit): Record<string, string> {
-  const baseHeaders = init?.headers ? 
-    (init.headers instanceof Headers ? 
-      Object.fromEntries(init.headers.entries()) : 
-      init.headers as Record<string, string>) : {};
-  
-  // Merge with optimized local AI headers
-  return {
-    ...baseHeaders,
+  // Enhanced header processing with better type safety (from qwen-code)
+  const baseHeaders: Record<string, string> = {
     'Accept': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
     'Connection': 'keep-alive',
     'User-Agent': 'local-ai-client/1.0',
   };
+
+  // Safely merge headers, converting init headers to string format (qwen-code approach)
+  if (init?.headers) {
+    const initHeaders = init.headers;
+    
+    // Convert various header formats to key-value pairs with error handling
+    try {
+      if (initHeaders instanceof Headers) {
+        // Handle Headers object
+        initHeaders.forEach((value, key) => {
+          baseHeaders[key] = value;
+        });
+      } else if (typeof initHeaders === 'object' && initHeaders !== null) {
+        // Handle plain object format - most common case
+        for (const [key, value] of Object.entries(initHeaders)) {
+          if (typeof value === 'string') {
+            baseHeaders[key] = value;
+          } else if (Array.isArray(value)) {
+            baseHeaders[key] = value.join(', ');
+          } else if (value != null) {
+            baseHeaders[key] = String(value);
+          }
+        }
+      }
+    } catch (error) {
+      // If header processing fails, just use base headers (defensive programming)
+      console.warn('Failed to process custom headers, using defaults:', error);
+    }
+  }
+  
+  return baseHeaders;
 }
 
 /**
