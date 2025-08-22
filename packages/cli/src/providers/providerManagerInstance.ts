@@ -12,7 +12,10 @@ import {
   GeminiProvider,
   sanitizeForByteString,
   needsSanitization,
+  getLocalAIAgent,
+  isLocalServerUrl,
 } from '@vybestack/llxprt-code-core';
+import { setGlobalDispatcher } from 'undici';
 import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -163,6 +166,14 @@ export function getProviderManager(
         hasApiKey: !!openaiApiKey,
         baseUrl: openaiBaseUrl || 'default',
       });
+    }
+    
+    // Set global dispatcher for local AI servers to fix connection termination
+    if (isLocalServerUrl(openaiBaseUrl)) {
+      setGlobalDispatcher(getLocalAIAgent());
+      if (process.env.DEBUG || process.env.VERBOSE) {
+        console.log('[ProviderManager] Configured global undici Agent for local AI server');
+      }
     }
     // Create provider config from user settings
     const openaiProviderConfig = {

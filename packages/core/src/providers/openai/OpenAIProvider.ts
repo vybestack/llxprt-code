@@ -28,6 +28,11 @@ import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import OpenAI from 'openai';
 import { IProviderConfig } from '../types/IProviderConfig.js';
+import { 
+  isLocalServerUrl, 
+  getFetchForUrl,
+  getApiKeyForUrl
+} from '../../utils/localAI.js';
 import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
 import { ConversationCache } from './ConversationCache.js';
 import {
@@ -54,6 +59,7 @@ export class OpenAIProvider extends BaseProvider {
   private currentModel: string = process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
   private baseURL?: string;
   private providerConfig?: IProviderConfig;
+  
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
   private conversationCache: ConversationCache;
@@ -116,13 +122,28 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      apiKey: apiKey || 'placeholder', // OpenAI client requires a string, use placeholder if OAuth will be used
+      apiKey: getApiKeyForUrl(baseURL, apiKey), // Use default key for local servers
       // Allow browser environment if explicitly configured
       dangerouslyAllowBrowser: config?.allowBrowserEnvironment || false,
-      // Add timeout for LM Studio compatibility
+      // Add timeout for local LLM servers
       timeout: 60000, // 60 seconds timeout for local LLM servers
       maxRetries: 2, // Reduce retries for faster failure
     };
+    
+    // For local servers, use custom fetch that properly handles the Agent
+    if (isLocalServerUrl(baseURL)) {
+      // Use our custom fetch that ensures the dispatcher is used
+      clientOptions.fetch = getFetchForUrl(baseURL);
+      
+      console.log(`[OpenAIProvider] Configuring local AI server: ${baseURL}`);
+      console.log(`[OpenAIProvider] Using API key: ${clientOptions.apiKey}`);
+      console.log(`[OpenAIProvider] Custom fetch function attached: ${typeof clientOptions.fetch}`);
+      
+      this.logger.debug(() => 
+        `Configured local AI server ${baseURL} with custom fetch and default key`
+      );
+    }
+    
     // Only include baseURL if it's defined
     if (baseURL) {
       clientOptions.baseURL = baseURL;
@@ -207,14 +228,29 @@ export class OpenAIProvider extends BaseProvider {
       this.baseURL !== effectiveBaseURL
     ) {
       const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-        apiKey: resolvedKey,
+        apiKey: getApiKeyForUrl(effectiveBaseURL, resolvedKey),
         // Allow browser environment if explicitly configured
         dangerouslyAllowBrowser:
           this.providerConfig?.allowBrowserEnvironment || false,
-        // Add timeout for LM Studio compatibility
-        timeout: 60000, // 60 seconds timeout for local LLM servers
+        // Add timeout for local servers
+        timeout: 60000, // 60 seconds timeout for local servers
         maxRetries: 2, // Reduce retries for faster failure
       };
+      
+      // For local servers, use custom fetch that properly handles the Agent
+      if (isLocalServerUrl(effectiveBaseURL)) {
+        // Use our custom fetch that ensures the dispatcher is used
+        clientOptions.fetch = getFetchForUrl(effectiveBaseURL);
+        
+        console.log(`[OpenAIProvider.updateClient] Recreating client for local AI server: ${effectiveBaseURL}`);
+        console.log(`[OpenAIProvider.updateClient] Using API key: ${clientOptions.apiKey}`);
+        console.log(`[OpenAIProvider.updateClient] Custom fetch attached: ${typeof clientOptions.fetch}`);
+        
+        this.logger.debug(() => 
+          `Configured local AI server ${effectiveBaseURL} with custom fetch and default key`
+        );
+      }
+      
       // Only include baseURL if it's defined
       if (effectiveBaseURL) {
         clientOptions.baseURL = effectiveBaseURL;
@@ -1698,13 +1734,23 @@ export class OpenAIProvider extends BaseProvider {
 
     // Create a new OpenAI client with the updated API key
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      apiKey,
+      apiKey: getApiKeyForUrl(this.baseURL, apiKey),
       dangerouslyAllowBrowser:
         this.providerConfig?.allowBrowserEnvironment || false,
-      // Add timeout for LM Studio compatibility
-      timeout: 60000, // 60 seconds timeout for local LLM servers
+      // Add timeout for local servers
+      timeout: 60000, // 60 seconds timeout for local servers
       maxRetries: 2, // Reduce retries for faster failure
     };
+    
+    // For local servers, use custom fetch that properly handles the Agent
+    if (isLocalServerUrl(this.baseURL)) {
+      clientOptions.fetch = getFetchForUrl(this.baseURL);
+      
+      this.logger.debug(() => 
+        `Configured local AI server ${this.baseURL} with custom fetch and default key`
+      );
+    }
+    
     // Only include baseURL if it's defined
     if (this.baseURL) {
       clientOptions.baseURL = this.baseURL;
@@ -1742,14 +1788,24 @@ export class OpenAIProvider extends BaseProvider {
 
     // Create a new OpenAI client with the updated (or cleared) base URL
     const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      // Use existing key or empty string as placeholder
-      apiKey: this._cachedClientKey || 'placeholder',
+      // Use existing key or default for local servers
+      apiKey: getApiKeyForUrl(this.baseURL, this._cachedClientKey),
       dangerouslyAllowBrowser:
         this.providerConfig?.allowBrowserEnvironment || false,
-      // Add timeout for LM Studio compatibility
-      timeout: 60000, // 60 seconds timeout for local LLM servers
+      // Add timeout for local servers
+      timeout: 60000, // 60 seconds timeout for local servers
       maxRetries: 2, // Reduce retries for faster failure
     };
+    
+    // For local servers, use custom fetch that properly handles the Agent
+    if (isLocalServerUrl(this.baseURL)) {
+      clientOptions.fetch = getFetchForUrl(this.baseURL);
+      
+      this.logger.debug(() => 
+        `Configured local AI server ${this.baseURL} with custom fetch and default key`
+      );
+    }
+    
     // Only include baseURL if it's defined
     if (this.baseURL) {
       clientOptions.baseURL = this.baseURL;

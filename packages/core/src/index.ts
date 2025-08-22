@@ -150,6 +150,15 @@ export * from './providers/ProviderManager.js';
 export { OpenAIProvider } from './providers/openai/OpenAIProvider.js';
 export { ConversationCache } from './providers/openai/ConversationCache.js';
 export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
+export { 
+  getLocalAIAgent, 
+  isLocalServerUrl, 
+  resetLocalAIAgent,
+  createLocalAIFetch,
+  getFetchForUrl,
+  getApiKeyForUrl,
+  LOCAL_AI_DEFAULT_KEY
+} from './utils/localAI.js';
 export { AnthropicProvider } from './providers/anthropic/AnthropicProvider.js';
 export { GeminiProvider } from './providers/gemini/GeminiProvider.js';
 export * from './providers/ProviderManager.js';
