@@ -151,9 +151,7 @@ export { OpenAIProvider } from './providers/openai/OpenAIProvider.js';
 export { ConversationCache } from './providers/openai/ConversationCache.js';
 export { getOpenAIProviderInfo } from './providers/openai/getOpenAIProviderInfo.js';
 export { 
-  getLocalAIAgent, 
   isLocalServerUrl, 
-  resetLocalAIAgent,
   createLocalAIFetch,
   getFetchForUrl,
   getApiKeyForUrl,
