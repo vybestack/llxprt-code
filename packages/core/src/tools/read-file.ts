@@ -33,7 +33,13 @@ export interface ReadFileToolParams {
   /**
    * The absolute path to the file to read
    */
-  absolute_path: string;
+  absolute_path?: string;
+
+  /**
+   * Alternative parameter name for absolute_path (for compatibility)
+   * Not shown in schema - internal use only
+   */
+  file_path?: string;
 
   /**
    * The line number to start reading from (optional)
@@ -57,21 +63,26 @@ class ReadFileToolInvocation extends BaseToolInvocation<
     super(params);
   }
 
+  private getFilePath(): string {
+    // Use absolute_path if provided, otherwise fall back to file_path
+    return this.params.absolute_path || this.params.file_path || '';
+  }
+
   getDescription(): string {
     const relativePath = makeRelative(
-      this.params.absolute_path,
+      this.getFilePath(),
       this.config.getTargetDir(),
     );
     return shortenPath(relativePath);
   }
 
   override toolLocations(): ToolLocation[] {
-    return [{ path: this.params.absolute_path, line: this.params.offset }];
+    return [{ path: this.getFilePath(), line: this.params.offset }];
   }
 
   async execute(): Promise<ToolResult> {
     const result = await processSingleFileContent(
-      this.params.absolute_path,
+      this.getFilePath(),
       this.config.getTargetDir(),
       this.config.getFileSystemService(),
       this.params.offset,
@@ -143,13 +154,13 @@ ${result.llmContent}`;
       typeof result.llmContent === 'string'
         ? result.llmContent.split('\n').length
         : undefined;
-    const mimetype = getSpecificMimeType(this.params.absolute_path);
+    const mimetype = getSpecificMimeType(this.getFilePath());
     recordFileOperationMetric(
       this.config,
       FileOperation.READ,
       lines,
       mimetype,
-      path.extname(this.params.absolute_path),
+      path.extname(this.getFilePath()),
     );
 
     return {
@@ -201,8 +212,10 @@ export class ReadFileTool extends BaseDeclarativeTool<
   protected override validateToolParamValues(
     params: ReadFileToolParams,
   ): string | null {
-    const filePath = params.absolute_path;
-    if (params.absolute_path.trim() === '') {
+    // Accept either absolute_path or file_path
+    const filePath = params.absolute_path || params.file_path || '';
+
+    if (filePath.trim() === '') {
       return "The 'absolute_path' parameter must be non-empty.";
     }
 
@@ -223,7 +236,7 @@ export class ReadFileTool extends BaseDeclarativeTool<
     }
 
     const fileService = this.config.getFileService();
-    if (fileService.shouldLlxprtIgnoreFile(params.absolute_path)) {
+    if (fileService.shouldLlxprtIgnoreFile(filePath)) {
       return `File path '${filePath}' is ignored by .llxprtignore pattern(s).`;
     }
 
@@ -233,6 +246,11 @@ export class ReadFileTool extends BaseDeclarativeTool<
   protected createInvocation(
     params: ReadFileToolParams,
   ): ToolInvocation<ReadFileToolParams, ToolResult> {
-    return new ReadFileToolInvocation(this.config, params);
+    // Normalize parameters: if file_path is provided but not absolute_path, copy it over
+    const normalizedParams = { ...params };
+    if (!normalizedParams.absolute_path && normalizedParams.file_path) {
+      normalizedParams.absolute_path = normalizedParams.file_path;
+    }
+    return new ReadFileToolInvocation(this.config, normalizedParams);
   }
 }
