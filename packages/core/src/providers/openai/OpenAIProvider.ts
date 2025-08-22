@@ -1078,6 +1078,8 @@ export class OpenAIProvider extends BaseProvider {
         {
           provider: this.baseURL,
           streamingEnabled,
+          isUsingQwen: this.isUsingQwen(),
+          currentModel: this.currentModel,
         },
       );
 
@@ -1171,6 +1173,18 @@ export class OpenAIProvider extends BaseProvider {
           };
           allChunks.push(safeChunk);
         }
+
+        this.logger.debug(
+          () =>
+            `[Stream Buffering Complete] Collected ${allChunks.length} chunks`,
+          {
+            chunkCount: allChunks.length,
+            hasContent: allChunks.some((c) => c.choices?.[0]?.delta?.content),
+            hasToolCalls: allChunks.some(
+              (c) => c.choices?.[0]?.delta?.tool_calls,
+            ),
+          },
+        );
       } catch (error) {
         // Handle JSONResponse mutation errors that occur during iteration
         const errorMessage =
@@ -1324,7 +1338,17 @@ export class OpenAIProvider extends BaseProvider {
       }
 
       // Process chunks normally - stream them as they come
+      this.logger.debug(
+        () =>
+          `[Processing Chunks] Starting to process ${allChunks.length} buffered chunks`,
+        {
+          isUsingQwen: this.isUsingQwen(),
+        },
+      );
+
+      let chunkIndex = 0;
       for (const chunk of allChunks) {
+        chunkIndex++;
         // Since we created safe copies during buffering, chunks are now mutable
         // Check if this chunk has message format instead of delta (malformed stream)
         let processedChunk: StreamChunk = chunk;
@@ -1376,6 +1400,17 @@ export class OpenAIProvider extends BaseProvider {
 
           // For text-based models, don't yield content chunks yet
           if (!parser && delta.content) {
+            this.logger.debug(
+              () =>
+                `[Content Processing] Chunk ${chunkIndex}/${allChunks.length} has content`,
+              {
+                contentLength: delta.content.length,
+                contentPreview: delta.content.substring(0, 50),
+                isUsingQwen: this.isUsingQwen(),
+                willBuffer: this.isUsingQwen() && delta.content.trim() === '',
+              },
+            );
+
             if (this.isUsingQwen()) {
               const isWhitespaceOnly = delta.content.trim() === '';
               if (isWhitespaceOnly) {
@@ -1383,7 +1418,13 @@ export class OpenAIProvider extends BaseProvider {
                 pendingWhitespace = (pendingWhitespace || '') + delta.content;
                 this.logger.debug(
                   () =>
-                    `Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${pendingWhitespace?.length ?? 0}`,
+                    `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${pendingWhitespace?.length ?? 0}`,
+                  {
+                    chunkIndex,
+                    totalChunks: allChunks.length,
+                    isLastChunk: chunkIndex === allChunks.length,
+                    contentHex: Buffer.from(delta.content).toString('hex'),
+                  },
                 );
                 continue;
               } else if (pendingWhitespace) {
@@ -1401,6 +1442,15 @@ export class OpenAIProvider extends BaseProvider {
                 pendingWhitespace = null;
               }
             }
+
+            this.logger.debug(
+              () =>
+                `[Yielding Content] Yielding chunk ${chunkIndex}/${allChunks.length}`,
+              {
+                contentLength: delta.content.length,
+                hasStreamedContent,
+              },
+            );
 
             yield {
               role: ContentGeneratorRole.ASSISTANT,
@@ -1553,14 +1603,27 @@ export class OpenAIProvider extends BaseProvider {
                 const parsedArgs = JSON.parse(toolCall.function.arguments);
                 let hasNestedStringification = false;
 
-                // Check each property to see if it's a stringified array/object
+                // Check each property to see if it's a stringified array/object/number
                 const fixedArgs: Record<string, unknown> = {};
                 for (const [key, value] of Object.entries(parsedArgs)) {
                   if (typeof value === 'string') {
                     const trimmed = value.trim();
+
+                    // Check if it's a stringified number (integer or float)
+                    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+                      const numValue = trimmed.includes('.')
+                        ? parseFloat(trimmed)
+                        : parseInt(trimmed, 10);
+                      fixedArgs[key] = numValue;
+                      hasNestedStringification = true;
+                      this.logger.debug(
+                        () =>
+                          `[Qwen Fix] Fixed stringified number in property '${key}' for ${toolCall.function.name}: "${value}" -> ${numValue}`,
+                      );
+                    }
                     // Check if it looks like a stringified array or object
                     // Also check for Python-style dictionaries with single quotes
-                    if (
+                    else if (
                       (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
                       (trimmed.startsWith('{') && trimmed.endsWith('}'))
                     ) {
@@ -1680,11 +1743,23 @@ export class OpenAIProvider extends BaseProvider {
         const shouldOmitContent =
           hasStreamedContent && this.isUsingQwen() && !isCerebras;
 
+        this.logger.debug(
+          () => '[Tool Call Handling] Deciding how to yield tool calls',
+          {
+            hasStreamedContent,
+            isUsingQwen: this.isUsingQwen(),
+            isCerebras,
+            shouldOmitContent,
+            fullContentLength: fullContent.length,
+            toolCallCount: fixedToolCalls?.length || 0,
+          },
+        );
+
         if (shouldOmitContent) {
-          // Only yield tool calls with empty content to avoid duplication
+          // Qwen: Send just a space (like Cerebras) to prevent stream stopping
           yield {
             role: ContentGeneratorRole.ASSISTANT,
-            content: '',
+            content: ' ', // Single space instead of empty to keep stream alive
             tool_calls: fixedToolCalls,
             usage: usageData,
           };
