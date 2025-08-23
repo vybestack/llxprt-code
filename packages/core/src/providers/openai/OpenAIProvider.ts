@@ -956,7 +956,7 @@ export class OpenAIProvider extends BaseProvider {
         messages:
           cleanedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
         stream: streamingEnabled,
-        ...(streamingEnabled && finalStreamOptions !== null
+        ...(streamingEnabled && finalStreamOptions
           ? { stream_options: finalStreamOptions }
           : {}),
         tools: formattedTools as
