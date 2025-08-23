@@ -40,6 +40,9 @@ describe('GrepTool', () => {
     getTargetDir: () => tempRootDir,
     getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
     getEphemeralSettings: () => ({}),
+    getFileExclusions: () => ({
+      getGlobExcludes: () => [],
+    }),
   } as unknown as Config;
 
   beforeEach(async () => {
@@ -261,6 +264,9 @@ describe('GrepTool', () => {
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, [secondDir]),
         getEphemeralSettings: () => ({}),
+        getFileExclusions: () => ({
+          getGlobExcludes: () => [],
+        }),
       } as unknown as Config;
 
       const multiDirGrepTool = new GrepTool(multiDirConfig);
@@ -312,6 +318,9 @@ describe('GrepTool', () => {
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, [secondDir]),
         getEphemeralSettings: () => ({}),
+        getFileExclusions: () => ({
+          getGlobExcludes: () => [],
+        }),
       } as unknown as Config;
 
       const multiDirGrepTool = new GrepTool(multiDirConfig);
@@ -369,6 +378,9 @@ describe('GrepTool', () => {
         getTargetDir: () => tempRootDir,
         getWorkspaceContext: () =>
           createMockWorkspaceContext(tempRootDir, ['/another/dir']),
+        getFileExclusions: () => ({
+          getGlobExcludes: () => [],
+        }),
       } as unknown as Config;
 
       const multiDirGrepTool = new GrepTool(multiDirConfig);

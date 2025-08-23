@@ -54,6 +54,7 @@ export * from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
+export * from './utils/ignorePatterns.js';
 
 // Export auth system
 export * from './auth/token-store.js';

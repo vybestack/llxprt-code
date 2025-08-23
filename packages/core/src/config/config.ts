@@ -65,6 +65,7 @@ import {
 export type { MCPOAuthConfig };
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from './storage.js';
+import { FileExclusions } from '../utils/ignorePatterns.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -363,6 +364,7 @@ export class Config {
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
   readonly storage: Storage;
+  private readonly fileExclusions: FileExclusions;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -451,6 +453,7 @@ export class Config {
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
     this.storage = new Storage(this.targetDir);
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
+    this.fileExclusions = new FileExclusions(this);
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -885,6 +888,21 @@ export class Config {
     };
   }
 
+  /**
+   * Gets custom file exclusion patterns from configuration.
+   * TODO: This is a placeholder implementation. In the future, this could
+   * read from settings files, CLI arguments, or environment variables.
+   */
+  getCustomExcludes(): string[] {
+    // Placeholder implementation - returns empty array for now
+    // Future implementation could read from:
+    // - User settings file
+    // - Project-specific configuration
+    // - Environment variables
+    // - CLI arguments
+    return [];
+  }
+
   getCheckpointingEnabled(): boolean {
     return this.checkpointing;
   }
@@ -1092,6 +1110,10 @@ export class Config {
    */
   getSettingsService(): SettingsService {
     return this.settingsService;
+  }
+
+  getFileExclusions(): FileExclusions {
+    return this.fileExclusions;
   }
 
   async refreshMemory(): Promise<{ memoryContent: string; fileCount: number }> {

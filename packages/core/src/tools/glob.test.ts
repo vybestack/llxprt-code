@@ -30,6 +30,9 @@ describe('GlobTool', () => {
     getTargetDir: () => tempRootDir,
     getWorkspaceContext: () => createMockWorkspaceContext(tempRootDir),
     getEphemeralSettings: () => ({}),
+    getFileExclusions: () => ({
+      getGlobExcludes: () => [],
+    }),
   } as unknown as Config;
 
   beforeEach(async () => {

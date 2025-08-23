@@ -104,49 +104,14 @@ type FileProcessingResult =
     };
 
 /**
- * Default exclusion patterns for commonly ignored directories and binary file types.
- * These are compatible with glob ignore patterns.
+ * Creates the default exclusion patterns including dynamic patterns.
+ * This combines the shared patterns with dynamic patterns like LLXPRT.md.
  * TODO(adh): Consider making this configurable or extendable through a command line argument.
- * TODO(adh): Look into sharing this list with the glob tool.
  */
-const DEFAULT_EXCLUDES: string[] = [
-  '**/node_modules/**',
-  '**/.git/**',
-  '**/.vscode/**',
-  '**/.idea/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/coverage/**',
-  '**/__pycache__/**',
-  '**/*.pyc',
-  '**/*.pyo',
-  '**/*.bin',
-  '**/*.exe',
-  '**/*.dll',
-  '**/*.so',
-  '**/*.dylib',
-  '**/*.class',
-  '**/*.jar',
-  '**/*.war',
-  '**/*.zip',
-  '**/*.tar',
-  '**/*.gz',
-  '**/*.bz2',
-  '**/*.rar',
-  '**/*.7z',
-  '**/*.doc',
-  '**/*.docx',
-  '**/*.xls',
-  '**/*.xlsx',
-  '**/*.ppt',
-  '**/*.pptx',
-  '**/*.odt',
-  '**/*.ods',
-  '**/*.odp',
-  '**/*.DS_Store',
-  '**/.env',
-  `**/${getCurrentLlxprtMdFilename()}`,
-];
+function getDefaultExcludes(config?: Config): string[] {
+  const baseExcludes = config?.getFileExclusions().getReadManyFilesExcludes() ?? [];
+  return [...baseExcludes, `**/${getCurrentLlxprtMdFilename()}`];
+}
 
 const DEFAULT_OUTPUT_SEPARATOR_FORMAT = '--- {filePath} ---';
 const DEFAULT_OUTPUT_TERMINATOR = '\n--- End of content ---';
@@ -186,7 +151,11 @@ ${this.config.getTargetDir()}
     const paramUseDefaultExcludes = this.params.useDefaultExcludes !== false;
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes
-        ? [...DEFAULT_EXCLUDES, ...paramExcludes, ...this.llxprtIgnorePatterns]
+        ? [
+            ...getDefaultExcludes(this.config),
+            ...paramExcludes,
+            ...this.llxprtIgnorePatterns,
+          ]
         : [...paramExcludes, ...this.llxprtIgnorePatterns];
 
     let excludeDesc = `Excluding: ${
@@ -244,7 +213,7 @@ ${finalExclusionPatternsForDescription
     const contentParts: PartListUnion = [];
 
     const effectiveExcludes = useDefaultExcludes
-      ? [...DEFAULT_EXCLUDES, ...exclude, ...this.llxprtIgnorePatterns]
+      ? [...getDefaultExcludes(this.config), ...exclude, ...this.llxprtIgnorePatterns]
       : [...exclude, ...this.llxprtIgnorePatterns];
 
     const searchPatterns = [...inputPatterns, ...include];
