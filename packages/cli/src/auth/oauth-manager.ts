@@ -245,18 +245,36 @@ export class OAuthManager {
       await this.tokenStore.removeToken(providerName);
     }
 
-    // Special handling for Gemini - also clear the legacy oauth_creds.json
+    // Special handling for Gemini - clear all Google OAuth related files
     if (providerName === 'gemini') {
       try {
         const fs = await import('fs/promises');
         const path = await import('path');
         const os = await import('os');
-        const legacyCredsPath = path.join(os.homedir(), '.llxprt', 'oauth_creds.json');
-        await fs.unlink(legacyCredsPath);
-        console.log('Cleared Gemini OAuth credentials');
+        const llxprtDir = path.join(os.homedir(), '.llxprt');
+        
+        // Clear the OAuth credentials
+        const legacyCredsPath = path.join(llxprtDir, 'oauth_creds.json');
+        try {
+          await fs.unlink(legacyCredsPath);
+          console.log('Cleared Gemini OAuth credentials');
+        } catch {
+          // File might not exist
+        }
+        
+        // Clear the Google accounts file
+        const googleAccountsPath = path.join(llxprtDir, 'google_accounts.json');
+        try {
+          await fs.unlink(googleAccountsPath);
+          console.log('Cleared Google account info');
+        } catch {
+          // File might not exist
+        }
+        
+        // Force the OAuth client to re-authenticate by clearing any cached state
+        // The next request will need to re-authenticate
       } catch (error) {
-        // File might not exist, that's OK
-        console.debug('No legacy Gemini credentials to clear');
+        console.debug('Error clearing Gemini credentials:', error);
       }
     }
   }
