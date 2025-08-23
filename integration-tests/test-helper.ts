@@ -197,7 +197,9 @@ export class TestRig {
   }
 
   run(
-    promptOrOptions: string | { prompt?: string; stdin?: string },
+    promptOrOptions:
+      | string
+      | { prompt?: string; stdin?: string; stdinDoesNotEnd?: boolean },
     ...args: string[]
   ): Promise<string> {
     // Add provider and model flags from environment - FAIL FAST if not configured
@@ -308,7 +310,13 @@ export class TestRig {
     if (execOptions.input) {
       child.stdin!.write(execOptions.input);
     }
-    child.stdin!.end();
+
+    if (
+      typeof promptOrOptions === 'object' &&
+      !promptOrOptions.stdinDoesNotEnd
+    ) {
+      child.stdin!.end();
+    }
 
     child.stdout!.on('data', (data: Buffer) => {
       stdout += data;
