@@ -245,22 +245,19 @@ export class OAuthManager {
       await this.tokenStore.removeToken(providerName);
     }
 
-    // Lines 28-30: Update settings to disable OAuth
-    // Use the same settings structure as isOAuthEnabled/toggleOAuthEnabled
-    if (this.settings) {
-      const oauthEnabledProviders =
-        this.settings.merged.oauthEnabledProviders || {};
-      oauthEnabledProviders[providerName] = false;
-      
-      // Save the updated configuration
-      this.settings.setValue(
-        SettingScope.User,
-        'oauthEnabledProviders',
-        oauthEnabledProviders,
-      );
-    } else {
-      // Update in-memory state if no settings available
-      this.inMemoryOAuthState.set(providerName, false);
+    // Special handling for Gemini - also clear the legacy oauth_creds.json
+    if (providerName === 'gemini') {
+      try {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const os = await import('os');
+        const legacyCredsPath = path.join(os.homedir(), '.llxprt', 'oauth_creds.json');
+        await fs.unlink(legacyCredsPath);
+        console.log('Cleared Gemini OAuth credentials');
+      } catch (error) {
+        // File might not exist, that's OK
+        console.debug('No legacy Gemini credentials to clear');
+      }
     }
   }
 
