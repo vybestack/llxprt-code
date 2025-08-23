@@ -245,22 +245,22 @@ export class OAuthManager {
       await this.tokenStore.removeToken(providerName);
     }
 
-    // Lines 28-30: Update settings
-    try {
-      const { getSettingsService } = await import(
-        '@vybestack/llxprt-code-core'
+    // Lines 28-30: Update settings to disable OAuth
+    // Use the same settings structure as isOAuthEnabled/toggleOAuthEnabled
+    if (this.settings) {
+      const oauthEnabledProviders =
+        this.settings.merged.oauthEnabledProviders || {};
+      oauthEnabledProviders[providerName] = false;
+      
+      // Save the updated configuration
+      this.settings.setValue(
+        SettingScope.User,
+        'oauthEnabledProviders',
+        oauthEnabledProviders,
       );
-      const settingsService = getSettingsService();
-      if (
-        settingsService &&
-        typeof settingsService.updateSettings === 'function'
-      ) {
-        await settingsService.updateSettings({
-          [`auth.${providerName}.oauth.enabled`]: false,
-        });
-      }
-    } catch (_error) {
-      // Settings service unavailable (e.g., in test environment), continue without updating settings
+    } else {
+      // Update in-memory state if no settings available
+      this.inMemoryOAuthState.set(providerName, false);
     }
   }
 
