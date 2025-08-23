@@ -193,6 +193,12 @@ export class OAuthManager {
       return false;
     }
 
+    // Special handling for Gemini - if OAuth is enabled, assume authenticated
+    // since the actual auth is handled by LOGIN_WITH_GOOGLE
+    if (providerName === 'gemini' && this.isOAuthEnabled('gemini')) {
+      return true;
+    }
+
     // Lines 57-60: SET token = AWAIT this.tokenStore.getToken(providerName)
     const token = await this.tokenStore.getToken(providerName);
     if (!token) {
@@ -316,6 +322,15 @@ export class OAuthManager {
       // Return the access token without any prefix - OAuth Bearer tokens should be used as-is
       return newToken ? newToken.access_token : null;
     } catch (error) {
+      // Special handling for Gemini - USE_EXISTING_GEMINI_OAUTH is not an error
+      // It's a signal to use the existing LOGIN_WITH_GOOGLE flow
+      if (providerName === 'gemini' && 
+          error instanceof Error && 
+          error.message === 'USE_EXISTING_GEMINI_OAUTH') {
+        // Return null to signal that OAuth should be handled by GeminiProvider
+        return null;
+      }
+      
       // Re-throw the error so it's not silently swallowed
       console.error(`OAuth authentication failed for ${providerName}:`, error);
       throw error;
