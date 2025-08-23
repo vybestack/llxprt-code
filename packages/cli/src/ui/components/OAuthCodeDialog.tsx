@@ -15,6 +15,11 @@ interface OAuthCodeDialogProps {
   onSubmit: (code: string) => void;
 }
 
+/**
+ * @plan PLAN-20250822-GEMINIFALLBACK.P09
+ * @requirement REQ-002.1
+ * @pseudocode lines 38-45
+ */
 export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
   provider,
   onClose,
@@ -22,6 +27,31 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
 }) => {
   const [code, setCode] = useState('');
 
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P09
+   * @requirement REQ-002.1, REQ-006.2
+   * @pseudocode lines 38-45
+   */
+  const getInstructions = useCallback((): string[] => {
+    if (provider === 'gemini') {
+      return [
+        'The OAuth URL has been copied to your clipboard.',
+        'Please paste it into your browser to authenticate with Google.',
+        'After authenticating, paste the verification code you receive below:',
+      ];
+    } else {
+      return [
+        'Please check your browser and authorize the application.',
+        'After authorizing, paste the authorization code below:',
+      ];
+    }
+  }, [provider]);
+
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P09
+   * @requirement REQ-002.2, REQ-006.3
+   * @pseudocode lines 46-65
+   */
   const handleInput = useCallback(
     (key: Key) => {
       // Handle escape to close
@@ -82,12 +112,11 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         {provider.charAt(0).toUpperCase() + provider.slice(1)} OAuth
         Authentication
       </Text>
-      <Text color={Colors.Foreground}>
-        Please check your browser and authorize the application.
-      </Text>
-      <Text color={Colors.Foreground}>
-        After authorizing, paste the authorization code below:
-      </Text>
+      {getInstructions().map((instruction, index) => (
+        <Text key={index} color={Colors.Foreground}>
+          {instruction}
+        </Text>
+      ))}
       <Box marginTop={1}>
         <Text color={Colors.AccentCyan}>Code: </Text>
         <Text color={Colors.Foreground}>

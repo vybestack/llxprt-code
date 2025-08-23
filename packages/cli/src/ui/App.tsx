@@ -403,14 +403,9 @@ const App = (props: AppInternalProps) => {
   // Check for OAuth code needed flag
   useEffect(() => {
     const checkOAuthFlag = setInterval(() => {
-      if (
-        (global as unknown as { __oauth_needs_code?: boolean })
-          .__oauth_needs_code
-      ) {
+      if ((global as Record<string, unknown>).__oauth_needs_code) {
         // Clear the flag
-        (
-          global as unknown as { __oauth_needs_code?: boolean }
-        ).__oauth_needs_code = false;
+        (global as Record<string, unknown>).__oauth_needs_code = false;
         // Open the OAuth code dialog
         appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
       }
@@ -1359,8 +1354,8 @@ You can switch authentication methods by typing /auth or switch to a different m
             <Box flexDirection="column">
               <OAuthCodeDialog
                 provider={
-                  (global as unknown as { __oauth_provider?: string })
-                    .__oauth_provider || 'anthropic'
+                  ((global as Record<string, unknown>)
+                    .__oauth_provider as string) || 'anthropic'
                 }
                 onClose={handleOAuthCodeDialogClose}
                 onSubmit={handleOAuthCodeSubmit}

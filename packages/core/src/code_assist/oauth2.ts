@@ -27,6 +27,7 @@ import {
 import { AuthType } from '../core/contentGenerator.js';
 import readline from 'node:readline';
 import open from 'open';
+import { ClipboardService } from '../services/ClipboardService.js';
 
 //  OAuth Client ID used to initiate OAuth2Client class.
 const OAUTH_CLIENT_ID =
@@ -165,6 +166,7 @@ async function initOauthClient(
         `Attempting to open authentication page in your browser.\n` +
         `Otherwise navigate to:\n\n${webLogin.authUrl}\n\n`,
     );
+
     try {
       // Attempt to open the authentication URL in the default browser.
       // We do not use the `wait` option here because the main script's execution
@@ -176,22 +178,34 @@ async function initOauthClient(
       // in a minimal Docker container), it will emit an unhandled 'error' event,
       // causing the entire Node.js process to crash.
       childProcess.on('error', (_) => {
-        console.error(
-          'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
-        );
-        process.exit(1);
+        // Error will be handled in the catch block
       });
-    } catch (err) {
+    } catch (_err) {
       console.error(
-        'An unexpected error occurred while trying to open the browser:',
-        err,
-        '\nPlease try running again with NO_BROWSER=true set.',
+        'Failed to open browser automatically. Falling back to manual authentication.',
       );
-      process.exit(1);
+
+      // Fall back to user code flow when browser fails
+      const success = await authWithUserCode(client);
+      if (!success) {
+        console.error('Authentication failed.');
+        process.exit(1);
+      }
+      return client;
     }
+
     console.log('Waiting for authentication...');
 
     await webLogin.loginCompletePromise;
+
+    // Reset global state variables after successful authentication
+    /**
+     * @plan PLAN-20250822-GEMINIFALLBACK.P13
+     * @requirement REQ-004.2
+     * @pseudocode lines 17-18, 25-26
+     */
+    (global as Record<string, unknown>).__oauth_needs_code = false;
+    (global as Record<string, unknown>).__oauth_provider = undefined;
   }
 
   return client;
@@ -219,10 +233,33 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
     code_challenge: codeVerifier.codeChallenge,
     state,
   });
-  console.log('Please visit the following URL to authorize the application:');
-  console.log('');
-  console.log(authUrl);
-  console.log('');
+
+  // Try to copy URL to clipboard
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P13
+   * @requirement REQ-004.1
+   * @pseudocode lines 11-13
+   */
+  const clipboardService = new ClipboardService();
+  try {
+    await clipboardService.copyToClipboard(authUrl);
+    console.log(
+      '\n\nCode Assist login required.\n' +
+        'The authentication URL has been copied to your clipboard.\n' +
+        'Please paste it into your browser to authenticate.\n' +
+        'After authenticating, paste the verification code you receive below:\n\n',
+    );
+  } catch (clipboardError) {
+    console.error('Failed to copy URL to clipboard:', clipboardError);
+    // If clipboard copy fails, show the URL in a clean format without decorations
+    console.log(
+      '\nPlease visit the following URL to authorize the application:',
+    );
+    console.log(authUrl);
+    console.log(
+      '\nAfter authenticating, paste the verification code you receive below:',
+    );
+  }
 
   const code = await new Promise<string>((resolve) => {
     const rl = readline.createInterface({
@@ -336,22 +373,22 @@ export function getAvailablePort(): Promise<number> {
         port = parseInt(portStr, 10);
         if (isNaN(port) || port <= 0 || port > 65535) {
           return reject(
-            new Error(`Invalid value for OAUTH_CALLBACK_PORT: "${portStr}"`),
+            new Error(`Invalid value for OAUTH_CALLBACK_PORT: ${portStr}`),
           );
         }
         return resolve(port);
       }
       const server = net.createServer();
       server.listen(0, () => {
-        const address = server.address()! as net.AddressInfo;
-        port = address.port;
-      });
-      server.on('listening', () => {
+        const address = server.address();
+        if (address && typeof address === 'object' && 'port' in address) {
+          resolve(address.port);
+        } else {
+          reject(new Error('Failed to get available port'));
+        }
         server.close();
-        server.unref();
       });
-      server.on('error', (e) => reject(e));
-      server.on('close', () => resolve(port));
+      server.on('error', reject);
     } catch (e) {
       reject(e);
     }
@@ -364,23 +401,16 @@ async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
     process.env['GOOGLE_APPLICATION_CREDENTIALS'],
   ].filter((p): p is string => !!p);
 
-  for (const keyFile of pathsToTry) {
+  for (const credPath of pathsToTry) {
     try {
-      const creds = await fs.readFile(keyFile, 'utf-8');
-      client.setCredentials(JSON.parse(creds));
-
-      // This will verify locally that the credentials look good.
-      const { token } = await client.getAccessToken();
-      if (!token) {
-        continue;
+      const credsJson = await fs.readFile(credPath, 'utf8');
+      const creds = JSON.parse(credsJson) as Credentials;
+      if (creds.refresh_token) {
+        client.setCredentials(creds);
+        return true;
       }
-
-      // This will check with the server to see if it hasn't been revoked.
-      await client.getTokenInfo(token);
-
-      return true;
-    } catch (_) {
-      // Ignore and try next path.
+    } catch {
+      // Continue to next path
     }
   }
 
@@ -409,9 +439,10 @@ async function cacheCredentials(credentials: Credentials) {
   }
 
   try {
-    const credString = JSON.stringify(credentials, null, 2);
-    // Restrict file permissions to owner read/write only (0o600)
-    await fs.writeFile(filePath, credString, { mode: 0o600 });
+    // Write with restricted permissions (owner read/write only)
+    await fs.writeFile(filePath, JSON.stringify(credentials, null, 2), {
+      mode: 0o600,
+    });
   } catch (error) {
     console.error('Failed to cache OAuth credentials:', error);
     // Don't throw - allow OAuth to continue without caching

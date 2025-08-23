@@ -204,6 +204,7 @@ export class ReadFileTool extends BaseDeclarativeTool<
           },
         },
         required: ['absolute_path'],
+        requireOne: [['absolute_path', 'file_path']], // Accept either absolute_path or file_path
         type: 'object',
       },
     );
@@ -216,7 +217,7 @@ export class ReadFileTool extends BaseDeclarativeTool<
     const filePath = params.absolute_path || params.file_path || '';
 
     if (filePath.trim() === '') {
-      return "The 'absolute_path' parameter must be non-empty.";
+      return "Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.";
     }
 
     if (!path.isAbsolute(filePath)) {

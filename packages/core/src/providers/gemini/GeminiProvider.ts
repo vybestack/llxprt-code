@@ -27,6 +27,12 @@ import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 /**
+ * @plan PLAN-20250822-GEMINIFALLBACK.P12
+ * @requirement REQ-003.1, REQ-003.2, REQ-003.3
+ * @pseudocode lines 12-18, 21-26
+ */
+
+/**
  * Represents the default Gemini provider.
  * This provider is implicitly active when no other provider is explicitly set.
  *
@@ -431,6 +437,15 @@ export class GeminiProvider extends BaseProvider {
           request,
           'oauth-session', // userPromptId for OAuth mode
         );
+
+        // Reset global state variables after successful authentication
+        /**
+         * @plan PLAN-20250822-GEMINIFALLBACK.P12
+         * @requirement REQ-003.3
+         * @pseudocode lines 17-18, 25-26
+         */
+        (global as Record<string, unknown>).__oauth_needs_code = false;
+        (global as Record<string, unknown>).__oauth_provider = undefined;
 
         // Convert the stream to our format
         for await (const response of streamResult) {

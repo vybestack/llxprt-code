@@ -12,3 +12,4 @@ export type {
   ComplexityAnalyzerOptions,
   AnalysisStats,
 } from './complexity-analyzer.js';
+export { ClipboardService } from './ClipboardService.js';

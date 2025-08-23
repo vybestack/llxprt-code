@@ -158,6 +158,19 @@ export abstract class DeclarativeTool<
   ) {}
 
   get schema(): FunctionDeclaration {
+    // Strip requireOne from the schema before sending to the model
+    // The requireOne property is used internally for validation but not sent to the model
+    if (this.parameterSchema && typeof this.parameterSchema === 'object') {
+      const schemaClone = {
+        ...(this.parameterSchema as Record<string, unknown>),
+      };
+      delete schemaClone.requireOne;
+      return {
+        name: this.name,
+        description: this.description,
+        parametersJsonSchema: schemaClone,
+      };
+    }
     return {
       name: this.name,
       description: this.description,

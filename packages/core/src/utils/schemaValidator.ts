@@ -11,6 +11,17 @@ const AjvClass = (AjvPkg as any).default || AjvPkg;
 const ajValidator = new AjvClass();
 
 /**
+ * Extended JSON Schema type with custom properties
+ */
+interface ExtendedSchema {
+  type?: string;
+  properties?: Record<string, unknown>;
+  required?: string[];
+  requireOne?: string[][]; // Array of arrays - at least one property from each array must be present
+  [key: string]: unknown;
+}
+
+/**
  * Simple utility to validate objects against JSON Schemas
  */
 export class SchemaValidator {
@@ -26,7 +37,27 @@ export class SchemaValidator {
       return 'Value of params must be an object';
     }
 
-    const validate = ajValidator.compile(schema);
+    // Handle our custom requireOne validation first
+    const extSchema = schema as ExtendedSchema;
+    if (extSchema.requireOne) {
+      for (const oneOfGroup of extSchema.requireOne) {
+        const hasOne = oneOfGroup.some(
+          (prop) =>
+            (data as Record<string, unknown>)[prop] !== undefined &&
+            (data as Record<string, unknown>)[prop] !== null &&
+            (data as Record<string, unknown>)[prop] !== '',
+        );
+        if (!hasOne) {
+          return `params must have at least one of required properties: ${oneOfGroup.join(', ')}`;
+        }
+      }
+    }
+
+    // Create a copy of the schema without our custom properties for AJV
+    const ajvSchema = { ...extSchema };
+    delete ajvSchema.requireOne;
+
+    const validate = ajValidator.compile(ajvSchema);
     const valid = validate(data);
 
     if (!valid && validate.errors) {

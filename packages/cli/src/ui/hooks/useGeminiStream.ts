@@ -586,9 +586,11 @@ export const useGeminiStream = (
 
       // Check if this is an authentication error that should trigger onAuthError
       // Match various authentication error patterns from different providers
+      // But DON'T trigger if we're in the middle of OAuth flow
       if (
-        errorText.includes('Failed to resolve authentication') ||
-        errorText.includes('Authentication required')
+        (errorText.includes('Failed to resolve authentication') ||
+          errorText.includes('Authentication required')) &&
+        !(global as Record<string, unknown>).__oauth_needs_code
       ) {
         // Call the onAuthError callback which will be handled by App.tsx
         onAuthError();

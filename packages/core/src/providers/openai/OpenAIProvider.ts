@@ -800,31 +800,20 @@ export class OpenAIProvider extends BaseProvider {
       return;
     }
 
-    // Fix messages in place like AnthropicProvider does - this ensures synthetic responses persist
-    // This is critical for preventing 400 errors on subsequent calls with Qwen/Cerebras
-    const missingToolIds = this.identifyAndFixMissingToolResponses(messages);
-    if (missingToolIds.length > 0) {
+    // Don't automatically add synthetic responses - they should only be added when tools are actually cancelled
+    // Check if we have any existing synthetic responses (from actual cancellations)
+    const existingSyntheticCount = messages.filter(
+      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
+    ).length;
+
+    if (existingSyntheticCount > 0) {
       this.logger.debug(
         () =>
-          `[Synthetic] Added ${missingToolIds.length} synthetic responses to conversation history: ${JSON.stringify(missingToolIds)}`,
+          `[Synthetic] Found ${existingSyntheticCount} existing synthetic responses in conversation`,
       );
-
-      // Log the actual tool calls and their IDs for debugging
-      const assistantMessagesWithTools = messages.filter(
-        (m) =>
-          m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
-      );
-      const lastAssistantWithTools =
-        assistantMessagesWithTools[assistantMessagesWithTools.length - 1];
-      if (lastAssistantWithTools?.tool_calls) {
-        this.logger.debug(
-          () =>
-            `[Synthetic] Last assistant tool calls: ${JSON.stringify(lastAssistantWithTools.tool_calls?.map((tc) => ({ id: tc.id, name: tc.function.name })) ?? [])}`,
-        );
-      }
     }
 
-    // Now messages array has been modified in place with synthetic responses
+    // Just use the messages as-is without "fixing" them
     const patchedMessages = messages;
 
     // Validate tool messages have required tool_call_id
@@ -850,6 +839,52 @@ export class OpenAIProvider extends BaseProvider {
         () =>
           `[Synthetic] Added ${syntheticMessages.length} synthetic tool responses`,
       );
+
+      // Check for ordering issues - using debug logger which only executes when enabled
+      this.logger.debug(() => {
+        const orderingErrors: string[] = [];
+        const orderingWarnings: string[] = [];
+
+        for (let i = 0; i < patchedMessages.length - 1; i++) {
+          const current = patchedMessages[i];
+          const next = patchedMessages[i + 1];
+
+          // Check if a tool response comes before its corresponding tool call
+          if (current.role === 'tool' && current.tool_call_id) {
+            // Find the assistant message with this tool call
+            const callIndex = patchedMessages.findIndex(
+              (m) =>
+                m.role === 'assistant' &&
+                m.tool_calls?.some((tc) => tc.id === current.tool_call_id),
+            );
+            if (callIndex === -1 || callIndex > i) {
+              orderingErrors.push(
+                `Tool response ${current.tool_call_id} appears before its tool call or call not found`,
+              );
+            }
+          }
+
+          // Check if we have consecutive assistant messages with tool calls
+          if (
+            current.role === 'assistant' &&
+            current.tool_calls &&
+            next.role === 'assistant' &&
+            next.tool_calls
+          ) {
+            orderingWarnings.push(
+              `Consecutive assistant messages with tool calls at indices ${i} and ${i + 1}`,
+            );
+          }
+        }
+
+        if (orderingErrors.length > 0) {
+          return `[Synthetic Order Check] Errors found: ${orderingErrors.join('; ')}`;
+        } else if (orderingWarnings.length > 0) {
+          return `[Synthetic Order Check] Warnings: ${orderingWarnings.join('; ')}`;
+        } else {
+          return '[Synthetic Order Check] No issues found';
+        }
+      });
     }
 
     const parser = this.requiresTextToolCallParsing()
@@ -932,29 +967,54 @@ export class OpenAIProvider extends BaseProvider {
       });
     } catch (error) {
       // Debug the error
+      const errorStatus =
+        (error as { status?: number })?.status ||
+        (error as { response?: { status?: number } })?.response?.status;
+      const errorLabel =
+        errorStatus === 400 ? '[API Error 400]' : '[API Error]';
+
       this.logger.error(
-        () => `[Cancellation 400] Error caught in API call: ${error}`,
+        () => `${errorLabel} Error caught in API call: ${error}`,
       );
       this.logger.error(
         () =>
-          `[Cancellation 400] Error type: ${(error as Error)?.constructor?.name}`,
+          `${errorLabel} Error type: ${(error as Error)?.constructor?.name}`,
       );
+      this.logger.error(() => `${errorLabel} Error status: ${errorStatus}`);
       this.logger.error(
         () =>
-          `[Cancellation 400] Error status: ${(error as { status?: number })?.status || (error as { response?: { status?: number } })?.response?.status}`,
-      );
-      this.logger.error(
-        () =>
-          `[Cancellation 400] Error response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
+          `${errorLabel} Error response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
       );
 
       // Log the last few messages to understand what's being sent
-      if (
-        (error as { status?: number })?.status === 400 ||
-        (error as { response?: { status?: number } })?.response?.status === 400
-      ) {
+      if (errorStatus === 400) {
+        // Log additional diagnostics for 400 errors
+        const hasSyntheticMessages = cleanedMessages.some(
+          (msg) =>
+            msg.role === 'tool' &&
+            msg.content === 'Tool execution cancelled by user',
+        );
+        const hasPendingToolCalls = cleanedMessages.some((msg, idx) => {
+          if (msg.role === 'assistant' && msg.tool_calls) {
+            // Check if there's a matching tool response
+            const toolCallIds = msg.tool_calls.map((tc) => tc.id);
+            const hasResponses = toolCallIds.every((id) =>
+              cleanedMessages
+                .slice(idx + 1)
+                .some((m) => m.role === 'tool' && m.tool_call_id === id),
+            );
+            return !hasResponses;
+          }
+          return false;
+        });
+
+        this.logger.error(() => `${errorLabel} Last 5 messages being sent:`);
         this.logger.error(
-          () => `[Cancellation 400] Last 5 messages being sent:`,
+          () => `${errorLabel} Has synthetic messages: ${hasSyntheticMessages}`,
+        );
+        this.logger.error(
+          () =>
+            `${errorLabel} Has pending tool calls without responses: ${hasPendingToolCalls}`,
         );
         const lastMessages = cleanedMessages.slice(-5);
         lastMessages.forEach((msg, idx) => {
@@ -981,7 +1041,7 @@ export class OpenAIProvider extends BaseProvider {
       ) {
         this.logger.debug(
           () =>
-            '[Cancellation 400] Detected JSONResponse mutation error, retrying without streaming',
+            '[JSONResponse Error] Detected JSONResponse mutation error, retrying without streaming',
         );
         this.logger.error(
           () =>
@@ -1008,8 +1068,7 @@ export class OpenAIProvider extends BaseProvider {
         streamingEnabled = false;
       } else {
         this.logger.debug(
-          () =>
-            '[Cancellation 400] Re-throwing error (not a JSONResponse mutation)',
+          () => `${errorLabel} Re-throwing error (not a JSONResponse mutation)`,
         );
         // Re-throw other errors
         throw error;
@@ -1940,117 +1999,6 @@ export class OpenAIProvider extends BaseProvider {
    */
   getConversationCache(): ConversationCache {
     return this.conversationCache;
-  }
-
-  /**
-   * Identifies and fixes missing tool responses by adding synthetic responses in place.
-   * Similar to AnthropicProvider's validateAndFixMessages approach.
-   * This ensures synthetic responses persist in the conversation history.
-   * @param messages The message array to fix in place
-   * @returns Array of tool call IDs that were fixed
-   */
-  private identifyAndFixMissingToolResponses(messages: IMessage[]): string[] {
-    const fixedIds: string[] = [];
-    const pendingToolCalls: Array<{ id: string; name: string }> = [];
-
-    // Process messages in order, tracking tool calls and responses
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-
-      if (msg.role === 'assistant' && msg.tool_calls) {
-        // If we have pending tool calls from a previous assistant message,
-        // add synthetic responses for them before processing this new assistant message
-        if (pendingToolCalls.length > 0) {
-          const syntheticResponses = pendingToolCalls.map(
-            (tc) =>
-              ({
-                role: 'tool' as const,
-                tool_call_id: tc.id,
-                content: 'Tool execution cancelled by user',
-                _synthetic: true,
-                _cancelled: true,
-              }) as IMessage & { _synthetic: boolean; _cancelled: boolean },
-          );
-
-          // Insert synthetic responses before the current assistant message
-          messages.splice(i, 0, ...syntheticResponses);
-
-          // Track what we fixed
-          fixedIds.push(...pendingToolCalls.map((tc) => tc.id));
-
-          // Adjust index to account for inserted messages
-          i += syntheticResponses.length;
-
-          // Clear pending tool calls
-          pendingToolCalls.length = 0;
-        }
-
-        // Now track the new tool calls from this assistant message
-        msg.tool_calls.forEach((toolCall) => {
-          if (toolCall.id) {
-            pendingToolCalls.push({
-              id: toolCall.id,
-              name: toolCall.function.name,
-            });
-          }
-        });
-      } else if (msg.role === 'tool' && pendingToolCalls.length > 0) {
-        // Match tool responses with pending tool calls
-        pendingToolCalls.splice(
-          pendingToolCalls.findIndex((tc) => tc.id === msg.tool_call_id),
-          1,
-        );
-      } else if (
-        (msg.role === 'assistant' || msg.role === 'user') &&
-        pendingToolCalls.length > 0
-      ) {
-        // We hit a non-tool message with pending tool calls - need to add synthetic responses
-        const syntheticResponses = pendingToolCalls.map(
-          (tc) =>
-            ({
-              role: 'tool' as const,
-              tool_call_id: tc.id,
-              content: 'Tool execution cancelled by user',
-              _synthetic: true,
-              _cancelled: true,
-            }) as IMessage & { _synthetic: boolean; _cancelled: boolean },
-        );
-
-        // Insert synthetic responses before the current message
-        messages.splice(i, 0, ...syntheticResponses);
-
-        // Track what we fixed
-        fixedIds.push(...pendingToolCalls.map((tc) => tc.id));
-
-        // Adjust index to account for inserted messages
-        i += syntheticResponses.length;
-
-        // Clear pending tool calls
-        pendingToolCalls.length = 0;
-      }
-    }
-
-    // Handle any remaining pending tool calls at the end
-    if (pendingToolCalls.length > 0) {
-      const syntheticResponses = pendingToolCalls.map(
-        (tc) =>
-          ({
-            role: 'tool' as const,
-            tool_call_id: tc.id,
-            content: 'Tool execution cancelled by user',
-            _synthetic: true,
-            _cancelled: true,
-          }) as IMessage & { _synthetic: boolean; _cancelled: boolean },
-      );
-
-      // Add to the end of messages
-      messages.push(...syntheticResponses);
-
-      // Track what we fixed
-      fixedIds.push(...pendingToolCalls.map((tc) => tc.id));
-    }
-
-    return fixedIds;
   }
 
   /**
