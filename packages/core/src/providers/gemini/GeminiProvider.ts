@@ -122,16 +122,25 @@ export class GeminiProvider extends BaseProvider {
     try {
       const token = await this.getAuthToken();
 
-      // @plan:PLAN-20250823-AUTHFIXES.P15
-      // @requirement:REQ-004
-      // Removed magic string check - now uses standard OAuth token handling
+      // Check if OAuth is enabled for Gemini but no token was returned
+      // This signals to use the existing LOGIN_WITH_GOOGLE flow
+      const authMethodName = await this.getAuthMethodName();
+      const manager = this.geminiOAuthManager as OAuthManager & {
+        isOAuthEnabled?(provider: string): boolean;
+      };
+      const isOAuthEnabled = manager?.isOAuthEnabled && 
+                            typeof manager.isOAuthEnabled === 'function' &&
+                            manager.isOAuthEnabled('gemini');
+      
+      if (authMethodName?.startsWith('oauth-') || 
+          (this.geminiOAuthManager && !token && isOAuthEnabled)) {
+        this.authMode = 'oauth';
+        // Return a special token for OAuth mode
+        return 'USE_LOGIN_WITH_GOOGLE';
+      }
 
       // Determine auth mode based on resolved authentication method
-      const authMethodName = await this.getAuthMethodName();
-
-      if (authMethodName?.startsWith('oauth-')) {
-        this.authMode = 'oauth';
-      } else if (this.hasVertexAICredentials()) {
+      if (this.hasVertexAICredentials()) {
         this.authMode = 'vertex-ai';
         this.setupVertexAIAuth();
       } else if (this.hasGeminiAPIKey() || authMethodName?.includes('key')) {
@@ -142,6 +151,18 @@ export class GeminiProvider extends BaseProvider {
 
       return token;
     } catch (error) {
+      // Check if OAuth is enabled for Gemini - if so, use LOGIN_WITH_GOOGLE
+      const manager = this.geminiOAuthManager as OAuthManager & {
+        isOAuthEnabled?(provider: string): boolean;
+      };
+      if (this.geminiOAuthManager && 
+          manager.isOAuthEnabled && 
+          typeof manager.isOAuthEnabled === 'function' &&
+          manager.isOAuthEnabled('gemini')) {
+        this.authMode = 'oauth';
+        return 'USE_LOGIN_WITH_GOOGLE';
+      }
+      
       // Handle case where no auth is available
       const authType = this.geminiConfig?.getContentGeneratorConfig()?.authType;
       if (authType === AuthType.USE_NONE) {
