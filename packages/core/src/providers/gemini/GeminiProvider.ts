@@ -122,11 +122,9 @@ export class GeminiProvider extends BaseProvider {
     try {
       const token = await this.getAuthToken();
 
-      // Check for special OAuth signal
-      if (token === 'USE_LOGIN_WITH_GOOGLE') {
-        this.authMode = 'oauth';
-        return token; // Return the magic token
-      }
+      // @plan:PLAN-20250823-AUTHFIXES.P15
+      // @requirement:REQ-004
+      // Removed magic string check - now uses standard OAuth token handling
 
       // Determine auth mode based on resolved authentication method
       const authMethodName = await this.getAuthMethodName();

@@ -48,11 +48,16 @@ export class AuthCommandExecutor {
       return this.setProviderOAuth(provider, action === 'enable');
     }
 
-    // Invalid action
+    // Lines 15-17: Handle logout action (NEW) @pseudocode lines 15-17
+    if (action === 'logout' || action === 'signout') {
+      return this.logoutProvider(provider);
+    }
+
+    // Lines 19-24: Invalid action @pseudocode lines 19-24
     return {
       type: 'message',
       messageType: 'error',
-      content: `Invalid action: ${action}. Use 'enable' or 'disable'`,
+      content: `Invalid action: ${action}. Use enable, disable, or logout`,
     };
   }
 
@@ -84,7 +89,29 @@ export class AuthCommandExecutor {
 
       let status = `OAuth for ${provider}: ${isEnabled ? 'ENABLED' : 'DISABLED'}`;
       if (isEnabled && isAuthenticated) {
-        status += ' (authenticated)';
+        // Lines 70-85: Show token expiry information @pseudocode lines 70-85
+        const token = await this.oauthManager.getOAuthToken(provider);
+        if (token && token.expiry) {
+          // Lines 72-76: Calculate time until expiry
+          const expiryDate = new Date(token.expiry * 1000);
+          const timeUntilExpiry = Math.max(0, token.expiry - Date.now() / 1000);
+          const hours = Math.floor(timeUntilExpiry / 3600);
+          const minutes = Math.floor((timeUntilExpiry % 3600) / 60);
+
+          // Lines 78-85: Return detailed status with logout instruction
+          status =
+            `${provider} OAuth: Enabled and authenticated\n` +
+            `Token expires: ${expiryDate.toISOString()}\n` +
+            `Time remaining: ${hours}h ${minutes}m\n` +
+            `Use /auth ${provider} logout to sign out`;
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: status,
+          };
+        } else {
+          status += ' (authenticated)';
+        }
       } else if (isEnabled && !isAuthenticated) {
         status += ' (not authenticated)';
       }
@@ -167,6 +194,71 @@ export class AuthCommandExecutor {
         type: 'message',
         messageType: 'error',
         content: `Failed to ${enable ? 'enable' : 'disable'} OAuth for ${provider}: ${errorMessage}`,
+      };
+    }
+  }
+
+  /**
+   * @plan PLAN-20250823-AUTHFIXES.P14
+   * @requirement REQ-002.3
+   * @pseudocode lines 26-63
+   * Logout from a specific provider
+   * @param provider - Name of the provider to logout from
+   * @returns MessageActionReturn with logout result
+   */
+  private async logoutProvider(provider: string): Promise<MessageActionReturn> {
+    try {
+      // Lines 28-35: Check if provider is supported
+      const supportedProviders = this.oauthManager.getSupportedProviders();
+      if (!supportedProviders.includes(provider)) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
+        };
+      }
+
+      // Lines 38-49: Check if user is authenticated and perform logout
+      const isAuthenticated = await this.oauthManager.isAuthenticated(provider);
+      if (!isAuthenticated) {
+        // Still attempt logout in case there's an expired/invalid token to clean up
+        try {
+          await this.oauthManager.logout(provider);
+        } catch (error) {
+          // OAuth manager failures should be treated as errors
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to logout from ${provider}: ${errorMessage}`,
+          };
+        }
+        // If logout succeeded for unauthenticated user, they had stale tokens
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `Successfully logged out of ${provider}`,
+        };
+      } else {
+        // User is authenticated, perform logout
+        await this.oauthManager.logout(provider);
+      }
+
+      // Lines 51-55: Return success message
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Successfully logged out of ${provider}`,
+      };
+    } catch (error) {
+      // Lines 56-62: Handle errors
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to logout from ${provider}: ${errorMessage}`,
       };
     }
   }

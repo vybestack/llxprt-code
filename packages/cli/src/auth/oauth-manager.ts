@@ -180,20 +180,105 @@ export class OAuthManager {
   }
 
   /**
+   * @plan PLAN-20250823-AUTHFIXES.P14
+   * @requirement REQ-002
+   * @pseudocode lines 51-68
    * Check if authenticated with a specific provider (required by precedence resolver)
    * @param providerName - Name of the provider
    * @returns True if authenticated, false otherwise
    */
   async isAuthenticated(providerName: string): Promise<boolean> {
-    // Special handling for Gemini - check if OAuth is enabled and working
-    if (providerName === 'gemini' && this.isOAuthEnabled('gemini')) {
-      // For Gemini, if OAuth is enabled, we assume it's authenticated
-      // since the actual auth is handled by LOGIN_WITH_GOOGLE
-      return true;
+    // Lines 52-55: VALIDATE providerName
+    if (!providerName || typeof providerName !== 'string') {
+      return false;
     }
 
-    const token = await this.getOAuthToken(providerName);
-    return token !== null;
+    // Lines 57-60: SET token = AWAIT this.tokenStore.getToken(providerName)
+    const token = await this.tokenStore.getToken(providerName);
+    if (!token) {
+      return false;
+    }
+
+    // Lines 62-66: Check if token is expired
+    const now = Date.now() / 1000;
+    if (token.expiry <= now) {
+      return false;
+    }
+
+    // Line 68: RETURN true
+    return true;
+  }
+
+  /**
+   * @plan PLAN-20250823-AUTHFIXES.P14
+   * @requirement REQ-002.1
+   * @pseudocode lines 4-37
+   * Logout from a specific provider by clearing stored tokens
+   * @param providerName - Name of the provider to logout from
+   */
+  async logout(providerName: string): Promise<void> {
+    // Line 5-8: VALIDATE providerName
+    if (!providerName || typeof providerName !== 'string') {
+      throw new Error('Provider name must be a non-empty string');
+    }
+
+    // Line 10-13: Get provider
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      throw new Error(`Unknown provider: ${providerName}`);
+    }
+
+    // Lines 16-26: Call provider logout if exists
+    if ('logout' in provider && typeof provider.logout === 'function') {
+      try {
+        await provider.logout();
+      } catch (error) {
+        console.warn(`Provider logout failed:`, error);
+      }
+    } else {
+      await this.tokenStore.removeToken(providerName);
+    }
+
+    // Lines 28-30: Update settings
+    try {
+      const { getSettingsService } = await import(
+        '@vybestack/llxprt-code-core'
+      );
+      const settingsService = getSettingsService();
+      if (
+        settingsService &&
+        typeof settingsService.updateSettings === 'function'
+      ) {
+        await settingsService.updateSettings({
+          [`auth.${providerName}.oauth.enabled`]: false,
+        });
+      }
+    } catch (_error) {
+      // Settings service unavailable (e.g., in test environment), continue without updating settings
+    }
+  }
+
+  /**
+   * @plan PLAN-20250823-AUTHFIXES.P14
+   * @requirement REQ-002
+   * @pseudocode lines 39-49
+   * Logout from all providers by clearing all stored tokens
+   */
+  async logoutAll(): Promise<void> {
+    // Line 40: SET providers = AWAIT this.tokenStore.listProviders()
+    const providers = await this.tokenStore.listProviders();
+
+    // Lines 42-49: FOR EACH provider IN providers DO
+    for (const provider of providers) {
+      try {
+        // Line 44: AWAIT this.logout(provider)
+        await this.logout(provider);
+      } catch (error) {
+        // Lines 45-47: LOG "Failed to logout from " + provider + ": " + error
+        console.warn(`Failed to logout from ${provider}: ${error}`);
+        // Continue with other providers even if one fails
+      }
+    }
   }
 
   /**
@@ -211,13 +296,9 @@ export class OAuthManager {
     const token = await this.getOAuthToken(providerName);
 
     // Special handling for different providers
-    if (providerName === 'gemini') {
-      if (token) {
-        return token.access_token;
-      }
-      // Return a special token that signals to use LOGIN_WITH_GOOGLE
-      return 'USE_LOGIN_WITH_GOOGLE';
-    }
+    // @plan:PLAN-20250823-AUTHFIXES.P15
+    // @requirement:REQ-004
+    // Removed magic string handling for Gemini - now uses standard OAuth flow
 
     // For Qwen, return the OAuth token to be used as API key
     if (providerName === 'qwen' && token) {

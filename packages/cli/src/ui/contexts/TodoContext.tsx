@@ -16,10 +16,14 @@ interface TodoContextType {
 const defaultContextValue: TodoContextType = {
   todos: [],
   updateTodos: () => {
-    throw new Error('NotYetImplemented');
+    throw new Error(
+      'TodoContext updateTodos not implemented - use TodoProvider',
+    );
   },
   refreshTodos: () => {
-    throw new Error('NotYetImplemented');
+    throw new Error(
+      'TodoContext refreshTodos not implemented - use TodoProvider',
+    );
   },
 };
 

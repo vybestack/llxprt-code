@@ -101,7 +101,9 @@ export function getProviderManager(
         : undefined;
     }
 
-    // Create OAuth manager for providers
+    // @plan:PLAN-20250823-AUTHFIXES.P15
+    // @requirement:REQ-004
+    // Create OAuth manager for providers with TokenStore integration
     const tokenStore = new MultiProviderTokenStore();
     const oauthManager = new OAuthManager(tokenStore, loadedSettings);
     oauthManagerInstance = oauthManager;

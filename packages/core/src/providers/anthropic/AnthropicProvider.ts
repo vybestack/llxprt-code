@@ -94,12 +94,16 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * @plan:PLAN-20250823-AUTHFIXES.P15
+   * @requirement:REQ-004
    * Update the Anthropic client with resolved authentication if needed
    */
   private async updateClientWithResolvedAuth(): Promise<void> {
     const resolvedToken = await this.getAuthToken();
     if (!resolvedToken) {
-      throw new Error('No authentication available for Anthropic API calls');
+      throw new Error(
+        'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
+      );
     }
 
     // Check if this is an OAuth token (starts with sk-ant-oat)
