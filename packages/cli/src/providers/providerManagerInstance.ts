@@ -108,10 +108,10 @@ export function getProviderManager(
     const oauthManager = new OAuthManager(tokenStore, loadedSettings);
     oauthManagerInstance = oauthManager;
 
-    // Register OAuth providers
-    oauthManager.registerProvider(new GeminiOAuthProvider());
-    oauthManager.registerProvider(new QwenOAuthProvider());
-    oauthManager.registerProvider(new AnthropicOAuthProvider());
+    // Register OAuth providers with TokenStore for persistence
+    oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
+    oauthManager.registerProvider(new QwenOAuthProvider(tokenStore));
+    oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
 
     // Set config BEFORE registering providers so logging wrapper works
     if (config) {
