@@ -143,6 +143,80 @@ ${reason.stack}`
   });
 }
 
+function handleError(error: Error, errorInfo: ErrorInfo) {
+  // Log to console for debugging
+  console.error('Application Error:', error);
+  console.error('Component Stack:', errorInfo.componentStack);
+
+  // Special handling for maximum update depth errors
+  if (error.message.includes('Maximum update depth exceeded')) {
+    console.error('\nCRITICAL: RENDER LOOP DETECTED!');
+    console.error('This is likely caused by:');
+    console.error('- State updates during render');
+    console.error('- Incorrect useEffect dependencies');
+    console.error('- Non-memoized props causing re-renders');
+    console.error('\nCheck recent changes to React components and hooks.');
+  }
+}
+
+export async function startInteractiveUI(
+  config: Config,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  workspaceRoot: string,
+) {
+  const version = await getCliVersion();
+  // Detect and enable Kitty keyboard protocol once at startup
+  await detectAndEnableKittyProtocol();
+  setWindowTitle(basename(workspaceRoot), settings);
+  
+  // Initialize authentication before rendering to ensure geminiClient is available
+  if (settings.merged.selectedAuthType) {
+    try {
+      const err = validateAuthMethod(settings.merged.selectedAuthType);
+      if (err) {
+        console.error('Error validating authentication method:', err);
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error('Error authenticating:', err);
+      process.exit(1);
+    }
+  }
+  
+  const instance = render(
+    <React.StrictMode>
+      <ErrorBoundary
+        // eslint-disable-next-line react/jsx-no-bind
+        onError={handleError}
+      >
+        <SettingsContext.Provider value={settings}>
+          <AppWrapper
+            config={config}
+            settings={settings}
+            startupWarnings={startupWarnings}
+            version={version}
+          />
+        </SettingsContext.Provider>
+      </ErrorBoundary>
+    </React.StrictMode>,
+    { exitOnCtrlC: false, isScreenReaderEnabled: config.getScreenReader() },
+  );
+
+  checkForUpdates()
+    .then((info) => {
+      handleAutoUpdate(info, settings, config.getProjectRoot());
+    })
+    .catch((err) => {
+      // Silently ignore update check errors.
+      if (config.getDebugMode()) {
+        console.error('Update check failed:', err);
+      }
+    });
+
+  registerCleanup(() => instance.unmount());
+}
+
 export async function main() {
   setupUnhandledRejectionHandler();
 
@@ -629,74 +703,9 @@ export async function main() {
   // Check if a provider is already active on startup
   providerManager.getActiveProvider();
 
-  function handleError(error: Error, errorInfo: ErrorInfo) {
-    // Log to console for debugging
-    console.error('Application Error:', error);
-    console.error('Component Stack:', errorInfo.componentStack);
-
-    // Special handling for maximum update depth errors
-    if (error.message.includes('Maximum update depth exceeded')) {
-      console.error('\nCRITICAL: RENDER LOOP DETECTED!');
-      console.error('This is likely caused by:');
-      console.error('- State updates during render');
-      console.error('- Incorrect useEffect dependencies');
-      console.error('- Non-memoized props causing re-renders');
-      console.error('\nCheck recent changes to React components and hooks.');
-    }
-  }
-
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (config.isInteractive()) {
-    const version = await getCliVersion();
-    // Detect and enable Kitty keyboard protocol once at startup
-    await detectAndEnableKittyProtocol();
-    setWindowTitle(basename(workspaceRoot), settings);
-
-    // Initialize authentication before rendering to ensure geminiClient is available
-    if (settings.merged.selectedAuthType) {
-      try {
-        const err = validateAuthMethod(settings.merged.selectedAuthType);
-        if (err) {
-          console.error('Error validating authentication method:', err);
-          process.exit(1);
-        }
-      } catch (err) {
-        console.error('Error authenticating:', err);
-        process.exit(1);
-      }
-    }
-
-    const instance = render(
-      <React.StrictMode>
-        <ErrorBoundary
-          // eslint-disable-next-line react/jsx-no-bind
-          onError={handleError}
-        >
-          <SettingsContext.Provider value={settings}>
-            <AppWrapper
-              config={config}
-              settings={settings}
-              startupWarnings={startupWarnings}
-              version={version}
-            />
-          </SettingsContext.Provider>
-        </ErrorBoundary>
-      </React.StrictMode>,
-      { exitOnCtrlC: false, isScreenReaderEnabled: config.getScreenReader() },
-    );
-
-    checkForUpdates()
-      .then((info) => {
-        handleAutoUpdate(info, settings, config.getProjectRoot());
-      })
-      .catch((err) => {
-        // Silently ignore update check errors.
-        if (config.getDebugMode()) {
-          console.error('Update check failed:', err);
-        }
-      });
-
-    registerCleanup(() => instance.unmount());
+    await startInteractiveUI(config, settings, startupWarnings, workspaceRoot);
     return;
   }
   // If not a TTY, read from stdin

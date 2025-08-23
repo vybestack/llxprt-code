@@ -84,6 +84,7 @@ export interface CliArgs {
 
 export async function parseArguments(): Promise<CliArgs> {
   const yargsInstance = yargs(hideBin(process.argv))
+    .locale('en')
     .scriptName('llxprt')
     .usage(
       '$0 [options]',
