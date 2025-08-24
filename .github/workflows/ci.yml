@@ -318,6 +318,8 @@ jobs:
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
           NO_COLOR: true
+          # Ensure OAuth tests are skipped in CI (they require browser interaction)
+          CI: true
         run: 'npm run test:ci'
 
       - name: 'Publish Test Report (for non-forks)'

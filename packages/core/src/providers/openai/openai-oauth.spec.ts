@@ -54,7 +54,9 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     originalEnv = { ...process.env };
 
     // Clear SettingsService to ensure test isolation
-    const { getSettingsService } = await import('../../settings/settingsServiceInstance.js');
+    const { getSettingsService } = await import(
+      '../../settings/settingsServiceInstance.js'
+    );
     const settingsService = getSettingsService();
     settingsService.clear();
 
