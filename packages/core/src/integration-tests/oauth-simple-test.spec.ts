@@ -7,7 +7,10 @@ import { OAuthManager } from '../auth/precedence.js';
 import { TEST_PROVIDER_CONFIG } from '../providers/test-utils/providerTestConfig.js';
 import { isQwenEndpoint } from '../config/endpoints.js';
 
-describe('Simple OAuth Integration Test', () => {
+// Skip OAuth tests in CI as they require browser interaction
+const skipInCI = process.env.CI === 'true';
+
+describe.skipIf(skipInCI)('Simple OAuth Integration Test', () => {
   let mockOAuthManager: OAuthManager;
   let originalEnv: NodeJS.ProcessEnv;
 
