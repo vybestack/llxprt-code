@@ -291,20 +291,17 @@ describe('profileCommand', () => {
         },
       });
 
-      (fs.promises.readFile as ReturnType<typeof vi.fn>).mockResolvedValue(
-        'sk-test-key-123\n',
-      );
-
       await loadCommand.action!(context, 'test-profile');
 
-      // Verify file was read with expanded path
-      expect(fs.promises.readFile).toHaveBeenCalledWith(
-        '/home/user/.keys/api-key',
-        'utf-8',
+      // Verify keyfile path was stored in ephemeral settings (but file is not read during profile load)
+      // The AuthPrecedenceResolver will read the file when needed
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'auth-keyfile',
+        '~/.keys/api-key',
       );
 
-      // Verify API key was set
-      expect(mockProvider.setApiKey).toHaveBeenCalledWith('sk-test-key-123');
+      // API key is NOT set during profile load - the keyfile will be read by AuthPrecedenceResolver when needed
+      expect(mockProvider.setApiKey).not.toHaveBeenCalled();
     });
 
     it('should handle keyfile read errors gracefully', async () => {

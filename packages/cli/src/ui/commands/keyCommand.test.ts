@@ -67,10 +67,7 @@ describe('keyCommand', () => {
     const result = await keyCommand.action(mockContext, testApiKey);
 
     expect(mockActiveProvider.setApiKey).toHaveBeenCalledWith(testApiKey);
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'auth-key',
-      testApiKey,
-    );
+    // setEphemeralSetting is no longer called - auth is stored via SettingsService through activeProvider.setApiKey()
 
     expect(result).toEqual({
       type: 'message',
@@ -87,10 +84,7 @@ describe('keyCommand', () => {
     const result = await keyCommand.action(mockContext, '');
 
     expect(mockActiveProvider.setApiKey).toHaveBeenCalledWith('');
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'auth-key',
-      undefined,
-    );
+    // setEphemeralSetting is no longer called - auth is stored via SettingsService through activeProvider.setApiKey()
 
     expect(result).toEqual({
       type: 'message',
@@ -107,10 +101,7 @@ describe('keyCommand', () => {
     const result = await keyCommand.action(mockContext, 'none');
 
     expect(mockActiveProvider.setApiKey).toHaveBeenCalledWith('');
-    expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-      'auth-key',
-      undefined,
-    );
+    // setEphemeralSetting is no longer called - auth is stored via SettingsService through activeProvider.setApiKey()
 
     expect(result).toEqual({
       type: 'message',

@@ -17,8 +17,10 @@ const mockOAuthManager = {
   isAuthenticated: vi.fn(),
   getAuthStatus: vi.fn(),
   getToken: vi.fn(),
+  getOAuthToken: vi.fn(),
   getSupportedProviders: vi.fn().mockReturnValue(['gemini', 'qwen']),
   getHigherPriorityAuth: vi.fn(),
+  logout: vi.fn(),
 } as unknown as OAuthManager;
 
 describe('AuthCommandExecutor OAuth Support', () => {
@@ -163,7 +165,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(result).toEqual({
         type: 'message',
         messageType: 'error',
-        content: "Invalid action: invalid. Use 'enable' or 'disable'",
+        content: 'Invalid action: invalid. Use enable, disable, or logout',
       });
     });
   });

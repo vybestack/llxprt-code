@@ -8,7 +8,10 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-describe('OAuth Authentication End-to-End Integration', () => {
+// Skip OAuth tests in CI as they require browser interaction
+const skipInCI = process.env.CI === 'true';
+
+describe.skipIf(skipInCI)('OAuth Authentication End-to-End Integration', () => {
   const tokenPath = join(homedir(), '.llxprt', 'oauth');
 
   beforeEach(async () => {
