@@ -38,6 +38,7 @@
     "@types/html-to-text": "^9.0.4",
     "@xterm/headless": "5.5.0",
     "ajv": "8.17.1",
+    "ajv-formats": "^3.0.0",
     "chardet": "^2.1.0",
     "debug": "^4.3.4",
     "diff": "^7.0.0",
