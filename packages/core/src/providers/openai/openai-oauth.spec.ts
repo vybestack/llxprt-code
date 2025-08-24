@@ -19,6 +19,9 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { NotYetImplemented } from '../../utils/errors.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
+// Skip OAuth tests in CI as they require browser interaction
+const skipInCI = process.env.CI === 'true';
+
 // Helper functions and utilities for OpenAI OAuth testing
 
 // Mock OAuth manager interface for testing
@@ -42,7 +45,7 @@ vi.mock('openai', () => ({
   })),
 }));
 
-describe('OpenAI Provider OAuth Integration', () => {
+describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   let mockOAuthManager: MockOAuthManager;
   let originalEnv: NodeJS.ProcessEnv;
 
