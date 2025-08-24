@@ -257,6 +257,10 @@ export class OAuthManager {
       await this.tokenStore.removeToken(providerName);
     }
 
+    // CRITICAL FIX: Clear all provider auth caches after logout
+    // This ensures BaseProvider and specific provider caches are invalidated
+    await this.clearProviderAuthCaches(providerName);
+
     // Special handling for Gemini - clear all Google OAuth related files
     if (providerName === 'gemini') {
       try {
@@ -546,6 +550,71 @@ export class OAuthManager {
       return qwenDomains.some((domain) => urlObj.hostname.includes(domain));
     } catch {
       return false; // Invalid URL format
+    }
+  }
+
+  /**
+   * CRITICAL FIX: Clear all auth caches for a provider after logout
+   * This method finds and clears auth caches from both BaseProvider and provider-specific implementations
+   * @param providerName - Name of the provider to clear caches for
+   */
+  private async clearProviderAuthCaches(providerName: string): Promise<void> {
+    try {
+      // Import ProviderManager to access active providers
+      // Use dynamic import to avoid circular dependencies
+      const { getProviderManager } = await import(
+        '../providers/providerManagerInstance.js'
+      );
+      const providerManager = getProviderManager();
+
+      // Get the provider instance to clear its auth cache
+      const targetProvider = providerManager.getProviderByName(providerName);
+
+      if (targetProvider) {
+        // Clear BaseProvider auth cache
+        if (typeof targetProvider.clearAuthCache === 'function') {
+          targetProvider.clearAuthCache();
+        }
+
+        // Clear provider-specific cached clients
+        // For AnthropicProvider: clear _cachedAuthKey
+        if ('_cachedAuthKey' in targetProvider) {
+          const provider = targetProvider as { _cachedAuthKey?: string };
+          provider._cachedAuthKey = undefined;
+        }
+
+        // For GeminiProvider: clear any auth-related state
+        if (targetProvider.name === 'gemini') {
+          // Clear GeminiProvider auth state
+          if (
+            'clearAuthCache' in targetProvider &&
+            typeof targetProvider.clearAuthCache === 'function'
+          ) {
+            targetProvider.clearAuthCache();
+          }
+          // Clear any client instances that might be cached
+          if ('authMode' in targetProvider) {
+            const geminiProvider = targetProvider as { authMode?: string };
+            geminiProvider.authMode = 'none';
+          }
+        }
+
+        // For providers extending BaseProvider: ensure auth cache is cleared
+        if (
+          'clearState' in targetProvider &&
+          typeof targetProvider.clearState === 'function'
+        ) {
+          targetProvider.clearState();
+        }
+      }
+
+      console.debug(`Cleared auth caches for provider: ${providerName}`);
+    } catch (error) {
+      // Cache clearing failures should not prevent logout from succeeding
+      console.debug(
+        `Failed to clear provider auth caches for ${providerName}:`,
+        error,
+      );
     }
   }
 }

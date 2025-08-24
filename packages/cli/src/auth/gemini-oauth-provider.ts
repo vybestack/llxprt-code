@@ -140,7 +140,46 @@ export class GeminiOAuthProvider implements OAuthProvider {
         } as unknown as Parameters<typeof getOauthClient>[1];
 
         // Use the existing Google OAuth infrastructure to get a client
-        const client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, config);
+        let client;
+        try {
+          client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, config);
+        } catch (error) {
+          // Handle browser auth cancellation or other auth failures
+          if (error instanceof Error) {
+            // Check for specific cancellation messages
+            if (
+              error.message.includes('cancelled') ||
+              error.message.includes('denied') ||
+              error.message.includes('access_denied') ||
+              error.message.includes('user_cancelled')
+            ) {
+              // CRITICAL FIX: Trigger fallback flow instead of failing
+              this.logger.debug(
+                () =>
+                  `Browser auth cancelled, triggering fallback: ${error.message}`,
+              );
+
+              // Show fallback instructions to user
+              console.log('\n' + '─'.repeat(60));
+              console.log('Browser authentication was cancelled.');
+              console.log('Fallback options:');
+              console.log('1. Use API key: /keyfile <path-to-your-gemini-key>');
+              console.log(
+                '2. Set environment: export GEMINI_API_KEY=<your-key>',
+              );
+              console.log('3. Try OAuth again: /auth gemini enable');
+              console.log('─'.repeat(60));
+
+              // Throw a user-friendly error that doesn't hang the system
+              throw OAuthErrorFactory.authenticationRequired(this.name, {
+                reason:
+                  'Browser authentication was cancelled. Please use one of the fallback options shown above.',
+              });
+            }
+          }
+          // Re-throw other authentication errors
+          throw error;
+        }
 
         // The client should now have valid credentials
         // Extract and cache the token

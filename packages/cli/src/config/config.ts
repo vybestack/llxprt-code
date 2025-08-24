@@ -711,13 +711,16 @@ export async function loadCliConfig(
   }
 
   // Handle model selection with proper precedence
-  const finalModel =
+  // Only use DEFAULT_GEMINI_MODEL as fallback when provider is 'gemini'
+  const finalModel: string =
     argv.model ||
     profileModel ||
     effectiveSettings.model ||
     process.env.LLXPRT_DEFAULT_MODEL ||
     process.env.GEMINI_MODEL ||
-    DEFAULT_GEMINI_MODEL;
+    // If no model specified and provider is gemini, use the Gemini default
+    // For other providers, let them use their own default models (empty string means use provider default)
+    (finalProvider === 'gemini' ? DEFAULT_GEMINI_MODEL : '');
 
   const config = new Config({
     sessionId,

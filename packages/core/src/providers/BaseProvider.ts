@@ -187,8 +187,39 @@ export abstract class BaseProvider implements IProvider {
    * Updates the API key (used for CLI --key argument)
    */
   setApiKey?(apiKey: string): void {
-    this.baseProviderConfig.cliKey = apiKey;
-    this.authResolver.updateConfig({ cliKey: apiKey });
+    // CRITICAL FIX: When clearing the key, set to undefined instead of empty string
+    // This ensures the precedence chain properly skips this level
+    const keyToSet = apiKey && apiKey.trim() !== '' ? apiKey : undefined;
+    this.baseProviderConfig.cliKey = keyToSet;
+    this.authResolver.updateConfig({ cliKey: keyToSet });
+    this.clearAuthCache();
+  }
+
+  /**
+   * Updates the command-level key (used for /key command)
+   */
+  setCommandKey?(key: string): void {
+    this.baseProviderConfig.commandKey = key;
+    this.authResolver.updateConfig({ commandKey: key });
+    this.clearAuthCache();
+  }
+
+  /**
+   * Updates the command-level keyfile (used for /keyfile command)
+   */
+  setCommandKeyfile?(keyfilePath: string): void {
+    this.baseProviderConfig.commandKeyfile = keyfilePath;
+    this.authResolver.setCommandKeyfile(keyfilePath);
+    this.clearAuthCache();
+  }
+
+  /**
+   * Clears command-level authentication (used when removing keyfiles)
+   */
+  clearCommandAuth?(): void {
+    this.baseProviderConfig.commandKey = undefined;
+    this.baseProviderConfig.commandKeyfile = undefined;
+    this.authResolver.clearCommandAuth();
     this.clearAuthCache();
   }
 
@@ -229,7 +260,7 @@ export abstract class BaseProvider implements IProvider {
   /**
    * Clears the authentication token cache
    */
-  protected clearAuthCache(): void {
+  clearAuthCache(): void {
     this.cachedAuthToken = undefined;
     this.authCacheTimestamp = undefined;
   }

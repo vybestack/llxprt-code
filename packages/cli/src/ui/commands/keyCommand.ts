@@ -29,8 +29,7 @@ export const keyCommand: SlashCommand = {
       };
     }
 
-    const settingsService = config.getSettingsService();
-    const useSettingsService = settingsService !== null;
+    // Settings service not needed for command-level auth
 
     const providerManager = config.getProviderManager();
     if (!providerManager) {
@@ -47,67 +46,39 @@ export const keyCommand: SlashCommand = {
 
     // If no key provided or 'none', remove the key
     if (!apiKey || apiKey.toLowerCase() === 'none') {
-      // Clear the API key
-      if (activeProvider.setApiKey) {
-        activeProvider.setApiKey('');
-
-        if (useSettingsService && settingsService) {
-          // Use SettingsService to update provider settings
-          try {
-            await settingsService.updateSettings(providerName, {
-              apiKey: undefined,
-            });
-          } catch (error) {
-            console.error('SettingsService error, using fallback:', error);
-            config.setEphemeralSetting('auth-key', undefined);
-          }
-        } else {
-          // Fallback to direct ephemeral setting
-          config.setEphemeralSetting('auth-key', undefined);
-        }
-
-        // If this is the Gemini provider, we might need to switch auth mode
-        const requiresAuthRefresh = providerName === 'gemini';
-        if (requiresAuthRefresh) {
-          await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
-        }
-
-        const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-        const paymentMessage =
-          !isPaidMode && providerName === 'gemini'
-            ? '\n✅ You are now in FREE MODE - using OAuth authentication'
-            : '';
-
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `API key removed for provider '${providerName}'${paymentMessage}`,
-        };
-      } else {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Provider '${providerName}' does not support API key updates`,
-        };
+      // Clear command-level authentication
+      if (activeProvider.clearCommandAuth) {
+        activeProvider.clearCommandAuth();
       }
+
+      // Clear from ephemeral settings
+      config.setEphemeralSetting('auth-key', undefined);
+
+      // If this is the Gemini provider, we might need to switch auth mode
+      const requiresAuthRefresh = providerName === 'gemini';
+      if (requiresAuthRefresh) {
+        await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+      }
+
+      const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+      const paymentMessage =
+        !isPaidMode && providerName === 'gemini'
+          ? '\n✅ You are now in FREE MODE - using OAuth authentication'
+          : '';
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `API key removed for provider '${providerName}'${paymentMessage}`,
+      };
     }
 
-    // Set the API key
-    if (activeProvider.setApiKey) {
-      activeProvider.setApiKey(apiKey);
+    // Set the command-level API key
+    if (activeProvider.setCommandKey) {
+      activeProvider.setCommandKey(apiKey);
 
-      if (useSettingsService && settingsService) {
-        // Use SettingsService to update provider settings
-        try {
-          await settingsService.updateSettings(providerName, { apiKey });
-        } catch (error) {
-          console.error('SettingsService error, using fallback:', error);
-          config.setEphemeralSetting('auth-key', apiKey);
-        }
-      } else {
-        // Fallback to direct ephemeral setting
-        config.setEphemeralSetting('auth-key', apiKey);
-      }
+      // Store in ephemeral settings as well
+      config.setEphemeralSetting('auth-key', apiKey);
 
       // If this is the Gemini provider, we need to refresh auth to use API key mode
       const requiresAuthRefresh = providerName === 'gemini';

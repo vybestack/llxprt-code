@@ -266,6 +266,23 @@ export class AuthPrecedenceResolver {
   }
 
   /**
+   * Set command-level keyfile (used by /keyfile command)
+   * This ensures keyfile paths are properly stored for command precedence
+   */
+  setCommandKeyfile(keyfilePath: string): void {
+    this.config.commandKeyfile = keyfilePath;
+  }
+
+  /**
+   * Clear command-level authentication
+   * Used when clearing keyfiles or keys via commands
+   */
+  clearCommandAuth(): void {
+    this.config.commandKey = undefined;
+    this.config.commandKeyfile = undefined;
+  }
+
+  /**
    * Updates the OAuth manager
    */
   updateOAuthManager(oauthManager: OAuthManager): void {

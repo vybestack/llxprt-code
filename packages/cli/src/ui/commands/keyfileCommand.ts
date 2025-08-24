@@ -77,9 +77,15 @@ export const keyfileCommand: SlashCommand = {
         const removedPath =
           context.services.settings.getProviderKeyfile(providerName);
 
-        // Clear the API key from the provider
-        if (activeProvider.setApiKey) {
-          activeProvider.setApiKey('');
+        // Clear command-level auth from BaseProvider
+        if (activeProvider.clearCommandAuth) {
+          activeProvider.clearCommandAuth();
+        } else {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Provider '${providerName}' does not support keyfile commands`,
+          };
         }
 
         // Clear from ephemeral settings
@@ -110,7 +116,7 @@ export const keyfileCommand: SlashCommand = {
         // Check if file exists
         await fs.access(resolvedPath);
 
-        // Read the key to set it on the provider
+        // Verify the file is not empty
         const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
         if (!apiKey) {
           return {
@@ -120,61 +126,60 @@ export const keyfileCommand: SlashCommand = {
           };
         }
 
-        // Set API key on provider
+        // Get the active provider
         const activeProvider = providerManager.getActiveProvider();
         const providerName = activeProvider.name;
 
-        if (activeProvider.setApiKey) {
-          activeProvider.setApiKey(apiKey);
-
-          // Store the keyfile PATH in ephemeral settings, not the key itself
-          if (context.services.config) {
-            context.services.config.setEphemeralSetting(
-              'auth-keyfile',
-              filePath,
-            );
-            // Remove any stored auth-key since we're using keyfile
-            context.services.config.setEphemeralSetting('auth-key', undefined);
-          }
-
-          // Check if we're now in paid mode
-          const isPaidMode = activeProvider.isPaidMode?.() ?? true;
-          const paymentWarning = isPaidMode
-            ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
-            : '';
-
-          // Trigger payment mode check if available
-          const extendedContext = context as CommandContext & {
-            checkPaymentModeChange?: () => void;
-          };
-          if (extendedContext.checkPaymentModeChange) {
-            setTimeout(extendedContext.checkPaymentModeChange, 100);
-          }
-
-          return {
-            type: 'message',
-            messageType: 'info',
-            content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
-          };
+        // Set the command-level keyfile path
+        // Let the auth precedence resolver handle reading the file when needed
+        if (activeProvider.setCommandKeyfile) {
+          activeProvider.setCommandKeyfile(resolvedPath);
         } else {
           return {
             type: 'message',
             messageType: 'error',
-            content: `Provider '${providerName}' does not support API key updates`,
+            content: `Provider '${providerName}' does not support keyfile commands`,
           };
         }
+
+        // Store the keyfile PATH in ephemeral settings, not the key itself
+        if (context.services.config) {
+          context.services.config.setEphemeralSetting('auth-keyfile', filePath);
+          // Remove any stored auth-key since we're using keyfile
+          context.services.config.setEphemeralSetting('auth-key', undefined);
+        }
+
+        // Check if we're now in paid mode
+        const isPaidMode = activeProvider.isPaidMode?.() ?? true;
+        const paymentWarning = isPaidMode
+          ? '\nWARNING: You are now in PAID MODE - API usage will be charged to your account'
+          : '';
+
+        // Trigger payment mode check if available
+        const extendedContext = context as CommandContext & {
+          checkPaymentModeChange?: () => void;
+        };
+        if (extendedContext.checkPaymentModeChange) {
+          setTimeout(extendedContext.checkPaymentModeChange, 100);
+        }
+
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: `API key loaded from ${resolvedPath} for provider '${providerName}'${paymentWarning}`,
+        };
       } catch (error) {
         return {
           type: 'message',
           messageType: 'error',
-          content: `Failed to load keyfile: ${error instanceof Error ? error.message : String(error)}`,
+          content: `Failed to manage keyfile: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
     } catch (error) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Failed to manage keyfile: ${error instanceof Error ? error.message : String(error)}`,
+        content: `Failed to access provider: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },

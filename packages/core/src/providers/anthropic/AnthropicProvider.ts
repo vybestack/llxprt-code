@@ -937,7 +937,7 @@ ${llxprtPrompts}`;
   /**
    * Override clearAuthCache to also clear cached auth key
    */
-  protected override clearAuthCache(): void {
+  override clearAuthCache(): void {
     super.clearAuthCache();
     this._cachedAuthKey = undefined;
   }

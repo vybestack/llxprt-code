@@ -60,6 +60,26 @@ export interface IProvider {
    * @returns Current parameters or undefined if not set
    */
   getModelParams?(): Record<string, unknown> | undefined;
+
+  /**
+   * Clear authentication cache (for OAuth logout)
+   */
+  clearAuthCache?(): void;
+
+  /**
+   * Set command-level API key for authentication precedence
+   */
+  setCommandKey?(key: string): void;
+
+  /**
+   * Set command-level keyfile for authentication precedence
+   */
+  setCommandKeyfile?(keyfilePath: string): void;
+
+  /**
+   * Clear command-level authentication settings
+   */
+  clearCommandAuth?(): void;
 }
 
 // Re-export the interfaces for convenience

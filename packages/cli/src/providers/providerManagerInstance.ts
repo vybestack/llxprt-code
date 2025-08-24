@@ -193,10 +193,16 @@ export function getProviderManager(
 
     // Register qwen as an alias to OpenAI provider with OAuth
     // When user selects "--provider qwen", we create a separate OpenAI instance for Qwen
+    // Create a special config for qwen that ensures proper OAuth identification
+    const qwenProviderConfig = {
+      ...openaiProviderConfig,
+      // Override any OAuth-related settings that might affect provider identification
+      forceQwenOAuth: true,
+    };
     const qwenProvider = new OpenAIProvider(
       undefined, // No API key - force OAuth
-      undefined, // No base URL - will be set from OAuth token's resource_url
-      openaiProviderConfig,
+      'https://portal.qwen.ai/v1', // Set Qwen base URL to trigger OAuth enablement
+      qwenProviderConfig,
       oauthManager,
     );
     // Override the name to 'qwen' so it can be selected

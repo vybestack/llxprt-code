@@ -246,41 +246,45 @@ describe('OAuth E2E Tests - Complete User Authentication Journeys', () => {
 
   describe('First-Time User Authentication Flow', () => {
     // Skip in CI: This test may require browser interaction or manual token setup
-    it.skipIf(process.env.CI)('should guide user through Qwen OAuth setup from scratch', async () => {
-      // User enables OAuth for Qwen
-      const enabledState = await oauthManager.toggleOAuthEnabled('qwen');
-      expect(enabledState).toBe(true);
+    it.skipIf(process.env.CI)(
+      'should guide user through Qwen OAuth setup from scratch',
+      async () => {
+        // User enables OAuth for Qwen
+        const enabledState = await oauthManager.toggleOAuthEnabled('qwen');
+        expect(enabledState).toBe(true);
 
-      // Check initial auth status - should be unauthenticated
-      expect(await oauthManager.isAuthenticated('qwen')).toBe(false);
+        // Check initial auth status - should be unauthenticated
+        expect(await oauthManager.isAuthenticated('qwen')).toBe(false);
 
-      const initialStatus = await oauthManager.getAuthStatus();
-      const qwenStatus = initialStatus.find((s) => s.provider === 'qwen');
-      expect(qwenStatus?.authenticated).toBe(false);
-      expect(qwenStatus?.authType).toBe('none');
-      expect(qwenStatus?.oauthEnabled).toBe(true);
+        const initialStatus = await oauthManager.getAuthStatus();
+        const qwenStatus = initialStatus.find((s) => s.provider === 'qwen');
+        expect(qwenStatus?.authenticated).toBe(false);
+        expect(qwenStatus?.authType).toBe('none');
+        expect(qwenStatus?.oauthEnabled).toBe(true);
 
-      // Attempt to get OAuth token directly (avoid potential blocking getToken call)
-      const initialToken = await oauthManager.getOAuthToken('qwen');
-      expect(initialToken).toBe(null);
+        // Attempt to get OAuth token directly (avoid potential blocking getToken call)
+        const initialToken = await oauthManager.getOAuthToken('qwen');
+        expect(initialToken).toBe(null);
 
-      // Simulate successful authentication by storing a token
-      const authenticatedToken = createRealisticToken('qwen');
-      await tokenStore.saveToken('qwen', authenticatedToken);
+        // Simulate successful authentication by storing a token
+        const authenticatedToken = createRealisticToken('qwen');
+        await tokenStore.saveToken('qwen', authenticatedToken);
 
-      // Now user should be authenticated
-      expect(await oauthManager.isAuthenticated('qwen')).toBe(true);
+        // Now user should be authenticated
+        expect(await oauthManager.isAuthenticated('qwen')).toBe(true);
 
-      const finalToken = await oauthManager.getToken('qwen');
-      expect(finalToken).toBe(authenticatedToken.access_token);
+        const finalToken = await oauthManager.getToken('qwen');
+        expect(finalToken).toBe(authenticatedToken.access_token);
 
-      // Check final status
-      const finalStatus = await oauthManager.getAuthStatus();
-      const finalQwenStatus = finalStatus.find((s) => s.provider === 'qwen');
-      expect(finalQwenStatus?.authenticated).toBe(true);
-      expect(finalQwenStatus?.authType).toBe('oauth');
-      expect(finalQwenStatus?.expiresIn).toBeGreaterThan(3500); // ~1 hour
-    }, 5000); // 5 second timeout
+        // Check final status
+        const finalStatus = await oauthManager.getAuthStatus();
+        const finalQwenStatus = finalStatus.find((s) => s.provider === 'qwen');
+        expect(finalQwenStatus?.authenticated).toBe(true);
+        expect(finalQwenStatus?.authType).toBe('oauth');
+        expect(finalQwenStatus?.expiresIn).toBeGreaterThan(3500); // ~1 hour
+      },
+      5000,
+    ); // 5 second timeout
 
     it('should handle Gemini OAuth with existing Google authentication', async () => {
       // Simulate existing Google OAuth credentials
@@ -573,38 +577,41 @@ describe('OAuth E2E Tests - Complete User Authentication Journeys', () => {
     }, 10000);
 
     // Skip in CI: This test requires token expiry calculations that may be timing-sensitive
-    it.skipIf(process.env.CI)('should show comprehensive authentication status to user', async () => {
-      // Mixed authentication states
-      await oauthManager.toggleOAuthEnabled('qwen');
-      await oauthManager.toggleOAuthEnabled('gemini');
-      // Anthropic OAuth disabled
+    it.skipIf(process.env.CI)(
+      'should show comprehensive authentication status to user',
+      async () => {
+        // Mixed authentication states
+        await oauthManager.toggleOAuthEnabled('qwen');
+        await oauthManager.toggleOAuthEnabled('gemini');
+        // Anthropic OAuth disabled
 
-      const qwenToken = createRealisticToken('qwen');
-      await tokenStore.saveToken('qwen', qwenToken);
-      // No Gemini token
+        const qwenToken = createRealisticToken('qwen');
+        await tokenStore.saveToken('qwen', qwenToken);
+        // No Gemini token
 
-      const status = await oauthManager.getAuthStatus();
+        const status = await oauthManager.getAuthStatus();
 
-      const qwenStatus = status.find((s) => s.provider === 'qwen');
-      const geminiStatus = status.find((s) => s.provider === 'gemini');
-      const anthropicStatus = status.find((s) => s.provider === 'anthropic');
+        const qwenStatus = status.find((s) => s.provider === 'qwen');
+        const geminiStatus = status.find((s) => s.provider === 'gemini');
+        const anthropicStatus = status.find((s) => s.provider === 'anthropic');
 
-      // Qwen: Enabled and authenticated
-      expect(qwenStatus?.authenticated).toBe(true);
-      expect(qwenStatus?.authType).toBe('oauth');
-      expect(qwenStatus?.oauthEnabled).toBe(true);
-      expect(qwenStatus?.expiresIn).toBeGreaterThan(0); // Should be positive
+        // Qwen: Enabled and authenticated
+        expect(qwenStatus?.authenticated).toBe(true);
+        expect(qwenStatus?.authType).toBe('oauth');
+        expect(qwenStatus?.oauthEnabled).toBe(true);
+        expect(qwenStatus?.expiresIn).toBeGreaterThan(0); // Should be positive
 
-      // Gemini: Enabled but not authenticated
-      expect(geminiStatus?.authenticated).toBe(false);
-      expect(geminiStatus?.authType).toBe('none');
-      expect(geminiStatus?.oauthEnabled).toBe(true);
+        // Gemini: Enabled but not authenticated
+        expect(geminiStatus?.authenticated).toBe(false);
+        expect(geminiStatus?.authType).toBe('none');
+        expect(geminiStatus?.oauthEnabled).toBe(true);
 
-      // Anthropic: Disabled
-      expect(anthropicStatus?.authenticated).toBe(false);
-      expect(anthropicStatus?.authType).toBe('none');
-      expect(anthropicStatus?.oauthEnabled).toBe(false);
-    });
+        // Anthropic: Disabled
+        expect(anthropicStatus?.authenticated).toBe(false);
+        expect(anthropicStatus?.authType).toBe('none');
+        expect(anthropicStatus?.oauthEnabled).toBe(false);
+      },
+    );
   });
 
   describe('Error Recovery User Experience', () => {

@@ -218,6 +218,13 @@ export class ProviderManager implements IProviderManager {
     return Array.from(this.providers.keys());
   }
 
+  /**
+   * Get a provider by name (for OAuth manager)
+   */
+  getProviderByName(name: string): IProvider | undefined {
+    return this.providers.get(name);
+  }
+
   getActiveProviderName(): string {
     const settingsService = getSettingsService();
     return (settingsService.get('activeProvider') as string) || '';
