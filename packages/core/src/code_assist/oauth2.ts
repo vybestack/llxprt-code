@@ -284,7 +284,8 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
       redirect_uri: redirectUri,
     });
     client.setCredentials(tokens);
-  } catch (_error) {
+  } catch (error) {
+    console.error('Failed to exchange authorization code for tokens:', error);
     return false;
   }
   return true;
@@ -494,6 +495,25 @@ async function fetchAndCacheUserInfo(client: OAuth2Client): Promise<void> {
     }
   } catch (error) {
     console.error('Error retrieving user info:', error);
+  }
+}
+
+/**
+ * Clears the OAuth client cache to prevent session leakage during logout.
+ * This is critical for security - without clearing the cache, users cannot properly logout.
+ *
+ * @param authType Optional specific auth type to clear. If not provided, clears entire cache.
+ */
+export function clearOauthClientCache(authType?: AuthType): void {
+  try {
+    if (authType) {
+      oauthClientPromises.delete(authType);
+    } else {
+      oauthClientPromises.clear();
+    }
+  } catch (error) {
+    // Log warning but don't throw - logout should continue even if cache clearing fails
+    console.warn('Failed to clear OAuth client cache:', error);
   }
 }
 

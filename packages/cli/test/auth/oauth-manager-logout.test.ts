@@ -133,9 +133,9 @@ describe('OAuthManager - Logout Single Provider (REQ-002)', () => {
    * @then Error is thrown with appropriate message
    */
   it('should throw error for null provider name', async () => {
-    await expect(oauthManager.logout(null as unknown as string)).rejects.toThrow(
-      'Provider name must be a non-empty string',
-    );
+    await expect(
+      oauthManager.logout(null as unknown as string),
+    ).rejects.toThrow('Provider name must be a non-empty string');
   });
 
   /**

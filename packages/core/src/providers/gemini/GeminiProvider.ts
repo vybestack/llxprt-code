@@ -128,12 +128,15 @@ export class GeminiProvider extends BaseProvider {
       const manager = this.geminiOAuthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
-      const isOAuthEnabled = manager?.isOAuthEnabled && 
-                            typeof manager.isOAuthEnabled === 'function' &&
-                            manager.isOAuthEnabled('gemini');
-      
-      if (authMethodName?.startsWith('oauth-') || 
-          (this.geminiOAuthManager && !token && isOAuthEnabled)) {
+      const isOAuthEnabled =
+        manager?.isOAuthEnabled &&
+        typeof manager.isOAuthEnabled === 'function' &&
+        manager.isOAuthEnabled('gemini');
+
+      if (
+        authMethodName?.startsWith('oauth-') ||
+        (this.geminiOAuthManager && !token && isOAuthEnabled)
+      ) {
         this.authMode = 'oauth';
         // Return a special token for OAuth mode
         return 'USE_LOGIN_WITH_GOOGLE';
@@ -155,14 +158,16 @@ export class GeminiProvider extends BaseProvider {
       const manager = this.geminiOAuthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
-      if (this.geminiOAuthManager && 
-          manager.isOAuthEnabled && 
-          typeof manager.isOAuthEnabled === 'function' &&
-          manager.isOAuthEnabled('gemini')) {
+      if (
+        this.geminiOAuthManager &&
+        manager.isOAuthEnabled &&
+        typeof manager.isOAuthEnabled === 'function' &&
+        manager.isOAuthEnabled('gemini')
+      ) {
         this.authMode = 'oauth';
         return 'USE_LOGIN_WITH_GOOGLE';
       }
-      
+
       // Handle case where no auth is available
       const authType = this.geminiConfig?.getContentGeneratorConfig()?.authType;
       if (authType === AuthType.USE_NONE) {

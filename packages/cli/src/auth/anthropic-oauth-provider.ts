@@ -9,7 +9,19 @@ import {
   openBrowserSecurely,
   shouldLaunchBrowser,
   TokenStore,
+  OAuthError,
+  OAuthErrorFactory,
+  GracefulErrorHandler,
+  RetryHandler,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
+
+enum InitializationState {
+  NotStarted = 'not-started',
+  InProgress = 'in-progress',
+  Completed = 'completed',
+  Failed = 'failed',
+}
 
 export class AnthropicOAuthProvider implements OAuthProvider {
   name = 'anthropic';
@@ -17,14 +29,25 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private authCodeResolver?: (code: string) => void;
   private authCodeRejecter?: (error: Error) => void;
   private pendingAuthPromise?: Promise<string>;
+  private initializationState = InitializationState.NotStarted;
+  private initializationPromise?: Promise<void>;
+  private initializationError?: Error;
+  private errorHandler: GracefulErrorHandler;
+  private retryHandler: RetryHandler;
+  private logger: DebugLogger;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
    * @requirement REQ-001.1
    * @pseudocode lines 7-10
+   *
+   * Constructor completes synchronously - no async calls
    */
   constructor(private _tokenStore?: TokenStore) {
     this.deviceFlow = new AnthropicDeviceFlow();
+    this.retryHandler = new RetryHandler();
+    this.errorHandler = new GracefulErrorHandler(this.retryHandler);
+    this.logger = new DebugLogger('llxprt:auth:anthropic');
 
     /**
      * @plan PLAN-20250823-AUTHFIXES.P16
@@ -37,6 +60,8 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           `Token persistence will not work. Please update your code.`,
       );
     }
+
+    // DO NOT call initializeToken() - lazy initialization pattern
   }
 
   /**
@@ -65,73 +90,135 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   cancelAuth(): void {
     if (this.authCodeRejecter) {
-      this.authCodeRejecter(new Error('OAuth authentication cancelled'));
+      const error = OAuthErrorFactory.fromUnknown(
+        this.name,
+        new Error('OAuth authentication cancelled'),
+        'cancelAuth',
+      );
+      this.authCodeRejecter(error);
       this.authCodeResolver = undefined;
       this.authCodeRejecter = undefined;
     }
   }
 
-  async initiateAuth(): Promise<void> {
-    // Start device flow
-    const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
-
-    // Construct the authorization URL
-    const authUrl =
-      deviceCodeResponse.verification_uri_complete ||
-      `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
-
-    // Display user instructions
-    console.log('\nAnthropic Claude OAuth Authentication');
-    console.log('─'.repeat(40));
-
-    // Try to open browser if appropriate
-    if (shouldLaunchBrowser()) {
-      console.log('Opening browser for authentication...');
-      console.log('If the browser does not open, please visit:');
-      console.log(authUrl);
-
-      try {
-        await openBrowserSecurely(authUrl);
-      } catch (_error) {
-        // If browser fails to open, just show the URL
-        console.log('Failed to open browser automatically.');
-      }
-    } else {
-      // In non-interactive environments, just show the URL
-      console.log('Visit this URL to authorize:');
-      console.log(authUrl);
+  /**
+   * Lazy initialization with proper state management
+   * Ensures initialization only happens once and handles concurrent calls
+   */
+  private async ensureInitialized(): Promise<void> {
+    // If already completed, return immediately
+    if (this.initializationState === InitializationState.Completed) {
+      return;
     }
 
-    console.log('─'.repeat(40));
+    // If failed, allow retry by resetting to NotStarted
+    if (this.initializationState === InitializationState.Failed) {
+      this.initializationState = InitializationState.NotStarted;
+      this.initializationPromise = undefined;
+      this.initializationError = undefined;
+    }
 
-    // Store the provider name globally so the dialog knows which provider
-    (global as unknown as { __oauth_provider: string }).__oauth_provider =
-      'anthropic';
+    // If not started, start initialization
+    if (this.initializationState === InitializationState.NotStarted) {
+      this.initializationState = InitializationState.InProgress;
+      this.initializationPromise = this.initializeToken();
+    }
 
-    // Create a promise that will resolve when the code is entered
-    this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
-      this.authCodeResolver = resolve;
-      this.authCodeRejecter = reject;
+    // Wait for initialization to complete (handles concurrent calls)
+    if (this.initializationPromise) {
+      try {
+        await this.initializationPromise;
+        this.initializationState = InitializationState.Completed;
+      } catch (error) {
+        this.initializationState = InitializationState.Failed;
+        this.initializationError =
+          error instanceof OAuthError
+            ? error
+            : OAuthErrorFactory.fromUnknown(
+                this.name,
+                error,
+                'ensureInitialized',
+              );
+        throw this.initializationError;
+      }
+    }
+  }
 
-      // Set a timeout to prevent hanging forever
-      setTimeout(
-        () => {
-          reject(new Error('OAuth authentication timed out'));
-        },
-        5 * 60 * 1000,
-      ); // 5 minute timeout
-    });
+  async initiateAuth(): Promise<void> {
+    return this.errorHandler.wrapMethod(
+      async () => {
+        await this.ensureInitialized();
+        // Start device flow
+        const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
 
-    // Signal that we need the OAuth code dialog
-    // This needs to be caught by the UI to open the dialog
-    (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
-      true;
+        // Construct the authorization URL
+        const authUrl =
+          deviceCodeResponse.verification_uri_complete ||
+          `${deviceCodeResponse.verification_uri}?user_code=${deviceCodeResponse.user_code}`;
 
-    // Wait for the code to be entered
-    const authCode = await this.pendingAuthPromise;
+        // Display user instructions
+        console.log('\nAnthropic Claude OAuth Authentication');
+        console.log('─'.repeat(40));
 
-    // Exchange the code for tokens
-    await this.completeAuth(authCode);
+        // Try to open browser if appropriate
+        if (shouldLaunchBrowser()) {
+          console.log('Opening browser for authentication...');
+          console.log('If the browser does not open, please visit:');
+          console.log(authUrl);
+
+          try {
+            await openBrowserSecurely(authUrl);
+          } catch (error) {
+            // If browser fails to open, just show the URL - this is not critical
+            console.log('Failed to open browser automatically.');
+            this.logger.debug(() => `Browser launch error: ${error}`);
+          }
+        } else {
+          // In non-interactive environments, just show the URL
+          console.log('Visit this URL to authorize:');
+          console.log(authUrl);
+        }
+
+        console.log('─'.repeat(40));
+
+        // Store the provider name globally so the dialog knows which provider
+        (global as unknown as { __oauth_provider: string }).__oauth_provider =
+          'anthropic';
+
+        // Create a promise that will resolve when the code is entered
+        this.pendingAuthPromise = new Promise<string>((resolve, reject) => {
+          this.authCodeResolver = resolve;
+          this.authCodeRejecter = reject;
+
+          // Set a timeout to prevent hanging forever
+          setTimeout(
+            () => {
+              const timeoutError = OAuthErrorFactory.fromUnknown(
+                this.name,
+                new Error('OAuth authentication timed out after 5 minutes'),
+                'authentication timeout',
+              );
+              reject(timeoutError);
+            },
+            5 * 60 * 1000,
+          ); // 5 minute timeout
+        });
+
+        // Signal that we need the OAuth code dialog
+        // This needs to be caught by the UI to open the dialog
+        (
+          global as unknown as { __oauth_needs_code: boolean }
+        ).__oauth_needs_code = true;
+
+        // Wait for the code to be entered
+        const authCode = await this.pendingAuthPromise;
+
+        // Exchange the code for tokens
+        await this.completeAuth(authCode);
+      },
+      this.name,
+      'initiateAuth',
+    )();
   }
 
   /**
@@ -140,18 +227,39 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    */
   async completeAuth(authCode: string): Promise<void> {
     if (!authCode) {
-      throw new Error('No authorization code provided');
+      throw OAuthErrorFactory.fromUnknown(
+        this.name,
+        new Error('No authorization code provided'),
+        'completeAuth',
+      );
     }
 
-    // Exchange the authorization code for tokens
-    const token = await this.deviceFlow.exchangeCodeForToken(authCode);
+    return this.errorHandler.wrapMethod(
+      async () => {
+        // Exchange the authorization code for tokens
+        const token = await this.deviceFlow.exchangeCodeForToken(authCode);
 
-    // @pseudocode line 61: Save token to store
-    if (this._tokenStore) {
-      await this._tokenStore.saveToken('anthropic', token);
-    }
+        // @pseudocode line 61: Save token to store
+        if (this._tokenStore) {
+          try {
+            await this._tokenStore.saveToken('anthropic', token);
+          } catch (error) {
+            throw OAuthErrorFactory.storageError(
+              this.name,
+              error instanceof Error ? error : undefined,
+              {
+                operation: 'saveToken',
+                provider: 'anthropic',
+              },
+            );
+          }
+        }
 
-    console.log('Successfully authenticated with Anthropic Claude!');
+        console.log('Successfully authenticated with Anthropic Claude!');
+      },
+      this.name,
+      'completeAuth',
+    )();
   }
 
   /**
@@ -164,17 +272,19 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       return;
     }
 
-    try {
-      // @pseudocode line 19: Load saved token from store
-      const savedToken = await this._tokenStore.getToken('anthropic');
-      // @pseudocode lines 20-22: Check if token exists and not expired
-      if (savedToken && !this.isTokenExpired(savedToken)) {
-        return; // Token is valid, ready to use
-      }
-    } catch (error) {
-      // @pseudocode lines 23-25: Log and ignore errors
-      console.error('Failed to load Anthropic token:', error);
-    }
+    return this.errorHandler.handleGracefully(
+      async () => {
+        // @pseudocode line 19: Load saved token from store
+        const savedToken = await this._tokenStore!.getToken('anthropic');
+        // @pseudocode lines 20-22: Check if token exists and not expired
+        if (savedToken && !this.isTokenExpired(savedToken)) {
+          return; // Token is valid, ready to use
+        }
+      },
+      undefined, // No fallback needed - graceful failure is acceptable
+      this.name,
+      'initializeToken',
+    );
   }
 
   /**
@@ -183,16 +293,25 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @pseudocode lines 71-72
    */
   async getToken(): Promise<OAuthToken | null> {
+    await this.ensureInitialized();
     if (!this._tokenStore) {
       return null;
     }
-    // @pseudocode line 72: Return token from store, but check if refresh is needed
-    const token = await this._tokenStore.getToken('anthropic');
-    if (token && this.isTokenExpired(token)) {
-      // Token is expired or near expiry, try to refresh
-      return await this.refreshIfNeeded();
-    }
-    return token;
+
+    return this.errorHandler.handleGracefully(
+      async () => {
+        // @pseudocode line 72: Return token from store, but check if refresh is needed
+        const token = await this._tokenStore!.getToken('anthropic');
+        if (token && this.isTokenExpired(token)) {
+          // Token is expired or near expiry, try to refresh
+          return await this.refreshIfNeeded();
+        }
+        return token;
+      },
+      null, // Return null on error
+      this.name,
+      'getToken',
+    );
   }
 
   /**
@@ -201,6 +320,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @pseudocode lines 74-98
    */
   async refreshIfNeeded(): Promise<OAuthToken | null> {
+    await this.ensureInitialized();
     if (!this._tokenStore) {
       return null;
     }
@@ -229,12 +349,44 @@ export class AnthropicOAuthProvider implements OAuthProvider {
               setTimeout(() => reject(new Error('Refresh timeout')), 1),
             ),
           ]);
-          await this._tokenStore.saveToken('anthropic', refreshedToken);
+
+          try {
+            await this._tokenStore.saveToken('anthropic', refreshedToken);
+          } catch (saveError) {
+            throw OAuthErrorFactory.storageError(
+              this.name,
+              saveError instanceof Error ? saveError : undefined,
+              {
+                operation: 'saveRefreshedToken',
+              },
+            );
+          }
+
           return refreshedToken;
         } catch (error) {
           // @pseudocode lines 88-90: Remove invalid token on refresh failure
-          console.error('Failed to refresh Anthropic token:', error);
-          await this._tokenStore.removeToken('anthropic');
+          const refreshError =
+            error instanceof OAuthError
+              ? error
+              : OAuthErrorFactory.authorizationExpired(this.name, {
+                  originalError:
+                    error instanceof Error ? error.message : String(error),
+                  operation: 'refreshToken',
+                });
+
+          this.logger.debug(
+            () =>
+              `Token refresh failed: ${JSON.stringify(refreshError.toLogEntry())}`,
+          );
+
+          try {
+            await this._tokenStore.removeToken('anthropic');
+          } catch (removeError) {
+            this.logger.debug(
+              () => `Failed to remove invalid token: ${removeError}`,
+            );
+          }
+
           return null;
         }
       } else {
@@ -254,9 +406,20 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * @pseudocode lines 100-112
    */
   async logout(): Promise<void> {
+    await this.ensureInitialized();
+
+    // NO ERROR SUPPRESSION - let it fail loudly
     if (this._tokenStore) {
       // @pseudocode lines 102-108: Try to revoke token with provider
-      const token = await this._tokenStore.getToken('anthropic');
+      let token: OAuthToken | null = null;
+      try {
+        token = await this._tokenStore.getToken('anthropic');
+      } catch (error) {
+        this.logger.debug(
+          () => `Could not retrieve token during logout: ${error}`,
+        );
+      }
+
       if (token) {
         try {
           // Check if revokeToken method exists before calling
@@ -270,18 +433,22 @@ export class AnthropicOAuthProvider implements OAuthProvider {
               }
             ).revokeToken(token.access_token);
           } else {
-            // Method not implemented yet
-            console.error(
-              'Token revocation not supported: revokeToken method not implemented',
+            // Method not implemented yet - this is not a critical failure
+            this.logger.debug(
+              () =>
+                'Token revocation not supported: revokeToken method not implemented',
             );
           }
         } catch (error) {
-          // @pseudocode lines 106-108: Log revocation failures
-          console.error('Token revocation not supported or failed:', error);
+          // @pseudocode lines 106-108: Log revocation failures but continue
+          this.logger.debug(
+            () =>
+              `Token revocation failed (continuing with local cleanup): ${error}`,
+          );
         }
       }
 
-      // @pseudocode line 111: Remove token from storage
+      // @pseudocode line 111: Remove token from storage - THIS MUST SUCCEED
       await this._tokenStore.removeToken('anthropic');
     }
 

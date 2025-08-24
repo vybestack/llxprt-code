@@ -79,6 +79,18 @@ export class OAuthManager {
     }
 
     this.providers.set(provider.name, provider);
+
+    // Trigger lazy initialization of the provider in the background to preload any stored tokens
+    // This ensures the provider is ready for use but doesn't block registration
+    // Use fire-and-forget pattern but with proper error handling
+    void provider.getToken().catch((error) => {
+      // Initialization failures shouldn't prevent registration
+      // The provider will work in memory-only mode
+      console.debug(
+        `Provider ${provider.name} initialization failed during registration:`,
+        error,
+      );
+    });
   }
 
   /**
@@ -252,7 +264,7 @@ export class OAuthManager {
         const path = await import('path');
         const os = await import('os');
         const llxprtDir = path.join(os.homedir(), '.llxprt');
-        
+
         // Clear the OAuth credentials
         const legacyCredsPath = path.join(llxprtDir, 'oauth_creds.json');
         try {
@@ -261,7 +273,7 @@ export class OAuthManager {
         } catch {
           // File might not exist
         }
-        
+
         // Clear the Google accounts file
         const googleAccountsPath = path.join(llxprtDir, 'google_accounts.json');
         try {
@@ -270,7 +282,7 @@ export class OAuthManager {
         } catch {
           // File might not exist
         }
-        
+
         // Force the OAuth client to re-authenticate by clearing any cached state
         // The next request will need to re-authenticate
       } catch (error) {
@@ -339,13 +351,15 @@ export class OAuthManager {
     } catch (error) {
       // Special handling for Gemini - USE_EXISTING_GEMINI_OAUTH is not an error
       // It's a signal to use the existing LOGIN_WITH_GOOGLE flow
-      if (providerName === 'gemini' && 
-          error instanceof Error && 
-          error.message === 'USE_EXISTING_GEMINI_OAUTH') {
+      if (
+        providerName === 'gemini' &&
+        error instanceof Error &&
+        error.message === 'USE_EXISTING_GEMINI_OAUTH'
+      ) {
         // Return null to signal that OAuth should be handled by GeminiProvider
         return null;
       }
-      
+
       // Re-throw the error so it's not silently swallowed
       console.error(`OAuth authentication failed for ${providerName}:`, error);
       throw error;

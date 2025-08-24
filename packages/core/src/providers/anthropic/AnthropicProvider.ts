@@ -23,6 +23,7 @@ export class AnthropicProvider extends BaseProvider {
   private _config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-20250514'; // Default model
   private modelParams?: Record<string, unknown>;
+  private _cachedAuthKey?: string; // Track cached auth key for client recreation
 
   // Model cache for latest resolution
   private modelCache: { models: IModel[]; timestamp: number } | null = null;
@@ -106,31 +107,35 @@ export class AnthropicProvider extends BaseProvider {
       );
     }
 
-    // Check if this is an OAuth token (starts with sk-ant-oat)
-    const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
+    // Only recreate client if auth changed
+    if (this._cachedAuthKey !== resolvedToken) {
+      // Check if this is an OAuth token (starts with sk-ant-oat)
+      const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
 
-    if (isOAuthToken) {
-      // For OAuth tokens, use authToken field which sends Bearer token
-      // Don't pass apiKey at all - just authToken
-      const oauthConfig: Record<string, unknown> = {
-        authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
-        baseURL: this.baseURL,
-        dangerouslyAllowBrowser: true,
-        defaultHeaders: {
-          'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
-        },
-      };
+      if (isOAuthToken) {
+        // For OAuth tokens, use authToken field which sends Bearer token
+        // Don't pass apiKey at all - just authToken
+        const oauthConfig: Record<string, unknown> = {
+          authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
+          baseURL: this.baseURL,
+          dangerouslyAllowBrowser: true,
+          defaultHeaders: {
+            'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
+          },
+        };
 
-      this.anthropic = new Anthropic(oauthConfig as ClientOptions);
-    } else {
-      // Regular API key auth
-      if (this.anthropic.apiKey !== resolvedToken) {
+        this.anthropic = new Anthropic(oauthConfig as ClientOptions);
+      } else {
+        // Regular API key auth
         this.anthropic = new Anthropic({
           apiKey: resolvedToken,
           baseURL: this.baseURL,
           dangerouslyAllowBrowser: true,
         });
       }
+
+      // Track the key to avoid unnecessary client recreation
+      this._cachedAuthKey = resolvedToken;
     }
   }
 
@@ -927,6 +932,14 @@ ${llxprtPrompts}`;
    */
   override getModelParams(): Record<string, unknown> | undefined {
     return this.modelParams;
+  }
+
+  /**
+   * Override clearAuthCache to also clear cached auth key
+   */
+  protected override clearAuthCache(): void {
+    super.clearAuthCache();
+    this._cachedAuthKey = undefined;
   }
 
   /**
