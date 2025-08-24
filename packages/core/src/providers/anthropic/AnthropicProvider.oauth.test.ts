@@ -94,6 +94,11 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
 
+    // Clear SettingsService to ensure test isolation
+    const { getSettingsService } = await import('../../settings/settingsServiceInstance.js');
+    const settingsService = getSettingsService();
+    settingsService.clear();
+
     // Create mock OAuth manager
     mockOAuthManager = {
       getToken: vi.fn(),

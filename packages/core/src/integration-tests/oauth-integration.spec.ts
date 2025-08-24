@@ -72,9 +72,14 @@ describe.skipIf(skipInCI)(
     let mockConfigManager: MockConfigManager;
     let originalEnv: NodeJS.ProcessEnv;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       vi.clearAllMocks();
       originalEnv = { ...process.env };
+
+      // Clear SettingsService to ensure test isolation
+      const { getSettingsService } = await import('../settings/settingsServiceInstance.js');
+      const settingsService = getSettingsService();
+      settingsService.clear();
 
       // Clear all environment variables for clean testing
       delete process.env.OPENAI_API_KEY;

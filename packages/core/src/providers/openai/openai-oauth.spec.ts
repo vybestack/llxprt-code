@@ -49,9 +49,14 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
   let mockOAuthManager: MockOAuthManager;
   let originalEnv: NodeJS.ProcessEnv;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     originalEnv = { ...process.env };
+
+    // Clear SettingsService to ensure test isolation
+    const { getSettingsService } = await import('../../settings/settingsServiceInstance.js');
+    const settingsService = getSettingsService();
+    settingsService.clear();
 
     // Clear OPENAI_API_KEY for OAuth tests to work properly
     delete process.env.OPENAI_API_KEY;

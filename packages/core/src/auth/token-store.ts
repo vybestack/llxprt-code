@@ -8,7 +8,6 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { OAuthToken, OAuthTokenSchema } from './types.js';
-import { LegacyMigrationService } from './legacy-migration.js';
 
 /**
  * Interface for multi-provider OAuth token storage
@@ -44,16 +43,12 @@ export interface TokenStore {
 /**
  * Implementation of multi-provider token storage
  * Stores tokens securely in ~/.llxprt/oauth/ directory
- * Automatically migrates legacy tokens when they are accessed
  */
 export class MultiProviderTokenStore implements TokenStore {
   private readonly basePath: string;
-  private readonly migrationService: LegacyMigrationService;
-  private readonly migrationAttempts: Set<string> = new Set();
 
   constructor() {
     this.basePath = join(homedir(), '.llxprt', 'oauth');
-    this.migrationService = new LegacyMigrationService();
   }
 
   /**
@@ -101,7 +96,6 @@ export class MultiProviderTokenStore implements TokenStore {
 
   /**
    * Retrieve an OAuth token for a specific provider
-   * Automatically attempts legacy migration if token not found
    */
   async getToken(provider: string): Promise<OAuthToken | null> {
     try {
@@ -113,47 +107,9 @@ export class MultiProviderTokenStore implements TokenStore {
       const validatedToken = OAuthTokenSchema.parse(parsed);
       return validatedToken;
     } catch (_error) {
-      // Token not found in new location, attempt migration from legacy locations
-      return await this.attemptLegacyMigration(provider);
-    }
-  }
-
-  /**
-   * Attempt to migrate legacy tokens for a provider
-   * Only attempts migration once per provider per session to avoid loops
-   */
-  private async attemptLegacyMigration(
-    provider: string,
-  ): Promise<OAuthToken | null> {
-    // Check if we've already attempted migration for this provider
-    if (this.migrationAttempts.has(provider)) {
+      // Token not found
       return null;
     }
-
-    // Mark this provider as attempted to prevent loops
-    this.migrationAttempts.add(provider);
-
-    try {
-      const migrationResult =
-        await this.migrationService.migrateProvider(provider);
-
-      if (migrationResult.success && migrationResult.migrated) {
-        console.log(
-          `Migrated ${provider} token from legacy location: ${migrationResult.legacyPath}`,
-        );
-
-        // Now try to read the migrated token
-        const tokenPath = this.getTokenPath(provider);
-        const content = await fs.readFile(tokenPath, 'utf8');
-        const parsed = JSON.parse(content);
-        const validatedToken = OAuthTokenSchema.parse(parsed);
-        return validatedToken;
-      }
-    } catch (error) {
-      console.debug(`Legacy migration failed for ${provider}:`, error);
-    }
-
-    return null;
   }
 
   /**
@@ -201,66 +157,6 @@ export class MultiProviderTokenStore implements TokenStore {
         return [];
       }
       throw error;
-    }
-  }
-
-  /**
-   * Manually trigger migration for all providers
-   * Returns migration results for each provider
-   */
-  async migrateAllLegacyTokens(): Promise<
-    Array<{
-      provider: string;
-      success: boolean;
-      migrated: boolean;
-      error?: string;
-    }>
-  > {
-    const results = await this.migrationService.migrateAllProviders();
-
-    // Clear migration attempts cache so subsequent getToken calls can work
-    this.migrationAttempts.clear();
-
-    return results;
-  }
-
-  /**
-   * Get migration status summary
-   */
-  async getMigrationStatus(): Promise<{
-    totalProviders: number;
-    providersWithLegacyTokens: number;
-    providersMigrated: number;
-    providersWithNewTokens: number;
-  }> {
-    return await this.migrationService.getMigrationStatus();
-  }
-
-  /**
-   * Clean up legacy token files after successful migration
-   * @param provider - The provider name, or undefined to clean all
-   * @param dryRun - If true, only log what would be deleted
-   */
-  async cleanupLegacyTokens(
-    provider?: string,
-    dryRun: boolean = false,
-  ): Promise<string[]> {
-    if (provider) {
-      return await this.migrationService.cleanupLegacyTokens(provider, dryRun);
-    } else {
-      // Clean up all providers
-      const allProviders = ['gemini', 'qwen', 'anthropic'];
-      const allDeleted: string[] = [];
-
-      for (const providerName of allProviders) {
-        const deleted = await this.migrationService.cleanupLegacyTokens(
-          providerName,
-          dryRun,
-        );
-        allDeleted.push(...deleted);
-      }
-
-      return allDeleted;
     }
   }
 

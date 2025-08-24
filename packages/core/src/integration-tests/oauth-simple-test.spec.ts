@@ -14,9 +14,14 @@ describe.skipIf(skipInCI)('Simple OAuth Integration Test', () => {
   let mockOAuthManager: OAuthManager;
   let originalEnv: NodeJS.ProcessEnv;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     originalEnv = { ...process.env };
+
+    // Clear SettingsService to ensure test isolation
+    const { getSettingsService } = await import('../settings/settingsServiceInstance.js');
+    const settingsService = getSettingsService();
+    settingsService.clear();
 
     // Clear environment variables
     delete process.env.OPENAI_API_KEY;
