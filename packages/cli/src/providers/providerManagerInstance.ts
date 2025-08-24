@@ -14,8 +14,6 @@ import {
   needsSanitization,
 } from '@vybestack/llxprt-code-core';
 import { IFileSystem, NodeFileSystem } from './IFileSystem.js';
-import { homedir } from 'os';
-import { join } from 'path';
 import {
   Settings,
   LoadedSettings,
@@ -131,37 +129,14 @@ export function getProviderManager(
     }
     providerManagerInstance.registerProvider(geminiProvider);
 
-    // Configure Gemini auth - check for keyfile only
-    try {
-      const keyfilePath = join(homedir(), '.google_key');
-      if (fs.existsSync(keyfilePath)) {
-        const geminiApiKey = fs.readFileSync(keyfilePath, 'utf-8').trim();
-        if (geminiApiKey) {
-          geminiProvider.setApiKey(sanitizeApiKey(geminiApiKey));
-        }
-      }
-    } catch (_error) {
-      // No Google keyfile available, that's OK - will use OAuth if available
-    }
+    // Gemini auth configuration removed - use explicit --key/--keyfile, /key//keyfile commands, profiles, env vars, or OAuth only
 
     // Always register OpenAI provider
-    // Priority: Environment variable > keyfile (skip keyfile in test)
+    // Priority: Environment variable only - no automatic keyfile loading
     let openaiApiKey: string | undefined;
 
     if (process.env.OPENAI_API_KEY) {
       openaiApiKey = sanitizeApiKey(process.env.OPENAI_API_KEY);
-    }
-
-    if (!openaiApiKey) {
-      try {
-        const apiKeyPath = join(homedir(), '.openai_key');
-        if (fs.existsSync(apiKeyPath)) {
-          const rawKey = fs.readFileSync(apiKeyPath, 'utf-8').trim();
-          openaiApiKey = sanitizeApiKey(rawKey);
-        }
-      } catch (_error) {
-        // No OpenAI keyfile available, that's OK
-      }
     }
 
     const openaiBaseUrl = process.env.OPENAI_BASE_URL;
@@ -215,23 +190,11 @@ export function getProviderManager(
     providerManagerInstance.registerProvider(qwenProvider);
 
     // Always register Anthropic provider
-    // Priority: Environment variable > keyfile (skip keyfile in test)
+    // Priority: Environment variable only - no automatic keyfile loading
     let anthropicApiKey: string | undefined;
 
     if (process.env.ANTHROPIC_API_KEY) {
       anthropicApiKey = sanitizeApiKey(process.env.ANTHROPIC_API_KEY);
-    }
-
-    if (!anthropicApiKey) {
-      try {
-        const apiKeyPath = join(homedir(), '.anthropic_key');
-        if (fs.existsSync(apiKeyPath)) {
-          const rawKey = fs.readFileSync(apiKeyPath, 'utf-8').trim();
-          anthropicApiKey = sanitizeApiKey(rawKey);
-        }
-      } catch (_error) {
-        // No Anthropic keyfile available, that's OK
-      }
     }
 
     const anthropicBaseUrl = process.env.ANTHROPIC_BASE_URL;

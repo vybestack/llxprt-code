@@ -96,7 +96,6 @@ export class OpenAIProvider extends BaseProvider {
       name: 'openai',
       apiKey,
       baseURL,
-      cliKey: !apiKey || apiKey === '' ? undefined : apiKey, // Don't set cliKey if no API key to allow OAuth
       envKeyNames: ['OPENAI_API_KEY'],
       isOAuthEnabled: shouldEnableQwenOAuth,
       oauthProvider: shouldEnableQwenOAuth ? 'qwen' : undefined,

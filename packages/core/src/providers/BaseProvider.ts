@@ -26,11 +26,7 @@ export interface BaseProviderConfig {
   apiKey?: string;
   baseURL?: string;
 
-  // Authentication precedence config
-  commandKey?: string;
-  commandKeyfile?: string;
-  cliKey?: string;
-  cliKeyfile?: string;
+  // Environment variable names to check
   envKeyNames?: string[];
 
   // OAuth config
@@ -55,13 +51,15 @@ export abstract class BaseProvider implements IProvider {
     this.name = config.name;
     this.baseProviderConfig = config;
 
+    // If an initial apiKey is provided, store it in SettingsService
+    if (config.apiKey) {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', config.apiKey);
+    }
+
     // Initialize auth precedence resolver
     // OAuth enablement will be checked dynamically through the manager
     const precedenceConfig: AuthPrecedenceConfig = {
-      commandKey: config.commandKey,
-      commandKeyfile: config.commandKeyfile,
-      cliKey: config.cliKey,
-      cliKeyfile: config.cliKeyfile,
       envKeyNames: config.envKeyNames || [],
       isOAuthEnabled: config.isOAuthEnabled ?? false, // Use the config value, which can be updated
       supportsOAuth: this.supportsOAuth(),
@@ -184,42 +182,29 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
-   * Updates the API key (used for CLI --key argument)
+   * Updates the API key (used for CLI --key argument and other sources)
    */
   setApiKey?(apiKey: string): void {
+    const settingsService = getSettingsService();
+
     // CRITICAL FIX: When clearing the key, set to undefined instead of empty string
     // This ensures the precedence chain properly skips this level
-    const keyToSet = apiKey && apiKey.trim() !== '' ? apiKey : undefined;
-    this.baseProviderConfig.cliKey = keyToSet;
-    this.authResolver.updateConfig({ cliKey: keyToSet });
+    if (!apiKey || apiKey.trim() === '') {
+      settingsService.set('auth-key', undefined);
+    } else {
+      settingsService.set('auth-key', apiKey);
+    }
+
     this.clearAuthCache();
   }
 
   /**
-   * Updates the command-level key (used for /key command)
+   * Clears authentication (used when removing keys/keyfiles)
    */
-  setCommandKey?(key: string): void {
-    this.baseProviderConfig.commandKey = key;
-    this.authResolver.updateConfig({ commandKey: key });
-    this.clearAuthCache();
-  }
-
-  /**
-   * Updates the command-level keyfile (used for /keyfile command)
-   */
-  setCommandKeyfile?(keyfilePath: string): void {
-    this.baseProviderConfig.commandKeyfile = keyfilePath;
-    this.authResolver.setCommandKeyfile(keyfilePath);
-    this.clearAuthCache();
-  }
-
-  /**
-   * Clears command-level authentication (used when removing keyfiles)
-   */
-  clearCommandAuth?(): void {
-    this.baseProviderConfig.commandKey = undefined;
-    this.baseProviderConfig.commandKeyfile = undefined;
-    this.authResolver.clearCommandAuth();
+  clearAuth?(): void {
+    const settingsService = getSettingsService();
+    settingsService.set('auth-key', undefined);
+    settingsService.set('auth-keyfile', undefined);
     this.clearAuthCache();
   }
 

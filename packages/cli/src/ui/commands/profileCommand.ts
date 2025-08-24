@@ -334,21 +334,9 @@ const loadCommand: SlashCommand = {
             activeProvider.setApiKey(value);
           }
         } else if (key === 'auth-keyfile' && typeof value === 'string') {
-          // Load API key from file
-          try {
-            const { promises: fs } = await import('fs');
-            const { homedir } = await import('os');
-            const resolvedPath = value.replace(/^~/, homedir());
-            const apiKey = (await fs.readFile(resolvedPath, 'utf-8')).trim();
-
-            const activeProvider = providerManager?.getActiveProvider();
-            if (activeProvider && activeProvider.setApiKey && apiKey) {
-              activeProvider.setApiKey(apiKey);
-            }
-          } catch (error) {
-            // Log error but continue loading profile
-            console.error(`Failed to load keyfile ${value}:`, error);
-          }
+          // Just store the keyfile path in ephemeral settings
+          // The AuthPrecedenceResolver will read from the file when needed
+          // DO NOT read the file and call setApiKey here - that defeats the purpose
         } else if (key === 'base-url' && typeof value === 'string') {
           // Directly set base URL on the provider without saving to persistent settings
           const activeProvider = providerManager?.getActiveProvider();

@@ -57,11 +57,9 @@ export async function setProviderApiKey(
       apiKey.trim() === '' ||
       apiKey.trim().toLowerCase() === 'none'
     ) {
-      // Clear the API key
+      // Clear the API key using the provider's setApiKey method (which now stores in SettingsService)
       if (activeProvider.setApiKey) {
         activeProvider.setApiKey('');
-
-        // Don't need to remove from settings as we no longer save API keys there
 
         // If this is the Gemini provider, we might need to switch auth mode
         const requiresAuthRefresh = providerName === 'gemini' && !!config;
@@ -90,12 +88,10 @@ export async function setProviderApiKey(
       }
     }
 
-    // Update the provider's API key (sanitized)
+    // Update the provider's API key (sanitized) - this will store in SettingsService
     if (activeProvider.setApiKey) {
       const sanitizedKey = sanitizeApiKey(apiKey);
       activeProvider.setApiKey(sanitizedKey);
-
-      // Don't save API keys to settings - they should only be in profiles or ephemeral
 
       // If this is the Gemini provider, we need to refresh auth to use API key mode
       const requiresAuthRefresh = providerName === 'gemini' && !!config;

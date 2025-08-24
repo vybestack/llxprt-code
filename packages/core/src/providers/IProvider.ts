@@ -67,19 +67,9 @@ export interface IProvider {
   clearAuthCache?(): void;
 
   /**
-   * Set command-level API key for authentication precedence
+   * Clear authentication settings (keys and keyfiles)
    */
-  setCommandKey?(key: string): void;
-
-  /**
-   * Set command-level keyfile for authentication precedence
-   */
-  setCommandKeyfile?(keyfilePath: string): void;
-
-  /**
-   * Clear command-level authentication settings
-   */
-  clearCommandAuth?(): void;
+  clearAuth?(): void;
 }
 
 // Re-export the interfaces for convenience

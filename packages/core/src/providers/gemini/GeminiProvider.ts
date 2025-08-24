@@ -72,7 +72,6 @@ export class GeminiProvider extends BaseProvider {
       name: 'gemini',
       apiKey,
       baseURL,
-      cliKey: apiKey, // CLI --key argument
       envKeyNames: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
       isOAuthEnabled: false, // OAuth enablement will be checked dynamically
       oauthProvider: 'gemini',
@@ -1084,6 +1083,16 @@ export class GeminiProvider extends BaseProvider {
       this.currentModel = 'gemini-2.5-pro';
     }
     // Note: We don't clear config or apiKey as they might be needed
+  }
+
+  /**
+   * Clear all authentication including environment variable
+   */
+  override clearAuth(): void {
+    // Call base implementation to clear SettingsService
+    super.clearAuth?.();
+    // CRITICAL: Also clear the environment variable that setApiKey sets
+    delete process.env.GEMINI_API_KEY;
   }
 
   /**

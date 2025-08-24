@@ -10,6 +10,10 @@ import {
   AuthPrecedenceConfig,
   OAuthManager,
 } from './precedence.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../settings/settingsServiceInstance.js';
 
 // Mock fs module
 vi.mock('node:fs/promises', () => ({
@@ -33,6 +37,8 @@ describe('AuthPrecedenceResolver', () => {
     // Clear environment variables
     delete process.env.TEST_API_KEY;
     delete process.env.ANOTHER_API_KEY;
+    // Reset settings service to ensure clean state
+    resetSettingsService();
   });
 
   afterEach(() => {
@@ -41,13 +47,12 @@ describe('AuthPrecedenceResolver', () => {
   });
 
   describe('Authentication Precedence Chain', () => {
-    it('should prioritize command key over all other methods', async () => {
+    it('should prioritize SettingsService auth-key over all other methods', async () => {
       // Given: All auth methods available
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-auth-key-123');
+
       const config: AuthPrecedenceConfig = {
-        commandKey: 'command-key-123',
-        commandKeyfile: '/path/to/command/keyfile',
-        cliKey: 'cli-key-456',
-        cliKeyfile: '/path/to/cli/keyfile',
         envKeyNames: ['TEST_API_KEY'],
         isOAuthEnabled: true,
         supportsOAuth: true,
@@ -62,19 +67,20 @@ describe('AuthPrecedenceResolver', () => {
       // When: Resolve authentication
       const result = await resolver.resolveAuthentication();
 
-      // Then: Should use command key (highest priority)
-      expect(result).toBe('command-key-123');
+      // Then: Should use SettingsService auth-key (highest priority)
+      expect(result).toBe('settings-auth-key-123');
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
-    it('should fall back to command keyfile when no command key', async () => {
-      // Given: Command keyfile and other methods available
+    it('should fall back to SettingsService auth-keyfile when no auth-key', async () => {
+      // Given: SettingsService keyfile and other methods available
       const keyFileContent = 'keyfile-content-123';
       vi.mocked(mockFs.readFile).mockResolvedValue(keyFileContent);
 
+      const settingsService = getSettingsService();
+      settingsService.set('auth-keyfile', '/path/to/settings/keyfile');
+
       const config: AuthPrecedenceConfig = {
-        commandKeyfile: '/path/to/command/keyfile',
-        cliKey: 'cli-key-456',
         envKeyNames: ['TEST_API_KEY'],
         isOAuthEnabled: true,
         supportsOAuth: true,
@@ -89,19 +95,18 @@ describe('AuthPrecedenceResolver', () => {
       // When: Resolve authentication
       const result = await resolver.resolveAuthentication();
 
-      // Then: Should use command keyfile (second priority)
+      // Then: Should use SettingsService auth-keyfile (second priority)
       expect(result).toBe('keyfile-content-123');
       expect(mockFs.readFile).toHaveBeenCalledWith(
-        '/path/to/command/keyfile',
+        '/path/to/settings/keyfile',
         'utf-8',
       );
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
-    it('should fall back to CLI key when no command methods', async () => {
-      // Given: CLI key and other methods available
+    it('should fall back to environment variables when no SettingsService methods', async () => {
+      // Given: Environment variable and other methods available
       const config: AuthPrecedenceConfig = {
-        cliKey: 'cli-key-456',
         envKeyNames: ['TEST_API_KEY'],
         isOAuthEnabled: true,
         supportsOAuth: true,
@@ -116,59 +121,7 @@ describe('AuthPrecedenceResolver', () => {
       // When: Resolve authentication
       const result = await resolver.resolveAuthentication();
 
-      // Then: Should use CLI key (third priority)
-      expect(result).toBe('cli-key-456');
-      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
-    });
-
-    it('should fall back to CLI keyfile when no command or CLI key', async () => {
-      // Given: CLI keyfile and other methods available
-      const keyFileContent = 'cli-keyfile-content-456';
-      vi.mocked(mockFs.readFile).mockResolvedValue(keyFileContent);
-
-      const config: AuthPrecedenceConfig = {
-        cliKeyfile: '/path/to/cli/keyfile',
-        envKeyNames: ['TEST_API_KEY'],
-        isOAuthEnabled: true,
-        supportsOAuth: true,
-        oauthProvider: 'qwen',
-      };
-
-      process.env.TEST_API_KEY = 'env-key-789';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-abc');
-
-      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
-
-      // When: Resolve authentication
-      const result = await resolver.resolveAuthentication();
-
-      // Then: Should use CLI keyfile (fourth priority)
-      expect(result).toBe('cli-keyfile-content-456');
-      expect(mockFs.readFile).toHaveBeenCalledWith(
-        '/path/to/cli/keyfile',
-        'utf-8',
-      );
-      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
-    });
-
-    it('should fall back to environment variables when no file or explicit keys', async () => {
-      // Given: Environment variable and OAuth available
-      const config: AuthPrecedenceConfig = {
-        envKeyNames: ['TEST_API_KEY', 'ANOTHER_API_KEY'],
-        isOAuthEnabled: true,
-        supportsOAuth: true,
-        oauthProvider: 'qwen',
-      };
-
-      process.env.TEST_API_KEY = 'env-key-789';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token-abc');
-
-      const resolver = new AuthPrecedenceResolver(config, mockOAuthManager);
-
-      // When: Resolve authentication
-      const result = await resolver.resolveAuthentication();
-
-      // Then: Should use environment variable (fifth priority)
+      // Then: Should use environment variable (third priority)
       expect(result).toBe('env-key-789');
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
@@ -322,9 +275,11 @@ describe('AuthPrecedenceResolver', () => {
 
   describe('Utility Methods', () => {
     it('should correctly identify when non-OAuth auth is available', async () => {
-      // Given: API key available
+      // Given: SettingsService auth-key available
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-key-456');
+
       const config: AuthPrecedenceConfig = {
-        cliKey: 'cli-key-456',
         envKeyNames: ['TEST_API_KEY'],
         isOAuthEnabled: true,
         supportsOAuth: true,
@@ -358,10 +313,12 @@ describe('AuthPrecedenceResolver', () => {
       expect(isOAuthOnly).toBe(true);
     });
 
-    it('should get correct auth method name for CLI key', async () => {
-      // Given: CLI key configured
+    it('should get correct auth method name for SettingsService auth-key', async () => {
+      // Given: SettingsService auth-key configured
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-key-456');
+
       const config: AuthPrecedenceConfig = {
-        cliKey: 'cli-key-456',
         envKeyNames: ['TEST_API_KEY'],
       };
 
@@ -370,8 +327,8 @@ describe('AuthPrecedenceResolver', () => {
       // When: Get auth method name
       const methodName = await resolver.getAuthMethodName();
 
-      // Then: Should return cli-key
-      expect(methodName).toBe('cli-key');
+      // Then: Should return command-key (SettingsService auth-key represents command-level auth)
+      expect(methodName).toBe('command-key');
     });
 
     it('should get correct auth method name for environment variable', async () => {
@@ -393,48 +350,56 @@ describe('AuthPrecedenceResolver', () => {
 
   describe('File Handling', () => {
     it('should handle keyfile read errors gracefully', async () => {
-      // Given: Keyfile that cannot be read
+      // Given: SettingsService keyfile that cannot be read
       vi.mocked(mockFs.readFile).mockRejectedValue(new Error('File not found'));
 
+      const settingsService = getSettingsService();
+      settingsService.set('auth-keyfile', '/nonexistent/keyfile');
+
       const config: AuthPrecedenceConfig = {
-        commandKeyfile: '/nonexistent/keyfile',
-        cliKey: 'cli-key-456',
+        envKeyNames: ['TEST_API_KEY'],
       };
 
+      process.env.TEST_API_KEY = 'env-fallback-key';
       const resolver = new AuthPrecedenceResolver(config);
 
       // When: Resolve authentication
       const result = await resolver.resolveAuthentication();
 
-      // Then: Should fall back to CLI key
-      expect(result).toBe('cli-key-456');
+      // Then: Should fall back to environment variable
+      expect(result).toBe('env-fallback-key');
     });
 
     it('should handle empty keyfile gracefully', async () => {
-      // Given: Empty keyfile
+      // Given: Empty SettingsService keyfile
       vi.mocked(mockFs.readFile).mockResolvedValue('   \n  \t  '); // Whitespace only
 
+      const settingsService = getSettingsService();
+      settingsService.set('auth-keyfile', '/path/to/empty/keyfile');
+
       const config: AuthPrecedenceConfig = {
-        commandKeyfile: '/path/to/empty/keyfile',
-        cliKey: 'cli-key-456',
+        envKeyNames: ['TEST_API_KEY'],
       };
 
+      process.env.TEST_API_KEY = 'env-fallback-key';
       const resolver = new AuthPrecedenceResolver(config);
 
       // When: Resolve authentication
       const result = await resolver.resolveAuthentication();
 
-      // Then: Should fall back to CLI key
-      expect(result).toBe('cli-key-456');
+      // Then: Should fall back to environment variable
+      expect(result).toBe('env-fallback-key');
     });
 
     it('should handle keyfile with valid content', async () => {
-      // Given: Keyfile with valid content
+      // Given: SettingsService keyfile with valid content
       vi.mocked(mockFs.readFile).mockResolvedValue('  valid-key-content  \n');
 
+      const settingsService = getSettingsService();
+      settingsService.set('auth-keyfile', '/path/to/valid/keyfile');
+
       const config: AuthPrecedenceConfig = {
-        commandKeyfile: '/path/to/valid/keyfile',
-        cliKey: 'cli-key-456',
+        envKeyNames: ['TEST_API_KEY'],
       };
 
       const resolver = new AuthPrecedenceResolver(config);
@@ -451,18 +416,23 @@ describe('AuthPrecedenceResolver', () => {
     it('should update configuration correctly', async () => {
       // Given: Initial configuration
       const config: AuthPrecedenceConfig = {
-        cliKey: 'old-key',
         envKeyNames: ['TEST_API_KEY'],
       };
 
       const resolver = new AuthPrecedenceResolver(config);
 
-      // When: Update configuration
-      resolver.updateConfig({ cliKey: 'new-key' });
+      // When: Update configuration with new env key names
+      resolver.updateConfig({ envKeyNames: ['NEW_TEST_API_KEY'] });
+
+      // Set the new env var
+      process.env.NEW_TEST_API_KEY = 'new-key';
 
       // Then: Should use updated configuration
       const result = await resolver.resolveAuthentication();
       expect(result).toBe('new-key');
+
+      // Cleanup
+      delete process.env.NEW_TEST_API_KEY;
     });
 
     it('should update OAuth manager correctly', async () => {

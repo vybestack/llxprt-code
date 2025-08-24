@@ -60,7 +60,6 @@ export class AnthropicProvider extends BaseProvider {
       name: 'anthropic',
       apiKey,
       baseURL,
-      cliKey: !apiKey || apiKey === '' ? undefined : apiKey,
       envKeyNames: ['ANTHROPIC_API_KEY'],
       isOAuthEnabled: !!oauthManager,
       oauthProvider: oauthManager ? 'anthropic' : undefined,

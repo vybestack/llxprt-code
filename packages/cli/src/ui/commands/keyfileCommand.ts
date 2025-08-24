@@ -77,24 +77,21 @@ export const keyfileCommand: SlashCommand = {
         const removedPath =
           context.services.settings.getProviderKeyfile(providerName);
 
-        // Clear command-level auth from BaseProvider
-        if (activeProvider.clearCommandAuth) {
-          activeProvider.clearCommandAuth();
+        // Clear authentication using the provider's method (which now stores in SettingsService)
+        if (
+          'clearAuth' in activeProvider &&
+          typeof activeProvider.clearAuth === 'function'
+        ) {
+          activeProvider.clearAuth();
+        } else if (activeProvider.setApiKey) {
+          // Fallback to clearing just the API key if clearAuth is not available
+          activeProvider.setApiKey('');
         } else {
           return {
             type: 'message',
             messageType: 'error',
             content: `Provider '${providerName}' does not support keyfile commands`,
           };
-        }
-
-        // Clear from ephemeral settings
-        if (context.services.config) {
-          context.services.config.setEphemeralSetting(
-            'auth-keyfile',
-            undefined,
-          );
-          context.services.config.setEphemeralSetting('auth-key', undefined);
         }
 
         // Remove from saved settings
@@ -130,19 +127,8 @@ export const keyfileCommand: SlashCommand = {
         const activeProvider = providerManager.getActiveProvider();
         const providerName = activeProvider.name;
 
-        // Set the command-level keyfile path
-        // Let the auth precedence resolver handle reading the file when needed
-        if (activeProvider.setCommandKeyfile) {
-          activeProvider.setCommandKeyfile(resolvedPath);
-        } else {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: `Provider '${providerName}' does not support keyfile commands`,
-          };
-        }
-
-        // Store the keyfile PATH in ephemeral settings, not the key itself
+        // Store the keyfile PATH in SettingsService (ephemeral settings)
+        // The AuthPrecedenceResolver will read from here when needed
         if (context.services.config) {
           context.services.config.setEphemeralSetting('auth-keyfile', filePath);
           // Remove any stored auth-key since we're using keyfile

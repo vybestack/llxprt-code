@@ -46,13 +46,10 @@ export const keyCommand: SlashCommand = {
 
     // If no key provided or 'none', remove the key
     if (!apiKey || apiKey.toLowerCase() === 'none') {
-      // Clear command-level authentication
-      if (activeProvider.clearCommandAuth) {
-        activeProvider.clearCommandAuth();
+      // Clear authentication using the provider's method (which now stores in SettingsService)
+      if (activeProvider.setApiKey) {
+        activeProvider.setApiKey('');
       }
-
-      // Clear from ephemeral settings
-      config.setEphemeralSetting('auth-key', undefined);
 
       // If this is the Gemini provider, we might need to switch auth mode
       const requiresAuthRefresh = providerName === 'gemini';
@@ -73,12 +70,9 @@ export const keyCommand: SlashCommand = {
       };
     }
 
-    // Set the command-level API key
-    if (activeProvider.setCommandKey) {
-      activeProvider.setCommandKey(apiKey);
-
-      // Store in ephemeral settings as well
-      config.setEphemeralSetting('auth-key', apiKey);
+    // Set the API key using the provider's method (which now stores in SettingsService)
+    if (activeProvider.setApiKey) {
+      activeProvider.setApiKey(apiKey);
 
       // If this is the Gemini provider, we need to refresh auth to use API key mode
       const requiresAuthRefresh = providerName === 'gemini';

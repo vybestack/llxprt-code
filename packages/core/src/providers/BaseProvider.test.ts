@@ -11,6 +11,10 @@ import { IModel } from './IModel.js';
 import { IMessage } from './IMessage.js';
 import { ITool } from './ITool.js';
 import { ContentGeneratorRole } from './ContentGeneratorRole.js';
+import {
+  getSettingsService,
+  resetSettingsService,
+} from '../settings/settingsServiceInstance.js';
 
 // Mock OAuth manager for testing
 const mockOAuthManager: OAuthManager = {
@@ -81,6 +85,8 @@ describe('BaseProvider', () => {
     // Clear test environment variables
     delete process.env.TEST_API_KEY;
     delete process.env.ANOTHER_API_KEY;
+    // Reset settings service to ensure clean state
+    resetSettingsService();
   });
 
   afterEach(() => {
@@ -89,11 +95,12 @@ describe('BaseProvider', () => {
   });
 
   describe('Authentication Precedence', () => {
-    it('should prioritize command key over all other methods', async () => {
+    it('should prioritize SettingsService auth-key over all other methods', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-auth-key-123');
+
       const config: BaseProviderConfig = {
         name: 'test',
-        commandKey: 'command-key-123',
-        cliKey: 'cli-key-456',
         envKeyNames: ['TEST_API_KEY'],
         isOAuthEnabled: true,
         oauthProvider: 'test',
@@ -112,41 +119,14 @@ describe('BaseProvider', () => {
         ])
         .next();
 
-      // Then: Should use command key
+      // Then: Should use SettingsService auth-key
       expect(response.value).toMatchObject({
-        content: expect.stringContaining('command-ke'),
+        content: expect.stringContaining('settings-a'),
       });
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
-    it('should fall back to CLI key when no command key', async () => {
-      const config: BaseProviderConfig = {
-        name: 'test',
-        cliKey: 'cli-key-456',
-        envKeyNames: ['TEST_API_KEY'],
-        isOAuthEnabled: true,
-        oauthProvider: 'test',
-        oauthManager: mockOAuthManager,
-      };
-
-      process.env.TEST_API_KEY = 'env-key-789';
-      vi.mocked(mockOAuthManager.getToken).mockResolvedValue('oauth-token');
-
-      const provider = new TestProvider(config);
-
-      const response = await provider
-        .generateChatCompletion([
-          { role: ContentGeneratorRole.USER, content: 'test' },
-        ])
-        .next();
-
-      expect(response.value).toMatchObject({
-        content: expect.stringContaining('cli-key-45'),
-      });
-      expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
-    });
-
-    it('should fall back to environment variable', async () => {
+    it('should fall back to environment variable when no SettingsService auth', async () => {
       const config: BaseProviderConfig = {
         name: 'test',
         envKeyNames: ['TEST_API_KEY'],
@@ -369,9 +349,11 @@ describe('BaseProvider', () => {
 
   describe('Utility Methods', () => {
     it('should correctly identify when non-OAuth auth is available', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-key-456');
+
       const config: BaseProviderConfig = {
         name: 'test',
-        cliKey: 'cli-key-456',
         isOAuthEnabled: true,
         oauthProvider: 'test',
         oauthManager: mockOAuthManager,
@@ -400,21 +382,25 @@ describe('BaseProvider', () => {
     });
 
     it('should get correct auth method name', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-key-456');
+
       const config: BaseProviderConfig = {
         name: 'test',
-        cliKey: 'cli-key-456',
       };
 
       const provider = new TestProvider(config);
 
       const methodName = await provider.getAuthMethodName();
-      expect(methodName).toBe('cli-key');
+      expect(methodName).toBe('command-key');
     });
 
     it('should check authentication status correctly', async () => {
+      const settingsService = getSettingsService();
+      settingsService.set('auth-key', 'settings-key-456');
+
       const config: BaseProviderConfig = {
         name: 'test',
-        cliKey: 'cli-key-456',
       };
 
       const provider = new TestProvider(config);

@@ -18,16 +18,9 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 export interface AuthPrecedenceConfig {
-  // Command-level auth (highest priority)
-  commandKey?: string;
-  commandKeyfile?: string;
-
-  // CLI argument auth
-  cliKey?: string;
-  cliKeyfile?: string;
-
   // Environment variable names to check
   envKeyNames?: string[];
 
@@ -59,51 +52,33 @@ export class AuthPrecedenceResolver {
    * Returns the first available authentication method or null if none found
    */
   async resolveAuthentication(): Promise<string | null> {
-    // 1. Check /key command key (highest priority)
-    if (this.config.commandKey && this.config.commandKey.trim() !== '') {
-      return this.config.commandKey;
+    const settingsService = getSettingsService();
+
+    // 1. Check /key command key (highest priority) - stored in SettingsService
+    const authKey = settingsService.get('auth-key');
+    if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
+      return authKey;
     }
 
-    // 2. Check /keyfile command keyfile
-    if (this.config.commandKeyfile) {
+    // 2. Check /keyfile command keyfile - stored in SettingsService
+    const authKeyfile = settingsService.get('auth-keyfile');
+    if (authKeyfile && typeof authKeyfile === 'string') {
       try {
-        const keyFromFile = await this.readKeyFile(this.config.commandKeyfile);
+        const keyFromFile = await this.readKeyFile(authKeyfile);
         if (keyFromFile) {
           return keyFromFile;
         }
       } catch (error) {
         if (process.env.DEBUG) {
           console.warn(
-            `Failed to read command keyfile ${this.config.commandKeyfile}:`,
+            `Failed to read keyfile from SettingsService ${authKeyfile}:`,
             error,
           );
         }
       }
     }
 
-    // 3. Check --key CLI argument
-    if (this.config.cliKey && this.config.cliKey.trim() !== '') {
-      return this.config.cliKey;
-    }
-
-    // 4. Check --keyfile CLI argument
-    if (this.config.cliKeyfile) {
-      try {
-        const keyFromFile = await this.readKeyFile(this.config.cliKeyfile);
-        if (keyFromFile) {
-          return keyFromFile;
-        }
-      } catch (error) {
-        if (process.env.DEBUG) {
-          console.warn(
-            `Failed to read CLI keyfile ${this.config.cliKeyfile}:`,
-            error,
-          );
-        }
-      }
-    }
-
-    // 5. Check environment variables
+    // 3. Check environment variables
     if (this.config.envKeyNames && this.config.envKeyNames.length > 0) {
       for (const envVarName of this.config.envKeyNames) {
         const envValue = process.env[envVarName];
@@ -113,7 +88,7 @@ export class AuthPrecedenceResolver {
       }
     }
 
-    // 6. OAuth (if enabled and supported)
+    // 4. OAuth (if enabled and supported)
     if (
       this.config.isOAuthEnabled &&
       this.config.supportsOAuth &&
@@ -168,31 +143,20 @@ export class AuthPrecedenceResolver {
    * Get authentication method name for debugging/logging
    */
   async getAuthMethodName(): Promise<string | null> {
+    const settingsService = getSettingsService();
+
     // Check precedence levels and return method name
-    if (this.config.commandKey && this.config.commandKey.trim() !== '') {
+    const authKey = settingsService.get('auth-key');
+    if (authKey && typeof authKey === 'string' && authKey.trim() !== '') {
       return 'command-key';
     }
 
-    if (this.config.commandKeyfile) {
+    const authKeyfile = settingsService.get('auth-keyfile');
+    if (authKeyfile && typeof authKeyfile === 'string') {
       try {
-        const keyFromFile = await this.readKeyFile(this.config.commandKeyfile);
+        const keyFromFile = await this.readKeyFile(authKeyfile);
         if (keyFromFile) {
           return 'command-keyfile';
-        }
-      } catch {
-        // Ignore errors for method detection
-      }
-    }
-
-    if (this.config.cliKey && this.config.cliKey.trim() !== '') {
-      return 'cli-key';
-    }
-
-    if (this.config.cliKeyfile) {
-      try {
-        const keyFromFile = await this.readKeyFile(this.config.cliKeyfile);
-        if (keyFromFile) {
-          return 'cli-keyfile';
         }
       } catch {
         // Ignore errors for method detection
@@ -263,23 +227,6 @@ export class AuthPrecedenceResolver {
    */
   updateConfig(newConfig: Partial<AuthPrecedenceConfig>): void {
     this.config = { ...this.config, ...newConfig };
-  }
-
-  /**
-   * Set command-level keyfile (used by /keyfile command)
-   * This ensures keyfile paths are properly stored for command precedence
-   */
-  setCommandKeyfile(keyfilePath: string): void {
-    this.config.commandKeyfile = keyfilePath;
-  }
-
-  /**
-   * Clear command-level authentication
-   * Used when clearing keyfiles or keys via commands
-   */
-  clearCommandAuth(): void {
-    this.config.commandKey = undefined;
-    this.config.commandKeyfile = undefined;
   }
 
   /**
