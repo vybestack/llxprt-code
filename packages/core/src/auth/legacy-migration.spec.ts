@@ -11,9 +11,11 @@ import { tmpdir } from 'os';
 import { LegacyMigrationService } from './legacy-migration.js';
 import { OAuthToken } from './types.js';
 
+// Define testHomeDir at module level so it's available to the mock
+let testHomeDir: string;
+
 describe('LegacyMigrationService', () => {
   let service: LegacyMigrationService;
-  let testHomeDir: string;
   let _originalHomedir: typeof import('os').homedir;
 
   beforeEach(async () => {
@@ -22,7 +24,7 @@ describe('LegacyMigrationService', () => {
 
     // Mock homedir to return our test directory
     _originalHomedir = (await import('os')).homedir;
-    vi.mock('os', async () => {
+    vi.doMock('os', async () => {
       const actual = await vi.importActual('os');
       return {
         ...(actual as object),

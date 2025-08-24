@@ -154,11 +154,8 @@ export class OAuthManager {
 
         if (token) {
           // Provider is authenticated, calculate time until expiry
-          const now = Date.now();
-          const expiresIn = Math.max(
-            0,
-            Math.floor((token.expiry - now) / 1000),
-          ); // seconds
+          const now = Date.now() / 1000; // Convert to seconds to match token.expiry
+          const expiresIn = Math.max(0, Math.floor(token.expiry - now)); // seconds
 
           statuses.push({
             provider: providerName,
