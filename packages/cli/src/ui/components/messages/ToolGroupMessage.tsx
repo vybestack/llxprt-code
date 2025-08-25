@@ -114,6 +114,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       marginLeft={1}
       borderDimColor={hasPending}
       borderColor={borderColor}
+      gap={1}
     >
       {filteredToolCalls.map((tool) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;
