@@ -593,6 +593,16 @@ export const SETTINGS_SCHEMA = {
     showInDialog: false,
   },
 
+  extensionManagement: {
+    type: 'boolean',
+    label: 'Extension Management',
+    category: 'Feature Flag',
+    requiresRestart: true,
+    default: false,
+    description: 'Enable extension management features.',
+    showInDialog: false,
+  },
+
   // Text-based tool call parsing settings
   enableTextToolCallParsing: {
     type: 'boolean',

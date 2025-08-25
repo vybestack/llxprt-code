@@ -104,6 +104,7 @@
     "node-fetch": "^3.3.2",
     "openai": "^5.10.1",
     "path-scurry": "^2.0.0",
+    "simple-git": "^3.28.0",
     "strip-ansi": "^7.1.0"
   },
   "optionalDependencies": {

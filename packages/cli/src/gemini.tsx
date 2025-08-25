@@ -227,7 +227,7 @@ export async function main() {
   }
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
-  const argv = await parseArguments();
+  const argv = await parseArguments(settings.merged);
 
   await cleanupCheckpoints();
   if (settings.errors.length > 0) {
@@ -246,7 +246,6 @@ export async function main() {
     console.info = console.error;
     console.debug = console.error;
   }
-
   const extensions = loadExtensions(workspaceRoot);
   const config = await loadCliConfig(
     settings.merged,
