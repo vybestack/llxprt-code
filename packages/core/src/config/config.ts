@@ -326,7 +326,7 @@ export class Config {
   private readonly folderTrustFeature: boolean;
   private readonly folderTrust: boolean;
   private ideMode: boolean;
-  private ideClient?: IdeClient;
+  private ideClient!: IdeClient;
   private inFallbackMode = false;
   private _modelSwitchedDuringSession: boolean = false;
   private readonly maxSessionTurns: number;
@@ -438,7 +438,6 @@ export class Config {
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
     this.ideMode = params.ideMode ?? false;
-    this.ideClient = params.ideClient || IdeClient.getInstance();
     this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
       complexityThreshold: 0.6,
       minTasksForSuggestion: 3,
@@ -489,6 +488,7 @@ export class Config {
       throw Error('Config was already initialized');
     }
     this.initialized = true;
+    this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
     this.getFileService();
     if (this.getCheckpointingEnabled()) {

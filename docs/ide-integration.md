@@ -44,7 +44,10 @@ You can also install the extension directly from a marketplace.
 - **For Visual Studio Code:** Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=vybestack.llxprt-vscode-ide-companion).
 - **For VS Code Forks:** To support forks of VS Code, the extension is also published on the [Open VSX Registry](https://open-vsx.org/extension/vybestack/llxprt-vscode-ide-companion). Follow your editor's instructions for installing extensions from this registry.
 
-After any installation method, it's recommended to open a new terminal window to ensure the integration is activated correctly. Once installed, you can use `/ide enable` to connect.
+> NOTE:
+> The "Gemini CLI Companion" extension may appear towards the bottom of search results. If you don't see it immediately, try scrolling down or sorting by "Newly Published".
+>
+> After manually installing the extension, you must run `/ide enable` in the CLI to activate the integration.
 
 ## Usage
 
@@ -110,8 +113,8 @@ If you encounter issues with IDE integration, here are some common error message
 
 ### Connection Errors
 
-- **Message:** `🔴 Disconnected: Failed to connect to IDE companion extension for [IDE Name]. Please ensure the extension is running and try restarting your terminal. To install the extension, run /ide install.`
-  - **Cause:** llxprt could not find the necessary environment variables (`LLXPRT_IDE_WORKSPACE_PATH` or `LLXPRT_IDE_SERVER_PORT`) to connect to the IDE. This usually means the IDE companion extension is not running or did not initialize correctly.
+- **Message:** `🔴 Disconnected: Failed to connect to IDE companion extension in [IDE Name]. Please ensure the extension is running. To install the extension, run /ide install.`
+  - **Cause:** LLxprt Code could not find the necessary environment variables (`LLXPRT_CODE_IDE_WORKSPACE_PATH` or `LLXPRT_CODE_IDE_SERVER_PORT`) to connect to the IDE. This usually means the IDE companion extension is not running or did not initialize correctly.
   - **Solution:**
     1.  Make sure you have installed the **llxprt Companion** extension in your IDE and that it is enabled.
     2.  Open a new terminal window in your IDE to ensure it picks up the correct environment.
@@ -122,13 +125,14 @@ If you encounter issues with IDE integration, here are some common error message
 
 ### Configuration Errors
 
-- **Message:** `🔴 Disconnected: Directory mismatch. llxprt is running in a different location than the open workspace in [IDE Name]. Please run llxprt from the same directory as your project's root folder.
-  - **Cause:** The CLI's current working directory is outside the folder or workspace you have open in your IDE.
+- **Message:** `🔴 Disconnected: Directory mismatch. LLxprt Code is running in a different location than the open workspace in [IDE Name]. Please run the CLI from one of the following directories: [List of directories]`
+  - **Cause:** The CLI's current working directory is outside the workspace you have open in your IDE.
+>>>>>>> 776627c85 (refactor(ide): Improve IDE detection discovery (#6765))
   - **Solution:** `cd` into the same directory that is open in your IDE and restart the CLI.
 
-- **Message:** `🔴 Disconnected: To use this feature, please open a single workspace folder in [IDE Name] and try again.`
-  - **Cause:** You have multiple workspace folders open in your IDE, or no folder is open at all. The IDE integration requires a single root workspace folder to operate correctly.
-  - **Solution:** Open a single project folder in your IDE and restart the CLI.
+- **Message:** `🔴 Disconnected: To use this feature, please open a workspace folder in [IDE Name] and try again.`
+  - **Cause:** You have no workspace open in your IDE.
+  - **Solution:** Open a workspace in your IDE and restart the CLI.
 
 ### General Errors
 
@@ -136,6 +140,6 @@ If you encounter issues with IDE integration, here are some common error message
   - **Cause:** You are running llxprt in a terminal or environment that is not a supported IDE.
   - **Solution:** Run llxprt from the integrated terminal of a supported IDE, like VS Code.
 
-- **Message:** `No installer is available for [IDE Name]. Please install the IDE companion manually from its marketplace.`
-  - **Cause:** You ran `/ide install`, but llxprt does not have an automated installer for your specific IDE.
-  - **Solution:** Open your IDE's extension marketplace, search for "llxprt Companion", and install it manually.
+- **Message:** `No installer is available for IDE. Please install the LLxprt Code Companion extension manually from the marketplace.`
+  - **Cause:** You ran `/ide install`, but the CLI does not have an automated installer for your specific IDE.
+  - **Solution:** Open your IDE's extension marketplace, search for "LLxprt Code Companion", and [install it manually](#3-manual-installation-from-a-marketplace).

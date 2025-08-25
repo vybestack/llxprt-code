@@ -84,6 +84,11 @@ import { MessageType } from '../types.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
+import {
+  SlashCommandStatus,
+  makeFakeConfig,
+  type IdeClient,
+} from '@vybestack/llxprt-code-core/index.js';
 
 const createTestCommand = (
   overrides: Partial<SlashCommand>,
@@ -103,16 +108,11 @@ describe('useSlashCommandProcessor', () => {
   const mockOpenAuthDialog = vi.fn();
   const mockSetQuittingMessages = vi.fn();
 
-  const mockConfig = {
-    getProjectRoot: vi.fn(() => '/mock/cwd'),
-    getSessionId: vi.fn(() => 'test-session'),
-    getGeminiClient: vi.fn(() => ({
-      setHistory: vi.fn().mockResolvedValue(undefined),
-    })),
-    getExtensions: vi.fn(() => []),
-    getIdeMode: vi.fn(() => false),
-    getIdeClient: vi.fn(() => undefined),
-  } as unknown as Config;
+  const mockConfig = makeFakeConfig({});
+  vi.spyOn(mockConfig, 'getIdeClient').mockReturnValue({
+    addStatusChangeListener: vi.fn(),
+    removeStatusChangeListener: vi.fn(),
+  } as unknown as IdeClient);
 
   const mockSettings = {} as LoadedSettings;
 
