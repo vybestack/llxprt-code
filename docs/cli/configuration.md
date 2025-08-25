@@ -7,25 +7,29 @@ LLxprt Code offers several ways to configure its behavior, including environment
 Configuration is applied in the following order of precedence (lower numbers are overridden by higher numbers):
 
 1.  **Default values:** Hardcoded defaults within the application.
-2.  **User settings file:** Global settings for the current user.
-3.  **Project settings file:** Project-specific settings.
-4.  **System settings file:** System-wide settings.
-5.  **Environment variables:** System-wide or session-specific variables, potentially loaded from `.env` files.
-6.  **Command-line arguments:** Values passed when launching the CLI.
+2.  **System defaults file:** System-wide default settings that can be overridden by other settings files.
+3.  **User settings file:** Global settings for the current user.
+4.  **Project settings file:** Project-specific settings.
+5.  **System settings file:** System-wide settings that override all other settings files.
+6.  **Environment variables:** System-wide or session-specific variables, potentially loaded from `.env` files.
+7.  **Command-line arguments:** Values passed when launching the CLI.
 
 ## Settings files
 
-LLxprt Code uses `settings.json` files for persistent configuration. There are three locations for these files:
+LLxprt Code uses JSON settings files for persistent configuration. There are four locations for these files:
 
+- **System defaults file:**
+  - **Location:** `/etc/llxprt-code/system-defaults.json` (Linux), `C:\ProgramData\llxprt-code\system-defaults.json` (Windows) or `/Library/Application Support/LLxprt-Code/system-defaults.json` (macOS). The path can be overridden using the `LLXPRT_CODE_SYSTEM_DEFAULTS_PATH` environment variable.
+  - **Scope:** Provides a base layer of system-wide default settings. These settings have the lowest precedence and are intended to be overridden by user, project, or system override settings.
 - **User settings file:**
   - **Location:** `~/.llxprt/settings.json` (where `~` is your home directory).
-  - **Scope:** Applies to all LLxprt Code sessions for the current user.
+  - **Scope:** Applies to all LLxprt Code sessions for the current user. User settings override system defaults.
 - **Project settings file:**
   - **Location:** `.llxprt/settings.json` within your project's root directory.
-  - **Scope:** Applies only when running LLxprt Code from that specific project. Project settings override user settings.
+  - **Scope:** Applies only when running LLxprt Code from that specific project. Project settings override user settings and system defaults.
 - **System settings file:**
-  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LLxprtCode/settings.json` (macOS). The path can be overridden using the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` environment variable.
-  - **Scope:** Applies to all LLxprt Code sessions on the system, for all users. System settings override user and project settings. May be useful for system administrators at enterprises to have controls over users' LLxprt Code setups.
+  - **Location:** `/etc/llxprt-code/settings.json` (Linux), `C:\ProgramData\llxprt-code\settings.json` (Windows) or `/Library/Application Support/LLxprt-Code/settings.json` (macOS). The path can be overridden using the `LLXPRT_CODE_SYSTEM_SETTINGS_PATH` environment variable.
+  - **Scope:** Applies to all LLxprt Code sessions on the system, for all users. System settings act as overrides, taking precedence over all other settings files. May be useful for system administrators at enterprises to have controls over users' LLxprt Code setups.
 
 **Note on environment variables in settings:** String values within your `settings.json` files can reference environment variables using either `$VAR_NAME` or `${VAR_NAME}` syntax. These variables will be automatically resolved when the settings are loaded. For example, if you have an environment variable `MY_API_TOKEN`, you could use it in `settings.json` like this: `"apiKey": "$MY_API_TOKEN"`.
 
