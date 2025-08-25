@@ -66,3 +66,6 @@ test-*.sh
 debug-*.js
 temp-*
 tmp-*
+
+# GHA credentials
+gha-creds-*.json
