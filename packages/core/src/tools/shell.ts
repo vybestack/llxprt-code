@@ -9,6 +9,7 @@ import path from 'path';
 import os, { EOL } from 'os';
 import crypto from 'crypto';
 import { Config } from '../config/config.js';
+import { ToolErrorType } from './tool-error.js';
 import {
   BaseDeclarativeTool,
   BaseToolInvocation,
@@ -282,6 +283,14 @@ class ShellToolInvocation extends BaseToolInvocation<
 
       // Check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
+      const executionError = result.error
+        ? {
+            error: {
+              message: result.error.message,
+              type: ToolErrorType.SHELL_EXECUTE_ERROR,
+            },
+          }
+        : {};
       if (summarizeConfig && summarizeConfig[ShellTool.Name]) {
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
@@ -318,12 +327,14 @@ class ShellToolInvocation extends BaseToolInvocation<
         return {
           llmContent: formatted.llmContent,
           returnDisplay: returnDisplayMessage,
+          ...executionError,
         };
       }
 
       return {
         llmContent: limitedResult.content,
         returnDisplay: returnDisplayMessage,
+        ...executionError,
       };
     } finally {
       if (fs.existsSync(tempFilePath)) {
