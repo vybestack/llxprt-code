@@ -386,3 +386,97 @@ export function toOutputString(extension: Extension): string {
   }
   return output;
 }
+
+export async function updateExtension(
+  extensionName: string,
+  cwd: string = process.cwd(),
+): Promise<ExtensionUpdateInfo | undefined> {
+  const installedExtensions = loadUserExtensions();
+  const extension = installedExtensions.find(
+    (installed) => installed.config.name === extensionName,
+  );
+  if (!extension) {
+    throw new Error(
+      `Extension "${extensionName}" not found. Run llxprt extensions list to see available extensions.`,
+    );
+  }
+  if (!extension.installMetadata) {
+    throw new Error(
+      `Extension cannot be updated because it is missing the .llxprt-extension-install.json file. To update manually, uninstall and then reinstall the updated version.`,
+    );
+  }
+  const originalVersion = extension.config.version;
+  const tempDir = await ExtensionStorage.createTmpDir();
+  try {
+    await copyExtension(extension.path, tempDir);
+    await uninstallExtension(extensionName, cwd);
+    await installExtension(extension.installMetadata, cwd);
+
+    const updatedExtension = loadExtension(extension.path);
+    if (!updatedExtension) {
+      throw new Error('Updated extension not found after installation.');
+    }
+    const updatedVersion = updatedExtension.config.version;
+    return {
+      originalVersion,
+      updatedVersion,
+    };
+  } catch (e) {
+    console.error(
+      `Error updating extension, rolling back. ${getErrorMessage(e)}`,
+    );
+    await copyExtension(tempDir, extension.path);
+    throw e;
+  } finally {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+export function disableExtension(
+  name: string,
+  scope: SettingScope,
+  cwd: string = process.cwd(),
+) {
+  if (scope === SettingScope.System || scope === SettingScope.SystemDefaults) {
+    throw new Error('System and SystemDefaults scopes are not supported.');
+  }
+  const settings = loadSettings(cwd);
+  const settingsFile = settings.forScope(scope);
+  const extensionSettings = settingsFile.settings.extensions || {
+    disabled: [],
+  };
+  const disabledExtensions = extensionSettings.disabled || [];
+  if (!disabledExtensions.includes(name)) {
+    disabledExtensions.push(name);
+    extensionSettings.disabled = disabledExtensions;
+    settings.setValue(scope, 'extensions', extensionSettings);
+  }
+}
+
+export function enableExtension(name: string, scopes: SettingScope[]) {
+  removeFromDisabledExtensions(name, scopes);
+}
+
+/**
+ * Removes an extension from the list of disabled extensions.
+ * @param name The name of the extension to remove.
+ * @param scope The scopes to remove the name from.
+ */
+function removeFromDisabledExtensions(
+  name: string,
+  scopes: SettingScope[],
+  cwd: string = process.cwd(),
+) {
+  const settings = loadSettings(cwd);
+  for (const scope of scopes) {
+    const settingsFile = settings.forScope(scope);
+    const extensionSettings = settingsFile.settings.extensions || {
+      disabled: [],
+    };
+    const disabledExtensions = extensionSettings.disabled || [];
+    extensionSettings.disabled = disabledExtensions.filter(
+      (extension) => extension !== name,
+    );
+    settings.setValue(scope, 'extensions', extensionSettings);
+  }
+}
