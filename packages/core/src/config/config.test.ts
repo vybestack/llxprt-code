@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { Config, ConfigParameters, SandboxConfig } from './config.js';
-import * as path from 'path';
-import { setLlxprtMdFilename as mockSetGeminiMdFilename } from '../tools/memoryTool.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
+import type { ConfigParameters, SandboxConfig } from './config.js';
+import { Config, ApprovalMode } from './config.js';
+import * as path from 'node:path';
+import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
@@ -409,12 +411,12 @@ describe('Server Config (config.ts)', () => {
       contextFileName,
     };
     new Config(paramsWithContextFile);
-    expect(mockSetGeminiMdFilename).toHaveBeenCalledWith(contextFileName);
+    expect(mockSetLlxprtMdFilename).toHaveBeenCalledWith(contextFileName);
   });
 
   it('Config constructor should not call setLlxprtMdFilename if contextFileName is not provided', () => {
     new Config(baseParams); // baseParams does not have contextFileName
-    expect(mockSetGeminiMdFilename).not.toHaveBeenCalled();
+    expect(mockSetLlxprtMdFilename).not.toHaveBeenCalled();
   });
 
   it('should set default file filtering settings when not provided', () => {
@@ -807,5 +809,61 @@ describe('Server Config (config.ts)', () => {
       const config = new Config(paramsWithUndefinedRipgrep);
       expect(config.getUseRipgrep()).toBe(false);
     });
+  });
+});
+
+describe('setApprovalMode with folder trust', () => {
+  it('should throw an error when setting YOLO mode in an untrusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: false, // Untrusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).toThrow(
+      'Cannot enable privileged approval modes in an untrusted folder.',
+    );
+  });
+
+  it('should throw an error when setting AUTO_EDIT mode in an untrusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: false, // Untrusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).toThrow(
+      'Cannot enable privileged approval modes in an untrusted folder.',
+    );
+  });
+
+  it('should NOT throw an error when setting DEFAULT mode in an untrusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: false, // Untrusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+  });
+
+  it('should NOT throw an error when setting any mode in a trusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: true, // Trusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
+    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
+    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
   });
 });

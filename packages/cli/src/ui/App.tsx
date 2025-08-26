@@ -993,7 +993,7 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const { elapsedTime, currentLoadingPhrase } =
     useLoadingIndicator(streamingState);
-  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config });
+  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
   const handleExit = useCallback(
     (

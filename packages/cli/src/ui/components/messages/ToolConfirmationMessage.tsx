@@ -208,16 +208,16 @@ export const ToolConfirmationMessage: React.FC<
     }
 
     question = `Apply this change?`;
-    options.push(
-      {
-        label: 'Yes, allow once',
-        value: ToolConfirmationOutcome.ProceedOnce,
-      },
-      {
+    options.push({
+      label: 'Yes, allow once',
+      value: ToolConfirmationOutcome.ProceedOnce,
+    });
+    if (config?.isTrustedFolder()) {
+      options.push({
         label: 'Yes, allow always',
         value: ToolConfirmationOutcome.ProceedAlways,
-      },
-    );
+      });
+    }
     if (config?.getIdeMode()) {
       options.push({
         label: 'No (esc)',
@@ -247,20 +247,20 @@ export const ToolConfirmationMessage: React.FC<
       confirmationDetails as ToolExecuteConfirmationDetails;
 
     question = `Allow execution of: '${executionProps.rootCommand}'?`;
-    options.push(
-      {
-        label: `Yes, allow once`,
-        value: ToolConfirmationOutcome.ProceedOnce,
-      },
-      {
+    options.push({
+      label: 'Yes, allow once',
+      value: ToolConfirmationOutcome.ProceedOnce,
+    });
+    if (config?.isTrustedFolder()) {
+      options.push({
         label: `Yes, allow always ...`,
         value: ToolConfirmationOutcome.ProceedAlways,
-      },
-      {
-        label: 'No, suggest changes (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-      },
-    );
+      });
+    }
+    options.push({
+      label: 'No, suggest changes (esc)',
+      value: ToolConfirmationOutcome.Cancel,
+    });
 
     let bodyContentHeight = availableBodyContentHeight();
     if (bodyContentHeight !== undefined) {
@@ -325,20 +325,20 @@ export const ToolConfirmationMessage: React.FC<
       !(infoProps.urls.length === 1 && infoProps.urls[0] === infoProps.prompt);
 
     question = `Do you want to proceed?`;
-    options.push(
-      {
-        label: 'Yes, allow once',
-        value: ToolConfirmationOutcome.ProceedOnce,
-      },
-      {
+    options.push({
+      label: 'Yes, allow once',
+      value: ToolConfirmationOutcome.ProceedOnce,
+    });
+    if (config?.isTrustedFolder()) {
+      options.push({
         label: 'Yes, allow always',
         value: ToolConfirmationOutcome.ProceedAlways,
-      },
-      {
-        label: 'No, suggest changes (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-      },
-    );
+      });
+    }
+    options.push({
+      label: 'No, suggest changes (esc)',
+      value: ToolConfirmationOutcome.Cancel,
+    });
 
     if (shouldShowSummary) {
       // Show summary with details toggle
@@ -416,24 +416,24 @@ export const ToolConfirmationMessage: React.FC<
     }
 
     question = `Allow execution of MCP tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"?`;
-    options.push(
-      {
-        label: 'Yes, allow once',
-        value: ToolConfirmationOutcome.ProceedOnce,
-      },
-      {
+    options.push({
+      label: 'Yes, allow once',
+      value: ToolConfirmationOutcome.ProceedOnce,
+    });
+    if (config?.isTrustedFolder()) {
+      options.push({
         label: `Yes, always allow tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"`,
         value: ToolConfirmationOutcome.ProceedAlwaysTool, // Cast until types are updated
-      },
-      {
+      });
+      options.push({
         label: `Yes, always allow all tools from server "${mcpProps.serverName}"`,
         value: ToolConfirmationOutcome.ProceedAlwaysServer,
-      },
-      {
-        label: 'No, suggest changes (esc)',
-        value: ToolConfirmationOutcome.Cancel,
-      },
-    );
+      });
+    }
+    options.push({
+      label: 'No, suggest changes (esc)',
+      value: ToolConfirmationOutcome.Cancel,
+    });
   }
 
   return (
