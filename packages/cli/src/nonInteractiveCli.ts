@@ -12,6 +12,8 @@ import {
   isTelemetrySdkInitialized,
   GeminiEventType,
   parseAndFormatApiError,
+  FatalInputError,
+  FatalTurnLimitedError,
 } from '@google/gemini-cli-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
@@ -54,8 +56,9 @@ export async function runNonInteractive(
     if (!shouldProceed || !processedQuery) {
       // An error occurred during @include processing (e.g., file not found).
       // The error message is already logged by handleAtCommand.
-      console.error('Exiting due to an error processing the @ command.');
-      process.exit(1);
+      throw new FatalInputError(
+        'Exiting due to an error processing the @ command.',
+      );
     }
 
     let currentMessages: Content[] = [
@@ -69,10 +72,9 @@ export async function runNonInteractive(
         config.getMaxSessionTurns() >= 0 &&
         turnCount > config.getMaxSessionTurns()
       ) {
-        console.error(
-          '\n Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
+        throw new FatalTurnLimitedError(
+          'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
         );
-        return;
       }
       const functionCalls: FunctionCall[] = [];
 
@@ -152,7 +154,7 @@ export async function runNonInteractive(
         config.getContentGeneratorConfig()?.authType,
       ),
     );
-    process.exit(1);
+    throw error;
   } finally {
     consolePatcher.cleanup();
     if (isTelemetrySdkInitialized()) {

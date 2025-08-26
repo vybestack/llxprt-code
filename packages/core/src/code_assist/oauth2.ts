@@ -16,8 +16,8 @@ import crypto from 'crypto';
 import * as net from 'net';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { Config } from '../config/config.js';
-import { getErrorMessage } from '../utils/errors.js';
+import type { Config } from '../config/config.js';
+import { getErrorMessage, FatalAuthenticationError } from '../utils/errors.js';
 import { UserAccountManager } from '../utils/userAccountManager.js';
 import { AuthType } from '../core/contentGenerator.js';
 import readline from 'node:readline';
@@ -151,7 +151,9 @@ async function initOauthClient(
       }
     }
     if (!success) {
-      process.exit(1);
+      throw new FatalAuthenticationError(
+        'Failed to authenticate with user code.',
+      );
     }
   } else {
     const webLogin = await authWithWeb(client);
@@ -173,20 +175,16 @@ async function initOauthClient(
       // in a minimal Docker container), it will emit an unhandled 'error' event,
       // causing the entire Node.js process to crash.
       childProcess.on('error', (_) => {
-        // Error will be handled in the catch block
+        console.error(
+          'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
+        );
+        throw new FatalAuthenticationError('Failed to open browser.');
       });
     } catch (_err) {
       console.error(
         'Failed to open browser automatically. Falling back to manual authentication.',
       );
-
-      // Fall back to user code flow when browser fails
-      const success = await authWithUserCode(client);
-      if (!success) {
-        console.error('Authentication failed.');
-        process.exit(1);
-      }
-      return client;
+      throw new FatalAuthenticationError('Failed to open browser.');
     }
 
     console.log('Waiting for authentication...');

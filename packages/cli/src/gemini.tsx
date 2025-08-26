@@ -31,6 +31,11 @@ import {
   AuthType,
   getOauthClient,
   setGitStatsService,
+  logUserPrompt,
+  logIdeConnection,
+  IdeConnectionEvent,
+  IdeConnectionType,
+  FatalConfigError,
   // IDE connection logging removed - telemetry disabled in llxprt
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
@@ -231,12 +236,12 @@ export async function main() {
 
   await cleanupCheckpoints();
   if (settings.errors.length > 0) {
-    for (const error of settings.errors) {
-      const errorMessage = `Error in ${error.path}: ${error.message}`;
-      console.error(chalk.red(errorMessage));
-      console.error(`Please fix ${error.path} and try again.`);
-    }
-    process.exit(1);
+    const errorMessages = settings.errors.map(
+      (error) => `Error in ${error.path}: ${error.message}`,
+    );
+    throw new FatalConfigError(
+      `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
+    );
   }
 
   // If we're in ACP mode, redirect console output IMMEDIATELY
