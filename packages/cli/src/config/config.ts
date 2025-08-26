@@ -56,9 +56,7 @@ export interface CliArgs {
   prompt: string | undefined;
   promptInteractive: string | undefined;
   allFiles: boolean | undefined;
-  all_files: boolean | undefined;
   showMemoryUsage: boolean | undefined;
-  show_memory_usage: boolean | undefined;
   yolo: boolean | undefined;
   approvalMode: string | undefined;
   telemetry: boolean | undefined;
@@ -131,29 +129,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           description: 'Include ALL files in context?',
           default: false,
         })
-        .option('all_files', {
-          type: 'boolean',
-          description: 'Include ALL files in context?',
-          default: false,
-        })
-        .deprecateOption(
-          'all_files',
-          'Use --all-files instead. We will be removing --all_files in the coming weeks.',
-        )
         .option('show-memory-usage', {
           type: 'boolean',
           description: 'Show memory usage in status bar',
           default: false,
         })
-        .option('show_memory_usage', {
-          type: 'boolean',
-          description: 'Show memory usage in status bar',
-          default: false,
-        })
-        .deprecateOption(
-          'show_memory_usage',
-          'Use --show-memory-usage instead. We will be removing --show_memory_usage in the coming weeks.',
-        )
         .option('yolo', {
           alias: 'y',
           type: 'boolean',
@@ -722,7 +702,6 @@ export async function loadCliConfig(
 
   const sandboxConfig = await loadSandboxConfig(effectiveSettings, argv);
 
-<<<<<<< HEAD
   // Handle provider selection FIRST with proper precedence
   // Priority: CLI arg > Profile > Environment > Default
   let finalProvider: string;
@@ -770,7 +749,7 @@ export async function loadCliConfig(
       false,
     debugMode,
     question,
-    fullContext: argv.allFiles || argv.all_files || false,
+    fullContext: argv.allFiles || false,
     coreTools: effectiveSettings.coreTools || undefined,
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
@@ -781,10 +760,7 @@ export async function loadCliConfig(
     llxprtMdFileCount: fileCount,
     approvalMode,
     showMemoryUsage:
-      argv.showMemoryUsage ||
-      argv.show_memory_usage ||
-      effectiveSettings.showMemoryUsage ||
-      false,
+      argv.showMemoryUsage || effectiveSettings.showMemoryUsage || false,
     accessibility: {
       ...effectiveSettings.accessibility,
       screenReader,
