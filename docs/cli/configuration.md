@@ -94,6 +94,11 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Default:** All tools available for use by the Gemini model.
   - **Example:** `"coreTools": ["ReadFileTool", "GlobTool", "ShellTool(ls)"]`.
 
+- **`allowedTools`** (array of strings):
+  - **Default:** `undefined`
+  - **Description:** A list of tool names that will bypass the confirmation dialog. This is useful for tools that you trust and use frequently. The match semantics are the same as `coreTools`.
+  - **Example:** `"allowedTools": ["ShellTool(git status)"]`.
+
 - **`excludeTools`** (array of strings):
   - **Description:** Allows you to specify a list of core tool names that should be excluded from the model. A tool listed in both `excludeTools` and `coreTools` is excluded. You can also specify command-specific restrictions for tools that support it, like the `ShellTool`. For example, `"excludeTools": ["ShellTool(rm -rf)"]` will block the `rm -rf` command.
   - **Default**: No tools excluded.
@@ -617,6 +622,9 @@ Arguments passed directly when running the CLI can override other configurations
     - `yolo`: Automatically approve all tool calls (equivalent to `--yolo`)
   - Cannot be used together with `--yolo`. Use `--approval-mode=yolo` instead of `--yolo` for the new unified approach.
   - Example: `llxprt --approval-mode auto_edit`
+- **`--allowed-tools <tool1,tool2,...>`**:
+  - A comma-separated list of tool names that will bypass the confirmation dialog.
+  - Example: `llxprt --allowed-tools "ShellTool(git status)"`
 - **`--telemetry`**:
   - Enables [telemetry](../telemetry.md).
 - **`--telemetry-target`**:
@@ -641,7 +649,6 @@ Arguments passed directly when running the CLI can override other configurations
   - Can be specified multiple times or as comma-separated values.
   - 5 directories can be added at maximum.
   - Example: `--include-directories /path/to/project1,/path/to/project2` or `--include-directories /path/to/project1 --include-directories /path/to/project2`
-    <<<<<<< HEAD
 - **`--profile-load <profile_name>`**:
   - Load a saved profile configuration on startup.
   - Example: `llxprt --profile-load my-project`
@@ -654,11 +661,9 @@ Arguments passed directly when running the CLI can override other configurations
   - Redirects console output to stderr to keep stdout clean for protocol communication.
   - Example: `llxprt --experimental-acp`
   - **Note:** This is an experimental feature primarily used by the Zed editor integration.
-- # **`--version`** (**`-v`**):
 - **`--screen-reader`**:
   - Enables screen reader mode for accessibility.
 - **`--version`**:
-  > > > > > > > 10286934e (Introduce initial screen reader mode handling and flag (#6653))
   - Displays the version of the CLI.
 
 ## Provider API Keys

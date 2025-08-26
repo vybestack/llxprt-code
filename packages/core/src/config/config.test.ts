@@ -24,6 +24,9 @@ import { GitService } from '../services/gitService.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
+import { ShellTool } from '../tools/shell.js';
+import { ReadFileTool } from '../tools/read-file.js';
+
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -808,6 +811,36 @@ describe('Server Config (config.ts)', () => {
       };
       const config = new Config(paramsWithUndefinedRipgrep);
       expect(config.getUseRipgrep()).toBe(false);
+    });
+  });
+
+  describe('createToolRegistry', () => {
+    it('should register a tool if coreTools contains an argument-specific pattern', async () => {
+      const params: ConfigParameters = {
+        ...baseParams,
+        coreTools: ['ShellTool(git status)'],
+      };
+      const config = new Config(params);
+      await config.initialize();
+
+      // The ToolRegistry class is mocked, so we can inspect its prototype's methods.
+      const registerToolMock = (
+        (await vi.importMock('../tools/tool-registry')) as {
+          ToolRegistry: { prototype: { registerTool: Mock } };
+        }
+      ).ToolRegistry.prototype.registerTool;
+
+      // Check that registerTool was called for ShellTool
+      const wasShellToolRegistered = (registerToolMock as Mock).mock.calls.some(
+        (call) => call[0] instanceof vi.mocked(ShellTool),
+      );
+      expect(wasShellToolRegistered).toBe(true);
+
+      // Check that registerTool was NOT called for ReadFileTool
+      const wasReadFileToolRegistered = (
+        registerToolMock as Mock
+      ).mock.calls.some((call) => call[0] instanceof vi.mocked(ReadFileTool));
+      expect(wasReadFileToolRegistered).toBe(false);
     });
   });
 });
