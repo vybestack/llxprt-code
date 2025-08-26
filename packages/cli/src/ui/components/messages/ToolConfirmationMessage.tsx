@@ -76,6 +76,8 @@ export const ToolConfirmationMessage: React.FC<
     [confirmationDetails, config, onConfirm],
   );
 
+  const isTrustedFolder = config?.isTrustedFolder() !== false;
+
   useKeypress(
     (key) => {
       if (!isFocused) return;
@@ -212,7 +214,7 @@ export const ToolConfirmationMessage: React.FC<
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
     });
-    if (config?.isTrustedFolder()) {
+    if (isTrustedFolder) {
       options.push({
         label: 'Yes, allow always',
         value: ToolConfirmationOutcome.ProceedAlways,
@@ -251,7 +253,7 @@ export const ToolConfirmationMessage: React.FC<
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
     });
-    if (config?.isTrustedFolder()) {
+    if (isTrustedFolder) {
       options.push({
         label: `Yes, allow always ...`,
         value: ToolConfirmationOutcome.ProceedAlways,
@@ -329,7 +331,7 @@ export const ToolConfirmationMessage: React.FC<
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
     });
-    if (config?.isTrustedFolder()) {
+    if (isTrustedFolder) {
       options.push({
         label: 'Yes, allow always',
         value: ToolConfirmationOutcome.ProceedAlways,
@@ -420,7 +422,7 @@ export const ToolConfirmationMessage: React.FC<
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
     });
-    if (config?.isTrustedFolder()) {
+    if (isTrustedFolder) {
       options.push({
         label: `Yes, always allow tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"`,
         value: ToolConfirmationOutcome.ProceedAlwaysTool, // Cast until types are updated
