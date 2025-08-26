@@ -131,20 +131,6 @@ async function getIdeProcessInfoForUnix(): Promise<{
     }
   }
 
-  // Only show the warning if we're not in a known CI environment
-  if (!process.env.CI && !process.env.GITHUB_ACTIONS) {
-    if (process.env.DEBUG_PROCESS_TREE) {
-      console.error(
-        `Failed to find shell process in the process tree (looked for: ${shells.join(', ')}). ` +
-          `Falling back to top-level process (PID: ${currentPid}).`,
-      );
-    } else {
-      console.error(
-        'Failed to find shell process in the process tree. Falling back to top-level process. ' +
-          'Set DEBUG_PROCESS_TREE=1 for more details.',
-      );
-    }
-  }
   const { command } = await getProcessInfo(currentPid);
   return { pid: currentPid, command };
 }
