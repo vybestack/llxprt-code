@@ -326,6 +326,7 @@ describe('useGeminiStream', () => {
       getContentGeneratorConfig: vi
         .fn()
         .mockReturnValue(contentGeneratorConfig),
+      getEphemeralSetting: vi.fn(() => undefined),
     } as unknown as Config;
     mockOnDebugMessage = vi.fn();
     mockHandleSlashCommand = vi.fn().mockResolvedValue(false);
@@ -602,7 +603,7 @@ describe('useGeminiStream', () => {
         name: 'toolA',
         args: {},
         isClientInitiated: false,
-        prompt_id: 'prompt-id-7',
+        prompt_id: 'prompt-id-same',
       },
       tool: {
         name: 'toolA',
@@ -631,7 +632,7 @@ describe('useGeminiStream', () => {
         name: 'toolB',
         args: {},
         isClientInitiated: false,
-        prompt_id: 'prompt-id-8',
+        prompt_id: 'prompt-id-same',
       },
       tool: {
         name: 'toolB',
@@ -860,10 +861,14 @@ describe('useGeminiStream', () => {
     };
 
     it('should cancel an in-progress stream when escape is pressed', async () => {
+      let streamController: { resolve: () => void } | null = null;
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Part 1' };
-        // Keep the stream open
-        await new Promise(() => {});
+        // Wait for the controller to be resolved
+        await new Promise<void>((resolve) => {
+          streamController = { resolve };
+        });
+        yield { type: 'content', value: 'Part 2' };
       })();
       mockSendMessageStream.mockReturnValue(mockStream);
 
@@ -874,7 +879,7 @@ describe('useGeminiStream', () => {
         result.current.submitQuery('test query');
       });
 
-      // Wait for the first part of the response
+      // Wait for the first part and confirm responding state
       await waitFor(() => {
         expect(result.current.streamingState).toBe(StreamingState.Responding);
       });
@@ -895,14 +900,23 @@ describe('useGeminiStream', () => {
 
       // Verify state is reset
       expect(result.current.streamingState).toBe(StreamingState.Idle);
+
+      // Clean up by resolving the stream controller
+      if (streamController) {
+        streamController.resolve();
+      }
     });
 
     it('should call onCancelSubmit handler when escape is pressed', async () => {
       const cancelSubmitSpy = vi.fn();
+      let streamController: { resolve: () => void } | null = null;
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Part 1' };
-        // Keep the stream open
-        await new Promise(() => {});
+        // Wait for the controller to be resolved
+        await new Promise<void>((resolve) => {
+          streamController = { resolve };
+        });
+        yield { type: 'content', value: 'Part 2' };
       })();
       mockSendMessageStream.mockReturnValue(mockStream);
 
@@ -931,9 +945,19 @@ describe('useGeminiStream', () => {
         result.current.submitQuery('test query');
       });
 
+      // Wait for responding state
+      await waitFor(() => {
+        expect(result.current.streamingState).toBe(StreamingState.Responding);
+      });
+
       simulateEscapeKeyPress();
 
       expect(cancelSubmitSpy).toHaveBeenCalled();
+
+      // Clean up by resolving the stream controller
+      if (streamController) {
+        streamController.resolve();
+      }
     });
 
     it('should not do anything if escape is pressed when not responding', () => {
@@ -954,15 +978,15 @@ describe('useGeminiStream', () => {
     });
 
     it('should prevent further processing after cancellation', async () => {
-      let continueStream: () => void;
+      let continueStream: (() => void) | null = null;
       const streamPromise = new Promise<void>((resolve) => {
         continueStream = resolve;
       });
 
       const mockStream = (async function* () {
-        yield { type: 'content', value: 'Initial' };
+        yield createMockChunk('Initial');
         await streamPromise; // Wait until we manually continue
-        yield { type: 'content', value: ' Canceled' };
+        yield createMockChunk(' Should not be processed');
       })();
       mockSendMessageStream.mockReturnValue(mockStream);
 
@@ -976,22 +1000,34 @@ describe('useGeminiStream', () => {
         expect(result.current.streamingState).toBe(StreamingState.Responding);
       });
 
+      // Verify initial text was added
+      await waitFor(() => {
+        const geminiCall = mockAddItem.mock.calls.find(
+          (call) => call[0].type === 'gemini',
+        );
+        expect(geminiCall).toBeDefined();
+        expect(geminiCall?.[0].text).toBe('Initial');
+      });
+
       // Cancel the request
       simulateEscapeKeyPress();
 
       // Allow the stream to continue
       act(() => {
-        continueStream();
+        if (continueStream) {
+          continueStream();
+        }
       });
 
       // Wait a bit to see if the second part is processed
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // The text should not have been updated with " Canceled"
-      const lastCall = mockAddItem.mock.calls.find(
+      // The text should still be just "Initial", not "Initial Should not be processed"
+      const allGeminiCalls = mockAddItem.mock.calls.filter(
         (call) => call[0].type === 'gemini',
       );
-      expect(lastCall?.[0].text).toBe('Initial');
+      const lastGeminiCall = allGeminiCalls[allGeminiCalls.length - 1];
+      expect(lastGeminiCall?.[0].text).toBe('Initial');
 
       // The final state should be idle after cancellation
       expect(result.current.streamingState).toBe(StreamingState.Idle);
@@ -1234,6 +1270,7 @@ describe('useGeminiStream', () => {
           authType: mockAuthType,
         })),
         getModel: vi.fn(() => 'gemini-2.5-pro'),
+        getEphemeralSetting: vi.fn(() => undefined),
       } as unknown as Config;
 
       const { result } = renderHook(() =>

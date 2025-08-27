@@ -232,6 +232,7 @@ export const useGeminiStream = (
     }
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
+    setThought(null); // Reset thought when user cancels
 
     // Don't add incomplete/partial assistant messages to history
     // These can corrupt the context and cause 400 errors
@@ -244,11 +245,10 @@ export const useGeminiStream = (
       ) {
         // Check if the message has meaningful content
         if (pendingItem.text && pendingItem.text.trim().length > 0) {
-          // Add the partial response with a cancellation marker
+          // Add the partial response without cancellation marker to preserve clean content
           addItem(
             {
               ...pendingItem,
-              text: pendingItem.text + '\n\n[Response cancelled by user]',
             },
             Date.now(),
           );
@@ -462,7 +462,8 @@ export const useGeminiStream = (
     ): string => {
       if (turnCancelledRef.current) {
         // Prevents additional output after a user initiated cancel.
-        return '';
+        // Return the current buffer unchanged to preserve existing content
+        return currentGeminiMessageBuffer;
       }
       let newGeminiMessageBuffer = currentGeminiMessageBuffer + eventValue;
 
@@ -582,6 +583,8 @@ export const useGeminiStream = (
         addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         setPendingHistoryItem(null);
       }
+      
+      setThought(null); // Reset thought when there is an error
 
       const errorText = parseAndFormatApiError(
         eventValue.error,
@@ -653,7 +656,7 @@ export const useGeminiStream = (
         addItem(
           {
             type: 'info',
-            text: `WARNING: ${message}`,
+            text: `⚠️  ${message}`,
           },
           userMessageTimestamp,
         );
@@ -725,7 +728,7 @@ export const useGeminiStream = (
       const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
       const emojiFilter = new EmojiFilter(filterConfig);
 
-      for await (const event of stream) {
+      for await (const event of stream) {        
         switch (event.type) {
           case ServerGeminiEventType.Thought:
             setThought(event.value);
@@ -791,6 +794,11 @@ export const useGeminiStream = (
               queuedSystemFeedbackRef.current.push(
                 `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
               );
+            }
+            
+            // If cancelled after processing this content event, stop further processing
+            if (turnCancelledRef.current) {
+              break;
             }
             break;
           }

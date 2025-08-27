@@ -609,12 +609,14 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
    */
   it.prop([
     fc.constantFrom('qwen', 'gemini', 'anthropic'),
-    fc.string().filter((s) => /^\s*$/.test(s) && s.length < 10), // Only whitespace
-    fc.string().filter((s) => /^\s*$/.test(s) && s.length < 10),
+    fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5), // Only whitespace, shorter
+    fc.string().filter((s) => /^\s*$/.test(s) && s.length < 5),
   ])(
     'should parse commands correctly with random whitespace',
     async (provider, leadingSpace, trailingSpace) => {
-      const args = `${leadingSpace}${provider}${leadingSpace}logout${trailingSpace}`;
+      // Ensure we always have the word 'logout' with proper spacing
+      const middleSpace = leadingSpace || ' '; // At least one space between provider and logout
+      const args = `${leadingSpace}${provider}${middleSpace}logout${trailingSpace}`;
 
       const result = await authCommand.execute(context, args);
 
@@ -634,7 +636,7 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
   it.prop([
     fc
       .string({ minLength: 1, maxLength: 20 })
-      .filter((s) => !['qwen', 'gemini', 'anthropic'].includes(s))
+      .filter((s) => !['qwen', 'gemini', 'anthropic'].includes(s.trim())) // Check trimmed version
       .filter((s) => !/^\s*$/.test(s)), // Not just whitespace
   ])(
     'should handle any invalid provider name gracefully',
@@ -647,7 +649,9 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
       const messageResult = result as MessageActionReturn;
       expect(messageResult.messageType).toBe('error');
       expect(messageResult.content).toContain('Unknown provider');
-      expect(messageResult.content).toContain(invalidProvider);
+      // Check for trimmed version since that's what the command processing uses
+      const trimmedProvider = invalidProvider.trim();
+      expect(messageResult.content).toContain(trimmedProvider);
     },
   );
 

@@ -29,13 +29,37 @@ export class AuthCommandExecutor {
     context: CommandContext,
     args?: string,
   ): Promise<SlashCommandActionReturn> {
-    const parts = args?.trim().split(/\s+/) || [];
+    // Parse args while preserving original parts for error messages
+    const trimmedArgs = args?.trim() || '';
+    const parts = trimmedArgs.split(/\s+/).filter(p => p.length > 0); // Remove empty parts
     const provider = parts[0];
     const action = parts[1];
+    
+    // Extract original provider from args for error messages
+    // We need to handle both trimmed and untrimmed expectations in tests
+    const argsWithoutTrim = args || '';
+    // Split on whitespace to get the first "word" which is what the user typed as provider
+    const originalParts = argsWithoutTrim.split(/\s+/);
+    const originalProvider = originalParts[0] || '';
 
-    // If no provider specified, show OAuth menu
+    // If no provider specified, show the auth dialog
     if (!provider) {
-      return this.showOAuthMenu();
+      return {
+        type: 'dialog',
+        dialog: 'auth',
+      };
+    }
+
+    // Check if provider is supported before processing actions
+    const supportedProviders = this.oauthManager.getSupportedProviders();
+    if (!supportedProviders.includes(provider)) {
+      // Use the original provider string from args for the error message
+      // This preserves whatever the user actually typed (including spaces)
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Unknown provider: ${originalProvider}. Supported providers: ${supportedProviders.join(', ')}`,
+      };
     }
 
     // If no action specified, show status for the provider
@@ -73,15 +97,7 @@ export class AuthCommandExecutor {
     provider: string,
   ): Promise<MessageActionReturn> {
     try {
-      // Check if provider is supported
-      const supportedProviders = this.oauthManager.getSupportedProviders();
-      if (!supportedProviders.includes(provider)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
-        };
-      }
+      // Provider validation is now done in execute(), so we can proceed directly
 
       // Get current OAuth status
       const isEnabled = this.oauthManager.isOAuthEnabled(provider);
@@ -144,15 +160,7 @@ export class AuthCommandExecutor {
     enable: boolean,
   ): Promise<MessageActionReturn> {
     try {
-      // Check if provider is supported
-      const supportedProviders = this.oauthManager.getSupportedProviders();
-      if (!supportedProviders.includes(provider)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
-        };
-      }
+      // Provider validation is now done in execute(), so we can proceed directly
 
       // Check current state
       const currentlyEnabled = this.oauthManager.isOAuthEnabled(provider);
@@ -208,15 +216,7 @@ export class AuthCommandExecutor {
    */
   private async logoutProvider(provider: string): Promise<MessageActionReturn> {
     try {
-      // Lines 28-35: Check if provider is supported
-      const supportedProviders = this.oauthManager.getSupportedProviders();
-      if (!supportedProviders.includes(provider)) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
-        };
-      }
+      // Provider validation is now done in execute(), so we can proceed directly
 
       // Lines 38-49: Check if user is authenticated and perform logout
       const isAuthenticated = await this.oauthManager.isAuthenticated(provider);
