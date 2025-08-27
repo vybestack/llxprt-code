@@ -791,6 +791,7 @@ export async function loadCliConfig(
       respectLlxprtIgnore: effectiveSettings.fileFiltering?.respectLlxprtIgnore,
       enableRecursiveFileSearch:
         effectiveSettings.fileFiltering?.enableRecursiveFileSearch,
+      disableFuzzySearch: effectiveSettings.fileFiltering?.disableFuzzySearch,
     },
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
