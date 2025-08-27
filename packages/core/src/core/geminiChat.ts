@@ -11,7 +11,6 @@ import {
   GenerateContentResponse,
   Content,
   GenerateContentConfig,
-  GenerateContentParameters,
   SendMessageParameters,
   createUserContent,
   Part,
@@ -23,7 +22,7 @@ import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator, AuthType } from './contentGenerator.js';
 import { Config } from '../config/config.js';
-import { estimateTokens } from '../utils/toolOutputLimiter.js';
+// import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
 import {
   logApiRequest,
   logApiResponse,
@@ -545,7 +544,9 @@ export class GeminiChat {
     });
     this.sendPromise = streamDonePromise;
 
-    const userContent = createUserContent(params.message);
+    const userContent = createUserContentWithFunctionResponseFix(
+      params.message,
+    );
 
     // Add user content to history ONCE before any attempts.
     this.history.push(userContent);
@@ -618,8 +619,11 @@ export class GeminiChat {
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     const apiCall = () => {
       const modelToUse = this.config.getModel();
+      const authType = this.config.getContentGeneratorConfig()?.authType;
 
+      // Prevent Flash model calls immediately after quota error (only for Gemini providers)
       if (
+        authType !== AuthType.USE_PROVIDER &&
         this.config.getQuotaErrorOccurred() &&
         modelToUse === DEFAULT_GEMINI_FLASH_MODEL
       ) {
@@ -851,132 +855,132 @@ export class GeminiChat {
    * Trim prompt contents to fit within token limit
    * Strategy: Keep the most recent user message, trim older history and tool outputs
    */
-  private trimPromptContents(
-    contents: Content[],
-    maxTokens: number,
-  ): Content[] {
-    if (contents.length === 0) return contents;
-
-    // Always keep the last message (current user input)
-    const lastMessage = contents[contents.length - 1];
-    const result: Content[] = [];
-
-    // Reserve tokens for the last message and warning
-    const lastMessageTokens = estimateTokens(JSON.stringify(lastMessage));
-    const warningTokens = 200; // Reserve for warning message
-    let remainingTokens = maxTokens - lastMessageTokens - warningTokens;
-
-    if (remainingTokens <= 0) {
-      // Even the last message is too big, truncate it
-      return [this.truncateContent(lastMessage, maxTokens - warningTokens)];
-    }
-
-    // Add messages from most recent to oldest, stopping when we hit the limit
-    for (let i = contents.length - 2; i >= 0; i--) {
-      const content = contents[i];
-      const contentTokens = estimateTokens(JSON.stringify(content));
-
-      if (contentTokens <= remainingTokens) {
-        result.unshift(content);
-        remainingTokens -= contentTokens;
-      } else if (remainingTokens > 100) {
-        // Try to truncate this content to fit
-        const truncated = this.truncateContent(content, remainingTokens);
-        // Only add if we actually got some content back
-        if (truncated.parts && truncated.parts.length > 0) {
-          result.unshift(truncated);
-        }
-        break;
-      } else {
-        // No room left, stop
-        break;
-      }
-    }
-
-    // Add the last message
-    result.push(lastMessage);
-
-    return result;
-  }
-
+  //   private _trimPromptContents(
+  //     contents: Content[],
+  //     maxTokens: number,
+  //   ): Content[] {
+  //     if (contents.length === 0) return contents;
+  //
+  //     // Always keep the last message (current user input)
+  //     const lastMessage = contents[contents.length - 1];
+  //     const result: Content[] = [];
+  //
+  //     // Reserve tokens for the last message and warning
+  //     const lastMessageTokens = estimateTokens(JSON.stringify(lastMessage));
+  //     const warningTokens = 200; // Reserve for warning message
+  //     let remainingTokens = maxTokens - lastMessageTokens - warningTokens;
+  //
+  //     if (remainingTokens <= 0) {
+  //       // Even the last message is too big, truncate it
+  //       return [this._truncateContent(lastMessage, maxTokens - warningTokens)];
+  //     }
+  //
+  //     // Add messages from most recent to oldest, stopping when we hit the limit
+  //     for (let i = contents.length - 2; i >= 0; i--) {
+  //       const content = contents[i];
+  //       const contentTokens = estimateTokens(JSON.stringify(content));
+  //
+  //       if (contentTokens <= remainingTokens) {
+  //         result.unshift(content);
+  //         remainingTokens -= contentTokens;
+  //       } else if (remainingTokens > 100) {
+  //         // Try to truncate this content to fit
+  //         const truncated = this._truncateContent(content, remainingTokens);
+  //         // Only add if we actually got some content back
+  //         if (truncated.parts && truncated.parts.length > 0) {
+  //           result.unshift(truncated);
+  //         }
+  //         break;
+  //       } else {
+  //         // No room left, stop
+  //         break;
+  //       }
+  //     }
+  //
+  //     // Add the last message
+  //     result.push(lastMessage);
+  //
+  //     return result;
+  //   }
+  //
   /**
    * Truncate a single content to fit within token limit
    */
-  private truncateContent(content: Content, maxTokens: number): Content {
-    if (!content.parts || content.parts.length === 0) {
-      return content;
-    }
-
-    const truncatedParts: Part[] = [];
-    let currentTokens = 0;
-
-    for (const part of content.parts) {
-      if ('text' in part && part.text) {
-        const partTokens = estimateTokens(part.text);
-        if (currentTokens + partTokens <= maxTokens) {
-          truncatedParts.push(part);
-          currentTokens += partTokens;
-        } else {
-          // Truncate this part
-          const remainingTokens = maxTokens - currentTokens;
-          if (remainingTokens > 10) {
-            const remainingChars = remainingTokens * 4;
-            truncatedParts.push({
-              text:
-                part.text.substring(0, remainingChars) +
-                '\n[...content truncated due to token limit...]',
-            });
-          }
-          break;
-        }
-      } else {
-        // Non-text parts (function calls, responses, etc) - NEVER truncate these
-        // Either include them fully or skip them entirely to avoid breaking JSON
-        const partTokens = estimateTokens(JSON.stringify(part));
-        if (currentTokens + partTokens <= maxTokens) {
-          truncatedParts.push(part);
-          currentTokens += partTokens;
-        } else {
-          // Skip this part entirely - DO NOT truncate function calls/responses
-          // Log what we're skipping for debugging
-          if (process.env.DEBUG || process.env.VERBOSE) {
-            let skipInfo = 'unknown part';
-            if ('functionCall' in part) {
-              const funcPart = part as { functionCall?: { name?: string } };
-              skipInfo = `functionCall: ${funcPart.functionCall?.name || 'unnamed'}`;
-            } else if ('functionResponse' in part) {
-              const respPart = part as { functionResponse?: { name?: string } };
-              skipInfo = `functionResponse: ${respPart.functionResponse?.name || 'unnamed'}`;
-            }
-            console.warn(
-              `INFO: Skipping ${skipInfo} due to token limit (needs ${partTokens} tokens, only ${maxTokens - currentTokens} available)`,
-            );
-          }
-          // Add a marker that content was omitted
-          if (
-            truncatedParts.length > 0 &&
-            !truncatedParts.some(
-              (p) =>
-                'text' in p &&
-                p.text?.includes(
-                  '[...function calls omitted due to token limit...]',
-                ),
-            )
-          ) {
-            truncatedParts.push({
-              text: '[...function calls omitted due to token limit...]',
-            });
-          }
-          break;
-        }
-      }
-    }
-
-    return {
-      role: content.role,
-      parts: truncatedParts,
-    };
-  }
+  //   private _truncateContent(content: Content, maxTokens: number): Content {
+  //     if (!content.parts || content.parts.length === 0) {
+  //       return content;
+  //     }
+  //
+  //     const truncatedParts: Part[] = [];
+  //     let currentTokens = 0;
+  //
+  //     for (const part of content.parts) {
+  //       if ('text' in part && part.text) {
+  //         const partTokens = estimateTokens(part.text);
+  //         if (currentTokens + partTokens <= maxTokens) {
+  //           truncatedParts.push(part);
+  //           currentTokens += partTokens;
+  //         } else {
+  //           // Truncate this part
+  //           const remainingTokens = maxTokens - currentTokens;
+  //           if (remainingTokens > 10) {
+  //             const remainingChars = remainingTokens * 4;
+  //             truncatedParts.push({
+  //               text:
+  //                 part.text.substring(0, remainingChars) +
+  //                 '\n[...content truncated due to token limit...]',
+  //             });
+  //           }
+  //           break;
+  //         }
+  //       } else {
+  //         // Non-text parts (function calls, responses, etc) - NEVER truncate these
+  //         // Either include them fully or skip them entirely to avoid breaking JSON
+  //         const partTokens = estimateTokens(JSON.stringify(part));
+  //         if (currentTokens + partTokens <= maxTokens) {
+  //           truncatedParts.push(part);
+  //           currentTokens += partTokens;
+  //         } else {
+  //           // Skip this part entirely - DO NOT truncate function calls/responses
+  //           // Log what we're skipping for debugging
+  //           if (process.env.DEBUG || process.env.VERBOSE) {
+  //             let skipInfo = 'unknown part';
+  //             if ('functionCall' in part) {
+  //               const funcPart = part as { functionCall?: { name?: string } };
+  //               skipInfo = `functionCall: ${funcPart.functionCall?.name || 'unnamed'}`;
+  //             } else if ('functionResponse' in part) {
+  //               const respPart = part as { functionResponse?: { name?: string } };
+  //               skipInfo = `functionResponse: ${respPart.functionResponse?.name || 'unnamed'}`;
+  //             }
+  //             console.warn(
+  //               `INFO: Skipping ${skipInfo} due to token limit (needs ${partTokens} tokens, only ${maxTokens - currentTokens} available)`,
+  //             );
+  //           }
+  //           // Add a marker that content was omitted
+  //           if (
+  //             truncatedParts.length > 0 &&
+  //             !truncatedParts.some(
+  //               (p) =>
+  //                 'text' in p &&
+  //                 p.text?.includes(
+  //                   '[...function calls omitted due to token limit...]',
+  //                 ),
+  //             )
+  //           ) {
+  //             truncatedParts.push({
+  //               text: '[...function calls omitted due to token limit...]',
+  //             });
+  //           }
+  //           break;
+  //         }
+  //       }
+  //     }
+  //
+  //     return {
+  //       role: content.role,
+  //       parts: truncatedParts,
+  //     };
+  //   }
 
   private async maybeIncludeSchemaDepthContext(error: unknown): Promise<void> {
     // Check for potentially problematic cyclic tools with cyclic schemas

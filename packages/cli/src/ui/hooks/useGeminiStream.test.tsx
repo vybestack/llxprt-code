@@ -33,7 +33,7 @@ import {
   GeminiEventType as ServerGeminiEventType,
   AnyToolInvocation,
   ToolErrorType, // <-- Import ToolErrorType
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { Part, PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
@@ -64,7 +64,7 @@ const MockedUserPromptEvent = vi.hoisted(() =>
 );
 const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
 
-vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actualCoreModule = (await importOriginal()) as any;
   return {
     ...actualCoreModule,
@@ -231,8 +231,8 @@ describe('mergePartListUnions', () => {
   });
 
   it('should handle cases where some PartListUnion items are single Parts and others are arrays of Parts', () => {
-    const part1: Part = { text: 'Direct Part' };
-    const arrayOfParts: Part[] = [
+    const singlePart1: Part = { text: 'Direct Part' };
+    const arrayPart1: Part[] = [
       { text: 'Array Part 1' },
       { text: 'Array Part 2' },
     ];
@@ -441,7 +441,7 @@ describe('useGeminiStream', () => {
   };
 
   it('should not submit tool responses if not all tool calls are completed', () => {
-    const toolCalls: TrackedToolCall[] = [
+    const _toolCalls: TrackedToolCall[] = [
       {
         request: {
           callId: 'call1',
@@ -510,7 +510,7 @@ describe('useGeminiStream', () => {
       { functionResponse: { name: 'func1', response: { result: 'data1' } } },
       { functionResponse: { name: 'func2', response: { result: 'data2' } } },
     ];
-    const completedToolCalls: TrackedToolCall[] = [
+    const _completedToolCalls: TrackedToolCall[] = [
       {
         request: {
           callId: 'call1',
@@ -799,7 +799,6 @@ describe('useGeminiStream', () => {
         endTime: Date.now(),
       } as TrackedCompletedToolCall,
     ];
-    const list2: PartListUnion = [{ text: 'World' }];
 
     // Capture the onComplete callback
     let capturedOnComplete:
@@ -1532,11 +1531,18 @@ describe('useGeminiStream', () => {
           await result.current.submitQuery(`Test ${reason}`);
         });
 
-    expect(result).toEqual([
-      { text: 'Hello' },
-      { functionResponse: { name: 'func1', response: { result: 'data1' } } },
-      { text: 'World' },
-    ]);
+        // Verify the appropriate message was added
+        await waitFor(() => {
+          expect(mockAddItem).toHaveBeenCalledWith(
+            {
+              type: 'info',
+              text: message,
+            },
+            expect.any(Number),
+          );
+        });
+      }
+    });
   });
 
   it('should handle string items in PartListUnion arrays', () => {

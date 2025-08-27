@@ -177,7 +177,8 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
         context.services.settings.setValue(SettingScope.User, 'ideMode', true);
         // Poll for up to 5 seconds for the extension to activate.
         for (let i = 0; i < 10; i++) {
-          await config.setIdeModeAndSyncConnection(true);
+          config.setIdeMode(true);
+          await ideClient.connect();
           if (
             ideClient.getConnectionStatus().status ===
             IDEConnectionStatus.Connected
@@ -187,7 +188,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
-        const { messageType, content } = getIdeStatusMessage(ideClient);
+        const { messageType, content } = await getIdeStatusMessageWithFiles(ideClient);
         if (messageType === 'error') {
           context.ui.addItem(
             {
