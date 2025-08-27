@@ -5,6 +5,7 @@
  */
 
 import {
+  CompressionStatus,
   ToolCallConfirmationDetails,
   ToolResultDisplay,
 } from '@vybestack/llxprt-code-core';
@@ -56,6 +57,7 @@ export interface CompressionProps {
   isPending: boolean;
   originalTokenCount: number | null;
   newTokenCount: number | null;
+  compressionStatus: CompressionStatus | null;
 }
 
 export interface HistoryItemBase {
