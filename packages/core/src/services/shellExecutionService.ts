@@ -132,6 +132,7 @@ export class ShellExecutionService {
       const child = cpSpawn(commandToExecute, [], {
         cwd,
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsVerbatimArguments: true,
         shell: isWindows ? true : 'bash',
         detached: !isWindows,
         env: {
@@ -317,7 +318,7 @@ export class ShellExecutionService {
       const isWindows = os.platform() === 'win32';
       const shell = isWindows ? 'cmd.exe' : 'bash';
       const args = isWindows
-        ? ['/c', commandToExecute]
+        ? `/c ${commandToExecute}`
         : ['-c', commandToExecute];
 
       const ptyProcess = ptyInfo?.module.spawn(shell, args, {
