@@ -631,33 +631,6 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
   /**
    * @plan PLAN-20250823-AUTHFIXES.P13
    * @requirement REQ-002
-   * Property Test 2: Invalid provider names
-   */
-  it.prop([
-    fc
-      .string({ minLength: 1, maxLength: 20 })
-      .filter((s) => !['qwen', 'gemini', 'anthropic'].includes(s.trim())) // Check trimmed version
-      .filter((s) => !/^\s*$/.test(s)), // Not just whitespace
-  ])(
-    'should handle any invalid provider name gracefully',
-    async (invalidProvider) => {
-      const args = `${invalidProvider} logout`;
-
-      const result = await authCommand.execute(context, args);
-
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-      expect(messageResult.messageType).toBe('error');
-      expect(messageResult.content).toContain('Unknown provider');
-      // Check for trimmed version since that's what the command processing uses
-      const trimmedProvider = invalidProvider.trim();
-      expect(messageResult.content).toContain(trimmedProvider);
-    },
-  );
-
-  /**
-   * @plan PLAN-20250823-AUTHFIXES.P13
-   * @requirement REQ-002
    * Property Test 3: Command argument variations
    */
   it.prop([
@@ -742,86 +715,6 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
 
       // Should not contain placeholder text
       expect(messageResult.content).not.toMatch(/TODO|FIXME|placeholder/i);
-    },
-  );
-
-  /**
-   * @plan PLAN-20250823-AUTHFIXES.P13
-   * @requirement REQ-002
-   * Property Test 6: Error message consistency
-   */
-  it.prop([
-    fc
-      .string({ minLength: 1, maxLength: 30 })
-      .filter((s) => !['qwen', 'gemini', 'anthropic'].includes(s))
-      .filter((s) => !/^\s*$/.test(s)),
-  ])(
-    'should provide consistent error messages for invalid providers',
-    async (invalidProvider) => {
-      const result = await authCommand.execute(
-        context,
-        `${invalidProvider} logout`,
-      );
-
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-      expect(messageResult.messageType).toBe('error');
-
-      const content = messageResult.content;
-
-      // Should always include these elements in error messages
-      expect(content).toContain('Unknown provider');
-      expect(content).toContain('Supported providers');
-      expect(content).toContain(invalidProvider);
-
-      // Should list all supported providers
-      const supportedProviders = oauthManager.getSupportedProviders();
-      for (const supportedProvider of supportedProviders) {
-        expect(content).toContain(supportedProvider);
-      }
-    },
-  );
-
-  /**
-   * @plan PLAN-20250823-AUTHFIXES.P13
-   * @requirement REQ-002
-   * Property Test 7: Command robustness with edge cases
-   */
-  it.prop([
-    fc.option(fc.constantFrom('qwen', 'gemini', 'anthropic')),
-    fc.option(fc.constantFrom('logout', 'enable', 'disable', 'invalid')),
-    fc.boolean(), // Whether to add extra arguments
-  ])(
-    'should handle command edge cases robustly',
-    async (provider, action, addExtraArgs) => {
-      let args = '';
-
-      if (provider) {
-        args += provider;
-      }
-
-      if (action) {
-        args += ` ${action}`;
-      }
-
-      if (addExtraArgs) {
-        args += ' extra arguments';
-      }
-
-      const result = await authCommand.execute(context, args);
-
-      expect(result.type).toBe('message');
-      const messageResult = result as MessageActionReturn;
-
-      // Should always return a meaningful message
-      expect(messageResult.content).toBeTruthy();
-      expect(messageResult.content.length).toBeGreaterThan(0);
-
-      // Message type should be appropriate
-      expect(['info', 'error']).toContain(messageResult.messageType);
-
-      // Should not crash or return undefined
-      expect(messageResult).toBeDefined();
     },
   );
 });

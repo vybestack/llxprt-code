@@ -10,7 +10,6 @@ import {
   CommandContext,
   SlashCommandActionReturn,
   MessageActionReturn,
-  OpenDialogActionReturn,
 } from './types.js';
 import { OAuthManager } from '../../auth/oauth-manager.js';
 import { MultiProviderTokenStore } from '@vybestack/llxprt-code-core';
@@ -31,16 +30,14 @@ export class AuthCommandExecutor {
   ): Promise<SlashCommandActionReturn> {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() || '';
-    const parts = trimmedArgs.split(/\s+/).filter(p => p.length > 0); // Remove empty parts
+    const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0); // Remove empty parts
     const provider = parts[0];
     const action = parts[1];
-    
-    // Extract original provider from args for error messages
-    // We need to handle both trimmed and untrimmed expectations in tests
-    const argsWithoutTrim = args || '';
-    // Split on whitespace to get the first "word" which is what the user typed as provider
-    const originalParts = argsWithoutTrim.split(/\s+/);
-    const originalProvider = originalParts[0] || '';
+
+    // For error messages, we want to show the provider as the user typed it
+    // This should be the first word from the arguments, trimmed of leading/trailing spaces
+    // but preserving any internal structure
+    const originalProvider = provider || ''; // Use the parsed provider for consistency
 
     // If no provider specified, show the auth dialog
     if (!provider) {
@@ -85,13 +82,6 @@ export class AuthCommandExecutor {
     };
   }
 
-  private async showOAuthMenu(): Promise<OpenDialogActionReturn> {
-    // Return dialog action to show OAuth authentication dialog
-    return {
-      type: 'dialog',
-      dialog: 'auth',
-    };
-  }
 
   private async showProviderStatus(
     provider: string,

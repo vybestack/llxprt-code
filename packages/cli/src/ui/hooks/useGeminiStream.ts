@@ -583,7 +583,7 @@ export const useGeminiStream = (
         addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         setPendingHistoryItem(null);
       }
-      
+
       setThought(null); // Reset thought when there is an error
 
       const errorText = parseAndFormatApiError(
@@ -728,7 +728,7 @@ export const useGeminiStream = (
       const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
       const emojiFilter = new EmojiFilter(filterConfig);
 
-      for await (const event of stream) {        
+      for await (const event of stream) {
         switch (event.type) {
           case ServerGeminiEventType.Thought:
             setThought(event.value);
@@ -795,7 +795,7 @@ export const useGeminiStream = (
                 `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
               );
             }
-            
+
             // If cancelled after processing this content event, stop further processing
             if (turnCancelledRef.current) {
               break;

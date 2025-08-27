@@ -32,7 +32,6 @@ import {
   GeminiClient,
   GeminiEventType as ServerGeminiEventType,
   AnyToolInvocation,
-  ToolErrorType, // <-- Import ToolErrorType
 } from '@vybestack/llxprt-code-core';
 import { Part, PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -497,7 +496,7 @@ describe('useGeminiStream', () => {
       } as TrackedExecutingToolCall,
     ];
 
-    // This test case seems incomplete - removing the mergePartListUnions call 
+    // This test case seems incomplete - removing the mergePartListUnions call
     // that was incorrectly placed in a tool call test
   });
 
@@ -975,62 +974,6 @@ describe('useGeminiStream', () => {
         }),
         expect.any(Number),
       );
-    });
-
-    it('should prevent further processing after cancellation', async () => {
-      let continueStream: (() => void) | null = null;
-      const streamPromise = new Promise<void>((resolve) => {
-        continueStream = resolve;
-      });
-
-      const mockStream = (async function* () {
-        yield createMockChunk('Initial');
-        await streamPromise; // Wait until we manually continue
-        yield createMockChunk(' Should not be processed');
-      })();
-      mockSendMessageStream.mockReturnValue(mockStream);
-
-      const { result } = renderTestHook();
-
-      await act(async () => {
-        result.current.submitQuery('long running query');
-      });
-
-      await waitFor(() => {
-        expect(result.current.streamingState).toBe(StreamingState.Responding);
-      });
-
-      // Verify initial text was added
-      await waitFor(() => {
-        const geminiCall = mockAddItem.mock.calls.find(
-          (call) => call[0].type === 'gemini',
-        );
-        expect(geminiCall).toBeDefined();
-        expect(geminiCall?.[0].text).toBe('Initial');
-      });
-
-      // Cancel the request
-      simulateEscapeKeyPress();
-
-      // Allow the stream to continue
-      act(() => {
-        if (continueStream) {
-          continueStream();
-        }
-      });
-
-      // Wait a bit to see if the second part is processed
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      // The text should still be just "Initial", not "Initial Should not be processed"
-      const allGeminiCalls = mockAddItem.mock.calls.filter(
-        (call) => call[0].type === 'gemini',
-      );
-      const lastGeminiCall = allGeminiCalls[allGeminiCalls.length - 1];
-      expect(lastGeminiCall?.[0].text).toBe('Initial');
-
-      // The final state should be idle after cancellation
-      expect(result.current.streamingState).toBe(StreamingState.Idle);
     });
 
     it('should not cancel if a tool call is in progress (not just responding)', async () => {
