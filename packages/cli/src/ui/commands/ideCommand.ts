@@ -188,7 +188,8 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
-        const { messageType, content } = await getIdeStatusMessageWithFiles(ideClient);
+        const { messageType, content } =
+          await getIdeStatusMessageWithFiles(ideClient);
         if (messageType === 'error') {
           context.ui.addItem(
             {

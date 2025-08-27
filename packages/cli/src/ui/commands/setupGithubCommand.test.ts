@@ -19,7 +19,6 @@ import {
   ToolActionReturn,
   MessageActionReturn,
 } from './types.js';
-import * as commandUtils from '../utils/commandUtils.js';
 
 vi.mock('child_process');
 
