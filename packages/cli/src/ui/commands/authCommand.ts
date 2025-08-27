@@ -82,7 +82,6 @@ export class AuthCommandExecutor {
     };
   }
 
-
   private async showProviderStatus(
     provider: string,
   ): Promise<MessageActionReturn> {
