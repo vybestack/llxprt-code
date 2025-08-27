@@ -602,6 +602,36 @@ export const SETTINGS_SCHEMA = {
     description: 'Enable extension management features.',
     showInDialog: false,
   },
+  extensions: {
+    type: 'object',
+    label: 'Extensions',
+    category: 'Extensions',
+    requiresRestart: true,
+    default: {},
+    description: 'Settings for extensions.',
+    showInDialog: false,
+    properties: {
+      disabled: {
+        type: 'array',
+        label: 'Disabled Extensions',
+        category: 'Extensions',
+        requiresRestart: true,
+        default: [] as string[],
+        description: 'List of disabled extensions.',
+        showInDialog: false,
+      },
+      workspacesWithMigrationNudge: {
+        type: 'array',
+        label: 'Workspaces with Migration Nudge',
+        category: 'Extensions',
+        requiresRestart: false,
+        default: [] as string[],
+        description:
+          'List of workspaces for which the migration nudge has been shown.',
+        showInDialog: false,
+      },
+    },
+  },
 
   // Text-based tool call parsing settings
   enableTextToolCallParsing: {

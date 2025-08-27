@@ -130,6 +130,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -165,6 +169,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
     });
 
@@ -200,6 +208,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
     });
 
@@ -233,6 +245,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
     });
 
@@ -272,6 +288,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
     });
 
@@ -323,6 +343,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
     });
 
@@ -385,6 +409,10 @@ describe('Settings Loading and Merging', () => {
           '/system/dir',
         ],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
     });
 
@@ -545,6 +573,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
       expect(settings.user.settings.excludedProjectEnvVars).toEqual([
         'DEBUG',
         'NODE_ENV',
@@ -952,6 +981,10 @@ describe('Settings Loading and Merging', () => {
         mcpServers: {},
         includeDirectories: [],
         chatCompression: {},
+        extensions: {
+          disabled: [],
+          workspacesWithMigrationNudge: [],
+        },
       });
 
       // Check that error objects are populated in settings.errors
@@ -1326,6 +1359,10 @@ describe('Settings Loading and Merging', () => {
           mcpServers: {},
           includeDirectories: [],
           chatCompression: {},
+          extensions: {
+            disabled: [],
+            workspacesWithMigrationNudge: [],
+          },
         });
       });
     });
