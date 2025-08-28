@@ -160,7 +160,12 @@ export function isFolderTrustEnabled(settings: Settings): boolean {
   return folderTrustFeature && folderTrustSetting;
 }
 
-export function isWorkspaceTrusted(): boolean | undefined {
+export function isWorkspaceTrusted(settings?: Settings): boolean | undefined {
+  // If settings are provided, check if folder trust is enabled
+  if (settings && !isFolderTrustEnabled(settings)) {
+    return true;
+  }
+
   const folders = loadTrustedFolders();
 
   if (folders.errors.length > 0) {

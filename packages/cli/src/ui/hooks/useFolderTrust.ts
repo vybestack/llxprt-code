@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { type Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
+import { LoadedSettings, Settings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import {
   loadTrustedFolders,
@@ -26,7 +26,10 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
 
   const { folderTrust, folderTrustFeature } = settings.merged;
   useEffect(() => {
-    const trusted = isWorkspaceTrusted();
+    const trusted = isWorkspaceTrusted({
+      folderTrust: folderTrust,
+      folderTrustFeature: folderTrustFeature,
+    } as Settings);
     setIsTrusted(trusted);
     if (trusted === undefined) {
       setIsFolderTrustDialogOpen(true);
