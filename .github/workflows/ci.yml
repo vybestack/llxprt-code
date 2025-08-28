@@ -324,11 +324,11 @@ jobs:
 
       - name: 'Run tests and generate reports'
         env:
-          # Provider configuration from environment variables
-          OPENAI_API_KEY: ${{ secrets[env.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ env.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ env.LLXPRT_DEFAULT_PROVIDER }}
+          # Provider configuration - use inputs if workflow_dispatch, else use Groq defaults
+          OPENAI_API_KEY: ${{ inputs.KEY_VAR_NAME && secrets[inputs.KEY_VAR_NAME] || secrets.GROQ_API_KEY }}
+          OPENAI_BASE_URL: ${{ inputs.OPENAI_BASE_URL || 'https://api.groq.com/openai/v1' }}
+          LLXPRT_DEFAULT_MODEL: ${{ inputs.LLXPRT_DEFAULT_MODEL || 'openai/gpt-oss-20b' }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.LLXPRT_DEFAULT_PROVIDER || 'openai' }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
           NO_COLOR: true
