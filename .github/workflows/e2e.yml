@@ -5,6 +5,20 @@ on:
     branches:
       - 'main'
   merge_group:
+  workflow_dispatch:
+    inputs:
+      KEY_VAR_NAME:
+        description: 'Secret variable name for API key (e.g., GROQ_API_KEY, CEREBRAS_API_KEY)'
+        required: false
+      LLXPRT_DEFAULT_MODEL:
+        description: 'Default model to use'
+        required: false
+      LLXPRT_DEFAULT_PROVIDER:
+        description: 'Provider to use'
+        required: false
+      OPENAI_BASE_URL:
+        description: 'Base URL for the provider API'
+        required: false
 
 jobs:
   e2e-test-linux:
@@ -96,11 +110,11 @@ jobs:
 
       - name: 'Run E2E tests'
         env:
-          # Use Groq as a cost-effective alternative to Google's API
-          OPENAI_API_KEY: '${{ secrets.GROQ_API_KEY }}'
-          OPENAI_BASE_URL: 'https://api.groq.com/openai/v1'
-          LLXPRT_DEFAULT_MODEL: 'openai/gpt-oss-20b'
-          LLXPRT_DEFAULT_PROVIDER: 'openai'
+          # Provider configuration from environment variables, with Groq as fallback defaults
+          OPENAI_API_KEY: ${{ secrets[env.KEY_VAR_NAME] }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ env.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ env.LLXPRT_DEFAULT_PROVIDER }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: 'none'
           # Suppress browser launch for OAuth (important for CI)
@@ -147,11 +161,10 @@ jobs:
 
       - name: 'Run E2E tests'
         env:
-          # Use Groq as a cost-effective alternative to Google's API
-          OPENAI_API_KEY: '${{ secrets.GROQ_API_KEY }}'
-          OPENAI_BASE_URL: 'https://api.groq.com/openai/v1'
-          LLXPRT_DEFAULT_MODEL: 'openai/gpt-oss-20b'
-          LLXPRT_DEFAULT_PROVIDER: 'openai'
+          OPENAI_API_KEY: ${{ secrets[env.KEY_VAR_NAME] }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ env.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ env.LLXPRT_DEFAULT_PROVIDER }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: 'none'
           # Suppress browser launch for OAuth (important for CI)
@@ -204,10 +217,10 @@ jobs:
       - name: 'Run E2E tests'
         env:
           # Use Groq as a cost-effective alternative to Google's API
-          OPENAI_API_KEY: '${{ secrets.GROQ_API_KEY }}'
-          OPENAI_BASE_URL: 'https://api.groq.com/openai/v1'
-          LLXPRT_DEFAULT_MODEL: 'openai/gpt-oss-20b'
-          LLXPRT_DEFAULT_PROVIDER: 'openai'
+          OPENAI_API_KEY: ${{ secrets[env.KEY_VAR_NAME] }}
+          OPENAI_BASE_URL: ${{ env.OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ env.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ env.LLXPRT_DEFAULT_PROVIDER }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: 'none'
           # Suppress browser launch for OAuth (important for CI)
