@@ -47,21 +47,6 @@ You have two options to install LLxprt Code.
    npx https://github.com/acoliver/llxprt-code
    ```
 
-### With Homebrew
-
-1. **Prerequisites:** Ensure you have [Homebrew](https://brew.sh/) installed.
-2. **Install the CLI:** Execute the following command in your terminal:
-
-   ```bash
-   brew install llxprt-code
-   ```
-
-   Then, run the CLI from anywhere:
-
-   ```bash
-   llxprt
-   ```
-
 ### Common Configuration Steps
 
 3. **Run and configure:**
