@@ -115,6 +115,7 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     resetSettingsService: vi.fn(),
   };
 });
+
 vi.mock('../ide/ide-client.js', () => ({
   IdeClient: {
     getInstance: vi.fn().mockResolvedValue({
