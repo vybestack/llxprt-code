@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MCPServerConfig } from '../config/config.js';
-import { ToolRegistry } from './tool-registry.js';
-import { PromptRegistry } from '../prompts/prompt-registry.js';
+import type { Config, MCPServerConfig } from '../config/config.js';
+import type { ToolRegistry } from './tool-registry.js';
+import type { PromptRegistry } from '../prompts/prompt-registry.js';
 import {
   McpClient,
   MCPDiscoveryState,
@@ -14,7 +14,7 @@ import {
 } from './mcp-client.js';
 import { getErrorMessage } from '../utils/errors.js';
 import type { EventEmitter } from 'node:events';
-import { WorkspaceContext } from '../utils/workspaceContext.js';
+import type { WorkspaceContext } from '../utils/workspaceContext.js';
 
 /**
  * Manages the lifecycle of multiple MCP clients, including local child processes.
@@ -55,7 +55,10 @@ export class McpClientManager {
    * It connects to each server, discovers its available tools, and registers
    * them with the `ToolRegistry`.
    */
-  async discoverAllMcpTools(): Promise<void> {
+  async discoverAllMcpTools(cliConfig: Config): Promise<void> {
+    if (cliConfig.isTrustedFolder() === false) {
+      return;
+    }
     await this.stop();
 
     const servers = populateMcpServerCommand(
@@ -91,7 +94,7 @@ export class McpClientManager {
 
         try {
           await client.connect();
-          await client.discover();
+          await client.discover(cliConfig);
           this.eventEmitter?.emit('mcp-server-connected', {
             name,
             current,
