@@ -27,47 +27,70 @@ async function getProcessInfo(pid: number): Promise<{
   try {
     const platform = os.platform();
     if (platform === 'win32') {
-      const command = `wmic process where "ProcessId=${pid}" get Name,ParentProcessId,CommandLine /value`;
-      const { stdout } = await execAsync(command);
-      const nameMatch = stdout.match(/Name=([^\n]*)/);
-      const processName = nameMatch ? nameMatch[1].trim() : '';
-      const ppidMatch = stdout.match(/ParentProcessId=(\d+)/);
-      const parentPid = ppidMatch ? parseInt(ppidMatch[1], 10) : 0;
-      const commandLineMatch = stdout.match(/CommandLine=([^\n]*)/);
-      const commandLine = commandLineMatch ? commandLineMatch[1].trim() : '';
-      return { parentPid, name: processName, command: commandLine };
-    } else {
-      // Use comm= to get executable name without arguments
-      const command = `ps -o ppid=,comm= -p ${pid}`;
-      const { stdout } = await execAsync(command);
-      const trimmedStdout = stdout.trim();
-
-      // Parse the output - ppid is first, then executable path
-      const match = trimmedStdout.match(/^\s*(\d+)\s+(.+)$/);
-      if (!match) {
-        throw new Error(`Failed to parse ps output: ${trimmedStdout}`);
+      const powershellSegments = [
+        '$p = Get-CimInstance Win32_Process',
+        `-Filter 'ProcessId=${pid}'`,
+        '-ErrorAction SilentlyContinue;',
+        'if ($p) {',
+        '@{Name=$p.Name;ParentProcessId=$p.ParentProcessId;CommandLine=$p.CommandLine}',
+        '| ConvertTo-Json',
+        '}',
+      ];
+      const powershellCommand = `powershell "${powershellSegments.join(' ')}"`;
+      const { stdout } = await execAsync(powershellCommand);
+      const output = stdout.trim();
+      if (!output) {
+        return { parentPid: 0, name: '', command: '' };
       }
 
-      const parentPid = parseInt(match[1], 10);
-      const execPath = match[2].trim();
-
-      // Get the full command line separately
-      const { stdout: fullCmdStdout } = await execAsync(
-        `ps -o command= -p ${pid}`,
-      );
-      const fullCommand = fullCmdStdout.trim();
-
-      // Extract just the executable name from path (e.g., /bin/zsh -> zsh)
-      const processName = path.basename(execPath);
-
-      return {
-        parentPid: isNaN(parentPid) ? 1 : parentPid,
-        name: processName,
-        command: fullCommand,
-      };
+      try {
+        const parsed = JSON.parse(output) as {
+          Name?: string;
+          ParentProcessId?: number;
+          CommandLine?: string;
+        };
+        const parentPid =
+          typeof parsed.ParentProcessId === 'number' ? parsed.ParentProcessId : 0;
+        return {
+          parentPid,
+          name: parsed.Name ?? '',
+          command: parsed.CommandLine ?? '',
+        };
+      } catch (parseError) {
+        console.debug(
+          `Failed to parse PowerShell output for pid ${pid}:`,
+          parseError,
+        );
+        return { parentPid: 0, name: '', command: '' };
+      }
     }
-  } catch (_e) {
-    console.debug(`Failed to get process info for pid ${pid}:`, _e);
+
+    // Non-Windows platforms
+    const command = `ps -o ppid=,comm= -p ${pid}`;
+    const { stdout } = await execAsync(command);
+    const trimmedStdout = stdout.trim();
+
+    const match = trimmedStdout.match(/^\s*(\d+)\s+(.+)$/);
+    if (!match) {
+      throw new Error(`Failed to parse ps output: ${trimmedStdout}`);
+    }
+
+    const parentPid = parseInt(match[1], 10);
+    const execPath = match[2].trim();
+
+    const { stdout: fullCmdStdout } = await execAsync(
+      `ps -o command= -p ${pid}`,
+    );
+    const fullCommand = fullCmdStdout.trim();
+    const processName = path.basename(execPath);
+
+    return {
+      parentPid: Number.isNaN(parentPid) ? 1 : parentPid,
+      name: processName,
+      command: fullCommand,
+    };
+  } catch (error) {
+    console.debug(`Failed to get process info for pid ${pid}:`, error);
     return { parentPid: 0, name: '', command: '' };
   }
 }

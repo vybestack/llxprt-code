@@ -21,7 +21,6 @@ import {
 } from '../core/contentGenerator.js';
 import { GeminiClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
-import { IdeClient } from '../ide/ide-client.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 import { ShellTool } from '../tools/shell.js';
@@ -116,6 +115,15 @@ vi.mock('../settings/settingsServiceInstance.js', () => {
     resetSettingsService: vi.fn(),
   };
 });
+vi.mock('../ide/ide-client.js', () => ({
+  IdeClient: {
+    getInstance: vi.fn().mockResolvedValue({
+      getConnectionStatus: vi.fn(),
+      initialize: vi.fn(),
+      shutdown: vi.fn(),
+    }),
+  },
+}));
 
 describe('Server Config (config.ts)', () => {
   const MODEL = 'gemini-pro';
@@ -143,7 +151,6 @@ describe('Server Config (config.ts)', () => {
     telemetry: TELEMETRY_SETTINGS,
     sessionId: SESSION_ID,
     model: MODEL,
-    ideClient: IdeClient.getInstance(false),
   };
 
   beforeEach(() => {
