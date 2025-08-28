@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useIsScreenReaderEnabled } from 'ink';
 import { Colors, SemanticColors } from '../../colors.js';
 import crypto from 'node:crypto';
 import { colorizeCode, colorizeLine } from '../../utils/CodeColorizer.js';
@@ -106,6 +106,7 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
   terminalWidth,
   theme,
 }) => {
+  const screenReaderEnabled = useIsScreenReaderEnabled();
   if (!diffContent || typeof diffContent !== 'string') {
     return <Text color={Colors.AccentYellow}>No diff content.</Text>;
   }
@@ -116,6 +117,17 @@ export const DiffRenderer: React.FC<DiffRendererProps> = ({
     return (
       <Box borderStyle="round" borderColor={Colors.Gray} padding={1}>
         <Text dimColor>No changes detected.</Text>
+      </Box>
+    );
+  }
+  if (screenReaderEnabled) {
+    return (
+      <Box flexDirection="column">
+        {parsedLines.map((line, index) => (
+          <Text key={index}>
+            {line.type}: {line.content}
+          </Text>
+        ))}
       </Box>
     );
   }

@@ -747,7 +747,9 @@ export async function loadCliConfig(
 
   // The screen reader argument takes precedence over the accessibility setting.
   const screenReader =
-    argv.screenReader ?? effectiveSettings.accessibility?.screenReader ?? false;
+    argv.screenReader !== undefined
+      ? argv.screenReader
+      : (effectiveSettings.accessibility?.screenReader ?? false);
 
   const config = new Config({
     sessionId,
