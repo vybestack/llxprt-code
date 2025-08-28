@@ -728,31 +728,62 @@ export class GeminiChat {
     userInput: Content,
   ): AsyncGenerator<GenerateContentResponse> {
     const modelResponseParts: Part[] = [];
-    let isStreamInvalid = false;
+    let hasReceivedValidContent = false;
     let hasReceivedAnyChunk = false;
+    let invalidChunkCount = 0;
+    let totalChunkCount = 0;
 
     for await (const chunk of streamResponse) {
       hasReceivedAnyChunk = true;
+      totalChunkCount++;
+
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
         if (content) {
+          // Check if this chunk has meaningful content (text or function calls)
+          if (content.parts && content.parts.length > 0) {
+            const hasMeaningfulContent = content.parts.some(
+              (part) =>
+                part.text ||
+                'functionCall' in part ||
+                'functionResponse' in part,
+            );
+            if (hasMeaningfulContent) {
+              hasReceivedValidContent = true;
+            }
+          }
+
           // Filter out thought parts from being added to history.
           if (!this.isThoughtContent(content) && content.parts) {
             modelResponseParts.push(...content.parts);
           }
         }
       } else {
-        isStreamInvalid = true;
+        invalidChunkCount++;
       }
       yield chunk; // Yield every chunk to the UI immediately.
     }
 
     // Now that the stream is finished, make a decision.
-    // Throw an error if the stream was invalid OR if it was completely empty.
-    if (isStreamInvalid || !hasReceivedAnyChunk) {
-      throw new EmptyStreamError(
-        'Model stream was invalid or completed without valid content.',
-      );
+    // Only throw an error if:
+    // 1. We received no chunks at all, OR
+    // 2. We received chunks but NONE had valid content (all were invalid or empty)
+    // This allows models like Qwen to send empty chunks at the end of a stream
+    // as long as they sent valid content earlier.
+    if (
+      !hasReceivedAnyChunk ||
+      (!hasReceivedValidContent && totalChunkCount > 0)
+    ) {
+      // Only throw if this looks like a genuinely empty/invalid stream
+      // Not just a stream that ended with some invalid chunks
+      if (
+        invalidChunkCount === totalChunkCount ||
+        modelResponseParts.length === 0
+      ) {
+        throw new EmptyStreamError(
+          'Model stream was invalid or completed without valid content.',
+        );
+      }
     }
 
     // Use recordHistory to correctly save the conversation turn.
