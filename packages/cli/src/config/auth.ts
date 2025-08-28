@@ -5,32 +5,23 @@
  */
 
 import { AuthType } from '@vybestack/llxprt-code-core';
-import { loadEnvironment } from './settings.js';
+import { loadEnvironment, loadSettings } from './settings.js';
 
-export const validateAuthMethod = (authMethod: string): string | null => {
-  loadEnvironment();
+export function validateAuthMethod(authMethod: string): string | null {
+  loadEnvironment(loadSettings(process.cwd()).merged);
 
-  // Handle OAuth provider selections
   if (
     authMethod === 'oauth_gemini' ||
+    authMethod === 'oauth-gemini' ||
     authMethod === 'oauth_qwen' ||
     authMethod === 'oauth_anthropic'
   ) {
-    return null; // OAuth providers are always valid
+    return null;
   }
 
   if (authMethod === AuthType.USE_PROVIDER) {
-    // Provider-specific auth is handled by the provider itself
-    // No validation needed at this level
     return null;
   }
-
-  // Handle legacy auth types for backward compatibility
-  if (authMethod === 'oauth_gemini' || authMethod === 'oauth-gemini') {
-    // Map to LOGIN_WITH_GOOGLE for backward compatibility
-    return null;
-  }
-
   if (
     authMethod === AuthType.LOGIN_WITH_GOOGLE ||
     authMethod === AuthType.CLOUD_SHELL
@@ -66,4 +57,4 @@ export const validateAuthMethod = (authMethod: string): string | null => {
   }
 
   return 'Invalid auth method selected.';
-};
+}
