@@ -22,6 +22,7 @@ export function validateAuthMethod(authMethod: string): string | null {
   if (authMethod === AuthType.USE_PROVIDER) {
     return null;
   }
+
   if (
     authMethod === AuthType.LOGIN_WITH_GOOGLE ||
     authMethod === AuthType.CLOUD_SHELL
