@@ -6,6 +6,8 @@
 
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 import { Storage } from '../config/storage.js';
 import { getErrorMessage } from '../utils/errors.js';
 import {
@@ -14,16 +16,46 @@ import {
   MCPOAuthCredentials,
 } from './token-store.js';
 
+const safeOsHostname = (): string => {
+  try {
+    return os.hostname();
+  } catch (error) {
+    console.warn('Failed to resolve hostname, falling back to default', error);
+    return 'unknown-host';
+  }
+};
+
+const safeOsUsername = (): string => {
+  try {
+    return os.userInfo().username;
+  } catch (error) {
+    const fallback = process.env.USER || process.env.USERNAME || 'unknown-user';
+    console.warn('Failed to resolve username, using fallback value', error);
+    return fallback;
+  }
+};
+
 /**
  * File-based implementation of the BaseTokenStore.
  * Stores MCP OAuth tokens in a JSON file in the user's configuration directory.
  */
 export class FileTokenStore extends BaseTokenStore {
   private readonly tokenFilePath: string;
+  private readonly encryptionKey: Buffer;
+  private readonly serviceName: string;
 
-  constructor(tokenFilePath?: string) {
+  constructor(
+    tokenFilePath?: string,
+    options: {
+      serviceName?: string;
+      encryptionKey?: Buffer;
+    } = {},
+  ) {
     super();
     this.tokenFilePath = tokenFilePath || Storage.getMcpOAuthTokensPath();
+    this.serviceName = options.serviceName ?? 'llxprt-cli-mcp-oauth';
+    this.encryptionKey =
+      options.encryptionKey ?? this.deriveEncryptionKey(this.serviceName);
   }
 
   /**
@@ -32,13 +64,94 @@ export class FileTokenStore extends BaseTokenStore {
   private async ensureConfigDir(): Promise<void> {
     const configDir = path.dirname(this.tokenFilePath);
     try {
-      await fs.mkdir(configDir, { recursive: true });
+      await fs.mkdir(configDir, { recursive: true, mode: 0o700 });
     } catch (error) {
       console.error(
         `Failed to create config directory ${configDir}: ${getErrorMessage(error)}`,
       );
       throw error;
     }
+  }
+
+  /**
+   * Derive an encryption key for securing stored tokens.
+   */
+  private deriveEncryptionKey(serviceName: string): Buffer {
+    const hostname = safeOsHostname();
+    const username = safeOsUsername();
+    const salt = `${hostname}:${username}:${serviceName}`;
+    return crypto.scryptSync('llxprt-cli-oauth', salt, 32);
+  }
+
+  /**
+   * Encrypt token payload with AES-256-GCM.
+   */
+  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
+  private encrypt(payload: string): string {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
+
+    let encrypted = cipher.update(payload, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    return [iv.toString('hex'), authTag.toString('hex'), encrypted].join(':');
+  }
+
+  /**
+   * Decrypt stored payload. Falls back to plaintext for backward compatibility.
+   */
+  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
+  private decrypt(payload: string): string {
+    const trimmed = payload.trim();
+    const encryptedPattern = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i;
+
+    if (!encryptedPattern.test(trimmed)) {
+      return payload;
+    }
+
+    const [ivHex, authTagHex, encryptedHex] = trimmed.split(':');
+
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      this.encryptionKey,
+      iv,
+    );
+
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  }
+
+  private async readTokenPayload(): Promise<string | null> {
+    try {
+      return await fs.readFile(this.tokenFilePath, 'utf-8');
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code === 'ENOENT') {
+        return null;
+      }
+
+      console.error(
+        `Failed to read MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`,
+      );
+      throw error;
+    }
+  }
+
+  private async writeTokenPayload(tokens: MCPOAuthCredentials[]): Promise<void> {
+    await this.ensureConfigDir();
+
+    const payload = JSON.stringify(tokens, null, 2);
+    const encrypted = this.encrypt(payload);
+
+    await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
   }
 
   /**
@@ -50,8 +163,13 @@ export class FileTokenStore extends BaseTokenStore {
     const tokenMap = new Map<string, MCPOAuthCredentials>();
 
     try {
-      const data = await fs.readFile(this.tokenFilePath, 'utf-8');
-      const tokens = JSON.parse(data) as MCPOAuthCredentials[];
+      const payload = await this.readTokenPayload();
+      if (!payload) {
+        return tokenMap;
+      }
+
+      const decrypted = this.decrypt(payload);
+      const tokens = JSON.parse(decrypted) as MCPOAuthCredentials[];
 
       // Validate the loaded data structure
       if (!Array.isArray(tokens)) {
@@ -69,12 +187,9 @@ export class FileTokenStore extends BaseTokenStore {
         }
       }
     } catch (error) {
-      // File doesn't exist or is invalid, return empty map
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(
-          `Failed to load MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`,
-        );
-      }
+      console.error(
+        `Failed to load MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`,
+      );
     }
 
     return tokenMap;
@@ -96,8 +211,6 @@ export class FileTokenStore extends BaseTokenStore {
     tokenUrl?: string,
     mcpServerUrl?: string,
   ): Promise<void> {
-    await this.ensureConfigDir();
-
     const tokens = await this.loadTokens();
     const credential = this.createCredentials(
       serverName,
@@ -109,14 +222,8 @@ export class FileTokenStore extends BaseTokenStore {
 
     tokens.set(serverName, credential);
 
-    const tokenArray = Array.from(tokens.values());
-
     try {
-      await fs.writeFile(
-        this.tokenFilePath,
-        JSON.stringify(tokenArray, null, 2),
-        { mode: 0o600 }, // Restrict file permissions for security
-      );
+      await this.writeTokenPayload(Array.from(tokens.values()));
 
       // Token saved successfully
     } catch (error) {
@@ -155,19 +262,13 @@ export class FileTokenStore extends BaseTokenStore {
     const tokens = await this.loadTokens();
 
     if (tokens.delete(serverName)) {
-      const tokenArray = Array.from(tokens.values());
-
       try {
-        if (tokenArray.length === 0) {
+        if (tokens.size === 0) {
           // Remove file if no tokens left
           await fs.unlink(this.tokenFilePath);
           // Token file removed successfully
         } else {
-          await fs.writeFile(
-            this.tokenFilePath,
-            JSON.stringify(tokenArray, null, 2),
-            { mode: 0o600 },
-          );
+          await this.writeTokenPayload(Array.from(tokens.values()));
           // Token removed successfully
         }
       } catch (error) {
