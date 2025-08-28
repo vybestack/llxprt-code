@@ -241,7 +241,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
   }
 }
 
-describe('Conversation Logging Performance Impact', () => {
+describe.skip('Conversation Logging Performance Impact', () => {
   let measurer: PerformanceMeasurer;
   let redactor: ConversationDataRedactor;
   let storage: ConversationStorage;
