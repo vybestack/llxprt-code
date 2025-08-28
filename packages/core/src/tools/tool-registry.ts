@@ -23,6 +23,7 @@ import { parse } from 'shell-quote';
 import { ToolErrorType } from './tool-error.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
+import type { EventEmitter } from 'node:events';
 
 type ToolParams = Record<string, unknown>;
 
@@ -176,7 +177,7 @@ export class ToolRegistry {
   private mcpClientManager: McpClientManager;
   private logger = new DebugLogger('llxprt:tool-registry');
 
-  constructor(config: Config) {
+  constructor(config: Config, eventEmitter?: EventEmitter) {
     this.config = config;
     this.mcpClientManager = new McpClientManager(
       this.config.getMcpServers() ?? {},
@@ -185,6 +186,7 @@ export class ToolRegistry {
       this.config.getPromptRegistry(),
       this.config.getDebugMode(),
       this.config.getWorkspaceContext(),
+      eventEmitter,
     );
   }
 

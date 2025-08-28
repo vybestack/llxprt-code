@@ -41,6 +41,7 @@ import { loadSandboxConfig } from './sandboxConfig.js';
 import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
+import { appEvents } from '../utils/events.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 
@@ -841,6 +842,7 @@ export async function loadCliConfig(
     useRipgrep: effectiveSettings.useRipgrep,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
+    eventEmitter: appEvents,
   });
 
   const enhancedConfig = config;
