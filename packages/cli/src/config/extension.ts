@@ -16,6 +16,7 @@ import * as os from 'os';
 import { simpleGit } from 'simple-git';
 import { recursivelyHydrateStrings } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
+import { isWorkspaceTrusted } from './trustedFolders.js';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 
@@ -103,7 +104,7 @@ export async function performWorkspaceExtensionMigration(
         source: extension.path,
         type: 'local',
       };
-      await installExtension(installMetadata);
+      await installExtension(installMetadata, process.cwd());
     } catch (_) {
       failedInstallNames.push(extension.config.name);
     }
@@ -116,7 +117,10 @@ export function loadExtensions(workspaceDir: string): Extension[] {
   const disabledExtensions = settings.extensions?.disabled ?? [];
   const allExtensions = [...loadUserExtensions()];
 
-  if (!settings.extensionManagement) {
+  if (
+    (isWorkspaceTrusted(settings) ?? true) &&
+    !settings.extensionManagement
+  ) {
     allExtensions.push(...getWorkspaceExtensions(workspaceDir));
   }
 
@@ -312,7 +316,15 @@ async function cloneFromGit(
 
 export async function installExtension(
   installMetadata: ExtensionInstallMetadata,
+  cwd: string = process.cwd(),
 ): Promise<string> {
+  const settings = loadSettings(cwd).merged;
+  if (!isWorkspaceTrusted(settings)) {
+    throw new Error(
+      `Could not install extension from untrusted folder at ${installMetadata.source}`,
+    );
+  }
+
   const extensionsDir = ExtensionStorage.getUserExtensionsDir();
   await fs.promises.mkdir(extensionsDir, { recursive: true });
 
