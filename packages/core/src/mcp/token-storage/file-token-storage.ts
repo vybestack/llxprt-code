@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
-import type { OAuthCredentials } from './types.js';
+import type { MCPOAuthCredentials } from './types.js';
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
@@ -67,11 +67,11 @@ export class FileTokenStorage extends BaseTokenStorage {
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   }
 
-  private async loadTokens(): Promise<Map<string, OAuthCredentials>> {
+  private async loadTokens(): Promise<Map<string, MCPMCPOAuthCredentials>> {
     try {
       const data = await fs.readFile(this.tokenFilePath, 'utf-8');
       const decrypted = this.decrypt(data);
-      const tokens = JSON.parse(decrypted) as Record<string, OAuthCredentials>;
+      const tokens = JSON.parse(decrypted) as Record<string, MCPMCPOAuthCredentials>;
       return new Map(Object.entries(tokens));
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException & { message?: string };
@@ -91,7 +91,7 @@ export class FileTokenStorage extends BaseTokenStorage {
   }
 
   private async saveTokens(
-    tokens: Map<string, OAuthCredentials>,
+    tokens: Map<string, MCPMCPOAuthCredentials>,
   ): Promise<void> {
     await this.ensureDirectoryExists();
 
@@ -102,7 +102,7 @@ export class FileTokenStorage extends BaseTokenStorage {
     await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
   }
 
-  async getCredentials(serverName: string): Promise<OAuthCredentials | null> {
+  async getCredentials(serverName: string): Promise<MCPOAuthCredentials | null> {
     const tokens = await this.loadTokens();
     const credentials = tokens.get(serverName);
 
@@ -117,11 +117,11 @@ export class FileTokenStorage extends BaseTokenStorage {
     return credentials;
   }
 
-  async setCredentials(credentials: OAuthCredentials): Promise<void> {
+  async setCredentials(credentials: MCPOAuthCredentials): Promise<void> {
     this.validateCredentials(credentials);
 
     const tokens = await this.loadTokens();
-    const updatedCredentials: OAuthCredentials = {
+    const updatedCredentials: MCPOAuthCredentials = {
       ...credentials,
       updatedAt: Date.now(),
     };
@@ -158,9 +158,9 @@ export class FileTokenStorage extends BaseTokenStorage {
     return Array.from(tokens.keys());
   }
 
-  async getAllCredentials(): Promise<Map<string, OAuthCredentials>> {
+  async getAllCredentials(): Promise<Map<string, MCPOAuthCredentials>> {
     const tokens = await this.loadTokens();
-    const result = new Map<string, OAuthCredentials>();
+    const result = new Map<string, MCPOAuthCredentials>();
 
     for (const [serverName, credentials] of tokens) {
       if (!this.isTokenExpired(credentials)) {

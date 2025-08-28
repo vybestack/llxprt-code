@@ -65,8 +65,8 @@ async function getProcessInfo(pid: number): Promise<{
       }
     }
 
-    // Non-Windows platforms
-    const command = `ps -o ppid=,comm= -p ${pid}`;
+    // Non-Windows platforms - use command= instead of comm=
+    const command = `ps -o ppid=,command= -p ${pid}`;
     const { stdout } = await execAsync(command);
     const trimmedStdout = stdout.trim();
 

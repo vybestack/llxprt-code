@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { FileTokenStorage } from './file-token-storage.js';
-import type { OAuthCredentials } from './types.js';
+import type { MCPMCPOAuthCredentials } from '../token-store.js';
 
 vi.mock('node:fs', () => ({
   promises: {
@@ -38,7 +38,7 @@ describe('FileTokenStorage', () => {
     unlink: ReturnType<typeof vi.fn>;
     mkdir: ReturnType<typeof vi.fn>;
   };
-  const existingCredentials: OAuthCredentials = {
+  const existingCredentials: MCPOAuthCredentials = {
     serverName: 'existing-server',
     token: {
       accessToken: 'existing-token',
@@ -66,7 +66,7 @@ describe('FileTokenStorage', () => {
     });
 
     it('should return null for expired tokens', async () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -86,7 +86,7 @@ describe('FileTokenStorage', () => {
     });
 
     it('should return credentials for valid tokens', async () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -123,7 +123,7 @@ describe('FileTokenStorage', () => {
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -135,7 +135,7 @@ describe('FileTokenStorage', () => {
       await storage.setCredentials(credentials);
 
       expect(mockFs.mkdir).toHaveBeenCalledWith(
-        path.join('/home/test', '.gemini'),
+        path.join('/home/test', '.llxprt'),
         { recursive: true, mode: 0o700 },
       );
       expect(mockFs.writeFile).toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe('FileTokenStorage', () => {
       mockFs.readFile.mockResolvedValue(encryptedData);
       mockFs.writeFile.mockResolvedValue(undefined);
 
-      const newCredentials: OAuthCredentials = {
+      const newCredentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'new-token',
@@ -183,7 +183,7 @@ describe('FileTokenStorage', () => {
     });
 
     it('should delete file when last credential is removed', async () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -201,12 +201,12 @@ describe('FileTokenStorage', () => {
       await storage.deleteCredentials('test-server');
 
       expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.gemini', 'mcp-oauth-tokens-v2.json'),
+        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
       );
     });
 
     it('should update file when other credentials remain', async () => {
-      const credentials1: OAuthCredentials = {
+      const credentials1: MCPOAuthCredentials = {
         serverName: 'server1',
         token: {
           accessToken: 'token1',
@@ -215,7 +215,7 @@ describe('FileTokenStorage', () => {
         updatedAt: Date.now(),
       };
 
-      const credentials2: OAuthCredentials = {
+      const credentials2: MCPOAuthCredentials = {
         serverName: 'server2',
         token: {
           accessToken: 'token2',
@@ -254,7 +254,7 @@ describe('FileTokenStorage', () => {
     });
 
     it('should return list of server names', async () => {
-      const credentials: Record<string, OAuthCredentials> = {
+      const credentials: Record<string, MCPOAuthCredentials> = {
         server1: {
           serverName: 'server1',
           token: { accessToken: 'token1', tokenType: 'Bearer' },
@@ -282,7 +282,7 @@ describe('FileTokenStorage', () => {
       await storage.clearAll();
 
       expect(mockFs.unlink).toHaveBeenCalledWith(
-        path.join('/home/test', '.gemini', 'mcp-oauth-tokens-v2.json'),
+        path.join('/home/test', '.llxprt', 'mcp-oauth-tokens-v2.json'),
       );
     });
 

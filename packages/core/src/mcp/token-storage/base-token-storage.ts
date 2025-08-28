@@ -4,23 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { TokenStorage, OAuthCredentials } from './types.js';
+import type { MCPOAuthCredentials } from '../token-store.js';
 
-export abstract class BaseTokenStorage implements TokenStorage {
+export abstract class BaseTokenStorage {
   protected readonly serviceName: string;
 
   constructor(serviceName: string) {
     this.serviceName = serviceName;
   }
 
-  abstract getCredentials(serverName: string): Promise<OAuthCredentials | null>;
-  abstract setCredentials(credentials: OAuthCredentials): Promise<void>;
+  abstract getCredentials(serverName: string): Promise<MCPOAuthCredentials | null>;
+  abstract setCredentials(credentials: MCPOAuthCredentials): Promise<void>;
   abstract deleteCredentials(serverName: string): Promise<void>;
   abstract listServers(): Promise<string[]>;
-  abstract getAllCredentials(): Promise<Map<string, OAuthCredentials>>;
+  abstract getAllCredentials(): Promise<Map<string, MCPOAuthCredentials>>;
   abstract clearAll(): Promise<void>;
 
-  protected validateCredentials(credentials: OAuthCredentials): void {
+  protected validateCredentials(credentials: MCPOAuthCredentials): void {
     if (!credentials.serverName) {
       throw new Error('Server name is required');
     }
@@ -35,7 +35,7 @@ export abstract class BaseTokenStorage implements TokenStorage {
     }
   }
 
-  protected isTokenExpired(credentials: OAuthCredentials): boolean {
+  protected isTokenExpired(credentials: MCPOAuthCredentials): boolean {
     if (!credentials.token.expiresAt) {
       return false;
     }

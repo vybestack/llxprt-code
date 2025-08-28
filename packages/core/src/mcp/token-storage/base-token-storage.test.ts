@@ -6,16 +6,16 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BaseTokenStorage } from './base-token-storage.js';
-import type { OAuthCredentials, OAuthToken } from './types.js';
+import type { MCPMCPOAuthCredentials, MCPMCPOAuthToken } from '../token-store.js';
 
 class TestTokenStorage extends BaseTokenStorage {
-  private storage = new Map<string, OAuthCredentials>();
+  private storage = new Map<string, MCPOAuthCredentials>();
 
-  async getCredentials(serverName: string): Promise<OAuthCredentials | null> {
+  async getCredentials(serverName: string): Promise<MCPOAuthCredentials | null> {
     return this.storage.get(serverName) || null;
   }
 
-  async setCredentials(credentials: OAuthCredentials): Promise<void> {
+  async setCredentials(credentials: MCPOAuthCredentials): Promise<void> {
     this.validateCredentials(credentials);
     this.storage.set(credentials.serverName, credentials);
   }
@@ -28,7 +28,7 @@ class TestTokenStorage extends BaseTokenStorage {
     return Array.from(this.storage.keys());
   }
 
-  async getAllCredentials(): Promise<Map<string, OAuthCredentials>> {
+  async getAllCredentials(): Promise<Map<string, MCPOAuthCredentials>> {
     return new Map(this.storage);
   }
 
@@ -36,11 +36,11 @@ class TestTokenStorage extends BaseTokenStorage {
     this.storage.clear();
   }
 
-  override validateCredentials(credentials: OAuthCredentials): void {
+  override validateCredentials(credentials: MCPOAuthCredentials): void {
     super.validateCredentials(credentials);
   }
 
-  override isTokenExpired(credentials: OAuthCredentials): boolean {
+  override isTokenExpired(credentials: MCPOAuthCredentials): boolean {
     return super.isTokenExpired(credentials);
   }
 
@@ -58,7 +58,7 @@ describe('BaseTokenStorage', () => {
 
   describe('validateCredentials', () => {
     it('should validate valid credentials', () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -78,7 +78,7 @@ describe('BaseTokenStorage', () => {
           tokenType: 'Bearer',
         },
         updatedAt: Date.now(),
-      } as OAuthCredentials;
+      } as MCPOAuthCredentials;
 
       expect(() => storage.validateCredentials(credentials)).toThrow(
         'Server name is required',
@@ -88,9 +88,9 @@ describe('BaseTokenStorage', () => {
     it('should throw for missing token', () => {
       const credentials = {
         serverName: 'test-server',
-        token: null as unknown as OAuthToken,
+        token: null as unknown as MCPOAuthToken,
         updatedAt: Date.now(),
-      } as OAuthCredentials;
+      } as MCPOAuthCredentials;
 
       expect(() => storage.validateCredentials(credentials)).toThrow(
         'Token is required',
@@ -105,7 +105,7 @@ describe('BaseTokenStorage', () => {
           tokenType: 'Bearer',
         },
         updatedAt: Date.now(),
-      } as OAuthCredentials;
+      } as MCPOAuthCredentials;
 
       expect(() => storage.validateCredentials(credentials)).toThrow(
         'Access token is required',
@@ -120,7 +120,7 @@ describe('BaseTokenStorage', () => {
           tokenType: '',
         },
         updatedAt: Date.now(),
-      } as OAuthCredentials;
+      } as MCPOAuthCredentials;
 
       expect(() => storage.validateCredentials(credentials)).toThrow(
         'Token type is required',
@@ -130,7 +130,7 @@ describe('BaseTokenStorage', () => {
 
   describe('isTokenExpired', () => {
     it('should return false for tokens without expiry', () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -143,7 +143,7 @@ describe('BaseTokenStorage', () => {
     });
 
     it('should return false for valid tokens', () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -157,7 +157,7 @@ describe('BaseTokenStorage', () => {
     });
 
     it('should return true for expired tokens', () => {
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
@@ -172,7 +172,7 @@ describe('BaseTokenStorage', () => {
 
     it('should apply 5-minute buffer for expiry check', () => {
       const fourMinutesFromNow = Date.now() + 4 * 60 * 1000;
-      const credentials: OAuthCredentials = {
+      const credentials: MCPOAuthCredentials = {
         serverName: 'test-server',
         token: {
           accessToken: 'access-token',
