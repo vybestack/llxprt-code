@@ -183,6 +183,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getEphemeralSettings: vi.fn(() => ({})),
         setEphemeralSetting: vi.fn(),
         clearEphemeralSetting: vi.fn(),
+        getFolderTrustFeature: vi.fn(() => false),
+        getFolderTrust: vi.fn(() => false),
       };
     });
 
