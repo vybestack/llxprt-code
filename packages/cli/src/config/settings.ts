@@ -8,6 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir, platform } from 'os';
 import * as dotenv from 'dotenv';
+import process from 'node:process';
 import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
   getErrorMessage,
@@ -22,6 +23,8 @@ import {
   MemoryImportFormat,
   SETTINGS_SCHEMA,
 } from './settingsSchema.js';
+import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
+import { mergeWith } from 'lodash-es';
 
 export type { Settings, MemoryImportFormat };
 
@@ -287,48 +290,6 @@ export class LoadedSettings {
     const oauthEnabledProviders = this.getOAuthEnabledProviders();
     return oauthEnabledProviders[providerName] ?? false;
   }
-}
-
-function resolveEnvVarsInString(value: string): string {
-  const envVarRegex = /\$(?:(\w+)|{([^}]+)})/g; // Find $VAR_NAME or ${VAR_NAME}
-  return value.replace(envVarRegex, (match, varName1, varName2) => {
-    const varName = varName1 || varName2;
-    if (process && process.env && typeof process.env[varName] === 'string') {
-      return process.env[varName]!;
-    }
-    return match;
-  });
-}
-
-function resolveEnvVarsInObject<T>(obj: T): T {
-  if (
-    obj === null ||
-    obj === undefined ||
-    typeof obj === 'boolean' ||
-    typeof obj === 'number'
-  ) {
-    return obj;
-  }
-
-  if (typeof obj === 'string') {
-    return resolveEnvVarsInString(obj) as unknown as T;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => resolveEnvVarsInObject(item)) as unknown as T;
-  }
-
-  if (typeof obj === 'object') {
-    const newObj = { ...obj } as T;
-    for (const key in newObj) {
-      if (Object.prototype.hasOwnProperty.call(newObj, key)) {
-        newObj[key] = resolveEnvVarsInObject(newObj[key]);
-      }
-    }
-    return newObj;
-  }
-
-  return obj;
 }
 
 function findEnvFile(startDir: string): string | null {
