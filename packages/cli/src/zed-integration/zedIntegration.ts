@@ -10,6 +10,7 @@ import {
   AuthType,
   Config,
   GeminiChat,
+  GeminiClient,
   GeminiProvider,
   logToolCall,
   ToolResult,
@@ -126,33 +127,66 @@ class GeminiAgent {
     const config = await this.newSessionConfig(sessionId, cwd, mcpServers);
 
     let isAuthenticated = false;
+    const selectedAuthType = this.settings.merged.selectedAuthType;
 
-    // Try to authenticate with the selected auth type
-    if (this.settings.merged.selectedAuthType) {
+    // Check if we're using provider-based authentication
+    const providerManager = config.getProviderManager();
+    const isProviderAuth =
+      selectedAuthType === AuthType.USE_NONE ||
+      selectedAuthType === AuthType.USE_PROVIDER ||
+      !selectedAuthType;
+
+    if (isProviderAuth && providerManager) {
+      // For provider-based auth, we need to manually initialize the GeminiClient
+      // since refreshAuth doesn't handle USE_NONE/USE_PROVIDER
       try {
-        await config.refreshAuth(this.settings.merged.selectedAuthType);
+        const activeProvider = providerManager.getActiveProvider();
+        if (activeProvider) {
+          console.log('[ZED] Using provider-based authentication');
+
+          // Create content generator config for provider-based auth
+          // Get the model from the provider if it has the method
+          let model = 'placeholder-model';
+          if (
+            'getModel' in activeProvider &&
+            typeof activeProvider.getModel === 'function'
+          ) {
+            model = activeProvider.getModel();
+          }
+
+          const contentGeneratorConfig = {
+            authType: AuthType.USE_NONE,
+            model,
+            providerManager,
+          };
+
+          // Manually set the content generator config and initialize the client
+          // This is what refreshAuth does for other auth types
+          const geminiClient = new GeminiClient(config);
+          await geminiClient.initialize(contentGeneratorConfig);
+
+          // Set the initialized client on the config
+          // We need to use a workaround since there's no public setter
+          // These are private properties but we need to set them for provider-based auth
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (config as any).geminiClient = geminiClient;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (config as any).contentGeneratorConfig = contentGeneratorConfig;
+
+          isAuthenticated = true;
+        }
+      } catch (e) {
+        console.error(`[ZED] Provider-based auth setup failed: ${e}`);
+      }
+    } else if (selectedAuthType) {
+      // Try traditional auth methods (Google, Gemini API key, etc.)
+      try {
+        await config.refreshAuth(selectedAuthType);
         isAuthenticated = true;
       } catch (e) {
         console.error(
-          `[ZED] Authentication with ${this.settings.merged.selectedAuthType} failed: ${e}`,
+          `[ZED] Authentication with ${selectedAuthType} failed: ${e}`,
         );
-        // Try to fall back to checking if provider is already configured
-        try {
-          const providerManager = config.getProviderManager();
-          const activeProvider = providerManager?.getActiveProvider();
-          if (activeProvider) {
-            // Check if provider has necessary configuration
-            // Most providers will have an API key or be configured through auth
-            console.log(
-              '[ZED] Provider is active, proceeding without re-authentication',
-            );
-            isAuthenticated = true;
-          }
-        } catch (fallbackError) {
-          console.error(
-            `[ZED] Fallback provider check failed: ${fallbackError}`,
-          );
-        }
       }
     }
 
@@ -223,6 +257,7 @@ class GeminiAgent {
       }
     }
 
+    // Initialize config first to set up basic configuration
     await config.initialize();
 
     // If a provider is specified, activate it after initialization
