@@ -141,6 +141,7 @@ import { TodoPanel } from './components/TodoPanel.js';
 import { useTodoContext } from './contexts/TodoContext.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { WorkspaceMigrationDialog } from './components/WorkspaceMigrationDialog.js';
+import { isWorkspaceTrusted } from '../config/trustedFolders.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -355,6 +356,9 @@ const App = (props: AppInternalProps) => {
     sessionTokenTotal: 0,
   });
   const [_corgiMode, setCorgiMode] = useState(false);
+  const [isTrustedFolderState, setIsTrustedFolder] = useState(
+    isWorkspaceTrusted(settings.merged),
+  );
   const [currentModel, setCurrentModel] = useState(config.getModel());
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
