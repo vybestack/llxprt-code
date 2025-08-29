@@ -35,6 +35,18 @@ on:
         required: false
         type: boolean
         default: false
+      KEY_VAR_NAME:
+        description: 'Secret variable name for API key (e.g., GROQ_API_KEY, CEREBRAS_API_KEY)'
+        required: false
+      LLXPRT_DEFAULT_MODEL:
+        description: 'Default model to use'
+        required: false
+      LLXPRT_DEFAULT_PROVIDER:
+        description: 'Provider to use'
+        required: false
+      OPENAI_BASE_URL:
+        description: 'Base URL for the provider API'
+        required: false
 
 jobs:
   release:
@@ -104,11 +116,11 @@ jobs:
         if: github.event.inputs.force_skip_tests != 'true'
         run: node scripts/preflight-ci.js
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENAI_BASE_URL: https://api.groq.com/openai/v1
-          LLXPRT_DEFAULT_MODEL: openai/gpt-oss-20b
-          LLXPRT_DEFAULT_PROVIDER: openai
+          # Provider configuration from workflow_dispatch inputs
+          OPENAI_API_KEY: ${{ secrets[inputs.KEY_VAR_NAME] }}
+          OPENAI_BASE_URL: ${{ inputs.OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ inputs.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
 
       - name: Build Bundle for Integration Tests
@@ -121,11 +133,11 @@ jobs:
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENAI_BASE_URL: https://api.groq.com/openai/v1
-          LLXPRT_DEFAULT_MODEL: openai/gpt-oss-20b
-          LLXPRT_DEFAULT_PROVIDER: openai
+          # Provider configuration from workflow_dispatch inputs
+          OPENAI_API_KEY: ${{ secrets[inputs.KEY_VAR_NAME] }}
+          OPENAI_BASE_URL: ${{ inputs.OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ inputs.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
 
       - name: Configure Git User
@@ -227,10 +239,10 @@ jobs:
           # Try LLxprt generation using Groq
           set +e
           npx @vybestack/llxprt-code@latest \
-            --provider openai \
-            --model openai/gpt-oss-20b \
-            --key "${{ secrets.GROQ_API_KEY }}" \
-            --baseurl https://api.groq.com/openai/v1 \
+            --provider ${{ inputs.LLXPRT_DEFAULT_PROVIDER }} \
+            --model ${{ inputs.LLXPRT_DEFAULT_MODEL }} \
+            --key "${{ secrets[inputs.KEY_VAR_NAME] }}" \
+            --baseurl ${{ inputs.OPENAI_BASE_URL }} \
             --yolo \
             --prompt "$PROMPT" > /dev/null 2>&1
           LLXPRT_EXIT=$?
