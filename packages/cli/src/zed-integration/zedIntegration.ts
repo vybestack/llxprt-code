@@ -10,6 +10,7 @@ import {
   AuthType,
   Config,
   GeminiChat,
+  GeminiProvider,
   logToolCall,
   ToolResult,
   convertToFunctionResponse,
@@ -35,6 +36,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { Extension } from '../config/extension.js';
 import { CliArgs, loadCliConfig } from '../config/config.js';
+import { getProviderManager } from '../providers/providerManagerInstance.js';
 
 export async function runZedIntegration(
   config: Config,
@@ -124,16 +126,38 @@ class GeminiAgent {
     const config = await this.newSessionConfig(sessionId, cwd, mcpServers);
 
     let isAuthenticated = false;
+
+    // Try to authenticate with the selected auth type
     if (this.settings.merged.selectedAuthType) {
       try {
         await config.refreshAuth(this.settings.merged.selectedAuthType);
         isAuthenticated = true;
       } catch (e) {
-        console.error(`Authentication failed: ${e}`);
+        console.error(
+          `[ZED] Authentication with ${this.settings.merged.selectedAuthType} failed: ${e}`,
+        );
+        // Try to fall back to checking if provider is already configured
+        try {
+          const providerManager = config.getProviderManager();
+          const activeProvider = providerManager?.getActiveProvider();
+          if (activeProvider) {
+            // Check if provider has necessary configuration
+            // Most providers will have an API key or be configured through auth
+            console.log(
+              '[ZED] Provider is active, proceeding without re-authentication',
+            );
+            isAuthenticated = true;
+          }
+        } catch (fallbackError) {
+          console.error(
+            `[ZED] Fallback provider check failed: ${fallbackError}`,
+          );
+        }
       }
     }
 
     if (!isAuthenticated) {
+      console.error('[ZED] No authentication available, requesting auth');
       throw acp.RequestError.authRequired();
     }
 
@@ -182,7 +206,61 @@ class GeminiAgent {
       cwd,
     );
 
+    // Register the provider manager with the config (critical for content generator initialization)
+    const providerManager = getProviderManager(config, false, this.settings);
+    config.setProviderManager(providerManager);
+
+    // Ensure serverToolsProvider (Gemini) has config set if using Gemini
+    const serverToolsProvider = providerManager.getServerToolsProvider();
+    if (
+      serverToolsProvider &&
+      serverToolsProvider.name === 'gemini' &&
+      'setConfig' in serverToolsProvider
+    ) {
+      const geminiProvider = serverToolsProvider as GeminiProvider;
+      if (geminiProvider.setConfig) {
+        geminiProvider.setConfig(config);
+      }
+    }
+
     await config.initialize();
+
+    // If a provider is specified, activate it after initialization
+    const configProvider = config.getProvider();
+    if (configProvider) {
+      try {
+        await providerManager.setActiveProvider(configProvider);
+
+        // Apply appropriate key and URL overrides from CLI args to the active provider
+        const activeProvider = providerManager.getActiveProvider();
+
+        // Set the model after activating provider
+        let configModel = config.getModel();
+        if (
+          (!configModel || configModel === 'placeholder-model') &&
+          activeProvider.getDefaultModel
+        ) {
+          configModel = activeProvider.getDefaultModel();
+        }
+
+        if (configModel && activeProvider.setModel) {
+          activeProvider.setModel(configModel);
+        }
+
+        // Apply API key if provided via CLI args
+        if (this.argv.key && activeProvider.setApiKey) {
+          activeProvider.setApiKey(this.argv.key);
+        }
+
+        // Apply base URL if provided via CLI args
+        if (this.argv.baseurl && activeProvider.setBaseUrl) {
+          activeProvider.setBaseUrl(this.argv.baseurl);
+        }
+      } catch (e) {
+        console.error(`[ZED] Provider activation failed: ${e}`);
+      }
+    }
+
     return config;
   }
 
