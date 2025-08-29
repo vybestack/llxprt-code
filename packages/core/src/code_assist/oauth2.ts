@@ -437,6 +437,12 @@ async function cacheCredentials(credentials: Credentials) {
     await fs.writeFile(filePath, JSON.stringify(credentials, null, 2), {
       mode: 0o600,
     });
+    // Belt-and-suspenders: explicitly chmod the file for platforms where writeFile mode may not work
+    try {
+      await fs.chmod(filePath, 0o600);
+    } catch {
+      /* empty - file already has correct permissions from writeFile */
+    }
   } catch (error) {
     console.error('Failed to cache OAuth credentials:', error);
     // Don't throw - allow OAuth to continue without caching
