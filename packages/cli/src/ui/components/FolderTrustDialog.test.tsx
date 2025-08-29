@@ -69,9 +69,7 @@ describe('FolderTrustDialog', () => {
       <FolderTrustDialog onSelect={vi.fn()} isRestarting={true} />,
     );
 
-    expect(lastFrame()).toContain(
-      'To see changes, llxprt must be restarted',
-    );
+    expect(lastFrame()).toContain('To see changes, llxprt must be restarted');
   });
 
   it('should call process.exit when "r" is pressed and isRestarting is true', async () => {

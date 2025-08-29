@@ -225,3 +225,6 @@ export { Storage } from './config/storage.js';
 
 // Export models
 export * from './config/models.js';
+
+// Export test utils
+export * from './test-utils/index.js';

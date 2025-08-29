@@ -997,11 +997,11 @@ You can switch authentication methods by typing /auth or switch to a different m
   const inputHistoryStore = useInputHistoryStore();
 
   const handleUserCancel = useCallback(() => {
-    const lastUserMessage = userMessages.at(-1);
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
     if (lastUserMessage) {
       buffer.setText(lastUserMessage);
     }
-  }, [buffer, userMessages]);
+  }, [buffer, inputHistoryStore.inputHistory]);
 
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
@@ -1069,41 +1069,27 @@ You can switch authentication methods by typing /auth or switch to a different m
       return;
     }
 
-<<<<<<< HEAD
-    const lastUserMessage = userMessages.at(-1);
-    const textToSet = lastUserMessage || '';
-=======
     const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    let textToSet = lastUserMessage || '';
->>>>>>> 6f91cfa9a (fix(cli): preserve input history after /clear command (#5890))
+    const textToSet = lastUserMessage || '';
 
     // Queue functionality removed - no queued messages to append
 
     if (textToSet) {
       buffer.setText(textToSet);
     }
-<<<<<<< HEAD
-  }, [buffer, userMessages, pendingHistoryItems]);
-=======
-  }, [
-    buffer,
-    inputHistoryStore.inputHistory,
-    getQueuedMessagesText,
-    clearQueue,
-    pendingHistoryItems,
-  ]);
->>>>>>> 6f91cfa9a (fix(cli): preserve input history after /clear command (#5890))
+  }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
 
   // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
-<<<<<<< HEAD
+        // Add to independent input history
+        inputHistoryStore.addInput(trimmedValue);
         submitQuery(trimmedValue);
       }
     },
-    [submitQuery],
+    [submitQuery, inputHistoryStore],
   );
 
   const handleUserInputSubmit = useCallback(
@@ -1113,15 +1099,6 @@ You can switch authentication methods by typing /auth or switch to a different m
       handleFinalSubmit(submittedValue);
     },
     [handleFinalSubmit, updateTodos],
-=======
-        // Add to independent input history
-        inputHistoryStore.addInput(trimmedValue);
-      }
-      // Always add to message queue
-      addMessage(submittedValue);
-    },
-    [addMessage, inputHistoryStore],
->>>>>>> 6f91cfa9a (fix(cli): preserve input history after /clear command (#5890))
   );
 
   const handleIdePromptComplete = useCallback(

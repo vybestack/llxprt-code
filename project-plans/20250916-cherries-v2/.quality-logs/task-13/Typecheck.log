@@ -1,0 +1,24 @@
+
+> @vybestack/llxprt-code@0.3.4 typecheck
+> npm run typecheck --workspaces --if-present
+
+
+> @vybestack/llxprt-code-a2a-server@0.3.4 typecheck
+> tsc --noEmit
+
+
+> @vybestack/llxprt-code@0.3.4 typecheck
+> tsc --noEmit
+
+src/config/config.ts(668,5): error TS2345: Argument of type 'boolean | undefined' is not assignable to parameter of type 'boolean'.
+  Type 'undefined' is not assignable to type 'boolean'.
+src/ui/containers/SessionController.tsx(244,50): error TS2554: Expected 7-9 arguments, but got 6.
+
+> @vybestack/llxprt-code-core@0.3.4 typecheck
+> tsc --noEmit
+
+src/config/config.ts(1251,48): error TS2554: Expected 6-9 arguments, but got 5.
+
+> @vybestack/llxprt-code-test-utils@0.3.4 typecheck
+> tsc --noEmit
+

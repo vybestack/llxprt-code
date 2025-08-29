@@ -178,6 +178,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -255,6 +259,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...systemSettingsContent,
       });
     });
@@ -333,6 +341,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...userSettingsContent,
       });
     });
@@ -409,6 +421,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...workspaceSettingsContent,
       });
     });
@@ -488,6 +504,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...userSettingsContent,
         ...workspaceSettingsContent,
       });
@@ -578,6 +598,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...userSettingsContent,
         ...workspaceSettingsContent,
         ...systemSettingsContent,
@@ -682,6 +706,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         theme: 'system-theme',
         sandbox: false,
         telemetry: false,
@@ -1297,6 +1325,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
       });
 
       // Check that error objects are populated in settings.errors
@@ -1713,6 +1745,10 @@ describe('Settings Loading and Merging', () => {
           enablePromptCompletion: false,
           debugKeystrokeLogging: false,
           chatCompression: {},
+          mcp: {},
+          security: {},
+          tools: {},
+          useSmartEdit: false,
           ...systemSettingsContent,
         });
       });

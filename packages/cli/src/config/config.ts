@@ -436,7 +436,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     approvalMode: result.approvalMode as string | undefined,
     telemetry: result.telemetry as boolean | undefined,
     checkpointing: result.checkpointing as boolean | undefined,
-    screenReader: result.screenReader as boolean | undefined,
     telemetryTarget: result.telemetryTarget as string | undefined,
     telemetryOtlpEndpoint: result.telemetryOtlpEndpoint as string | undefined,
     telemetryLogPrompts: result.telemetryLogPrompts as boolean | undefined,
@@ -455,6 +454,8 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     loadMemoryFromIncludeDirectories:
       result.loadMemoryFromIncludeDirectories as boolean | undefined,
     ideMode: result.ideMode as string | undefined,
+    screenReader: result.screenReader as boolean | undefined,
+    useSmartEdit: result.useSmartEdit as boolean | undefined,
     sessionSummary: result.sessionSummary as string | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
   };
@@ -899,7 +900,7 @@ export async function loadCliConfig(
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
-    useSmartEdit: argv.useSmartEdit ?? settings.useSmartEdit,
+    useSmartEdit: argv.useSmartEdit ?? effectiveSettings.useSmartEdit,
   });
 
   const enhancedConfig = config;
