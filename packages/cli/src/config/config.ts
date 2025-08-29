@@ -30,6 +30,7 @@ import {
   WriteFileTool,
   MCPServerConfig,
   getSettingsService,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Settings } from './settings.js';
 
@@ -44,12 +45,7 @@ import { isWorkspaceTrusted } from './trustedFolders.js';
 
 const LLXPRT_DIR = '.llxprt';
 
-// Simple console logger for now - replace with actual logger if available
-const logger = {
-  debug: (...args: unknown[]) => console.debug('[DEBUG]', ...args),
-  warn: (...args: unknown[]) => console.warn('[WARN]', ...args),
-  error: (...args: unknown[]) => console.error('[ERROR]', ...args),
-};
+const logger = new DebugLogger('llxprt:config');
 
 export interface CliArgs {
   model: string | undefined;
@@ -461,10 +457,11 @@ export async function loadCliConfig(
   let profileProvider: string | undefined;
   let profileModelParams: Record<string, unknown> | undefined;
 
-  // Check for profile to load - either from CLI arg or default profile setting
+  // Check for profile to load - either from CLI arg, env var, or default profile setting
   // BUT skip default profile if --provider is explicitly specified
   const profileToLoad =
     argv.profileLoad ||
+    process.env.LLXPRT_PROFILE ||
     (argv.provider === undefined ? settings.defaultProfile : undefined);
 
   if (profileToLoad) {
@@ -479,6 +476,11 @@ export async function loadCliConfig(
         argv.provider !== undefined ? undefined : profile.provider;
       profileModel = argv.provider !== undefined ? undefined : profile.model;
       profileModelParams = profile.modelParams;
+
+      logger.debug(
+        () =>
+          `Loaded profile ${profileToLoad}: provider=${profile.provider}, model=${profile.model}, hasEphemeralSettings=${!!profile.ephemeralSettings}`,
+      );
 
       // Check debug mode for logging
       const tempDebugMode =
@@ -710,6 +712,11 @@ export async function loadCliConfig(
     finalProvider = 'gemini';
   }
 
+  logger.debug(
+    () =>
+      `Provider selection: argv=${argv.provider}, profile=${profileProvider}, env=${process.env.LLXPRT_DEFAULT_PROVIDER}, final=${finalProvider}`,
+  );
+
   // Handle model selection with proper precedence
   // Only use DEFAULT_GEMINI_MODEL as fallback when provider is 'gemini'
   const finalModel: string =
@@ -895,8 +902,9 @@ function mergeMcpServers(settings: Settings, extensions: Extension[]) {
     Object.entries(extension.config.mcpServers || {}).forEach(
       ([key, server]) => {
         if (mcpServers[key]) {
-          logger.warn(
-            `Skipping extension MCP config for server with key "${key}" as it already exists.`,
+          logger.debug(
+            () =>
+              `WARNING: Skipping extension MCP config for server with key "${key}" as it already exists.`,
           );
           return;
         }

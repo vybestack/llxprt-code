@@ -9,9 +9,8 @@ import { WritableStream, ReadableStream } from 'node:stream/web';
 import {
   AuthType,
   Config,
+  ContentGeneratorConfig,
   GeminiChat,
-  GeminiClient,
-  GeminiProvider,
   logToolCall,
   ToolResult,
   convertToFunctionResponse,
@@ -22,7 +21,6 @@ import {
   getErrorMessage,
   isWithinRoot,
   getErrorStatus,
-  MCPServerConfig,
   DiscoveredMCPTool,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
@@ -34,33 +32,43 @@ import { LoadedSettings, SettingScope } from '../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { z } from 'zod';
+import os from 'os';
 
 import { randomUUID } from 'crypto';
-import { Extension } from '../config/extension.js';
-import { CliArgs, loadCliConfig } from '../config/config.js';
-import { getProviderManager } from '../providers/providerManagerInstance.js';
 
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
-  extensions: Extension[],
-  argv: CliArgs,
 ) {
+  const logger = new DebugLogger('llxprt:zed-integration');
+  logger.debug(() => 'Starting Zed integration');
+
   const stdout = Writable.toWeb(process.stdout) as WritableStream;
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
-  // Stdout is used to send messages to the client, so console.log/console.info
-  // messages to stderr so that they don't interfere with ACP.
-  console.log = console.error;
-  console.info = console.error;
-  console.debug = console.error;
+  logger.debug(() => 'Streams created');
 
-  new acp.AgentSideConnection(
-    (client: acp.Client) =>
-      new GeminiAgent(config, settings, extensions, argv, client),
-    stdout,
-    stdin,
-  );
+  try {
+    new acp.AgentSideConnection(
+      (client: acp.Client) => {
+        logger.debug(() => 'Creating GeminiAgent');
+        return new GeminiAgent(config, settings, client);
+      },
+      stdout,
+      stdin,
+    );
+    logger.debug(() => 'AgentSideConnection created successfully');
+  } catch (e) {
+    logger.debug(() => `ERROR: Failed to create AgentSideConnection: ${e}`);
+    throw e;
+  }
+
+  logger.debug(() => 'Zed integration ready, waiting for messages');
+
+  // Keep the process alive - the Connection's #receive method will handle messages
+  await new Promise(() => {
+    // This promise never resolves, keeping the process alive
+  });
 }
 
 class GeminiAgent {
@@ -71,8 +79,6 @@ class GeminiAgent {
   constructor(
     private config: Config,
     private settings: LoadedSettings,
-    private extensions: Extension[],
-    private argv: CliArgs,
     private client: acp.Client,
   ) {
     this.logger = new DebugLogger('llxprt:zed-integration');
@@ -124,291 +130,248 @@ class GeminiAgent {
   }
 
   async newSession({
-    cwd,
-    mcpServers,
+    cwd: _cwd,
+    mcpServers: _mcpServers,
   }: acp.NewSessionRequest): Promise<acp.NewSessionResponse> {
-    const sessionId = randomUUID();
-    const config = await this.newSessionConfig(sessionId, cwd, mcpServers);
+    try {
+      const sessionId = randomUUID();
 
-    let isAuthenticated = false;
-    const selectedAuthType = this.settings.merged.selectedAuthType;
+      // Use the existing config that was passed to runZedIntegration
+      const sessionConfig = this.config;
 
-    this.logger.debug(
-      () => `newSession - selectedAuthType: ${selectedAuthType}`,
-    );
+      this.logger.debug(() => `newSession - creating session ${sessionId}`);
 
-    // Check if we're using provider-based authentication
-    const providerManager = config.getProviderManager();
-    const isProviderAuth =
-      selectedAuthType === AuthType.USE_NONE ||
-      selectedAuthType === AuthType.USE_PROVIDER ||
-      !selectedAuthType;
+      if (this.clientCapabilities?.fs) {
+        const acpFileSystemService = new AcpFileSystemService(
+          this.client,
+          sessionId,
+          this.clientCapabilities.fs,
+          sessionConfig.getFileSystemService(),
+        );
+        sessionConfig.setFileSystemService(acpFileSystemService);
+      }
 
-    this.logger.debug(
-      () =>
-        `isProviderAuth: ${isProviderAuth}, hasProviderManager: ${!!providerManager}`,
-    );
+      // Try to get the client and check if it's properly initialized
+      let geminiClient = sessionConfig.getGeminiClient();
+      const hasContentGeneratorConfig =
+        sessionConfig.getContentGeneratorConfig() !== undefined;
 
-    if (isProviderAuth && providerManager) {
-      // For provider-based auth, we need to manually initialize the GeminiClient
-      // since refreshAuth doesn't handle USE_NONE/USE_PROVIDER
-      try {
-        const activeProvider = providerManager.getActiveProvider();
+      this.logger.debug(
+        () =>
+          `GeminiClient exists: ${!!geminiClient}, ContentGeneratorConfig exists: ${hasContentGeneratorConfig}`,
+      );
+
+      if (!geminiClient || !hasContentGeneratorConfig) {
         this.logger.debug(
-          () => `Active provider: ${activeProvider?.name || 'none'}`,
+          () => 'GeminiClient not available - attempting auto-authentication',
         );
 
-        if (activeProvider) {
-          this.logger.debug(() => 'Using provider-based authentication');
+        // Auto-authenticate based on available configuration
+        const providerManager = sessionConfig.getProviderManager();
 
-          // Create content generator config for provider-based auth
-          // Get the model from the provider if it has the method
-          let model = 'placeholder-model';
-          if (
-            'getModel' in activeProvider &&
-            typeof activeProvider.getModel === 'function'
-          ) {
-            model = activeProvider.getModel();
+        // Debug provider state
+        if (providerManager) {
+          this.logger.debug(
+            () =>
+              `ProviderManager exists: ${providerManager.hasActiveProvider() ? 'has active provider' : 'no active provider'}`,
+          );
+          this.logger.debug(
+            () =>
+              `Active provider name: ${providerManager.getActiveProviderName() || 'none'}`,
+          );
+        } else {
+          this.logger.debug(() => 'No ProviderManager available');
+        }
+
+        // Check for provider from config (loaded from profile or CLI)
+        const configProvider = sessionConfig.getProvider();
+        if (configProvider && providerManager) {
+          this.logger.debug(() => `Config has provider: ${configProvider}`);
+          // Ensure provider is activated
+          if (!providerManager.hasActiveProvider()) {
+            this.logger.debug(() => `Activating provider: ${configProvider}`);
+            await providerManager.setActiveProvider(configProvider);
+
+            // Apply ephemeral settings from profile to the provider
+            const activeProvider = providerManager.getActiveProvider();
+            if (activeProvider) {
+              const authKey = sessionConfig.getEphemeralSetting(
+                'auth-key',
+              ) as string;
+              const authKeyfile = sessionConfig.getEphemeralSetting(
+                'auth-keyfile',
+              ) as string;
+              const baseUrl = sessionConfig.getEphemeralSetting(
+                'base-url',
+              ) as string;
+
+              // Apply auth settings from profile
+              if (authKey && activeProvider.setApiKey) {
+                this.logger.debug(() => 'Setting API key from profile');
+                activeProvider.setApiKey(authKey);
+              } else if (authKeyfile && activeProvider.setApiKey) {
+                // Load API key from file
+                try {
+                  const apiKey = (
+                    await fs.readFile(
+                      authKeyfile.replace(/^~/, os.homedir()),
+                      'utf-8',
+                    )
+                  ).trim();
+                  if (apiKey) {
+                    this.logger.debug(() => 'Setting API key from keyfile');
+                    activeProvider.setApiKey(apiKey);
+                  }
+                } catch (error) {
+                  this.logger.debug(
+                    () =>
+                      `ERROR: Failed to load keyfile ${authKeyfile}: ${error}`,
+                  );
+                }
+              }
+
+              // Apply base URL if specified
+              if (baseUrl && baseUrl !== 'none' && activeProvider.setBaseUrl) {
+                this.logger.debug(() => `Setting base URL: ${baseUrl}`);
+                activeProvider.setBaseUrl(baseUrl);
+              }
+
+              // Apply profile model params if loaded
+              const configWithProfile = sessionConfig as Config & {
+                _profileModelParams?: Record<string, unknown>;
+              };
+              if (
+                configWithProfile._profileModelParams &&
+                'setModelParams' in activeProvider &&
+                activeProvider.setModelParams
+              ) {
+                this.logger.debug(() => 'Setting model params from profile');
+                activeProvider.setModelParams(
+                  configWithProfile._profileModelParams,
+                );
+              }
+            }
+          }
+        }
+
+        if (providerManager && providerManager.hasActiveProvider()) {
+          // Use provider-based auth if a provider is configured
+          this.logger.debug(
+            () =>
+              `Auto-authenticating with provider: ${providerManager.getActiveProviderName()}`,
+          );
+
+          // Ensure provider manager is set on config before refreshAuth
+          // This is crucial for createContentGeneratorConfig to include the provider manager
+          if (!sessionConfig.getProviderManager()) {
+            this.logger.debug(() => 'Setting provider manager on config');
+            (
+              sessionConfig as unknown as Record<string, unknown>
+            ).providerManager = providerManager;
           }
 
-          const contentGeneratorConfig = {
-            authType: AuthType.USE_NONE,
-            model,
-            providerManager,
-          };
+          await sessionConfig.refreshAuth(AuthType.USE_PROVIDER);
 
-          this.logger.debug(
-            () => `Creating content generator config with model: ${model}`,
-          );
-
-          // Manually set the content generator config and initialize the client
-          // This is what refreshAuth does for other auth types
-          const geminiClient = new GeminiClient(config);
-
-          this.logger.debug(
-            () => 'Initializing GeminiClient with content generator config',
-          );
-          await geminiClient.initialize(contentGeneratorConfig);
-
-          // Set the initialized client on the config
-          // We need to use a workaround since there's no public setter
-          // These are private properties but we need to set them for provider-based auth
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (config as any).geminiClient = geminiClient;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (config as any).contentGeneratorConfig = contentGeneratorConfig;
-
-          this.logger.debug(() => 'GeminiClient initialized and set on config');
-          isAuthenticated = true;
+          // After refreshAuth, verify ContentGeneratorConfig was created with provider manager
+          const contentGenConfig = sessionConfig.getContentGeneratorConfig();
+          if (contentGenConfig && !contentGenConfig.providerManager) {
+            this.logger.debug(
+              () => 'Adding provider manager to ContentGeneratorConfig',
+            );
+            contentGenConfig.providerManager = providerManager;
+          }
+        } else if (process.env.GEMINI_API_KEY) {
+          // Use API key if available
+          this.logger.debug(() => 'Auto-authenticating with GEMINI_API_KEY');
+          await sessionConfig.refreshAuth(AuthType.USE_GEMINI);
+        } else {
+          // Try OAuth as last resort (this might open a browser)
+          this.logger.debug(() => 'Auto-authenticating with OAuth');
+          await sessionConfig.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
         }
-      } catch (e) {
-        this.logger.error(() => `Provider-based auth setup failed: ${e}`);
+
+        geminiClient = sessionConfig.getGeminiClient();
+        if (!geminiClient) {
+          throw new Error(
+            'Failed to authenticate. Please ensure valid credentials are available.',
+          );
+        }
       }
-    } else if (selectedAuthType) {
-      // Try traditional auth methods (Google, Gemini API key, etc.)
+
+      this.logger.debug(() => 'Successfully obtained GeminiClient');
+
+      // Verify ContentGeneratorConfig was created properly
+      let contentGenConfig: ContentGeneratorConfig | undefined;
       try {
+        contentGenConfig = sessionConfig.getContentGeneratorConfig();
         this.logger.debug(
-          () => `Attempting refreshAuth with ${selectedAuthType}`,
+          () => `ContentGeneratorConfig exists: ${!!contentGenConfig}`,
         );
-        await config.refreshAuth(selectedAuthType);
-        isAuthenticated = true;
+        if (contentGenConfig) {
+          this.logger.debug(
+            () =>
+              `ContentGeneratorConfig has providerManager: ${!!(contentGenConfig as Record<string, unknown>).providerManager}`,
+          );
+          this.logger.debug(
+            () =>
+              `ContentGeneratorConfig authType: ${(contentGenConfig as Record<string, unknown>).authType}`,
+          );
+        }
+      } catch (error) {
         this.logger.debug(
-          () => 'refreshAuth succeeded, isAuthenticated = true',
+          () => `Failed to get ContentGeneratorConfig: ${error}`,
         );
-      } catch (e) {
-        this.logger.error(
-          () => `Authentication with ${selectedAuthType} failed: ${e}`,
+        throw new Error(
+          'Content generator config not created after authentication. Please check your credentials.',
         );
       }
-    }
 
-    if (!isAuthenticated) {
-      this.logger.error(() => 'No authentication available, requesting auth');
-      this.logger.debug(
-        () =>
-          `Final auth state: ${JSON.stringify({
-            selectedAuthType,
-            isProviderAuth,
-            hasProviderManager: !!providerManager,
-            activeProvider: providerManager?.getActiveProvider()?.name,
-            configIsAuthenticated: (() => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const c = config as any;
-              return c.isAuthenticated ? c.isAuthenticated() : false;
-            })(),
-          })}`,
-      );
-      throw acp.RequestError.authRequired();
-    }
-
-    if (this.clientCapabilities?.fs) {
-      const acpFileSystemService = new AcpFileSystemService(
-        this.client,
-        sessionId,
-        this.clientCapabilities.fs,
-        config.getFileSystemService(),
-      );
-      config.setFileSystemService(acpFileSystemService);
-    }
-
-    const geminiClient = config.getGeminiClient();
-    if (!geminiClient) {
-      this.logger.error(() => 'Failed to get GeminiClient from config');
-      this.logger.debug(
-        () =>
-          `Config state: ${JSON.stringify({
-            hasGeminiClient: !!config.getGeminiClient(),
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            hasContentGeneratorConfig: !!(config as any).contentGeneratorConfig,
-            provider: config.getProvider(),
-            model: config.getModel(),
-          })}`,
-      );
-      throw new Error('GeminiClient not initialized');
-    }
-
-    this.logger.debug(
-      () => 'Successfully obtained GeminiClient, starting chat',
-    );
-    const chat = await geminiClient.startChat();
-    const session = new Session(sessionId, chat, config, this.client);
-    this.sessions.set(sessionId, session);
-
-    return {
-      sessionId,
-    };
-  }
-
-  async newSessionConfig(
-    sessionId: string,
-    cwd: string,
-    mcpServers: acp.McpServer[],
-  ): Promise<Config> {
-    this.logger.debug(
-      () => 'newSessionConfig - Starting session config creation',
-    );
-    this.logger.debug(() => `Session ID: ${sessionId}`);
-    this.logger.debug(() => `CWD: ${cwd}`);
-
-    const mergedMcpServers = { ...this.settings.merged.mcpServers };
-
-    for (const { command, args, env: rawEnv, name } of mcpServers) {
-      const env: Record<string, string> = {};
-      for (const { name: envName, value } of rawEnv) {
-        env[envName] = value;
+      if (!contentGenConfig) {
+        throw new Error(
+          'Content generator config not created after authentication.',
+        );
       }
-      mergedMcpServers[name] = new MCPServerConfig(command, args, env, cwd);
-    }
 
-    const settings = { ...this.settings.merged, mcpServers: mergedMcpServers };
-    this.logger.debug(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const s = settings as any;
-      return `Settings activeProvider: ${s.activeProvider}`;
-    });
-    this.logger.debug(
-      () => `Settings selectedAuthType: ${settings.selectedAuthType}`,
-    );
-
-    const config = await loadCliConfig(
-      settings,
-      this.extensions,
-      sessionId,
-      this.argv,
-      cwd,
-    );
-
-    this.logger.debug(
-      () => `Config loaded, provider from config: ${config.getProvider()}`,
-    );
-    this.logger.debug(() => `Config model: ${config.getModel()}`);
-
-    // Register the provider manager with the config (critical for content generator initialization)
-    const providerManager = getProviderManager(config, false, this.settings);
-    this.logger.debug(() => {
-      // Get providers in a type-safe way
-      // ProviderManager doesn't export getProviders() in its interface
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pm = providerManager as any;
-      const providers = pm.getProviders
-        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          pm.getProviders().map((p: any) => p.name || 'unknown')
-        : [];
-      return `Provider manager created, has providers: ${providers.join(', ')}`;
-    });
-    config.setProviderManager(providerManager);
-    this.logger.debug(() => 'Provider manager set on config');
-
-    // Ensure serverToolsProvider (Gemini) has config set if using Gemini
-    const serverToolsProvider = providerManager.getServerToolsProvider();
-    this.logger.debug(
-      () => `Server tools provider: ${serverToolsProvider?.name || 'none'}`,
-    );
-
-    if (
-      serverToolsProvider &&
-      serverToolsProvider.name === 'gemini' &&
-      'setConfig' in serverToolsProvider
-    ) {
-      const geminiProvider = serverToolsProvider as GeminiProvider;
-      if (geminiProvider.setConfig) {
-        this.logger.debug(() => 'Setting config on Gemini serverToolsProvider');
-        geminiProvider.setConfig(config);
-        this.logger.debug(() => 'Config set on Gemini serverToolsProvider');
-      }
-    }
-
-    // Initialize config first to set up basic configuration
-    this.logger.debug(() => 'Initializing config');
-    await config.initialize();
-    this.logger.debug(() => 'Config initialized');
-
-    // If a provider is specified, activate it after initialization
-    const configProvider = config.getProvider();
-    if (configProvider) {
+      let chat;
       try {
-        this.logger.debug(() => `Activating provider: ${configProvider}`);
-        await providerManager.setActiveProvider(configProvider);
+        chat = await geminiClient.startChat();
+      } catch (error) {
+        this.logger.debug(() => `Error starting chat: ${error}`);
 
-        // Apply appropriate key and URL overrides from CLI args to the active provider
-        const activeProvider = providerManager.getActiveProvider();
-
-        // Set the model after activating provider
-        let configModel = config.getModel();
+        // If startChat fails due to missing config, try to authenticate now
         if (
-          (!configModel || configModel === 'placeholder-model') &&
-          activeProvider.getDefaultModel
+          error instanceof Error &&
+          error.message.includes('Content generator config')
         ) {
-          configModel = activeProvider.getDefaultModel();
           this.logger.debug(
-            () => `Using provider default model: ${configModel}`,
+            () => 'Attempting late authentication due to missing config',
           );
-        }
 
-        if (configModel && activeProvider.setModel) {
-          this.logger.debug(() => `Setting model on provider: ${configModel}`);
-          activeProvider.setModel(configModel);
-        }
+          const providerManager = sessionConfig.getProviderManager();
+          if (providerManager && providerManager.hasActiveProvider()) {
+            await sessionConfig.refreshAuth(AuthType.USE_PROVIDER);
+          } else if (process.env.GEMINI_API_KEY) {
+            await sessionConfig.refreshAuth(AuthType.USE_GEMINI);
+          } else {
+            await sessionConfig.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+          }
 
-        // Apply API key if provided via CLI args
-        if (this.argv.key && activeProvider.setApiKey) {
-          this.logger.debug(() => 'Setting API key from CLI args');
-          activeProvider.setApiKey(this.argv.key);
+          // Try again after auth
+          chat = await geminiClient.startChat();
+        } else {
+          throw error;
         }
-
-        // Apply base URL if provided via CLI args
-        if (this.argv.baseurl && activeProvider.setBaseUrl) {
-          this.logger.debug(
-            () => `Setting base URL from CLI args: ${this.argv.baseurl}`,
-          );
-          activeProvider.setBaseUrl(this.argv.baseurl);
-        }
-      } catch (e) {
-        this.logger.error(() => `Provider activation failed: ${e}`);
       }
-    }
+      const session = new Session(sessionId, chat, sessionConfig, this.client);
+      this.sessions.set(sessionId, session);
 
-    return config;
+      return {
+        sessionId,
+      };
+    } catch (error) {
+      this.logger.debug(() => `ERROR in newSession: ${error}`);
+      throw error;
+    }
   }
 
   async cancel(params: acp.CancelNotification): Promise<void> {

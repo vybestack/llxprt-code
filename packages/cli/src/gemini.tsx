@@ -165,6 +165,14 @@ export async function main() {
     process.exit(1);
   }
 
+  // If we're in ACP mode, redirect console output IMMEDIATELY
+  // before any config loading that might write to stdout
+  if (argv.experimentalAcp) {
+    console.log = console.error;
+    console.info = console.error;
+    console.debug = console.error;
+  }
+
   const extensions = loadExtensions(workspaceRoot);
   const config = await loadCliConfig(
     settings.merged,
@@ -568,7 +576,25 @@ export async function main() {
   }
 
   if (config.getExperimentalZedIntegration()) {
-    return runZedIntegration(config, settings, extensions, argv);
+    // In ACP mode, authentication happens through the protocol
+    // Just ensure the provider manager is set up if configured
+    const providerManager = config.getProviderManager();
+    const configProvider = config.getProvider();
+
+    if (configProvider && providerManager) {
+      try {
+        // Set the active provider if not already set
+        if (!providerManager.hasActiveProvider()) {
+          await providerManager.setActiveProvider(configProvider);
+        }
+      } catch (_e) {
+        // Non-fatal - continue without provider
+        // Authentication can still happen via the ACP protocol
+      }
+    }
+
+    await runZedIntegration(config, settings);
+    return;
   }
 
   let input = config.getQuestion();

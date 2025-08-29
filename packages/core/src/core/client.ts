@@ -205,16 +205,8 @@ export class GeminiClient {
       this.config.getSessionId(),
     );
 
-    // If we have previous history, restore it when creating the chat
-    // This preserves conversation context across auth transitions and chat resumes
-    if (this._previousHistory && this._previousHistory.length > 0) {
-      // Extract the conversation history after the initial environment setup
-      // The first two messages are always the environment context and acknowledgment
-      const conversationHistory = this._previousHistory.slice(2);
-      this.chat = await this.startChat(conversationHistory);
-    } else {
-      this.chat = await this.startChat();
-    }
+    // Don't create chat here - that causes infinite recursion with startChat()
+    // The chat will be created when needed
 
     // Clear pending config after successful initialization
     // Note: We do NOT clear _previousHistory as it may be needed for the chat context
@@ -346,6 +338,10 @@ export class GeminiClient {
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
     this.forceFullIdeContext = true;
+
+    // Ensure content generator is initialized before creating chat
+    await this.lazyInitialize();
+
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
