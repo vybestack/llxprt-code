@@ -471,6 +471,7 @@ export async function loadHierarchicalLlxprtMemory(
   fileService: FileDiscoveryService,
   settings: Settings,
   extensionContextFilePaths: string[] = [],
+  folderTrust: boolean,
   memoryImportFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
 ): Promise<{ memoryContent: string; fileCount: number }> {
@@ -496,6 +497,7 @@ export async function loadHierarchicalLlxprtMemory(
     debugMode,
     fileService,
     extensionContextFilePaths,
+    folderTrust,
     memoryImportFormat,
     fileFilteringOptions,
     settings.memoryDiscoveryMaxDirs,
@@ -663,6 +665,7 @@ export async function loadCliConfig(
     fileService,
     effectiveSettings,
     extensionContextFilePaths,
+    trustedFolder,
     memoryImportFormat,
     fileFiltering,
   );

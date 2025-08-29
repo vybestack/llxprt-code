@@ -679,6 +679,7 @@ const App = (props: AppInternalProps) => {
         config.getFileService(),
         settings.merged,
         config.getExtensionContextFilePaths(),
+        config.getFolderTrust(),
         settings.merged.memoryImportFormat || 'tree', // Use setting or default to 'tree'
         config.getFileFilteringOptions(),
       );

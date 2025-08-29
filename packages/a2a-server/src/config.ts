@@ -79,9 +79,10 @@ export async function loadConfig(
     false,
     fileService,
     extensionContextFilePaths,
+    true, /// TODO: Wire up folder trust logic here.
   );
   configParams.userMemory = memoryContent;
-
+  configParams.llxprtMdFileCount = fileCount;
   const config = new Config({
     ...configParams,
   });
