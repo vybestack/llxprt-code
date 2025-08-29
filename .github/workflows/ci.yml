@@ -97,6 +97,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      - name: 'Run lockfile check'
+        run: |-
+          npm run check:lockfile
+
       - name: 'Install dependencies'
         run: |-
           npm ci
