@@ -44,6 +44,7 @@ export interface ExtensionInstallMetadata {
 }
 
 export interface ExtensionUpdateInfo {
+  name: string;
   originalVersion: string;
   updatedVersion: string;
 }
@@ -427,9 +428,9 @@ export function toOutputString(extension: Extension): string {
   return output;
 }
 
-export async function updateExtension(
+export async function updateExtensionByName(
   extensionName: string,
-  _cwd: string = process.cwd(),
+  cwd: string = process.cwd(),
 ): Promise<ExtensionUpdateInfo | undefined> {
   const installedExtensions = loadUserExtensions();
   const extension = installedExtensions.find(
@@ -440,6 +441,13 @@ export async function updateExtension(
       `Extension "${extensionName}" not found. Run llxprt extensions list to see available extensions.`,
     );
   }
+  return await updateExtension(extension, cwd);
+}
+
+export async function updateExtension(
+  extension: Extension,
+  cwd: string = process.cwd(),
+): Promise<ExtensionUpdateInfo> {
   if (!extension.installMetadata) {
     throw new Error(
       `Extension cannot be updated because it is missing the .llxprt-extension-install.json file. To update manually, uninstall and then reinstall the updated version.`,
@@ -449,8 +457,8 @@ export async function updateExtension(
   const tempDir = await ExtensionStorage.createTmpDir();
   try {
     await copyExtension(extension.path, tempDir);
-    await uninstallExtension(extensionName);
-    await installExtension(extension.installMetadata);
+    await uninstallExtension(extension.config.name, cwd);
+    await installExtension(extension.installMetadata, cwd);
 
     const updatedExtension = loadExtension(extension.path);
     if (!updatedExtension) {
@@ -458,6 +466,7 @@ export async function updateExtension(
     }
     const updatedVersion = updatedExtension.config.version;
     return {
+      name: extension.config.name,
       originalVersion,
       updatedVersion,
     };
@@ -519,4 +528,15 @@ function removeFromDisabledExtensions(
     );
     settings.setValue(scope, 'extensions', extensionSettings);
   }
+}
+
+export async function updateAllUpdatableExtensions(
+  cwd: string = process.cwd(),
+): Promise<ExtensionUpdateInfo[]> {
+  const extensions = loadExtensions(cwd).filter(
+    (extension) => !!extension.installMetadata,
+  );
+  return await Promise.all(
+    extensions.map((extension) => updateExtension(extension, cwd)),
+  );
 }

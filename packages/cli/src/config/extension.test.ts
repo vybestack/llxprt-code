@@ -623,12 +623,11 @@ describe('updateExtension', () => {
 
   it('should update a git-installed extension', async () => {
     // 1. "Install" an extension
-    const gitUrl = 'https://github.com/google/llxprt-extensions.git';
+    const gitUrl = 'https://github.com/vybestack/llxprt-extensions.git';
     const extensionName = 'llxprt-extensions';
     const targetExtDir = path.join(userExtensionsDir, extensionName);
     const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
 
-    // Create the "installed" extension directory and files
     fs.mkdirSync(targetExtDir, { recursive: true });
     fs.writeFileSync(
       path.join(targetExtDir, EXTENSIONS_CONFIG_FILENAME),
@@ -639,10 +638,8 @@ describe('updateExtension', () => {
       JSON.stringify({ source: gitUrl, type: 'git' }),
     );
 
-    // 2. Mock the git clone for the update
     const clone = vi.fn().mockImplementation(async (_, destination) => {
       fs.mkdirSync(destination, { recursive: true });
-      // This is the "updated" version
       fs.writeFileSync(
         path.join(destination, EXTENSIONS_CONFIG_FILENAME),
         JSON.stringify({ name: extensionName, version: '1.1.0' }),
@@ -654,16 +651,14 @@ describe('updateExtension', () => {
       clone,
     } as unknown as SimpleGit);
 
-    // 3. Call updateExtension
-    const updateInfo = await updateExtension(extensionName);
+    const updateInfo = await updateExtension(loadExtension(targetExtDir));
 
-    // 4. Assertions
     expect(updateInfo).toEqual({
+      name: 'llxprt-extensions',
       originalVersion: '1.0.0',
       updatedVersion: '1.1.0',
     });
 
-    // Check that the config file reflects the new version
     const updatedConfig = JSON.parse(
       fs.readFileSync(
         path.join(targetExtDir, EXTENSIONS_CONFIG_FILENAME),

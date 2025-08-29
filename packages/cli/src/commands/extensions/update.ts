@@ -6,40 +6,73 @@
 
 import { type CommandModule } from 'yargs';
 import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
-import { updateExtension } from '../../config/extension.js';
+import {
+  updateExtensionByName,
+  updateAllUpdatableExtensions,
+  type ExtensionUpdateInfo,
+} from '../../config/extension.js';
 
 interface UpdateArgs {
-  name: string;
+  name?: string;
+  all?: boolean;
 }
 
+const updateOutput = (info: ExtensionUpdateInfo) =>
+  `Extension "${info.name}" successfully updated: ${info.originalVersion} → ${info.updatedVersion}.`;
+
 export async function handleUpdate(args: UpdateArgs) {
-  try {
-    const result = await updateExtension(args.name);
-    if (result) {
-      console.log(
-        `Extension "${args.name}" successfully updated from version ${result.originalVersion} to ${result.updatedVersion}.`,
-      );
-    } else {
-      console.log(`Extension "${args.name}" is already up to date.`);
+  if (args.all) {
+    try {
+      const updateInfos = await updateAllUpdatableExtensions();
+      if (updateInfos.length === 0) {
+        console.log('No extensions to update.');
+        return;
+      }
+      console.log(updateInfos.map((info) => updateOutput(info)).join('\n'));
+    } catch (error) {
+      throw new FatalConfigError(getErrorMessage(error));
     }
-  } catch (error) {
-    throw new FatalConfigError(getErrorMessage(error));
+    return;
   }
+  if (args.name)
+    try {
+      // TODO(chrstnb): we should list extensions if the requested extension is not installed.
+      const updatedExtensionInfo = await updateExtensionByName(args.name);
+      if (updatedExtensionInfo) {
+        console.log(updateOutput(updatedExtensionInfo));
+      } else {
+        console.log(`Extension "${args.name}" is already up to date.`);
+      }
+    } catch (error) {
+      throw new FatalConfigError(getErrorMessage(error));
+    }
 }
 
 export const updateCommand: CommandModule = {
-  command: 'update <name>',
-  describe: 'Updates an extension to the latest version.',
+  command: 'update [--all] [name]',
+  describe:
+    'Updates all extensions or a named extension to the latest version.',
   builder: (yargs) =>
     yargs
       .positional('name', {
         describe: 'The name of the extension to update.',
         type: 'string',
       })
-      .check((_argv) => true),
+      .option('all', {
+        describe: 'Update all extensions.',
+        type: 'boolean',
+      })
+      .conflicts('name', 'all')
+      .check((argv) => {
+        if (!argv.all && !argv.name) {
+          throw new Error('Either an extension name or --all must be provided');
+        }
+        return true;
+      }),
   handler: async (argv) => {
     await handleUpdate({
-      name: argv['name'] as string,
+      name: argv['name'] as string | undefined,
+      all: argv['all'] as boolean | undefined,
     });
   },
 };
