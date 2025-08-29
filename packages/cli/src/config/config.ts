@@ -81,6 +81,7 @@ export interface CliArgs {
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
   screenReader: boolean | undefined;
+  useSmartEdit: boolean | undefined;
   sessionSummary: string | undefined;
 }
 
@@ -898,6 +899,7 @@ export async function loadCliConfig(
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
+    useSmartEdit: argv.useSmartEdit ?? settings.useSmartEdit,
   });
 
   const enhancedConfig = config;
