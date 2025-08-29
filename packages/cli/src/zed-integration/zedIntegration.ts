@@ -24,6 +24,7 @@ import {
   getErrorStatus,
   MCPServerConfig,
   DiscoveredMCPTool,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -65,6 +66,7 @@ export async function runZedIntegration(
 class GeminiAgent {
   private sessions: Map<string, Session> = new Map();
   private clientCapabilities: acp.ClientCapabilities | undefined;
+  private logger: DebugLogger;
 
   constructor(
     private config: Config,
@@ -72,7 +74,9 @@ class GeminiAgent {
     private extensions: Extension[],
     private argv: CliArgs,
     private client: acp.Client,
-  ) {}
+  ) {
+    this.logger = new DebugLogger('llxprt:zed-integration');
+  }
 
   async initialize(
     args: acp.InitializeRequest,
@@ -129,6 +133,10 @@ class GeminiAgent {
     let isAuthenticated = false;
     const selectedAuthType = this.settings.merged.selectedAuthType;
 
+    this.logger.debug(
+      () => `newSession - selectedAuthType: ${selectedAuthType}`,
+    );
+
     // Check if we're using provider-based authentication
     const providerManager = config.getProviderManager();
     const isProviderAuth =
@@ -136,13 +144,22 @@ class GeminiAgent {
       selectedAuthType === AuthType.USE_PROVIDER ||
       !selectedAuthType;
 
+    this.logger.debug(
+      () =>
+        `isProviderAuth: ${isProviderAuth}, hasProviderManager: ${!!providerManager}`,
+    );
+
     if (isProviderAuth && providerManager) {
       // For provider-based auth, we need to manually initialize the GeminiClient
       // since refreshAuth doesn't handle USE_NONE/USE_PROVIDER
       try {
         const activeProvider = providerManager.getActiveProvider();
+        this.logger.debug(
+          () => `Active provider: ${activeProvider?.name || 'none'}`,
+        );
+
         if (activeProvider) {
-          console.log('[ZED] Using provider-based authentication');
+          this.logger.debug(() => 'Using provider-based authentication');
 
           // Create content generator config for provider-based auth
           // Get the model from the provider if it has the method
@@ -160,9 +177,17 @@ class GeminiAgent {
             providerManager,
           };
 
+          this.logger.debug(
+            () => `Creating content generator config with model: ${model}`,
+          );
+
           // Manually set the content generator config and initialize the client
           // This is what refreshAuth does for other auth types
           const geminiClient = new GeminiClient(config);
+
+          this.logger.debug(
+            () => 'Initializing GeminiClient with content generator config',
+          );
           await geminiClient.initialize(contentGeneratorConfig);
 
           // Set the initialized client on the config
@@ -173,25 +198,46 @@ class GeminiAgent {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (config as any).contentGeneratorConfig = contentGeneratorConfig;
 
+          this.logger.debug(() => 'GeminiClient initialized and set on config');
           isAuthenticated = true;
         }
       } catch (e) {
-        console.error(`[ZED] Provider-based auth setup failed: ${e}`);
+        this.logger.error(() => `Provider-based auth setup failed: ${e}`);
       }
     } else if (selectedAuthType) {
       // Try traditional auth methods (Google, Gemini API key, etc.)
       try {
+        this.logger.debug(
+          () => `Attempting refreshAuth with ${selectedAuthType}`,
+        );
         await config.refreshAuth(selectedAuthType);
         isAuthenticated = true;
+        this.logger.debug(
+          () => 'refreshAuth succeeded, isAuthenticated = true',
+        );
       } catch (e) {
-        console.error(
-          `[ZED] Authentication with ${selectedAuthType} failed: ${e}`,
+        this.logger.error(
+          () => `Authentication with ${selectedAuthType} failed: ${e}`,
         );
       }
     }
 
     if (!isAuthenticated) {
-      console.error('[ZED] No authentication available, requesting auth');
+      this.logger.error(() => 'No authentication available, requesting auth');
+      this.logger.debug(
+        () =>
+          `Final auth state: ${JSON.stringify({
+            selectedAuthType,
+            isProviderAuth,
+            hasProviderManager: !!providerManager,
+            activeProvider: providerManager?.getActiveProvider()?.name,
+            configIsAuthenticated: (() => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const c = config as any;
+              return c.isAuthenticated ? c.isAuthenticated() : false;
+            })(),
+          })}`,
+      );
       throw acp.RequestError.authRequired();
     }
 
@@ -206,6 +252,24 @@ class GeminiAgent {
     }
 
     const geminiClient = config.getGeminiClient();
+    if (!geminiClient) {
+      this.logger.error(() => 'Failed to get GeminiClient from config');
+      this.logger.debug(
+        () =>
+          `Config state: ${JSON.stringify({
+            hasGeminiClient: !!config.getGeminiClient(),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            hasContentGeneratorConfig: !!(config as any).contentGeneratorConfig,
+            provider: config.getProvider(),
+            model: config.getModel(),
+          })}`,
+      );
+      throw new Error('GeminiClient not initialized');
+    }
+
+    this.logger.debug(
+      () => 'Successfully obtained GeminiClient, starting chat',
+    );
     const chat = await geminiClient.startChat();
     const session = new Session(sessionId, chat, config, this.client);
     this.sessions.set(sessionId, session);
@@ -220,6 +284,12 @@ class GeminiAgent {
     cwd: string,
     mcpServers: acp.McpServer[],
   ): Promise<Config> {
+    this.logger.debug(
+      () => 'newSessionConfig - Starting session config creation',
+    );
+    this.logger.debug(() => `Session ID: ${sessionId}`);
+    this.logger.debug(() => `CWD: ${cwd}`);
+
     const mergedMcpServers = { ...this.settings.merged.mcpServers };
 
     for (const { command, args, env: rawEnv, name } of mcpServers) {
@@ -231,6 +301,14 @@ class GeminiAgent {
     }
 
     const settings = { ...this.settings.merged, mcpServers: mergedMcpServers };
+    this.logger.debug(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = settings as any;
+      return `Settings activeProvider: ${s.activeProvider}`;
+    });
+    this.logger.debug(
+      () => `Settings selectedAuthType: ${settings.selectedAuthType}`,
+    );
 
     const config = await loadCliConfig(
       settings,
@@ -240,12 +318,33 @@ class GeminiAgent {
       cwd,
     );
 
+    this.logger.debug(
+      () => `Config loaded, provider from config: ${config.getProvider()}`,
+    );
+    this.logger.debug(() => `Config model: ${config.getModel()}`);
+
     // Register the provider manager with the config (critical for content generator initialization)
     const providerManager = getProviderManager(config, false, this.settings);
+    this.logger.debug(() => {
+      // Get providers in a type-safe way
+      // ProviderManager doesn't export getProviders() in its interface
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pm = providerManager as any;
+      const providers = pm.getProviders
+        ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          pm.getProviders().map((p: any) => p.name || 'unknown')
+        : [];
+      return `Provider manager created, has providers: ${providers.join(', ')}`;
+    });
     config.setProviderManager(providerManager);
+    this.logger.debug(() => 'Provider manager set on config');
 
     // Ensure serverToolsProvider (Gemini) has config set if using Gemini
     const serverToolsProvider = providerManager.getServerToolsProvider();
+    this.logger.debug(
+      () => `Server tools provider: ${serverToolsProvider?.name || 'none'}`,
+    );
+
     if (
       serverToolsProvider &&
       serverToolsProvider.name === 'gemini' &&
@@ -253,17 +352,22 @@ class GeminiAgent {
     ) {
       const geminiProvider = serverToolsProvider as GeminiProvider;
       if (geminiProvider.setConfig) {
+        this.logger.debug(() => 'Setting config on Gemini serverToolsProvider');
         geminiProvider.setConfig(config);
+        this.logger.debug(() => 'Config set on Gemini serverToolsProvider');
       }
     }
 
     // Initialize config first to set up basic configuration
+    this.logger.debug(() => 'Initializing config');
     await config.initialize();
+    this.logger.debug(() => 'Config initialized');
 
     // If a provider is specified, activate it after initialization
     const configProvider = config.getProvider();
     if (configProvider) {
       try {
+        this.logger.debug(() => `Activating provider: ${configProvider}`);
         await providerManager.setActiveProvider(configProvider);
 
         // Apply appropriate key and URL overrides from CLI args to the active provider
@@ -276,23 +380,31 @@ class GeminiAgent {
           activeProvider.getDefaultModel
         ) {
           configModel = activeProvider.getDefaultModel();
+          this.logger.debug(
+            () => `Using provider default model: ${configModel}`,
+          );
         }
 
         if (configModel && activeProvider.setModel) {
+          this.logger.debug(() => `Setting model on provider: ${configModel}`);
           activeProvider.setModel(configModel);
         }
 
         // Apply API key if provided via CLI args
         if (this.argv.key && activeProvider.setApiKey) {
+          this.logger.debug(() => 'Setting API key from CLI args');
           activeProvider.setApiKey(this.argv.key);
         }
 
         // Apply base URL if provided via CLI args
         if (this.argv.baseurl && activeProvider.setBaseUrl) {
+          this.logger.debug(
+            () => `Setting base URL from CLI args: ${this.argv.baseurl}`,
+          );
           activeProvider.setBaseUrl(this.argv.baseurl);
         }
       } catch (e) {
-        console.error(`[ZED] Provider activation failed: ${e}`);
+        this.logger.error(() => `Provider activation failed: ${e}`);
       }
     }
 
