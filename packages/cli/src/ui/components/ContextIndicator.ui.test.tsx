@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, MockedFunction } from 'vitest';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import {
-  OpenAIProvider,
+  OpenAIResponsesProvider,
   ProviderManager,
   IProvider,
 } from '@vybestack/llxprt-code-core';
@@ -16,7 +16,7 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
 describe('ContextIndicator UI', () => {
   let mockProvider: {
     estimateContextUsage: MockedFunction<
-      typeof OpenAIProvider.prototype.estimateContextUsage
+      typeof OpenAIResponsesProvider.prototype.estimateContextUsage
     >;
   };
   let mockProviderManager: ProviderManager;
@@ -27,8 +27,8 @@ describe('ContextIndicator UI', () => {
       estimateContextUsage: vi.fn(),
     };
 
-    // Make it an instance of OpenAIProvider for instanceof check
-    Object.setPrototypeOf(mockProvider, OpenAIProvider.prototype);
+    // Make it an instance of OpenAIResponsesProvider for instanceof check
+    Object.setPrototypeOf(mockProvider, OpenAIResponsesProvider.prototype);
 
     // Create a real ProviderManager instance and mock its methods
     mockProviderManager = new ProviderManager();
