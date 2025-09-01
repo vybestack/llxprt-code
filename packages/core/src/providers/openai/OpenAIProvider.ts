@@ -530,39 +530,37 @@ export class OpenAIProvider extends BaseProvider {
           // For text-based models, don't yield content chunks yet
           if (!parser && delta.content) {
             if (this.isUsingQwen()) {
-              const isWhitespaceOnly = delta.content.trim() === '';
-              if (isWhitespaceOnly) {
-                // Buffer whitespace-only chunk
-                pendingWhitespace = (pendingWhitespace || '') + delta.content;
-                this.logger.debug(
-                  () =>
-                    `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${pendingWhitespace?.length ?? 0}`,
-                );
-                continue;
-              } else if (pendingWhitespace) {
-                // Flush buffered whitespace before non-empty chunk to preserve spacing
-                this.logger.debug(
-                  () =>
-                    `Flushing pending whitespace (len=${pendingWhitespace?.length ?? 0}) before non-empty chunk`,
-                );
+              const whitespaceResult = this.handleQwenStreamingWhitespace(
+                delta,
+                pendingWhitespace,
+                fullContent,
+              );
+
+              if (whitespaceResult.shouldYield) {
                 yield {
                   role: ContentGeneratorRole.ASSISTANT,
-                  content: pendingWhitespace,
+                  content: whitespaceResult.content,
                 };
                 hasStreamedContent = true;
-                fullContent += pendingWhitespace;
-                pendingWhitespace = null;
               }
+
+              pendingWhitespace = whitespaceResult.updatedPendingWhitespace;
+              fullContent = whitespaceResult.updatedFullContent;
+
+              if (!whitespaceResult.shouldYield) {
+                continue;
+              }
+            } else {
+              yield {
+                role: ContentGeneratorRole.ASSISTANT,
+                content: delta.content,
+              };
+              hasStreamedContent = true;
+              fullContent += delta.content;
             }
-
-            yield {
-              role: ContentGeneratorRole.ASSISTANT,
-              content: delta.content,
-            };
-            hasStreamedContent = true;
+          } else {
+            fullContent += delta.content;
           }
-
-          fullContent += delta.content;
         }
 
         if (delta?.tool_calls) {
@@ -673,31 +671,8 @@ export class OpenAIProvider extends BaseProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
-        // Fix double stringification for Qwen tool calls
-        // Qwen models pre-stringify arguments values, but later in the process
-        // they are being JSON.stringify'd again
-        let fixedToolCalls = accumulatedToolCalls;
-        if (this.isUsingQwen()) {
-          this.logger.debug(
-            () =>
-              `[Qwen Fix] Processing ${accumulatedToolCalls.length} tool calls for double-stringification fix`,
-          );
-          fixedToolCalls = accumulatedToolCalls.map((toolCall, index) => {
-            this.logger.debug(
-              () =>
-                `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
-                  name: toolCall.function.name,
-                  argumentsType: typeof toolCall.function.arguments,
-                  argumentsLength: toolCall.function.arguments?.length,
-                  argumentsSample: toolCall.function.arguments?.substring(
-                    0,
-                    100,
-                  ),
-                })}`,
-            );
-            return this.fixQwenDoubleStringification(toolCall);
-          });
-        }
+        // Process tool calls with Qwen-specific fixes if needed
+        const fixedToolCalls = this.processQwenToolCalls(accumulatedToolCalls);
 
         if (this.isUsingQwen()) {
           this.logger.debug(
@@ -713,65 +688,14 @@ export class OpenAIProvider extends BaseProvider {
           );
         }
 
-        // For Qwen models, don't duplicate content if we've already streamed it
-        // BUT Cerebras needs at least a space to continue after tool responses
-        const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
-
-        if (isCerebras) {
-          this.logger.debug(
-            () =>
-              '[Cerebras] Special handling for Cerebras provider after tool responses',
-            {
-              hasStreamedContent,
-              willSendSpace: hasStreamedContent,
-            },
-          );
-        }
-        const shouldOmitContent =
-          hasStreamedContent && this.isUsingQwen() && !isCerebras;
-
-        this.logger.debug(
-          () => '[Tool Call Handling] Deciding how to yield tool calls',
-          {
-            hasStreamedContent,
-            isUsingQwen: this.isUsingQwen(),
-            isCerebras,
-            shouldOmitContent,
-            fullContentLength: fullContent.length,
-            toolCallCount: fixedToolCalls?.length || 0,
-          },
+        // Build the final message based on provider-specific requirements
+        const finalMessage = this.buildFinalToolCallMessage(
+          hasStreamedContent,
+          fullContent,
+          fixedToolCalls,
+          usageData,
         );
-
-        if (shouldOmitContent) {
-          // Qwen: Send just a space (like Cerebras) to prevent stream stopping
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: ' ', // Single space instead of empty to keep stream alive
-            tool_calls: fixedToolCalls,
-            usage: usageData,
-          };
-        } else if (isCerebras && hasStreamedContent) {
-          // Cerebras: Send just a space to prevent duplication but allow continuation
-          // This prevents the repeated "Let me search..." text
-          this.logger.debug(
-            () =>
-              '[Cerebras] Sending minimal space content to prevent duplication',
-          );
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: ' ', // Single space instead of full content
-            tool_calls: fixedToolCalls,
-            usage: usageData,
-          };
-        } else {
-          // Include full content with tool calls
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: fullContent || '',
-            tool_calls: fixedToolCalls,
-            usage: usageData,
-          };
-        }
+        yield finalMessage;
       } else if (usageData) {
         // Always emit usage data so downstream consumers can update stats
         yield {
@@ -1100,6 +1024,173 @@ export class OpenAIProvider extends BaseProvider {
     // TODO: Implement response parsing based on detected format
     // For now, return the response as-is
     return response;
+  }
+
+  /**
+   * Handle Qwen-specific whitespace buffering during streaming
+   * @param delta The stream delta containing content
+   * @param pendingWhitespace Current buffered whitespace
+   * @param fullContent Accumulated full content
+   * @returns Object with updated state and whether to yield content
+   */
+  private handleQwenStreamingWhitespace(
+    delta: { content?: string | null },
+    pendingWhitespace: string | null,
+    fullContent: string,
+  ): {
+    shouldYield: boolean;
+    content: string;
+    updatedPendingWhitespace: string | null;
+    updatedFullContent: string;
+  } {
+    if (!delta.content) {
+      return {
+        shouldYield: false,
+        content: '',
+        updatedPendingWhitespace: pendingWhitespace,
+        updatedFullContent: fullContent,
+      };
+    }
+
+    const isWhitespaceOnly = delta.content.trim() === '';
+
+    if (isWhitespaceOnly) {
+      // Buffer whitespace-only chunk
+      const newPendingWhitespace = (pendingWhitespace || '') + delta.content;
+      this.logger.debug(
+        () =>
+          `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${newPendingWhitespace?.length ?? 0}`,
+      );
+      return {
+        shouldYield: false,
+        content: '',
+        updatedPendingWhitespace: newPendingWhitespace,
+        updatedFullContent: fullContent + delta.content,
+      };
+    }
+
+    // Non-whitespace content - flush any pending whitespace first
+    if (pendingWhitespace) {
+      this.logger.debug(
+        () =>
+          `Flushing pending whitespace (len=${pendingWhitespace?.length ?? 0}) before non-empty chunk`,
+      );
+      return {
+        shouldYield: true,
+        content: pendingWhitespace + delta.content,
+        updatedPendingWhitespace: null,
+        updatedFullContent: fullContent + pendingWhitespace + delta.content,
+      };
+    }
+
+    return {
+      shouldYield: true,
+      content: delta.content,
+      updatedPendingWhitespace: null,
+      updatedFullContent: fullContent + delta.content,
+    };
+  }
+
+  /**
+   * Process tool calls for Qwen models, fixing double stringification
+   * @param toolCalls The tool calls to process
+   * @returns Processed tool calls with fixes applied
+   */
+  private processQwenToolCalls(
+    toolCalls: NonNullable<IMessage['tool_calls']>,
+  ): NonNullable<IMessage['tool_calls']> {
+    if (!this.isUsingQwen()) {
+      return toolCalls;
+    }
+
+    this.logger.debug(
+      () =>
+        `[Qwen Fix] Processing ${toolCalls.length} tool calls for double-stringification fix`,
+    );
+
+    return toolCalls.map((toolCall, index) => {
+      this.logger.debug(
+        () =>
+          `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
+            name: toolCall.function.name,
+            argumentsType: typeof toolCall.function.arguments,
+            argumentsLength: toolCall.function.arguments?.length,
+            argumentsSample: toolCall.function.arguments?.substring(0, 100),
+          })}`,
+      );
+      return this.fixQwenDoubleStringification(toolCall);
+    });
+  }
+
+  /**
+   * Determine how to yield the final message with tool calls based on provider quirks
+   * @param hasStreamedContent Whether content was already streamed
+   * @param fullContent The complete content
+   * @param toolCalls The tool calls to include
+   * @param usageData Optional usage statistics
+   * @returns The message to yield
+   */
+  private buildFinalToolCallMessage(
+    hasStreamedContent: boolean,
+    fullContent: string,
+    toolCalls: NonNullable<IMessage['tool_calls']>,
+    usageData?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    },
+  ): IMessage {
+    const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
+
+    if (isCerebras) {
+      this.logger.debug(
+        () =>
+          '[Cerebras] Special handling for Cerebras provider after tool responses',
+        {
+          hasStreamedContent,
+          willSendSpace: hasStreamedContent,
+        },
+      );
+    }
+
+    const shouldOmitContent =
+      hasStreamedContent && this.isUsingQwen() && !isCerebras;
+
+    this.logger.debug(
+      () => '[Tool Call Handling] Deciding how to yield tool calls',
+      {
+        hasStreamedContent,
+        isUsingQwen: this.isUsingQwen(),
+        isCerebras,
+        shouldOmitContent,
+        fullContentLength: fullContent.length,
+        toolCallCount: toolCalls?.length || 0,
+      },
+    );
+
+    if (shouldOmitContent || (isCerebras && hasStreamedContent)) {
+      // Send just a space to prevent stream stopping or duplication
+      if (isCerebras && hasStreamedContent) {
+        this.logger.debug(
+          () =>
+            '[Cerebras] Sending minimal space content to prevent duplication',
+        );
+      }
+      return {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: ' ',
+        tool_calls: toolCalls,
+        usage: usageData,
+      };
+    }
+
+    // Include full content with tool calls
+    return {
+      role: ContentGeneratorRole.ASSISTANT,
+      content: fullContent || '',
+      tool_calls: toolCalls,
+      usage: usageData,
+    };
   }
 
   /**
