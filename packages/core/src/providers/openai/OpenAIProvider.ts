@@ -365,10 +365,8 @@ export class OpenAIProvider extends BaseProvider {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
-    const patchedMessages = messages;
-
     // Validate tool messages have required tool_call_id
-    const toolMessages = patchedMessages.filter((msg) => msg.role === 'tool');
+    const toolMessages = messages.filter((msg) => msg.role === 'tool');
     const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
 
     if (missingIds.length > 0) {
@@ -407,17 +405,9 @@ export class OpenAIProvider extends BaseProvider {
     // Get resolved authentication and update client if needed
     await this.updateClientWithResolvedAuth();
 
-    const cleanedMessages = patchedMessages;
-
     this.logger.debug(
       () =>
-        `About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${streamingEnabled}`,
-    );
-
-    // Debug: Log message roles being sent
-    this.logger.debug(
-      () =>
-        `Messages being sent to OpenAI (${cleanedMessages.length} total): ${cleanedMessages
+        `About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${streamingEnabled}, messages (${messages.length} total): ${messages
           .map(
             (m) =>
               `${m.role}${m.role === 'system' ? ` (length: ${m.content?.length})` : ''}`,
@@ -431,7 +421,7 @@ export class OpenAIProvider extends BaseProvider {
       response = await this.openai.chat.completions.create({
         model: this.currentModel,
         messages:
-          cleanedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+          messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
         stream: streamingEnabled,
         ...(streamingEnabled && finalStreamOptions
           ? { stream_options: finalStreamOptions }
@@ -466,12 +456,12 @@ export class OpenAIProvider extends BaseProvider {
       // Log the last few messages to understand what's being sent
       if (errorStatus === 400) {
         // Log additional diagnostics for 400 errors
-        const hasPendingToolCalls = cleanedMessages.some((msg, idx) => {
+        const hasPendingToolCalls = messages.some((msg, idx) => {
           if (msg.role === 'assistant' && msg.tool_calls) {
             // Check if there's a matching tool response
             const toolCallIds = msg.tool_calls.map((tc) => tc.id);
             const hasResponses = toolCallIds.every((id) =>
-              cleanedMessages
+              messages
                 .slice(idx + 1)
                 .some((m) => m.role === 'tool' && m.tool_call_id === id),
             );
@@ -485,11 +475,11 @@ export class OpenAIProvider extends BaseProvider {
           () =>
             `${errorLabel} Has pending tool calls without responses: ${hasPendingToolCalls}`,
         );
-        const lastMessages = cleanedMessages.slice(-5);
+        const lastMessages = messages.slice(-5);
         lastMessages.forEach((msg, idx) => {
           this.logger.error(
             () =>
-              `  [${cleanedMessages.length - 5 + idx}] ${msg.role}${msg.tool_call_id ? ` (tool response for ${msg.tool_call_id})` : ''}${msg.tool_calls ? ` (${msg.tool_calls.length} tool calls)` : ''}`,
+              `  [${messages.length - 5 + idx}] ${msg.role}${msg.tool_call_id ? ` (tool response for ${msg.tool_call_id})` : ''}${msg.tool_calls ? ` (${msg.tool_calls.length} tool calls)` : ''}`,
           );
           if (msg.tool_calls) {
             msg.tool_calls.forEach((tc) => {
