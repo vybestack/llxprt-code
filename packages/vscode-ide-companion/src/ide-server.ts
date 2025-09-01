@@ -21,6 +21,45 @@ import { OpenFilesManager } from './open-files-manager.js';
 
 const MCP_SESSION_ID_HEADER = 'mcp-session-id';
 const IDE_SERVER_PORT_ENV_VAR = 'LLXPRT_CODE_IDE_SERVER_PORT';
+const IDE_WORKSPACE_PATH_ENV_VAR = 'LLXPRT_CODE_IDE_WORKSPACE_PATH';
+
+async function writePortAndWorkspace(
+  context: vscode.ExtensionContext,
+  port: number,
+  portFile: string,
+  ppidPortFile: string,
+  log: (message: string) => void,
+): Promise<void> {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  const workspacePath =
+    workspaceFolders && workspaceFolders.length > 0
+      ? workspaceFolders.map((folder) => folder.uri.fsPath).join(path.delimiter)
+      : '';
+
+  context.environmentVariableCollection.replace(
+    IDE_SERVER_PORT_ENV_VAR,
+    port.toString(),
+  );
+  context.environmentVariableCollection.replace(
+    IDE_WORKSPACE_PATH_ENV_VAR,
+    workspacePath,
+  );
+
+  const content = JSON.stringify({ port, workspacePath, ppid: process.ppid });
+
+  log(`Writing port file to: ${portFile}`);
+  log(`Writing ppid port file to: ${ppidPortFile}`);
+
+  try {
+    await Promise.all([
+      fs.writeFile(portFile, content),
+      fs.writeFile(ppidPortFile, content),
+    ]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`Failed to write port to file: ${message}`);
+  }
+}
 
 function sendIdeContextUpdateNotification(
   transport: StreamableHTTPServerTransport,
@@ -49,16 +88,14 @@ export class IDEServer {
   private server: HTTPServer | undefined;
   private context: vscode.ExtensionContext | undefined;
   private log: (message: string) => void;
-  private portFile: string;
+  private portFile: string | undefined;
+  private ppidPortFile: string | undefined;
+  private port: number | undefined;
   diffManager: DiffManager;
 
   constructor(log: (message: string) => void, diffManager: DiffManager) {
     this.log = log;
     this.diffManager = diffManager;
-    this.portFile = path.join(
-      os.tmpdir(),
-      `llxprt-ide-server-${process.ppid}.json`,
-    );
   }
 
   async start(context: vscode.ExtensionContext) {
@@ -196,21 +233,46 @@ export class IDEServer {
 
     app.get('/mcp', handleSessionRequest);
 
-    this.server = app.listen(0, () => {
+    this.server = app.listen(0, async () => {
       const address = (this.server as HTTPServer).address();
       if (address && typeof address !== 'string') {
-        const port = address.port;
-        context.environmentVariableCollection.replace(
-          IDE_SERVER_PORT_ENV_VAR,
-          port.toString(),
+        this.port = address.port;
+        this.portFile = path.join(
+          os.tmpdir(),
+          `llxprt-ide-server-${this.port}.json`,
         );
-        this.log(`IDE server listening on port ${port}`);
-        fs.writeFile(this.portFile, JSON.stringify({ port })).catch((err) => {
-          this.log(`Failed to write port to file: ${err}`);
-        });
-        this.log(this.portFile);
+        this.ppidPortFile = path.join(
+          os.tmpdir(),
+          `llxprt-ide-server-${process.ppid}.json`,
+        );
+        this.log(`IDE server listening on port ${this.port}`);
+        await writePortAndWorkspace(
+          context,
+          this.port,
+          this.portFile,
+          this.ppidPortFile,
+          this.log,
+        );
       }
     });
+  }
+
+  async updateWorkspacePath(): Promise<void> {
+    if (
+      this.context &&
+      this.server &&
+      this.port &&
+      this.portFile &&
+      this.ppidPortFile
+    ) {
+      await writePortAndWorkspace(
+        this.context,
+        this.port,
+        this.portFile,
+        this.ppidPortFile,
+        this.log,
+      );
+    }
   }
 
   async stop(): Promise<void> {
@@ -231,10 +293,19 @@ export class IDEServer {
     if (this.context) {
       this.context.environmentVariableCollection.clear();
     }
-    try {
-      await fs.unlink(this.portFile);
-    } catch (_err) {
-      // Ignore errors if the file doesn't exist.
+    if (this.portFile) {
+      try {
+        await fs.unlink(this.portFile);
+      } catch (_err) {
+        // Ignore errors if the file doesn't exist.
+      }
+    }
+    if (this.ppidPortFile) {
+      try {
+        await fs.unlink(this.ppidPortFile);
+      } catch (_err) {
+        // Ignore errors if the file doesn't exist.
+      }
     }
   }
 }
