@@ -117,13 +117,24 @@ export class GeminiProvider extends BaseProvider {
     // Re-check OAuth enablement state before determining auth
     this.updateOAuthState();
 
-    // Use the base provider's auth precedence resolution
+    // First check if we have Gemini-specific credentials
+    if (this.hasVertexAICredentials()) {
+      this.authMode = 'vertex-ai';
+      this.setupVertexAIAuth();
+      return 'USE_VERTEX_AI';
+    }
+
+    if (this.hasGeminiAPIKey()) {
+      this.authMode = 'gemini-api-key';
+      return process.env.GEMINI_API_KEY!;
+    }
+
+    // No Gemini-specific credentials, check OAuth availability
     try {
       const token = await this.getAuthToken();
-
-      // Check if OAuth is enabled for Gemini but no token was returned
-      // This signals to use the existing LOGIN_WITH_GOOGLE flow
       const authMethodName = await this.getAuthMethodName();
+
+      // Check if OAuth is configured for Gemini
       const manager = this.geminiOAuthManager as OAuthManager & {
         isOAuthEnabled?(provider: string): boolean;
       };
@@ -132,29 +143,33 @@ export class GeminiProvider extends BaseProvider {
         typeof manager.isOAuthEnabled === 'function' &&
         manager.isOAuthEnabled('gemini');
 
-      // CRITICAL FIX: Only use LOGIN_WITH_GOOGLE if OAuth is actually enabled
-      // Don't fall back to it when OAuth is disabled
       if (
         isOAuthEnabled &&
         (authMethodName?.startsWith('oauth-') ||
           (this.geminiOAuthManager && !token))
       ) {
         this.authMode = 'oauth';
-        // Return a special token for OAuth mode
         return 'USE_LOGIN_WITH_GOOGLE';
       }
 
-      // Determine auth mode based on resolved authentication method
-      if (this.hasVertexAICredentials()) {
-        this.authMode = 'vertex-ai';
-        this.setupVertexAIAuth();
-      } else if (this.hasGeminiAPIKey() || authMethodName?.includes('key')) {
-        this.authMode = 'gemini-api-key';
-      } else {
-        this.authMode = 'none';
+      // If we have a token but it's not for Gemini (e.g., from another provider),
+      // we should still fall back to OAuth for Gemini web search - BUT ONLY IF OAUTH IS ENABLED
+      if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
+        if (isOAuthEnabled) {
+          this.authMode = 'oauth';
+          return 'USE_LOGIN_WITH_GOOGLE';
+        } else {
+          // OAuth is disabled and no other auth method available
+          throw new AuthenticationRequiredError(
+            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled',
+            'none',
+            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+          );
+        }
       }
 
-      return token;
+      this.authMode = 'none';
+      return token || '';
     } catch (error) {
       // CRITICAL FIX: Only fall back to LOGIN_WITH_GOOGLE if OAuth is actually enabled
       // Don't use it when OAuth has been disabled
@@ -182,6 +197,23 @@ export class GeminiProvider extends BaseProvider {
           ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
         );
       }
+
+      // When used as serverToolsProvider without API key, fall back to OAuth ONLY if enabled
+      // This handles the case where Gemini is used for server tools but not as main provider
+      if (!this.hasGeminiAPIKey() && !this.hasVertexAICredentials()) {
+        if (isOAuthEnabled) {
+          this.authMode = 'oauth';
+          return 'USE_LOGIN_WITH_GOOGLE';
+        } else {
+          // OAuth is disabled and no other auth method available
+          throw new AuthenticationRequiredError(
+            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled',
+            'none',
+            ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+          );
+        }
+      }
+
       throw error;
     }
   }
@@ -1154,8 +1186,23 @@ export class GeminiProvider extends BaseProvider {
           `invokeServerTool: determineBestAuth returned, authMode is now ${this.authMode}`,
       );
 
+      // Re-evaluate auth mode if we got a signal to use OAuth
+      if (authToken === 'USE_LOGIN_WITH_GOOGLE') {
+        this.authMode = 'oauth';
+      }
+
       switch (this.authMode) {
         case 'gemini-api-key': {
+          // This case should never happen if determineBestAuth worked correctly
+          // but add safety check
+          if (
+            !authToken ||
+            authToken === 'USE_LOGIN_WITH_GOOGLE' ||
+            authToken === ''
+          ) {
+            throw new Error('No valid Gemini API key available for web search');
+          }
+
           genAI = new GoogleGenAI({
             apiKey: authToken,
             httpOptions: this.baseURL
@@ -1225,12 +1272,26 @@ export class GeminiProvider extends BaseProvider {
             this.logger.debug(
               () => `invokeServerTool: OAuth case - creating content generator`,
             );
-            if (!this.geminiConfig) {
+
+            // If geminiConfig is not set (e.g., when using non-Gemini provider),
+            // create a minimal config for OAuth
+            let configForOAuth = this.geminiConfig;
+            if (!configForOAuth) {
               this.logger.debug(
                 () =>
-                  `invokeServerTool: ERROR - geminiConfig is null/undefined in OAuth case`,
+                  `invokeServerTool: geminiConfig is null, creating minimal config for OAuth`,
               );
-              throw new Error(`Gemini config is required for OAuth web search`);
+              // Import Config dynamically to avoid circular dependencies
+              const { Config } = await import('../../config/config.js');
+              const { randomUUID } = await import('crypto');
+              configForOAuth = new Config({
+                sessionId: randomUUID(),
+                targetDir: process.cwd(),
+                debugMode: false,
+                cwd: process.cwd(),
+                model: 'gemini-2.5-flash',
+              });
+              // The OAuth flow will handle authentication
             }
 
             // For OAuth, use the code assist content generator
@@ -1242,7 +1303,7 @@ export class GeminiProvider extends BaseProvider {
               await createCodeAssistContentGenerator(
                 httpOptions,
                 AuthType.LOGIN_WITH_GOOGLE,
-                this.geminiConfig!,
+                configForOAuth,
               );
             this.logger.debug(
               () =>
