@@ -33,6 +33,9 @@ export interface UserData {
  * @returns the user's actual project id
  */
 export async function setupUser(client: OAuth2Client): Promise<UserData> {
+  console.log(
+    `setupUser: starting setup, GOOGLE_CLOUD_PROJECT=${process.env.GOOGLE_CLOUD_PROJECT || 'undefined'}`,
+  );
   const projectId = process.env.GOOGLE_CLOUD_PROJECT || undefined;
   // PRIVACY FIX: sessionId parameter removed from CodeAssistServer constructor
   const caServer = new CodeAssistServer(client, projectId, {}, undefined);
@@ -41,6 +44,7 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
     platform: 'PLATFORM_UNSPECIFIED',
     pluginType: 'GEMINI',
   };
+  console.log(`setupUser: created CodeAssistServer, calling loadCodeAssist`);
 
   const loadRes = await caServer.loadCodeAssist({
     cloudaicompanionProject: projectId,
@@ -49,17 +53,30 @@ export async function setupUser(client: OAuth2Client): Promise<UserData> {
       duetProject: projectId,
     },
   });
+  console.log(
+    `setupUser: loadCodeAssist completed, currentTier=${!!loadRes.currentTier}, cloudaicompanionProject=${loadRes.cloudaicompanionProject}`,
+  );
 
   if (loadRes.currentTier) {
+    console.log(`setupUser: user has current tier: ${loadRes.currentTier.id}`);
     if (!loadRes.cloudaicompanionProject) {
       if (projectId) {
+        console.log(
+          `setupUser: returning with project ID from env: ${projectId}`,
+        );
         return {
           projectId,
           userTier: loadRes.currentTier.id,
         };
       }
+      console.log(
+        `setupUser: throwing ProjectIdRequiredError - no project ID available`,
+      );
       throw new ProjectIdRequiredError();
     }
+    console.log(
+      `setupUser: returning with project ID from response: ${loadRes.cloudaicompanionProject}`,
+    );
     return {
       projectId: loadRes.cloudaicompanionProject,
       userTier: loadRes.currentTier.id,

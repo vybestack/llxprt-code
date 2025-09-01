@@ -1120,6 +1120,18 @@ export class GeminiProvider extends BaseProvider {
     _config?: unknown,
   ): Promise<unknown> {
     if (toolName === 'web_search') {
+      this.logger.debug(
+        () =>
+          `invokeServerTool: web_search called with params: ${JSON.stringify(params)}`,
+      );
+      this.logger.debug(
+        () =>
+          `invokeServerTool: geminiConfig is ${this.geminiConfig ? 'set' : 'null/undefined'}`,
+      );
+      this.logger.debug(
+        () => `invokeServerTool: current authMode is ${this.authMode}`,
+      );
+
       // Import the necessary modules dynamically
       const { GoogleGenAI } = await import('@google/genai');
 
@@ -1133,7 +1145,14 @@ export class GeminiProvider extends BaseProvider {
       let genAI: InstanceType<typeof GoogleGenAI>;
 
       // Get authentication token lazily
+      this.logger.debug(
+        () => `invokeServerTool: about to call determineBestAuth()`,
+      );
       const authToken = await this.determineBestAuth();
+      this.logger.debug(
+        () =>
+          `invokeServerTool: determineBestAuth returned, authMode is now ${this.authMode}`,
+      );
 
       switch (this.authMode) {
         case 'gemini-api-key': {
@@ -1202,32 +1221,68 @@ export class GeminiProvider extends BaseProvider {
         }
 
         case 'oauth': {
-          // For OAuth, use the code assist content generator
-          const oauthContentGenerator = await createCodeAssistContentGenerator(
-            httpOptions,
-            AuthType.LOGIN_WITH_GOOGLE,
-            this.geminiConfig!,
-          );
+          try {
+            this.logger.debug(
+              () => `invokeServerTool: OAuth case - creating content generator`,
+            );
+            if (!this.geminiConfig) {
+              this.logger.debug(
+                () =>
+                  `invokeServerTool: ERROR - geminiConfig is null/undefined in OAuth case`,
+              );
+              throw new Error(`Gemini config is required for OAuth web search`);
+            }
 
-          // For web search, always use gemini-2.5-flash regardless of the active model
-          const oauthRequest: GenerateContentParameters = {
-            model: 'gemini-2.5-flash',
-            contents: [
-              {
-                role: 'user',
-                parts: [{ text: (params as { query: string }).query }],
+            // For OAuth, use the code assist content generator
+            this.logger.debug(
+              () =>
+                `invokeServerTool: calling createCodeAssistContentGenerator`,
+            );
+            const oauthContentGenerator =
+              await createCodeAssistContentGenerator(
+                httpOptions,
+                AuthType.LOGIN_WITH_GOOGLE,
+                this.geminiConfig!,
+              );
+            this.logger.debug(
+              () =>
+                `invokeServerTool: OAuth content generator created successfully`,
+            );
+
+            // For web search, always use gemini-2.5-flash regardless of the active model
+            const oauthRequest: GenerateContentParameters = {
+              model: 'gemini-2.5-flash',
+              contents: [
+                {
+                  role: 'user',
+                  parts: [{ text: (params as { query: string }).query }],
+                },
+              ],
+              config: {
+                tools: [{ googleSearch: {} }],
               },
-            ],
-            config: {
-              tools: [{ googleSearch: {} }],
-            },
-          };
-          // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
-          const result = await oauthContentGenerator.generateContent(
-            oauthRequest,
-            'web-search-oauth', // userPromptId for OAuth web search
-          );
-          return result;
+            };
+            this.logger.debug(
+              () =>
+                `invokeServerTool: making OAuth generateContent request with query: ${(params as { query: string }).query}`,
+            );
+            // PRIVACY FIX: Removed sessionId to prevent transmission to Google servers
+            const result = await oauthContentGenerator.generateContent(
+              oauthRequest,
+              'web-search-oauth', // userPromptId for OAuth web search
+            );
+            this.logger.debug(
+              () =>
+                `invokeServerTool: OAuth generateContent completed successfully`,
+            );
+            return result;
+          } catch (error) {
+            this.logger.debug(
+              () => `invokeServerTool: ERROR in OAuth case: ${error}`,
+            );
+            this.logger.debug(() => `invokeServerTool: Error details:`, error);
+            throw error;
+          }
         }
 
         default:

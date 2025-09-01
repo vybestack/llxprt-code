@@ -23,6 +23,7 @@ import {
   getErrorStatus,
   DiscoveredMCPTool,
   DebugLogger,
+  getFunctionCalls,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -268,6 +269,22 @@ class GeminiAgent {
             (
               sessionConfig as unknown as Record<string, unknown>
             ).providerManager = providerManager;
+
+            // Ensure serverToolsProvider (Gemini) has config set BEFORE refreshAuth
+            // This is critical for web search to work properly
+            const serverToolsProvider =
+              providerManager.getServerToolsProvider();
+            if (
+              serverToolsProvider &&
+              serverToolsProvider.name === 'gemini' &&
+              serverToolsProvider.setConfig
+            ) {
+              this.logger.debug(
+                () =>
+                  'Setting config on serverToolsProvider for web search (before auth)',
+              );
+              serverToolsProvider.setConfig(sessionConfig);
+            }
           }
 
           await sessionConfig.refreshAuth(AuthType.USE_PROVIDER);
@@ -468,8 +485,10 @@ class Session {
             }
           }
 
-          if (resp.functionCalls) {
-            functionCalls.push(...resp.functionCalls);
+          // Extract function calls from the response using the proper utility
+          const respFunctionCalls = getFunctionCalls(resp);
+          if (respFunctionCalls && respFunctionCalls.length > 0) {
+            functionCalls.push(...respFunctionCalls);
           }
         }
       } catch (error) {

@@ -162,6 +162,7 @@ export * from './providers/tokenizers/ITokenizer.js';
 export * from './providers/tokenizers/OpenAITokenizer.js';
 export * from './providers/tokenizers/AnthropicTokenizer.js';
 export * from './utils/browser.js';
+export * from './utils/generateContentResponseUtilities.js';
 
 // Export adapters
 export * from './adapters/IStreamAdapter.js';

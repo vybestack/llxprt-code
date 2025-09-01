@@ -594,6 +594,18 @@ export class GeminiClient {
     }
     await this.lazyInitialize();
 
+    // Ensure chat is initialized after lazyInitialize
+    if (!this.chat) {
+      // If we have previous history, restore it when creating the chat
+      if (this._previousHistory && this._previousHistory.length > 0) {
+        // Extract the conversation history after the initial environment setup
+        const conversationHistory = this._previousHistory.slice(2);
+        this.chat = await this.startChat(conversationHistory);
+      } else {
+        this.chat = await this.startChat();
+      }
+    }
+
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;

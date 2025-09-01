@@ -17,21 +17,42 @@ export async function createCodeAssistContentGenerator(
   baseURL?: string, // Add baseURL parameter
   _sessionId?: string, // PRIVACY FIX: parameter kept for backward compatibility but not used
 ): Promise<ContentGenerator> {
+  console.log(
+    `createCodeAssistContentGenerator: authType=${authType}, config=${!!config}, baseURL=${baseURL}`,
+  );
+
   if (
     authType === AuthType.LOGIN_WITH_GOOGLE ||
     authType === AuthType.CLOUD_SHELL
   ) {
-    const authClient = await getOauthClient(authType, config);
-    const userData = await setupUser(authClient);
-    return new CodeAssistServer(
-      authClient,
-      userData.projectId,
-      httpOptions,
-      // PRIVACY FIX: sessionId removed to prevent transmission to Google servers
-      // sessionId, // removed
-      userData.userTier,
-      baseURL, // Pass baseURL to constructor
-    );
+    try {
+      console.log(
+        `createCodeAssistContentGenerator: calling getOauthClient for authType ${authType}`,
+      );
+      const authClient = await getOauthClient(authType, config);
+      console.log(
+        `createCodeAssistContentGenerator: OAuth client created, calling setupUser`,
+      );
+      const userData = await setupUser(authClient);
+      console.log(
+        `createCodeAssistContentGenerator: setupUser completed, projectId=${userData.projectId}, userTier=${userData.userTier}`,
+      );
+      return new CodeAssistServer(
+        authClient,
+        userData.projectId,
+        httpOptions,
+        // PRIVACY FIX: sessionId removed to prevent transmission to Google servers
+        // sessionId, // removed
+        userData.userTier,
+        baseURL, // Pass baseURL to constructor
+      );
+    } catch (error) {
+      console.log(
+        `createCodeAssistContentGenerator: ERROR during OAuth setup: ${error}`,
+      );
+      console.log(`createCodeAssistContentGenerator: Error details:`, error);
+      throw error;
+    }
   }
 
   throw new Error(`Unsupported authType: ${authType}`);

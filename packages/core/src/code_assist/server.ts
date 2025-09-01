@@ -80,18 +80,39 @@ export class CodeAssistServer implements ContentGenerator {
     req: GenerateContentParameters,
     userPromptId: string,
   ): Promise<GenerateContentResponse> {
-    const resp = await this.requestPost<CaGenerateContentResponse>(
-      'generateContent',
-      // PRIVACY FIX: sessionId removed from request to prevent transmission to Google servers
-      toGenerateContentRequest(
-        req,
-        userPromptId,
-        this.projectId,
-        // this.sessionId, // removed
-      ),
-      req.config?.abortSignal,
+    console.log(
+      `CodeAssistServer.generateContent: userPromptId=${userPromptId}, model=${req.model}, projectId=${this.projectId}`,
     );
-    return fromGenerateContentResponse(resp);
+    console.log(
+      `CodeAssistServer.generateContent: request contents:`,
+      req.contents,
+    );
+    console.log(
+      `CodeAssistServer.generateContent: request config:`,
+      req.config,
+    );
+
+    try {
+      const resp = await this.requestPost<CaGenerateContentResponse>(
+        'generateContent',
+        // PRIVACY FIX: sessionId removed from request to prevent transmission to Google servers
+        toGenerateContentRequest(
+          req,
+          userPromptId,
+          this.projectId,
+          // this.sessionId, // removed
+        ),
+        req.config?.abortSignal,
+      );
+      console.log(`CodeAssistServer.generateContent: request successful`);
+      return fromGenerateContentResponse(resp);
+    } catch (error) {
+      console.log(
+        `CodeAssistServer.generateContent: ERROR during request: ${error}`,
+      );
+      console.log(`CodeAssistServer.generateContent: Error details:`, error);
+      throw error;
+    }
   }
 
   async onboardUser(
