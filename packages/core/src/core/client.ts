@@ -594,6 +594,12 @@ export class GeminiClient {
     }
     await this.lazyInitialize();
 
+    // Ensure chat is initialized after lazyInitialize
+    // This is needed for TUI mode where the chat might not be initialized yet
+    if (!this.hasChatInitialized()) {
+      await this.resetChat();
+    }
+
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
