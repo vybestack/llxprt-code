@@ -363,14 +363,6 @@ export async function main() {
       );
     }
   }
-  // Empty key causes issues with the GoogleGenAI package.
-  if (process.env['GEMINI_API_KEY']?.trim() === '') {
-    delete process.env['GEMINI_API_KEY'];
-  }
-
-  if (process.env['GOOGLE_API_KEY']?.trim() === '') {
-    delete process.env['GOOGLE_API_KEY'];
-  }
 
   setMaxSizedBoxDebugging(config.getDebugMode());
 
