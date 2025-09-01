@@ -365,20 +365,6 @@ export class OpenAIProvider extends BaseProvider {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
-    // Don't automatically add synthetic responses - they should only be added when tools are actually cancelled
-    // Check if we have any existing synthetic responses (from actual cancellations)
-    const existingSyntheticCount = messages.filter(
-      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
-    ).length;
-
-    if (existingSyntheticCount > 0) {
-      this.logger.debug(
-        () =>
-          `[Synthetic] Found ${existingSyntheticCount} existing synthetic responses in conversation`,
-      );
-    }
-
-    // Just use the messages as-is without "fixing" them
     const patchedMessages = messages;
 
     // Validate tool messages have required tool_call_id
@@ -393,63 +379,6 @@ export class OpenAIProvider extends BaseProvider {
       throw new Error(
         `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
       );
-    }
-
-    // Log synthetic responses for debugging
-    const syntheticMessages = patchedMessages.filter(
-      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
-    );
-    if (syntheticMessages.length > 0) {
-      this.logger.debug(
-        () =>
-          `[Synthetic] Added ${syntheticMessages.length} synthetic tool responses`,
-      );
-
-      // Check for ordering issues - using debug logger which only executes when enabled
-      this.logger.debug(() => {
-        const orderingErrors: string[] = [];
-        const orderingWarnings: string[] = [];
-
-        for (let i = 0; i < patchedMessages.length - 1; i++) {
-          const current = patchedMessages[i];
-          const next = patchedMessages[i + 1];
-
-          // Check if a tool response comes before its corresponding tool call
-          if (current.role === 'tool' && current.tool_call_id) {
-            // Find the assistant message with this tool call
-            const callIndex = patchedMessages.findIndex(
-              (m) =>
-                m.role === 'assistant' &&
-                m.tool_calls?.some((tc) => tc.id === current.tool_call_id),
-            );
-            if (callIndex === -1 || callIndex > i) {
-              orderingErrors.push(
-                `Tool response ${current.tool_call_id} appears before its tool call or call not found`,
-              );
-            }
-          }
-
-          // Check if we have consecutive assistant messages with tool calls
-          if (
-            current.role === 'assistant' &&
-            current.tool_calls &&
-            next.role === 'assistant' &&
-            next.tool_calls
-          ) {
-            orderingWarnings.push(
-              `Consecutive assistant messages with tool calls at indices ${i} and ${i + 1}`,
-            );
-          }
-        }
-
-        if (orderingErrors.length > 0) {
-          return `[Synthetic Order Check] Errors found: ${orderingErrors.join('; ')}`;
-        } else if (orderingWarnings.length > 0) {
-          return `[Synthetic Order Check] Warnings: ${orderingWarnings.join('; ')}`;
-        } else {
-          return '[Synthetic Order Check] No issues found';
-        }
-      });
     }
 
     const parser = this.requiresTextToolCallParsing()
@@ -478,24 +407,7 @@ export class OpenAIProvider extends BaseProvider {
     // Get resolved authentication and update client if needed
     await this.updateClientWithResolvedAuth();
 
-    // Strip internal tracking fields that some APIs don't accept
-    // We keep the synthetic responses but remove the metadata fields
-    const cleanedMessages = patchedMessages.map((msg) => {
-      // Create a shallow copy and remove internal fields
-      const { _synthetic, _cancelled, ...cleanMsg } = msg as IMessage & {
-        _synthetic?: boolean;
-        _cancelled?: boolean;
-      };
-
-      // Log synthetic tool responses for debugging
-      if ((msg as IMessage & { _synthetic?: boolean })._synthetic) {
-        this.logger.debug(
-          () => `[Synthetic Tool Response] ${JSON.stringify(cleanMsg)}`,
-        );
-      }
-
-      return cleanMsg;
-    });
+    const cleanedMessages = patchedMessages;
 
     this.logger.debug(
       () =>
@@ -554,11 +466,6 @@ export class OpenAIProvider extends BaseProvider {
       // Log the last few messages to understand what's being sent
       if (errorStatus === 400) {
         // Log additional diagnostics for 400 errors
-        const hasSyntheticMessages = cleanedMessages.some(
-          (msg) =>
-            msg.role === 'tool' &&
-            msg.content === 'Tool execution cancelled by user',
-        );
         const hasPendingToolCalls = cleanedMessages.some((msg, idx) => {
           if (msg.role === 'assistant' && msg.tool_calls) {
             // Check if there's a matching tool response
@@ -574,9 +481,6 @@ export class OpenAIProvider extends BaseProvider {
         });
 
         this.logger.error(() => `${errorLabel} Last 5 messages being sent:`);
-        this.logger.error(
-          () => `${errorLabel} Has synthetic messages: ${hasSyntheticMessages}`,
-        );
         this.logger.error(
           () =>
             `${errorLabel} Has pending tool calls without responses: ${hasPendingToolCalls}`,
@@ -651,364 +555,13 @@ export class OpenAIProvider extends BaseProvider {
         }
       | undefined;
 
-    // Type for chunks that may have message instead of delta
-    interface StreamChunk {
-      choices?: Array<{
-        delta?: {
-          content?: string | null;
-          role?: string;
-          tool_calls?: Array<{
-            id?: string;
-            type?: string;
-            function?: {
-              name?: string;
-              arguments?: string;
-            };
-            index?: number;
-          }>;
-        };
-        message?: {
-          content?: string | null;
-          role?: string;
-          tool_calls?: Array<{
-            id?: string;
-            type?: string;
-            function?: {
-              name?: string;
-              arguments?: string;
-            };
-          }>;
-        };
-        index?: number;
-        finish_reason?: string | null;
-      }>;
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-      };
-    }
-
     // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
     let pendingWhitespace: string | null = null;
 
     // Handle streaming vs non-streaming response
     if (streamingEnabled) {
-      // We need to buffer all chunks to detect and handle malformed streams
-      // Some providers (like Cerebras) send message format instead of delta
-      const allChunks: StreamChunk[] = [];
-
-      this.logger.debug(
-        () =>
-          '[Stream Detection] Starting to buffer chunks for corruption detection',
-        {
-          provider: this.baseURL,
-          streamingEnabled,
-          isUsingQwen: this.isUsingQwen(),
-          currentModel: this.currentModel,
-        },
-      );
-
-      try {
-        for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
-          // CRITICAL: Create a deep copy to avoid JSONResponse mutation issues
-          // Cerebras and other providers may return immutable JSONResponse objects
-          // Cast to unknown first to bypass type checking, then to our extended type
-          const extendedChunk = chunk as unknown as {
-            choices?: Array<{
-              delta?: {
-                content?: string | null;
-                role?: string;
-                tool_calls?: Array<{
-                  id: string;
-                  type: string;
-                  function: {
-                    name: string;
-                    arguments: string;
-                  };
-                  index?: number;
-                }>;
-              };
-              message?: {
-                content?: string | null;
-                role?: string;
-                tool_calls?: Array<{
-                  id: string;
-                  type: string;
-                  function: {
-                    name: string;
-                    arguments: string;
-                  };
-                }>;
-              };
-              index: number;
-              finish_reason: string | null;
-            }>;
-            usage?: {
-              prompt_tokens?: number;
-              completion_tokens?: number;
-              total_tokens?: number;
-            };
-          };
-
-          const safeChunk: StreamChunk = {
-            choices: extendedChunk.choices?.map((choice) => ({
-              delta: choice.delta
-                ? {
-                    content: choice.delta.content ?? undefined,
-                    role: choice.delta.role,
-                    tool_calls: choice.delta.tool_calls?.map((tc, idx) => ({
-                      id: tc.id,
-                      type: tc.type,
-                      function: tc.function
-                        ? {
-                            name: tc.function.name,
-                            arguments: tc.function.arguments,
-                          }
-                        : undefined,
-                      index: tc.index !== undefined ? tc.index : idx,
-                    })),
-                  }
-                : undefined,
-              message: choice.message
-                ? {
-                    content: choice.message.content ?? undefined,
-                    role: choice.message.role,
-                    tool_calls: choice.message.tool_calls?.map((tc) => ({
-                      id: tc.id,
-                      type: tc.type,
-                      function: tc.function
-                        ? {
-                            name: tc.function.name,
-                            arguments: tc.function.arguments,
-                          }
-                        : undefined,
-                    })),
-                  }
-                : undefined,
-              index: choice.index,
-              finish_reason: choice.finish_reason,
-            })),
-            usage: extendedChunk.usage
-              ? {
-                  prompt_tokens: extendedChunk.usage.prompt_tokens,
-                  completion_tokens: extendedChunk.usage.completion_tokens,
-                  total_tokens: extendedChunk.usage.total_tokens,
-                }
-              : undefined,
-          };
-          allChunks.push(safeChunk);
-        }
-
-        this.logger.debug(
-          () =>
-            `[Stream Buffering Complete] Collected ${allChunks.length} chunks`,
-          {
-            chunkCount: allChunks.length,
-            hasContent: allChunks.some((c) => c.choices?.[0]?.delta?.content),
-            hasToolCalls: allChunks.some(
-              (c) => c.choices?.[0]?.delta?.tool_calls,
-            ),
-          },
-        );
-      } catch (error) {
-        // Handle JSONResponse mutation errors that occur during iteration
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        if (
-          errorMessage?.includes('JSONResponse') &&
-          errorMessage?.includes('does not support item assignment')
-        ) {
-          this.logger.error(
-            () =>
-              '[Cerebras Corruption] JSONResponse mutation error during stream iteration. This is a known issue with Cerebras. The OpenAI client library is trying to mutate immutable response objects. Falling back to non-streaming mode.',
-            {
-              error: errorMessage,
-              provider: this.baseURL,
-              chunksCollected: allChunks.length,
-            },
-          );
-
-          // Retry the entire request with streaming disabled
-          // This is the nuclear option but ensures we get a response
-          const nonStreamingResponse =
-            await this.openai.chat.completions.create({
-              model: this.currentModel,
-              messages:
-                cleanedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-              stream: false, // Force non-streaming
-              tools: formattedTools as
-                | OpenAI.Chat.Completions.ChatCompletionTool[]
-                | undefined,
-              tool_choice: this.getToolChoiceForFormat(tools),
-              ...this.modelParams,
-            });
-
-          // Handle as non-streaming response
-          const completionResponse =
-            nonStreamingResponse as OpenAI.Chat.Completions.ChatCompletion;
-          const choice = completionResponse.choices[0];
-
-          if (choice?.message.content) {
-            fullContent = choice.message.content;
-          }
-
-          if (choice?.message.tool_calls) {
-            for (const toolCall of choice.message.tool_calls) {
-              if (toolCall.type === 'function' && toolCall.function) {
-                accumulatedToolCalls.push({
-                  id: toolCall.id,
-                  type: 'function' as const,
-                  function: toolCall.function,
-                });
-              }
-            }
-          }
-
-          if (completionResponse.usage) {
-            usageData = {
-              prompt_tokens: completionResponse.usage.prompt_tokens,
-              completion_tokens: completionResponse.usage.completion_tokens,
-              total_tokens: completionResponse.usage.total_tokens,
-            };
-          }
-
-          // Yield the complete response
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: fullContent || '',
-            tool_calls:
-              accumulatedToolCalls.length > 0
-                ? accumulatedToolCalls
-                : undefined,
-            usage: usageData,
-          };
-          return;
-        }
-
-        // Re-throw other errors
-        throw error;
-      }
-
-      // Check first chunk to see if we have malformed stream
-      let detectedMalformedStream = false;
-      if (allChunks.length > 0) {
-        const firstChunk = allChunks[0];
-        if (
-          firstChunk.choices?.[0]?.message &&
-          !firstChunk.choices?.[0]?.delta
-        ) {
-          detectedMalformedStream = true;
-          this.logger.debug(
-            () =>
-              'Detected malformed stream (message instead of delta), using aggregation mode',
-          );
-        }
-      }
-
-      // If we detected issues, aggregate everything
-      if (detectedMalformedStream) {
-        const contentParts: string[] = [];
-        let aggregatedToolCalls: Array<{
-          id: string;
-          type: 'function';
-          function: {
-            name: string;
-            arguments: string;
-          };
-        }> = [];
-        let finalUsageData:
-          | {
-              prompt_tokens: number;
-              completion_tokens: number;
-              total_tokens: number;
-            }
-          | undefined = undefined;
-
-        // Process all buffered chunks
-        for (const chunk of allChunks) {
-          const message =
-            chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
-          if (message?.content) {
-            contentParts.push(message.content);
-          }
-          if (message?.tool_calls) {
-            // Ensure tool_calls match the expected format
-            aggregatedToolCalls = message.tool_calls.map((tc) => ({
-              id: tc.id || `call_${Date.now()}`,
-              type: (tc.type || 'function') as 'function',
-              function: {
-                name: tc.function?.name || '',
-                arguments: tc.function?.arguments || '',
-              },
-            }));
-          }
-          if (chunk.usage) {
-            finalUsageData = {
-              prompt_tokens: chunk.usage.prompt_tokens || 0,
-              completion_tokens: chunk.usage.completion_tokens || 0,
-              total_tokens: chunk.usage.total_tokens || 0,
-            };
-          }
-        }
-
-        // Yield single reconstructed message
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: contentParts.join(''),
-          tool_calls:
-            aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
-          usage: finalUsageData,
-        };
-        return;
-      }
-
-      // Process chunks normally - stream them as they come
-      this.logger.debug(
-        () =>
-          `[Processing Chunks] Starting to process ${allChunks.length} buffered chunks`,
-        {
-          isUsingQwen: this.isUsingQwen(),
-        },
-      );
-
-      let chunkIndex = 0;
-      for (const chunk of allChunks) {
-        chunkIndex++;
-        // Since we created safe copies during buffering, chunks are now mutable
-        // Check if this chunk has message format instead of delta (malformed stream)
-        let processedChunk: StreamChunk = chunk;
-        if (chunk.choices?.[0]?.message && !chunk.choices?.[0]?.delta) {
-          this.logger.error(
-            () =>
-              '[Cerebras Corruption] Converting malformed chunk from message to delta format',
-            {
-              provider: this.baseURL,
-              hasMessage: true,
-              hasDelta: false,
-              messageContent: chunk.choices[0].message?.content?.substring(
-                0,
-                100,
-              ),
-            },
-          );
-          // Convert message format to delta format for consistent processing
-          const message = chunk.choices[0].message;
-          processedChunk = {
-            choices: [
-              {
-                delta: {
-                  content: message?.content ?? undefined,
-                  role: message?.role,
-                  tool_calls: message?.tool_calls,
-                },
-              },
-            ],
-            usage: chunk.usage,
-          };
-        }
-
-        const delta = processedChunk.choices?.[0]?.delta;
+      for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+        const delta = chunk.choices?.[0]?.delta;
 
         if (delta?.content) {
           // Enhanced debug logging to understand streaming behavior
@@ -1019,24 +572,12 @@ export class OpenAIProvider extends BaseProvider {
                   content: delta.content,
                   contentLength: delta.content?.length ?? 0,
                   isWhitespaceOnly: delta.content?.trim() === '',
-                  chunkIndex: 0,
                 })}`,
             );
           }
 
           // For text-based models, don't yield content chunks yet
           if (!parser && delta.content) {
-            this.logger.debug(
-              () =>
-                `[Content Processing] Chunk ${chunkIndex}/${allChunks.length} has content`,
-              {
-                contentLength: delta.content.length,
-                contentPreview: delta.content.substring(0, 50),
-                isUsingQwen: this.isUsingQwen(),
-                willBuffer: this.isUsingQwen() && delta.content.trim() === '',
-              },
-            );
-
             if (this.isUsingQwen()) {
               const isWhitespaceOnly = delta.content.trim() === '';
               if (isWhitespaceOnly) {
@@ -1045,12 +586,6 @@ export class OpenAIProvider extends BaseProvider {
                 this.logger.debug(
                   () =>
                     `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${pendingWhitespace?.length ?? 0}`,
-                  {
-                    chunkIndex,
-                    totalChunks: allChunks.length,
-                    isLastChunk: chunkIndex === allChunks.length,
-                    contentHex: Buffer.from(delta.content).toString('hex'),
-                  },
                 );
                 continue;
               } else if (pendingWhitespace) {
@@ -1068,15 +603,6 @@ export class OpenAIProvider extends BaseProvider {
                 pendingWhitespace = null;
               }
             }
-
-            this.logger.debug(
-              () =>
-                `[Yielding Content] Yielding chunk ${chunkIndex}/${allChunks.length}`,
-              {
-                contentLength: delta.content.length,
-                hasStreamedContent,
-              },
-            );
 
             yield {
               role: ContentGeneratorRole.ASSISTANT,
@@ -1099,11 +625,11 @@ export class OpenAIProvider extends BaseProvider {
         }
 
         // Check for usage data in the chunk
-        if (processedChunk.usage) {
+        if (chunk.usage) {
           usageData = {
-            prompt_tokens: processedChunk.usage.prompt_tokens || 0,
-            completion_tokens: processedChunk.usage.completion_tokens || 0,
-            total_tokens: processedChunk.usage.total_tokens || 0,
+            prompt_tokens: chunk.usage.prompt_tokens || 0,
+            completion_tokens: chunk.usage.completion_tokens || 0,
+            total_tokens: chunk.usage.total_tokens || 0,
           };
         }
       }
