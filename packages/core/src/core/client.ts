@@ -28,6 +28,8 @@ import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { ContentConverters } from '../services/history/ContentConverters.js';
 import { retryWithBackoff } from '../utils/retry.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -322,7 +324,8 @@ export class GeminiClient {
   }
 
   async resetChat(): Promise<void> {
-    this.chat = await this.startChat();
+    // Pass the stored history to startChat so it's preserved
+    this.chat = await this.startChat(this._previousHistory);
   }
 
   async addDirectoryContext(): Promise<void> {
@@ -346,7 +349,16 @@ export class GeminiClient {
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
-    const history: Content[] = [...(extraHistory ?? [])];
+    // Create HistoryService and add initial history
+    const historyService = new HistoryService();
+
+    // Add extraHistory if provided
+    if (extraHistory && extraHistory.length > 0) {
+      for (const content of extraHistory) {
+        historyService.add(ContentConverters.toIContent(content));
+      }
+    }
+
     try {
       const userMemory = this.config.getUserMemory();
       const model = this.config.getModel();
@@ -389,13 +401,14 @@ export class GeminiClient {
           ...generateContentConfigWithThinking,
           tools,
         },
-        history,
+        [], // Empty initial history since we're using HistoryService
+        historyService,
       );
     } catch (error) {
       await reportError(
         error,
         'Error initializing chat session.',
-        history,
+        extraHistory ?? [],
         'startChat',
       );
       throw new Error(`Failed to initialize chat: ${getErrorMessage(error)}`);

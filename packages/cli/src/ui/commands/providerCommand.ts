@@ -171,11 +171,8 @@ export const providerCommand: SlashCommand = {
           context.services.config.setModel(defaultModel);
         }
 
-        // Clear conversation history BEFORE switching to prevent tool call ID mismatches
-        const geminiClient = context.services.config.getGeminiClient();
-        if (geminiClient && geminiClient.isInitialized()) {
-          await geminiClient.resetChat();
-        }
+        // With HistoryService and ContentConverters, we can now keep conversation history
+        // when switching providers as the conversion handles format differences
 
         // Keep the current auth type - auth only affects GeminiProvider internally
         const currentAuthType =

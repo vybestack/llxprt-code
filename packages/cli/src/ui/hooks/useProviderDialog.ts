@@ -72,11 +72,8 @@ export const useProviderDialog = ({
           providerManager.getActiveProvider().getCurrentModel?.() || '';
         config.setModel(newModel);
 
-        // Clear conversation history BEFORE switching to prevent tool call ID mismatches
-        const geminiClient = config.getGeminiClient();
-        if (geminiClient && geminiClient.isInitialized()) {
-          await geminiClient.resetChat();
-        }
+        // With HistoryService and ContentConverters, we can now keep conversation history
+        // when switching providers as the conversion handles format differences
 
         // Determine appropriate auth type
         let authType: AuthType;

@@ -31,9 +31,12 @@ export class HistoryService {
 
   /**
    * Add content to the history
+   * Note: We accept all content including empty responses for comprehensive history.
+   * Filtering happens only when getting curated history.
    */
   add(content: IContent): void {
-    if (ContentValidation.isValid(content)) {
+    // Only do basic validation - must have valid speaker
+    if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
     }
   }
@@ -70,11 +73,27 @@ export class HistoryService {
 
   /**
    * Get curated history (only valid, meaningful content)
+   * Matches the behavior of extractCuratedHistory in geminiChat.ts:
+   * - Always includes user/human messages
+   * - Always includes tool messages
+   * - Only includes AI messages if they are valid (have content)
    */
   getCurated(): IContent[] {
-    return this.history.filter((content) =>
-      ContentValidation.hasContent(content),
-    );
+    const curated: IContent[] = [];
+
+    for (const content of this.history) {
+      if (content.speaker === 'human' || content.speaker === 'tool') {
+        // Always include user and tool messages
+        curated.push(content);
+      } else if (content.speaker === 'ai') {
+        // Only include AI messages if they have valid content
+        if (ContentValidation.hasContent(content)) {
+          curated.push(content);
+        }
+      }
+    }
+
+    return curated;
   }
 
   /**
