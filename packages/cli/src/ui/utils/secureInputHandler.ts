@@ -27,8 +27,13 @@ export class SecureInputHandler {
    */
   shouldUseSecureMode(text: string): boolean {
     const trimmed = text.trim();
-    // Check for /key command with a space (indicating an argument is being typed or about to be typed)
-    return trimmed.startsWith('/key ') || trimmed === '/key';
+    // Check for /key or /keyfile command with a space (indicating an argument is being typed or about to be typed)
+    return (
+      trimmed.startsWith('/key ') ||
+      trimmed === '/key' ||
+      trimmed.startsWith('/keyfile ') ||
+      trimmed === '/keyfile'
+    );
   }
 
   /**
@@ -47,11 +52,13 @@ export class SecureInputHandler {
         console.log('[SecureHandler] Input:', JSON.stringify(text));
       }
 
-      // Check if text starts with /key followed by space and content
-      const match = text.match(/^\/key\s+([\s\S]*)/);
-      if (match && match[1]) {
+      // Check if text starts with /key or /keyfile followed by space and content
+      const keyMatch = text.match(/^\/key\s+([\s\S]*)/);
+      const keyfileMatch = text.match(/^\/keyfile\s+([\s\S]*)/);
+
+      if (keyMatch && keyMatch[1]) {
         // We have content after "/key "
-        const keyContent = match[1];
+        const keyContent = keyMatch[1];
 
         // Check if the key contains newlines or carriage returns
         const lineBreakMatch = keyContent.match(/[\r\n]/);
@@ -81,8 +88,12 @@ export class SecureInputHandler {
           const maskedKey = this.maskValue(keyContent);
           return `/key ${maskedKey}`;
         }
+      } else if (keyfileMatch && keyfileMatch[1]) {
+        // We have content after "/keyfile "
+        // For /keyfile, we don't mask the file path (it's not sensitive)
+        return text;
       } else {
-        // Just "/key" or "/key " with no content yet
+        // Just "/key", "/keyfile" or with space but no content yet
         return text;
       }
     }
@@ -146,6 +157,8 @@ export class SecureInputHandler {
         const keyValue = keyCommandMatch[2];
         return `${prefix}${this.maskValue(keyValue)}`;
       }
+      // For /keyfile, we don't mask the file path (it's not sensitive)
+      // Just return the command as-is
     }
     return command;
   }

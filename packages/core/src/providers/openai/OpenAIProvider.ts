@@ -1895,7 +1895,7 @@ export class OpenAIProvider extends BaseProvider {
 
   override setApiKey(apiKey: string): void {
     // Call base provider implementation
-    super.setApiKey?.(apiKey);
+    super.setApiKey(apiKey);
 
     // Persist to SettingsService if available
     this.setApiKeyInSettings(apiKey).catch((error) => {

@@ -464,6 +464,13 @@ export async function main() {
           process.exit(1);
         }
 
+        // Store the keyfile path in ephemeral settings for reference
+        // This helps track that we're using a keyfile vs direct key
+        config.setEphemeralSetting('auth-keyfile', resolvedPath);
+        // Don't clear auth-key - setProviderApiKey already sets it in settings
+        // The auth-key will be used immediately, and auth-keyfile is stored
+        // for future reference (e.g., when reloading profiles)
+
         const message = `API key loaded from ${resolvedPath} for provider '${providerManager.getActiveProviderName()}'`;
         if (config.getDebugMode()) {
           console.debug(message);

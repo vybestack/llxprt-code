@@ -184,7 +184,7 @@ export abstract class BaseProvider implements IProvider {
   /**
    * Updates the API key (used for CLI --key argument and other sources)
    */
-  setApiKey?(apiKey: string): void {
+  setApiKey(apiKey: string): void {
     const settingsService = getSettingsService();
 
     // CRITICAL FIX: When clearing the key, set to undefined instead of empty string

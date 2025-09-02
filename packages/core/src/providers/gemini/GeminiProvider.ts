@@ -985,7 +985,7 @@ export class GeminiProvider extends BaseProvider {
 
   override setApiKey(apiKey: string): void {
     // Call base provider implementation
-    super.setApiKey?.(apiKey);
+    super.setApiKey(apiKey);
 
     // Set the API key as an environment variable so it can be used by the core library
     // CRITICAL FIX: When clearing the key (empty string), delete the env var instead of setting to empty

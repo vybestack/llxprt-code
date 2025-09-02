@@ -127,12 +127,27 @@ export const keyfileCommand: SlashCommand = {
         const activeProvider = providerManager.getActiveProvider();
         const providerName = activeProvider.name;
 
-        // Store the keyfile PATH in SettingsService (ephemeral settings)
-        // The AuthPrecedenceResolver will read from here when needed
+        // Set the API key directly on the provider
+        if (activeProvider.setApiKey) {
+          activeProvider.setApiKey(apiKey);
+        } else {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Provider '${providerName}' does not support API key authentication`,
+          };
+        }
+
+        // Store the keyfile PATH in ephemeral settings for reference
+        // This helps track that we're using a keyfile vs direct key
         if (context.services.config) {
-          context.services.config.setEphemeralSetting('auth-keyfile', filePath);
-          // Remove any stored auth-key since we're using keyfile
-          context.services.config.setEphemeralSetting('auth-key', undefined);
+          context.services.config.setEphemeralSetting(
+            'auth-keyfile',
+            resolvedPath,
+          );
+          // Don't clear auth-key - we just set it via setApiKey above!
+          // The auth-key will be used immediately, and auth-keyfile is stored
+          // for future reference (e.g., when reloading profiles)
         }
 
         // Check if we're now in paid mode

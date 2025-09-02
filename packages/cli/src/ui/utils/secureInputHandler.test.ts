@@ -31,6 +31,15 @@ describe('SecureInputHandler', () => {
       expect(handler.shouldUseSecureMode('key abc')).toBe(false);
     });
 
+    it('should detect /keyfile command', () => {
+      expect(handler.shouldUseSecureMode('/keyfile')).toBe(true);
+      expect(handler.shouldUseSecureMode('/keyfile ')).toBe(true);
+      expect(handler.shouldUseSecureMode('/keyfile ~/.mykey')).toBe(true);
+      expect(handler.shouldUseSecureMode('  /keyfile   ~/.ssh/key  ')).toBe(
+        true,
+      );
+    });
+
     it('should not detect other commands', () => {
       expect(handler.shouldUseSecureMode('/help')).toBe(false);
       expect(handler.shouldUseSecureMode('/clear')).toBe(false);
@@ -55,6 +64,16 @@ describe('SecureInputHandler', () => {
       const processed = handler.processInput(input);
 
       expect(processed).toBe('/key ******');
+      expect(handler.getActualValue()).toBe(input);
+    });
+
+    it('should not mask file paths in /keyfile command', () => {
+      const input = '/keyfile ~/.ssh/mykey';
+      const processed = handler.processInput(input);
+
+      // File paths should not be masked
+      expect(processed).toBe(input);
+      expect(handler.isInSecureMode()).toBe(true);
       expect(handler.getActualValue()).toBe(input);
     });
 
@@ -135,6 +154,13 @@ describe('SecureInputHandler', () => {
       commands.forEach((cmd) => {
         expect(handler.sanitizeForHistory(cmd)).toBe(cmd);
       });
+    });
+
+    it('should not mask /keyfile paths', () => {
+      const command = '/keyfile ~/.mykey';
+      const sanitized = handler.sanitizeForHistory(command);
+      // File paths should not be masked
+      expect(sanitized).toBe(command);
     });
 
     it('should handle edge cases', () => {

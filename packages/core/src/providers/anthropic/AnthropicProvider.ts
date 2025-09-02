@@ -606,7 +606,7 @@ ${llxprtPrompts}`;
 
   override setApiKey(apiKey: string): void {
     // Call base provider implementation
-    super.setApiKey?.(apiKey);
+    super.setApiKey(apiKey);
 
     // Create a new Anthropic client with the updated API key
     this.anthropic = new Anthropic({
