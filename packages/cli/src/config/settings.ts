@@ -113,7 +113,7 @@ function mergeSettings(
       ...(systemDefaults.customThemes || {}),
       ...(user.customThemes || {}),
       ...(safeWorkspace.customThemes || {}),
-      ...(system.customThemes || {}),
+      ...(system.customThemes || {})
     },
     mcpServers: {
       ...(systemDefaults.mcpServers || {}),
@@ -131,7 +131,7 @@ function mergeSettings(
       ...(systemDefaults.chatCompression || {}),
       ...(user.chatCompression || {}),
       ...(safeWorkspace.chatCompression || {}),
-      ...(system.chatCompression || {}),
+      ...(system.chatCompression || {})
     },
   };
 }
