@@ -1427,6 +1427,8 @@ You can switch authentication methods by typing /auth or switch to a different m
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
 
+  const hideContextSummary = settings.merged.ui?.hideContextSummary ?? false;
+
   return (
     <StreamingContext.Provider value={streamingState}>
       <Box flexDirection="column" width="90%">
@@ -1686,10 +1688,49 @@ You can switch authentication methods by typing /auth or switch to a different m
                 }
                 elapsedTime={elapsedTime}
               />
+<<<<<<< HEAD
               <Box
                 marginTop={1}
                 display="flex"
                 justifyContent="space-between"
+=======
+              {/* Display queued messages below loading indicator */}
+              {messageQueue.length > 0 && (
+                <Box flexDirection="column" marginTop={1}>
+                  {messageQueue
+                    .slice(0, MAX_DISPLAYED_QUEUED_MESSAGES)
+                    .map((message, index) => {
+                      // Ensure multi-line messages are collapsed for the preview.
+                      // Replace all whitespace (including newlines) with a single space.
+                      const preview = message.replace(/\s+/g, ' ');
+
+                      return (
+                        // Ensure the Box takes full width so truncation calculates correctly
+                        <Box key={index} paddingLeft={2} width="100%">
+                          {/* Use wrap="truncate" to ensure it fits the terminal width and doesn't wrap */}
+                          <Text dimColor wrap="truncate">
+                            {preview}
+                          </Text>
+                        </Box>
+                      );
+                    })}
+                  {messageQueue.length > MAX_DISPLAYED_QUEUED_MESSAGES && (
+                    <Box paddingLeft={2}>
+                      <Text dimColor>
+                        ... (+
+                        {messageQueue.length - MAX_DISPLAYED_QUEUED_MESSAGES}
+                        more)
+                      </Text>
+                    </Box>
+                  )}
+                </Box>
+              )}
+              <Box
+                marginTop={1}
+                justifyContent={
+                  hideContextSummary ? 'flex-start' : 'space-between'
+                }
+>>>>>>> 0a7f5be81 (Add footer configuration settings (#7419))
                 width="100%"
               >
                 <Box>
@@ -1706,7 +1747,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                     </Text>
                   ) : showEscapePrompt ? (
                     <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-                  ) : (
+                  ) : !hideContextSummary ? (
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
                       llxprtMdFileCount={llxprtMdFileCount}
@@ -1715,9 +1756,12 @@ You can switch authentication methods by typing /auth or switch to a different m
                       blockedMcpServers={config.getBlockedMcpServers()}
                       showToolDescriptions={showToolDescriptions}
                     />
-                  )}
+                  ) : null}
                 </Box>
-                <Box>
+                <Box
+                  paddingTop={isNarrow ? 1 : 0}
+                  marginLeft={hideContextSummary ? 1 : 2}
+                >
                   {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
                     !shellModeActive && (
                       <AutoAcceptIndicator
@@ -1727,7 +1771,6 @@ You can switch authentication methods by typing /auth or switch to a different m
                   {shellModeActive && <ShellModeIndicator />}
                 </Box>
               </Box>
-
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
@@ -1742,7 +1785,6 @@ You can switch authentication methods by typing /auth or switch to a different m
                   </Box>
                 </OverflowProvider>
               )}
-
               {isInputActive && (
                 <>
                   <InputPrompt
@@ -1825,6 +1867,9 @@ You can switch authentication methods by typing /auth or switch to a different m
               tokensPerMinute={tokenMetrics.tokensPerMinute}
               throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
               sessionTokenTotal={tokenMetrics.sessionTokenTotal}
+              hideCWD={settings.merged.hideCWD}
+              hideSandboxStatus={settings.merged.hideSandboxStatus}
+              hideModelInfo={settings.merged.hideModelInfo}
             />
           )}
         </Box>

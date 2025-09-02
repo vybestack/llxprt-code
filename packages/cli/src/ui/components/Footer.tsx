@@ -43,6 +43,10 @@ interface FooterProps {
   tokensPerMinute?: number;
   throttleWaitTimeMs?: number;
   sessionTokenTotal?: number;
+  // Footer visibility settings
+  hideCWD?: boolean;
+  hideSandboxStatus?: boolean;
+  hideModelInfo?: boolean;
 }
 
 // Responsive Memory Usage Display - Memoized to prevent re-renders
@@ -240,6 +244,9 @@ export const Footer = React.memo<FooterProps>(
     tokensPerMinute,
     throttleWaitTimeMs,
     sessionTokenTotal,
+    hideCWD = false,
+    hideSandboxStatus = false,
+    hideModelInfo = false,
   }) => {
     const { breakpoint } = useResponsive();
 
@@ -305,24 +312,25 @@ export const Footer = React.memo<FooterProps>(
           </Box>
 
           {/* Right: Memory | Context | TPM | Wait Time | Time */}
-          <Box flexDirection="row" alignItems="center">
-            {showMemoryUsage && (
-              <>
-                <ResponsiveMemoryDisplay
-                  compact={isCompact}
-                  detailed={isDetailed}
-                />
-                <Text color={SemanticColors.text.secondary}> | </Text>
-              </>
-            )}
+          {!hideModelInfo && (
+            <Box flexDirection="row" alignItems="center">
+              {showMemoryUsage && (
+                <>
+                  <ResponsiveMemoryDisplay
+                    compact={isCompact}
+                    detailed={isDetailed}
+                  />
+                  <Text color={SemanticColors.text.secondary}> | </Text>
+                </>
+              )}
 
-            <ResponsiveContextDisplay
-              historyTokenCount={historyTokenCount}
-              model={model}
-              contextLimit={contextLimit}
-              compact={isCompact}
-              detailed={isDetailed}
-            />
+              <ResponsiveContextDisplay
+                historyTokenCount={historyTokenCount}
+                model={model}
+                contextLimit={contextLimit}
+                compact={isCompact}
+                detailed={isDetailed}
+              />
 
             {/* Token tracking metrics - Debounced */}
             {tokensPerMinute !== undefined && (
@@ -346,60 +354,64 @@ export const Footer = React.memo<FooterProps>(
                 <ResponsiveTimestamp />
               </>
             )}
-          </Box>
+            </Box>
+          )}
         </Box>
 
         {/* Second Line: Path (left) | Model | Session Tokens (right) */}
         <Box justifyContent="space-between" width="100%" alignItems="center">
           {/* Left: Path and Sandbox Info */}
-          <Box flexDirection="row" alignItems="center">
-            {nightly ? (
-              <Gradient colors={Colors.GradientColors}>
-                <Text>
+          {!hideCWD && (
+            <Box flexDirection="row" alignItems="center">
+              {nightly ? (
+                <Gradient colors={Colors.GradientColors}>
+                  <Text>
+                    {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+                  </Text>
+                </Gradient>
+              ) : (
+                <Text color={SemanticColors.text.secondary}>
                   {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
                 </Text>
-              </Gradient>
-            ) : (
-              <Text color={SemanticColors.text.secondary}>
-                {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-              </Text>
-            )}
+              )}
 
-            {/* Sandbox info (only show at standard+ widths) */}
-            {!isCompact && (
-              <Box marginLeft={2}>
-                {process.env.SANDBOX &&
-                process.env.SANDBOX !== 'sandbox-exec' ? (
-                  <Text color={SemanticColors.status.success}>
-                    [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
-                  </Text>
-                ) : process.env.SANDBOX === 'sandbox-exec' ? (
-                  <Text color={SemanticColors.status.warning}>
-                    [macOS Seatbelt{' '}
-                    <Text color={SemanticColors.text.secondary}>
-                      ({process.env.SEATBELT_PROFILE})
+              {/* Sandbox info (only show at standard+ widths) */}
+              {!isCompact && !hideSandboxStatus && (
+                <Box marginLeft={2}>
+                  {process.env.SANDBOX &&
+                  process.env.SANDBOX !== 'sandbox-exec' ? (
+                    <Text color={SemanticColors.status.success}>
+                      [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
                     </Text>
-                    ]
-                  </Text>
-                ) : (
-                  <Text color={SemanticColors.status.error}>
-                    [no sandbox{' '}
-                    <Text color={SemanticColors.text.secondary}>
-                      (see /docs)
+                  ) : process.env.SANDBOX === 'sandbox-exec' ? (
+                    <Text color={SemanticColors.status.warning}>
+                      [macOS Seatbelt{' '}
+                      <Text color={SemanticColors.text.secondary}>
+                        ({process.env.SEATBELT_PROFILE})
+                      </Text>
+                      ]
                     </Text>
-                    ]
-                  </Text>
-                )}
-              </Box>
-            )}
-          </Box>
+                  ) : (
+                    <Text color={SemanticColors.status.error}>
+                      [no sandbox{' '}
+                      <Text color={SemanticColors.text.secondary}>
+                        (see /docs)
+                      </Text>
+                      ]
+                    </Text>
+                  )}
+                </Box>
+              )}
+            </Box>
+          )}
 
           {/* Right: Model, Session Tokens and other status */}
-          <Box flexDirection="row" alignItems="center">
-            {/* Show model name */}
-            {showModelName && (
-              <Text color={SemanticColors.text.accent}>{model}</Text>
-            )}
+          {!hideModelInfo && (
+            <Box flexDirection="row" alignItems="center">
+              {/* Show model name */}
+              {showModelName && (
+                <Text color={SemanticColors.text.accent}>{model}</Text>
+              )}
 
             {/* Show paid/free mode for Gemini provider */}
             {isPaidMode !== undefined &&
@@ -446,7 +458,8 @@ export const Footer = React.memo<FooterProps>(
                 <ConsoleSummaryDisplay errorCount={errorCount} />
               </>
             )}
-          </Box>
+            </Box>
+          )}
         </Box>
       </Box>
     );

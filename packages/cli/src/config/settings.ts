@@ -32,6 +32,7 @@ export const SETTINGS_DIRECTORY_NAME = '.llxprt';
 export const USER_SETTINGS_PATH = Storage.getGlobalSettingsPath();
 export const USER_SETTINGS_DIR = path.dirname(USER_SETTINGS_PATH);
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
+
 export function getSystemSettingsPath(): string {
   if (process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH) {
     return process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;

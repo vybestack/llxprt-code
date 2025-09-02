@@ -95,6 +95,15 @@ export const SETTINGS_SCHEMA = {
     description: 'Hide the footer from the UI',
     showInDialog: true,
   },
+  hideContextSummary: {
+    type: 'boolean',
+    label: 'Hide Context Summary',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
+    showInDialog: true,
+  },
   showMemoryUsage: {
     type: 'boolean',
     label: 'Show Memory Usage',
@@ -418,6 +427,34 @@ export const SETTINGS_SCHEMA = {
     default: {} as Record<string, MCPServerConfig>,
     description: 'Configuration for MCP servers.',
     showInDialog: false,
+  },
+  // Footer configuration settings - adapted to llxprt's flat structure
+  hideCWD: {
+    type: 'boolean',
+    label: 'Hide CWD',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the current working directory path in the footer.',
+    showInDialog: true,
+  },
+  hideSandboxStatus: {
+    type: 'boolean',
+    label: 'Hide Sandbox Status',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the sandbox status indicator in the footer.',
+    showInDialog: true,
+  },
+  hideModelInfo: {
+    type: 'boolean',
+    label: 'Hide Model Info',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the model name and context usage in the footer.',
+    showInDialog: true,
   },
   allowMCPServers: {
     type: 'array',
@@ -942,3 +979,9 @@ type InferSettings<T extends SettingsSchema> = {
 };
 
 export type Settings = InferSettings<typeof SETTINGS_SCHEMA>;
+
+export interface FooterSettings {
+  hideCWD?: boolean;
+  hideSandboxStatus?: boolean;
+  hideModelInfo?: boolean;
+}
