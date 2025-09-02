@@ -40,13 +40,13 @@ Token limits vary by provider and model:
 - **OpenAI:** Models like GPT-4.1 and o3 have different context windows
 - **Anthropic:** Claude models offer various context window sizes
 
-## Model fallback
+## Model fallback (Disabled in LLxprt)
 
-LLxprt Code includes a model fallback mechanism for the Google Gemini provider to ensure that you can continue to use the CLI even if the default "pro" model is rate-limited.
+**Note:** LLxprt Code has disabled automatic model fallback. When you select a model, it will stay on that model throughout your session. This prevents unexpected model changes mid-conversation (e.g., switching from a powerful model to a less capable one while coding).
 
-When using Gemini, if the CLI detects that you are being rate-limited on the "pro" model, it automatically switches to the "flash" model for the current session. This allows you to continue working without interruption.
+The upstream Gemini CLI includes an automatic fallback mechanism that switches from "pro" to "flash" models when rate-limited. LLxprt intentionally disables this behavior to maintain consistency in your AI interactions.
 
-Other providers may have their own rate limiting behaviors - consult their documentation for details.
+If you encounter rate limits, you can manually switch models using the `/model` command or wait for the rate limit to reset. Other providers may have their own rate limiting behaviors - consult their documentation for details.
 
 ## File discovery service
 

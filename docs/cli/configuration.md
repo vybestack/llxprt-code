@@ -331,12 +331,42 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
     "showLineNumbers": false
     ```
 
+- **`emojiFilter`** (object):
+  - **Description:** Controls emoji filtering in LLM responses and file operations. See [Emoji Filter Guide](../EMOJI-FILTER.md) for detailed usage.
+  - **Default:** `{"mode": "auto"}`
+  - **Properties:**
+    - **`mode`** (string): Filtering mode - `allowed`, `auto`, `warn`, or `error`
+      - `allowed`: No filtering, emojis pass through
+      - `auto`: Silent filtering (default) - converts functional emojis to text, removes decorative ones
+      - `warn`: Filter with feedback messages
+      - `error`: Block any content with emojis
+  - **Example:**
+    ```json
+    "emojiFilter": {
+      "mode": "warn"
+    }
+    ```
+  - **Note:** Can be configured per-session using `/set emojifilter <mode>` command
+
+- **`defaultProfile`** (string):
+  - **Description:** Specifies the profile to automatically load on startup. Set via `/profile set-default` command.
+  - **Default:** `null`
+  - **Example:**
+    ```json
+    "defaultProfile": "my-development-profile"
+    ```
+  - **Note:** When set, the specified profile will be loaded automatically each time LLxprt Code starts
+
 ### Example `settings.json`:
 
 ```json
 {
   "theme": "GitHub",
   "sandbox": "docker",
+  "defaultProfile": "my-development-profile",
+  "emojiFilter": {
+    "mode": "warn"
+  },
   "toolDiscoveryCommand": "bin/get_tools",
   "toolCallCommand": "bin/call_tool",
   "mcpServers": {
@@ -491,6 +521,22 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
   - Default: `~/.llxprt/prompts`
   - Example: `export LLXPRT_PROMPTS_DIR="/path/to/custom/prompts"`
   - See the [Prompt Configuration Guide](../prompt-configuration.md) for details
+- **`QWEN_API_KEY`**:
+  - Your API key for Qwen/Alibaba Cloud services.
+  - Used when provider is set to qwen.
+  - Example: `export QWEN_API_KEY="sk-..."`
+- **`GROQ_API_KEY`**:
+  - Your API key for Groq services.
+  - Used when provider is set to groq.
+  - Example: `export GROQ_API_KEY="gsk_..."`
+- **`TOGETHER_API_KEY`**:
+  - Your API key for Together AI services.
+  - Used when provider is set to together.
+  - Example: `export TOGETHER_API_KEY="..."`
+- **`X_API_KEY`**:
+  - Your API key for X.AI (Grok) services.
+  - Used when provider is set to xai.
+  - Example: `export X_API_KEY="xai-..."`
 
 ## Command-Line Arguments
 
@@ -700,20 +746,25 @@ LLxprt Code provides OAuth authentication for multiple providers through the `/a
 ### Usage Examples
 
 #### Show Auth Dialog
+
 ```
 /auth
 ```
+
 Displays the authentication dialog with all available options.
 
 #### Check Provider Status
+
 ```
 /auth gemini
 /auth anthropic
 /auth qwen
 ```
+
 Shows the current OAuth status for the specified provider.
 
 #### Enable OAuth for a Provider
+
 ```
 /auth gemini enable
 /auth anthropic enable
@@ -721,6 +772,7 @@ Shows the current OAuth status for the specified provider.
 ```
 
 #### Disable OAuth for a Provider
+
 ```
 /auth gemini disable
 /auth anthropic disable
@@ -728,6 +780,7 @@ Shows the current OAuth status for the specified provider.
 ```
 
 #### Logout from a Provider
+
 ```
 /auth gemini logout
 /auth anthropic logout
@@ -737,16 +790,19 @@ Shows the current OAuth status for the specified provider.
 ### OAuth Flow by Provider
 
 #### Gemini (Google)
+
 - Opens browser for Google OAuth
 - Automatically continues after you accept permissions
 - Token refreshes automatically
 
 #### Qwen (Alibaba)
+
 - Opens browser for Alibaba Cloud OAuth
 - Automatically continues after you accept permissions
 - Seamless authentication flow
 
 #### Anthropic (Claude)
+
 - Opens browser to Anthropic Console
 - After accepting, you need to:
   1. Copy the API key from the Anthropic Console
@@ -757,6 +813,7 @@ Shows the current OAuth status for the specified provider.
 ### Authentication Priority
 
 Authentication methods are checked in this order:
+
 1. OAuth tokens (if enabled)
 2. API keys from `/key` or `--key` commands
 3. Environment variables
@@ -765,11 +822,13 @@ Authentication methods are checked in this order:
 ### Checking Auth Status
 
 Use `/status` to see all active authentications:
+
 ```
 /status
 ```
 
 This shows:
+
 - Which providers are authenticated
 - Token expiration times
 - OAuth enablement status
@@ -832,6 +891,7 @@ LLxprt Code can be integrated with the Zed editor as an AI assistant using the e
 You can pass additional arguments to customize the provider and authentication:
 
 #### Using a specific provider and model:
+
 ```json
 {
   "assistant": {
@@ -842,8 +902,10 @@ You can pass additional arguments to customize the provider and authentication:
         "command": "llxprt",
         "args": [
           "--experimental-acp",
-          "--provider", "anthropic",
-          "--model", "claude-3-opus-20240229"
+          "--provider",
+          "anthropic",
+          "--model",
+          "claude-3-opus-20240229"
         ]
       }
     ]
@@ -852,6 +914,7 @@ You can pass additional arguments to customize the provider and authentication:
 ```
 
 #### Using a saved profile:
+
 ```json
 {
   "assistant": {
@@ -860,10 +923,7 @@ You can pass additional arguments to customize the provider and authentication:
         "name": "llxprt",
         "type": "acp",
         "command": "llxprt",
-        "args": [
-          "--experimental-acp",
-          "--profile-load", "my-project"
-        ]
+        "args": ["--experimental-acp", "--profile-load", "my-project"]
       }
     ]
   }
@@ -871,6 +931,7 @@ You can pass additional arguments to customize the provider and authentication:
 ```
 
 #### Providing an API key directly:
+
 ```json
 {
   "assistant": {
@@ -881,8 +942,10 @@ You can pass additional arguments to customize the provider and authentication:
         "command": "llxprt",
         "args": [
           "--experimental-acp",
-          "--provider", "openai",
-          "--key", "sk-..."
+          "--provider",
+          "openai",
+          "--key",
+          "sk-..."
         ]
       }
     ]
@@ -893,15 +956,16 @@ You can pass additional arguments to customize the provider and authentication:
 ### Important Notes for Zed Integration
 
 - **All CLI arguments work**: You can use `--provider`, `--model`, `--key`, `--keyfile`, `--profile-load`, etc.
-- **Default provider**: If you don't specify a provider, it will use your default profile or Gemini
+- **Default provider**: If you don't specify a provider, it will use your default profile (if configured) or the provider specified by LLXPRT_DEFAULT_PROVIDER environment variable, or Gemini as fallback
 - **Authentication for Claude/Anthropic**: OAuth authentication for Anthropic in Zed is challenging in the current release because it requires manual API key entry. We recommend either:
   - Using `--key` with your API key directly in the Zed config
   - Setting up a default profile with Anthropic configured
   - Using environment variables
   - This will be improved in a future release
-- **Best practice**: Set up your preferred provider as the default profile, then Zed will automatically use it
+- **Best practice**: Set up your preferred provider as the default profile using `/profile save` and `/profile set-default`, then Zed will automatically use it
 
 When running in ACP mode:
+
 - Console output is redirected to stderr to keep stdout clean for protocol messages
 - Authentication happens through the protocol
 - The integration supports all llxprt providers (OpenAI, Anthropic, Google, Groq, etc.)

@@ -37,7 +37,7 @@ Selected themes are saved in LLxprt Code's [configuration](./configuration.md) s
 
 ## Custom Color Themes
 
-Gemini CLI allows you to create your own custom color themes by specifying them in your `settings.json` file. This gives you full control over the color palette used in the CLI.
+LLxprt Code allows you to create your own custom color themes by specifying them in your `settings.json` file. This gives you full control over the color palette used in the CLI.
 
 ### How to Define a Custom Theme
 
@@ -112,7 +112,7 @@ You can define multiple custom themes by adding more entries to the `customTheme
 
 ### Using Your Custom Theme
 
-- Select your custom theme using the `/theme` command in Gemini CLI. Your custom theme will appear in the theme selection dialog.
+- Select your custom theme using the `/theme` command in LLxprt Code. Your custom theme will appear in the theme selection dialog.
 - Or, set it as the default by adding `"theme": "MyCustomTheme"` to your `settings.json`.
 - Custom themes can be set at the user, project, or system level, and follow the same [configuration precedence](./configuration.md) as other settings.
 

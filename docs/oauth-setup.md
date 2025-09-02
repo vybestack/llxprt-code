@@ -6,10 +6,13 @@ This guide explains how to set up OAuth authentication for various AI providers 
 
 llxprt-code supports OAuth 2.0 authentication for multiple providers:
 
-- **Gemini** (Google AI)
-- **Qwen** (Alibaba Cloud)
+- **Gemini** (Google AI) - Browser-based OAuth flow
+- **Anthropic** - Authorization code via dialog
+- **Qwen** (Alibaba Cloud) - Device code flow
 
 OAuth provides secure authentication without requiring API keys, offering better security and user experience.
+
+**Important:** All OAuth authentication is lazy - the authentication flow only starts when you make your first API request to the provider, not when you enable OAuth.
 
 ## Authentication Precedence
 
@@ -23,38 +26,65 @@ The system uses the following authentication precedence (highest to lowest):
 
 ### Using the Auth Command
 
-The simplest way to authenticate is using the `/auth` command:
+The `/auth` command manages OAuth authentication for all providers:
 
 ```bash
-# Show OAuth authentication menu
+# Show OAuth authentication menu/status
 /auth
 
-# Authenticate with specific provider
-/auth gemini
-/auth qwen
+# Enable OAuth for a provider (authentication happens on first use)
+/auth gemini enable
+/auth anthropic enable
+/auth qwen enable
+
+# Disable OAuth for a provider
+/auth gemini disable
+/auth anthropic disable
+/auth qwen disable
+
+# Log out from a provider (clears stored tokens)
+/auth gemini logout
+/auth anthropic logout
+/auth qwen logout
 ```
 
 ### Gemini OAuth Setup
 
-1. Run the authentication command:
+1. Enable OAuth for Gemini:
 
    ```bash
-   /auth gemini
+   /auth gemini enable
    ```
 
-2. Follow the browser-based OAuth flow
-3. Grant permissions to llxprt-code
-4. Authentication complete!
+2. Make your first request to Gemini (e.g., send a message)
+3. Browser will open automatically for authentication
+4. Grant permissions to llxprt-code
+5. Authentication complete!
+
+### Anthropic OAuth Setup
+
+1. Enable OAuth for Anthropic:
+
+   ```bash
+   /auth anthropic enable
+   ```
+
+2. Make your first request to Anthropic
+3. A dialog will appear asking for your authorization code
+4. Go to https://console.anthropic.com/settings/oauth to get your code
+5. Paste the code into the dialog
+6. Authentication complete!
 
 ### Qwen OAuth Setup
 
-1. Run the authentication command:
+1. Enable OAuth for Qwen:
 
    ```bash
-   /auth qwen
+   /auth qwen enable
    ```
 
-2. You'll see a device code and URL:
+2. Make your first request to Qwen
+3. You'll see a device code and URL (device code flow):
 
    ```
    Device code: ABC-DEF-123
@@ -62,21 +92,26 @@ The simplest way to authenticate is using the `/auth` command:
    Enter code: ABC-DEF-123
    ```
 
-3. Open the URL in your browser
-4. Enter the device code when prompted
-5. Grant permissions to llxprt-code
-6. Wait for authentication to complete (up to 15 minutes)
+4. Open the URL in your browser
+5. Enter the device code when prompted
+6. Grant permissions to llxprt-code
+7. Authentication completes automatically
 
 ## Multi-Provider Authentication
 
-You can authenticate with multiple providers simultaneously:
+You can enable OAuth for multiple providers simultaneously:
 
 ```bash
-/auth gemini  # Set up Gemini OAuth
-/auth qwen    # Set up Qwen OAuth
+/auth gemini enable     # Enable Gemini OAuth
+/auth anthropic enable  # Enable Anthropic OAuth
+/auth qwen enable       # Enable Qwen OAuth
 ```
 
-Each provider stores tokens separately and securely.
+Each provider:
+
+- Stores tokens separately and securely
+- Authenticates lazily on first use
+- Maintains independent authentication state
 
 ## Authentication Status
 
@@ -96,11 +131,15 @@ This shows:
 
 ### Token Storage
 
-OAuth tokens are stored securely at:
+OAuth tokens are stored as plain JSON files:
 
 - **Location**: `~/.llxprt/oauth/`
-- **Format**: `{provider}.json` (e.g., `gemini.json`, `qwen.json`)
+- **Files**:
+  - `gemini.json` - Gemini OAuth tokens
+  - `anthropic.json` - Anthropic OAuth tokens
+  - `qwen.json` - Qwen OAuth tokens
 - **Permissions**: `0600` (user read/write only)
+- **Note**: Tokens are stored as plain text JSON files. For enhanced security in production environments, consider using system keychains or encrypted storage.
 
 ### Automatic Refresh
 
@@ -122,11 +161,12 @@ rm ~/.llxprt/oauth/{provider}.json
 
 ### Authentication Timeout
 
-If OAuth authentication times out:
+Different providers have different timeout behaviors:
 
-1. **Qwen**: 15-minute timeout for device flow
-2. **Solution**: Restart authentication and complete promptly
-3. **Check**: Network connectivity and browser access
+1. **Gemini**: No timeout - browser flow waits for user
+2. **Anthropic**: Dialog waits indefinitely for code input
+3. **Qwen**: Device flow has polling timeout (typically 5-15 minutes)
+4. **Solution**: Complete authentication promptly after initiating
 
 ### Token Refresh Issues
 
@@ -217,19 +257,23 @@ If you already have Gemini OAuth:
 
 ## Command Reference
 
-| Command        | Description                    |
-| -------------- | ------------------------------ |
-| `/auth`        | Show OAuth authentication menu |
-| `/auth gemini` | Authenticate with Gemini       |
-| `/auth qwen`   | Authenticate with Qwen         |
+| Command                    | Description                           |
+| -------------------------- | ------------------------------------- |
+| `/auth`                    | Show OAuth authentication menu/status |
+| `/auth <provider> enable`  | Enable OAuth for provider             |
+| `/auth <provider> disable` | Disable OAuth for provider            |
+| `/auth <provider> logout`  | Clear OAuth tokens for provider       |
+
+Supported providers: `gemini`, `anthropic`, `qwen`
 
 ## File Locations
 
-| File/Directory                | Purpose                       |
-| ----------------------------- | ----------------------------- |
-| `~/.llxprt/oauth/`            | OAuth token storage directory |
-| `~/.llxprt/oauth/gemini.json` | Gemini OAuth token            |
-| `~/.llxprt/oauth/qwen.json`   | Qwen OAuth token              |
+| File/Directory                   | Purpose                       |
+| -------------------------------- | ----------------------------- |
+| `~/.llxprt/oauth/`               | OAuth token storage directory |
+| `~/.llxprt/oauth/gemini.json`    | Gemini OAuth tokens           |
+| `~/.llxprt/oauth/anthropic.json` | Anthropic OAuth tokens        |
+| `~/.llxprt/oauth/qwen.json`      | Qwen OAuth tokens             |
 
 ## Support
 

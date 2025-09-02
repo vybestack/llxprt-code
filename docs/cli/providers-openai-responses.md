@@ -2,6 +2,8 @@
 
 The OpenAI Responses API is a new endpoint that provides enhanced capabilities for certain models. This document describes how the LLxprt Code integrates with the Responses API, including automatic model detection, streaming support, and tool calling.
 
+**Note:** The Responses API features are now accessible through the `/provider` command. Use `/provider openai-responses` to enable this mode in the CLI.
+
 ## Overview
 
 The Responses API (`/v1/responses`) is automatically used for compatible models, providing:
@@ -20,6 +22,7 @@ The following models automatically use the Responses API:
 - `o3-mini`
 - `o1`
 - `o1-mini`
+- `gpt-5` (when available)
 - `gpt-4.1`
 - `gpt-4o`
 - `gpt-4o-mini`
@@ -253,11 +256,20 @@ npm run test:integration -- --grep "Responses API"
 ### Manual Testing
 
 ```bash
+# Enable OpenAI Responses mode in the CLI
+llxprt
+> /provider openai-responses
+> /model gpt-4.1
+> Hello
+
 # Test with gpt-4.1 (uses Responses API)
 llxprt --provider openai --model gpt-4.1 "Hello"
 
 # Test with o3 (uses Responses API)
 llxprt --provider openai --model o3 "Hello"
+
+# Test with gpt-5 (when available, will use Responses API)
+llxprt --provider openai --model gpt-5 "Hello"
 
 # Test with custom model (uses legacy endpoint)
 llxprt --provider openai --model my-custom-model "Hello"

@@ -101,7 +101,23 @@ Slash commands provide meta-level control over the CLI itself.
   - **Description:** Open a dialog that lets you change the visual theme of LLxprt Code.
 
 - **`/auth`**
-  - **Description:** Open a dialog that lets you change the authentication method.
+  - **Description:** Manage authentication for different LLM providers.
+  - **Usage:** `/auth` (opens provider selection dialog) or `/auth <provider> <command>`
+  - **Sub-commands:**
+    - **`enable`**:
+      - **Description:** Enable OAuth authentication for a provider (lazy - browser opens on first request).
+      - **Usage:** `/auth <provider> enable`
+      - **Providers:** gemini, anthropic, qwen
+      - **Example:** `/auth gemini enable` - Enables OAuth for Google (browser opens when needed)
+    - **`disable`**:
+      - **Description:** Disable OAuth authentication for a provider.
+      - **Usage:** `/auth <provider> disable`
+      - **Example:** `/auth anthropic disable` - Disables OAuth for Anthropic
+    - **`logout`**:
+      - **Description:** Clear stored OAuth credentials for a provider.
+      - **Usage:** `/auth <provider> logout`
+      - **Example:** `/auth qwen logout` - Clears Qwen OAuth credentials
+  - **Note:** OAuth authentication is lazy - the browser will only open when you make your first request to the provider, not when you enable it.
 
 ### Provider Management Commands (LLxprt-specific)
 

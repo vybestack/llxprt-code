@@ -13,7 +13,7 @@ import * as path from 'path';
 import * as os from 'os';
 
 export const EXTENSIONS_DIRECTORY_NAME = path.join('.llxprt', 'extensions');
-export const EXTENSIONS_CONFIG_FILENAME = 'gemini-extension.json';
+export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
 
 export interface Extension {
   path: string;

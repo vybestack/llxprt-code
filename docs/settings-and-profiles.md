@@ -26,22 +26,25 @@ Ephemeral settings are runtime configurations that last only for your current se
 
 ### Available Ephemeral Settings
 
-| Setting                       | Description                                             | Default  | Example                         |
-| ----------------------------- | ------------------------------------------------------- | -------- | ------------------------------- |
-| `context-limit`               | Maximum tokens for context window                       | -        | `100000`                        |
-| `compression-threshold`       | When to compress history (0.0-1.0)                      | -        | `0.7` (70% of context)          |
-| `auth-key`                    | API authentication key                                  | -        | `sk-ant-api03-...`              |
-| `auth-keyfile`                | Path to file containing API key                         | -        | `~/.keys/anthropic.key`         |
-| `base-url`                    | Custom API endpoint                                     | -        | `https://api.anthropic.com`     |
-| `tool-format`                 | Tool format override                                    | -        | `openai`, `anthropic`, `hermes` |
-| `api-version`                 | API version (Azure)                                     | -        | `2024-02-01`                    |
-| `custom-headers`              | HTTP headers as JSON                                    | -        | `{"X-Custom": "value"}`         |
-| `tool-output-max-items`       | Maximum number of items/files/matches returned by tools | `50`     | `100`                           |
-| `tool-output-max-tokens`      | Maximum tokens in tool output                           | `50000`  | `100000`                        |
-| `tool-output-truncate-mode`   | How to handle exceeding limits                          | `warn`   | `warn`, `truncate`, or `sample` |
-| `tool-output-item-size-limit` | Maximum size per item/file in bytes                     | `524288` | `1048576` (1MB)                 |
-| `max-prompt-tokens`           | Maximum tokens allowed in any prompt sent to LLM        | `200000` | `300000`                        |
-| `shell-replacement`           | Allow command substitution ($(), <(), backticks)        | `false`  | `true`                          |
+| Setting                       | Description                                             | Default                   | Example                            |
+| ----------------------------- | ------------------------------------------------------- | ------------------------- | ---------------------------------- |
+| `context-limit`               | Maximum tokens for context window                       | -                         | `100000`                           |
+| `compression-threshold`       | When to compress history (0.0-1.0)                      | -                         | `0.7` (70% of context)             |
+| `base-url`                    | Custom API endpoint                                     | -                         | `https://api.anthropic.com`        |
+| `tool-format`                 | Tool format override                                    | -                         | `openai`, `anthropic`, `hermes`    |
+| `api-version`                 | API version (Azure)                                     | -                         | `2024-02-01`                       |
+| `custom-headers`              | HTTP headers as JSON                                    | -                         | `{"X-Custom": "value"}`            |
+| `stream-options`              | Stream options for OpenAI API                           | `{"include_usage": true}` | `{"include_usage": false}`         |
+| `streaming`                   | Enable or disable streaming responses                   | `enabled`                 | `disabled`                         |
+| `tool-output-max-items`       | Maximum number of items/files/matches returned by tools | `50`                      | `100`                              |
+| `tool-output-max-tokens`      | Maximum tokens in tool output                           | `50000`                   | `100000`                           |
+| `tool-output-truncate-mode`   | How to handle exceeding limits                          | `warn`                    | `warn`, `truncate`, or `sample`    |
+| `tool-output-item-size-limit` | Maximum size per item/file in bytes                     | `524288`                  | `1048576` (1MB)                    |
+| `max-prompt-tokens`           | Maximum tokens allowed in any prompt sent to LLM        | `200000`                  | `300000`                           |
+| `shell-replacement`           | Allow command substitution ($(), <(), backticks)        | `false`                   | `true`                             |
+| `emojifilter`                 | Emoji filter mode for LLM responses                     | `auto`                    | `allowed`, `auto`, `warn`, `error` |
+
+**Note:** `auth-key` and `auth-keyfile` are no longer supported as ephemeral settings. Use `/key` and `/keyfile` commands instead.
 
 ### Setting Ephemeral Values
 
@@ -55,11 +58,9 @@ Ephemeral settings are runtime configurations that last only for your current se
 # Set custom headers
 /set custom-headers {"X-Organization": "my-org", "X-Project": "my-project"}
 
-# Set API key (not recommended - use keyfile instead)
-/set auth-key sk-ant-api03-...
-
-# Set keyfile path (recommended)
-/set auth-keyfile ~/.keys/anthropic.key
+# Configure streaming
+/set streaming disabled                 # Disable streaming responses
+/set stream-options {"include_usage": false}  # OpenAI stream options
 
 # Enable shell command substitution (use with caution)
 /set shell-replacement true
@@ -70,6 +71,12 @@ Ephemeral settings are runtime configurations that last only for your current se
 /set tool-output-truncate-mode truncate # Truncate instead of warning
 /set tool-output-item-size-limit 1048576 # 1MB per file
 /set max-prompt-tokens 300000           # Increase max prompt size
+
+# Emoji filter settings
+/set emojifilter auto                   # Silent filtering (default)
+/set emojifilter warn                   # Filter with feedback
+/set emojifilter error                  # Block content with emojis
+/set emojifilter allowed                # Allow emojis through
 ```
 
 ### Unsetting Values

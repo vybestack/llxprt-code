@@ -11,13 +11,13 @@ On startup, LLxprt Code looks for extensions in two locations:
 
 LLxprt Code loads all extensions from both locations. If an extension with the same name exists in both locations, the extension in the workspace directory takes precedence.
 
-Within each location, individual extensions exist as a directory that contains a `gemini-extension.json` file. For example:
+Within each location, individual extensions exist as a directory that contains a `llxprt-extension.json` file. For example:
 
-`<workspace>/.llxprt/extensions/my-extension/gemini-extension.json`
+`<workspace>/.llxprt/extensions/my-extension/llxprt-extension.json`
 
-### `gemini-extension.json`
+### `llxprt-extension.json`
 
-The `gemini-extension.json` file contains the configuration for the extension. The file has the following structure:
+The `llxprt-extension.json` file contains the configuration for the extension. The file has the following structure:
 
 ```json
 {
@@ -51,7 +51,7 @@ An extension named `gcp` with the following structure:
 
 ```
 .llxprt/extensions/gcp/
-├── gemini-extension.json
+├── llxprt-extension.json
 └── commands/
     ├── deploy.toml
     └── gcs/

@@ -36,17 +36,21 @@ The core comes with a suite of pre-defined tools, typically found in `packages/c
   - `LSTool` (`ls.ts`): Lists directory contents.
   - `ReadFileTool` (`read-file.ts`): Reads the content of a single file. It takes an `absolute_path` parameter, which must be an absolute path.
   - `WriteFileTool` (`write-file.ts`): Writes content to a file.
-  - `GrepTool` (`grep.ts`): Searches for patterns in files.
+  - `GrepTool` (`grep.ts`): Searches for patterns in files using ripgrep.
   - `GlobTool` (`glob.ts`): Finds files matching glob patterns.
   - `EditTool` (`edit.ts`): Performs in-place modifications to files (often requiring confirmation).
   - `ReadManyFilesTool` (`read-many-files.ts`): Reads and concatenates content from multiple files or glob patterns (used by the `@` command in CLI).
 - **Execution Tools:**
   - `ShellTool` (`shell.ts`): Executes arbitrary shell commands (requires careful sandboxing and user confirmation).
 - **Web Tools:**
-  - `WebFetchTool` (`web-fetch.ts`): Fetches content from a URL.
-  - `WebSearchTool` (`web-search.ts`): Performs a web search.
+  - `WebFetchTool` (`web-fetch.ts`): Fetches content from a URL. **Note:** Currently requires a Gemini/Google API key or OAuth authentication to Google. Future releases will support configuration with other providers.
+  - `WebSearchTool` (`web-search.ts`): Performs a web search. **Note:** Currently requires a Gemini/Google API key or OAuth authentication to Google. Future releases will support configuration with other providers.
 - **Memory Tools:**
-  - `MemoryTool` (`memoryTool.ts`): Interacts with the AI's memory.
+  - `MemoryTool` (`memoryTool.ts`): Interacts with the AI's memory (LLXPRT.md/AGENTS.md files).
+- **Task Management Tools:**
+  - `TodoWrite`: Creates and manages task lists for tracking work.
+  - `TodoRead`: Reads the current task list.
+  - `TodoPause`: Pauses task tracking.
 
 Each of these tools extends `BaseTool` and implements the required methods for its specific functionality.
 
@@ -72,4 +76,12 @@ While direct programmatic registration of new tools by users isn't explicitly de
 - **Command-based Discovery:** Advanced users or project administrators can define a `toolDiscoveryCommand` in `settings.json`. This command, when run by the LLxprt Code core, should output a JSON array of `FunctionDeclaration` objects. The core will then make these available as `DiscoveredTool` instances. The corresponding `toolCallCommand` would then be responsible for actually executing these custom tools.
 - **MCP Server(s):** For more complex scenarios, one or more MCP servers can be set up and configured via the `mcpServers` setting in `settings.json`. The LLxprt Code core can then discover and use tools exposed by these servers. As mentioned, if you have multiple MCP servers, the tool names will be prefixed with the server name from your configuration (e.g., `serverAlias__actualToolName`).
 
-This tool system provides a flexible and powerful way to augment the Gemini model's capabilities, making the LLxprt Code a versatile assistant for a wide range of tasks.
+## Tool Availability by Provider
+
+**Important Notes:**
+
+- Web tools (`WebFetchTool` and `WebSearchTool`) currently require Google/Gemini authentication (API key or OAuth). Support for other providers is planned for future releases.
+- Most file system and execution tools work with all providers.
+- The agent system (`TaskTool`) is unique to LLxprt Code and works with all providers.
+
+This tool system provides a flexible and powerful way to augment the AI model's capabilities, making LLxprt Code a versatile assistant for a wide range of development tasks.
