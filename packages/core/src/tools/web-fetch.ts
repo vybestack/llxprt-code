@@ -15,7 +15,7 @@ import {
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { ApprovalMode, Config } from '../config/config.js';
+import { ApprovalMode, Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';
@@ -101,7 +101,8 @@ class WebFetchToolInvocation extends BaseToolInvocation<
         ],
       }).substring(0, MAX_CONTENT_LENGTH);
 
-      // For private URLs, just return the raw content without AI processing
+      // For private URLs in llxprt, we return raw content without AI processing
+      // This preserves our multi-provider approach
       return {
         llmContent: textContent,
         returnDisplay: `Content for ${url} fetched directly.`,
@@ -221,6 +222,7 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     }
 
     try {
+      // Keep our multi-provider approach
       const response = await serverToolsProvider.invokeServerTool(
         'web_fetch',
         { prompt: userPrompt },

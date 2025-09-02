@@ -833,13 +833,12 @@ export class GeminiClient {
     contents: Content[],
     schema: Record<string, unknown>,
     abortSignal: AbortSignal,
-    model?: string,
+    model: string,
     config: GenerateContentConfig = {},
   ): Promise<Record<string, unknown>> {
     await this.lazyInitialize();
-    // Use current model from config instead of hardcoded Flash model
-    const modelToUse =
-      model || this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
+    // Use the provided model parameter directly
+    const modelToUse = model;
     try {
       const userMemory = this.config.getUserMemory();
       const systemInstruction = await getCoreSystemPromptAsync(
@@ -890,6 +889,10 @@ export class GeminiClient {
       const prefix = '```json';
       const suffix = '```';
       if (text.startsWith(prefix) && text.endsWith(suffix)) {
+        logMalformedJsonResponse(
+          this.config,
+          new MalformedJsonResponseEvent(modelToUse),
+        );
         text = text
           .substring(prefix.length, text.length - suffix.length)
           .trim();
@@ -967,10 +970,10 @@ export class GeminiClient {
     contents: Content[],
     generationConfig: GenerateContentConfig,
     abortSignal: AbortSignal,
-    model?: string,
+    model: string,
   ): Promise<GenerateContentResponse> {
     await this.lazyInitialize();
-    const modelToUse = model ?? this.config.getModel();
+    const modelToUse = model;
     const configToUse: GenerateContentConfig = {
       ...this.generateContentConfig,
       ...generationConfig,
@@ -992,7 +995,7 @@ export class GeminiClient {
       const apiCall = () =>
         this.getContentGenerator().generateContent(
           {
-            model: modelToUse,
+            model,
             config: requestConfig,
             contents,
           },
@@ -1012,7 +1015,7 @@ export class GeminiClient {
 
       await reportError(
         error,
-        `Error generating content via API with model ${modelToUse}.`,
+        `Error generating content via API with model ${model}.`,
         {
           requestContents: contents,
           requestConfig: configToUse,
@@ -1020,7 +1023,7 @@ export class GeminiClient {
         'generateContent-api',
       );
       throw new Error(
-        `Failed to generate content with model ${modelToUse}: ${getErrorMessage(error)}`,
+        `Failed to generate content with model ${model}: ${getErrorMessage(error)}`,
       );
     }
   }
