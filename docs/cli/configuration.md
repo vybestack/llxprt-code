@@ -158,6 +158,194 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Default:** Empty
   - **Example:** `"toolCallCommand": "bin/call_tool"`
 
+- **`ui.theme`** (string):
+  - **Description:** The color theme for the UI. See [Themes](./themes.md) for available options.
+  - **Default:** `undefined`
+
+- **`ui.customThemes`** (object):
+  - **Description:** Custom theme definitions.
+  - **Default:** `{}`
+
+- **`ui.hideWindowTitle`** (boolean):
+  - **Description:** Hide the window title bar.
+  - **Default:** `false`
+
+- **`ui.hideTips`** (boolean):
+  - **Description:** Hide helpful tips in the UI.
+  - **Default:** `false`
+
+- **`ui.hideBanner`** (boolean):
+  - **Description:** Hide the application banner.
+  - **Default:** `false`
+
+- **`ui.hideFooter`** (boolean):
+  - **Description:** Hide the footer from the UI.
+  - **Default:** `false`
+
+- **`ui.showMemoryUsage`** (boolean):
+  - **Description:** Display memory usage information in the UI.
+  - **Default:** `false`
+
+- **`ui.showLineNumbers`** (boolean):
+  - **Description:** Show line numbers in the chat.
+  - **Default:** `false`
+
+- **`ui.showCitations`** (boolean):
+  - **Description:** Show citations for generated text in the chat.
+  - **Default:** `false`
+
+- **`ui.accessibility.disableLoadingPhrases`** (boolean):
+  - **Description:** Disable loading phrases for accessibility.
+  - **Default:** `false`
+
+#### `ide`
+
+- **`ide.enabled`** (boolean):
+  - **Description:** Enable IDE integration mode.
+  - **Default:** `false`
+
+- **`ide.hasSeenNudge`** (boolean):
+  - **Description:** Whether the user has seen the IDE integration nudge.
+  - **Default:** `false`
+
+#### `privacy`
+
+- **`privacy.usageStatisticsEnabled`** (boolean):
+  - **Description:** Enable collection of usage statistics.
+  - **Default:** `true`
+
+#### `model`
+
+- **`model.name`** (string):
+  - **Description:** The Gemini model to use for conversations.
+  - **Default:** `undefined`
+
+- **`model.maxSessionTurns`** (number):
+  - **Description:** Maximum number of user/model/tool turns to keep in a session. -1 means unlimited.
+  - **Default:** `-1`
+
+- **`model.summarizeToolOutput`** (object):
+  - **Description:** Settings for summarizing tool output.
+  - **Default:** `undefined`
+
+- **`model.chatCompression`** (object):
+  - **Description:** Chat compression settings.
+  - **Default:** `undefined`
+
+- **`model.skipNextSpeakerCheck`** (boolean):
+  - **Description:** Skip the next speaker check.
+  - **Default:** `false`
+
+#### `context`
+
+- **`context.fileName`** (string or array of strings):
+  - **Description:** The name of the context file(s).
+  - **Default:** `undefined`
+
+- **`context.importFormat`** (string):
+  - **Description:** The format to use when importing memory.
+  - **Default:** `undefined`
+
+- **`context.discoveryMaxDirs`** (number):
+  - **Description:** Maximum number of directories to search for memory.
+  - **Default:** `200`
+
+- **`context.includeDirectories`** (array):
+  - **Description:** Additional directories to include in the workspace context. Missing directories will be skipped with a warning.
+  - **Default:** `[]`
+
+- **`context.loadFromIncludeDirectories`** (boolean):
+  - **Description:** Whether to load memory files from include directories.
+  - **Default:** `false`
+
+- **`context.fileFiltering.respectGitIgnore`** (boolean):
+  - **Description:** Respect .gitignore files when searching.
+  - **Default:** `true`
+
+- **`context.fileFiltering.respectGeminiIgnore`** (boolean):
+  - **Description:** Respect .geminiignore files when searching.
+  - **Default:** `true`
+
+- **`context.fileFiltering.enableRecursiveFileSearch`** (boolean):
+  - **Description:** Enable recursive file search functionality.
+  - **Default:** `true`
+
+#### `tools`
+
+- **`tools.sandbox`** (boolean or string):
+  - **Description:** Sandbox execution environment (can be a boolean or a path string).
+  - **Default:** `undefined`
+
+- **`tools.usePty`** (boolean):
+  - **Description:** Use node-pty for shell command execution. Fallback to child_process still applies.
+  - **Default:** `false`
+
+- **`tools.core`** (array of strings):
+  - **Description:** Paths to core tool definitions.
+  - **Default:** `undefined`
+
+- **`tools.exclude`** (array of strings):
+  - **Description:** Tool names to exclude from discovery.
+  - **Default:** `undefined`
+
+- **`tools.discoveryCommand`** (string):
+  - **Description:** Command to run for tool discovery.
+  - **Default:** `undefined`
+
+- **`tools.callCommand`** (string):
+  - **Description:** Command to run for tool calls.
+  - **Default:** `undefined`
+
+#### `mcp`
+
+- **`mcp.serverCommand`** (string):
+  - **Description:** Command to start an MCP server.
+  - **Default:** `undefined`
+
+- **`mcp.allowed`** (array of strings):
+  - **Description:** A whitelist of MCP servers to allow.
+  - **Default:** `undefined`
+
+- **`mcp.excluded`** (array of strings):
+  - **Description:** A blacklist of MCP servers to exclude.
+  - **Default:** `undefined`
+
+#### `security`
+
+- **`security.folderTrust.enabled`** (boolean):
+  - **Description:** Setting to track whether Folder trust is enabled.
+  - **Default:** `false`
+
+- **`security.auth.selectedType`** (string):
+  - **Description:** The currently selected authentication type.
+  - **Default:** `undefined`
+
+- **`security.auth.useExternal`** (boolean):
+  - **Description:** Whether to use an external authentication flow.
+  - **Default:** `undefined`
+
+#### `advanced`
+
+- **`advanced.autoConfigureMemory`** (boolean):
+  - **Description:** Automatically configure Node.js memory limits.
+  - **Default:** `false`
+
+- **`advanced.dnsResolutionOrder`** (string):
+  - **Description:** The DNS resolution order.
+  - **Default:** `undefined`
+
+- **`advanced.excludedEnvVars`** (array of strings):
+  - **Description:** Environment variables to exclude from project context.
+  - **Default:** `["DEBUG","DEBUG_MODE"]`
+
+- **`advanced.bugCommand`** (object):
+  - **Description:** Configuration for the bug report command.
+  - **Default:** `undefined`
+
+#### Top-Level Settings
+
+The following settings remain at the top level of the `settings.json` file.
+
 - **`mcpServers`** (object):
   - **Description:** Configures connections to one or more Model-Context Protocol (MCP) servers for discovering and using custom tools. LLxprt Code attempts to connect to each configured MCP server to discover available tools. If multiple MCP servers expose a tool with the same name, the tool names will be prefixed with the server alias you defined in the configuration (e.g., `serverAlias__actualToolName`) to avoid conflicts. Note that the system might strip certain schema properties from MCP tool definitions for compatibility. At least one of `command`, `url`, or `httpUrl` must be provided. If multiple are specified, the order of precedence is `httpUrl`, then `url`, then `command`.
   - **Default:** Empty

@@ -26,6 +26,8 @@ import {
   UserPromptEvent,
   DEFAULT_GEMINI_FLASH_MODEL,
   parseAndFormatApiError,
+  getCodeAssistServer,
+  UserTierId,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -81,6 +83,15 @@ enum StreamProcessingStatus {
   Completed,
   UserCancelled,
   Error,
+}
+
+function showCitations(settings: LoadedSettings, config: Config): boolean {
+  const enabled = settings?.merged?.ui?.showCitations;
+  if (enabled !== undefined) {
+    return enabled;
+  }
+  const server = getCodeAssistServer(config);
+  return (server && server.userTier !== UserTierId.FREE) ?? false;
 }
 
 /**
@@ -477,6 +488,21 @@ export const useGeminiStream = (
       setThought(null); // Reset thought when there's an error
     },
     [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought],
+  );
+
+  const handleCitationEvent = useCallback(
+    (text: string, userMessageTimestamp: number) => {
+      if (!showCitations(settings, config)) {
+        return;
+      }
+
+      if (pendingHistoryItemRef.current) {
+        addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+        setPendingHistoryItem(null);
+      }
+      addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
+    },
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config],
   );
 
   const handleFinishedEvent = useCallback(
