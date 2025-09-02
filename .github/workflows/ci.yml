@@ -313,8 +313,8 @@ jobs:
       - name: 'Run tests and generate reports'
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           # Set auth type to none since we're not using Google services in these tests
