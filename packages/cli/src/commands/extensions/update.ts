@@ -32,7 +32,6 @@ export async function handleUpdate(args: UpdateArgs) {
     } catch (error) {
       throw new FatalConfigError(getErrorMessage(error));
     }
-    return;
   }
   if (args.name)
     try {
