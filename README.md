@@ -112,10 +112,10 @@ Access Qwen3-Coder-Pro and other Qwen models for free:
 Use OAuth authentication to access Qwen with your free account:
 
 ```
-/auth qwen
+/auth qwen enable
 ```
 
-Your browser will open to the Qwen authentication page. Log in and authorize LLxprt Code, then copy the authorization code shown and paste it back in the terminal. You're now using Qwen3-Coder-Pro for free!
+This enables OAuth for Qwen. When you send your first message, your browser will automatically open to the Qwen authentication page. Log in and authorize LLxprt Code - the authentication will complete automatically and your request will be processed. You're now using Qwen3-Coder-Pro for free!
 
 #### Option 2: Use an API Key
 

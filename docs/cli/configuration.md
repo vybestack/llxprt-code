@@ -43,6 +43,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Single filename example:** `"contextFileName": "AGENTS.md"`
   - **Multiple filenames example:** `"contextFileName": ["AGENTS.md", "CONTEXT.md", "INSTRUCTIONS.md"]`
   - **Usage:** When you prefer different naming conventions (like `AGENTS.md` for AI agent instructions, `CONTEXT.md` for project context, or custom names that match your project's documentation style), you can configure this setting. All specified filenames will be searched for and loaded from the hierarchical memory system.
+  - **Note for filename preferences:** Some users prefer `AGENTS.md` as it clearly indicates the file contains instructions for AI agents. To use this convention, simply set `"contextFileName": "AGENTS.md"` in your settings file.
 
 - **`bugCommand`** (object):
   - **Description:** Overrides the default URL for the `/bug` command.
@@ -388,6 +389,38 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
 
 **Environment Variable Exclusion:** Some environment variables (like `DEBUG` and `DEBUG_MODE`) are automatically excluded from being loaded from project `.env` files to prevent interference with llxprt-code behavior. Variables from `.llxprt/.env` files are never excluded. You can customize this behavior using the `excludedProjectEnvVars` setting in your `settings.json` file.
 
+- **`LLXPRT_DEFAULT_PROVIDER`**:
+  - Sets the default LLM provider to use.
+  - Example: `export LLXPRT_DEFAULT_PROVIDER="anthropic"`
+- **`LLXPRT_DEFAULT_MODEL`**:
+  - Sets the default model to use.
+  - Example: `export LLXPRT_DEFAULT_MODEL="claude-3-opus-20240229"`
+- **`LLXPRT_DEBUG`**:
+  - Enable debug logging with specific namespaces.
+  - Namespaces follow the pattern `llxprt:<component>:<subcomponent>`
+  - Example namespaces:
+    - `llxprt:*` - All debug output
+    - `llxprt:providers:*` - All provider debug output
+    - `llxprt:providers:openai` - OpenAI provider only
+    - `llxprt:providers:anthropic` - Anthropic provider only
+    - `llxprt:gemini:provider` - Gemini provider
+    - `llxprt:core:client` - Core client operations
+    - `llxprt:tools:formatter` - Tool formatting
+    - `llxprt:zed-integration` - Zed editor integration
+  - Example: `export LLXPRT_DEBUG="llxprt:providers:*"` or `export LLXPRT_DEBUG="llxprt:core:*,llxprt:tools:*"`
+- **`LLXPRT_CODE_IDE_SERVER_PORT`**:
+  - Port for the IDE integration server.
+  - Used by VS Code extension.
+  - Example: `export LLXPRT_CODE_IDE_SERVER_PORT="3000"`
+- **`LLXPRT_CODE_IDE_WORKSPACE_PATH`**:
+  - Workspace path for IDE integration.
+  - Automatically set by VS Code extension.
+- **`LLXPRT_CODE_SYSTEM_SETTINGS_PATH`**:
+  - Override the system settings file location.
+  - Example: `export LLXPRT_CODE_SYSTEM_SETTINGS_PATH="/custom/path/settings.json"`
+- **`LLXPRT_CLI_NO_RELAUNCH`**:
+  - Internal flag to prevent CLI relaunching.
+  - Automatically set by the CLI.
 - **`GEMINI_API_KEY`** (Optional):
   - Your API key for the Gemini API.
   - **Only required if using Google's Gemini provider.** LLxprt Code supports multiple providers.
@@ -429,6 +462,12 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
 - **`DEBUG` or `DEBUG_MODE`** (often used by underlying libraries or the CLI itself):
   - Set to `true` or `1` to enable verbose debug logging, which can be helpful for troubleshooting.
   - **Note:** These variables are automatically excluded from project `.env` files by default to prevent interference with llxprt-code behavior. Use `.llxprt/.env` files if you need to set these for llxprt-code specifically.
+- **`DEBUG_ENABLED`**:
+  - Enable or disable debug logging.
+  - Example: `export DEBUG_ENABLED="true"`
+- **`DEBUG_LEVEL`**:
+  - Set the debug logging level.
+  - Example: `export DEBUG_LEVEL="debug"`
 - **`NO_COLOR`**:
   - Set to any value to disable all color output in the CLI.
 - **`CLI_TITLE`**:
@@ -440,6 +479,9 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
   - Your API key for OpenAI services.
   - Used when provider is set to openai.
   - Example: `export OPENAI_API_KEY="sk-..."`
+- **`OPENAI_BASE_URL`**:
+  - Custom base URL for OpenAI API.
+  - Example: `export OPENAI_BASE_URL="http://localhost:1234/v1/"`
 - **`ANTHROPIC_API_KEY`**:
   - Your API key for Anthropic services.
   - Used when provider is set to anthropic.
@@ -454,9 +496,21 @@ The CLI automatically loads environment variables from an `.env` file. The loadi
 
 Arguments passed directly when running the CLI can override other configurations for that specific session.
 
+- **`--provider <provider_name>`**:
+  - Specifies the LLM provider to use (e.g., `openai`, `anthropic`, `google`, `groq`, etc.).
+  - Example: `llxprt --provider anthropic`
 - **`--model <model_name>`** (**`-m <model_name>`**):
-  - Specifies the Gemini model to use for this session.
-  - Example: `npm start -- --model gemini-1.5-pro-latest`
+  - Specifies the model to use for this session.
+  - Example: `llxprt --model claude-3-opus-20240229`
+- **`--key <api_key>`**:
+  - Provides the API key for the current provider directly.
+  - Example: `llxprt --key sk-...`
+- **`--keyfile <path>`**:
+  - Path to a file containing the API key for the current provider.
+  - Example: `llxprt --keyfile ~/.openai_key`
+- **`--baseurl <url>`**:
+  - Sets a custom base URL for the provider API.
+  - Example: `llxprt --baseurl http://localhost:1234/v1/`
 - **`--prompt <your_prompt>`** (**`-p <your_prompt>`**):
   - Used to pass a prompt directly to the command. This invokes LLxprt Code in a non-interactive mode.
 - **`--prompt-interactive <your_prompt>`** (**`-i <your_prompt>`**):
@@ -509,7 +563,19 @@ Arguments passed directly when running the CLI can override other configurations
   - Can be specified multiple times or as comma-separated values.
   - 5 directories can be added at maximum.
   - Example: `--include-directories /path/to/project1,/path/to/project2` or `--include-directories /path/to/project1 --include-directories /path/to/project2`
-- **`--version`**:
+- **`--profile-load <profile_name>`**:
+  - Load a saved profile configuration on startup.
+  - Example: `llxprt --profile-load my-project`
+- **`--ide-mode <enable|disable>`**:
+  - Enable or disable IDE integration mode.
+  - Example: `llxprt --ide-mode enable`
+- **`--experimental-acp`**:
+  - Starts the agent in ACP (Agent Communication Protocol) mode for Zed editor integration.
+  - This enables the Zed editor to communicate with llxprt as an AI assistant.
+  - Redirects console output to stderr to keep stdout clean for protocol communication.
+  - Example: `llxprt --experimental-acp`
+  - **Note:** This is an experimental feature primarily used by the Zed editor integration.
+- **`--version`** (**`-v`**):
   - Displays the version of the CLI.
 
 ## Provider API Keys
@@ -517,7 +583,7 @@ Arguments passed directly when running the CLI can override other configurations
 The CLI will automatically detect API keys from the following sources in order of priority:
 
 1. **CLI arguments:** `--key` and `--keyfile`
-2. **Config file:** `providerApiKeys` field in `~/.gemini/settings.json`
+2. **Config file:** `providerApiKeys` field in `~/.llxprt/settings.json`
 3. **Environment variables:** `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.
 4. **Key files:** `~/.openai_key`, `~/.anthropic_key`, etc.
 
@@ -535,7 +601,9 @@ Set base URLs using:
 
 CLI arguments:
 
-```
+```bash
+llxprt --baseurl http://localhost:1234/v1/
+# or within the CLI:
 /baseurl <url>
 ```
 
@@ -548,6 +616,12 @@ Config file:
     "anthropic": "https://api.proxy.example.com/anthropic/v1/"
   }
 }
+```
+
+Environment variable:
+
+```bash
+export OPENAI_BASE_URL="http://localhost:1234/v1/"
 ```
 
 ## Context Files (Hierarchical Instructional Context)
@@ -610,6 +684,96 @@ This example demonstrates how you can provide general project context, specific 
 
 By understanding and utilizing these configuration layers and the hierarchical nature of context files, you can effectively manage the AI's memory and tailor the LLxprt Code's responses to your specific needs and projects.
 
+## Authentication Command
+
+LLxprt Code provides OAuth authentication for multiple providers through the `/auth` command.
+
+### Command Syntax
+
+```
+/auth [provider] [action]
+```
+
+- **provider**: `gemini`, `qwen`, or `anthropic`
+- **action**: `enable`, `disable`, `logout` (or `signout`)
+
+### Usage Examples
+
+#### Show Auth Dialog
+```
+/auth
+```
+Displays the authentication dialog with all available options.
+
+#### Check Provider Status
+```
+/auth gemini
+/auth anthropic
+/auth qwen
+```
+Shows the current OAuth status for the specified provider.
+
+#### Enable OAuth for a Provider
+```
+/auth gemini enable
+/auth anthropic enable
+/auth qwen enable
+```
+
+#### Disable OAuth for a Provider
+```
+/auth gemini disable
+/auth anthropic disable
+/auth qwen disable
+```
+
+#### Logout from a Provider
+```
+/auth gemini logout
+/auth anthropic logout
+/auth qwen logout
+```
+
+### OAuth Flow by Provider
+
+#### Gemini (Google)
+- Opens browser for Google OAuth
+- Automatically continues after you accept permissions
+- Token refreshes automatically
+
+#### Qwen (Alibaba)
+- Opens browser for Alibaba Cloud OAuth
+- Automatically continues after you accept permissions
+- Seamless authentication flow
+
+#### Anthropic (Claude)
+- Opens browser to Anthropic Console
+- After accepting, you need to:
+  1. Copy the API key from the Anthropic Console
+  2. Return to the terminal
+  3. Paste the API key when prompted
+- Note: This is a manual step because Anthropic uses API keys rather than OAuth tokens
+
+### Authentication Priority
+
+Authentication methods are checked in this order:
+1. OAuth tokens (if enabled)
+2. API keys from `/key` or `--key` commands
+3. Environment variables
+4. Key files (`~/.openai_key`, etc.)
+
+### Checking Auth Status
+
+Use `/status` to see all active authentications:
+```
+/status
+```
+
+This shows:
+- Which providers are authenticated
+- Token expiration times
+- OAuth enablement status
+
 ## Sandboxing
 
 The LLxprt Code can execute potentially unsafe operations (like shell commands and file modifications) within a sandboxed environment to protect your system.
@@ -638,6 +802,109 @@ When `.llxprt/sandbox.Dockerfile` exists, you can use `BUILD_SANDBOX` environmen
 ```bash
 BUILD_SANDBOX=1 llxprt -s
 ```
+
+## Zed Editor Integration
+
+LLxprt Code can be integrated with the Zed editor as an AI assistant using the experimental ACP (Agent Communication Protocol) mode.
+
+### Setting up Zed Integration
+
+1. In Zed, open your settings (`cmd+,` on macOS)
+2. Add llxprt as an assistant provider:
+
+```json
+{
+  "assistant": {
+    "providers": [
+      {
+        "name": "llxprt",
+        "type": "acp",
+        "command": "llxprt",
+        "args": ["--experimental-acp"]
+      }
+    ]
+  }
+}
+```
+
+### Configuring Zed with Different Providers
+
+You can pass additional arguments to customize the provider and authentication:
+
+#### Using a specific provider and model:
+```json
+{
+  "assistant": {
+    "providers": [
+      {
+        "name": "llxprt-claude",
+        "type": "acp",
+        "command": "llxprt",
+        "args": [
+          "--experimental-acp",
+          "--provider", "anthropic",
+          "--model", "claude-3-opus-20240229"
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### Using a saved profile:
+```json
+{
+  "assistant": {
+    "providers": [
+      {
+        "name": "llxprt",
+        "type": "acp",
+        "command": "llxprt",
+        "args": [
+          "--experimental-acp",
+          "--profile-load", "my-project"
+        ]
+      }
+    ]
+  }
+}
+```
+
+#### Providing an API key directly:
+```json
+{
+  "assistant": {
+    "providers": [
+      {
+        "name": "llxprt-openai",
+        "type": "acp",
+        "command": "llxprt",
+        "args": [
+          "--experimental-acp",
+          "--provider", "openai",
+          "--key", "sk-..."
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Important Notes for Zed Integration
+
+- **All CLI arguments work**: You can use `--provider`, `--model`, `--key`, `--keyfile`, `--profile-load`, etc.
+- **Default provider**: If you don't specify a provider, it will use your default profile or Gemini
+- **Authentication for Claude/Anthropic**: OAuth authentication for Anthropic in Zed is challenging in the current release because it requires manual API key entry. We recommend either:
+  - Using `--key` with your API key directly in the Zed config
+  - Setting up a default profile with Anthropic configured
+  - Using environment variables
+  - This will be improved in a future release
+- **Best practice**: Set up your preferred provider as the default profile, then Zed will automatically use it
+
+When running in ACP mode:
+- Console output is redirected to stderr to keep stdout clean for protocol messages
+- Authentication happens through the protocol
+- The integration supports all llxprt providers (OpenAI, Anthropic, Google, Groq, etc.)
 
 ## Privacy and Telemetry
 
