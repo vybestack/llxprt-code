@@ -29,7 +29,7 @@ interface FooterProps {
   errorCount: number;
   showErrorDetails: boolean;
   showMemoryUsage?: boolean;
-  promptTokenCount: number;
+  historyTokenCount: number;
   isPaidMode?: boolean;
   nightly: boolean;
   vimMode?: string;
@@ -98,14 +98,14 @@ const ResponsiveMemoryDisplay: React.FC<{
 
 // Responsive Context Usage Display
 const ResponsiveContextDisplay: React.FC<{
-  promptTokenCount: number;
+  historyTokenCount: number;
   model: string;
   contextLimit?: number;
   compact: boolean;
   detailed: boolean;
-}> = ({ promptTokenCount, model, contextLimit, compact, detailed }) => {
+}> = ({ historyTokenCount, model, contextLimit, compact, detailed }) => {
   const limit = tokenLimit(model, contextLimit);
-  const percentage = promptTokenCount / limit;
+  const percentage = historyTokenCount / limit;
   const remainingPercentage = (1 - percentage) * 100;
 
   // Use semantic colors based on how much context is left
@@ -120,11 +120,11 @@ const ResponsiveContextDisplay: React.FC<{
 
   let displayText: string;
   if (detailed) {
-    displayText = `Context: ${promptTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
+    displayText = `Context: ${historyTokenCount.toLocaleString()}/${limit.toLocaleString()} tokens`;
   } else if (compact) {
-    displayText = `Ctx: ${(promptTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+    displayText = `Ctx: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
   } else {
-    displayText = `Context: ${(promptTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
+    displayText = `Context: ${(historyTokenCount / 1000).toFixed(1)}k/${(limit / 1000).toFixed(0)}k`;
   }
 
   return <Text color={color}>{displayText}</Text>;
@@ -159,7 +159,7 @@ export const Footer: React.FC<FooterProps> = ({
   errorCount,
   showErrorDetails,
   showMemoryUsage,
-  promptTokenCount,
+  historyTokenCount,
   isPaidMode,
   nightly,
   vimMode,
@@ -242,7 +242,7 @@ export const Footer: React.FC<FooterProps> = ({
           )}
 
           <ResponsiveContextDisplay
-            promptTokenCount={promptTokenCount}
+            historyTokenCount={historyTokenCount}
             model={model}
             contextLimit={contextLimit}
             compact={isCompact}

@@ -1281,8 +1281,7 @@ export class GeminiProvider extends BaseProvider {
                 () =>
                   `invokeServerTool: geminiConfig is null, creating minimal config for OAuth`,
               );
-              // Import Config dynamically to avoid circular dependencies
-              const { Config } = await import('../../config/config.js');
+              // Use crypto for UUID generation
               const { randomUUID } = await import('crypto');
               configForOAuth = new Config({
                 sessionId: randomUUID(),
@@ -1303,7 +1302,7 @@ export class GeminiProvider extends BaseProvider {
               await createCodeAssistContentGenerator(
                 httpOptions,
                 AuthType.LOGIN_WITH_GOOGLE,
-                configForOAuth,
+                configForOAuth!,
               );
             this.logger.debug(
               () =>

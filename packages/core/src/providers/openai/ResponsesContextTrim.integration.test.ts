@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { OpenAIProvider } from './OpenAIProvider.js';
+import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { IMessage } from '../IMessage.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
@@ -11,13 +11,13 @@ const originalWarn = console.warn;
 const originalDebug = console.debug;
 
 describe.skip('ResponsesContextTrim Integration', () => {
-  let provider: OpenAIProvider;
+  let provider: OpenAIResponsesProvider;
   let consoleWarnMock: typeof vi.fn;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    provider = new OpenAIProvider('test-api-key');
-    provider.setModel('gpt-4o');
+    provider = new OpenAIResponsesProvider('test-api-key');
+    provider.setModel('o3-mini');
 
     // Mock console.warn to capture warnings
     consoleWarnMock = vi.fn();

@@ -8,6 +8,7 @@ import {
   Config,
   ProviderManager,
   OpenAIProvider,
+  OpenAIResponsesProvider,
   AnthropicProvider,
   GeminiProvider,
   sanitizeForByteString,
@@ -188,6 +189,15 @@ export function getProviderManager(
       configurable: true,
     });
     providerManagerInstance.registerProvider(qwenProvider);
+
+    // Register OpenAI Responses provider (for o1, o3 models)
+    // This provider exclusively uses the /responses endpoint
+    const openaiResponsesProvider = new OpenAIResponsesProvider(
+      openaiApiKey || undefined, // Use same API key as OpenAI
+      openaiBaseUrl,
+      openaiProviderConfig,
+    );
+    providerManagerInstance.registerProvider(openaiResponsesProvider);
 
     // Always register Anthropic provider
     // Priority: Environment variable only - no automatic keyfile loading

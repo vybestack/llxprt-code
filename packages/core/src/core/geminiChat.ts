@@ -22,6 +22,9 @@ import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator, AuthType } from './contentGenerator.js';
 import { Config } from '../config/config.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { ContentConverters } from '../services/history/ContentConverters.js';
+import type { IContent } from '../services/history/IContent.js';
 // import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
 import {
   logApiRequest,
@@ -247,14 +250,30 @@ export class GeminiChat {
   // A promise to represent the current state of the message being sent to the
   // model.
   private sendPromise: Promise<void> = Promise.resolve();
+  private historyService: HistoryService;
 
   constructor(
     private readonly config: Config,
     private readonly contentGenerator: ContentGenerator,
     private readonly generationConfig: GenerateContentConfig = {},
-    private history: Content[] = [],
+    initialHistory: Content[] = [],
+    historyService?: HistoryService,
   ) {
-    validateHistory(history);
+    validateHistory(initialHistory);
+
+    // Use provided HistoryService or create a new one
+    this.historyService = historyService || new HistoryService();
+
+    // Convert and add initial history if provided
+    if (initialHistory.length > 0) {
+      const currentModel = this.config.getModel();
+      for (const content of initialHistory) {
+        this.historyService.add(
+          ContentConverters.toIContent(content),
+          currentModel,
+        );
+      }
+    }
   }
 
   private _getRequestTextFromContents(contents: Content[]): string {
@@ -363,6 +382,15 @@ export class GeminiChat {
   setSystemInstruction(sysInstr: string) {
     this.generationConfig.systemInstruction = sysInstr;
   }
+
+  /**
+   * Get the underlying HistoryService instance
+   * @returns The HistoryService managing conversation history
+   */
+  getHistoryService(): HistoryService {
+    return this.historyService;
+  }
+
   /**
    * Sends a message to the model and returns the response.
    *
@@ -391,7 +419,15 @@ export class GeminiChat {
     const userContent = createUserContentWithFunctionResponseFix(
       params.message,
     );
-    const requestContents = this.getHistory(true).concat(userContent);
+    // Add user content to history service
+    this.historyService.add(
+      ContentConverters.toIContent(userContent),
+      this.config.getModel(),
+    );
+
+    // Get curated history and convert to Content[] for the request
+    const iContents = this.historyService.getCurated();
+    const requestContents = ContentConverters.toGeminiContents(iContents);
 
     this._logApiRequest(requestContents, this.config.getModel(), prompt_id);
 
@@ -451,18 +487,62 @@ export class GeminiChat {
         // to deduplicate the existing chat history.
         const fullAutomaticFunctionCallingHistory =
           response.automaticFunctionCallingHistory;
-        const index = this.getHistory(true).length;
+        const curatedHistory = this.historyService.getCurated();
+        const index = ContentConverters.toGeminiContents(curatedHistory).length;
         let automaticFunctionCallingHistory: Content[] = [];
         if (fullAutomaticFunctionCallingHistory != null) {
           automaticFunctionCallingHistory =
             fullAutomaticFunctionCallingHistory.slice(index) ?? [];
         }
-        const modelOutput = outputContent ? [outputContent] : [];
-        this.recordHistory(
-          userContent,
-          modelOutput,
-          automaticFunctionCallingHistory,
-        );
+        // Note: modelOutput variable no longer used directly since we handle
+        // responses inline below
+        // Remove the user content we added and handle AFC history if present
+        // Only do this if AFC history actually has content
+        if (
+          automaticFunctionCallingHistory &&
+          automaticFunctionCallingHistory.length > 0
+        ) {
+          // Pop the user content and replace with AFC history
+          const allHistory = this.historyService.getAll();
+          const trimmedHistory = allHistory.slice(0, -1);
+          this.historyService.clear();
+          const currentModel = this.config.getModel();
+          for (const content of trimmedHistory) {
+            this.historyService.add(content, currentModel);
+          }
+          for (const content of automaticFunctionCallingHistory) {
+            this.historyService.add(
+              ContentConverters.toIContent(content),
+              currentModel,
+            );
+          }
+        }
+        // Add model response if we have one (but filter out pure thinking responses)
+        if (outputContent) {
+          // Check if this is pure thinking content that should be filtered
+          if (!this.isThoughtContent(outputContent)) {
+            // Not pure thinking, add it
+            this.historyService.add(
+              ContentConverters.toIContent(outputContent),
+              this.config.getModel(),
+            );
+          }
+          // If it's pure thinking content, don't add it to history
+        } else if (response.candidates && response.candidates.length > 0) {
+          // We have candidates but no content - add empty model response
+          // This handles the case where the model returns empty content
+          if (
+            !automaticFunctionCallingHistory ||
+            automaticFunctionCallingHistory.length === 0
+          ) {
+            const emptyModelContent: Content = { role: 'model', parts: [] };
+            this.historyService.add(
+              ContentConverters.toIContent(emptyModelContent),
+              this.config.getModel(),
+            );
+          }
+        }
+        // If no candidates at all, don't add anything (error case)
       })();
       await this.sendPromise.catch(() => {
         // Resets sendPromise to avoid subsequent calls failing
@@ -549,8 +629,11 @@ export class GeminiChat {
     );
 
     // Add user content to history ONCE before any attempts.
-    this.history.push(userContent);
-    const requestContents = this.getHistory(true);
+    this.historyService.add(
+      ContentConverters.toIContent(userContent),
+      this.config.getModel(),
+    );
+    // Note: requestContents is no longer needed as adapter gets history from HistoryService
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -565,7 +648,6 @@ export class GeminiChat {
         ) {
           try {
             const stream = await self.makeApiCallAndProcessStream(
-              requestContents,
               params,
               prompt_id,
               userContent,
@@ -600,8 +682,22 @@ export class GeminiChat {
 
         if (lastError) {
           // If the stream fails, remove the user message that was added.
-          if (self.history[self.history.length - 1] === userContent) {
-            self.history.pop();
+          const allHistory = self.historyService.getAll();
+          const lastIContent = allHistory[allHistory.length - 1];
+          const userIContent = ContentConverters.toIContent(userContent);
+
+          // Check if the last content is the user content we just added
+          if (
+            lastIContent?.speaker === userIContent.speaker &&
+            JSON.stringify(lastIContent?.blocks) ===
+              JSON.stringify(userIContent.blocks)
+          ) {
+            // Remove the last item from history
+            const trimmedHistory = allHistory.slice(0, -1);
+            self.historyService.clear();
+            for (const content of trimmedHistory) {
+              self.historyService.add(content, self.config.getModel());
+            }
           }
           throw lastError;
         }
@@ -612,7 +708,6 @@ export class GeminiChat {
   }
 
   private async makeApiCallAndProcessStream(
-    requestContents: Content[],
     params: SendMessageParameters,
     prompt_id: string,
     userContent: Content,
@@ -631,6 +726,10 @@ export class GeminiChat {
           'Please submit a new query to continue with the Flash model.',
         );
       }
+
+      // Get curated history for the request
+      const iContents = this.historyService.getCurated();
+      const requestContents = ContentConverters.toGeminiContents(iContents);
 
       return this.contentGenerator.generateContentStream(
         {
@@ -683,29 +782,44 @@ export class GeminiChat {
    *     chat session.
    */
   getHistory(curated: boolean = false): Content[] {
-    const history = curated
-      ? extractCuratedHistory(this.history)
-      : this.history;
+    // Get history from HistoryService in IContent format
+    const iContents = curated
+      ? this.historyService.getCurated()
+      : this.historyService.getAll();
+
+    // Convert to Gemini Content format
+    const contents = ContentConverters.toGeminiContents(iContents);
+
     // Deep copy the history to avoid mutating the history outside of the
     // chat session.
-    return structuredClone(history);
+    return structuredClone(contents);
   }
 
   /**
    * Clears the chat history.
    */
   clearHistory(): void {
-    this.history = [];
+    this.historyService.clear();
   }
 
   /**
    * Adds a new entry to the chat history.
    */
   addHistory(content: Content): void {
-    this.history.push(content);
+    this.historyService.add(
+      ContentConverters.toIContent(content),
+      this.config.getModel(),
+    );
   }
   setHistory(history: Content[]): void {
-    this.history = history;
+    this.historyService.clear();
+    const currentModel = this.config.getModel();
+    for (const content of history) {
+      this.historyService.add(
+        ContentConverters.toIContent(content),
+        currentModel,
+      );
+    }
   }
 
   setTools(tools: Tool[]): void {
@@ -798,23 +912,32 @@ export class GeminiChat {
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
   ) {
-    const newHistoryEntries: Content[] = [];
+    const newHistoryEntries: IContent[] = [];
 
     // Part 1: Handle the user's part of the turn.
     if (
       automaticFunctionCallingHistory &&
       automaticFunctionCallingHistory.length > 0
     ) {
-      newHistoryEntries.push(
-        ...extractCuratedHistory(automaticFunctionCallingHistory),
-      );
+      const curatedAfc = extractCuratedHistory(automaticFunctionCallingHistory);
+      for (const content of curatedAfc) {
+        newHistoryEntries.push(ContentConverters.toIContent(content));
+      }
     } else {
       // Guard for streaming calls where the user input might already be in the history.
-      if (
-        this.history.length === 0 ||
-        this.history[this.history.length - 1] !== userInput
-      ) {
-        newHistoryEntries.push(userInput);
+      const allHistory = this.historyService.getAll();
+      const lastEntry = allHistory[allHistory.length - 1];
+      const userIContent = ContentConverters.toIContent(userInput);
+
+      // Check if user input is already in history
+      const isAlreadyInHistory =
+        lastEntry &&
+        lastEntry.speaker === userIContent.speaker &&
+        JSON.stringify(lastEntry.blocks) ===
+          JSON.stringify(userIContent.blocks);
+
+      if (!isAlreadyInHistory) {
+        newHistoryEntries.push(userIContent);
       }
     }
 
@@ -852,8 +975,17 @@ export class GeminiChat {
       }
     }
 
-    // Part 4: Add the new turn (user and model parts) to the main history.
-    this.history.push(...newHistoryEntries, ...consolidatedOutputContents);
+    // Part 4: Add the new turn (user and model parts) to the history service.
+    const currentModel = this.config.getModel();
+    for (const entry of newHistoryEntries) {
+      this.historyService.add(entry, currentModel);
+    }
+    for (const content of consolidatedOutputContents) {
+      this.historyService.add(
+        ContentConverters.toIContent(content),
+        currentModel,
+      );
+    }
   }
 
   private hasTextContent(

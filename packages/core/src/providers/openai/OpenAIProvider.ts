@@ -28,18 +28,6 @@ import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import OpenAI from 'openai';
 import { IProviderConfig } from '../types/IProviderConfig.js';
-import { RESPONSES_API_MODELS } from './RESPONSES_API_MODELS.js';
-import { ConversationCache } from './ConversationCache.js';
-import {
-  estimateMessagesTokens,
-  estimateRemoteTokens,
-} from './estimateRemoteTokens.js';
-// ConversationContext removed - using inline conversation ID generation
-import {
-  parseResponsesStream,
-  parseErrorResponse,
-} from './parseResponsesStream.js';
-import { buildResponsesRequest } from './buildResponsesRequest.js';
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import {
   isQwenEndpoint,
@@ -56,7 +44,6 @@ export class OpenAIProvider extends BaseProvider {
   private providerConfig?: IProviderConfig;
   private toolFormatter: ToolFormatter;
   private toolFormatOverride?: ToolFormat;
-  private conversationCache: ConversationCache;
   private modelParams?: Record<string, unknown>;
   private _cachedClient?: OpenAI;
   private _cachedClientKey?: string;
@@ -112,7 +99,6 @@ export class OpenAIProvider extends BaseProvider {
     this.baseURL = baseURL;
     this.providerConfig = config;
     this.toolFormatter = new ToolFormatter();
-    this.conversationCache = new ConversationCache();
 
     // Initialize from SettingsService
     this.initializeFromSettings().catch((error) => {
@@ -201,7 +187,9 @@ export class OpenAIProvider extends BaseProvider {
         const oauthToken = await oauthManager.getOAuthToken('qwen');
         this.logger.debug(
           () =>
-            `OAuth token retrieved, resource_url: ${oauthToken?.resource_url}, access_token: ${oauthToken?.access_token?.substring(0, 10)}...`,
+            `OAuth token retrieved:\n` +
+            `  resource_url: ${oauthToken?.resource_url}\n` +
+            `  access_token: ${oauthToken?.access_token?.substring(0, 10)}...`,
         );
         if (oauthToken?.resource_url) {
           // Use the resource_url from the OAuth token
@@ -282,410 +270,6 @@ export class OpenAIProvider extends BaseProvider {
 
     // Default to OpenAI format
     return 'openai';
-  }
-
-  private shouldUseResponses(model: string): boolean {
-    // Check env flag override (highest priority)
-    if (process.env.OPENAI_RESPONSES_DISABLE === 'true') {
-      return false;
-    }
-
-    // Check settings override - if explicitly set to false, always respect that
-    if (this.providerConfig?.openaiResponsesEnabled === false) {
-      return false;
-    }
-
-    // Never use Responses API for non-OpenAI providers (those with custom base URLs)
-    const baseURL = this.baseURL || 'https://api.openai.com/v1';
-    if (baseURL !== 'https://api.openai.com/v1') {
-      return false;
-    }
-
-    // Default: Check if model starts with any of the responses API model prefixes
-    return RESPONSES_API_MODELS.some((responsesModel) =>
-      model.startsWith(responsesModel),
-    );
-  }
-
-  private async callResponsesEndpoint(
-    messages: IMessage[],
-    tools?: ITool[],
-    options?: {
-      stream?: boolean;
-      conversationId?: string;
-      parentId?: string;
-      tool_choice?: string | object;
-      stateful?: boolean;
-    },
-  ): Promise<AsyncIterableIterator<IMessage>> {
-    // Check if API key is available (using resolved authentication)
-    const apiKey = await this.getAuthToken();
-    if (!apiKey) {
-      const endpoint = this.baseURL || 'https://api.openai.com/v1';
-      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
-        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
-      }
-      throw new Error('OpenAI API key is required to make API calls');
-    }
-
-    // Remove the stateful mode error to allow O3 to work with conversation IDs
-
-    // Check context usage and warn if getting close to limit
-    if (options?.conversationId && options?.parentId) {
-      const contextInfo = this.estimateContextUsage(
-        options.conversationId,
-        options.parentId,
-        messages,
-      );
-
-      // Warn if less than 4k tokens remaining
-      if (contextInfo.tokensRemaining < 4000) {
-        this.logger.debug(
-          () =>
-            `Warning: Only ${contextInfo.tokensRemaining} tokens remaining (${contextInfo.contextUsedPercent.toFixed(1)}% context used). Consider starting a new conversation.`,
-        );
-      }
-    }
-
-    // Check cache for existing conversation
-    if (options?.conversationId && options?.parentId) {
-      const cachedMessages = this.conversationCache.get(
-        options.conversationId,
-        options.parentId,
-      );
-      if (cachedMessages) {
-        // Return cached messages as an async iterable
-        return (async function* () {
-          for (const message of cachedMessages) {
-            yield message;
-          }
-        })();
-      }
-    }
-
-    // Format tools for Responses API
-    const formattedTools = tools
-      ? this.toolFormatter.toResponsesTool(tools)
-      : undefined;
-
-    // Patch messages to include synthetic responses for cancelled tools
-    const { SyntheticToolResponseHandler } = await import(
-      './syntheticToolResponses.js'
-    );
-    const patchedMessages =
-      SyntheticToolResponseHandler.patchMessageHistory(messages);
-
-    // Build the request
-    const request = buildResponsesRequest({
-      model: this.currentModel,
-      messages: patchedMessages,
-      tools: formattedTools,
-      stream: options?.stream ?? true,
-      conversationId: options?.conversationId,
-      parentId: options?.parentId,
-      tool_choice: options?.tool_choice,
-      ...(this.modelParams || {}),
-    });
-
-    // Make the API call
-    const baseURL = this.baseURL || 'https://api.openai.com/v1';
-    const responsesURL = `${baseURL}/responses`;
-
-    // Ensure proper UTF-8 encoding for the request body
-    // This is crucial for handling multibyte characters (e.g., Japanese, Chinese)
-    const requestBody = JSON.stringify(request);
-    const bodyBlob = new Blob([requestBody], {
-      type: 'application/json; charset=utf-8',
-    });
-
-    const response = await fetch(responsesURL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json; charset=utf-8',
-      },
-      body: bodyBlob,
-    });
-
-    // Handle errors
-    if (!response.ok) {
-      const errorBody = await response.text();
-
-      // Handle 422 context_length_exceeded error
-      if (
-        response.status === 422 &&
-        errorBody.includes('context_length_exceeded')
-      ) {
-        this.logger.debug(
-          () =>
-            'Context length exceeded, invalidating cache and retrying stateless...',
-        );
-
-        // Invalidate the cache for this conversation
-        if (options?.conversationId && options?.parentId) {
-          this.conversationCache.invalidate(
-            options.conversationId,
-            options.parentId,
-          );
-        }
-
-        // Retry without conversation context (pure stateless)
-        const retryRequest = buildResponsesRequest({
-          model: this.currentModel,
-          messages,
-          tools: formattedTools,
-          stream: options?.stream ?? true,
-          // Omit conversationId and parentId for stateless retry
-          tool_choice: options?.tool_choice,
-          ...(this.modelParams || {}),
-        });
-
-        // Ensure proper UTF-8 encoding for retry request as well
-        const retryRequestBody = JSON.stringify(retryRequest);
-        const retryBodyBlob = new Blob([retryRequestBody], {
-          type: 'application/json; charset=utf-8',
-        });
-
-        const retryResponse = await fetch(responsesURL, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json; charset=utf-8',
-          },
-          body: retryBodyBlob,
-        });
-
-        if (!retryResponse.ok) {
-          const retryErrorBody = await retryResponse.text();
-          throw parseErrorResponse(
-            retryResponse.status,
-            retryErrorBody,
-            this.name,
-          );
-        }
-
-        // Use the retry response
-        return this.handleResponsesApiResponse(
-          retryResponse,
-          messages,
-          undefined, // No conversation context on retry
-          undefined,
-          options?.stream !== false,
-        );
-      }
-
-      throw parseErrorResponse(response.status, errorBody, this.name);
-    }
-
-    // Handle the response
-    return this.handleResponsesApiResponse(
-      response,
-      messages,
-      options?.conversationId,
-      options?.parentId,
-      options?.stream !== false,
-    );
-  }
-
-  private async handleResponsesApiResponse(
-    response: Response,
-    messages: IMessage[],
-    conversationId: string | undefined,
-    parentId: string | undefined,
-    isStreaming: boolean,
-  ): Promise<AsyncIterableIterator<IMessage>> {
-    // Handle streaming response
-    if (isStreaming && response.body) {
-      const collectedMessages: IMessage[] = [];
-      const cache = this.conversationCache;
-
-      return (async function* () {
-        for await (const message of parseResponsesStream(response.body!)) {
-          // Collect messages for caching
-          if (message.content || message.tool_calls) {
-            collectedMessages.push(message);
-          } else if (message.usage && collectedMessages.length === 0) {
-            // If we only got a usage message with no content, add a placeholder
-            collectedMessages.push({
-              role: ContentGeneratorRole.ASSISTANT,
-              content: '',
-            });
-          }
-
-          // Update the parentId in the context as soon as we get a message ID
-          if (message.id) {
-            // ConversationContext.setParentId(message.id);
-            // TODO: Handle parent ID updates when ConversationContext is available
-          }
-
-          yield message;
-        }
-
-        // Cache the collected messages with token count
-        if (conversationId && parentId && collectedMessages.length > 0) {
-          // Get previous accumulated tokens
-          const previousTokens = cache.getAccumulatedTokens(
-            conversationId,
-            parentId,
-          );
-
-          // Calculate tokens for this request (messages + response)
-          const requestTokens = estimateMessagesTokens(messages);
-          const responseTokens = estimateMessagesTokens(collectedMessages);
-          const totalTokensForRequest = requestTokens + responseTokens;
-
-          // Update cache with new accumulated total
-          cache.set(
-            conversationId,
-            parentId,
-            collectedMessages,
-            previousTokens + totalTokensForRequest,
-          );
-        }
-      })();
-    }
-
-    // Handle non-streaming response
-    interface OpenAIResponse {
-      choices?: Array<{
-        message: {
-          role: string;
-          content?: string;
-          tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            function: {
-              name: string;
-              arguments: string;
-            };
-          }>;
-        };
-      }>;
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-      };
-    }
-
-    const data = (await response.json()) as OpenAIResponse;
-    const resultMessages: IMessage[] = [];
-
-    // DEFENSIVE FIX: Handle potential array response from providers that violate OpenAI spec
-    // Some providers (like Cerebras) may return an array of responses instead of a single response
-    if (Array.isArray(data)) {
-      this.logger.error(
-        () =>
-          '[Cerebras Corruption] Detected malformed array response from provider, aggregating...',
-        {
-          provider: this.baseURL,
-          arrayLength: data.length,
-        },
-      );
-      const aggregatedContent: string[] = [];
-      let aggregatedToolCalls: Array<{
-        id: string;
-        type: 'function';
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }> = [];
-      let aggregatedUsage:
-        | {
-            prompt_tokens?: number;
-            completion_tokens?: number;
-            total_tokens?: number;
-          }
-        | undefined = undefined;
-
-      for (const item of data as OpenAIResponse[]) {
-        if (item.choices?.[0]?.message?.content) {
-          aggregatedContent.push(item.choices[0].message.content);
-        }
-        if (item.choices?.[0]?.message?.tool_calls) {
-          aggregatedToolCalls = item.choices[0].message.tool_calls;
-        }
-        if (item.usage) {
-          aggregatedUsage = item.usage;
-        }
-      }
-
-      const message: IMessage = {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: aggregatedContent.join(''),
-      };
-
-      if (aggregatedToolCalls.length > 0) {
-        message.tool_calls = aggregatedToolCalls;
-      }
-
-      if (aggregatedUsage) {
-        message.usage = {
-          prompt_tokens: aggregatedUsage.prompt_tokens || 0,
-          completion_tokens: aggregatedUsage.completion_tokens || 0,
-          total_tokens: aggregatedUsage.total_tokens || 0,
-        };
-      }
-
-      resultMessages.push(message);
-      // Convert to async iterator for consistent return type
-      return (async function* () {
-        for (const msg of resultMessages) {
-          yield msg;
-        }
-      })();
-    }
-
-    if (data.choices && data.choices.length > 0) {
-      const choice = data.choices[0];
-      const message: IMessage = {
-        role: choice.message.role as ContentGeneratorRole,
-        content: choice.message.content || '',
-      };
-
-      if (choice.message.tool_calls) {
-        message.tool_calls = choice.message.tool_calls;
-      }
-
-      if (data.usage) {
-        message.usage = {
-          prompt_tokens: data.usage.prompt_tokens || 0,
-          completion_tokens: data.usage.completion_tokens || 0,
-          total_tokens: data.usage.total_tokens || 0,
-        };
-      }
-
-      resultMessages.push(message);
-    }
-
-    // Cache the result with token count
-    if (conversationId && parentId && resultMessages.length > 0) {
-      // Get previous accumulated tokens
-      const previousTokens = this.conversationCache.getAccumulatedTokens(
-        conversationId,
-        parentId,
-      );
-
-      // Calculate tokens for this request
-      const requestTokens = estimateMessagesTokens(messages);
-      const responseTokens = estimateMessagesTokens(resultMessages);
-      const totalTokensForRequest = requestTokens + responseTokens;
-
-      // Update cache with new accumulated total
-      this.conversationCache.set(
-        conversationId,
-        parentId,
-        resultMessages,
-        previousTokens + totalTokensForRequest,
-      );
-    }
-
-    return (async function* () {
-      for (const message of resultMessages) {
-        yield message;
-      }
-    })();
   }
 
   override async getModels(): Promise<IModel[]> {
@@ -773,1087 +357,159 @@ export class OpenAIProvider extends BaseProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
-    // Check if API key is available (using resolved authentication)
-    const apiKey = await this.getAuthToken();
-    if (!apiKey) {
-      const endpoint = this.baseURL || 'https://api.openai.com/v1';
-      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
-        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
-      }
-      throw new Error('OpenAI API key is required to generate completions');
-    }
+    // 1. Validate authentication and messages
+    await this.validateRequestPreconditions(messages);
 
-    // Check if we should use responses endpoint
-    if (this.shouldUseResponses(this.currentModel)) {
-      // Generate conversation IDs inline (would normally come from application context)
-      const conversationId = undefined;
-      const parentId = undefined;
+    // 2. Prepare request configuration
+    const requestConfig = this.prepareApiRequest(messages, tools);
 
-      yield* await this.callResponsesEndpoint(messages, tools, {
-        stream: true,
-        tool_choice: tools && tools.length > 0 ? 'auto' : undefined,
-        stateful: false, // Always stateless for Phase 22-01
-        conversationId,
-        parentId,
-      });
-      return;
-    }
+    // 3. Make API call with error handling
+    const response = await this.executeApiCall(messages, tools, requestConfig);
 
-    // Don't automatically add synthetic responses - they should only be added when tools are actually cancelled
-    // Check if we have any existing synthetic responses (from actual cancellations)
-    const existingSyntheticCount = messages.filter(
-      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
-    ).length;
-
-    if (existingSyntheticCount > 0) {
-      this.logger.debug(
-        () =>
-          `[Synthetic] Found ${existingSyntheticCount} existing synthetic responses in conversation`,
-      );
-    }
-
-    // Just use the messages as-is without "fixing" them
-    const patchedMessages = messages;
-
-    // Validate tool messages have required tool_call_id
-    const toolMessages = patchedMessages.filter((msg) => msg.role === 'tool');
-    const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
-
-    if (missingIds.length > 0) {
-      this.logger.error(
-        () =>
-          `FATAL: Tool messages missing tool_call_id: ${JSON.stringify(missingIds)}`,
-      );
-      throw new Error(
-        `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
-      );
-    }
-
-    // Log synthetic responses for debugging
-    const syntheticMessages = patchedMessages.filter(
-      (msg) => (msg as IMessage & { _synthetic?: boolean })._synthetic,
-    );
-    if (syntheticMessages.length > 0) {
-      this.logger.debug(
-        () =>
-          `[Synthetic] Added ${syntheticMessages.length} synthetic tool responses`,
-      );
-
-      // Check for ordering issues - using debug logger which only executes when enabled
-      this.logger.debug(() => {
-        const orderingErrors: string[] = [];
-        const orderingWarnings: string[] = [];
-
-        for (let i = 0; i < patchedMessages.length - 1; i++) {
-          const current = patchedMessages[i];
-          const next = patchedMessages[i + 1];
-
-          // Check if a tool response comes before its corresponding tool call
-          if (current.role === 'tool' && current.tool_call_id) {
-            // Find the assistant message with this tool call
-            const callIndex = patchedMessages.findIndex(
-              (m) =>
-                m.role === 'assistant' &&
-                m.tool_calls?.some((tc) => tc.id === current.tool_call_id),
-            );
-            if (callIndex === -1 || callIndex > i) {
-              orderingErrors.push(
-                `Tool response ${current.tool_call_id} appears before its tool call or call not found`,
-              );
-            }
-          }
-
-          // Check if we have consecutive assistant messages with tool calls
-          if (
-            current.role === 'assistant' &&
-            current.tool_calls &&
-            next.role === 'assistant' &&
-            next.tool_calls
-          ) {
-            orderingWarnings.push(
-              `Consecutive assistant messages with tool calls at indices ${i} and ${i + 1}`,
-            );
-          }
-        }
-
-        if (orderingErrors.length > 0) {
-          return `[Synthetic Order Check] Errors found: ${orderingErrors.join('; ')}`;
-        } else if (orderingWarnings.length > 0) {
-          return `[Synthetic Order Check] Warnings: ${orderingWarnings.join('; ')}`;
-        } else {
-          return '[Synthetic Order Check] No issues found';
-        }
-      });
-    }
-
-    const parser = this.requiresTextToolCallParsing()
-      ? new GemmaToolCallParser()
-      : null;
-
-    // Get current tool format (with override support)
-    const currentToolFormat = this.getToolFormat();
-
-    // Format tools using formatToolsForAPI method
-    const formattedTools = tools ? this.formatToolsForAPI(tools) : undefined;
-
-    // Get stream_options from ephemeral settings (not model params)
-    const streamOptions =
-      this.providerConfig?.getEphemeralSettings?.()?.['stream-options'];
-
-    // Default stream_options to { include_usage: true } unless explicitly set
-    const finalStreamOptions =
-      streamOptions !== undefined ? streamOptions : { include_usage: true };
-
-    // Get streaming setting from ephemeral settings (default: enabled)
-    const streamingSetting =
-      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
-    let streamingEnabled = streamingSetting !== 'disabled';
-
-    // Get resolved authentication and update client if needed
-    await this.updateClientWithResolvedAuth();
-
-    // Strip internal tracking fields that some APIs don't accept
-    // We keep the synthetic responses but remove the metadata fields
-    const cleanedMessages = patchedMessages.map((msg) => {
-      // Create a shallow copy and remove internal fields
-      const { _synthetic, _cancelled, ...cleanMsg } = msg as IMessage & {
-        _synthetic?: boolean;
-        _cancelled?: boolean;
+    // 4. Process response based on streaming mode
+    let processedData: {
+      fullContent: string;
+      accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
+      hasStreamedContent: boolean;
+      usageData?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
       };
+      pendingWhitespace: string | null;
+    } = {
+      fullContent: '',
+      accumulatedToolCalls: [],
+      hasStreamedContent: false,
+      usageData: undefined,
+      pendingWhitespace: null,
+    };
 
-      // Log synthetic tool responses for debugging
-      if ((msg as IMessage & { _synthetic?: boolean })._synthetic) {
-        this.logger.debug(
-          () => `[Synthetic Tool Response] ${JSON.stringify(cleanMsg)}`,
-        );
-      }
+    if (requestConfig.streamingEnabled) {
+      // Need to yield streaming content as it comes
+      const streamResponse =
+        response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+      for await (const chunk of streamResponse) {
+        const delta = chunk.choices?.[0]?.delta;
 
-      return cleanMsg;
-    });
-
-    this.logger.debug(
-      () =>
-        `About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${streamingEnabled}`,
-    );
-
-    // Debug: Log message roles being sent
-    this.logger.debug(
-      () =>
-        `Messages being sent to OpenAI (${cleanedMessages.length} total): ${cleanedMessages
-          .map(
-            (m) =>
-              `${m.role}${m.role === 'system' ? ` (length: ${m.content?.length})` : ''}`,
-          )
-          .join(', ')}`,
-    );
-
-    let response;
-    try {
-      // Build request params with exact order from original
-      response = await this.openai.chat.completions.create({
-        model: this.currentModel,
-        messages:
-          cleanedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-        stream: streamingEnabled,
-        ...(streamingEnabled && finalStreamOptions
-          ? { stream_options: finalStreamOptions }
-          : {}),
-        tools: formattedTools as
-          | OpenAI.Chat.Completions.ChatCompletionTool[]
-          | undefined,
-        tool_choice: this.getToolChoiceForFormat(tools),
-        ...this.modelParams,
-      });
-    } catch (error) {
-      // Debug the error
-      const errorStatus =
-        (error as { status?: number })?.status ||
-        (error as { response?: { status?: number } })?.response?.status;
-      const errorLabel =
-        errorStatus === 400 ? '[API Error 400]' : '[API Error]';
-
-      this.logger.error(
-        () => `${errorLabel} Error caught in API call: ${error}`,
-      );
-      this.logger.error(
-        () =>
-          `${errorLabel} Error type: ${(error as Error)?.constructor?.name}`,
-      );
-      this.logger.error(() => `${errorLabel} Error status: ${errorStatus}`);
-      this.logger.error(
-        () =>
-          `${errorLabel} Error response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
-      );
-
-      // Log the last few messages to understand what's being sent
-      if (errorStatus === 400) {
-        // Log additional diagnostics for 400 errors
-        const hasSyntheticMessages = cleanedMessages.some(
-          (msg) =>
-            msg.role === 'tool' &&
-            msg.content === 'Tool execution cancelled by user',
-        );
-        const hasPendingToolCalls = cleanedMessages.some((msg, idx) => {
-          if (msg.role === 'assistant' && msg.tool_calls) {
-            // Check if there's a matching tool response
-            const toolCallIds = msg.tool_calls.map((tc) => tc.id);
-            const hasResponses = toolCallIds.every((id) =>
-              cleanedMessages
-                .slice(idx + 1)
-                .some((m) => m.role === 'tool' && m.tool_call_id === id),
-            );
-            return !hasResponses;
-          }
-          return false;
-        });
-
-        this.logger.error(() => `${errorLabel} Last 5 messages being sent:`);
-        this.logger.error(
-          () => `${errorLabel} Has synthetic messages: ${hasSyntheticMessages}`,
-        );
-        this.logger.error(
-          () =>
-            `${errorLabel} Has pending tool calls without responses: ${hasPendingToolCalls}`,
-        );
-        const lastMessages = cleanedMessages.slice(-5);
-        lastMessages.forEach((msg, idx) => {
-          this.logger.error(
-            () =>
-              `  [${cleanedMessages.length - 5 + idx}] ${msg.role}${msg.tool_call_id ? ` (tool response for ${msg.tool_call_id})` : ''}${msg.tool_calls ? ` (${msg.tool_calls.length} tool calls)` : ''}`,
-          );
-          if (msg.tool_calls) {
-            msg.tool_calls.forEach((tc) => {
-              this.logger.error(
-                () => `    - Tool call: ${tc.id} -> ${tc.function.name}`,
-              );
-            });
-          }
-        });
-      }
-
-      // Check for JSONResponse mutation errors
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      if (
-        errorMessage?.includes('JSONResponse') &&
-        errorMessage?.includes('does not support item assignment')
-      ) {
-        this.logger.debug(
-          () =>
-            '[JSONResponse Error] Detected JSONResponse mutation error, retrying without streaming',
-        );
-        this.logger.error(
-          () =>
-            '[Cerebras Corruption] JSONResponse mutation error detected. This typically occurs with certain providers like Cerebras. Falling back to non-streaming mode.',
-          {
-            errorMessage,
-            provider: this.baseURL,
-            streamingEnabled,
-          },
-        );
-        // Retry with streaming disabled
-        response = await this.openai.chat.completions.create({
-          model: this.currentModel,
-          messages:
-            cleanedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-          stream: false, // Force non-streaming
-          tools: formattedTools as
-            | OpenAI.Chat.Completions.ChatCompletionTool[]
-            | undefined,
-          tool_choice: this.getToolChoiceForFormat(tools),
-          ...this.modelParams,
-        });
-        // Override streamingEnabled for the rest of this function
-        streamingEnabled = false;
-      } else {
-        this.logger.debug(
-          () => `${errorLabel} Re-throwing error (not a JSONResponse mutation)`,
-        );
-        // Re-throw other errors
-        throw error;
-      }
-    }
-
-    let fullContent = '';
-    const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
-    let hasStreamedContent = false;
-    let usageData:
-      | {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        }
-      | undefined;
-
-    // Type for chunks that may have message instead of delta
-    interface StreamChunk {
-      choices?: Array<{
-        delta?: {
-          content?: string | null;
-          role?: string;
-          tool_calls?: Array<{
-            id?: string;
-            type?: string;
-            function?: {
-              name?: string;
-              arguments?: string;
-            };
-            index?: number;
-          }>;
-        };
-        message?: {
-          content?: string | null;
-          role?: string;
-          tool_calls?: Array<{
-            id?: string;
-            type?: string;
-            function?: {
-              name?: string;
-              arguments?: string;
-            };
-          }>;
-        };
-        index?: number;
-        finish_reason?: string | null;
-      }>;
-      usage?: {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-      };
-    }
-
-    // For Qwen streaming, buffer whitespace-only chunks to preserve spacing across chunk boundaries
-    let pendingWhitespace: string | null = null;
-
-    // Handle streaming vs non-streaming response
-    if (streamingEnabled) {
-      // We need to buffer all chunks to detect and handle malformed streams
-      // Some providers (like Cerebras) send message format instead of delta
-      const allChunks: StreamChunk[] = [];
-
-      this.logger.debug(
-        () =>
-          '[Stream Detection] Starting to buffer chunks for corruption detection',
-        {
-          provider: this.baseURL,
-          streamingEnabled,
-          isUsingQwen: this.isUsingQwen(),
-          currentModel: this.currentModel,
-        },
-      );
-
-      try {
-        for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
-          // CRITICAL: Create a deep copy to avoid JSONResponse mutation issues
-          // Cerebras and other providers may return immutable JSONResponse objects
-          // Cast to unknown first to bypass type checking, then to our extended type
-          const extendedChunk = chunk as unknown as {
-            choices?: Array<{
-              delta?: {
-                content?: string | null;
-                role?: string;
-                tool_calls?: Array<{
-                  id: string;
-                  type: string;
-                  function: {
-                    name: string;
-                    arguments: string;
-                  };
-                  index?: number;
-                }>;
-              };
-              message?: {
-                content?: string | null;
-                role?: string;
-                tool_calls?: Array<{
-                  id: string;
-                  type: string;
-                  function: {
-                    name: string;
-                    arguments: string;
-                  };
-                }>;
-              };
-              index: number;
-              finish_reason: string | null;
-            }>;
-            usage?: {
-              prompt_tokens?: number;
-              completion_tokens?: number;
-              total_tokens?: number;
-            };
-          };
-
-          const safeChunk: StreamChunk = {
-            choices: extendedChunk.choices?.map((choice) => ({
-              delta: choice.delta
-                ? {
-                    content: choice.delta.content ?? undefined,
-                    role: choice.delta.role,
-                    tool_calls: choice.delta.tool_calls?.map((tc, idx) => ({
-                      id: tc.id,
-                      type: tc.type,
-                      function: tc.function
-                        ? {
-                            name: tc.function.name,
-                            arguments: tc.function.arguments,
-                          }
-                        : undefined,
-                      index: tc.index !== undefined ? tc.index : idx,
-                    })),
-                  }
-                : undefined,
-              message: choice.message
-                ? {
-                    content: choice.message.content ?? undefined,
-                    role: choice.message.role,
-                    tool_calls: choice.message.tool_calls?.map((tc) => ({
-                      id: tc.id,
-                      type: tc.type,
-                      function: tc.function
-                        ? {
-                            name: tc.function.name,
-                            arguments: tc.function.arguments,
-                          }
-                        : undefined,
-                    })),
-                  }
-                : undefined,
-              index: choice.index,
-              finish_reason: choice.finish_reason,
-            })),
-            usage: extendedChunk.usage
-              ? {
-                  prompt_tokens: extendedChunk.usage.prompt_tokens,
-                  completion_tokens: extendedChunk.usage.completion_tokens,
-                  total_tokens: extendedChunk.usage.total_tokens,
-                }
-              : undefined,
-          };
-          allChunks.push(safeChunk);
-        }
-
-        this.logger.debug(
-          () =>
-            `[Stream Buffering Complete] Collected ${allChunks.length} chunks`,
-          {
-            chunkCount: allChunks.length,
-            hasContent: allChunks.some((c) => c.choices?.[0]?.delta?.content),
-            hasToolCalls: allChunks.some(
-              (c) => c.choices?.[0]?.delta?.tool_calls,
-            ),
-          },
-        );
-      } catch (error) {
-        // Handle JSONResponse mutation errors that occur during iteration
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        if (
-          errorMessage?.includes('JSONResponse') &&
-          errorMessage?.includes('does not support item assignment')
-        ) {
-          this.logger.error(
-            () =>
-              '[Cerebras Corruption] JSONResponse mutation error during stream iteration. This is a known issue with Cerebras. The OpenAI client library is trying to mutate immutable response objects. Falling back to non-streaming mode.',
-            {
-              error: errorMessage,
-              provider: this.baseURL,
-              chunksCollected: allChunks.length,
-            },
-          );
-
-          // Retry the entire request with streaming disabled
-          // This is the nuclear option but ensures we get a response
-          const nonStreamingResponse =
-            await this.openai.chat.completions.create({
-              model: this.currentModel,
-              messages:
-                cleanedMessages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-              stream: false, // Force non-streaming
-              tools: formattedTools as
-                | OpenAI.Chat.Completions.ChatCompletionTool[]
-                | undefined,
-              tool_choice: this.getToolChoiceForFormat(tools),
-              ...this.modelParams,
-            });
-
-          // Handle as non-streaming response
-          const completionResponse =
-            nonStreamingResponse as OpenAI.Chat.Completions.ChatCompletion;
-          const choice = completionResponse.choices[0];
-
-          if (choice?.message.content) {
-            fullContent = choice.message.content;
-          }
-
-          if (choice?.message.tool_calls) {
-            for (const toolCall of choice.message.tool_calls) {
-              if (toolCall.type === 'function' && toolCall.function) {
-                accumulatedToolCalls.push({
-                  id: toolCall.id,
-                  type: 'function' as const,
-                  function: toolCall.function,
-                });
-              }
-            }
-          }
-
-          if (completionResponse.usage) {
-            usageData = {
-              prompt_tokens: completionResponse.usage.prompt_tokens,
-              completion_tokens: completionResponse.usage.completion_tokens,
-              total_tokens: completionResponse.usage.total_tokens,
-            };
-          }
-
-          // Yield the complete response
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: fullContent || '',
-            tool_calls:
-              accumulatedToolCalls.length > 0
-                ? accumulatedToolCalls
-                : undefined,
-            usage: usageData,
-          };
-          return;
-        }
-
-        // Re-throw other errors
-        throw error;
-      }
-
-      // Check first chunk to see if we have malformed stream
-      let detectedMalformedStream = false;
-      if (allChunks.length > 0) {
-        const firstChunk = allChunks[0];
-        if (
-          firstChunk.choices?.[0]?.message &&
-          !firstChunk.choices?.[0]?.delta
-        ) {
-          detectedMalformedStream = true;
-          this.logger.debug(
-            () =>
-              'Detected malformed stream (message instead of delta), using aggregation mode',
-          );
-        }
-      }
-
-      // If we detected issues, aggregate everything
-      if (detectedMalformedStream) {
-        const contentParts: string[] = [];
-        let aggregatedToolCalls: Array<{
-          id: string;
-          type: 'function';
-          function: {
-            name: string;
-            arguments: string;
-          };
-        }> = [];
-        let finalUsageData:
-          | {
-              prompt_tokens: number;
-              completion_tokens: number;
-              total_tokens: number;
-            }
-          | undefined = undefined;
-
-        // Process all buffered chunks
-        for (const chunk of allChunks) {
-          const message =
-            chunk.choices?.[0]?.message || chunk.choices?.[0]?.delta;
-          if (message?.content) {
-            contentParts.push(message.content);
-          }
-          if (message?.tool_calls) {
-            // Ensure tool_calls match the expected format
-            aggregatedToolCalls = message.tool_calls.map((tc) => ({
-              id: tc.id || `call_${Date.now()}`,
-              type: (tc.type || 'function') as 'function',
-              function: {
-                name: tc.function?.name || '',
-                arguments: tc.function?.arguments || '',
-              },
-            }));
-          }
-          if (chunk.usage) {
-            finalUsageData = {
-              prompt_tokens: chunk.usage.prompt_tokens || 0,
-              completion_tokens: chunk.usage.completion_tokens || 0,
-              total_tokens: chunk.usage.total_tokens || 0,
-            };
-          }
-        }
-
-        // Yield single reconstructed message
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: contentParts.join(''),
-          tool_calls:
-            aggregatedToolCalls.length > 0 ? aggregatedToolCalls : undefined,
-          usage: finalUsageData,
-        };
-        return;
-      }
-
-      // Process chunks normally - stream them as they come
-      this.logger.debug(
-        () =>
-          `[Processing Chunks] Starting to process ${allChunks.length} buffered chunks`,
-        {
-          isUsingQwen: this.isUsingQwen(),
-        },
-      );
-
-      let chunkIndex = 0;
-      for (const chunk of allChunks) {
-        chunkIndex++;
-        // Since we created safe copies during buffering, chunks are now mutable
-        // Check if this chunk has message format instead of delta (malformed stream)
-        let processedChunk: StreamChunk = chunk;
-        if (chunk.choices?.[0]?.message && !chunk.choices?.[0]?.delta) {
-          this.logger.error(
-            () =>
-              '[Cerebras Corruption] Converting malformed chunk from message to delta format',
-            {
-              provider: this.baseURL,
-              hasMessage: true,
-              hasDelta: false,
-              messageContent: chunk.choices[0].message?.content?.substring(
-                0,
-                100,
-              ),
-            },
-          );
-          // Convert message format to delta format for consistent processing
-          const message = chunk.choices[0].message;
-          processedChunk = {
-            choices: [
-              {
-                delta: {
-                  content: message?.content ?? undefined,
-                  role: message?.role,
-                  tool_calls: message?.tool_calls,
-                },
-              },
-            ],
-            usage: chunk.usage,
-          };
-        }
-
-        const delta = processedChunk.choices?.[0]?.delta;
-
-        if (delta?.content) {
-          // Enhanced debug logging to understand streaming behavior
+        if (delta?.content && !requestConfig.parser) {
           if (this.isUsingQwen()) {
-            this.logger.debug(
-              () =>
-                `Chunk: ${JSON.stringify({
-                  content: delta.content,
-                  contentLength: delta.content?.length ?? 0,
-                  isWhitespaceOnly: delta.content?.trim() === '',
-                  chunkIndex: 0,
-                })}`,
-            );
-          }
-
-          // For text-based models, don't yield content chunks yet
-          if (!parser && delta.content) {
-            this.logger.debug(
-              () =>
-                `[Content Processing] Chunk ${chunkIndex}/${allChunks.length} has content`,
-              {
-                contentLength: delta.content.length,
-                contentPreview: delta.content.substring(0, 50),
-                isUsingQwen: this.isUsingQwen(),
-                willBuffer: this.isUsingQwen() && delta.content.trim() === '',
-              },
+            // Handle Qwen whitespace buffering inline for yielding
+            // This is needed because we yield during streaming
+            // We'll refactor this separately if needed
+            const whitespaceResult = this.handleQwenStreamingWhitespace(
+              delta,
+              processedData.pendingWhitespace,
+              processedData.fullContent,
             );
 
-            if (this.isUsingQwen()) {
-              const isWhitespaceOnly = delta.content.trim() === '';
-              if (isWhitespaceOnly) {
-                // Buffer whitespace-only chunk
-                pendingWhitespace = (pendingWhitespace || '') + delta.content;
-                this.logger.debug(
-                  () =>
-                    `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${pendingWhitespace?.length ?? 0}`,
-                  {
-                    chunkIndex,
-                    totalChunks: allChunks.length,
-                    isLastChunk: chunkIndex === allChunks.length,
-                    contentHex: Buffer.from(delta.content).toString('hex'),
-                  },
-                );
-                continue;
-              } else if (pendingWhitespace) {
-                // Flush buffered whitespace before non-empty chunk to preserve spacing
-                this.logger.debug(
-                  () =>
-                    `Flushing pending whitespace (len=${pendingWhitespace?.length ?? 0}) before non-empty chunk`,
-                );
-                yield {
-                  role: ContentGeneratorRole.ASSISTANT,
-                  content: pendingWhitespace,
-                };
-                hasStreamedContent = true;
-                fullContent += pendingWhitespace;
-                pendingWhitespace = null;
-              }
+            if (whitespaceResult.shouldYield) {
+              yield {
+                role: ContentGeneratorRole.ASSISTANT,
+                content: whitespaceResult.content,
+              };
             }
 
-            this.logger.debug(
-              () =>
-                `[Yielding Content] Yielding chunk ${chunkIndex}/${allChunks.length}`,
-              {
-                contentLength: delta.content.length,
-                hasStreamedContent,
-              },
-            );
-
+            // Update our tracking of processed data
+            processedData = {
+              fullContent: whitespaceResult.updatedFullContent,
+              accumulatedToolCalls: processedData.accumulatedToolCalls,
+              hasStreamedContent:
+                processedData.hasStreamedContent ||
+                whitespaceResult.shouldYield,
+              usageData: processedData.usageData,
+              pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
+            };
+          } else {
             yield {
               role: ContentGeneratorRole.ASSISTANT,
               content: delta.content,
             };
-            hasStreamedContent = true;
+            processedData = {
+              fullContent: processedData.fullContent + delta.content,
+              accumulatedToolCalls: processedData.accumulatedToolCalls,
+              hasStreamedContent: true,
+              usageData: processedData.usageData,
+              pendingWhitespace: null,
+            };
           }
-
-          fullContent += delta.content;
+        } else if (delta?.content) {
+          // Parser mode - just accumulate
+          processedData = {
+            fullContent: processedData.fullContent + delta.content,
+            accumulatedToolCalls: processedData.accumulatedToolCalls,
+            hasStreamedContent: processedData.hasStreamedContent,
+            usageData: processedData.usageData,
+            pendingWhitespace: processedData.pendingWhitespace,
+          };
         }
 
+        // Handle tool calls
         if (delta?.tool_calls) {
+          const accumulated: NonNullable<IMessage['tool_calls']> =
+            processedData.accumulatedToolCalls;
           for (const toolCall of delta.tool_calls) {
             this.toolFormatter.accumulateStreamingToolCall(
               toolCall,
-              accumulatedToolCalls,
-              currentToolFormat,
+              accumulated,
+              requestConfig.currentToolFormat,
             );
           }
+          processedData = {
+            ...processedData,
+            accumulatedToolCalls: accumulated,
+          };
         }
 
-        // Check for usage data in the chunk
-        if (processedChunk.usage) {
-          usageData = {
-            prompt_tokens: processedChunk.usage.prompt_tokens || 0,
-            completion_tokens: processedChunk.usage.completion_tokens || 0,
-            total_tokens: processedChunk.usage.total_tokens || 0,
+        // Check for usage data
+        if (chunk.usage) {
+          processedData = {
+            ...processedData,
+            usageData: {
+              prompt_tokens: chunk.usage.prompt_tokens || 0,
+              completion_tokens: chunk.usage.completion_tokens || 0,
+              total_tokens: chunk.usage.total_tokens || 0,
+            },
           };
         }
       }
     } else {
-      // Non-streaming response - handle as a single completion
-      const completionResponse =
-        response as OpenAI.Chat.Completions.ChatCompletion;
-      const choice = completionResponse.choices[0];
+      // Non-streaming response
+      processedData = this.processNonStreamingResponse(
+        response as OpenAI.Chat.Completions.ChatCompletion,
+      );
 
-      if (choice?.message.content) {
-        fullContent = choice.message.content;
-      }
-
-      if (choice?.message.tool_calls) {
-        // Convert tool calls to the standard format
-        for (const toolCall of choice.message.tool_calls) {
-          if (toolCall.type === 'function' && toolCall.function) {
-            // Don't fix double stringification here - it's handled later in the final processing
-            accumulatedToolCalls.push({
-              id: toolCall.id,
-              type: 'function' as const,
-              function: toolCall.function,
-            });
-          }
-        }
-      }
-
-      if (completionResponse.usage) {
-        usageData = {
-          prompt_tokens: completionResponse.usage.prompt_tokens,
-          completion_tokens: completionResponse.usage.completion_tokens,
-          total_tokens: completionResponse.usage.total_tokens,
-        };
-      }
-
-      // For non-streaming, we yield the full content at once if there's no parser
-      if (!parser && fullContent) {
+      // For non-streaming, yield content if no parser
+      if (!requestConfig.parser && processedData.fullContent) {
         yield {
           role: ContentGeneratorRole.ASSISTANT,
-          content: fullContent,
+          content: processedData.fullContent,
         };
-        hasStreamedContent = true;
+        processedData.hasStreamedContent = true;
       }
     }
 
-    // Flush any remaining pending whitespace for Qwen
-    if (pendingWhitespace && this.isUsingQwen() && !parser) {
+    // 5. Flush pending whitespace if needed (for Qwen)
+    if (
+      processedData.pendingWhitespace &&
+      this.isUsingQwen() &&
+      !requestConfig.parser
+    ) {
       this.logger.debug(
         () =>
-          `Flushing trailing pending whitespace (len=${pendingWhitespace?.length ?? 0}) at stream end`,
+          `Flushing trailing pending whitespace (len=${processedData.pendingWhitespace?.length ?? 0}) at stream end`,
       );
       yield {
         role: ContentGeneratorRole.ASSISTANT,
-        content: pendingWhitespace,
+        content: processedData.pendingWhitespace,
       };
-      hasStreamedContent = true;
-      fullContent += pendingWhitespace;
-      pendingWhitespace = null;
+      processedData.hasStreamedContent = true;
+      processedData.fullContent += processedData.pendingWhitespace;
+      processedData.pendingWhitespace = null;
     }
 
-    // After stream ends, parse text-based tool calls if needed
-    if (parser && fullContent) {
-      const { cleanedContent, toolCalls } = parser.parse(fullContent);
-
-      if (toolCalls.length > 0) {
-        // Convert to standard format
-        const standardToolCalls = toolCalls.map((tc, index) => ({
-          id: `call_${Date.now()}_${index}`,
-          type: 'function' as const,
-          function: {
-            name: tc.name,
-            arguments: JSON.stringify(tc.arguments),
-          },
-        }));
-
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: cleanedContent,
-          tool_calls: standardToolCalls,
-          usage: usageData,
-        };
-      } else {
-        // No tool calls found, yield cleaned content
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: cleanedContent,
-          usage: usageData,
-        };
-      }
-    } else {
-      // Standard OpenAI tool call handling
-      if (accumulatedToolCalls.length > 0) {
-        // Fix double stringification for Qwen tool calls
-        // Qwen models pre-stringify arguments values, but later in the process
-        // they are being JSON.stringify'd again
-        let fixedToolCalls = accumulatedToolCalls;
-        if (this.isUsingQwen()) {
-          this.logger.debug(
-            () =>
-              `[Qwen Fix] Processing ${accumulatedToolCalls.length} tool calls for double-stringification fix`,
-          );
-          fixedToolCalls = accumulatedToolCalls.map((toolCall, index) => {
-            this.logger.debug(
-              () =>
-                `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
-                  name: toolCall.function.name,
-                  argumentsType: typeof toolCall.function.arguments,
-                  argumentsLength: toolCall.function.arguments?.length,
-                  argumentsSample: toolCall.function.arguments?.substring(
-                    0,
-                    100,
-                  ),
-                })}`,
-            );
-            // For Qwen, check for nested double-stringification
-            // Qwen models stringify array/object values WITHIN the JSON arguments
-            if (
-              toolCall.function.arguments &&
-              typeof toolCall.function.arguments === 'string'
-            ) {
-              try {
-                // First, parse the arguments to get the JSON object
-                const parsedArgs = JSON.parse(toolCall.function.arguments);
-                let hasNestedStringification = false;
-
-                // Check each property to see if it's a stringified array/object/number
-                const fixedArgs: Record<string, unknown> = {};
-                for (const [key, value] of Object.entries(parsedArgs)) {
-                  if (typeof value === 'string') {
-                    const trimmed = value.trim();
-
-                    // Check if it's a stringified number (integer or float)
-                    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-                      const numValue = trimmed.includes('.')
-                        ? parseFloat(trimmed)
-                        : parseInt(trimmed, 10);
-                      fixedArgs[key] = numValue;
-                      hasNestedStringification = true;
-                      this.logger.debug(
-                        () =>
-                          `[Qwen Fix] Fixed stringified number in property '${key}' for ${toolCall.function.name}: "${value}" -> ${numValue}`,
-                      );
-                    }
-                    // Check if it looks like a stringified array or object
-                    // Also check for Python-style dictionaries with single quotes
-                    else if (
-                      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
-                      (trimmed.startsWith('{') && trimmed.endsWith('}'))
-                    ) {
-                      try {
-                        // Try to parse it as JSON
-                        const nestedParsed = JSON.parse(value);
-                        fixedArgs[key] = nestedParsed;
-                        hasNestedStringification = true;
-                        this.logger.debug(
-                          () =>
-                            `[Qwen Fix] Fixed nested stringification in property '${key}' for ${toolCall.function.name}`,
-                        );
-                      } catch {
-                        // Try to convert Python-style to JSON (single quotes to double quotes)
-                        try {
-                          const jsonified = value
-                            .replace(/'/g, '"')
-                            .replace(/: True/g, ': true')
-                            .replace(/: False/g, ': false')
-                            .replace(/: None/g, ': null');
-                          const nestedParsed = JSON.parse(jsonified);
-                          fixedArgs[key] = nestedParsed;
-                          hasNestedStringification = true;
-                          this.logger.debug(
-                            () =>
-                              `[Qwen Fix] Fixed Python-style nested stringification in property '${key}' for ${toolCall.function.name}`,
-                          );
-                        } catch {
-                          // Not valid JSON even after conversion, keep as string
-                          fixedArgs[key] = value;
-                        }
-                      }
-                    } else {
-                      fixedArgs[key] = value;
-                    }
-                  } else {
-                    fixedArgs[key] = value;
-                  }
-                }
-
-                if (hasNestedStringification) {
-                  this.logger.debug(
-                    () =>
-                      `[Qwen Fix] Fixed nested double-stringification for ${toolCall.function.name}`,
-                  );
-                  return {
-                    ...toolCall,
-                    function: {
-                      ...toolCall.function,
-                      arguments: JSON.stringify(fixedArgs),
-                    },
-                  };
-                }
-              } catch (_e) {
-                // If parsing fails, check for old-style double-stringification
-                if (
-                  toolCall.function.arguments.startsWith('"') &&
-                  toolCall.function.arguments.endsWith('"')
-                ) {
-                  try {
-                    // Old fix: entire arguments were double-stringified
-                    const parsedArgs = JSON.parse(toolCall.function.arguments);
-                    this.logger.debug(
-                      () =>
-                        `[Qwen Fix] Fixed whole-argument double-stringification for ${toolCall.function.name}`,
-                    );
-                    return {
-                      ...toolCall,
-                      function: {
-                        ...toolCall.function,
-                        arguments: JSON.stringify(parsedArgs),
-                      },
-                    };
-                  } catch {
-                    // Leave as-is if we can't parse
-                  }
-                }
-              }
-            }
-            // No fix needed
-            this.logger.debug(
-              () =>
-                `[Qwen Fix] No double-stringification detected for ${toolCall.function.name}, keeping original`,
-            );
-            return toolCall;
-          });
-        }
-
-        if (this.isUsingQwen()) {
-          this.logger.debug(
-            () =>
-              `Final message with tool calls: ${JSON.stringify({
-                contentLength: fullContent.length,
-                content:
-                  fullContent.substring(0, 200) +
-                  (fullContent.length > 200 ? '...' : ''),
-                toolCallCount: accumulatedToolCalls.length,
-                hasStreamedContent,
-              })}`,
-          );
-        }
-
-        // For Qwen models, don't duplicate content if we've already streamed it
-        // BUT Cerebras needs at least a space to continue after tool responses
-        const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
-
-        if (isCerebras) {
-          this.logger.debug(
-            () =>
-              '[Cerebras] Special handling for Cerebras provider after tool responses',
-            {
-              hasStreamedContent,
-              willSendSpace: hasStreamedContent,
-            },
-          );
-        }
-        const shouldOmitContent =
-          hasStreamedContent && this.isUsingQwen() && !isCerebras;
-
-        this.logger.debug(
-          () => '[Tool Call Handling] Deciding how to yield tool calls',
-          {
-            hasStreamedContent,
-            isUsingQwen: this.isUsingQwen(),
-            isCerebras,
-            shouldOmitContent,
-            fullContentLength: fullContent.length,
-            toolCallCount: fixedToolCalls?.length || 0,
-          },
-        );
-
-        if (shouldOmitContent) {
-          // Qwen: Send just a space (like Cerebras) to prevent stream stopping
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: ' ', // Single space instead of empty to keep stream alive
-            tool_calls: fixedToolCalls,
-            usage: usageData,
-          };
-        } else if (isCerebras && hasStreamedContent) {
-          // Cerebras: Send just a space to prevent duplication but allow continuation
-          // This prevents the repeated "Let me search..." text
-          this.logger.debug(
-            () =>
-              '[Cerebras] Sending minimal space content to prevent duplication',
-          );
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: ' ', // Single space instead of full content
-            tool_calls: fixedToolCalls,
-            usage: usageData,
-          };
-        } else {
-          // Include full content with tool calls
-          yield {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: fullContent || '',
-            tool_calls: fixedToolCalls,
-            usage: usageData,
-          };
-        }
-      } else if (usageData) {
-        // Always emit usage data so downstream consumers can update stats
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: '',
-          usage: usageData,
-        };
-      }
-    }
+    // 6. Process and yield final results
+    yield* this.processFinalResponse(processedData, requestConfig.parser);
   }
 
   override setModel(modelId: string): void {
@@ -1970,37 +626,6 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Estimates the remote context usage for the current conversation
-   * @param conversationId The conversation ID
-   * @param parentId The parent message ID
-   * @param promptMessages The messages being sent in the current prompt
-   * @returns Context usage information including remote tokens
-   */
-  estimateContextUsage(
-    conversationId: string | undefined,
-    parentId: string | undefined,
-    promptMessages: IMessage[],
-  ) {
-    const promptTokens = estimateMessagesTokens(promptMessages);
-
-    return estimateRemoteTokens(
-      this.currentModel,
-      this.conversationCache,
-      conversationId,
-      parentId,
-      promptTokens,
-    );
-  }
-
-  /**
-   * Get the conversation cache instance
-   * @returns The conversation cache
-   */
-  getConversationCache(): ConversationCache {
-    return this.conversationCache;
-  }
-
-  /**
    * OpenAI always requires payment (API key)
    */
   override isPaidMode(): boolean {
@@ -2008,8 +633,7 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   override clearState(): void {
-    // Clear the conversation cache to prevent tool call ID mismatches
-    this.conversationCache.clear();
+    // No state to clear in base OpenAI provider
   }
 
   /**
@@ -2205,5 +829,646 @@ export class OpenAIProvider extends BaseProvider {
     // TODO: Implement response parsing based on detected format
     // For now, return the response as-is
     return response;
+  }
+
+  /**
+   * Validate authentication and message preconditions for API calls
+   */
+  private async validateRequestPreconditions(
+    messages: IMessage[],
+  ): Promise<void> {
+    // Check if API key is available (using resolved authentication)
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      const endpoint = this.baseURL || 'https://api.openai.com/v1';
+      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
+        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
+      }
+      throw new Error('OpenAI API key is required to generate completions');
+    }
+
+    // Validate tool messages have required tool_call_id
+    const toolMessages = messages.filter((msg) => msg.role === 'tool');
+    const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
+
+    if (missingIds.length > 0) {
+      this.logger.error(
+        () =>
+          `FATAL: Tool messages missing tool_call_id: ${JSON.stringify(missingIds)}`,
+      );
+      throw new Error(
+        `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
+      );
+    }
+  }
+
+  /**
+   * Prepare API request configuration
+   */
+  private prepareApiRequest(
+    messages: IMessage[],
+    tools?: ITool[],
+  ): {
+    parser: GemmaToolCallParser | null;
+    currentToolFormat: ToolFormat;
+    formattedTools: unknown;
+    finalStreamOptions: unknown;
+    streamingEnabled: boolean;
+  } {
+    const parser = this.requiresTextToolCallParsing()
+      ? new GemmaToolCallParser()
+      : null;
+
+    // Get current tool format (with override support)
+    const currentToolFormat = this.getToolFormat();
+
+    // Format tools using formatToolsForAPI method
+    const formattedTools = tools ? this.formatToolsForAPI(tools) : undefined;
+
+    // Get stream_options from ephemeral settings (not model params)
+    const streamOptions =
+      this.providerConfig?.getEphemeralSettings?.()?.['stream-options'];
+
+    // Default stream_options to { include_usage: true } unless explicitly set
+    const finalStreamOptions =
+      streamOptions !== undefined ? streamOptions : { include_usage: true };
+
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting =
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
+    return {
+      parser,
+      currentToolFormat,
+      formattedTools,
+      finalStreamOptions,
+      streamingEnabled,
+    };
+  }
+
+  /**
+   * Execute API call with error handling
+   */
+  private async executeApiCall(
+    messages: IMessage[],
+    tools: ITool[] | undefined,
+    requestConfig: {
+      formattedTools: unknown;
+      finalStreamOptions: unknown;
+      streamingEnabled: boolean;
+    },
+  ): Promise<unknown> {
+    // Get resolved authentication and update client if needed
+    await this.updateClientWithResolvedAuth();
+
+    this.logger.debug(
+      () =>
+        `About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${requestConfig.streamingEnabled}, messages (${messages.length} total): ${messages
+          .map(
+            (m) =>
+              `${m.role}${m.role === 'system' ? ` (length: ${m.content?.length})` : ''}`,
+          )
+          .join(', ')}`,
+    );
+
+    try {
+      // Build request params with exact order from original
+      return await this.openai.chat.completions.create({
+        model: this.currentModel,
+        messages:
+          messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+        stream: requestConfig.streamingEnabled,
+        ...(requestConfig.streamingEnabled && requestConfig.finalStreamOptions
+          ? { stream_options: requestConfig.finalStreamOptions }
+          : {}),
+        tools: requestConfig.formattedTools as
+          | OpenAI.Chat.Completions.ChatCompletionTool[]
+          | undefined,
+        tool_choice: this.getToolChoiceForFormat(tools),
+        ...this.modelParams,
+      });
+    } catch (error) {
+      this.handleApiError(error, messages);
+      throw error; // Re-throw after logging
+    }
+  }
+
+  /**
+   * Handle and log API errors
+   */
+  private handleApiError(error: unknown, messages: IMessage[]): void {
+    const errorStatus =
+      (error as { status?: number })?.status ||
+      (error as { response?: { status?: number } })?.response?.status;
+    const errorLabel = errorStatus === 400 ? '[API Error 400]' : '[API Error]';
+
+    this.logger.error(
+      () =>
+        `${errorLabel} Error caught in API call:\n` +
+        `  Error: ${error}\n` +
+        `  Type: ${(error as Error)?.constructor?.name}\n` +
+        `  Status: ${errorStatus}\n` +
+        `  Response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
+    );
+
+    // Log the last few messages to understand what's being sent
+    if (errorStatus === 400) {
+      // Log additional diagnostics for 400 errors
+      const hasPendingToolCalls = messages.some((msg, idx) => {
+        if (msg.role === 'assistant' && msg.tool_calls) {
+          // Check if there's a matching tool response
+          const toolCallIds = msg.tool_calls.map((tc) => tc.id);
+          const hasResponses = toolCallIds.every((id) =>
+            messages
+              .slice(idx + 1)
+              .some((m) => m.role === 'tool' && m.tool_call_id === id),
+          );
+          return !hasResponses;
+        }
+        return false;
+      });
+
+      this.logger.error(
+        () =>
+          `${errorLabel} Last 5 messages being sent:\n` +
+          `  Has pending tool calls without responses: ${hasPendingToolCalls}`,
+      );
+      const lastMessages = messages.slice(-5);
+      lastMessages.forEach((msg, idx) => {
+        this.logger.error(
+          () =>
+            `  [${messages.length - 5 + idx}] ${msg.role}${msg.tool_call_id ? ` (tool response for ${msg.tool_call_id})` : ''}${msg.tool_calls ? ` (${msg.tool_calls.length} tool calls)` : ''}`,
+        );
+        if (msg.tool_calls) {
+          msg.tool_calls.forEach((tc) => {
+            this.logger.error(
+              () => `    - Tool call: ${tc.id} -> ${tc.function.name}`,
+            );
+          });
+        }
+      });
+    }
+  }
+
+  /**
+   * Process non-streaming response
+   */
+  private processNonStreamingResponse(
+    response: OpenAI.Chat.Completions.ChatCompletion,
+  ): {
+    fullContent: string;
+    accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
+    hasStreamedContent: boolean;
+    usageData?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    };
+    pendingWhitespace: string | null;
+  } {
+    const choice = response.choices[0];
+    let fullContent = '';
+    const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
+    let usageData:
+      | {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+        }
+      | undefined;
+
+    if (choice?.message.content) {
+      fullContent = choice.message.content;
+    }
+
+    if (choice?.message.tool_calls) {
+      // Convert tool calls to the standard format
+      for (const toolCall of choice.message.tool_calls) {
+        if (toolCall.type === 'function' && toolCall.function) {
+          // Don't fix double stringification here - it's handled later in the final processing
+          accumulatedToolCalls.push({
+            id: toolCall.id,
+            type: 'function' as const,
+            function: toolCall.function,
+          });
+        }
+      }
+    }
+
+    if (response.usage) {
+      usageData = {
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      };
+    }
+
+    return {
+      fullContent,
+      accumulatedToolCalls,
+      hasStreamedContent: false, // Non-streaming never has streamed content
+      usageData,
+      pendingWhitespace: null,
+    };
+  }
+
+  /**
+   * Process and build final response messages
+   */
+  private *processFinalResponse(
+    processedData: {
+      fullContent: string;
+      accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
+      hasStreamedContent: boolean;
+      usageData?: {
+        prompt_tokens: number;
+        completion_tokens: number;
+        total_tokens: number;
+      };
+      pendingWhitespace: string | null;
+    },
+    parser: GemmaToolCallParser | null,
+  ): Generator<IMessage> {
+    const {
+      fullContent,
+      accumulatedToolCalls,
+      hasStreamedContent,
+      usageData,
+      pendingWhitespace,
+    } = processedData;
+
+    // Flush any remaining pending whitespace for Qwen
+    let finalFullContent = fullContent;
+    if (pendingWhitespace && this.isUsingQwen() && !parser) {
+      this.logger.debug(
+        () =>
+          `Flushing trailing pending whitespace (len=${pendingWhitespace?.length ?? 0}) at stream end`,
+      );
+      finalFullContent += pendingWhitespace;
+    }
+
+    // After stream ends, parse text-based tool calls if needed
+    if (parser && finalFullContent) {
+      const { cleanedContent, toolCalls } = parser.parse(finalFullContent);
+
+      if (toolCalls.length > 0) {
+        // Convert to standard format
+        const standardToolCalls = toolCalls.map((tc, index) => ({
+          id: `call_${Date.now()}_${index}`,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.arguments),
+          },
+        }));
+
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: cleanedContent,
+          tool_calls: standardToolCalls,
+          usage: usageData,
+        };
+      } else {
+        // No tool calls found, yield cleaned content
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: cleanedContent,
+          usage: usageData,
+        };
+      }
+    } else {
+      // Standard OpenAI tool call handling
+      if (accumulatedToolCalls.length > 0) {
+        // Process tool calls with Qwen-specific fixes if needed
+        const fixedToolCalls = this.processQwenToolCalls(accumulatedToolCalls);
+
+        if (this.isUsingQwen()) {
+          this.logger.debug(
+            () =>
+              `Final message with tool calls: ${JSON.stringify({
+                contentLength: finalFullContent.length,
+                content:
+                  finalFullContent.substring(0, 200) +
+                  (finalFullContent.length > 200 ? '...' : ''),
+                toolCallCount: accumulatedToolCalls.length,
+                hasStreamedContent,
+              })}`,
+          );
+        }
+
+        // Build the final message based on provider-specific requirements
+        const finalMessage = this.buildFinalToolCallMessage(
+          hasStreamedContent,
+          finalFullContent,
+          fixedToolCalls,
+          usageData,
+        );
+        yield finalMessage;
+      } else if (usageData) {
+        // Always emit usage data so downstream consumers can update stats
+        yield {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: '',
+          usage: usageData,
+        };
+      }
+    }
+  }
+
+  /**
+   * Handle Qwen-specific whitespace buffering during streaming
+   * @param delta The stream delta containing content
+   * @param pendingWhitespace Current buffered whitespace
+   * @param fullContent Accumulated full content
+   * @returns Object with updated state and whether to yield content
+   */
+  private handleQwenStreamingWhitespace(
+    delta: { content?: string | null },
+    pendingWhitespace: string | null,
+    fullContent: string,
+  ): {
+    shouldYield: boolean;
+    content: string;
+    updatedPendingWhitespace: string | null;
+    updatedFullContent: string;
+  } {
+    if (!delta.content) {
+      return {
+        shouldYield: false,
+        content: '',
+        updatedPendingWhitespace: pendingWhitespace,
+        updatedFullContent: fullContent,
+      };
+    }
+
+    const isWhitespaceOnly = delta.content.trim() === '';
+
+    if (isWhitespaceOnly) {
+      // Buffer whitespace-only chunk
+      const newPendingWhitespace = (pendingWhitespace || '') + delta.content;
+      this.logger.debug(
+        () =>
+          `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${newPendingWhitespace?.length ?? 0}`,
+      );
+      return {
+        shouldYield: false,
+        content: '',
+        updatedPendingWhitespace: newPendingWhitespace,
+        updatedFullContent: fullContent + delta.content,
+      };
+    }
+
+    // Non-whitespace content - flush any pending whitespace first
+    if (pendingWhitespace) {
+      this.logger.debug(
+        () =>
+          `Flushing pending whitespace (len=${pendingWhitespace?.length ?? 0}) before non-empty chunk`,
+      );
+      return {
+        shouldYield: true,
+        content: pendingWhitespace + delta.content,
+        updatedPendingWhitespace: null,
+        updatedFullContent: fullContent + pendingWhitespace + delta.content,
+      };
+    }
+
+    return {
+      shouldYield: true,
+      content: delta.content,
+      updatedPendingWhitespace: null,
+      updatedFullContent: fullContent + delta.content,
+    };
+  }
+
+  /**
+   * Process tool calls for Qwen models, fixing double stringification
+   * @param toolCalls The tool calls to process
+   * @returns Processed tool calls with fixes applied
+   */
+  private processQwenToolCalls(
+    toolCalls: NonNullable<IMessage['tool_calls']>,
+  ): NonNullable<IMessage['tool_calls']> {
+    if (!this.isUsingQwen()) {
+      return toolCalls;
+    }
+
+    this.logger.debug(
+      () =>
+        `[Qwen Fix] Processing ${toolCalls.length} tool calls for double-stringification fix`,
+    );
+
+    return toolCalls.map((toolCall, index) => {
+      this.logger.debug(
+        () =>
+          `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
+            name: toolCall.function.name,
+            argumentsType: typeof toolCall.function.arguments,
+            argumentsLength: toolCall.function.arguments?.length,
+            argumentsSample: toolCall.function.arguments?.substring(0, 100),
+          })}`,
+      );
+      return this.fixQwenDoubleStringification(toolCall);
+    });
+  }
+
+  /**
+   * Determine how to yield the final message with tool calls based on provider quirks
+   * @param hasStreamedContent Whether content was already streamed
+   * @param fullContent The complete content
+   * @param toolCalls The tool calls to include
+   * @param usageData Optional usage statistics
+   * @returns The message to yield
+   */
+  private buildFinalToolCallMessage(
+    hasStreamedContent: boolean,
+    fullContent: string,
+    toolCalls: NonNullable<IMessage['tool_calls']>,
+    usageData?: {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    },
+  ): IMessage {
+    const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
+
+    if (isCerebras) {
+      this.logger.debug(
+        () =>
+          '[Cerebras] Special handling for Cerebras provider after tool responses',
+        {
+          hasStreamedContent,
+          willSendSpace: hasStreamedContent,
+        },
+      );
+    }
+
+    const shouldOmitContent =
+      hasStreamedContent && this.isUsingQwen() && !isCerebras;
+
+    this.logger.debug(
+      () => '[Tool Call Handling] Deciding how to yield tool calls',
+      {
+        hasStreamedContent,
+        isUsingQwen: this.isUsingQwen(),
+        isCerebras,
+        shouldOmitContent,
+        fullContentLength: fullContent.length,
+        toolCallCount: toolCalls?.length || 0,
+      },
+    );
+
+    if (shouldOmitContent || (isCerebras && hasStreamedContent)) {
+      // Send just a space to prevent stream stopping or duplication
+      if (isCerebras && hasStreamedContent) {
+        this.logger.debug(
+          () =>
+            '[Cerebras] Sending minimal space content to prevent duplication',
+        );
+      }
+      return {
+        role: ContentGeneratorRole.ASSISTANT,
+        content: ' ',
+        tool_calls: toolCalls,
+        usage: usageData,
+      };
+    }
+
+    // Include full content with tool calls
+    return {
+      role: ContentGeneratorRole.ASSISTANT,
+      content: fullContent || '',
+      tool_calls: toolCalls,
+      usage: usageData,
+    };
+  }
+
+  /**
+   * Fix Qwen's double stringification of tool call arguments
+   * Qwen models stringify array/object values WITHIN the JSON arguments
+   * @param toolCall The tool call to fix
+   * @returns The fixed tool call or the original if no fix is needed
+   */
+  private fixQwenDoubleStringification(
+    toolCall: NonNullable<IMessage['tool_calls']>[0],
+  ): NonNullable<IMessage['tool_calls']>[0] {
+    if (
+      !toolCall.function.arguments ||
+      typeof toolCall.function.arguments !== 'string'
+    ) {
+      return toolCall;
+    }
+
+    try {
+      // First, parse the arguments to get the JSON object
+      const parsedArgs = JSON.parse(toolCall.function.arguments);
+      let hasNestedStringification = false;
+
+      // Check each property to see if it's a stringified array/object/number
+      const fixedArgs: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(parsedArgs)) {
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+
+          // Check if it's a stringified number (integer or float)
+          if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+            const numValue = trimmed.includes('.')
+              ? parseFloat(trimmed)
+              : parseInt(trimmed, 10);
+            fixedArgs[key] = numValue;
+            hasNestedStringification = true;
+            this.logger.debug(
+              () =>
+                `[Qwen Fix] Fixed stringified number in property '${key}' for ${toolCall.function.name}: "${value}" -> ${numValue}`,
+            );
+          }
+          // Check if it looks like a stringified array or object
+          // Also check for Python-style dictionaries with single quotes
+          else if (
+            (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+            (trimmed.startsWith('{') && trimmed.endsWith('}'))
+          ) {
+            try {
+              // Try to parse it as JSON
+              const nestedParsed = JSON.parse(value);
+              fixedArgs[key] = nestedParsed;
+              hasNestedStringification = true;
+              this.logger.debug(
+                () =>
+                  `[Qwen Fix] Fixed nested stringification in property '${key}' for ${toolCall.function.name}`,
+              );
+            } catch {
+              // Try to convert Python-style to JSON (single quotes to double quotes)
+              try {
+                const jsonified = value
+                  .replace(/'/g, '"')
+                  .replace(/: True/g, ': true')
+                  .replace(/: False/g, ': false')
+                  .replace(/: None/g, ': null');
+                const nestedParsed = JSON.parse(jsonified);
+                fixedArgs[key] = nestedParsed;
+                hasNestedStringification = true;
+                this.logger.debug(
+                  () =>
+                    `[Qwen Fix] Fixed Python-style nested stringification in property '${key}' for ${toolCall.function.name}`,
+                );
+              } catch {
+                // Not valid JSON even after conversion, keep as string
+                fixedArgs[key] = value;
+              }
+            }
+          } else {
+            fixedArgs[key] = value;
+          }
+        } else {
+          fixedArgs[key] = value;
+        }
+      }
+
+      if (hasNestedStringification) {
+        this.logger.debug(
+          () =>
+            `[Qwen Fix] Fixed nested double-stringification for ${toolCall.function.name}`,
+        );
+        return {
+          ...toolCall,
+          function: {
+            ...toolCall.function,
+            arguments: JSON.stringify(fixedArgs),
+          },
+        };
+      }
+    } catch (_e) {
+      // If parsing fails, check for old-style double-stringification
+      if (
+        toolCall.function.arguments.startsWith('"') &&
+        toolCall.function.arguments.endsWith('"')
+      ) {
+        try {
+          // Old fix: entire arguments were double-stringified
+          const parsedArgs = JSON.parse(toolCall.function.arguments);
+          this.logger.debug(
+            () =>
+              `[Qwen Fix] Fixed whole-argument double-stringification for ${toolCall.function.name}`,
+          );
+          return {
+            ...toolCall,
+            function: {
+              ...toolCall.function,
+              arguments: JSON.stringify(parsedArgs),
+            },
+          };
+        } catch {
+          // Leave as-is if we can't parse
+        }
+      }
+    }
+
+    // No fix needed
+    this.logger.debug(
+      () =>
+        `[Qwen Fix] No double-stringification detected for ${toolCall.function.name}, keeping original`,
+    );
+    return toolCall;
   }
 }

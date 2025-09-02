@@ -230,7 +230,67 @@ const App = (props: AppInternalProps) => {
     registerCleanup(consolePatcher.cleanup);
   }, [handleNewMessage, config]);
 
-  const { stats: sessionStats } = useSessionStats();
+  const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
+  const historyTokenCleanupRef = useRef<(() => void) | null>(null);
+  const lastHistoryServiceRef = useRef<unknown>(null);
+
+  // Set up history token count listener
+  useEffect(() => {
+    let intervalCleared = false;
+
+    // Poll continuously to detect when the history service changes (e.g., after compression)
+    const checkInterval = setInterval(() => {
+      if (intervalCleared) return;
+
+      const geminiClient = config.getGeminiClient();
+
+      // Check if chat is initialized first
+      if (geminiClient?.hasChatInitialized?.()) {
+        const historyService = geminiClient.getHistoryService?.();
+
+        // Check if we have a new history service instance (happens after compression)
+        if (
+          historyService &&
+          historyService !== lastHistoryServiceRef.current
+        ) {
+          // Clean up old listener if it exists
+          if (historyTokenCleanupRef.current) {
+            historyTokenCleanupRef.current();
+            historyTokenCleanupRef.current = null;
+          }
+
+          // Store reference to current history service
+          lastHistoryServiceRef.current = historyService;
+
+          const handleTokensUpdated = (event: { totalTokens: number }) => {
+            updateHistoryTokenCount(event.totalTokens);
+          };
+
+          historyService.on('tokensUpdated', handleTokensUpdated);
+
+          // Initialize with current token count
+          const currentTokens = historyService.getTotalTokens();
+          updateHistoryTokenCount(currentTokens);
+
+          // Store cleanup function for later
+          historyTokenCleanupRef.current = () => {
+            historyService.off('tokensUpdated', handleTokensUpdated);
+          };
+        }
+      }
+    }, 100); // Check every 100ms
+
+    return () => {
+      clearInterval(checkInterval);
+      intervalCleared = true;
+      // Clean up the event listener if it was set up
+      if (historyTokenCleanupRef.current) {
+        historyTokenCleanupRef.current();
+        historyTokenCleanupRef.current = null;
+      }
+      lastHistoryServiceRef.current = null;
+    };
+  }, [config, updateHistoryTokenCount]);
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -1556,7 +1616,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                 settings.merged.showMemoryUsage ||
                 false
               }
-              promptTokenCount={sessionStats.lastPromptTokenCount}
+              historyTokenCount={sessionStats.historyTokenCount}
               nightly={nightly}
               vimMode={vimModeEnabled ? vimMode : undefined}
               contextLimit={
