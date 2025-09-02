@@ -53,7 +53,7 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        promptTokenCount={1000}
+        historyTokenCount={1000}
         nightly={false}
       />,
     );
@@ -81,7 +81,7 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        promptTokenCount={1000}
+        historyTokenCount={1000}
         nightly={false}
       />,
     );
@@ -109,7 +109,7 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        promptTokenCount={1000}
+        historyTokenCount={1000}
         nightly={false}
       />,
     );
@@ -132,7 +132,7 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        promptTokenCount={1000}
+        historyTokenCount={1000}
         nightly={false}
       />,
     );
@@ -156,7 +156,7 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        promptTokenCount={1000}
+        historyTokenCount={1000}
         nightly={false}
       />,
     );
@@ -175,7 +175,7 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        promptTokenCount={1000}
+        historyTokenCount={1000}
         nightly={false}
         // No conversationId or parentId
       />,

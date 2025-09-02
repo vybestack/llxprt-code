@@ -27,15 +27,15 @@ describe('Footer Responsive Behavior', () => {
   let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
 
   const defaultProps = {
-    model: 'gpt-4',
-    targetDir: '/home/user/projects/long-project-name-for-testing',
-    branchName: 'feature/very-long-branch-name-that-needs-truncation',
+    model: 'gemini-2.0-flash',
+    targetDir: '/test/path',
+    branchName: 'test-branch',
     debugMode: false,
     debugMessage: '',
     errorCount: 0,
     showErrorDetails: false,
     showMemoryUsage: true,
-    promptTokenCount: 8234,
+    historyTokenCount: 1000,
     isPaidMode: false,
     nightly: false,
     vimMode: 'NORMAL',

@@ -39,6 +39,9 @@ import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { setSimulate429 } from '../utils/testUtils.js';
 import { tokenLimit } from './tokenLimits.js';
+vi.mock('./tokenLimits.js', () => ({
+  tokenLimit: vi.fn(),
+}));
 import { ideContext } from '../ide/ideContext.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
@@ -686,19 +689,22 @@ describe('Gemini Client (client.ts)', () => {
     const mockGetHistory = vi.fn();
 
     beforeEach(() => {
-      vi.mock('./tokenLimits', () => ({
-        tokenLimit: vi.fn(),
-      }));
-
       client['contentGenerator'] = {
         countTokens: mockCountTokens,
       } as unknown as ContentGenerator;
+
+      // Create a mock HistoryService
+      const mockHistoryService = {
+        getTotalTokens: vi.fn().mockReturnValue(0),
+        recalculateTokens: vi.fn().mockResolvedValue(undefined),
+      };
 
       client['chat'] = {
         getHistory: mockGetHistory,
         addHistory: vi.fn(),
         setHistory: vi.fn(),
         sendMessage: mockSendMessage,
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
       } as unknown as GeminiChat;
     });
 
@@ -709,9 +715,19 @@ describe('Gemini Client (client.ts)', () => {
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
 
-      mockCountTokens.mockResolvedValue({
-        totalTokens: MOCKED_TOKEN_LIMIT * 0.699, // TOKEN_THRESHOLD_FOR_SUMMARIZATION = 0.7
-      });
+      // Mock HistoryService to return token count below threshold
+      const mockHistoryService = {
+        getTotalTokens: vi.fn().mockReturnValue(MOCKED_TOKEN_LIMIT * 0.849), // COMPRESSION_TOKEN_THRESHOLD = 0.85
+        recalculateTokens: vi.fn().mockResolvedValue(undefined),
+      };
+
+      client['chat'] = {
+        getHistory: mockGetHistory,
+        addHistory: vi.fn(),
+        setHistory: vi.fn(),
+        sendMessage: mockSendMessage,
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+      } as unknown as GeminiChat;
 
       const initialChat = client.getChat();
       const result = await client.tryCompressChat('prompt-id-2');
@@ -737,15 +753,33 @@ describe('Gemini Client (client.ts)', () => {
         MOCKED_TOKEN_LIMIT * MOCKED_CONTEXT_PERCENTAGE_THRESHOLD;
       const newTokenCount = 100;
 
-      mockCountTokens
-        .mockResolvedValueOnce({ totalTokens: originalTokenCount }) // First call for the check
-        .mockResolvedValueOnce({ totalTokens: newTokenCount }); // Second call for the new history
+      // Mock HistoryService with token counts
+      const mockHistoryService = {
+        getTotalTokens: vi
+          .fn()
+          .mockReturnValueOnce(originalTokenCount) // First call for the check
+          .mockReturnValueOnce(newTokenCount), // After compression
+        recalculateTokens: vi.fn().mockResolvedValue(undefined),
+      };
 
       // Mock the summary response from the chat
       mockSendMessage.mockResolvedValue({
-        role: 'model',
-        parts: [{ text: 'This is a summary.' }],
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'This is a summary.' }],
+            },
+          },
+        ],
       });
+
+      client['chat'] = {
+        getHistory: mockGetHistory,
+        addHistory: vi.fn(),
+        setHistory: vi.fn(),
+        sendMessage: mockSendMessage,
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
+      } as unknown as GeminiChat;
 
       const initialChat = client.getChat();
       const result = await client.tryCompressChat('prompt-id-3');

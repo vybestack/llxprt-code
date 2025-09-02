@@ -20,33 +20,205 @@ import {
   ToolCallBlock,
   ToolResponseBlock,
 } from './IContent.js';
+import { EventEmitter } from 'events';
+import { ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
+import { OpenAITokenizer } from '../../providers/tokenizers/OpenAITokenizer.js';
+import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenizer.js';
+import { TokensUpdatedEvent } from './HistoryEvents.js';
+
+/**
+ * Typed EventEmitter for HistoryService events
+ */
+interface HistoryServiceEventEmitter {
+  on(
+    event: 'tokensUpdated',
+    listener: (eventData: TokensUpdatedEvent) => void,
+  ): this;
+  emit(event: 'tokensUpdated', eventData: TokensUpdatedEvent): boolean;
+  off(
+    event: 'tokensUpdated',
+    listener: (eventData: TokensUpdatedEvent) => void,
+  ): this;
+}
 
 /**
  * Service for managing conversation history in a provider-agnostic way.
  * All history is stored as IContent. Providers are responsible for converting
  * to/from their own formats.
  */
-export class HistoryService {
+export class HistoryService
+  extends EventEmitter
+  implements HistoryServiceEventEmitter
+{
   private history: IContent[] = [];
+  private totalTokens: number = 0;
+  private tokenizerCache = new Map<string, ITokenizer>();
+  private tokenizerLock: Promise<void> = Promise.resolve();
+
+  /**
+   * Get or create tokenizer for a specific model
+   */
+  private getTokenizerForModel(modelName: string): ITokenizer {
+    if (this.tokenizerCache.has(modelName)) {
+      return this.tokenizerCache.get(modelName)!;
+    }
+
+    let tokenizer: ITokenizer;
+    if (modelName.includes('claude') || modelName.includes('anthropic')) {
+      tokenizer = new AnthropicTokenizer();
+    } else if (
+      modelName.includes('gpt') ||
+      modelName.includes('openai') ||
+      modelName.includes('o1') ||
+      modelName.includes('o3')
+    ) {
+      tokenizer = new OpenAITokenizer();
+    } else {
+      // Default to OpenAI tokenizer for Gemini and other models (tiktoken is pretty universal)
+      tokenizer = new OpenAITokenizer();
+    }
+
+    this.tokenizerCache.set(modelName, tokenizer);
+    return tokenizer;
+  }
+
+  /**
+   * Get the current total token count
+   */
+  getTotalTokens(): number {
+    return this.totalTokens;
+  }
 
   /**
    * Add content to the history
    * Note: We accept all content including empty responses for comprehensive history.
    * Filtering happens only when getting curated history.
    */
-  add(content: IContent): void {
+  add(content: IContent, modelName?: string): void {
     // Only do basic validation - must have valid speaker
     if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
+
+      // Update token count asynchronously but atomically
+      this.updateTokenCount(content, modelName);
     }
+  }
+
+  /**
+   * Atomically update token count for new content
+   */
+  private async updateTokenCount(
+    content: IContent,
+    modelName?: string,
+  ): Promise<void> {
+    // Use a lock to prevent race conditions
+    this.tokenizerLock = this.tokenizerLock.then(async () => {
+      let contentTokens = 0;
+
+      // First try to use usage data from the content metadata
+      if (content.metadata?.usage) {
+        contentTokens = content.metadata.usage.totalTokens;
+      } else {
+        // Fall back to tokenizer estimation
+        // Default to gpt-4.1 tokenizer if no model name provided (most universal)
+        const defaultModel = modelName || 'gpt-4.1';
+        contentTokens = await this.estimateContentTokens(content, defaultModel);
+      }
+
+      // Atomically update the total
+      this.totalTokens += contentTokens;
+
+      // Emit event with updated count
+      const eventData = {
+        totalTokens: this.totalTokens,
+        addedTokens: contentTokens,
+        contentId: content.metadata?.id,
+      };
+
+      if (process.env.DEBUG) {
+        console.debug('[HistoryService] Emitting tokensUpdated:', eventData);
+      }
+
+      this.emit('tokensUpdated', eventData);
+    });
+
+    return this.tokenizerLock;
+  }
+
+  /**
+   * Estimate token count for content using tokenizer
+   */
+  private async estimateContentTokens(
+    content: IContent,
+    modelName: string,
+  ): Promise<number> {
+    const tokenizer = this.getTokenizerForModel(modelName);
+    let totalTokens = 0;
+
+    for (const block of content.blocks) {
+      let blockText = '';
+
+      switch (block.type) {
+        case 'text':
+          blockText = block.text;
+          break;
+        case 'tool_call':
+          blockText = JSON.stringify({
+            name: block.name,
+            parameters: block.parameters,
+          });
+          break;
+        case 'tool_response':
+          blockText = JSON.stringify(block.result || block.error || '');
+          break;
+        case 'thinking':
+          blockText = block.thought;
+          break;
+        case 'code':
+          blockText = block.code;
+          break;
+        case 'media':
+          // For media, just count the caption if any
+          blockText = block.caption || '';
+          break;
+        default:
+          // Unknown block type, skip
+          break;
+      }
+
+      if (blockText) {
+        try {
+          const blockTokens = await tokenizer.countTokens(blockText, modelName);
+          totalTokens += blockTokens;
+        } catch (error) {
+          console.warn(
+            'Error counting tokens for block, using fallback:',
+            error,
+          );
+          totalTokens += this.simpleTokenEstimateForText(blockText);
+        }
+      }
+    }
+
+    return totalTokens;
+  }
+
+  /**
+   * Simple token estimation for text
+   */
+  private simpleTokenEstimateForText(text: string): number {
+    if (!text) return 0;
+    const wordCount = text.split(/\s+/).length;
+    const characterCount = text.length;
+    return Math.round(Math.max(wordCount * 1.3, characterCount / 4));
   }
 
   /**
    * Add multiple contents to the history
    */
-  addAll(contents: IContent[]): void {
+  addAll(contents: IContent[], modelName?: string): void {
     for (const content of contents) {
-      this.add(content);
+      this.add(content, modelName);
     }
   }
 
@@ -62,6 +234,14 @@ export class HistoryService {
    */
   clear(): void {
     this.history = [];
+    this.totalTokens = 0;
+
+    // Emit event with reset count
+    this.emit('tokensUpdated', {
+      totalTokens: 0,
+      addedTokens: -this.totalTokens, // Negative to indicate removal
+      contentId: null,
+    });
   }
 
   /**
@@ -119,7 +299,45 @@ export class HistoryService {
    * Pop the last content from history
    */
   pop(): IContent | undefined {
-    return this.history.pop();
+    const removed = this.history.pop();
+    if (removed) {
+      // Recalculate tokens since we removed content
+      // This is less efficient but ensures accuracy
+      this.recalculateTokens();
+    }
+    return removed;
+  }
+
+  /**
+   * Recalculate total tokens from scratch
+   * Use this when removing content or when token counts might be stale
+   */
+  async recalculateTokens(defaultModel: string = 'gpt-4.1'): Promise<void> {
+    this.tokenizerLock = this.tokenizerLock.then(async () => {
+      let newTotal = 0;
+
+      for (const content of this.history) {
+        if (content.metadata?.usage) {
+          newTotal += content.metadata.usage.totalTokens;
+        } else {
+          // Use the model from content metadata, or fall back to provided default
+          const modelToUse = content.metadata?.model || defaultModel;
+          newTotal += await this.estimateContentTokens(content, modelToUse);
+        }
+      }
+
+      const oldTotal = this.totalTokens;
+      this.totalTokens = newTotal;
+
+      // Emit event with updated count
+      this.emit('tokensUpdated', {
+        totalTokens: this.totalTokens,
+        addedTokens: this.totalTokens - oldTotal,
+        contentId: null,
+      });
+    });
+
+    return this.tokenizerLock;
   }
 
   /**

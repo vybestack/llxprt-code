@@ -29,6 +29,7 @@ export interface SessionStatsState {
   sessionStartTime: Date;
   metrics: SessionMetrics;
   lastPromptTokenCount: number;
+  historyTokenCount: number;
   promptCount: number;
 }
 
@@ -54,6 +55,7 @@ interface SessionStatsContextValue {
   stats: SessionStatsState;
   startNewPrompt: () => void;
   getPromptCount: () => number;
+  updateHistoryTokenCount: (count: number) => void;
 }
 
 // --- Context Definition ---
@@ -72,6 +74,7 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
     sessionStartTime: new Date(),
     metrics: uiTelemetryService.getMetrics(),
     lastPromptTokenCount: 0,
+    historyTokenCount: 0,
     promptCount: 0,
   });
 
@@ -109,6 +112,13 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
     }));
   }, []);
 
+  const updateHistoryTokenCount = useCallback((count: number) => {
+    setStats((prevState) => ({
+      ...prevState,
+      historyTokenCount: count,
+    }));
+  }, []);
+
   // FIX: Use a ref to provide stable callback that always returns latest value
   // This prevents components from re-rendering when promptCount changes
   const promptCountRef = useRef(stats.promptCount);
@@ -128,8 +138,9 @@ export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
       stats,
       startNewPrompt,
       getPromptCount,
+      updateHistoryTokenCount,
     }),
-    [stats, startNewPrompt, getPromptCount],
+    [stats, startNewPrompt, getPromptCount, updateHistoryTokenCount],
   );
 
   return (

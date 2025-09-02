@@ -179,7 +179,7 @@ When the conversation history grows too large, you will be invoked to distill th
 
 First, you will think through the entire history in a private <scratchpad>. Review the user's overall goal, the agent's actions, tool outputs, file modifications, and any unresolved questions. Identify every piece of information that is essential for future actions.
 
-After your reasoning is complete, generate the final <state_snapshot> XML object. Be incredibly dense with information. Omit any irrelevant conversational filler.
+After your reasoning is complete, generate the final <state_snapshot> XML object. Be incredibly dense with information. Omit any irrelevant conversational filler. Ensure you preserve enough context that the agent can continue its work seamlessly.
 
 The structure MUST be as follows:
 
@@ -195,8 +195,9 @@ The structure MUST be as follows:
          - Build Command: \`npm run build\`
          - Testing: Tests are run with \`npm test\`. Test files must end in \`.test.ts\`.
          - API Endpoint: The primary API endpoint is \`https://api.example.com/v2\`.
-         
+         - User Preference: The user wants all file modifications to be thoroughly explained.
         -->
+        <!-- Preserve sufficient detail to avoid confusion on restarting -->
     </key_knowledge>
 
     <file_system_state>
@@ -216,6 +217,7 @@ The structure MUST be as follows:
          - Ran \`npm run test\`, which failed due to a snapshot mismatch in \`UserProfile.test.ts\`.
          - Ran \`ls -F static/\` and discovered image assets are stored as \`.webp\`.
         -->
+        <!-- Include enough recent actions to maintain context -->
     </recent_actions>
 
     <current_plan>

@@ -266,8 +266,12 @@ export class GeminiChat {
 
     // Convert and add initial history if provided
     if (initialHistory.length > 0) {
+      const currentModel = this.config.getModel();
       for (const content of initialHistory) {
-        this.historyService.add(ContentConverters.toIContent(content));
+        this.historyService.add(
+          ContentConverters.toIContent(content),
+          currentModel,
+        );
       }
     }
   }
@@ -378,6 +382,15 @@ export class GeminiChat {
   setSystemInstruction(sysInstr: string) {
     this.generationConfig.systemInstruction = sysInstr;
   }
+
+  /**
+   * Get the underlying HistoryService instance
+   * @returns The HistoryService managing conversation history
+   */
+  getHistoryService(): HistoryService {
+    return this.historyService;
+  }
+
   /**
    * Sends a message to the model and returns the response.
    *
@@ -407,7 +420,10 @@ export class GeminiChat {
       params.message,
     );
     // Add user content to history service
-    this.historyService.add(ContentConverters.toIContent(userContent));
+    this.historyService.add(
+      ContentConverters.toIContent(userContent),
+      this.config.getModel(),
+    );
 
     // Get curated history and convert to Content[] for the request
     const iContents = this.historyService.getCurated();
@@ -490,11 +506,15 @@ export class GeminiChat {
           const allHistory = this.historyService.getAll();
           const trimmedHistory = allHistory.slice(0, -1);
           this.historyService.clear();
+          const currentModel = this.config.getModel();
           for (const content of trimmedHistory) {
-            this.historyService.add(content);
+            this.historyService.add(content, currentModel);
           }
           for (const content of automaticFunctionCallingHistory) {
-            this.historyService.add(ContentConverters.toIContent(content));
+            this.historyService.add(
+              ContentConverters.toIContent(content),
+              currentModel,
+            );
           }
         }
         // Add model response if we have one (but filter out pure thinking responses)
@@ -504,6 +524,7 @@ export class GeminiChat {
             // Not pure thinking, add it
             this.historyService.add(
               ContentConverters.toIContent(outputContent),
+              this.config.getModel(),
             );
           }
           // If it's pure thinking content, don't add it to history
@@ -517,6 +538,7 @@ export class GeminiChat {
             const emptyModelContent: Content = { role: 'model', parts: [] };
             this.historyService.add(
               ContentConverters.toIContent(emptyModelContent),
+              this.config.getModel(),
             );
           }
         }
@@ -607,7 +629,10 @@ export class GeminiChat {
     );
 
     // Add user content to history ONCE before any attempts.
-    this.historyService.add(ContentConverters.toIContent(userContent));
+    this.historyService.add(
+      ContentConverters.toIContent(userContent),
+      this.config.getModel(),
+    );
     // Note: requestContents is no longer needed as adapter gets history from HistoryService
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -671,7 +696,7 @@ export class GeminiChat {
             const trimmedHistory = allHistory.slice(0, -1);
             self.historyService.clear();
             for (const content of trimmedHistory) {
-              self.historyService.add(content);
+              self.historyService.add(content, self.config.getModel());
             }
           }
           throw lastError;
@@ -781,12 +806,19 @@ export class GeminiChat {
    * Adds a new entry to the chat history.
    */
   addHistory(content: Content): void {
-    this.historyService.add(ContentConverters.toIContent(content));
+    this.historyService.add(
+      ContentConverters.toIContent(content),
+      this.config.getModel(),
+    );
   }
   setHistory(history: Content[]): void {
     this.historyService.clear();
+    const currentModel = this.config.getModel();
     for (const content of history) {
-      this.historyService.add(ContentConverters.toIContent(content));
+      this.historyService.add(
+        ContentConverters.toIContent(content),
+        currentModel,
+      );
     }
   }
 
@@ -944,11 +976,15 @@ export class GeminiChat {
     }
 
     // Part 4: Add the new turn (user and model parts) to the history service.
+    const currentModel = this.config.getModel();
     for (const entry of newHistoryEntries) {
-      this.historyService.add(entry);
+      this.historyService.add(entry, currentModel);
     }
     for (const content of consolidatedOutputContents) {
-      this.historyService.add(ContentConverters.toIContent(content));
+      this.historyService.add(
+        ContentConverters.toIContent(content),
+        currentModel,
+      );
     }
   }
 
