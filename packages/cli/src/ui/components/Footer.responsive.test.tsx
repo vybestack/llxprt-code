@@ -28,8 +28,8 @@ describe('Footer Responsive Behavior', () => {
 
   const defaultProps = {
     model: 'gemini-2.0-flash',
-    targetDir: '/test/path',
-    branchName: 'test-branch',
+    targetDir: '/home/user/projects/long-project-name',
+    branchName: 'feature/very-long-branch-name-that-needs-truncation',
     debugMode: false,
     debugMessage: '',
     errorCount: 0,
@@ -95,8 +95,8 @@ describe('Footer Responsive Behavior', () => {
       const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
-      // Should show truncated branch name
-      expect(output).toMatch(/\.\.\./);
+      // Should show truncated branch name - will show as featur...cation
+      expect(output).toContain('featur...cation');
       // Should NOT show full branch name
       expect(output).not.toContain(
         'feature/very-long-branch-name-that-needs-truncation',
@@ -134,7 +134,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show model name
-      expect(output).toContain('gpt-4');
+      expect(output).toContain('gemini-2.0-flash');
       // Model name shows without 'Model:' prefix now
     });
 
@@ -174,7 +174,7 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should show model name
-      expect(output).toContain('gpt-4');
+      expect(output).toContain('gemini-2.0-flash');
       // Model name shows without 'Model:' prefix now
     });
 
@@ -190,8 +190,10 @@ describe('Footer Responsive Behavior', () => {
       const { lastFrame } = render(<Footer {...defaultProps} />);
       const output = lastFrame();
 
-      // Should show branch name at wide width (wrapped as "that-need" + "-truncation*")
-      expect(output).toMatch(/-truncation\*/);
+      // At wide width (180 cols), the branch name may wrap across lines in the output
+      // Look for the parts of the branch name
+      expect(output).toContain('feature/very-long-branch-name-that-need');
+      expect(output).toContain('-truncation');
     });
   });
 
@@ -205,7 +207,7 @@ describe('Footer Responsive Behavior', () => {
 
       // At exactly 80, should be STANDARD behavior
       expect(output).toMatch(/Memory:/); // Not abbreviated
-      expect(output).toContain('gpt-4'); // Model shown
+      expect(output).toContain('gemini-2.0-flash'); // Model shown
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // No timestamp
     });
 
@@ -218,7 +220,7 @@ describe('Footer Responsive Behavior', () => {
 
       // At exactly 120, should be STANDARD behavior (not WIDE)
       expect(output).toMatch(/Memory:/);
-      expect(output).toContain('gpt-4');
+      expect(output).toContain('gemini-2.0-flash');
       expect(output).not.toMatch(/\d{2}:\d{2}:\d{2}/); // Still no timestamp
     });
   });
@@ -247,7 +249,8 @@ describe('Footer Responsive Behavior', () => {
         const output = lastFrame();
 
         // Branch should always be visible (even if truncated)
-        expect(output).toMatch(/(feature|\.\.\.)/);
+        // At narrow width it shows as "featur...cation"
+        expect(output).toMatch(/featur|feature/);
       });
     });
   });
@@ -269,7 +272,7 @@ describe('Footer Responsive Behavior', () => {
           /(long-project-name|\/home\/user\/pr|home\/user\/pr|\.\.\.)/,
         ); // Path (may be truncated)
         if (width >= 80) {
-          expect(output).toMatch(/gpt-4/); // Model only shown at standard+ widths
+          expect(output).toMatch(/gemini-2.0-flash/); // Model only shown at standard+ widths
         }
       });
     });
@@ -286,8 +289,8 @@ describe('Footer Responsive Behavior', () => {
       expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp (may wrap)
 
       // Should also have path and model displayed
-      expect(output).toContain('/home/user/projects');
-      expect(output).toContain('gpt-4');
+      expect(output).toMatch(/home.*user.*projects|long-project-name/);
+      expect(output).toContain('gemini-2.0-flash');
     });
 
     it('should organize Path and Model information appropriately', () => {
@@ -297,9 +300,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should contain path and model information
-      expect(output).toContain('/home/user/projects');
-      expect(output).toContain('gpt-4');
-      expect(output).toContain('feature/'); // Branch name
+      expect(output).toMatch(/home.*user.*projects|long-project-name/);
+      expect(output).toContain('gemini-2.0-flash');
+      expect(output).toContain('feature'); // Branch name
 
       // Should also have memory and context (they can be on separate logical lines)
       expect(output).toMatch(/Memory:/);

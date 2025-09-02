@@ -55,7 +55,7 @@ describe('Footer', () => {
     errorCount: 0,
     showErrorDetails: false,
     showMemoryUsage: true,
-    promptTokenCount: 1000,
+    historyTokenCount: 1000,
     isPaidMode: false,
     nightly: false,
     contextLimit: undefined,
