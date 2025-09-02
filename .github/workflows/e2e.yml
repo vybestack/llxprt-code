@@ -107,7 +107,7 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
           # Allow override from workflow_dispatch, otherwise use repository variables
           LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}
@@ -160,7 +160,7 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
           # Allow override from workflow_dispatch, otherwise use repository variables
           LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}
@@ -218,7 +218,7 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
           # Allow override from workflow_dispatch, otherwise use repository variables
           LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}

@@ -106,7 +106,7 @@ jobs:
         run: node scripts/preflight-ci.js
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
@@ -123,7 +123,7 @@ jobs:
           # npm run test:integration:sandbox:docker
         env:
           # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
@@ -230,7 +230,7 @@ jobs:
           npx @vybestack/llxprt-code@latest \
             --provider ${{ vars.LLXPRT_DEFAULT_PROVIDER }} \
             --model ${{ vars.LLXPRT_DEFAULT_MODEL }} \
-            --key "${{ secrets.LLXPRT_OPENAI_API_KEY }}" \
+            --key "${{ secrets.OPENAI_API_KEY }}" \
             --baseurl ${{ vars.LLXPRT_OPENAI_BASE_URL }} \
             --yolo \
             --prompt "$PROMPT" > /dev/null 2>&1
