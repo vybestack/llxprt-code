@@ -176,6 +176,9 @@ describe('Trusted Folders Loading', () => {
 describe('isWorkspaceTrusted', () => {
   let mockCwd: string;
   const mockRules: Record<string, TrustLevel> = {};
+  const mockSettings: Settings = {
+    folderTrust: true,
+  };
 
   beforeEach(() => {
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);

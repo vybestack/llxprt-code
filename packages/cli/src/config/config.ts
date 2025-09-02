@@ -616,10 +616,9 @@ export async function loadCliConfig(
 
   const ideClient = await IdeClient.getInstance();
 
-  const folderTrustFeature = settings.folderTrustFeature ?? false;
-  const folderTrustSetting = settings.folderTrust ?? true;
-  const folderTrust = folderTrustFeature && folderTrustSetting;
-  const trustedFolder = folderTrust ? (isWorkspaceTrusted() ?? true) : true;
+  // Folder trust feature flag removed - now using settings directly
+  const folderTrust = settings.folderTrust ?? false;
+  const trustedFolder = isWorkspaceTrusted(settings) ?? true;
 
   const allExtensions = annotateActiveExtensions(
     extensions,
@@ -889,9 +888,14 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
+<<<<<<< HEAD
     ideClient,
     chatCompression: settings.chatCompression,
     folderTrustFeature,
+=======
+    chatCompression: settings.model?.chatCompression,
+    folderTrust,
+>>>>>>> 93820f833 (Fix(cli) - Remove Foldertrust Feature Flag (#7420))
     interactive,
     folderTrust,
     trustedFolder,
