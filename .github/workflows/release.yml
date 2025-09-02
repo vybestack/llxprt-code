@@ -35,18 +35,7 @@ on:
         required: false
         type: boolean
         default: false
-      KEY_VAR_NAME:
-        description: 'Secret variable name for API key (e.g., GROQ_API_KEY, CEREBRAS_API_KEY)'
-        required: false
-      LLXPRT_DEFAULT_MODEL:
-        description: 'Default model to use'
-        required: false
-      LLXPRT_DEFAULT_PROVIDER:
-        description: 'Provider to use'
-        required: false
-      OPENAI_BASE_URL:
-        description: 'Base URL for the provider API'
-        required: false
+      # Remove API provider inputs - these will come from repository secrets/variables
 
 jobs:
   release:
@@ -116,11 +105,11 @@ jobs:
         if: github.event.inputs.force_skip_tests != 'true'
         run: node scripts/preflight-ci.js
         env:
-          # Provider configuration from workflow_dispatch inputs
-          OPENAI_API_KEY: ${{ secrets[inputs.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ inputs.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.LLXPRT_DEFAULT_PROVIDER }}
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
 
       - name: Build Bundle for Integration Tests
@@ -133,11 +122,11 @@ jobs:
           # Skipping Docker tests due to flakiness
           # npm run test:integration:sandbox:docker
         env:
-          # Provider configuration from workflow_dispatch inputs
-          OPENAI_API_KEY: ${{ secrets[inputs.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ inputs.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.LLXPRT_DEFAULT_PROVIDER }}
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: none
 
       - name: Configure Git User
@@ -236,13 +225,13 @@ jobs:
 
           IMPORTANT: Use the write_file tool to save the release notes to 'generated-notes.md'. The file_path should be 'generated-notes.md' and content should be the formatted release notes. Do not output them to stdout."
 
-          # Try LLxprt generation using Groq
+          # Try LLxprt generation using configured provider
           set +e
           npx @vybestack/llxprt-code@latest \
-            --provider ${{ inputs.LLXPRT_DEFAULT_PROVIDER }} \
-            --model ${{ inputs.LLXPRT_DEFAULT_MODEL }} \
-            --key "${{ secrets[inputs.KEY_VAR_NAME] }}" \
-            --baseurl ${{ inputs.OPENAI_BASE_URL }} \
+            --provider ${{ vars.LLXPRT_DEFAULT_PROVIDER }} \
+            --model ${{ vars.LLXPRT_DEFAULT_MODEL }} \
+            --key "${{ secrets.LLXPRT_OPENAI_API_KEY }}" \
+            --baseurl ${{ vars.LLXPRT_OPENAI_BASE_URL }} \
             --yolo \
             --prompt "$PROMPT" > /dev/null 2>&1
           LLXPRT_EXIT=$?

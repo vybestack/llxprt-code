@@ -13,19 +13,7 @@ on:
       - 'release/**'
   merge_group:
   workflow_dispatch:
-    inputs:
-      KEY_VAR_NAME:
-        description: 'Secret variable name for API key (e.g., GROQ_API_KEY, CEREBRAS_API_KEY)'
-        required: false
-      LLXPRT_DEFAULT_MODEL:
-        description: 'Default model to use'
-        required: false
-      LLXPRT_DEFAULT_PROVIDER:
-        description: 'Provider to use'
-        required: false
-      OPENAI_BASE_URL:
-        description: 'Base URL for the provider API'
-        required: false
+    # Manual trigger - no inputs needed, uses repository variables
 
 concurrency:
   group: '${{ github.workflow }}-${{ github.head_ref || github.ref }}'
@@ -324,11 +312,11 @@ jobs:
 
       - name: 'Run tests and generate reports'
         env:
-          # Provider configuration from workflow_dispatch inputs
-          OPENAI_API_KEY: ${{ secrets[inputs.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ inputs.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.LLXPRT_DEFAULT_PROVIDER }}
+          # Provider configuration from repository secrets/variables
+          OPENAI_API_KEY: ${{ secrets.LLXPRT_OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.LLXPRT_OPENAI_BASE_URL }}
+          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: none
           NO_COLOR: true

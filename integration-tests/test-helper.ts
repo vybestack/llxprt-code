@@ -171,7 +171,7 @@ export class TestRig {
       },
       sandbox: env.GEMINI_SANDBOX !== 'false' ? env.GEMINI_SANDBOX : false,
       selectedAuthType: 'none', // Explicitly set auth type to none for tests
-      provider: env.LLXPRT_DEFAULT_PROVIDER || 'openai', // Use OpenAI provider by default
+      provider: env.LLXPRT_DEFAULT_PROVIDER, // No default - must be set explicitly
       ...options.settings, // Allow tests to override/add settings
     };
     writeFileSync(
@@ -202,11 +202,28 @@ export class TestRig {
     promptOrOptions: string | { prompt?: string; stdin?: string },
     ...args: string[]
   ): Promise<string> {
-    // Add provider and model flags from environment or defaults
-    const provider = env.LLXPRT_DEFAULT_PROVIDER || 'openai';
-    const model = env.LLXPRT_DEFAULT_MODEL || 'google/gemini-2.5-flash';
-    const baseUrl = env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1';
+    // Add provider and model flags from environment - FAIL FAST if not configured
+    const provider = env.LLXPRT_DEFAULT_PROVIDER;
+    const model = env.LLXPRT_DEFAULT_MODEL;
+    const baseUrl = env.OPENAI_BASE_URL;
     const apiKey = env.OPENAI_API_KEY;
+
+    // Fail fast if required configuration is missing
+    if (!provider) {
+      throw new Error(
+        'LLXPRT_DEFAULT_PROVIDER environment variable is required but not set',
+      );
+    }
+    if (!model) {
+      throw new Error(
+        'LLXPRT_DEFAULT_MODEL environment variable is required but not set',
+      );
+    }
+    if (provider === 'openai' && !apiKey) {
+      throw new Error(
+        'OPENAI_API_KEY environment variable is required for OpenAI provider but not set',
+      );
+    }
 
     // Build command args array directly instead of parsing a string
     // This avoids Windows-specific command line parsing issues
