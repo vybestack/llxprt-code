@@ -61,6 +61,32 @@ export class ToolFormatter implements IToolFormatter {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
 
+    // Convert enum values if present (they should remain as-is)
+    // But ensure they're arrays of strings, not some other type
+    if (newSchema.enum && Array.isArray(newSchema.enum)) {
+      newSchema.enum = newSchema.enum.map((v) => String(v));
+    }
+
+    // Convert minLength from string to number if present
+    if (newSchema.minLength && typeof newSchema.minLength === 'string') {
+      const minLengthNum = parseInt(newSchema.minLength, 10);
+      if (!isNaN(minLengthNum)) {
+        newSchema.minLength = minLengthNum;
+      } else {
+        delete newSchema.minLength;
+      }
+    }
+
+    // Convert maxLength from string to number if present
+    if (newSchema.maxLength && typeof newSchema.maxLength === 'string') {
+      const maxLengthNum = parseInt(newSchema.maxLength, 10);
+      if (!isNaN(maxLengthNum)) {
+        newSchema.maxLength = maxLengthNum;
+      } else {
+        delete newSchema.maxLength;
+      }
+    }
+
     return newSchema;
   }
 
@@ -75,14 +101,31 @@ export class ToolFormatter implements IToolFormatter {
           () => `Converting ${tools.length} tools to ${format} format`,
         );
         return tools.map((tool) => {
+          const convertedParams = this.convertGeminiSchemaToStandard(
+            tool.function.parameters,
+          );
+
+          // Special debug logging for TodoWrite to catch the issue
+          if (
+            tool.function.name === 'todo_write' ||
+            tool.function.name === 'TodoWrite'
+          ) {
+            this.logger.debug(
+              () =>
+                `TodoWrite schema conversion - Original: ${JSON.stringify(tool.function.parameters, null, 2)}`,
+            );
+            this.logger.debug(
+              () =>
+                `TodoWrite schema conversion - Converted: ${JSON.stringify(convertedParams, null, 2)}`,
+            );
+          }
+
           const converted = {
             type: 'function' as const,
             function: {
               name: tool.function.name,
               description: tool.function.description,
-              parameters: this.convertGeminiSchemaToStandard(
-                tool.function.parameters,
-              ),
+              parameters: convertedParams,
             },
           };
           this.logger.debug(

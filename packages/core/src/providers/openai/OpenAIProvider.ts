@@ -389,96 +389,129 @@ export class OpenAIProvider extends BaseProvider {
       // Need to yield streaming content as it comes
       const streamResponse =
         response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
-      for await (const chunk of streamResponse) {
-        const delta = chunk.choices?.[0]?.delta;
 
-        if (delta?.content && !requestConfig.parser) {
-          // Sanitize streaming content for qwen models
-          const sanitizedContent = this.sanitizeJsonContent(delta.content);
+      try {
+        for await (const chunk of streamResponse) {
+          // Deep copy chunk to avoid immutable object errors with qwen models
+          const chunkCopy = this.deepCopy(chunk);
+          const delta = chunkCopy.choices?.[0]?.delta;
 
-          if (this.isUsingQwen()) {
-            // Handle Qwen whitespace buffering inline for yielding
-            // This is needed because we yield during streaming
-            // We'll refactor this separately if needed
-            const whitespaceResult = this.handleQwenStreamingWhitespace(
-              { ...delta, content: sanitizedContent },
-              processedData.pendingWhitespace,
-              processedData.fullContent,
-            );
+          if (delta?.content && !requestConfig.parser) {
+            // Sanitize streaming content for qwen models
+            const sanitizedContent = this.sanitizeJsonContent(delta.content);
 
-            if (whitespaceResult.shouldYield) {
+            if (this.isUsingQwen()) {
+              // Handle Qwen whitespace buffering inline for yielding
+              // This is needed because we yield during streaming
+              // We'll refactor this separately if needed
+              const whitespaceResult = this.handleQwenStreamingWhitespace(
+                { ...delta, content: sanitizedContent },
+                processedData.pendingWhitespace,
+                processedData.fullContent,
+              );
+
+              if (whitespaceResult.shouldYield) {
+                // Deep copy before yielding to prevent immutable object errors
+                yield this.deepCopy({
+                  role: ContentGeneratorRole.ASSISTANT,
+                  content: whitespaceResult.content,
+                });
+              }
+
+              // Update our tracking of processed data
+              processedData = {
+                fullContent: whitespaceResult.updatedFullContent,
+                accumulatedToolCalls: processedData.accumulatedToolCalls,
+                hasStreamedContent:
+                  processedData.hasStreamedContent ||
+                  whitespaceResult.shouldYield,
+                usageData: processedData.usageData,
+                pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
+              };
+            } else {
               // Deep copy before yielding to prevent immutable object errors
               yield this.deepCopy({
                 role: ContentGeneratorRole.ASSISTANT,
-                content: whitespaceResult.content,
+                content: sanitizedContent,
               });
+              processedData = {
+                fullContent: processedData.fullContent + sanitizedContent,
+                accumulatedToolCalls: processedData.accumulatedToolCalls,
+                hasStreamedContent: true,
+                usageData: processedData.usageData,
+                pendingWhitespace: null,
+              };
             }
-
-            // Update our tracking of processed data
-            processedData = {
-              fullContent: whitespaceResult.updatedFullContent,
-              accumulatedToolCalls: processedData.accumulatedToolCalls,
-              hasStreamedContent:
-                processedData.hasStreamedContent ||
-                whitespaceResult.shouldYield,
-              usageData: processedData.usageData,
-              pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
-            };
-          } else {
-            // Deep copy before yielding to prevent immutable object errors
-            yield this.deepCopy({
-              role: ContentGeneratorRole.ASSISTANT,
-              content: sanitizedContent,
-            });
+          } else if (delta?.content) {
+            // Parser mode - just accumulate, also sanitize
+            const sanitizedContent = this.sanitizeJsonContent(delta.content);
             processedData = {
               fullContent: processedData.fullContent + sanitizedContent,
               accumulatedToolCalls: processedData.accumulatedToolCalls,
-              hasStreamedContent: true,
+              hasStreamedContent: processedData.hasStreamedContent,
               usageData: processedData.usageData,
-              pendingWhitespace: null,
+              pendingWhitespace: processedData.pendingWhitespace,
             };
           }
-        } else if (delta?.content) {
-          // Parser mode - just accumulate, also sanitize
-          const sanitizedContent = this.sanitizeJsonContent(delta.content);
-          processedData = {
-            fullContent: processedData.fullContent + sanitizedContent,
-            accumulatedToolCalls: processedData.accumulatedToolCalls,
-            hasStreamedContent: processedData.hasStreamedContent,
-            usageData: processedData.usageData,
-            pendingWhitespace: processedData.pendingWhitespace,
-          };
-        }
 
-        // Handle tool calls
-        if (delta?.tool_calls) {
-          // Deep copy tool calls before modifying to avoid immutable object errors
-          const copiedToolCalls = this.deepCopy(delta.tool_calls);
-          const accumulated: NonNullable<IMessage['tool_calls']> =
-            this.deepCopy(processedData.accumulatedToolCalls);
-          for (const toolCall of copiedToolCalls) {
-            this.toolFormatter.accumulateStreamingToolCall(
-              toolCall,
-              accumulated,
-              requestConfig.currentToolFormat,
-            );
+          // Handle tool calls
+          if (delta?.tool_calls) {
+            // Deep copy tool calls before modifying to avoid immutable object errors
+            const copiedToolCalls = this.deepCopy(delta.tool_calls);
+            const accumulated: NonNullable<IMessage['tool_calls']> =
+              this.deepCopy(processedData.accumulatedToolCalls);
+            for (const toolCall of copiedToolCalls) {
+              this.toolFormatter.accumulateStreamingToolCall(
+                toolCall,
+                accumulated,
+                requestConfig.currentToolFormat,
+              );
+            }
+            processedData = {
+              ...processedData,
+              accumulatedToolCalls: accumulated,
+            };
           }
-          processedData = {
-            ...processedData,
-            accumulatedToolCalls: accumulated,
-          };
-        }
 
-        // Check for usage data
-        if (chunk.usage) {
-          processedData = {
-            ...processedData,
-            usageData: {
-              prompt_tokens: chunk.usage.prompt_tokens || 0,
-              completion_tokens: chunk.usage.completion_tokens || 0,
-              total_tokens: chunk.usage.total_tokens || 0,
-            },
-          };
+          // Check for usage data
+          if (chunkCopy.usage) {
+            processedData = {
+              ...processedData,
+              usageData: {
+                prompt_tokens: chunkCopy.usage.prompt_tokens || 0,
+                completion_tokens: chunkCopy.usage.completion_tokens || 0,
+                total_tokens: chunkCopy.usage.total_tokens || 0,
+              },
+            };
+          }
+        }
+      } catch (error) {
+        // Handle JSONResponse error during streaming
+        if (
+          error &&
+          String(error).includes('JSONResponse') &&
+          this.isUsingQwen()
+        ) {
+          this.logger.debug(
+            () =>
+              '[Qwen] WARNING: JSONResponse error during streaming, attempting recovery',
+          );
+
+          // If we've already processed some data, yield what we have
+          if (
+            processedData.fullContent ||
+            processedData.accumulatedToolCalls.length > 0
+          ) {
+            yield* this.processFinalResponse(
+              processedData,
+              requestConfig.parser,
+            );
+          } else {
+            // No data processed, throw the error
+            throw error;
+          }
+        } else {
+          throw error;
         }
       }
     } else {
@@ -1060,8 +1093,16 @@ export class OpenAIProvider extends BaseProvider {
     );
 
     try {
+      // Log the formatted tools to debug the issue
+      if (requestConfig.formattedTools) {
+        this.logger.debug(
+          () =>
+            `Formatted tools being sent to API: ${JSON.stringify(requestConfig.formattedTools, null, 2)}`,
+        );
+      }
+
       // Build request params with exact order from original
-      return await this.openai.chat.completions.create({
+      const apiParams = {
         model: this.currentModel,
         messages:
           messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
@@ -1074,7 +1115,71 @@ export class OpenAIProvider extends BaseProvider {
           | undefined,
         tool_choice: this.getToolChoiceForFormat(tools),
         ...this.modelParams,
-      });
+      };
+
+      // For qwen models, we may need to handle the response differently
+      // as they sometimes return immutable JSONResponse objects
+      if (this.isUsingQwen() && requestConfig.streamingEnabled) {
+        try {
+          const response = await this.openai.chat.completions.create(apiParams);
+
+          // If we get a JSONResponse object, we need to handle it specially
+          // This is a workaround for qwen models that return Python JSONResponse objects
+          // Check if response has asyncIterator using 'in' operator
+          if (
+            response &&
+            typeof response === 'object' &&
+            !(Symbol.asyncIterator in response)
+          ) {
+            this.logger.debug(
+              () =>
+                '[Qwen] Received non-iterable response, attempting to convert',
+            );
+
+            // Try to convert the response to an async iterable
+            // This is a workaround for the JSONResponse immutability issue
+            const chunks = Array.isArray(response) ? response : [response];
+            return {
+              async *[Symbol.asyncIterator]() {
+                for (const chunk of chunks) {
+                  yield chunk;
+                }
+              },
+            } as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+          }
+
+          return response;
+        } catch (error) {
+          // If the error is about JSONResponse, try a non-streaming fallback
+          if (error && String(error).includes('JSONResponse')) {
+            this.logger.debug(
+              () =>
+                '[Qwen] WARNING: JSONResponse error detected, falling back to non-streaming mode',
+            );
+
+            // Retry without streaming
+            const nonStreamParams = {
+              ...apiParams,
+              stream: false,
+              stream_options: undefined,
+            };
+
+            const response =
+              await this.openai.chat.completions.create(nonStreamParams);
+
+            // Convert non-streaming response to streaming format
+            return {
+              async *[Symbol.asyncIterator]() {
+                // Yield the response as a single chunk
+                yield response;
+              },
+            };
+          }
+          throw error;
+        }
+      }
+
+      return await this.openai.chat.completions.create(apiParams);
     } catch (error) {
       this.handleApiError(error, messages);
       throw error; // Re-throw after logging
@@ -1154,7 +1259,10 @@ export class OpenAIProvider extends BaseProvider {
     };
     pendingWhitespace: string | null;
   } {
-    const choice = response.choices[0];
+    // Deep copy the response to avoid any immutable object errors
+    // This is especially important for qwen models which may return immutable JSONResponse objects
+    const responseCopy = this.deepCopy(response);
+    const choice = responseCopy.choices[0];
     let fullContent = '';
     const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
     let usageData:
@@ -1171,26 +1279,28 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     if (choice?.message.tool_calls) {
-      // Deep copy tool calls before processing to avoid immutable object errors
-      const copiedToolCalls = this.deepCopy(choice.message.tool_calls);
+      // Tool calls are already from the copied response, no need to deep copy again
       // Convert tool calls to the standard format
-      for (const toolCall of copiedToolCalls) {
+      for (const toolCall of choice.message.tool_calls) {
         if (toolCall.type === 'function' && toolCall.function) {
           // Don't fix double stringification here - it's handled later in the final processing
           accumulatedToolCalls.push({
             id: toolCall.id,
             type: 'function' as const,
-            function: this.deepCopy(toolCall.function),
+            function: {
+              name: toolCall.function.name,
+              arguments: toolCall.function.arguments,
+            },
           });
         }
       }
     }
 
-    if (response.usage) {
+    if (responseCopy.usage) {
       usageData = {
-        prompt_tokens: response.usage.prompt_tokens,
-        completion_tokens: response.usage.completion_tokens,
-        total_tokens: response.usage.total_tokens,
+        prompt_tokens: responseCopy.usage.prompt_tokens,
+        completion_tokens: responseCopy.usage.completion_tokens,
+        total_tokens: responseCopy.usage.total_tokens,
       };
     }
 

@@ -208,6 +208,7 @@ export class GeminiCompatibleWrapper {
         name: string;
         description?: string;
         parameters?: unknown;
+        parametersJsonSchema?: unknown; // Add support for new DeclarativeTool format
       }>;
     }>,
   ): ProviderTool[] {
@@ -217,13 +218,22 @@ export class GeminiCompatibleWrapper {
       if (tool.functionDeclarations) {
         // Gemini format has functionDeclarations array
         for (const func of tool.functionDeclarations) {
+          // Handle both old 'parameters' and new 'parametersJsonSchema' formats
+          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
+          const toolParameters = func.parametersJsonSchema || func.parameters;
+
+          // Log for debugging
+          this.logger.debug(
+            `Converting tool ${func.name}: has parametersJsonSchema=${!!func.parametersJsonSchema}, has parameters=${!!func.parameters}`,
+          );
+
           providerTools.push({
             type: 'function' as const,
             function: {
               name: func.name,
               description: func.description || '',
               parameters: (this.convertGeminiSchemaToStandard(
-                func.parameters,
+                toolParameters,
               ) as Record<string, unknown>) ?? {
                 type: 'object',
                 properties: {},
