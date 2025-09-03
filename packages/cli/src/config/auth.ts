@@ -8,7 +8,7 @@ import { AuthType } from '@vybestack/llxprt-code-core';
 import { loadEnvironment, loadSettings } from './settings.js';
 
 export function validateAuthMethod(authMethod: string): string | null {
-  loadEnvironment(loadSettings(process.cwd()).merged);
+  loadEnvironment(loadSettings().merged);
 
   if (
     authMethod === 'oauth_gemini' ||

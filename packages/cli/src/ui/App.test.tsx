@@ -363,7 +363,6 @@ describe('App UI', () => {
       systemDefaultsFile,
       userSettingsFile,
       workspaceSettingsFile,
-      [],
       true,
     );
   };

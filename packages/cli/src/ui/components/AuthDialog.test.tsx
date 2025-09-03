@@ -48,7 +48,6 @@ describe('AuthDialog', () => {
         settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
-      [],
       true,
     );
 
@@ -91,7 +90,6 @@ describe('AuthDialog', () => {
           settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
-        [],
         true,
       );
 
@@ -131,7 +129,6 @@ describe('AuthDialog', () => {
           settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
-        [],
         true,
       );
 
@@ -171,7 +168,6 @@ describe('AuthDialog', () => {
           settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
-        [],
         true,
       );
 
@@ -213,7 +209,6 @@ describe('AuthDialog', () => {
           settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
-        [],
         true,
       );
 
@@ -247,7 +242,6 @@ describe('AuthDialog', () => {
           settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
-        [],
         true,
       );
 
@@ -283,7 +277,6 @@ describe('AuthDialog', () => {
           settings: { customThemes: {}, mcpServers: {} },
           path: '',
         },
-        [],
         true,
       );
 
@@ -324,7 +317,6 @@ describe('AuthDialog', () => {
         settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
-      [],
       true,
     );
 
@@ -365,7 +357,6 @@ describe('AuthDialog', () => {
         settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
-      [],
       true,
     );
 
@@ -412,7 +403,6 @@ describe('AuthDialog', () => {
         settings: { customThemes: {}, mcpServers: {} },
         path: '',
       },
-      [],
       true,
     );
 

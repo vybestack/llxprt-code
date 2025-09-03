@@ -60,7 +60,7 @@ import {
   type Settings,
   loadEnvironment,
 } from './settings';
-import { LLXPRT_DIR } from '@vybestack/llxprt-code-core';
+import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency

@@ -59,7 +59,6 @@ const createMockSettings = (
       settings: { customThemes: {}, mcpServers: {}, ...workspaceSettings },
       path: '/workspace/settings.json',
     },
-    [],
     true,
   );
 
@@ -175,7 +174,6 @@ describe('SettingsDialog', () => {
         settings: { customThemes: {}, mcpServers: {}, ...workspaceSettings },
         path: '/workspace/settings.json',
       },
-      [],
       true,
     );
 

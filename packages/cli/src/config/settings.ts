@@ -11,6 +11,7 @@ import * as dotenv from 'dotenv';
 import process from 'node:process';
 import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
+  FatalConfigError,
   getErrorMessage,
   Storage,
 } from '@vybestack/llxprt-code-core';
@@ -191,14 +192,12 @@ export class LoadedSettings {
     systemDefaults: SettingsFile,
     user: SettingsFile,
     workspace: SettingsFile,
-    errors: SettingsError[],
     isTrusted: boolean,
   ) {
     this.system = system;
     this.systemDefaults = systemDefaults;
     this.user = user;
     this.workspace = workspace;
-    this.errors = errors;
     this.isTrusted = isTrusted;
     this._merged = this.computeMergedSettings();
   }
@@ -207,7 +206,6 @@ export class LoadedSettings {
   readonly systemDefaults: SettingsFile;
   readonly user: SettingsFile;
   readonly workspace: SettingsFile;
-  readonly errors: SettingsError[];
   readonly isTrusted: boolean;
 
   private _merged: Settings;
@@ -393,7 +391,9 @@ export function loadEnvironment(settings: Settings): void {
  * Loads settings from user and workspace directories.
  * Project settings override user settings.
  */
-export function loadSettings(workspaceDir: string): LoadedSettings {
+export function loadSettings(
+  workspaceDir: string = process.cwd(),
+): LoadedSettings {
   let systemSettings: Settings = {};
   let systemDefaultSettings: Settings = {};
   let userSettings: Settings = {};
@@ -531,7 +531,17 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
   workspaceSettings = resolveEnvVarsInObject(workspaceSettings);
 
   // Create LoadedSettings first
-  const loadedSettings = new LoadedSettings(
+
+  if (settingsErrors.length > 0) {
+    const errorMessages = settingsErrors.map(
+      (error) => `Error in ${error.path}: ${error.message}`,
+    );
+    throw new FatalConfigError(
+      `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
+    );
+  }
+
+  return new LoadedSettings(
     {
       path: systemSettingsPath,
       settings: systemSettings,
@@ -548,24 +558,8 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
       path: workspaceSettingsPath,
       settings: workspaceSettings,
     },
-    settingsErrors,
     isTrusted,
   );
-
-  // Validate chatCompression settings
-  const chatCompression = loadedSettings.merged.chatCompression;
-  const threshold = chatCompression?.contextPercentageThreshold;
-  if (
-    threshold != null &&
-    (typeof threshold !== 'number' || threshold < 0 || threshold > 1)
-  ) {
-    console.warn(
-      `Invalid value for chatCompression.contextPercentageThreshold: "${threshold}". Please use a value between 0 and 1. Using default compression settings.`,
-    );
-    delete loadedSettings.merged.chatCompression;
-  }
-
-  return loadedSettings;
 }
 
 export function saveSettings(settingsFile: SettingsFile): void {
