@@ -96,6 +96,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
       updateWorkspacePath(context);
+      ideServer.syncEnvVars();
+    }),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      ideServer.syncEnvVars();
     }),
     vscode.commands.registerCommand('llxprt-code.runLLxprtCode', async () => {
       const workspaceFolders = vscode.workspace.workspaceFolders;

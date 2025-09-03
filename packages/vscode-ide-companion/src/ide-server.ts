@@ -91,6 +91,9 @@ export class IDEServer {
   private portFile: string | undefined;
   private ppidPortFile: string | undefined;
   private port: number | undefined;
+  private transports: { [sessionId: string]: StreamableHTTPServerTransport } =
+    {};
+  private openFilesManager: OpenFilesManager | undefined;
   diffManager: DiffManager;
 
   constructor(log: (message: string) => void, diffManager: DiffManager) {
@@ -98,35 +101,28 @@ export class IDEServer {
     this.diffManager = diffManager;
   }
 
-  async start(context: vscode.ExtensionContext) {
-    this.context = context;
-    const sessionsWithInitialNotification = new Set<string>();
-    const transports: { [sessionId: string]: StreamableHTTPServerTransport } =
-      {};
+  start(context: vscode.ExtensionContext): Promise<void> {
+    return new Promise((resolve) => {
+      this.context = context;
+      const sessionsWithInitialNotification = new Set<string>();
 
     const app = express();
     app.use(express.json());
     const mcpServer = createMcpServer(this.diffManager);
 
-    const openFilesManager = new OpenFilesManager(context);
-    const onDidChangeSubscription = openFilesManager.onDidChange(() => {
-      for (const transport of Object.values(transports)) {
-        sendIdeContextUpdateNotification(
-          transport,
-          this.log.bind(this),
-          openFilesManager,
-        );
-      }
-    });
-    context.subscriptions.push(onDidChangeSubscription);
-    const onDidChangeDiffSubscription = this.diffManager.onDidChange(
-      (notification) => {
-        for (const transport of Object.values(transports)) {
-          transport.send(notification);
-        }
-      },
-    );
-    context.subscriptions.push(onDidChangeDiffSubscription);
+      this.openFilesManager = new OpenFilesManager(context);
+      const onDidChangeSubscription = this.openFilesManager.onDidChange(() => {
+        this.broadcastIdeContextUpdate();
+      });
+      context.subscriptions.push(onDidChangeSubscription);
+      const onDidChangeDiffSubscription = this.diffManager.onDidChange(
+        (notification) => {
+          for (const transport of Object.values(this.transports)) {
+            transport.send(notification);
+          }
+        },
+      );
+      context.subscriptions.push(onDidChangeDiffSubscription);
 
     app.post('/mcp', async (req: Request, res: Response) => {
       const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
@@ -134,14 +130,14 @@ export class IDEServer {
         | undefined;
       let transport: StreamableHTTPServerTransport;
 
-      if (sessionId && transports[sessionId]) {
-        transport = transports[sessionId];
-      } else if (!sessionId && isInitializeRequest(req.body)) {
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (newSessionId) => {
-            this.log(`New session initialized: ${newSessionId}`);
-            transports[newSessionId] = transport;
+        if (sessionId && this.transports[sessionId]) {
+          transport = this.transports[sessionId];
+        } else if (!sessionId && isInitializeRequest(req.body)) {
+          transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => randomUUID(),
+            onsessioninitialized: (newSessionId) => {
+              this.log(`New session initialized: ${newSessionId}`);
+              this.transports[newSessionId] = transport;
           },
         });
         const keepAlive = setInterval(() => {
@@ -160,7 +156,7 @@ export class IDEServer {
           if (transport.sessionId) {
             this.log(`Session closed: ${transport.sessionId}`);
             sessionsWithInitialNotification.delete(transport.sessionId);
-            delete transports[transport.sessionId];
+              delete this.transports[transport.sessionId];
           }
         };
         mcpServer.connect(transport);
@@ -169,95 +165,125 @@ export class IDEServer {
           'Bad Request: No valid session ID provided for non-initialize request.',
         );
         res.status(400).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message:
-              'Bad Request: No valid session ID provided for non-initialize request.',
-          },
-          id: null,
-        });
-        return;
-      }
-
-      try {
-        await transport.handleRequest(req, res, req.body);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        this.log(`Error handling MCP request: ${errorMessage}`);
-        if (!res.headersSent) {
-          res.status(500).json({
-            jsonrpc: '2.0' as const,
+            jsonrpc: '2.0'
             error: {
-              code: -32603,
-              message: 'Internal server error',
+              code: -32000,
+              message:
+                'Bad Request: No valid session ID provided for non-initialize request.',
             },
             id: null,
           });
+          return;
         }
-      }
+
+        try {
+          await transport.handleRequest(req, res, req.body);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.log(`Error handling MCP request: ${errorMessage}`);
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: '2.0' as const,
+              error: {
+                code: -32603,
+                message: 'Internal server error',
+              },
+              id: null,
+            });
+          }
+        }
+
+        if (
+          this.openFilesManager &&
+          !sessionsWithInitialNotification.has(sessionId)
+        ) {
+          sendIdeContextUpdateNotification(
+            transport,
+            this.log.bind(this),
+            this.openFilesManager,
+          );
+          sessionsWithInitialNotification.add(sessionId);
+        }
     });
 
-    const handleSessionRequest = async (req: Request, res: Response) => {
-      const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
-        | string
-        | undefined;
-      if (!sessionId || !transports[sessionId]) {
-        this.log('Invalid or missing session ID');
-        res.status(400).send('Invalid or missing session ID');
-        return;
-      }
-
-      const transport = transports[sessionId];
-      try {
-        await transport.handleRequest(req, res);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        this.log(`Error handling session request: ${errorMessage}`);
-        if (!res.headersSent) {
-          res.status(400).send('Bad Request');
+      const handleSessionRequest = async (req: Request, res: Response) => {
+        const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
+          | string
+          | undefined;
+        if (!sessionId || !this.transports[sessionId]) {
+          this.log('Invalid or missing session ID');
+          res.status(400).send('Invalid or missing session ID');
+          return;
         }
-      }
 
-      if (!sessionsWithInitialNotification.has(sessionId)) {
-        sendIdeContextUpdateNotification(
-          transport,
-          this.log.bind(this),
-          openFilesManager,
-        );
-        sessionsWithInitialNotification.add(sessionId);
-      }
-    };
+        const transport = this.transports[sessionId];
+        try {
+          await transport.handleRequest(req, res);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.log(`Error handling session request: ${errorMessage}`);
+          if (!res.headersSent) {
+            res.status(400).send('Bad Request');
+          }
+        }
 
-    app.get('/mcp', handleSessionRequest);
+        if (
+          this.openFilesManager &&
+          !sessionsWithInitialNotification.has(sessionId)
+        ) {
+          sendIdeContextUpdateNotification(
+            transport,
+            this.log.bind(this),
+            this.openFilesManager,
+          );
+          sessionsWithInitialNotification.add(sessionId);
+        }
+      };
 
-    this.server = app.listen(0, async () => {
-      const address = (this.server as HTTPServer).address();
-      if (address && typeof address !== 'string') {
-        this.port = address.port;
-        this.portFile = path.join(
-          os.tmpdir(),
-          `llxprt-ide-server-${this.port}.json`,
-        );
-        this.ppidPortFile = path.join(
-          os.tmpdir(),
-          `llxprt-ide-server-${process.ppid}.json`,
-        );
-        this.log(`IDE server listening on port ${this.port}`);
-        await writePortAndWorkspace(
-          context,
-          this.port,
-          this.portFile,
-          this.ppidPortFile,
-          this.log,
-        );
-      }
+      app.get('/mcp', handleSessionRequest);
+
+      this.server = app.listen(0, async () => {
+        const address = (this.server as HTTPServer).address();
+        if (address && typeof address !== 'string') {
+          this.port = address.port;
+          this.portFile = path.join(
+            os.tmpdir(),
+            `llxprt-ide-server-${this.port}.json`,
+          );
+          this.ppidPortFile = path.join(
+            os.tmpdir(),
+            `llxprt-ide-server-${process.ppid}.json`,
+          );
+          this.log(`IDE server listening on port ${this.port}`);
+          await writePortAndWorkspace(
+            context,
+            this.port,
+            this.portFile,
+            this.ppidPortFile,
+            this.log,
+          );
+        }
+        resolve();
+      });
     });
   }
 
-  async updateWorkspacePath(): Promise<void> {
+  broadcastIdeContextUpdate() {
+    if (!this.openFilesManager) {
+      return;
+    }
+    for (const transport of Object.values(this.transports)) {
+      sendIdeContextUpdateNotification(
+        transport,
+        this.log.bind(this),
+        this.openFilesManager,
+      );
+    }
+  }
+
+  async syncEnvVars(): Promise<void> {
     if (
       this.context &&
       this.server &&
@@ -272,6 +298,7 @@ export class IDEServer {
         this.ppidPortFile,
         this.log,
       );
+      this.broadcastIdeContextUpdate();
     }
   }
 

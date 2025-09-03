@@ -4,10 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { homedir } from 'os';
-import { getErrorMessage, isWithinRoot } from '@vybestack/llxprt-code-core';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { homedir } from 'node:os';
+import {
+  getErrorMessage,
+  isWithinRoot,
+  getIdeTrust,
+} from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import type { Settings } from './settings.js';
 
@@ -160,12 +164,7 @@ export function isFolderTrustEnabled(settings: Settings): boolean {
   return folderTrustSetting;
 }
 
-export function isWorkspaceTrusted(settings?: Settings): boolean | undefined {
-  // If settings are provided, check if folder trust is enabled
-  if (settings && !isFolderTrustEnabled(settings)) {
-    return true;
-  }
-
+function getWorkspaceTrustFromLocalConfig(): boolean | undefined {
   const folders = loadTrustedFolders();
 
   if (folders.errors.length > 0) {
@@ -177,4 +176,18 @@ export function isWorkspaceTrusted(settings?: Settings): boolean | undefined {
   }
 
   return folders.isPathTrusted(process.cwd());
+}
+
+export function isWorkspaceTrusted(settings: Settings): boolean | undefined {
+  if (!isFolderTrustEnabled(settings)) {
+    return true;
+  }
+
+  const ideTrust = getIdeTrust();
+  if (ideTrust !== undefined) {
+    return ideTrust;
+  }
+
+  // Fall back to the local user configuration
+  return getWorkspaceTrustFromLocalConfig();
 }
