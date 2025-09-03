@@ -17,6 +17,7 @@
 import { IModel } from './IModel.js';
 import { ITool } from './ITool.js';
 import { IMessage } from './IMessage.js';
+import { IContent } from '../services/history/IContent.js';
 
 export interface IProvider {
   name: string;
@@ -27,6 +28,10 @@ export interface IProvider {
     tools?: ITool[],
     toolFormat?: string,
   ): AsyncIterableIterator<unknown>;
+  generateChatCompletionIContent?(
+    content: IContent[],
+    tools?: ITool[],
+  ): AsyncIterableIterator<IContent>;
   setModel?(modelId: string): void;
   getCurrentModel?(): string;
   getDefaultModel(): string;

@@ -116,27 +116,6 @@ describe('OpenAIProvider IContent Tool Call Flow', () => {
                     type: 'function',
                     function: {
                       name: 'search_file_content',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        },
-        {
-          id: 'chatcmpl-1',
-          object: 'chat.completion.chunk',
-          created: 1700000000,
-          model: 'gpt-4',
-          choices: [
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    id: 'call_12345',
-                    type: 'function',
-                    function: {
                       arguments: '{"pattern":"',
                     },
                   },
@@ -234,27 +213,6 @@ describe('OpenAIProvider IContent Tool Call Flow', () => {
                     type: 'function',
                     function: {
                       name: 'read_file',
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        },
-        {
-          id: 'chatcmpl-2',
-          object: 'chat.completion.chunk',
-          created: 1700000001,
-          model: 'gpt-4',
-          choices: [
-            {
-              index: 0,
-              delta: {
-                tool_calls: [
-                  {
-                    id: 'call_67890',
-                    type: 'function',
-                    function: {
                       arguments: '{"absolute_path":"',
                     },
                   },
@@ -396,7 +354,9 @@ describe('OpenAIProvider IContent Tool Call Flow', () => {
 
     // Log what we actually got
     console.log('Response 1 length:', response1.length);
-    console.log('Response 1 content:', JSON.stringify(response1, null, 2));
+    response1.forEach((item, index) => {
+      console.log(`Response 1 item ${index}:`, JSON.stringify(item, null, 2));
+    });
 
     // Second round: add tool response and get next AI message with another tool call
     const toolResponse1: IContent = {
@@ -423,7 +383,9 @@ describe('OpenAIProvider IContent Tool Call Flow', () => {
 
     // Log what we actually got
     console.log('Response 2 length:', response2.length);
-    console.log('Response 2 content:', JSON.stringify(response2, null, 2));
+    response2.forEach((item, index) => {
+      console.log(`Response 2 item ${index}:`, JSON.stringify(item, null, 2));
+    });
 
     // Third round: add second tool response and get final AI message
     const toolResponse2: IContent = {
@@ -449,8 +411,16 @@ describe('OpenAIProvider IContent Tool Call Flow', () => {
     }
 
     // Log what we actually got
+    console.log('Response 1 length:', response1.length);
+    console.log('Response 1 content:', JSON.stringify(response1, null, 2));
+
+    console.log('Response 2 length:', response2.length);
+    console.log('Response 2 content:', JSON.stringify(response2, null, 2));
+
     console.log('Response 3 length:', response3.length);
-    console.log('Response 3 content:', JSON.stringify(response3, null, 2));
+    response3.forEach((item, index) => {
+      console.log(`Response 3 item ${index}:`, JSON.stringify(item, null, 2));
+    });
 
     // Verify that we got some responses without errors
     expect(response1.length).toBeGreaterThan(0);

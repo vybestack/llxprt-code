@@ -35,6 +35,12 @@ import {
 } from '../../config/endpoints.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+  TextBlock,
+} from '../../services/history/IContent.js';
 
 export class OpenAIProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -357,202 +363,266 @@ export class OpenAIProvider extends BaseProvider {
     tools?: ITool[],
     _toolFormat?: string,
   ): AsyncIterableIterator<IMessage> {
-    // 1. Validate authentication and messages
-    await this.validateRequestPreconditions(messages);
+    try {
+      // 1. Validate authentication and messages
+      await this.validateRequestPreconditions(messages);
 
-    // 2. Prepare request configuration
-    const requestConfig = this.prepareApiRequest(messages, tools);
+      // 2. Prepare request configuration
+      const requestConfig = this.prepareApiRequest(messages, tools);
 
-    // 3. Make API call with error handling
-    const response = await this.executeApiCall(messages, tools, requestConfig);
+      // 3. Make API call with error handling
+      const response = await this.executeApiCall(
+        messages,
+        tools,
+        requestConfig,
+      );
 
-    // 4. Process response based on streaming mode
-    let processedData: {
-      fullContent: string;
-      accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
-      hasStreamedContent: boolean;
-      usageData?: {
-        prompt_tokens: number;
-        completion_tokens: number;
-        total_tokens: number;
+      // 4. Process response based on streaming mode
+      let processedData: {
+        fullContent: string;
+        accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
+        hasStreamedContent: boolean;
+        usageData?: {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+        };
+        pendingWhitespace: string | null;
+      } = {
+        fullContent: '',
+        accumulatedToolCalls: [],
+        hasStreamedContent: false,
+        usageData: undefined,
+        pendingWhitespace: null,
       };
-      pendingWhitespace: string | null;
-    } = {
-      fullContent: '',
-      accumulatedToolCalls: [],
-      hasStreamedContent: false,
-      usageData: undefined,
-      pendingWhitespace: null,
-    };
 
-    if (requestConfig.streamingEnabled) {
-      // Need to yield streaming content as it comes
-      const streamResponse =
-        response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+      if (requestConfig.streamingEnabled) {
+        // Need to yield streaming content as it comes
+        const streamResponse =
+          response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
 
-      try {
-        for await (const chunk of streamResponse) {
-          // Deep copy chunk to avoid immutable object errors with qwen models
-          const chunkCopy = this.deepCopy(chunk);
-          const delta = chunkCopy.choices?.[0]?.delta;
+        try {
+          for await (const chunk of streamResponse) {
+            this.logger.debug(
+              () => `Got streaming chunk: ${JSON.stringify(chunk)}`,
+            );
+            // Deep copy chunk to avoid immutable object errors with qwen models
+            const chunkCopy = this.deepCopy(chunk);
+            const delta = chunkCopy.choices?.[0]?.delta;
 
-          if (delta?.content && !requestConfig.parser) {
-            // Sanitize streaming content for qwen models
-            const sanitizedContent = this.sanitizeJsonContent(delta.content);
+            if (delta?.content && !requestConfig.parser) {
+              // Sanitize streaming content for qwen models
+              const sanitizedContent = this.sanitizeJsonContent(delta.content);
 
-            if (this.isUsingQwen()) {
-              // Handle Qwen whitespace buffering inline for yielding
-              // This is needed because we yield during streaming
-              // We'll refactor this separately if needed
-              const whitespaceResult = this.handleQwenStreamingWhitespace(
-                { ...delta, content: sanitizedContent },
-                processedData.pendingWhitespace,
-                processedData.fullContent,
-              );
+              if (this.isUsingQwen()) {
+                // Handle Qwen whitespace buffering inline for yielding
+                // This is needed because we yield during streaming
+                // We'll refactor this separately if needed
+                const whitespaceResult = this.handleQwenStreamingWhitespace(
+                  { ...delta, content: sanitizedContent },
+                  processedData.pendingWhitespace,
+                  processedData.fullContent,
+                );
 
-              if (whitespaceResult.shouldYield) {
+                if (whitespaceResult.shouldYield) {
+                  // Deep copy before yielding to prevent immutable object errors
+                  yield this.deepCopy({
+                    role: ContentGeneratorRole.ASSISTANT,
+                    content: whitespaceResult.content,
+                  });
+                }
+
+                // Update our tracking of processed data
+                processedData = {
+                  fullContent: whitespaceResult.updatedFullContent,
+                  accumulatedToolCalls: processedData.accumulatedToolCalls,
+                  hasStreamedContent:
+                    processedData.hasStreamedContent ||
+                    whitespaceResult.shouldYield,
+                  usageData: processedData.usageData,
+                  pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
+                };
+              } else {
                 // Deep copy before yielding to prevent immutable object errors
                 yield this.deepCopy({
                   role: ContentGeneratorRole.ASSISTANT,
-                  content: whitespaceResult.content,
+                  content: sanitizedContent,
                 });
+                processedData = {
+                  fullContent: processedData.fullContent + sanitizedContent,
+                  accumulatedToolCalls: processedData.accumulatedToolCalls,
+                  hasStreamedContent: true,
+                  usageData: processedData.usageData,
+                  pendingWhitespace: null,
+                };
               }
-
-              // Update our tracking of processed data
-              processedData = {
-                fullContent: whitespaceResult.updatedFullContent,
-                accumulatedToolCalls: processedData.accumulatedToolCalls,
-                hasStreamedContent:
-                  processedData.hasStreamedContent ||
-                  whitespaceResult.shouldYield,
-                usageData: processedData.usageData,
-                pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
-              };
-            } else {
-              // Deep copy before yielding to prevent immutable object errors
-              yield this.deepCopy({
-                role: ContentGeneratorRole.ASSISTANT,
-                content: sanitizedContent,
-              });
+            } else if (delta?.content) {
+              // Parser mode - just accumulate, also sanitize
+              const sanitizedContent = this.sanitizeJsonContent(delta.content);
               processedData = {
                 fullContent: processedData.fullContent + sanitizedContent,
                 accumulatedToolCalls: processedData.accumulatedToolCalls,
-                hasStreamedContent: true,
+                hasStreamedContent: processedData.hasStreamedContent,
                 usageData: processedData.usageData,
-                pendingWhitespace: null,
+                pendingWhitespace: processedData.pendingWhitespace,
               };
             }
-          } else if (delta?.content) {
-            // Parser mode - just accumulate, also sanitize
-            const sanitizedContent = this.sanitizeJsonContent(delta.content);
-            processedData = {
-              fullContent: processedData.fullContent + sanitizedContent,
-              accumulatedToolCalls: processedData.accumulatedToolCalls,
-              hasStreamedContent: processedData.hasStreamedContent,
-              usageData: processedData.usageData,
-              pendingWhitespace: processedData.pendingWhitespace,
-            };
-          }
 
-          // Handle tool calls
-          if (delta?.tool_calls) {
-            // Deep copy tool calls before modifying to avoid immutable object errors
-            const copiedToolCalls = this.deepCopy(delta.tool_calls);
-            const accumulated: NonNullable<IMessage['tool_calls']> =
-              this.deepCopy(processedData.accumulatedToolCalls);
-            for (const toolCall of copiedToolCalls) {
-              this.toolFormatter.accumulateStreamingToolCall(
-                toolCall,
-                accumulated,
-                requestConfig.currentToolFormat,
+            // Handle tool calls
+            if (delta?.tool_calls) {
+              this.logger.debug(
+                () =>
+                  `Found tool_calls in delta: ${JSON.stringify(delta.tool_calls)}`,
+              );
+              // Deep copy tool calls before modifying to avoid immutable object errors
+              const copiedToolCalls = this.deepCopy(delta.tool_calls);
+              const accumulated: NonNullable<IMessage['tool_calls']> =
+                this.deepCopy(processedData.accumulatedToolCalls);
+              for (let i = 0; i < copiedToolCalls.length; i++) {
+                const toolCall = copiedToolCalls[i];
+                // Add index to the tool call for proper accumulation
+                this.toolFormatter.accumulateStreamingToolCall(
+                  { ...toolCall, index: i },
+                  accumulated,
+                  requestConfig.currentToolFormat,
+                );
+              }
+              this.logger.debug(
+                () =>
+                  `After accumulation, accumulated has: ${accumulated.length} tool calls`,
+              );
+              processedData = {
+                ...processedData,
+                accumulatedToolCalls: accumulated,
+              };
+              this.logger.debug(
+                () =>
+                  `processedData now has: ${processedData.accumulatedToolCalls.length} tool calls`,
               );
             }
-            processedData = {
-              ...processedData,
-              accumulatedToolCalls: accumulated,
-            };
-          }
 
-          // Check for usage data
-          if (chunkCopy.usage) {
-            processedData = {
-              ...processedData,
-              usageData: {
-                prompt_tokens: chunkCopy.usage.prompt_tokens || 0,
-                completion_tokens: chunkCopy.usage.completion_tokens || 0,
-                total_tokens: chunkCopy.usage.total_tokens || 0,
-              },
-            };
+            // Check for usage data
+            if (chunkCopy.usage) {
+              processedData = {
+                ...processedData,
+                usageData: {
+                  prompt_tokens: chunkCopy.usage.prompt_tokens || 0,
+                  completion_tokens: chunkCopy.usage.completion_tokens || 0,
+                  total_tokens: chunkCopy.usage.total_tokens || 0,
+                },
+              };
+            }
           }
-        }
-      } catch (error) {
-        // Handle JSONResponse error during streaming
-        if (
-          error &&
-          String(error).includes('JSONResponse') &&
-          this.isUsingQwen()
-        ) {
-          this.logger.debug(
-            () =>
-              '[Qwen] WARNING: JSONResponse error during streaming, attempting recovery',
-          );
-
-          // If we've already processed some data, yield what we have
+        } catch (error) {
+          // Handle JSONResponse error during streaming
           if (
-            processedData.fullContent ||
-            processedData.accumulatedToolCalls.length > 0
+            error &&
+            String(error).includes('JSONResponse') &&
+            this.isUsingQwen()
           ) {
-            yield* this.processFinalResponse(
-              processedData,
-              requestConfig.parser,
+            this.logger.debug(
+              () =>
+                '[Qwen] WARNING: JSONResponse error during streaming, attempting recovery',
             );
+
+            // If we've already processed some data, yield what we have
+            if (
+              processedData.fullContent ||
+              processedData.accumulatedToolCalls.length > 0
+            ) {
+              yield* this.processFinalResponse(
+                processedData,
+                requestConfig.parser,
+              );
+            } else {
+              // No data processed, throw the error
+              throw error;
+            }
           } else {
-            // No data processed, throw the error
             throw error;
           }
-        } else {
-          throw error;
+        }
+      } else {
+        // Non-streaming response
+        processedData = this.processNonStreamingResponse(
+          response as OpenAI.Chat.Completions.ChatCompletion,
+        );
+
+        // For non-streaming, yield content if no parser
+        if (!requestConfig.parser && processedData.fullContent) {
+          // Deep copy before yielding to prevent immutable object errors
+          yield this.deepCopy({
+            role: ContentGeneratorRole.ASSISTANT,
+            content: processedData.fullContent,
+          });
+          processedData.hasStreamedContent = true;
         }
       }
-    } else {
-      // Non-streaming response
-      processedData = this.processNonStreamingResponse(
-        response as OpenAI.Chat.Completions.ChatCompletion,
-      );
 
-      // For non-streaming, yield content if no parser
-      if (!requestConfig.parser && processedData.fullContent) {
+      // 5. Flush pending whitespace if needed (for Qwen)
+      if (
+        processedData.pendingWhitespace &&
+        this.isUsingQwen() &&
+        !requestConfig.parser
+      ) {
+        this.logger.debug(
+          () =>
+            `Flushing trailing pending whitespace (len=${processedData.pendingWhitespace?.length ?? 0}) at stream end`,
+        );
         // Deep copy before yielding to prevent immutable object errors
         yield this.deepCopy({
           role: ContentGeneratorRole.ASSISTANT,
-          content: processedData.fullContent,
+          content: processedData.pendingWhitespace,
         });
         processedData.hasStreamedContent = true;
+        processedData.fullContent += processedData.pendingWhitespace;
+        processedData.pendingWhitespace = null;
       }
-    }
 
-    // 5. Flush pending whitespace if needed (for Qwen)
-    if (
-      processedData.pendingWhitespace &&
-      this.isUsingQwen() &&
-      !requestConfig.parser
-    ) {
+      // 6. Process and yield final results
       this.logger.debug(
         () =>
-          `Flushing trailing pending whitespace (len=${processedData.pendingWhitespace?.length ?? 0}) at stream end`,
+          `About to call processFinalResponse with: hasContent=${!!processedData.fullContent}, toolCallCount=${processedData.accumulatedToolCalls.length}`,
       );
-      // Deep copy before yielding to prevent immutable object errors
-      yield this.deepCopy({
-        role: ContentGeneratorRole.ASSISTANT,
-        content: processedData.pendingWhitespace,
-      });
-      processedData.hasStreamedContent = true;
-      processedData.fullContent += processedData.pendingWhitespace;
-      processedData.pendingWhitespace = null;
-    }
+      yield* this.processFinalResponse(processedData, requestConfig.parser);
+    } catch (error) {
+      // Handle JSONResponse error at the top level
+      if (
+        error &&
+        String(error).includes('JSONResponse') &&
+        this.isUsingQwen()
+      ) {
+        this.logger.debug(
+          () =>
+            '[Qwen] JSONResponse error caught at top level, attempting non-streaming fallback',
+        );
 
-    // 6. Process and yield final results
-    yield* this.processFinalResponse(processedData, requestConfig.parser);
+        // Retry the entire request without streaming
+        const requestConfig = this.prepareApiRequest(messages, tools);
+        requestConfig.streamingEnabled = false;
+
+        try {
+          const response = await this.executeApiCall(
+            messages,
+            tools,
+            requestConfig,
+          );
+
+          // Process non-streaming response
+          const processedData = this.processNonStreamingResponse(
+            response as OpenAI.Chat.Completions.ChatCompletion,
+          );
+
+          // Yield the results
+          yield* this.processFinalResponse(processedData, requestConfig.parser);
+        } catch (_fallbackError) {
+          // If even non-streaming fails, throw the original error
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    }
   }
 
   override setModel(modelId: string): void {
@@ -839,6 +909,209 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
+   * Generate chat completion with IContent interface
+   * Internally converts to OpenAI API format, but only yields IContent
+   */
+  async *generateChatCompletionIContent(
+    content: IContent[],
+    tools?: ITool[],
+  ): AsyncIterableIterator<IContent> {
+    // Convert IContent to OpenAI message format for API call
+    const messages: IMessage[] = [];
+
+    for (const c of content) {
+      if (c.speaker === 'human') {
+        // Find text block
+        const textBlock = c.blocks.find((b) => b.type === 'text') as
+          | TextBlock
+          | undefined;
+        messages.push({
+          role: ContentGeneratorRole.USER,
+          content: textBlock?.text || '',
+        } as IMessage);
+      } else if (c.speaker === 'ai') {
+        // Merge all text blocks into single content string
+        const textBlocks = c.blocks.filter(
+          (b) => b.type === 'text',
+        ) as TextBlock[];
+        const toolCallBlocks = c.blocks.filter(
+          (b) => b.type === 'tool_call',
+        ) as ToolCallBlock[];
+
+        // Build content string from text blocks
+        const contentText = textBlocks.map((b) => b.text).join('');
+
+        // Build tool_calls if any tool_call blocks present
+        const toolCalls =
+          toolCallBlocks.length > 0
+            ? toolCallBlocks.map((tc) => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.parameters),
+                },
+              }))
+            : undefined;
+
+        messages.push({
+          role: ContentGeneratorRole.ASSISTANT,
+          content: contentText,
+          tool_calls: toolCalls,
+        } as IMessage);
+      } else if (c.speaker === 'tool') {
+        // Find tool_response block
+        const toolResponseBlock = c.blocks.find(
+          (b) => b.type === 'tool_response',
+        ) as ToolResponseBlock | undefined;
+
+        if (!toolResponseBlock) {
+          throw new Error('Tool content must have a tool_response block');
+        }
+
+        messages.push({
+          role: ContentGeneratorRole.TOOL,
+          content: JSON.stringify(toolResponseBlock.result),
+          tool_call_id: toolResponseBlock.callId,
+          tool_name: toolResponseBlock.toolName,
+        } as IMessage);
+      } else {
+        throw new Error(`Unknown speaker type: ${c.speaker}`);
+      }
+    }
+
+    // Stream the IMessage response and convert to IContent chunks
+    // Need to accumulate tool calls during streaming
+    const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
+    let hasYieldedText = false;
+    let lastUsageData:
+      | {
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+        }
+      | undefined;
+
+    for await (const chunk of this.generateChatCompletion(messages, tools)) {
+      if (typeof chunk === 'string') {
+        // String chunk - yield as text block immediately for streaming
+        const result: IContent = {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: chunk }],
+        };
+        this.logger.debug('Yielding string chunk as IContent:', result);
+        yield result;
+        hasYieldedText = true;
+      } else {
+        const msg = chunk as IMessage;
+        this.logger.debug(
+          () =>
+            `generateChatCompletionIContent - Got IMessage chunk: ${JSON.stringify(msg)}`,
+        );
+
+        if (msg.role === ContentGeneratorRole.ASSISTANT) {
+          // Handle text content - yield immediately for streaming
+          if (msg.content) {
+            const textResult: IContent = {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: msg.content }],
+            };
+            yield textResult;
+            hasYieldedText = true;
+          }
+
+          // Handle tool calls - accumulate them
+          if (msg.tool_calls) {
+            this.logger.debug(
+              () =>
+                `generateChatCompletionIContent - Found tool_calls in msg: ${msg.tool_calls?.length || 0}`,
+            );
+            // Deep copy tool calls before accumulating
+            const copiedToolCalls = this.deepCopy(msg.tool_calls);
+            for (let i = 0; i < copiedToolCalls.length; i++) {
+              const toolCall = copiedToolCalls[i];
+              // Add index to the tool call for proper accumulation
+              this.toolFormatter.accumulateStreamingToolCall(
+                { ...toolCall, index: i },
+                accumulatedToolCalls,
+                'openai',
+              );
+            }
+            this.logger.debug(
+              () =>
+                `After accumulation, have ${accumulatedToolCalls.length} tool calls`,
+            );
+          }
+
+          // Track usage data
+          if (msg.usage) {
+            lastUsageData = msg.usage;
+          }
+        }
+      }
+    }
+
+    // After streaming is complete, yield accumulated tool calls if any
+    if (accumulatedToolCalls.length > 0) {
+      const toolCallResult: IContent = {
+        speaker: 'ai',
+        blocks: [],
+      };
+
+      // Add accumulated tool calls as blocks
+      for (const tc of accumulatedToolCalls) {
+        try {
+          toolCallResult.blocks.push({
+            type: 'tool_call',
+            id: tc.id,
+            name: tc.function.name,
+            parameters: JSON.parse(tc.function.arguments),
+          } as ToolCallBlock);
+        } catch (_e) {
+          // If parsing fails, pass arguments as string
+          toolCallResult.blocks.push({
+            type: 'tool_call',
+            id: tc.id,
+            name: tc.function.name,
+            parameters: tc.function.arguments,
+          } as ToolCallBlock);
+        }
+      }
+
+      // Add usage metadata if we have it
+      if (lastUsageData) {
+        toolCallResult.metadata = {
+          usage: {
+            promptTokens: lastUsageData.prompt_tokens,
+            completionTokens: lastUsageData.completion_tokens,
+            totalTokens: lastUsageData.total_tokens,
+          },
+        };
+      }
+
+      this.logger.debug(
+        'Yielding final tool calls as IContent:',
+        toolCallResult,
+      );
+      yield toolCallResult;
+    } else if (!hasYieldedText && lastUsageData) {
+      // If we haven't yielded anything but have usage data, yield it
+      const usageResult: IContent = {
+        speaker: 'ai',
+        blocks: [],
+        metadata: {
+          usage: {
+            promptTokens: lastUsageData.prompt_tokens,
+            completionTokens: lastUsageData.completion_tokens,
+            totalTokens: lastUsageData.total_tokens,
+          },
+        },
+      };
+      yield usageResult;
+    }
+  }
+
+  /**
    * Initialize provider configuration from SettingsService
    */
   private async initializeFromSettings(): Promise<void> {
@@ -1101,6 +1374,24 @@ export class OpenAIProvider extends BaseProvider {
         );
       }
 
+      // Log messages to help debug 400 errors
+      this.logger.debug(
+        () =>
+          `Sending ${messages.length} messages to API. Last 3 messages: ${JSON.stringify(
+            messages.slice(-3).map((m) => ({
+              role: m.role,
+              content: m.content?.substring(0, 100),
+              tool_call_id: m.tool_call_id,
+              tool_calls: m.tool_calls?.map((tc) => ({
+                id: tc.id,
+                function: { name: tc.function.name },
+              })),
+            })),
+            null,
+            2,
+          )}`,
+      );
+
       // Build request params with exact order from original
       const apiParams = {
         model: this.currentModel,
@@ -1168,10 +1459,12 @@ export class OpenAIProvider extends BaseProvider {
               await this.openai.chat.completions.create(nonStreamParams);
 
             // Convert non-streaming response to streaming format
+            // Deep copy the response to avoid immutable object errors
+            const responseCopy = this.deepCopy(response);
             return {
               async *[Symbol.asyncIterator]() {
-                // Yield the response as a single chunk
-                yield response;
+                // Yield the deep copied response as a single chunk
+                yield responseCopy;
               },
             };
           }
@@ -1382,6 +1675,10 @@ export class OpenAIProvider extends BaseProvider {
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
+        this.logger.debug(
+          () =>
+            `Processing accumulated tool calls: ${accumulatedToolCalls.length}`,
+        );
         // Deep copy tool calls before processing to avoid modifying immutables
         const copiedToolCalls = this.deepCopy(accumulatedToolCalls);
         // Process tool calls with Qwen-specific fixes if needed

@@ -13,6 +13,12 @@ import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+  TextBlock,
+} from '../../services/history/IContent.js';
 
 export class AnthropicProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -947,5 +953,217 @@ ${llxprtPrompts}`;
    */
   override async isAuthenticated(): Promise<boolean> {
     return super.isAuthenticated();
+  }
+
+  /**
+   * Generate chat completion with IContent interface
+   * Convert between IContent and IMessage formats
+   */
+  async *generateChatCompletionIContent(
+    content: IContent[],
+    tools?: ITool[],
+  ): AsyncIterableIterator<IContent> {
+    // Extract messages from IContent
+    const messages: IMessage[] = [];
+
+    for (const c of content) {
+      if (c.speaker === 'human') {
+        // Find text block
+        const textBlock = c.blocks.find((b) => b.type === 'text') as
+          | TextBlock
+          | undefined;
+        messages.push({
+          role: ContentGeneratorRole.USER,
+          content: textBlock?.text || '',
+        } as IMessage);
+      } else if (c.speaker === 'ai') {
+        // Merge all text blocks into single content string
+        const textBlocks = c.blocks.filter(
+          (b) => b.type === 'text',
+        ) as TextBlock[];
+        const toolCallBlocks = c.blocks.filter(
+          (b) => b.type === 'tool_call',
+        ) as ToolCallBlock[];
+
+        // Build content string from text blocks
+        const contentText = textBlocks.map((b) => b.text).join('');
+
+        // Build tool_calls if any tool_call blocks present
+        const toolCalls =
+          toolCallBlocks.length > 0
+            ? toolCallBlocks.map((tc) => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.parameters),
+                },
+              }))
+            : undefined;
+
+        messages.push({
+          role: ContentGeneratorRole.ASSISTANT,
+          content: contentText,
+          tool_calls: toolCalls,
+        } as IMessage);
+      } else if (c.speaker === 'tool') {
+        // Find tool_response block
+        const toolResponseBlock = c.blocks.find(
+          (b) => b.type === 'tool_response',
+        ) as ToolResponseBlock | undefined;
+
+        if (!toolResponseBlock) {
+          throw new Error('Tool content must have a tool_response block');
+        }
+
+        messages.push({
+          role: ContentGeneratorRole.TOOL,
+          content: JSON.stringify(toolResponseBlock.result),
+          tool_call_id: toolResponseBlock.callId,
+          tool_name: toolResponseBlock.toolName,
+        } as IMessage);
+      } else {
+        throw new Error(`Unknown speaker type: ${c.speaker}`);
+      }
+    }
+
+    // Stream the IMessage response and convert to IContent chunks
+    let accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
+    let textContent = '';
+
+    for await (const chunk of this.generateChatCompletion(messages, tools)) {
+      if (typeof chunk === 'string') {
+        // String chunk - yield as combined text block
+        const result = {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: chunk }],
+        } as IContent;
+        this.logger.debug('Yielding string chunk as IContent:', result);
+        yield result;
+      } else {
+        const msg = chunk as IMessage;
+        if (msg.role === ContentGeneratorRole.ASSISTANT) {
+          // Accumulate text content and tool calls
+          if (msg.content) {
+            textContent += msg.content;
+          }
+
+          if (msg.tool_calls) {
+            // Deep copy tool calls
+            const copiedToolCalls = this.deepCopy(msg.tool_calls);
+            for (const toolCall of copiedToolCalls) {
+              this.toolFormatter.accumulateStreamingToolCall(
+                toolCall,
+                accumulatedToolCalls,
+                'anthropic',
+              );
+            }
+          }
+
+          // Yield combined content with both text and tool calls that have been accumulated so far
+          const contentResult: IContent = {
+            speaker: 'ai',
+            blocks: [],
+          };
+
+          if (textContent) {
+            contentResult.blocks.push({ type: 'text', text: textContent });
+            textContent = ''; // Reset textContent after yielding
+          }
+
+          // Convert accumulated tool calls to blocks if any exist
+          if (accumulatedToolCalls.length > 0) {
+            const toolCallBlocks = accumulatedToolCalls.map((tc) => {
+              try {
+                return {
+                  type: 'tool_call',
+                  id: tc.id,
+                  name: tc.function.name,
+                  parameters: JSON.parse(tc.function.arguments),
+                } as ToolCallBlock;
+              } catch (_e) {
+                // If parsing fails, pass as string
+                return {
+                  type: 'tool_call',
+                  id: tc.id,
+                  name: tc.function.name,
+                  parameters: tc.function.arguments,
+                } as ToolCallBlock;
+              }
+            });
+            contentResult.blocks.push(...toolCallBlocks);
+            accumulatedToolCalls = []; // Reset accumulatedToolCalls after yielding
+          }
+
+          // Yield if we have any blocks
+          if (contentResult.blocks.length > 0) {
+            this.logger.debug(
+              'Yielding combined IContent chunk:',
+              contentResult,
+            );
+            yield contentResult;
+          }
+        }
+      }
+    }
+
+    // If we still have accumulated content at the end that wasn't yielded,
+    // yield it now as a final chunk
+    if (textContent || accumulatedToolCalls.length > 0) {
+      const finalContent: IContent = {
+        speaker: 'ai',
+        blocks: [],
+      };
+
+      if (textContent) {
+        finalContent.blocks.push({ type: 'text', text: textContent });
+      }
+
+      if (accumulatedToolCalls.length > 0) {
+        const toolCallBlocks = accumulatedToolCalls.map((tc) => {
+          try {
+            return {
+              type: 'tool_call',
+              id: tc.id,
+              name: tc.function.name,
+              parameters: JSON.parse(tc.function.arguments),
+            } as ToolCallBlock;
+          } catch (_e) {
+            // If parsing fails, pass as string
+            return {
+              type: 'tool_call',
+              id: tc.id,
+              name: tc.function.name,
+              parameters: tc.function.arguments,
+            } as ToolCallBlock;
+          }
+        });
+        finalContent.blocks.push(...toolCallBlocks);
+      }
+
+      this.logger.debug(
+        'Yielding final accumulated content as IContent:',
+        finalContent,
+      );
+      yield finalContent;
+    }
+  }
+
+  private deepCopy<T>(obj: T): T {
+    // Quick type guard for primitives
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+
+    // Create deep copy via JSON serialization
+    // This ensures complete isolation from original object
+    try {
+      return JSON.parse(JSON.stringify(obj));
+    } catch (error) {
+      this.logger.debug(
+        () => `Failed to deep copy object: ${error}. Returning original.`,
+      );
+      return obj;
+    }
   }
 }

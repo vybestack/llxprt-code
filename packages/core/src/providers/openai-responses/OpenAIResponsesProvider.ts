@@ -23,6 +23,12 @@ import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
 import { IMessage } from '../IMessage.js';
+import {
+  IContent,
+  TextBlock,
+  ToolCallBlock,
+  ToolResponseBlock,
+} from '../../services/history/IContent.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
@@ -658,5 +664,161 @@ export class OpenAIResponsesProvider extends BaseProvider {
    */
   override async isAuthenticated(): Promise<boolean> {
     return super.isAuthenticated();
+  }
+
+  /**
+   * Generate chat completion with IContent interface
+   * Convert between IContent and IMessage formats
+   */
+  async *generateChatCompletionIContent(
+    content: IContent[],
+    tools?: ITool[],
+    toolFormat?: string,
+  ): AsyncIterableIterator<IContent> {
+    // Convert IContent to IMessage
+    const messages: IMessage[] = content.map((c) => {
+      if (c.speaker === 'human') {
+        // Find text block
+        const textBlock = c.blocks.find((b) => b.type === 'text') as
+          | TextBlock
+          | undefined;
+        return {
+          role: ContentGeneratorRole.USER,
+          content: textBlock?.text || '',
+        } as IMessage;
+      } else if (c.speaker === 'ai') {
+        // Merge all text blocks into single content string
+        const textBlocks = c.blocks.filter(
+          (b) => b.type === 'text',
+        ) as TextBlock[];
+        const toolCallBlocks = c.blocks.filter(
+          (b) => b.type === 'tool_call',
+        ) as ToolCallBlock[];
+
+        // Build content string from text blocks
+        const contentText = textBlocks.map((b) => b.text).join('');
+
+        // Build tool_calls if any tool_call blocks present
+        const toolCalls =
+          toolCallBlocks.length > 0
+            ? toolCallBlocks.map((tc) => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.parameters),
+                },
+              }))
+            : undefined;
+
+        return {
+          role: ContentGeneratorRole.ASSISTANT,
+          content: contentText,
+          tool_calls: toolCalls,
+        } as IMessage;
+      } else if (c.speaker === 'tool') {
+        // Find tool_response block
+        const toolResponseBlock = c.blocks.find(
+          (b) => b.type === 'tool_response',
+        ) as ToolResponseBlock | undefined;
+
+        if (!toolResponseBlock) {
+          throw new Error('Tool content must have a tool_response block');
+        }
+
+        return {
+          role: ContentGeneratorRole.TOOL,
+          content: JSON.stringify(toolResponseBlock.result),
+          tool_call_id: toolResponseBlock.callId,
+          tool_name: toolResponseBlock.toolName,
+        } as IMessage;
+      } else {
+        throw new Error(`Unknown speaker type: ${c.speaker}`);
+      }
+    });
+
+    // Call parent method
+    const response = this.generateChatCompletion(messages, tools, toolFormat);
+
+    // Convert IMessage back to IContent
+    for await (const chunk of response) {
+      if (typeof chunk === 'string') {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: chunk }],
+        } as IContent;
+        continue;
+      }
+
+      const msg = chunk as IMessage;
+      if (msg.role === ContentGeneratorRole.ASSISTANT) {
+        const contentResult: IContent = {
+          speaker: 'ai',
+          blocks: [],
+        };
+
+        // Add text content if exists
+        if (msg.content) {
+          contentResult.blocks.push({ type: 'text', text: msg.content });
+        }
+
+        // Convert tool calls to blocks
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          for (const tc of msg.tool_calls) {
+            try {
+              contentResult.blocks.push({
+                type: 'tool_call',
+                id: tc.id,
+                name: tc.function.name,
+                parameters: JSON.parse(tc.function.arguments),
+              });
+            } catch (_e) {
+              // If parsing fails, pass as string
+              contentResult.blocks.push({
+                type: 'tool_call',
+                id: tc.id,
+                name: tc.function.name,
+                parameters: tc.function.arguments,
+              });
+            }
+          }
+        }
+
+        // Add usage metadata if exists
+        if (msg.usage) {
+          contentResult.metadata = {
+            usage: {
+              promptTokens: msg.usage.prompt_tokens,
+              completionTokens: msg.usage.completion_tokens,
+              totalTokens: msg.usage.total_tokens,
+            },
+          };
+        }
+
+        if (contentResult.blocks.length > 0) {
+          yield contentResult;
+        }
+      } else if (msg.role === ContentGeneratorRole.USER) {
+        yield {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: msg.content || '' }],
+        } as IContent;
+      } else if (msg.role === ContentGeneratorRole.TOOL) {
+        yield {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: msg.tool_call_id || '',
+              toolName: msg.tool_name || 'unknown',
+              result: msg.content,
+            },
+          ],
+        } as IContent;
+      } else {
+        // Ignore system messages or other roles
+        continue;
+      }
+    }
   }
 }
