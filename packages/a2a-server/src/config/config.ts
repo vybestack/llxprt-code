@@ -22,10 +22,10 @@ import {
   DEFAULT_GEMINI_MODEL,
 } from '@vybestack/llxprt-code-core';
 
-import { logger } from './logger.js';
+import { logger } from '../utils/logger.js';
 import type { Settings } from './settings.js';
 import type { Extension } from './extension.js';
-import { type AgentSettings, CoderAgentEvent } from './types.js';
+import { type AgentSettings, CoderAgentEvent } from '../types.js';
 
 export async function loadConfig(
   settings: Settings,

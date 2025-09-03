@@ -30,13 +30,14 @@ import {
   it,
   vi,
 } from 'vitest';
-import { createApp } from './agent.js';
+import { createApp } from './app.js';
 import {
   assertUniqueFinalEventIsLast,
   assertTaskCreationAndWorkingStatus,
   createStreamMessageRequest,
   createMockConfig,
-} from './testing_utils.js';
+} from '../utils/testing_utils.js';
+import { MockTool } from '@vybestack/llxprt-code-core';
 
 const mockToolConfirmationFn = async () =>
   ({}) as unknown as ToolCallConfirmationDetails;
@@ -59,15 +60,15 @@ const streamToSSEEvents = (
 
 // Mock the logger to avoid polluting test output
 // Comment out to debug tests
-vi.mock('./logger.js', () => ({
+vi.mock('../utils/logger.js', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
 let config: Config;
 const getToolRegistrySpy = vi.fn().mockReturnValue(ApprovalMode.DEFAULT);
 const getApprovalModeSpy = vi.fn();
-vi.mock('./config.js', async () => {
-  const actual = await vi.importActual('./config.js');
+vi.mock('../config/config.js', async () => {
+  const actual = await vi.importActual('../config/config.js');
   return {
     ...actual,
     loadConfig: vi.fn().mockImplementation(async () => {
