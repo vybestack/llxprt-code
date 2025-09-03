@@ -1,0 +1,575 @@
+import { describe, it, expect } from 'vitest';
+import { MessageConverters } from './MessageConverters.js';
+import type { IMessage } from '../../providers/IMessage.js';
+import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
+
+describe('MessageConverters - IMessage ↔ IContent conversion', () => {
+  describe('OpenAI format conversion', () => {
+    it('should convert OpenAI tool calls to IContent with history IDs', () => {
+      // Given: OpenAI format message with tool calls
+      const openAIMessage: IMessage = {
+        role: 'assistant',
+        content: 'Let me help you with that.',
+        tool_calls: [
+          {
+            id: 'call_abc123',
+            type: 'function',
+            function: {
+              name: 'read_file',
+              arguments: '{"path": "test.txt"}',
+            },
+          },
+          {
+            id: 'call_def456',
+            type: 'function',
+            function: {
+              name: 'write_file',
+              arguments: '{"path": "out.txt", "content": "data"}',
+            },
+          },
+        ],
+      };
+
+      // When: Converted to IContent
+      const iContent = MessageConverters.toIContent(openAIMessage, 'openai');
+
+      // Then: Creates proper IContent with tool call blocks
+      expect(iContent.speaker).toBe('ai');
+      expect(iContent.blocks).toHaveLength(3); // 1 text + 2 tool calls
+      expect(iContent.blocks[0].type).toBe('text');
+      expect(iContent.blocks[0].text).toBe('Let me help you with that.');
+
+      // Tool calls get history IDs
+      const toolCall1 = iContent.blocks[1] as ToolCallBlock & {
+        originalId?: string;
+      };
+      const toolCall2 = iContent.blocks[2] as ToolCallBlock & {
+        originalId?: string;
+      };
+
+      expect(toolCall1.type).toBe('tool_call');
+      expect(toolCall1.id).toMatch(/^hist_tool_/);
+      expect(toolCall1.name).toBe('read_file');
+      expect(toolCall1.originalId).toBe('call_abc123'); // Store original for mapping
+
+      expect(toolCall2.type).toBe('tool_call');
+      expect(toolCall2.id).toMatch(/^hist_tool_/);
+      expect(toolCall2.name).toBe('write_file');
+      expect(toolCall2.originalId).toBe('call_def456');
+    });
+
+    it('should convert OpenAI tool responses to IContent', () => {
+      // Given: OpenAI tool response
+      const toolResponse: IMessage = {
+        role: 'tool',
+        tool_call_id: 'call_abc123',
+        name: 'read_file',
+        content: 'File contents here',
+      };
+
+      // When: Converted to IContent
+      const iContent = MessageConverters.toIContent(toolResponse, 'openai');
+
+      // Then: Creates tool response block
+      const toolResponseBlock = iContent.blocks[0] as ToolResponseBlock;
+      expect(iContent.speaker).toBe('tool');
+      expect(iContent.blocks).toHaveLength(1);
+      expect(toolResponseBlock.type).toBe('tool_response');
+      expect(toolResponseBlock.callId).toBe('call_abc123'); // Keep original for lookup
+      expect(toolResponseBlock.toolName).toBe('read_file');
+      expect(toolResponseBlock.result).toBe('File contents here');
+    });
+
+    it('should convert IContent back to OpenAI format with mapped IDs', () => {
+      // Given: IContent with history IDs and ID mapping
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: 'Processing your request.',
+          },
+          {
+            type: 'tool_call',
+            id: 'hist_tool_100_1',
+            name: 'search',
+            parameters: { query: 'test' },
+          },
+        ],
+      };
+
+      // ID mapping (would come from HistoryService)
+      const idMap = new Map([['hist_tool_100_1', 'call_newid_789']]);
+
+      // When: Converted to OpenAI format
+      const message = MessageConverters.toOpenAIMessage(iContent, idMap);
+
+      // Then: Uses mapped OpenAI IDs
+      expect(message.role).toBe('assistant');
+      expect(message.content).toBe('Processing your request.');
+      expect(message.tool_calls).toHaveLength(1);
+      expect(message.tool_calls![0].id).toBe('call_newid_789');
+      expect(message.tool_calls![0].function.name).toBe('search');
+    });
+  });
+
+  describe('Anthropic format conversion', () => {
+    it('should convert Anthropic tool calls to IContent with history IDs', () => {
+      // Given: Anthropic format message
+      const anthropicMessage: IMessage = {
+        role: 'assistant',
+        content: "I'll search for that information.",
+        tool_calls: [
+          {
+            id: 'toolu_xyz789',
+            type: 'function',
+            function: {
+              name: 'web_search',
+              arguments: '{"query": "latest news"}',
+            },
+          },
+        ],
+      };
+
+      // When: Converted to IContent
+      const iContent = MessageConverters.toIContent(
+        anthropicMessage,
+        'anthropic',
+      );
+
+      // Then: Creates proper IContent
+      const anthropicToolCall = iContent.blocks[1] as ToolCallBlock & {
+        originalId?: string;
+      };
+      expect(iContent.speaker).toBe('ai');
+      expect(iContent.blocks[0].type).toBe('text');
+      expect(anthropicToolCall.type).toBe('tool_call');
+      expect(anthropicToolCall.id).toMatch(/^hist_tool_/);
+      expect(anthropicToolCall.originalId).toBe('toolu_xyz789');
+    });
+
+    it('should convert IContent to Anthropic format with consistent IDs', () => {
+      // Given: IContent with tool call and response
+      const toolCall: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_200_1',
+            name: 'calculate',
+            parameters: { expression: '2+2' },
+          },
+        ],
+      };
+
+      const toolResponse: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_200_1',
+            toolName: 'calculate',
+            result: '4',
+          },
+        ],
+      };
+
+      // ID mapping
+      const idMap = new Map([['hist_tool_200_1', 'toolu_newid_123']]);
+
+      // When: Converted to Anthropic format
+      const callMessage = MessageConverters.toAnthropicMessage(toolCall, idMap);
+      const responseMessage = MessageConverters.toAnthropicMessage(
+        toolResponse,
+        idMap,
+      );
+
+      // Then: Both use same Anthropic ID
+      expect((callMessage.content as any[])[0].id).toBe('toolu_newid_123');
+      expect(responseMessage.tool_call_id).toBe('toolu_newid_123');
+    });
+  });
+
+  describe('Provider-agnostic conversion', () => {
+    it('should handle user messages consistently', () => {
+      // Given: User message
+      const userMessage: IMessage = {
+        role: 'user',
+        content: 'Hello, can you help me?',
+      };
+
+      // When: Converted to IContent
+      const iContent = MessageConverters.toIContent(userMessage, 'openai');
+
+      // Then: Creates human speaker
+      expect(iContent.speaker).toBe('human');
+      expect(iContent.blocks).toHaveLength(1);
+      expect(iContent.blocks[0].type).toBe('text');
+      expect(iContent.blocks[0].text).toBe('Hello, can you help me?');
+    });
+
+    it('should handle system messages', () => {
+      // Given: System message
+      const systemMessage: IMessage = {
+        role: 'system',
+        content: 'You are a helpful assistant.',
+      };
+
+      // When: Converted to IContent
+      const iContent = MessageConverters.toIContent(systemMessage, 'anthropic');
+
+      // Then: Creates human speaker (system messages map to human in IContent)
+      expect(iContent.speaker).toBe('human');
+      expect(iContent.blocks[0].type).toBe('text');
+      expect(iContent.blocks[0].text).toBe('You are a helpful assistant.');
+    });
+
+    it('should preserve message order and structure', () => {
+      // Given: Sequence of messages
+      const messages: IMessage[] = [
+        { role: 'user', content: 'Question' },
+        {
+          role: 'assistant',
+          content: 'Let me check.',
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'search', arguments: '{}' },
+            },
+          ],
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call_1',
+          name: 'search',
+          content: 'Results',
+        },
+        { role: 'assistant', content: "Here's what I found." },
+      ];
+
+      // When: All converted to IContent
+      const contents = messages.map((m: IMessage) =>
+        MessageConverters.toIContent(m, 'openai'),
+      );
+
+      // Then: Structure preserved
+      expect(contents).toHaveLength(4);
+      expect(contents[0].speaker).toBe('human');
+      expect(contents[1].speaker).toBe('ai');
+      expect(contents[1].blocks).toHaveLength(2); // text + tool call
+      expect(contents[2].speaker).toBe('tool');
+      expect(contents[3].speaker).toBe('ai');
+    });
+  });
+
+  describe('ID mapping and normalization', () => {
+    it('should generate unique history IDs for duplicate provider IDs', () => {
+      // Given: Two messages with same provider ID
+      const msg1: IMessage = {
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'duplicate_id',
+            type: 'function',
+            function: { name: 'tool_a', arguments: '{}' },
+          },
+        ],
+      };
+
+      const msg2: IMessage = {
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'duplicate_id', // Same ID!
+            type: 'function',
+            function: { name: 'tool_b', arguments: '{}' },
+          },
+        ],
+      };
+
+      // When: Both converted
+      const content1 = MessageConverters.toIContent(msg1, 'openai');
+      const content2 = MessageConverters.toIContent(msg2, 'openai');
+
+      // Then: Different history IDs generated
+      const toolCall1 = content1.blocks[0] as ToolCallBlock;
+      const toolCall2 = content2.blocks[0] as ToolCallBlock;
+      expect(toolCall1.id).toMatch(/^hist_tool_/);
+      expect(toolCall2.id).toMatch(/^hist_tool_/);
+      expect(toolCall1.id).not.toBe(toolCall2.id);
+    });
+
+    it('should maintain ID relationships in round-trip conversion', () => {
+      // Given: Original message with tool call
+      const original: IMessage = {
+        role: 'assistant',
+        tool_calls: [
+          {
+            id: 'call_original',
+            type: 'function',
+            function: { name: 'test', arguments: '{}' },
+          },
+        ],
+      };
+
+      // When: Convert to IContent and back
+      const iContent = MessageConverters.toIContent(original, 'openai');
+      const historyId = (iContent.blocks[0] as ToolCallBlock).id;
+
+      // Create mapping for reverse conversion
+      const idMap = new Map([[historyId, 'call_mapped']]);
+      const converted = MessageConverters.toOpenAIMessage(iContent, idMap);
+
+      // Then: Uses mapped ID
+      expect(converted.tool_calls![0].id).toBe('call_mapped');
+    });
+  });
+
+  // NEW TESTS FOR ID NORMALIZATION ARCHITECTURE
+  // These tests SHOULD FAIL initially - that's the point of TDD
+  describe('ID Normalization Architecture - NEW FAILING TESTS', () => {
+    describe('Using callbacks instead of internal ID generation', () => {
+      it('should use generateId callback when provided instead of internal generation', () => {
+        // FAILING TEST: MessageConverters.toIContent should accept generateId callback as 4th parameter
+        const message: IMessage = {
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'call_123',
+              type: 'function',
+              function: { name: 'test_tool', arguments: '{}' },
+            },
+          ],
+        };
+
+        let callbackUsed = false;
+        const generateIdCallback = (): string => {
+          callbackUsed = true;
+          return 'hist_tool_callback_generated';
+        };
+
+        const idMapping = new Map<string, string>();
+
+        // New signature should accept generateId callback
+        const result = MessageConverters.toIContent(
+          message,
+          'openai',
+          idMapping,
+          generateIdCallback,
+        );
+
+        // Should use the callback-generated ID
+        const toolCall = result.blocks[0] as ToolCallBlock;
+        expect(toolCall.id).toBe('hist_tool_callback_generated');
+        expect(callbackUsed).toBe(true);
+      });
+
+      it('should preserve existing provider IDs when they exist', () => {
+        // FAILING TEST: Should preserve existing provider IDs and generate proper history IDs
+        const messageWithId: IMessage = {
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'existing_call_456',
+              type: 'function',
+              function: { name: 'existing_tool', arguments: '{}' },
+            },
+          ],
+        };
+
+        const generateIdCallback = (): string => 'hist_tool_proper_uuid';
+        const idMapping = new Map<string, string>();
+
+        const result = MessageConverters.toIContent(
+          messageWithId,
+          'anthropic',
+          idMapping,
+          generateIdCallback,
+        );
+
+        // Should preserve the original ID mapping
+        const toolCall = result.blocks[0] as ToolCallBlock & {
+          originalId?: string;
+        };
+        expect(toolCall.originalId).toBe('existing_call_456');
+        // Should use callback to generate history ID
+        expect(toolCall.id).toBe('hist_tool_proper_uuid');
+      });
+
+      it('should handle tool responses with ID mapping lookup', () => {
+        // FAILING TEST: Tool responses should use ID mapping to find history IDs
+        const toolResponse: IMessage = {
+          role: 'tool',
+          tool_call_id: 'provider_call_789',
+          name: 'response_tool',
+          content: 'response content',
+        };
+
+        const idMapping = new Map([
+          ['provider_call_789', 'hist_tool_mapped_id'],
+        ]);
+
+        const result = MessageConverters.toIContent(
+          toolResponse,
+          'openai',
+          idMapping,
+        );
+
+        // Should map provider ID to history ID
+        const responseBlock = result.blocks[0] as ToolResponseBlock;
+        expect(responseBlock.callId).toBe('hist_tool_mapped_id');
+        expect(responseBlock.toolName).toBe('response_tool');
+      });
+    });
+
+    describe('Provider ID preservation and consistency', () => {
+      it('should preserve and reuse provider IDs when converting back', () => {
+        // FAILING TEST: Round-trip conversion should preserve original provider relationships
+        const originalMessage: IMessage = {
+          role: 'assistant',
+          content: 'Using a tool',
+          tool_calls: [
+            {
+              id: 'call_persistent_123',
+              type: 'function',
+              function: {
+                name: 'persistent_tool',
+                arguments: '{"keep": "this"}',
+              },
+            },
+          ],
+        };
+
+        // Convert to IContent (should preserve originalId)
+        const iContent = MessageConverters.toIContent(
+          originalMessage,
+          'openai',
+        );
+        const toolCall = iContent.blocks[1] as ToolCallBlock & {
+          originalId?: string;
+        };
+
+        expect(toolCall.originalId).toBe('call_persistent_123');
+
+        // Convert back to OpenAI format
+        const idMap = new Map([[toolCall.id, 'call_persistent_123']]); // Reuse original
+        const backToMessage = MessageConverters.toOpenAIMessage(
+          iContent,
+          idMap,
+        );
+
+        // Should have preserved the original ID
+        expect(backToMessage.tool_calls![0].id).toBe('call_persistent_123');
+        expect(backToMessage.tool_calls![0].function.name).toBe(
+          'persistent_tool',
+        );
+      });
+
+      it('should generate consistent Anthropic IDs with toolu_ prefix', () => {
+        // FAILING TEST: Anthropic conversion should enforce toolu_ prefix
+        const iContent: IContent = {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_uuid_123',
+              name: 'anthropic_tool',
+              parameters: { test: 'param' },
+            },
+          ],
+        };
+
+        const idMap = new Map([['hist_tool_uuid_123', 'toolu_anthropic_456']]);
+
+        const anthropicMessage = MessageConverters.toAnthropicMessage(
+          iContent,
+          idMap,
+        );
+
+        // Should use Anthropic format with toolu_ prefix
+        expect((anthropicMessage.content as any[])[0].id).toBe(
+          'toolu_anthropic_456',
+        );
+        expect((anthropicMessage.content as any[])[0].id).toMatch(/^toolu_/);
+      });
+
+      it('should auto-generate provider format IDs when missing from mapping', () => {
+        // FAILING TEST: Should generate appropriate provider IDs when not in mapping
+        const iContent: IContent = {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_unmapped',
+              name: 'unmapped_tool',
+              parameters: {},
+            },
+          ],
+        };
+
+        const emptyIdMap = new Map<string, string>(); // No mapping provided
+
+        const openAIMessage = MessageConverters.toOpenAIMessage(
+          iContent,
+          emptyIdMap,
+        );
+        const anthropicMessage = MessageConverters.toAnthropicMessage(
+          iContent,
+          emptyIdMap,
+        );
+
+        // Should generate appropriate format for each provider
+        expect(openAIMessage.tool_calls![0].id).toMatch(/^call_/);
+        expect((anthropicMessage.content as any[])[0].id).toMatch(/^toolu_/);
+      });
+    });
+
+    describe('Error handling and edge cases', () => {
+      it('should handle missing callback gracefully', () => {
+        // FAILING TEST: Should not crash when callback is undefined
+        const message: IMessage = {
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'call_123',
+              type: 'function',
+              function: { name: 'test', arguments: '{}' },
+            },
+          ],
+        };
+
+        // Call without generateId callback (should fall back to internal generation)
+        expect(() => {
+          const result = MessageConverters.toIContent(
+            message,
+            'openai',
+            new Map(),
+          );
+          expect(result.blocks).toHaveLength(1);
+          expect(result.blocks[0].type).toBe('tool_call');
+        }).not.toThrow();
+      });
+
+      it('should handle empty ID mapping without errors', () => {
+        // FAILING TEST: Should handle empty mapping gracefully
+        const toolResponse: IMessage = {
+          role: 'tool',
+          tool_call_id: 'unknown_call_id',
+          name: 'response_tool',
+          content: 'content',
+        };
+
+        expect(() => {
+          const result = MessageConverters.toIContent(
+            toolResponse,
+            'openai',
+            new Map(),
+          );
+          expect(result.speaker).toBe('tool');
+          expect(result.blocks[0].type).toBe('tool_response');
+        }).not.toThrow();
+      });
+    });
+  });
+});

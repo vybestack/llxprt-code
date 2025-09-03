@@ -25,6 +25,8 @@ import { ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
 import { OpenAITokenizer } from '../../providers/tokenizers/OpenAITokenizer.js';
 import { AnthropicTokenizer } from '../../providers/tokenizers/AnthropicTokenizer.js';
 import { TokensUpdatedEvent } from './HistoryEvents.js';
+import { DebugLogger } from '../../debug/index.js';
+import { randomUUID } from 'crypto';
 
 /**
  * Typed EventEmitter for HistoryService events
@@ -54,6 +56,7 @@ export class HistoryService
   private totalTokens: number = 0;
   private tokenizerCache = new Map<string, ITokenizer>();
   private tokenizerLock: Promise<void> = Promise.resolve();
+  private logger = new DebugLogger('llxprt:history:service');
 
   /**
    * Get or create tokenizer for a specific model
@@ -83,6 +86,22 @@ export class HistoryService
   }
 
   /**
+   * Generate a new normalized history tool ID.
+   * Format: hist_tool_<uuid-v4>
+   */
+  generateHistoryId(): string {
+    return `hist_tool_${randomUUID()}`;
+  }
+
+  /**
+   * Get a callback suitable for passing into converters
+   * which will generate normalized history IDs on demand.
+   */
+  getIdGeneratorCallback(): () => string {
+    return () => this.generateHistoryId();
+  }
+
+  /**
    * Get the current total token count
    */
   getTotalTokens(): number {
@@ -95,12 +114,35 @@ export class HistoryService
    * Filtering happens only when getting curated history.
    */
   add(content: IContent, modelName?: string): void {
+    // Log content being added with any tool call/response IDs
+    this.logger.debug('Adding content to history:', {
+      speaker: content.speaker,
+      blockTypes: content.blocks?.map((b) => b.type),
+      toolCallIds: content.blocks
+        ?.filter((b) => b.type === 'tool_call')
+        .map((b) => (b as ToolCallBlock).id),
+      toolResponseIds: content.blocks
+        ?.filter((b) => b.type === 'tool_response')
+        .map((b) => ({
+          callId: (b as ToolResponseBlock).callId,
+          toolName: (b as ToolResponseBlock).toolName,
+        })),
+      contentId: content.metadata?.id,
+      modelName,
+    });
+
     // Only do basic validation - must have valid speaker
     if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
+      this.logger.debug(
+        'Content added successfully, history length:',
+        this.history.length,
+      );
 
       // Update token count asynchronously but atomically
       this.updateTokenCount(content, modelName);
+    } else {
+      this.logger.debug('Content rejected - invalid speaker:', content.speaker);
     }
   }
 
@@ -135,9 +177,7 @@ export class HistoryService
         contentId: content.metadata?.id,
       };
 
-      if (process.env.DEBUG) {
-        console.debug('[HistoryService] Emitting tokensUpdated:', eventData);
-      }
+      this.logger.debug('Emitting tokensUpdated:', eventData);
 
       this.emit('tokensUpdated', eventData);
     });
@@ -191,7 +231,7 @@ export class HistoryService
           const blockTokens = await tokenizer.countTokens(blockText, modelName);
           totalTokens += blockTokens;
         } catch (error) {
-          console.warn(
+          this.logger.debug(
             'Error counting tokens for block, using fallback:',
             error,
           );
@@ -260,6 +300,7 @@ export class HistoryService
    */
   getCurated(): IContent[] {
     const curated: IContent[] = [];
+    let excludedCount = 0;
 
     for (const content of this.history) {
       if (content.speaker === 'human' || content.speaker === 'tool') {
@@ -269,9 +310,33 @@ export class HistoryService
         // Only include AI messages if they have valid content
         if (ContentValidation.hasContent(content)) {
           curated.push(content);
+        } else {
+          excludedCount++;
+          this.logger.debug('Excluding AI content without valid content:', {
+            blocks: content.blocks?.map((b) => ({
+              type: b.type,
+              hasContent:
+                b.type === 'text' ? !!(b as { text?: string }).text : true,
+            })),
+          });
         }
       }
     }
+
+    this.logger.debug('Curated history summary:', {
+      totalHistory: this.history.length,
+      curatedCount: curated.length,
+      excludedAiCount: excludedCount,
+      toolCallsInCurated: curated.reduce(
+        (acc, c) => acc + c.blocks.filter((b) => b.type === 'tool_call').length,
+        0,
+      ),
+      toolResponsesInCurated: curated.reduce(
+        (acc, c) =>
+          acc + c.blocks.filter((b) => b.type === 'tool_response').length,
+        0,
+      ),
+    });
 
     return curated;
   }
@@ -412,7 +477,9 @@ export class HistoryService
       if (content.speaker === 'tool') {
         for (const block of content.blocks) {
           if (block.type === 'tool_response') {
-            matchedCallIds.add((block as ToolResponseBlock).callId);
+            const callId = (block as ToolResponseBlock).callId;
+            matchedCallIds.add(callId);
+            this.logger.debug('Found tool response with callId:', callId);
           }
         }
       }
@@ -426,11 +493,26 @@ export class HistoryService
             const toolCall = block as ToolCallBlock;
             if (!matchedCallIds.has(toolCall.id)) {
               unmatchedCalls.push(toolCall);
+              this.logger.debug('Found unmatched tool call:', {
+                id: toolCall.id,
+                name: toolCall.name,
+              });
+            } else {
+              this.logger.debug('Found matched tool call:', {
+                id: toolCall.id,
+                name: toolCall.name,
+              });
             }
           }
         }
       }
     }
+
+    this.logger.debug('Unmatched tool calls summary:', {
+      totalUnmatched: unmatchedCalls.length,
+      unmatchedIds: unmatchedCalls.map((c) => c.id),
+      totalMatched: matchedCallIds.size,
+    });
 
     return unmatchedCalls;
   }

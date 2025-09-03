@@ -39,6 +39,7 @@ import {
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
+import { DebugLogger } from '../debug/index.js';
 
 /**
  * Custom createUserContent function that properly handles function response arrays.
@@ -251,6 +252,7 @@ export class GeminiChat {
   // model.
   private sendPromise: Promise<void> = Promise.resolve();
   private historyService: HistoryService;
+  private logger = new DebugLogger('llxprt:gemini:chat');
 
   constructor(
     private readonly config: Config,
@@ -264,16 +266,51 @@ export class GeminiChat {
     // Use provided HistoryService or create a new one
     this.historyService = historyService || new HistoryService();
 
+    this.logger.debug('GeminiChat initialized:', {
+      model: this.config.getModel(),
+      initialHistoryLength: initialHistory.length,
+      hasHistoryService: !!historyService,
+    });
+
     // Convert and add initial history if provided
     if (initialHistory.length > 0) {
       const currentModel = this.config.getModel();
+      this.logger.debug('Adding initial history to service:', {
+        count: initialHistory.length,
+      });
+      const idGen = this.historyService.getIdGeneratorCallback();
       for (const content of initialHistory) {
+        const matcher = this.makePositionMatcher();
         this.historyService.add(
-          ContentConverters.toIContent(content),
+          ContentConverters.toIContent(content, idGen, matcher),
           currentModel,
         );
       }
     }
+  }
+
+  /**
+   * Create a position-based matcher for Gemini tool responses.
+   * It returns the next unmatched tool call from the current history.
+   */
+  private makePositionMatcher():
+    | (() => { historyId: string; toolName?: string })
+    | undefined {
+    const queue = this.historyService
+      .findUnmatchedToolCalls()
+      .map((b) => ({ historyId: b.id, toolName: b.name }));
+
+    // Return undefined if there are no unmatched tool calls
+    if (queue.length === 0) {
+      return undefined;
+    }
+
+    // Return a function that always returns a valid value (never undefined)
+    return () => {
+      const result = queue.shift();
+      // If queue is empty, return a fallback value
+      return result || { historyId: '', toolName: undefined };
+    };
   }
 
   private _getRequestTextFromContents(contents: Content[]): string {
@@ -420,10 +457,14 @@ export class GeminiChat {
       params.message,
     );
     // Add user content to history service
-    this.historyService.add(
-      ContentConverters.toIContent(userContent),
-      this.config.getModel(),
-    );
+    {
+      const idGen = this.historyService.getIdGeneratorCallback();
+      const matcher = this.makePositionMatcher();
+      this.historyService.add(
+        ContentConverters.toIContent(userContent, idGen, matcher),
+        this.config.getModel(),
+      );
+    }
 
     // Get curated history and convert to Content[] for the request
     const iContents = this.historyService.getCurated();
@@ -511,8 +552,10 @@ export class GeminiChat {
             this.historyService.add(content, currentModel);
           }
           for (const content of automaticFunctionCallingHistory) {
+            const idGen = this.historyService.getIdGeneratorCallback();
+            const matcher = this.makePositionMatcher();
             this.historyService.add(
-              ContentConverters.toIContent(content),
+              ContentConverters.toIContent(content, idGen, matcher),
               currentModel,
             );
           }
@@ -522,8 +565,9 @@ export class GeminiChat {
           // Check if this is pure thinking content that should be filtered
           if (!this.isThoughtContent(outputContent)) {
             // Not pure thinking, add it
+            const idGen = this.historyService.getIdGeneratorCallback();
             this.historyService.add(
-              ContentConverters.toIContent(outputContent),
+              ContentConverters.toIContent(outputContent, idGen),
               this.config.getModel(),
             );
           }
@@ -536,8 +580,9 @@ export class GeminiChat {
             automaticFunctionCallingHistory.length === 0
           ) {
             const emptyModelContent: Content = { role: 'model', parts: [] };
+            const idGen = this.historyService.getIdGeneratorCallback();
             this.historyService.add(
-              ContentConverters.toIContent(emptyModelContent),
+              ContentConverters.toIContent(emptyModelContent, idGen),
               this.config.getModel(),
             );
           }
@@ -629,10 +674,14 @@ export class GeminiChat {
     );
 
     // Add user content to history ONCE before any attempts.
-    this.historyService.add(
-      ContentConverters.toIContent(userContent),
-      this.config.getModel(),
-    );
+    {
+      const idGen = this.historyService.getIdGeneratorCallback();
+      const matcher = this.makePositionMatcher();
+      this.historyService.add(
+        ContentConverters.toIContent(userContent, idGen, matcher),
+        this.config.getModel(),
+      );
+    }
     // Note: requestContents is no longer needed as adapter gets history from HistoryService
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -684,7 +733,13 @@ export class GeminiChat {
           // If the stream fails, remove the user message that was added.
           const allHistory = self.historyService.getAll();
           const lastIContent = allHistory[allHistory.length - 1];
-          const userIContent = ContentConverters.toIContent(userContent);
+          const idGen = self.historyService.getIdGeneratorCallback();
+          const matcher = self.makePositionMatcher();
+          const userIContent = ContentConverters.toIContent(
+            userContent,
+            idGen,
+            matcher,
+          );
 
           // Check if the last content is the user content we just added
           if (
@@ -730,6 +785,23 @@ export class GeminiChat {
       // Get curated history for the request
       const iContents = this.historyService.getCurated();
       const requestContents = ContentConverters.toGeminiContents(iContents);
+
+      // DEBUG: Check for malformed entries
+      if (process.env.DEBUG) {
+        console.log(
+          '[DEBUG] geminiChat requestContents:',
+          JSON.stringify(requestContents, null, 2),
+        );
+        for (let i = 0; i < requestContents.length; i++) {
+          const content = requestContents[i];
+          if (!content.role) {
+            console.error(
+              `[ERROR] Malformed content at index ${i} - missing role:`,
+              content,
+            );
+          }
+        }
+      }
 
       return this.contentGenerator.generateContentStream(
         {

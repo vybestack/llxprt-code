@@ -404,10 +404,11 @@ export class OpenAIProvider extends BaseProvider {
             );
 
             if (whitespaceResult.shouldYield) {
-              yield {
+              // Deep copy before yielding to prevent immutable object errors
+              yield this.deepCopy({
                 role: ContentGeneratorRole.ASSISTANT,
                 content: whitespaceResult.content,
-              };
+              });
             }
 
             // Update our tracking of processed data
@@ -421,10 +422,11 @@ export class OpenAIProvider extends BaseProvider {
               pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
             };
           } else {
-            yield {
+            // Deep copy before yielding to prevent immutable object errors
+            yield this.deepCopy({
               role: ContentGeneratorRole.ASSISTANT,
               content: delta.content,
-            };
+            });
             processedData = {
               fullContent: processedData.fullContent + delta.content,
               accumulatedToolCalls: processedData.accumulatedToolCalls,
@@ -446,9 +448,11 @@ export class OpenAIProvider extends BaseProvider {
 
         // Handle tool calls
         if (delta?.tool_calls) {
+          // Deep copy tool calls before modifying to avoid immutable object errors
+          const copiedToolCalls = this.deepCopy(delta.tool_calls);
           const accumulated: NonNullable<IMessage['tool_calls']> =
-            processedData.accumulatedToolCalls;
-          for (const toolCall of delta.tool_calls) {
+            this.deepCopy(processedData.accumulatedToolCalls);
+          for (const toolCall of copiedToolCalls) {
             this.toolFormatter.accumulateStreamingToolCall(
               toolCall,
               accumulated,
@@ -481,10 +485,11 @@ export class OpenAIProvider extends BaseProvider {
 
       // For non-streaming, yield content if no parser
       if (!requestConfig.parser && processedData.fullContent) {
-        yield {
+        // Deep copy before yielding to prevent immutable object errors
+        yield this.deepCopy({
           role: ContentGeneratorRole.ASSISTANT,
           content: processedData.fullContent,
-        };
+        });
         processedData.hasStreamedContent = true;
       }
     }
@@ -499,10 +504,11 @@ export class OpenAIProvider extends BaseProvider {
         () =>
           `Flushing trailing pending whitespace (len=${processedData.pendingWhitespace?.length ?? 0}) at stream end`,
       );
-      yield {
+      // Deep copy before yielding to prevent immutable object errors
+      yield this.deepCopy({
         role: ContentGeneratorRole.ASSISTANT,
         content: processedData.pendingWhitespace,
-      };
+      });
       processedData.hasStreamedContent = true;
       processedData.fullContent += processedData.pendingWhitespace;
       processedData.pendingWhitespace = null;
@@ -634,6 +640,32 @@ export class OpenAIProvider extends BaseProvider {
 
   override clearState(): void {
     // No state to clear in base OpenAI provider
+  }
+
+  /**
+   * Deep copy utility to prevent modifying immutable objects
+   * Creates a proper deep copy of any JSON-serializable object
+   */
+  private deepCopy<T>(obj: T): T {
+    if (obj === null || obj === undefined) {
+      return obj;
+    }
+
+    // Handle primitive types
+    if (typeof obj !== 'object') {
+      return obj;
+    }
+
+    // Create deep copy via JSON serialization
+    // This ensures complete isolation from original object
+    try {
+      return JSON.parse(JSON.stringify(obj));
+    } catch (error) {
+      this.logger.debug(
+        () => `Failed to deep copy object: ${error}. Returning original.`,
+      );
+      return obj;
+    }
   }
 
   /**
@@ -883,7 +915,10 @@ export class OpenAIProvider extends BaseProvider {
     const currentToolFormat = this.getToolFormat();
 
     // Format tools using formatToolsForAPI method
-    const formattedTools = tools ? this.formatToolsForAPI(tools) : undefined;
+    // Deep copy tools before formatting to prevent modifications to original
+    const formattedTools = tools
+      ? this.formatToolsForAPI(this.deepCopy(tools))
+      : undefined;
 
     // Get stream_options from ephemeral settings (not model params)
     const streamOptions =
@@ -1043,14 +1078,16 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     if (choice?.message.tool_calls) {
+      // Deep copy tool calls before processing to avoid immutable object errors
+      const copiedToolCalls = this.deepCopy(choice.message.tool_calls);
       // Convert tool calls to the standard format
-      for (const toolCall of choice.message.tool_calls) {
+      for (const toolCall of copiedToolCalls) {
         if (toolCall.type === 'function' && toolCall.function) {
           // Don't fix double stringification here - it's handled later in the final processing
           accumulatedToolCalls.push({
             id: toolCall.id,
             type: 'function' as const,
-            function: toolCall.function,
+            function: this.deepCopy(toolCall.function),
           });
         }
       }
@@ -1123,25 +1160,29 @@ export class OpenAIProvider extends BaseProvider {
           },
         }));
 
-        yield {
+        // Deep copy before emitting to prevent modifications to immutable objects
+        yield this.deepCopy({
           role: ContentGeneratorRole.ASSISTANT,
           content: cleanedContent,
           tool_calls: standardToolCalls,
           usage: usageData,
-        };
+        });
       } else {
         // No tool calls found, yield cleaned content
-        yield {
+        // Deep copy before emitting to prevent modifications to immutable objects
+        yield this.deepCopy({
           role: ContentGeneratorRole.ASSISTANT,
           content: cleanedContent,
           usage: usageData,
-        };
+        });
       }
     } else {
       // Standard OpenAI tool call handling
       if (accumulatedToolCalls.length > 0) {
+        // Deep copy tool calls before processing to avoid modifying immutables
+        const copiedToolCalls = this.deepCopy(accumulatedToolCalls);
         // Process tool calls with Qwen-specific fixes if needed
-        const fixedToolCalls = this.processQwenToolCalls(accumulatedToolCalls);
+        const fixedToolCalls = this.processQwenToolCalls(copiedToolCalls);
 
         if (this.isUsingQwen()) {
           this.logger.debug(
@@ -1164,14 +1205,16 @@ export class OpenAIProvider extends BaseProvider {
           fixedToolCalls,
           usageData,
         );
-        yield finalMessage;
+        // Deep copy before yielding to prevent immutable object errors
+        yield this.deepCopy(finalMessage);
       } else if (usageData) {
         // Always emit usage data so downstream consumers can update stats
-        yield {
+        // Deep copy before emitting to prevent modifications to immutable objects
+        yield this.deepCopy({
           role: ContentGeneratorRole.ASSISTANT,
           content: '',
           usage: usageData,
-        };
+        });
       }
     }
   }

@@ -23,6 +23,7 @@ import {
   ServerGeminiToolCallRequestEvent,
   ServerGeminiUsageMetadataEvent,
 } from '../../core/turn.js';
+import { DebugLogger } from '../../debug/index.js';
 
 /**
  * Wrapper that makes any IProvider compatible with Gemini's ContentGenerator interface
@@ -30,9 +31,44 @@ import {
 
 export class GeminiCompatibleWrapper {
   private readonly provider: Provider;
+  private logger = new DebugLogger('llxprt:gemini:wrapper');
 
   constructor(provider: Provider) {
     this.provider = provider;
+    this.logger.debug(
+      'GeminiCompatibleWrapper initialized for provider:',
+      provider.name,
+    );
+  }
+
+  /**
+   * Transform a history ID to the provider-specific format by adjusting prefix only.
+   * - OpenAI: hist_tool_<x> -> call_<x>
+   * - Anthropic: hist_tool_<x> -> toolu_<x>
+   * - Gemini or others: preserve as-is
+   */
+  private transformIdForProvider(id?: string): string | undefined {
+    if (!id) return undefined;
+    const name = (this.provider?.name || '').toLowerCase();
+    const histPrefix = 'hist_tool_';
+    const hasHist = id.startsWith(histPrefix);
+    const suffix = hasHist ? id.substring(histPrefix.length) : id;
+
+    if (name === 'openai') {
+      if (hasHist) return `call_${suffix}`;
+      // If already 'call_' keep, if 'toolu_' convert to 'call_'
+      if (id.startsWith('toolu_'))
+        return `call_${id.substring('toolu_'.length)}`;
+      return id.startsWith('call_') ? id : `call_${suffix}`;
+    }
+    if (name === 'anthropic') {
+      if (hasHist) return `toolu_${suffix}`;
+      if (id.startsWith('call_'))
+        return `toolu_${id.substring('call_'.length)}`;
+      return id.startsWith('toolu_') ? id : `toolu_${suffix}`;
+    }
+    // Gemini or unknown providers: keep original
+    return id;
   }
 
   /**
@@ -392,16 +428,44 @@ export class GeminiCompatibleWrapper {
   private convertContentsToMessages(
     contents: ContentListUnion,
   ): ProviderMessage[] {
-    // Debug logging for OpenRouter issue
-    if (process.env.DEBUG) {
-      console.log(
-        '[GeminiCompatibleWrapper] convertContentsToMessages input:',
-        {
-          type: Array.isArray(contents) ? 'array' : typeof contents,
-          length: Array.isArray(contents) ? contents.length : 'N/A',
-          contents: JSON.stringify(contents).substring(0, 500),
-        },
-      );
+    // Debug logging for conversion tracking
+    this.logger.debug('convertContentsToMessages input:', {
+      type: Array.isArray(contents) ? 'array' : typeof contents,
+      length: Array.isArray(contents) ? contents.length : 'N/A',
+      contentsPreview: JSON.stringify(contents).substring(0, 500),
+    });
+
+    // Track tool call/response IDs in input
+    if (Array.isArray(contents)) {
+      const toolCallIds = contents
+        .flatMap((content: Content) =>
+          Array.isArray(content.parts)
+            ? content.parts
+                .filter((p: Part) => 'functionCall' in p)
+                .map(
+                  (p: Part) =>
+                    (p as { functionCall?: { id?: string } }).functionCall?.id,
+                )
+            : [],
+        )
+        .filter(Boolean);
+      const toolResponseIds = contents
+        .flatMap((content: Content) =>
+          Array.isArray(content.parts)
+            ? content.parts
+                .filter((p: Part) => 'functionResponse' in p)
+                .map((p: Part) => ({
+                  id: (p as { functionResponse?: { id?: string } })
+                    .functionResponse?.id,
+                  name: (p as { functionResponse?: { name?: string } })
+                    .functionResponse?.name,
+                }))
+            : [],
+        )
+        .filter((item: { id?: string; name?: string }) => item.id);
+
+      this.logger.debug('Input tool call IDs:', toolCallIds);
+      this.logger.debug('Input tool response IDs:', toolResponseIds);
     }
 
     // Normalize ContentListUnion to Content[]
@@ -546,8 +610,21 @@ export class GeminiCompatibleWrapper {
             content = JSON.stringify(response);
           }
 
-          const toolCallId = (part.functionResponse as { id?: string }).id;
+          const originalId = (part.functionResponse as { id?: string }).id;
+          const toolCallId = this.transformIdForProvider(originalId);
+
+          this.logger.debug('Converting function response to tool message:', {
+            originalId: toolCallId,
+            name: part.functionResponse.name,
+            contentLength: content.length,
+            hasError: !!response?.error,
+          });
+
           if (!toolCallId) {
+            this.logger.debug('Missing tool_call_id for function response:', {
+              name: part.functionResponse.name,
+              response: JSON.stringify(response).substring(0, 200),
+            });
             throw new Error(
               `Tool response for '${part.functionResponse.name}' is missing required tool_call_id. This ID must match the original tool call ID from the model.`,
             );
@@ -590,6 +667,16 @@ export class GeminiCompatibleWrapper {
           } => 'functionCall' in part,
         );
 
+        if (functionCalls.length > 0) {
+          this.logger.debug(
+            'Found function calls in content:',
+            functionCalls.map((fc) => ({
+              id: fc.functionCall.id,
+              name: fc.functionCall.name,
+            })),
+          );
+        }
+
         // Get all parts
         const allParts = content.parts || [];
 
@@ -625,21 +712,55 @@ export class GeminiCompatibleWrapper {
 
         // If this is an assistant message with function calls, add them
         if (role === 'assistant' && functionCalls.length > 0) {
-          message.tool_calls = functionCalls.map((part) => ({
-            id:
-              part.functionCall.id ||
-              `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            type: 'function' as const,
-            function: {
+          message.tool_calls = functionCalls.map((part) => {
+            const transformed = this.transformIdForProvider(
+              (part.functionCall as { id?: string }).id,
+            );
+            const toolCallId =
+              transformed ||
+              (this.provider.name === 'anthropic'
+                ? `toolu_${Date.now()}_${Math.random()
+                    .toString(36)
+                    .substring(2, 11)}`
+                : `call_${Date.now()}_${Math.random()
+                    .toString(36)
+                    .substring(2, 11)}`);
+
+            this.logger.debug('Converting function call to tool_call:', {
+              originalId: (part.functionCall as { id?: string }).id,
+              finalId: toolCallId,
               name: part.functionCall.name,
-              arguments: JSON.stringify(part.functionCall.args || {}),
-            },
-          }));
+              hasArgs: !!part.functionCall.args,
+            });
+
+            return {
+              id: toolCallId,
+              type: 'function' as const,
+              function: {
+                name: part.functionCall.name,
+                arguments: JSON.stringify(part.functionCall.args || {}),
+              },
+            };
+          });
         }
 
         messages.push(message);
       }
     }
+
+    this.logger.debug('convertContentsToMessages result:', {
+      messageCount: messages.length,
+      roleSequence: messages.map((m) => m.role),
+      toolCallCounts: messages.filter((m) => m.tool_calls).length,
+      toolResponseCounts: messages.filter((m) => m.role === 'tool').length,
+      toolCallIds: messages
+        .filter((m) => m.tool_calls)
+        .flatMap((m) => m.tool_calls?.map((tc) => tc.id) || []),
+      toolResponseIds: messages
+        .filter((m) => m.role === 'tool')
+        .map((m) => m.tool_call_id)
+        .filter(Boolean),
+    });
 
     return messages;
   }
@@ -719,6 +840,12 @@ export class GeminiCompatibleWrapper {
         } catch (_e) {
           // Use empty object as fallback
         }
+
+        this.logger.debug('Converting tool call to functionCall part:', {
+          toolCallId: toolCall.id,
+          name: toolCall.function.name,
+          hasArgs: Object.keys(args).length > 0,
+        });
 
         parts.push({
           functionCall: {

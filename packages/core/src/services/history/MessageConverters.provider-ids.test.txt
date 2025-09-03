@@ -1,0 +1,378 @@
+/**
+ * Copyright 2025 Vybestack LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { describe, it, expect } from 'vitest';
+import { MessageConverters } from './MessageConverters.js';
+import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
+import type { IMessage } from '../../providers/IMessage.js';
+
+describe('MessageConverters - Provider-Specific ID Conversion', () => {
+  describe('toAnthropicMessage - Converting from History to Anthropic', () => {
+    it('should convert history tool IDs to Anthropic format', () => {
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_abc123',
+            name: 'search',
+            parameters: { query: 'test' },
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      // Should just transform the ID format, no mapping needed
+      const anthropicMessage = MessageConverters.toAnthropicMessage(iContent);
+
+      // Should have content array with tool_use
+      expect(anthropicMessage.content).toBeDefined();
+      expect(Array.isArray(anthropicMessage.content)).toBe(true);
+
+      // Find the tool_use in content array
+      const toolUse = anthropicMessage.content.find(
+        (c: any) => c.type === 'tool_use',
+      );
+      expect(toolUse).toBeDefined();
+      expect(toolUse.id).toMatch(/^toolu_/);
+      expect(toolUse.id).not.toBe('hist_tool_abc123');
+    });
+
+    it('should convert history tool response IDs to Anthropic format', () => {
+      const iContent: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_abc123',
+            toolName: 'search',
+            result: { output: 'results' },
+          } as ToolResponseBlock,
+        ],
+        metadata: {},
+      };
+
+      const anthropicMessage = MessageConverters.toAnthropicMessage(iContent);
+
+      // Anthropic uses 'user' role for tool responses
+      expect(anthropicMessage.role).toBe('user');
+
+      // Should have content array with tool_result
+      expect(anthropicMessage.content).toBeDefined();
+      expect(Array.isArray(anthropicMessage.content)).toBe(true);
+
+      const toolResult = anthropicMessage.content.find(
+        (c: any) => c.type === 'tool_result',
+      );
+      expect(toolResult).toBeDefined();
+      expect(toolResult.tool_use_id).toMatch(/^toolu_/);
+      expect(toolResult.tool_use_id).not.toBe('hist_tool_abc123');
+    });
+
+    it('should maintain ID consistency between tool call and response', () => {
+      // Tool call
+      const toolCallContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_xyz789',
+            name: 'read_file',
+            parameters: { path: '/test.ts' },
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      // Tool response with matching ID
+      const toolResponseContent: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_xyz789', // Same history ID
+            toolName: 'read_file',
+            result: { content: 'file contents' },
+          } as ToolResponseBlock,
+        ],
+        metadata: {},
+      };
+
+      const callMessage = MessageConverters.toAnthropicMessage(toolCallContent);
+      const responseMessage =
+        MessageConverters.toAnthropicMessage(toolResponseContent);
+
+      // Get tool_use from call message
+      const toolUse = callMessage.content.find(
+        (c: any) => c.type === 'tool_use',
+      );
+      expect(toolUse).toBeDefined();
+      expect(toolUse.id).toMatch(/^toolu_/);
+
+      // Get tool_result from response message
+      const toolResult = responseMessage.content.find(
+        (c: any) => c.type === 'tool_result',
+      );
+      expect(toolResult).toBeDefined();
+      expect(toolResult.tool_use_id).toMatch(/^toolu_/);
+
+      // IDs should match (deterministic transformation)
+      expect(toolResult.tool_use_id).toBe(toolUse.id);
+    });
+  });
+
+  describe('toOpenAIMessage - Converting from History to OpenAI', () => {
+    it('should convert history tool IDs to OpenAI format', () => {
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_def456',
+            name: 'calculate',
+            parameters: { x: 5, y: 10 },
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      const openAIMessage = MessageConverters.toOpenAIMessage(iContent);
+
+      // Should have tool_calls array
+      expect(openAIMessage.tool_calls).toBeDefined();
+      expect(openAIMessage.tool_calls).toHaveLength(1);
+
+      // ID should be converted to OpenAI format
+      const toolCall = openAIMessage.tool_calls![0];
+      expect(toolCall.id).toMatch(/^call_/);
+      expect(toolCall.id).not.toBe('hist_tool_def456');
+    });
+
+    it('should convert history tool response IDs to OpenAI format', () => {
+      const iContent: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_def456',
+            toolName: 'calculate',
+            result: { result: 50 },
+          } as ToolResponseBlock,
+        ],
+        metadata: {},
+      };
+
+      const openAIMessage = MessageConverters.toOpenAIMessage(iContent);
+
+      // Should be tool role
+      expect(openAIMessage.role).toBe('tool');
+
+      // tool_call_id should be converted to OpenAI format
+      expect(openAIMessage.tool_call_id).toMatch(/^call_/);
+      expect(openAIMessage.tool_call_id).not.toBe('hist_tool_def456');
+    });
+  });
+
+  describe('toGeminiMessage - Converting from History to Gemini', () => {
+    it('should preserve history IDs for Gemini (position-based matching)', () => {
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_ghi789',
+            name: 'list_files',
+            parameters: { directory: '/src' },
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      const geminiMessage = MessageConverters.toGeminiMessage(iContent);
+
+      // Gemini uses parts array with functionCall objects
+      expect(geminiMessage.parts).toBeDefined();
+      expect(geminiMessage.parts).toHaveLength(1);
+
+      // For Gemini, the history ID should be preserved in the functionCall
+      const functionCall = geminiMessage.parts[0].functionCall;
+      expect(functionCall).toBeDefined();
+      expect(functionCall.name).toBe('list_files');
+      expect(functionCall.id).toBe('hist_tool_ghi789'); // History ID preserved
+    });
+  });
+
+  describe('Real-world Provider Switching with MessageConverters', () => {
+    it('should handle OpenAI to Anthropic switching scenario', () => {
+      // This simulates the exact scenario from the debug log
+
+      // Step 1: History format after conversion from OpenAI
+      const historyToolCall: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: "I'll help you analyze files.",
+          },
+          {
+            type: 'tool_call',
+            id: 'hist_tool_session123_1', // Should be normalized to history
+            name: 'glob',
+            parameters: { pattern: '**/*.ts' },
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      // Step 2: History format tool response
+      const historyToolResponse: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_session123_1', // Matching history ID
+            toolName: 'glob',
+            result: {
+              output: 'glob output exceeded token limit and was truncated...',
+            },
+          } as ToolResponseBlock,
+        ],
+        metadata: {},
+      };
+
+      // Convert to Anthropic format
+      const anthropicCall =
+        MessageConverters.toAnthropicMessage(historyToolCall);
+      const anthropicResponse =
+        MessageConverters.toAnthropicMessage(historyToolResponse);
+
+      // Get tool_use from call message
+      const toolUse = anthropicCall.content.find(
+        (c: any) => c.type === 'tool_use',
+      );
+      expect(toolUse).toBeDefined();
+      expect(toolUse.id).toMatch(/^toolu_/);
+
+      // Get tool_result from response message
+      const toolResult = anthropicResponse.content.find(
+        (c: any) => c.type === 'tool_result',
+      );
+      expect(toolResult).toBeDefined();
+      expect(toolResult.tool_use_id).toMatch(/^toolu_/);
+
+      // They must match to avoid the 400 error
+      expect(toolResult.tool_use_id).toBe(toolUse.id);
+    });
+
+    it('should handle multiple providers in same conversation', () => {
+      // Start with history format (normalized from any provider)
+      const historyContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: 'hist_tool_multi_1',
+            name: 'search',
+            parameters: { q: 'test' },
+          } as ToolCallBlock,
+          {
+            type: 'tool_call',
+            id: 'hist_tool_multi_2',
+            name: 'read',
+            parameters: { file: 'test.ts' },
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      // Convert to different provider formats
+      const anthropicMsg = MessageConverters.toAnthropicMessage(historyContent);
+      const openAIMsg = MessageConverters.toOpenAIMessage(historyContent);
+      const geminiMsg = MessageConverters.toGeminiMessage(historyContent);
+
+      // Each should have provider-specific ID format
+      const anthropicToolUses = anthropicMsg.content.filter(
+        (c: any) => c.type === 'tool_use',
+      );
+      expect(anthropicToolUses).toHaveLength(2);
+      expect(anthropicToolUses[0].id).toMatch(/^toolu_/);
+      expect(anthropicToolUses[1].id).toMatch(/^toolu_/);
+
+      expect(openAIMsg.tool_calls![0].id).toMatch(/^call_/);
+      expect(openAIMsg.tool_calls![1].id).toMatch(/^call_/);
+
+      // Gemini should preserve history IDs (uses position-based matching)
+      expect(geminiMsg.parts).toBeDefined();
+      expect(geminiMsg.parts).toHaveLength(2);
+      expect(geminiMsg.parts[0].functionCall).toBeDefined();
+      expect(geminiMsg.parts[0].functionCall.id).toBe('hist_tool_multi_1');
+      expect(geminiMsg.parts[1].functionCall.id).toBe('hist_tool_multi_2');
+    });
+  });
+
+  describe('Edge Cases', () => {
+    it('should handle missing tool IDs gracefully', () => {
+      const iContent: IContent = {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'tool_call',
+            id: '', // Empty ID
+            name: 'test',
+            parameters: {},
+          } as ToolCallBlock,
+        ],
+        metadata: {},
+      };
+
+      // Should generate appropriate provider IDs
+      const anthropicMsg = MessageConverters.toAnthropicMessage(iContent);
+      const openAIMsg = MessageConverters.toOpenAIMessage(iContent);
+
+      // Check Anthropic format
+      const toolUse = anthropicMsg.content.find(
+        (c: any) => c.type === 'tool_use',
+      );
+      expect(toolUse).toBeDefined();
+      expect(toolUse.id).toMatch(/^toolu_/);
+
+      // Check OpenAI format
+      expect(openAIMsg.tool_calls![0].id).toMatch(/^call_/);
+    });
+
+    it('should handle tool responses without matching calls', () => {
+      const iContent: IContent = {
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'hist_tool_orphan',
+            toolName: 'orphan_tool',
+            result: { error: 'No matching call' },
+          } as ToolResponseBlock,
+        ],
+        metadata: {},
+      };
+
+      // Should still generate valid provider IDs
+      const anthropicMsg = MessageConverters.toAnthropicMessage(iContent);
+      const openAIMsg = MessageConverters.toOpenAIMessage(iContent);
+
+      expect(anthropicMsg.tool_call_id).toMatch(/^toolu_/);
+      expect(openAIMsg.tool_call_id).toMatch(/^call_/);
+    });
+  });
+});
