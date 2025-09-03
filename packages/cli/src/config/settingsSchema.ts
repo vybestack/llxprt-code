@@ -624,7 +624,7 @@ export const SETTINGS_SCHEMA = {
         category: 'MCP',
         requiresRestart: true,
         default: undefined as string[] | undefined,
-        description: 'A whitelist of MCP servers to allow.',
+        description: 'A list of MCP servers to allow.',
         showInDialog: false,
       },
       excluded: {
@@ -633,7 +633,7 @@ export const SETTINGS_SCHEMA = {
         category: 'MCP',
         requiresRestart: true,
         default: undefined as string[] | undefined,
-        description: 'A blacklist of MCP servers to exclude.',
+        description: 'A list of MCP servers to exclude.',
         showInDialog: false,
       },
     },
