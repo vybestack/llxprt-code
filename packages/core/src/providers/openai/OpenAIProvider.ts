@@ -914,23 +914,39 @@ export class OpenAIProvider extends BaseProvider {
    */
   async *generateChatCompletionIContent(
     content: IContent[],
-    tools?: ITool[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
   ): AsyncIterableIterator<IContent> {
-    // Convert IContent to OpenAI message format for API call
-    const messages: IMessage[] = [];
+    // Convert IContent directly to OpenAI API format (no IMessage!)
+    const apiMessages: Array<{
+      role: string;
+      content: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+      tool_call_id?: string;
+    }> = [];
 
     for (const c of content) {
       if (c.speaker === 'human') {
-        // Find text block
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
           | undefined;
-        messages.push({
-          role: ContentGeneratorRole.USER,
+        apiMessages.push({
+          role: 'user',
           content: textBlock?.text || '',
-        } as IMessage);
+        });
       } else if (c.speaker === 'ai') {
-        // Merge all text blocks into single content string
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -938,10 +954,7 @@ export class OpenAIProvider extends BaseProvider {
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
 
-        // Build content string from text blocks
         const contentText = textBlocks.map((b) => b.text).join('');
-
-        // Build tool_calls if any tool_call blocks present
         const toolCalls =
           toolCallBlocks.length > 0
             ? toolCallBlocks.map((tc) => ({
@@ -954,122 +967,153 @@ export class OpenAIProvider extends BaseProvider {
               }))
             : undefined;
 
-        messages.push({
-          role: ContentGeneratorRole.ASSISTANT,
-          content: contentText,
+        apiMessages.push({
+          role: 'assistant',
+          content: contentText || null,
           tool_calls: toolCalls,
-        } as IMessage);
+        });
       } else if (c.speaker === 'tool') {
-        // Find tool_response block
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
-
         if (!toolResponseBlock) {
           throw new Error('Tool content must have a tool_response block');
         }
 
-        messages.push({
-          role: ContentGeneratorRole.TOOL,
+        apiMessages.push({
+          role: 'tool',
           content: JSON.stringify(toolResponseBlock.result),
           tool_call_id: toolResponseBlock.callId,
-          tool_name: toolResponseBlock.toolName,
-        } as IMessage);
+        });
       } else {
         throw new Error(`Unknown speaker type: ${c.speaker}`);
       }
     }
 
-    // Stream the IMessage response and convert to IContent chunks
-    // Need to accumulate tool calls during streaming
-    const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
-    let hasYieldedText = false;
-    let lastUsageData:
-      | {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        }
-      | undefined;
+    // Convert Gemini format tools to OpenAI format
+    const apiTools = tools
+      ? tools[0].functionDeclarations.map((decl) => ({
+          type: 'function' as const,
+          function: {
+            name: decl.name,
+            description: decl.description || '',
+            parameters: decl.parameters || {},
+          },
+        }))
+      : undefined;
 
-    for await (const chunk of this.generateChatCompletion(messages, tools)) {
-      if (typeof chunk === 'string') {
-        // String chunk - yield as text block immediately for streaming
-        const result: IContent = {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: chunk }],
-        };
-        this.logger.debug('Yielding string chunk as IContent:', result);
-        yield result;
-        hasYieldedText = true;
-      } else {
-        const msg = chunk as IMessage;
-        this.logger.debug(
-          () =>
-            `generateChatCompletionIContent - Got IMessage chunk: ${JSON.stringify(msg)}`,
-        );
+    // Get auth token
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      throw new Error('OpenAI API key is required');
+    }
 
-        if (msg.role === ContentGeneratorRole.ASSISTANT) {
-          // Handle text content - yield immediately for streaming
-          if (msg.content) {
-            const textResult: IContent = {
+    // Build request
+    const requestBody = {
+      model: this.currentModel || 'gpt-4o-mini',
+      messages: apiMessages,
+      ...(apiTools && { tools: apiTools }),
+      stream: true,
+      ...(this.modelParams || {}),
+    };
+
+    // Make direct API call to OpenAI
+    const response = await fetch(`${this.baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI API error: ${error}`);
+    }
+
+    // Parse streaming response and emit IContent
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const accumulatedToolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }> = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+
+          if (delta?.content) {
+            // Emit text content immediately as IContent
+            yield {
               speaker: 'ai',
-              blocks: [{ type: 'text', text: msg.content }],
-            };
-            yield textResult;
-            hasYieldedText = true;
+              blocks: [{ type: 'text', text: delta.content }],
+            } as IContent;
           }
 
-          // Handle tool calls - accumulate them
-          if (msg.tool_calls) {
-            this.logger.debug(
-              () =>
-                `generateChatCompletionIContent - Found tool_calls in msg: ${msg.tool_calls?.length || 0}`,
-            );
-            // Deep copy tool calls before accumulating
-            const copiedToolCalls = this.deepCopy(msg.tool_calls);
-            for (let i = 0; i < copiedToolCalls.length; i++) {
-              const toolCall = copiedToolCalls[i];
-              // Add index to the tool call for proper accumulation
-              this.toolFormatter.accumulateStreamingToolCall(
-                { ...toolCall, index: i },
-                accumulatedToolCalls,
-                'openai',
-              );
+          if (delta?.tool_calls) {
+            // Accumulate tool calls
+            for (const toolCall of delta.tool_calls) {
+              if (toolCall.index !== undefined) {
+                if (!accumulatedToolCalls[toolCall.index]) {
+                  accumulatedToolCalls[toolCall.index] = {
+                    id: toolCall.id || '',
+                    type: 'function',
+                    function: { name: '', arguments: '' },
+                  };
+                }
+                const tc = accumulatedToolCalls[toolCall.index];
+                if (toolCall.id) tc.id = toolCall.id;
+                if (toolCall.function?.name)
+                  tc.function.name = toolCall.function.name;
+                if (toolCall.function?.arguments)
+                  tc.function.arguments += toolCall.function.arguments;
+              }
             }
-            this.logger.debug(
-              () =>
-                `After accumulation, have ${accumulatedToolCalls.length} tool calls`,
-            );
           }
-
-          // Track usage data
-          if (msg.usage) {
-            lastUsageData = msg.usage;
-          }
+        } catch (e) {
+          // Skip invalid JSON lines
+          this.logger.debug(() => `Failed to parse SSE line: ${e}`);
         }
       }
     }
 
-    // After streaming is complete, yield accumulated tool calls if any
+    // Emit accumulated tool calls as IContent if any
     if (accumulatedToolCalls.length > 0) {
-      const toolCallResult: IContent = {
-        speaker: 'ai',
-        blocks: [],
-      };
-
-      // Add accumulated tool calls as blocks
+      const blocks: ToolCallBlock[] = [];
       for (const tc of accumulatedToolCalls) {
+        if (!tc) continue;
         try {
-          toolCallResult.blocks.push({
+          blocks.push({
             type: 'tool_call',
             id: tc.id,
             name: tc.function.name,
             parameters: JSON.parse(tc.function.arguments),
-          } as ToolCallBlock);
+          });
         } catch (_e) {
-          // If parsing fails, pass arguments as string
-          toolCallResult.blocks.push({
+          // If parsing fails, emit with string parameters
+          blocks.push({
             type: 'tool_call',
             id: tc.id,
             name: tc.function.name,
@@ -1078,39 +1122,14 @@ export class OpenAIProvider extends BaseProvider {
         }
       }
 
-      // Add usage metadata if we have it
-      if (lastUsageData) {
-        toolCallResult.metadata = {
-          usage: {
-            promptTokens: lastUsageData.prompt_tokens,
-            completionTokens: lastUsageData.completion_tokens,
-            totalTokens: lastUsageData.total_tokens,
-          },
-        };
+      if (blocks.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks,
+        } as IContent;
       }
-
-      this.logger.debug(
-        'Yielding final tool calls as IContent:',
-        toolCallResult,
-      );
-      yield toolCallResult;
-    } else if (!hasYieldedText && lastUsageData) {
-      // If we haven't yielded anything but have usage data, yield it
-      const usageResult: IContent = {
-        speaker: 'ai',
-        blocks: [],
-        metadata: {
-          usage: {
-            promptTokens: lastUsageData.prompt_tokens,
-            completionTokens: lastUsageData.completion_tokens,
-            totalTokens: lastUsageData.total_tokens,
-          },
-        },
-      };
-      yield usageResult;
     }
   }
-
   /**
    * Initialize provider configuration from SettingsService
    */

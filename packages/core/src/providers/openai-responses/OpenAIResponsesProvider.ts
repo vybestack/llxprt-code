@@ -668,26 +668,51 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   /**
    * Generate chat completion with IContent interface
-   * Convert between IContent and IMessage formats
+   * Direct implementation for OpenAI Responses API without IMessage conversion
    */
   async *generateChatCompletionIContent(
     content: IContent[],
-    tools?: ITool[],
-    toolFormat?: string,
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+    _toolFormat?: string,
   ): AsyncIterableIterator<IContent> {
-    // Convert IContent to IMessage
-    const messages: IMessage[] = content.map((c) => {
+    // Check if API key is available
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      throw new Error('OpenAI API key is required to generate completions');
+    }
+
+    // Convert IContent directly to OpenAI format messages
+    const messages: Array<{
+      role: string;
+      content?: string;
+      tool_calls?: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+      tool_call_id?: string;
+      name?: string;
+    }> = [];
+
+    for (const c of content) {
       if (c.speaker === 'human') {
-        // Find text block
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
           | undefined;
-        return {
-          role: ContentGeneratorRole.USER,
+        messages.push({
+          role: 'user',
           content: textBlock?.text || '',
-        } as IMessage;
+        });
       } else if (c.speaker === 'ai') {
-        // Merge all text blocks into single content string
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -695,129 +720,150 @@ export class OpenAIResponsesProvider extends BaseProvider {
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
 
-        // Build content string from text blocks
         const contentText = textBlocks.map((b) => b.text).join('');
+        const message: {
+          role: 'assistant';
+          content: string | undefined;
+          tool_calls?: Array<{
+            id: string;
+            type: 'function';
+            function: {
+              name: string;
+              arguments: string;
+            };
+          }>;
+        } = {
+          role: 'assistant',
+          content: contentText || undefined,
+        };
 
-        // Build tool_calls if any tool_call blocks present
-        const toolCalls =
-          toolCallBlocks.length > 0
-            ? toolCallBlocks.map((tc) => ({
-                id: tc.id,
-                type: 'function' as const,
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.parameters),
-                },
-              }))
-            : undefined;
+        if (toolCallBlocks.length > 0) {
+          message.tool_calls = toolCallBlocks.map((tc) => ({
+            id: tc.id.replace(/^hist_tool_/, 'call_'),
+            type: 'function' as const,
+            function: {
+              name: tc.name,
+              arguments: JSON.stringify(tc.parameters),
+            },
+          }));
+        }
 
-        return {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: contentText,
-          tool_calls: toolCalls,
-        } as IMessage;
+        messages.push(message);
       } else if (c.speaker === 'tool') {
-        // Find tool_response block
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
-
         if (!toolResponseBlock) {
           throw new Error('Tool content must have a tool_response block');
         }
 
-        return {
-          role: ContentGeneratorRole.TOOL,
+        messages.push({
+          role: 'tool',
           content: JSON.stringify(toolResponseBlock.result),
-          tool_call_id: toolResponseBlock.callId,
-          tool_name: toolResponseBlock.toolName,
-        } as IMessage;
-      } else {
-        throw new Error(`Unknown speaker type: ${c.speaker}`);
+          tool_call_id: toolResponseBlock.callId.replace(
+            /^hist_tool_/,
+            'call_',
+          ),
+          name: toolResponseBlock.toolName,
+        });
       }
+    }
+
+    // Convert Gemini format tools to OpenAI format
+    const openaiTools = tools
+      ? tools[0].functionDeclarations.map((decl) => ({
+          type: 'function' as const,
+          function: {
+            name: decl.name,
+            description: decl.description || '',
+            parameters: decl.parameters || { type: 'object', properties: {} },
+          },
+        }))
+      : undefined;
+
+    // Format tools for Responses API
+    const formattedTools = openaiTools
+      ? this.toolFormatter.toResponsesTool(openaiTools)
+      : undefined;
+
+    // Patch messages to include synthetic responses for cancelled tools
+    const { SyntheticToolResponseHandler } = await import(
+      '../openai/syntheticToolResponses.js'
+    );
+    const patchedMessages = SyntheticToolResponseHandler.patchMessageHistory(
+      messages as IMessage[],
+    );
+
+    // Build the request
+    const request = buildResponsesRequest({
+      model: this.currentModel,
+      messages: patchedMessages,
+      tools: formattedTools,
+      stream: true,
+      ...(this.modelParams || {}),
     });
 
-    // Call parent method
-    const response = this.generateChatCompletion(messages, tools, toolFormat);
+    // Make the API call
+    const responsesURL = `${this.baseURL}/responses`;
+    const requestBody = JSON.stringify(request);
+    const bodyBlob = new Blob([requestBody], {
+      type: 'application/json; charset=utf-8',
+    });
 
-    // Convert IMessage back to IContent
-    for await (const chunk of response) {
-      if (typeof chunk === 'string') {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: chunk }],
-        } as IContent;
-        continue;
-      }
+    const response = await fetch(responsesURL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: bodyBlob,
+    });
 
-      const msg = chunk as IMessage;
-      if (msg.role === ContentGeneratorRole.ASSISTANT) {
-        const contentResult: IContent = {
-          speaker: 'ai',
-          blocks: [],
-        };
+    // Handle errors
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw parseErrorResponse(response.status, errorBody, this.name);
+    }
 
-        // Add text content if exists
-        if (msg.content) {
-          contentResult.blocks.push({ type: 'text', text: msg.content });
+    // Stream the response directly as IContent
+    if (response.body) {
+      for await (const message of parseResponsesStream(response.body)) {
+        // Convert IMessage chunks to IContent
+        if (message.content) {
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: message.content }],
+          } as IContent;
         }
 
-        // Convert tool calls to blocks
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-          for (const tc of msg.tool_calls) {
-            try {
-              contentResult.blocks.push({
-                type: 'tool_call',
-                id: tc.id,
-                name: tc.function.name,
-                parameters: JSON.parse(tc.function.arguments),
-              });
-            } catch (_e) {
-              // If parsing fails, pass as string
-              contentResult.blocks.push({
-                type: 'tool_call',
-                id: tc.id,
-                name: tc.function.name,
-                parameters: tc.function.arguments,
-              });
-            }
-          }
+        if (message.tool_calls) {
+          const blocks: ToolCallBlock[] = message.tool_calls.map((tc) => ({
+            type: 'tool_call',
+            id: tc.id.replace(/^call_/, 'hist_tool_'),
+            name: tc.function.name,
+            parameters: JSON.parse(tc.function.arguments),
+          }));
+
+          yield {
+            speaker: 'ai',
+            blocks,
+          } as IContent;
         }
 
-        // Add usage metadata if exists
-        if (msg.usage) {
-          contentResult.metadata = {
-            usage: {
-              promptTokens: msg.usage.prompt_tokens,
-              completionTokens: msg.usage.completion_tokens,
-              totalTokens: msg.usage.total_tokens,
+        if (message.usage) {
+          // Yield usage metadata
+          yield {
+            speaker: 'ai',
+            blocks: [],
+            metadata: {
+              usage: {
+                promptTokens: message.usage.prompt_tokens,
+                completionTokens: message.usage.completion_tokens,
+                totalTokens: message.usage.total_tokens,
+              },
             },
-          };
+          } as IContent;
         }
-
-        if (contentResult.blocks.length > 0) {
-          yield contentResult;
-        }
-      } else if (msg.role === ContentGeneratorRole.USER) {
-        yield {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: msg.content || '' }],
-        } as IContent;
-      } else if (msg.role === ContentGeneratorRole.TOOL) {
-        yield {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: msg.tool_call_id || '',
-              toolName: msg.tool_name || 'unknown',
-              result: msg.content,
-            },
-          ],
-        } as IContent;
-      } else {
-        // Ignore system messages or other roles
-        continue;
       }
     }
   }

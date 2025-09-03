@@ -66,6 +66,7 @@ export interface CommandContext {
      */
     toggleVimEnabled: () => Promise<boolean>;
     setLlxprtMdFileCount: (count: number) => void;
+    updateHistoryTokenCount: (count: number) => void;
     reloadCommands: () => void;
   };
   // Session-specific data

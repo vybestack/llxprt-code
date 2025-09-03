@@ -15,6 +15,7 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import {
   IContent,
+  ContentBlock,
   ToolCallBlock,
   ToolResponseBlock,
   TextBlock,
@@ -961,23 +962,49 @@ ${llxprtPrompts}`;
    */
   async *generateChatCompletionIContent(
     content: IContent[],
-    tools?: ITool[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
   ): AsyncIterableIterator<IContent> {
-    // Extract messages from IContent
-    const messages: IMessage[] = [];
+    // Convert IContent directly to Anthropic API format (no IMessage!)
+    const anthropicMessages: Array<{
+      role: 'user' | 'assistant';
+      content:
+        | string
+        | Array<
+            | { type: 'text'; text: string }
+            | { type: 'tool_use'; id: string; name: string; input: unknown }
+            | { type: 'tool_result'; tool_use_id: string; content: string }
+          >;
+    }> = [];
+
+    // Extract system message if present
+    let systemMessage: string | undefined;
 
     for (const c of content) {
       if (c.speaker === 'human') {
-        // Find text block
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
           | undefined;
-        messages.push({
-          role: ContentGeneratorRole.USER,
+
+        // Check for system message (this is a hack for now - should be explicit)
+        if (
+          anthropicMessages.length === 0 &&
+          textBlock?.text?.includes('You are')
+        ) {
+          systemMessage = textBlock.text;
+          continue;
+        }
+
+        anthropicMessages.push({
+          role: 'user',
           content: textBlock?.text || '',
-        } as IMessage);
+        });
       } else if (c.speaker === 'ai') {
-        // Merge all text blocks into single content string
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -985,185 +1012,236 @@ ${llxprtPrompts}`;
           (b) => b.type === 'tool_call',
         ) as ToolCallBlock[];
 
-        // Build content string from text blocks
-        const contentText = textBlocks.map((b) => b.text).join('');
+        if (toolCallBlocks.length > 0) {
+          // Build content array with text and tool_use blocks
+          const contentArray: Array<
+            | { type: 'text'; text: string }
+            | { type: 'tool_use'; id: string; name: string; input: unknown }
+          > = [];
 
-        // Build tool_calls if any tool_call blocks present
-        const toolCalls =
-          toolCallBlocks.length > 0
-            ? toolCallBlocks.map((tc) => ({
-                id: tc.id,
-                type: 'function' as const,
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.parameters),
-                },
-              }))
-            : undefined;
+          // Add text if present
+          const contentText = textBlocks.map((b) => b.text).join('');
+          if (contentText) {
+            contentArray.push({ type: 'text', text: contentText });
+          }
 
-        messages.push({
-          role: ContentGeneratorRole.ASSISTANT,
-          content: contentText,
-          tool_calls: toolCalls,
-        } as IMessage);
+          // Add tool uses
+          for (const tc of toolCallBlocks) {
+            contentArray.push({
+              type: 'tool_use',
+              id: tc.id.replace(/^hist_tool_/, 'toolu_'),
+              name: tc.name,
+              input: tc.parameters,
+            });
+          }
+
+          anthropicMessages.push({
+            role: 'assistant',
+            content: contentArray,
+          });
+        } else {
+          // Text-only message
+          const contentText = textBlocks.map((b) => b.text).join('');
+          anthropicMessages.push({
+            role: 'assistant',
+            content: contentText,
+          });
+        }
       } else if (c.speaker === 'tool') {
-        // Find tool_response block
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
-
         if (!toolResponseBlock) {
           throw new Error('Tool content must have a tool_response block');
         }
 
-        messages.push({
-          role: ContentGeneratorRole.TOOL,
-          content: JSON.stringify(toolResponseBlock.result),
-          tool_call_id: toolResponseBlock.callId,
-          tool_name: toolResponseBlock.toolName,
-        } as IMessage);
+        // Anthropic expects tool results as user messages
+        anthropicMessages.push({
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: toolResponseBlock.callId.replace(
+                /^hist_tool_/,
+                'toolu_',
+              ),
+              content: JSON.stringify(toolResponseBlock.result),
+            },
+          ],
+        });
       } else {
         throw new Error(`Unknown speaker type: ${c.speaker}`);
       }
     }
 
-    // Stream the IMessage response and convert to IContent chunks
-    let accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
-    let textContent = '';
+    // Convert Gemini format tools to Anthropic format
+    const anthropicTools = tools
+      ? tools[0].functionDeclarations.map((decl) => ({
+          name: decl.name,
+          description: decl.description || '',
+          input_schema: {
+            type: 'object' as const,
+            properties:
+              (decl.parameters as Record<string, unknown>)?.properties || {},
+            required:
+              (decl.parameters as Record<string, unknown>)?.required || [],
+          },
+        }))
+      : undefined;
 
-    for await (const chunk of this.generateChatCompletion(messages, tools)) {
-      if (typeof chunk === 'string') {
-        // String chunk - yield as combined text block
-        const result = {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: chunk }],
-        } as IContent;
-        this.logger.debug('Yielding string chunk as IContent:', result);
-        yield result;
-      } else {
-        const msg = chunk as IMessage;
-        if (msg.role === ContentGeneratorRole.ASSISTANT) {
-          // Accumulate text content and tool calls
-          if (msg.content) {
-            textContent += msg.content;
+    // Ensure authentication
+    await this.updateClientWithResolvedAuth();
+
+    // Check OAuth mode
+    const authToken = await this.getAuthToken();
+    const isOAuth = authToken && authToken.startsWith('sk-ant-oat');
+
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting =
+      this._config?.getEphemeralSettings?.()?.['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
+    // Build request with proper typing
+    const requestBody = {
+      model: this.currentModel,
+      messages: anthropicMessages,
+      max_tokens: this.getMaxTokensForModel(this.currentModel),
+      stream: streamingEnabled,
+      ...(this.modelParams || {}),
+      ...(isOAuth
+        ? {
+            system: "You are Claude Code, Anthropic's official CLI for Claude.",
           }
+        : systemMessage
+          ? { system: systemMessage }
+          : {}),
+      ...(anthropicTools && anthropicTools.length > 0
+        ? { tools: anthropicTools }
+        : {}),
+    };
 
-          if (msg.tool_calls) {
-            // Deep copy tool calls
-            const copiedToolCalls = this.deepCopy(msg.tool_calls);
-            for (const toolCall of copiedToolCalls) {
-              this.toolFormatter.accumulateStreamingToolCall(
-                toolCall,
-                accumulatedToolCalls,
-                'anthropic',
-              );
+    // Make the API call directly with type assertion
+    const response = await this.anthropic.messages.create(
+      requestBody as Parameters<typeof this.anthropic.messages.create>[0],
+    );
+
+    if (streamingEnabled) {
+      // Handle streaming response - response is already a Stream when streaming is enabled
+      const stream =
+        response as unknown as AsyncIterable<Anthropic.MessageStreamEvent>;
+      let currentToolCall:
+        | { id: string; name: string; input: string }
+        | undefined;
+
+      for await (const chunk of stream) {
+        if (chunk.type === 'content_block_start') {
+          if (chunk.content_block.type === 'tool_use') {
+            currentToolCall = {
+              id: chunk.content_block.id,
+              name: chunk.content_block.name,
+              input: '',
+            };
+          }
+        } else if (chunk.type === 'content_block_delta') {
+          if (chunk.delta.type === 'text_delta') {
+            // Emit text immediately as IContent
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: chunk.delta.text }],
+            } as IContent;
+          } else if (
+            chunk.delta.type === 'input_json_delta' &&
+            currentToolCall
+          ) {
+            currentToolCall.input += chunk.delta.partial_json;
+          }
+        } else if (chunk.type === 'content_block_stop') {
+          if (currentToolCall) {
+            // Emit tool call as IContent
+            try {
+              const input = JSON.parse(currentToolCall.input);
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'tool_call',
+                    id: currentToolCall.id.replace(/^toolu_/, 'hist_tool_'),
+                    name: currentToolCall.name,
+                    parameters: input,
+                  },
+                ],
+              } as IContent;
+            } catch (_e) {
+              // If parsing fails, emit with string parameters
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'tool_call',
+                    id: currentToolCall.id.replace(/^toolu_/, 'hist_tool_'),
+                    name: currentToolCall.name,
+                    parameters: currentToolCall.input,
+                  } as ToolCallBlock,
+                ],
+              } as IContent;
             }
+            currentToolCall = undefined;
           }
-
-          // Yield combined content with both text and tool calls that have been accumulated so far
-          const contentResult: IContent = {
+        } else if (chunk.type === 'message_delta' && chunk.usage) {
+          // Emit usage metadata
+          yield {
             speaker: 'ai',
             blocks: [],
-          };
-
-          if (textContent) {
-            contentResult.blocks.push({ type: 'text', text: textContent });
-            textContent = ''; // Reset textContent after yielding
-          }
-
-          // Convert accumulated tool calls to blocks if any exist
-          if (accumulatedToolCalls.length > 0) {
-            const toolCallBlocks = accumulatedToolCalls.map((tc) => {
-              try {
-                return {
-                  type: 'tool_call',
-                  id: tc.id,
-                  name: tc.function.name,
-                  parameters: JSON.parse(tc.function.arguments),
-                } as ToolCallBlock;
-              } catch (_e) {
-                // If parsing fails, pass as string
-                return {
-                  type: 'tool_call',
-                  id: tc.id,
-                  name: tc.function.name,
-                  parameters: tc.function.arguments,
-                } as ToolCallBlock;
-              }
-            });
-            contentResult.blocks.push(...toolCallBlocks);
-            accumulatedToolCalls = []; // Reset accumulatedToolCalls after yielding
-          }
-
-          // Yield if we have any blocks
-          if (contentResult.blocks.length > 0) {
-            this.logger.debug(
-              'Yielding combined IContent chunk:',
-              contentResult,
-            );
-            yield contentResult;
-          }
+            metadata: {
+              usage: {
+                promptTokens: chunk.usage.input_tokens || 0,
+                completionTokens: chunk.usage.output_tokens || 0,
+                totalTokens:
+                  (chunk.usage.input_tokens || 0) +
+                  (chunk.usage.output_tokens || 0),
+              },
+            },
+          } as IContent;
         }
       }
-    }
+    } else {
+      // Handle non-streaming response
+      const message = response as Anthropic.Message;
+      const blocks: ContentBlock[] = [];
 
-    // If we still have accumulated content at the end that wasn't yielded,
-    // yield it now as a final chunk
-    if (textContent || accumulatedToolCalls.length > 0) {
-      const finalContent: IContent = {
+      // Process content blocks
+      for (const contentBlock of message.content) {
+        if (contentBlock.type === 'text') {
+          blocks.push({ type: 'text', text: contentBlock.text } as TextBlock);
+        } else if (contentBlock.type === 'tool_use') {
+          blocks.push({
+            type: 'tool_call',
+            id: contentBlock.id.replace(/^toolu_/, 'hist_tool_'),
+            name: contentBlock.name,
+            parameters: contentBlock.input,
+          } as ToolCallBlock);
+        }
+      }
+
+      // Build response IContent
+      const result: IContent = {
         speaker: 'ai',
-        blocks: [],
+        blocks,
       };
 
-      if (textContent) {
-        finalContent.blocks.push({ type: 'text', text: textContent });
+      // Add usage metadata if present
+      if (message.usage) {
+        result.metadata = {
+          usage: {
+            promptTokens: message.usage.input_tokens,
+            completionTokens: message.usage.output_tokens,
+            totalTokens:
+              message.usage.input_tokens + message.usage.output_tokens,
+          },
+        };
       }
 
-      if (accumulatedToolCalls.length > 0) {
-        const toolCallBlocks = accumulatedToolCalls.map((tc) => {
-          try {
-            return {
-              type: 'tool_call',
-              id: tc.id,
-              name: tc.function.name,
-              parameters: JSON.parse(tc.function.arguments),
-            } as ToolCallBlock;
-          } catch (_e) {
-            // If parsing fails, pass as string
-            return {
-              type: 'tool_call',
-              id: tc.id,
-              name: tc.function.name,
-              parameters: tc.function.arguments,
-            } as ToolCallBlock;
-          }
-        });
-        finalContent.blocks.push(...toolCallBlocks);
-      }
-
-      this.logger.debug(
-        'Yielding final accumulated content as IContent:',
-        finalContent,
-      );
-      yield finalContent;
-    }
-  }
-
-  private deepCopy<T>(obj: T): T {
-    // Quick type guard for primitives
-    if (obj === null || typeof obj !== 'object') {
-      return obj;
-    }
-
-    // Create deep copy via JSON serialization
-    // This ensures complete isolation from original object
-    try {
-      return JSON.parse(JSON.stringify(obj));
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to deep copy object: ${error}. Returning original.`,
-      );
-      return obj;
+      yield result;
     }
   }
 }

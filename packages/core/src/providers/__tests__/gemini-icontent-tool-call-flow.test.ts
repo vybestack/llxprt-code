@@ -5,12 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { GoogleGeminiProvider } from '../gemini/GeminiProvider.js';
-import { ITool } from '../ITool.js';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 
-describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
-  let provider: GoogleGeminiProvider;
+describe('GeminiProvider IContent Tool Call Flow', () => {
+  let provider: GeminiProvider;
   let mockGenerateContentStream: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -18,7 +17,7 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
     mockGenerateContentStream = vi.fn();
 
     // Override the Gemini property with our mock implementation
-    provider = new GoogleGeminiProvider('test-key');
+    provider = new GeminiProvider('test-key');
     (
       provider as unknown as {
         gemini: {
@@ -38,12 +37,6 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
       provider as { getAuthToken: () => Promise<string> },
       'getAuthToken',
     ).mockResolvedValue('test-key');
-
-    // Mock the updateClientWithResolvedAuth method to prevent actual client recreation
-    vi.spyOn(
-      provider as { updateClientWithResolvedAuth: () => Promise<void> },
-      'updateClientWithResolvedAuth',
-    ).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -51,36 +44,34 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
   });
 
   it('should handle tool call sequence correctly with IContent', async () => {
-    // Define tools for the test
-    const tools: ITool[] = [
+    // Define tools in Gemini format for the test
+    const tools = [
       {
-        type: 'function',
-        function: {
-          name: 'search_file_content',
-          description: 'Search through file content',
-          parameters: {
-            type: 'object',
-            properties: {
-              pattern: { type: 'string' },
-              path: { type: 'string' },
+        functionDeclarations: [
+          {
+            name: 'search_file_content',
+            description: 'Search through file content',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                pattern: { type: 'STRING' },
+                path: { type: 'STRING' },
+              },
+              required: ['pattern', 'path'],
             },
-            required: ['pattern', 'path'],
           },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'read_file',
-          description: 'Read a file',
-          parameters: {
-            type: 'object',
-            properties: {
-              absolute_path: { type: 'string' },
+          {
+            name: 'read_file',
+            description: 'Read a file',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                absolute_path: { type: 'STRING' },
+              },
+              required: ['absolute_path'],
             },
-            required: ['absolute_path'],
           },
-        },
+        ],
       },
     ];
 
@@ -181,29 +172,88 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
       ],
     ];
 
-    // Mock the generateContentStream method to return different sequences for each call
-    let responseIndex = 0;
-    mockGenerateContentStream.mockImplementation(() => {
-      const responses = mockResponses[responseIndex++];
-      let chunkIndex = 0;
+    // Mock the generateChatCompletion method to return IMessage chunks
+    vi.spyOn(provider, 'generateChatCompletion').mockImplementation(
+      async function* (_messages, _tools) {
+        // Determine which mock response to use based on the messages
+        const messageContent = JSON.stringify(_messages);
+        let mockResponseIndex = 0;
 
-      return {
-        stream: {
-          [Symbol.asyncIterator]: () => ({
-            next: () =>
-              chunkIndex < responses.length
-                ? Promise.resolve({
-                    value: responses[chunkIndex++],
-                    done: false,
-                  })
-                : Promise.resolve({
-                    value: undefined,
-                    done: true,
-                  }),
-          }),
-        },
-      };
-    });
+        if (messageContent.includes('tool')) {
+          // Count tool messages to determine response index
+          const toolCount = (messageContent.match(/"role":"tool"/g) || [])
+            .length;
+          mockResponseIndex = Math.min(toolCount, mockResponses.length - 1);
+        }
+
+        const mockData = mockResponses[mockResponseIndex] || [];
+
+        for (const chunk of mockData) {
+          // Convert Gemini response to IMessage
+          if (chunk && typeof chunk === 'object' && 'candidates' in chunk) {
+            const candidates = (chunk as { candidates: unknown[] }).candidates;
+            if (candidates && candidates[0]) {
+              const candidate = candidates[0] as {
+                content: { role: string; parts: unknown[] };
+              };
+              if (candidate.content) {
+                let hasText = false;
+                let hasToolCalls = false;
+                let textContent = '';
+                const toolCalls: unknown[] = [];
+
+                for (const part of candidate.content.parts) {
+                  if ('text' in (part as object)) {
+                    hasText = true;
+                    textContent += (part as { text: string }).text;
+                  } else if ('functionCall' in (part as object)) {
+                    hasToolCalls = true;
+                    const fc = (part as { functionCall: unknown })
+                      .functionCall as {
+                      name: string;
+                      args: Record<string, unknown>;
+                      callId?: string;
+                    };
+                    // Extract callId from args if present
+                    const callId =
+                      fc.callId ||
+                      (fc.args.callId as string) ||
+                      `hist_tool_${Date.now()}`;
+                    // Remove callId from args to clean up
+                    const cleanArgs = { ...fc.args };
+                    delete (cleanArgs as { callId?: string }).callId;
+
+                    toolCalls.push({
+                      id: callId,
+                      type: 'function',
+                      function: {
+                        name: fc.name,
+                        arguments: JSON.stringify(cleanArgs),
+                      },
+                    });
+                  }
+                }
+
+                if (hasText) {
+                  yield {
+                    role: 'assistant',
+                    content: textContent,
+                  };
+                }
+
+                if (hasToolCalls) {
+                  yield {
+                    role: 'assistant',
+                    content: '',
+                    tool_calls: toolCalls,
+                  };
+                }
+              }
+            }
+          }
+        }
+      },
+    );
 
     // Test sequence:
     // 1. User message -> AI message with tool call -> Tool response -> AI final message
@@ -287,8 +337,8 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
     expect(response2.length).toBeGreaterThan(0);
     expect(response3.length).toBeGreaterThan(0);
 
-    // Verify the Gemini API was called three times with appropriate parameters
-    expect(mockGenerateContentStream).toHaveBeenCalledTimes(3);
+    // Verify the generateChatCompletion was called three times
+    expect(provider.generateChatCompletion).toHaveBeenCalledTimes(3);
 
     // Check that the tool call chunks were properly accumulated
     // Find the IContent chunks that contain tool_call blocks
@@ -315,22 +365,23 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
   it('should correctly serialize/deserialize Gemini tool call responses', async () => {
     // We'll add another test case here to specifically test the serialization/deserialization of tool calls
 
-    // Define tools for the test
-    const tools: ITool[] = [
+    // Define tools in Gemini format for the test
+    const tools = [
       {
-        type: 'function',
-        function: {
-          name: 'write_file',
-          description: 'Write content to a file',
-          parameters: {
-            type: 'object',
-            properties: {
-              file_path: { type: 'string' },
-              content: { type: 'string' },
+        functionDeclarations: [
+          {
+            name: 'write_file',
+            description: 'Write content to a file',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                file_path: { type: 'STRING' },
+                content: { type: 'STRING' },
+              },
+              required: ['file_path', 'content'],
             },
-            required: ['file_path', 'content'],
           },
-        },
+        ],
       },
     ];
 
@@ -363,27 +414,63 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
     ];
 
     // Mock the generateContentStream method
-    mockGenerateContentStream.mockImplementation(() => {
-      const responses = mockResponses[0]; // Return first response
-      let chunkIndex = 0;
+    // Mock the generateChatCompletion method to return IMessage chunks
+    vi.spyOn(provider, 'generateChatCompletion').mockImplementation(
+      async function* (_messages, _tools) {
+        const mockData = mockResponses[0] || [];
 
-      return {
-        stream: {
-          [Symbol.asyncIterator]: () => ({
-            next: () =>
-              chunkIndex < responses.length
-                ? Promise.resolve({
-                    value: responses[chunkIndex++],
-                    done: false,
-                  })
-                : Promise.resolve({
-                    value: undefined,
-                    done: true,
-                  }),
-          }),
-        },
-      };
-    });
+        for (const chunk of mockData) {
+          // Convert Gemini response to IMessage
+          if (chunk && typeof chunk === 'object' && 'candidates' in chunk) {
+            const candidates = (chunk as { candidates: unknown[] }).candidates;
+            if (candidates && candidates[0]) {
+              const candidate = candidates[0] as {
+                content: { role: string; parts: unknown[] };
+              };
+              if (candidate.content) {
+                const toolCalls: unknown[] = [];
+
+                for (const part of candidate.content.parts) {
+                  if ('functionCall' in (part as object)) {
+                    const fc = (part as { functionCall: unknown })
+                      .functionCall as {
+                      name: string;
+                      args: Record<string, unknown>;
+                      callId?: string;
+                    };
+                    // Extract callId from args if present
+                    const callId =
+                      fc.callId ||
+                      (fc.args.callId as string) ||
+                      `hist_tool_${Date.now()}`;
+                    // Remove callId from args to clean up
+                    const cleanArgs = { ...fc.args };
+                    delete (cleanArgs as { callId?: string }).callId;
+
+                    toolCalls.push({
+                      id: callId,
+                      type: 'function',
+                      function: {
+                        name: fc.name,
+                        arguments: JSON.stringify(cleanArgs),
+                      },
+                    });
+                  }
+                }
+
+                if (toolCalls.length > 0) {
+                  yield {
+                    role: 'assistant',
+                    content: '',
+                    tool_calls: toolCalls,
+                  };
+                }
+              }
+            }
+          }
+        }
+      },
+    );
 
     // Test serialization/deserialization
     const messages: IContent[] = [
@@ -409,12 +496,10 @@ describe('GoogleGeminiProvider IContent Tool Call Flow', () => {
     // Assert it exists and has the expected callId format
     expect(toolCallContent).toBeDefined();
     expect(toolCallContent?.blocks[0].type).toBe('tool_call');
-    expect(
-      (toolCallContent?.blocks[0] as { callId?: string })?.callId,
-    ).toBeDefined();
+    expect((toolCallContent?.blocks[0] as { id?: string })?.id).toBeDefined();
 
-    // Check that the callId is normalized with 'hist_tool_' prefix
-    expect((toolCallContent?.blocks[0] as { callId?: string })?.callId).toMatch(
+    // Check that the id is normalized with 'hist_tool_' prefix
+    expect((toolCallContent?.blocks[0] as { id?: string })?.id).toMatch(
       /^hist_tool_/,
     );
   });

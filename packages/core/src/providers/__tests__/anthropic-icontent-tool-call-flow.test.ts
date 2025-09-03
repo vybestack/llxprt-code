@@ -6,7 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
-import { ITool } from '../ITool.js';
 import { IContent } from '../../services/history/IContent.js';
 
 describe('AnthropicProvider IContent Tool Call Flow', () => {
@@ -59,36 +58,34 @@ describe('AnthropicProvider IContent Tool Call Flow', () => {
   });
 
   it('should handle tool call sequence correctly with IContent', async () => {
-    // Define tools for the test
-    const tools: ITool[] = [
+    // Define tools in Gemini format for the test
+    const tools = [
       {
-        type: 'function',
-        function: {
-          name: 'search_file_content',
-          description: 'Search through file content',
-          parameters: {
-            type: 'object',
-            properties: {
-              pattern: { type: 'string' },
-              path: { type: 'string' },
+        functionDeclarations: [
+          {
+            name: 'search_file_content',
+            description: 'Search through file content',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                pattern: { type: 'STRING' },
+                path: { type: 'STRING' },
+              },
+              required: ['pattern', 'path'],
             },
-            required: ['pattern', 'path'],
           },
-        },
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'read_file',
-          description: 'Read a file',
-          parameters: {
-            type: 'object',
-            properties: {
-              absolute_path: { type: 'string' },
+          {
+            name: 'read_file',
+            description: 'Read a file',
+            parameters: {
+              type: 'OBJECT',
+              properties: {
+                absolute_path: { type: 'STRING' },
+              },
+              required: ['absolute_path'],
             },
-            required: ['absolute_path'],
           },
-        },
+        ],
       },
     ];
 

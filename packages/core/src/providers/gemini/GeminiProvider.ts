@@ -14,8 +14,6 @@ import {
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../services/history/IContent.js';
-import { ToolFormatter } from '../../tools/ToolFormatter.js';
-import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import {
   Config,
   AuthType,
@@ -24,11 +22,13 @@ import {
   getCoreSystemPromptAsync,
   createCodeAssistContentGenerator,
 } from '@vybestack/llxprt-code-core';
-import type {
-  Part,
-  FunctionCall,
-  Schema,
-  GenerateContentParameters,
+import {
+  Type,
+  type Part,
+  type FunctionCall,
+  type Schema,
+  type GenerateContentParameters,
+  type GenerateContentResponse,
 } from '@google/genai';
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { OAuthManager } from '../../auth/precedence.js';
@@ -58,7 +58,6 @@ export class GeminiProvider extends BaseProvider {
   private modelExplicitlySet: boolean = false;
   private baseURL?: string;
   private modelParams?: Record<string, unknown>;
-  private toolFormatter: ToolFormatter;
   private toolSchemas:
     | Array<{
         functionDeclarations: Array<{
@@ -94,7 +93,6 @@ export class GeminiProvider extends BaseProvider {
     this.geminiConfig = config;
     this.baseURL = baseURL;
     this.geminiOAuthManager = oauthManager;
-    this.toolFormatter = new ToolFormatter();
 
     // Do not determine auth mode on instantiation.
     // This will be done lazily when a chat completion is requested.
@@ -559,7 +557,7 @@ export class GeminiProvider extends BaseProvider {
             message.tool_calls = functionCalls.map((call: FunctionCall) => ({
               id:
                 call.id ||
-                `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                `call_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
               type: 'function' as const,
               function: {
                 name: call.name || 'unknown_function',
@@ -674,7 +672,7 @@ export class GeminiProvider extends BaseProvider {
         message.tool_calls = functionCalls.map((call: FunctionCall) => ({
           id:
             call.id ||
-            `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            `call_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           type: 'function' as const,
           function: {
             name: call.name || 'unknown_function',
@@ -819,7 +817,7 @@ export class GeminiProvider extends BaseProvider {
                 `Tool call at message ${i} missing ID, generating one: ${JSON.stringify(toolCall)}`,
             );
             // Generate a unique ID for the function call
-            toolCall.id = `generated_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            toolCall.id = `generated_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
           }
 
           const partIndex = parts.length;
@@ -977,11 +975,25 @@ export class GeminiProvider extends BaseProvider {
   }> {
     const result = [
       {
-        functionDeclarations: tools.map((tool) => ({
-          name: tool.function.name,
-          description: tool.function.description,
-          parameters: tool.function.parameters as Schema,
-        })),
+        functionDeclarations: tools.map((tool) => {
+          // Ensure parameters always has type: 'object' for Gemini API compliance
+          let parameters = tool.function.parameters as Schema;
+          if (
+            parameters &&
+            typeof parameters === 'object' &&
+            !parameters.type
+          ) {
+            // Use Type enum from @google/genai
+            parameters = { ...parameters, type: Type.OBJECT };
+          } else if (!parameters) {
+            parameters = { type: Type.OBJECT, properties: {} };
+          }
+          return {
+            name: tool.function.name,
+            description: tool.function.description,
+            parameters,
+          };
+        }),
       },
     ];
 
@@ -1486,226 +1498,237 @@ export class GeminiProvider extends BaseProvider {
 
   /**
    * Generate chat completion with IContent interface
-   * Convert between IContent and IMessage formats
-   */
-  /**
-   * Generate chat completion with IContent interface
-   * Convert between IContent and IMessage formats
+   * Direct implementation for Gemini API without IMessage conversion
    */
   async *generateChatCompletionIContent(
     content: IContent[],
-    tools?: ITool[],
-    toolFormat?: string,
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+    _toolFormat?: string,
   ): AsyncIterableIterator<IContent> {
-    // Extract messages from IContent
-    const messages: IMessage[] = [];
+    // Determine best auth method
+    const authToken = await this.determineBestAuth();
+
+    // Import necessary modules
+    const { GoogleGenAI } = await import('@google/genai');
+
+    // Convert IContent directly to Gemini format
+    const contents: Array<{ role: string; parts: Part[] }> = [];
+    let systemMessage: string | undefined;
 
     for (const c of content) {
       if (c.speaker === 'human') {
-        // Find text block
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
           | undefined;
-        messages.push({
-          role: ContentGeneratorRole.USER,
-          content: textBlock?.text || '',
-        } as IMessage);
+        if (textBlock?.text?.includes('You are') && contents.length === 0) {
+          // First message might be system prompt
+          systemMessage = textBlock.text;
+          continue;
+        }
+
+        const parts: Part[] = [];
+        for (const block of c.blocks) {
+          if (block.type === 'text') {
+            parts.push({ text: (block as TextBlock).text });
+          }
+        }
+
+        if (parts.length > 0) {
+          contents.push({ role: 'user', parts });
+        }
       } else if (c.speaker === 'ai') {
-        // Merge all text blocks into single content string
-        const textBlocks = c.blocks.filter(
-          (b) => b.type === 'text',
-        ) as TextBlock[];
-        const toolCallBlocks = c.blocks.filter(
-          (b) => b.type === 'tool_call',
-        ) as ToolCallBlock[];
+        const parts: Part[] = [];
 
-        // Build content string from text blocks
-        const contentText = textBlocks.map((b) => b.text).join('');
-
-        // Build tool_calls if any tool_call blocks present
-        const toolCalls =
-          toolCallBlocks.length > 0
-            ? toolCallBlocks.map((tc) => ({
+        for (const block of c.blocks) {
+          if (block.type === 'text') {
+            parts.push({ text: (block as TextBlock).text });
+          } else if (block.type === 'tool_call') {
+            const tc = block as ToolCallBlock;
+            parts.push({
+              functionCall: {
                 id: tc.id,
-                type: 'function' as const,
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.parameters),
-                },
-              }))
-            : undefined;
+                name: tc.name,
+                args: tc.parameters,
+              },
+            } as Part);
+          }
+        }
 
-        messages.push({
-          role: ContentGeneratorRole.ASSISTANT,
-          content: contentText,
-          tool_calls: toolCalls,
-        } as IMessage);
+        if (parts.length > 0) {
+          contents.push({ role: 'model', parts });
+        }
       } else if (c.speaker === 'tool') {
-        // Find tool_response block
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
-
         if (!toolResponseBlock) {
           throw new Error('Tool content must have a tool_response block');
         }
 
-        messages.push({
-          role: ContentGeneratorRole.TOOL,
-          content: toolResponseBlock.result,
-          tool_call_id: toolResponseBlock.callId,
-          tool_name: toolResponseBlock.toolName,
-        } as IMessage);
-      } else {
-        throw new Error(`Unknown speaker type: ${c.speaker}`);
+        contents.push({
+          role: 'user',
+          parts: [
+            {
+              functionResponse: {
+                id: toolResponseBlock.callId,
+                name: toolResponseBlock.toolName,
+                response: {
+                  output: JSON.stringify(toolResponseBlock.result),
+                },
+              },
+            },
+          ],
+        });
       }
     }
 
-    // Stream the IMessage response and convert to IContent chunks
-    let accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
-    let textContent = '';
-
-    for await (const chunk of this.generateChatCompletion(
-      messages,
-      tools,
-      toolFormat,
-    )) {
-      if (typeof chunk === 'string') {
-        // String chunk - yield as combined text block
-        const result = {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: chunk }],
-        } as IContent;
-        this.logger.debug('Yielding string chunk as IContent:', result);
-        yield result;
-      } else {
-        const msg = chunk as IMessage;
-        if (msg.role === ContentGeneratorRole.ASSISTANT) {
-          // Accumulate text content and tool calls
-          if (msg.content) {
-            textContent += msg.content;
-          }
-
-          if (msg.tool_calls) {
-            // Deep copy tool calls
-            const copiedToolCalls = this.deepCopy(msg.tool_calls);
-            for (const toolCall of copiedToolCalls) {
-              this.toolFormatter.accumulateStreamingToolCall(
-                toolCall,
-                accumulatedToolCalls,
-                toolFormat as ToolFormat,
-              );
-            }
-          }
-
-          // Yield combined content with both text and tool calls that have been accumulated so far
-          const contentResult: IContent = {
-            speaker: 'ai',
-            blocks: [],
-          };
-
-          if (textContent) {
-            contentResult.blocks.push({ type: 'text', text: textContent });
-            textContent = ''; // Reset textContent after yielding
-          }
-
-          // Convert accumulated tool calls to blocks if any exist
-          if (accumulatedToolCalls.length > 0) {
-            const toolCallBlocks = accumulatedToolCalls.map((tc) => {
-              try {
-                return {
-                  type: 'tool_call',
-                  id: tc.id,
-                  name: tc.function.name,
-                  parameters: JSON.parse(tc.function.arguments),
-                } as ToolCallBlock;
-              } catch (_e) {
-                // If parsing fails, pass as string
-                return {
-                  type: 'tool_call',
-                  id: tc.id,
-                  name: tc.function.name,
-                  parameters: tc.function.arguments,
-                } as ToolCallBlock;
+    // Ensure tools have proper type: 'object' for Gemini
+    const geminiTools = tools
+      ? [
+          {
+            functionDeclarations: tools[0].functionDeclarations.map((decl) => {
+              let parameters = decl.parameters;
+              if (
+                parameters &&
+                typeof parameters === 'object' &&
+                !('type' in (parameters as Record<string, unknown>))
+              ) {
+                parameters = { type: Type.OBJECT, ...parameters };
+              } else if (!parameters) {
+                parameters = { type: Type.OBJECT, properties: {} };
               }
-            });
-            contentResult.blocks.push(...toolCallBlocks);
-            accumulatedToolCalls = []; // Reset accumulatedToolCalls after yielding
-          }
+              return {
+                name: decl.name,
+                description: decl.description,
+                parameters: parameters as Schema,
+              };
+            }),
+          },
+        ]
+      : undefined;
 
-          // Yield if we have any blocks
-          if (contentResult.blocks.length > 0) {
-            this.logger.debug(
-              'Yielding combined IContent chunk:',
-              contentResult,
-            );
-            yield contentResult;
-          }
-        }
-      }
-    }
+    // Create appropriate client and generate content
+    const httpOptions = {
+      headers: {
+        'User-Agent': `LLxprt-Code/${process.env.CLI_VERSION || process.version} (${process.platform}; ${process.arch})`,
+      },
+    };
 
-    // If we still have accumulated content at the end that wasn't yielded,
-    // yield it now as a final chunk
-    if (textContent || accumulatedToolCalls.length > 0) {
-      const finalContent: IContent = {
-        speaker: 'ai',
-        blocks: [],
+    let stream: AsyncIterable<GenerateContentResponse>;
+
+    if (this.authMode === 'oauth') {
+      // OAuth mode
+      const configForOAuth = this.geminiConfig || {
+        getProxy: () => undefined,
       };
 
-      if (textContent) {
-        finalContent.blocks.push({ type: 'text', text: textContent });
+      const contentGenerator = await createCodeAssistContentGenerator(
+        httpOptions,
+        AuthType.LOGIN_WITH_GOOGLE,
+        configForOAuth as Config,
+        this.baseURL,
+      );
+
+      const userMemory = this.geminiConfig?.getUserMemory
+        ? this.geminiConfig.getUserMemory()
+        : '';
+      const systemInstruction =
+        systemMessage ||
+        (await getCoreSystemPromptAsync(userMemory, this.currentModel));
+
+      const request = {
+        model: this.currentModel,
+        contents,
+        systemInstruction,
+        config: {
+          tools: geminiTools,
+          ...this.modelParams,
+        },
+      };
+
+      stream = await contentGenerator.generateContentStream(
+        request,
+        'oauth-session',
+      );
+    } else {
+      // API key mode
+      const genAI = new GoogleGenAI({
+        apiKey: authToken,
+        vertexai: this.authMode === 'vertex-ai',
+        httpOptions: this.baseURL
+          ? { ...httpOptions, baseUrl: this.baseURL }
+          : httpOptions,
+      });
+
+      const contentGenerator = genAI.models;
+      const userMemory = this.geminiConfig?.getUserMemory
+        ? this.geminiConfig.getUserMemory()
+        : '';
+      const systemInstruction =
+        systemMessage ||
+        (await getCoreSystemPromptAsync(userMemory, this.currentModel));
+
+      const request = {
+        model: this.currentModel,
+        contents,
+        systemInstruction,
+        config: {
+          tools: geminiTools,
+          ...this.modelParams,
+        },
+      };
+
+      stream = await contentGenerator.generateContentStream(request);
+    }
+
+    // Stream responses as IContent
+    for await (const response of stream) {
+      const text =
+        response.candidates?.[0]?.content?.parts
+          ?.filter((part: Part) => 'text' in part)
+          ?.map((part: Part) => (part as { text: string }).text)
+          ?.join('') || '';
+
+      const functionCalls =
+        response.candidates?.[0]?.content?.parts
+          ?.filter((part: Part) => 'functionCall' in part)
+          ?.map(
+            (part: Part) =>
+              (part as { functionCall: FunctionCall }).functionCall,
+          ) || [];
+
+      // Yield text if present
+      if (text) {
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text }],
+        } as IContent;
       }
 
-      if (accumulatedToolCalls.length > 0) {
-        const toolCallBlocks = accumulatedToolCalls.map((tc) => {
-          try {
-            return {
-              type: 'tool_call',
-              id: tc.id,
-              name: tc.function.name,
-              parameters: JSON.parse(tc.function.arguments),
-            } as ToolCallBlock;
-          } catch (_e) {
-            // If parsing fails, pass as string
-            return {
-              type: 'tool_call',
-              id: tc.id,
-              name: tc.function.name,
-              parameters: tc.function.arguments,
-            } as ToolCallBlock;
-          }
-        });
-        finalContent.blocks.push(...toolCallBlocks);
+      // Yield tool calls if present
+      if (functionCalls.length > 0) {
+        const blocks: ToolCallBlock[] = functionCalls.map(
+          (call: FunctionCall) => ({
+            type: 'tool_call',
+            id:
+              call.id ||
+              `call_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+            name: call.name || 'unknown_function',
+            parameters: call.args || {},
+          }),
+        );
+
+        yield {
+          speaker: 'ai',
+          blocks,
+        } as IContent;
       }
-
-      this.logger.debug(
-        'Yielding final accumulated content as IContent:',
-        finalContent,
-      );
-      yield finalContent;
-    }
-  }
-
-  private deepCopy<T>(obj: T): T {
-    if (obj === null || obj === undefined) {
-      return obj;
-    }
-
-    // Handle primitive types
-    if (typeof obj !== 'object') {
-      return obj;
-    }
-
-    // Create deep copy via JSON serialization
-    // This ensures complete isolation from original object
-    try {
-      return JSON.parse(JSON.stringify(obj));
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to deep copy object: ${error}. Returning original.`,
-      );
-      return obj;
     }
   }
 }

@@ -24,7 +24,13 @@ import { ContentGenerator, AuthType } from './contentGenerator.js';
 import { Config } from '../config/config.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
-import type { IContent } from '../services/history/IContent.js';
+import type {
+  IContent,
+  ContentBlock,
+  ToolCallBlock,
+  ToolResponseBlock,
+} from '../services/history/IContent.js';
+import type { IProvider } from '../providers/IProvider.js';
 // import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
 import {
   logApiRequest,
@@ -256,7 +262,7 @@ export class GeminiChat {
 
   constructor(
     private readonly config: Config,
-    private readonly contentGenerator: ContentGenerator,
+    contentGenerator: ContentGenerator,
     private readonly generationConfig: GenerateContentConfig = {},
     initialHistory: Content[] = [],
     historyService?: HistoryService,
@@ -466,17 +472,33 @@ export class GeminiChat {
       );
     }
 
-    // Get curated history and convert to Content[] for the request
-    const iContents = this.historyService.getCurated();
-    const requestContents = ContentConverters.toGeminiContents(iContents);
+    // Get the active provider
+    const provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
 
-    this._logApiRequest(requestContents, this.config.getModel(), prompt_id);
+    // Check if provider supports IContent interface
+    if (!this.providerSupportsIContent(provider)) {
+      throw new Error(
+        `Provider ${provider.name} does not support IContent interface`,
+      );
+    }
+
+    // Get curated history in IContent format
+    const iContents = this.historyService.getCurated();
+
+    this._logApiRequest(
+      ContentConverters.toGeminiContents(iContents),
+      this.config.getModel(),
+      prompt_id,
+    );
 
     const startTime = Date.now();
     let response: GenerateContentResponse;
 
     try {
-      const apiCall = () => {
+      const apiCall = async () => {
         const modelToUse = this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
 
         // Prevent Flash model calls immediately after quota error
@@ -489,14 +511,35 @@ export class GeminiChat {
           );
         }
 
-        return this.contentGenerator.generateContent(
-          {
-            model: modelToUse,
-            contents: requestContents,
-            config: { ...this.generationConfig, ...params.config },
-          },
-          prompt_id,
+        // Get tools in the format the provider expects
+        const tools = this.generationConfig.tools;
+
+        // Call the provider directly with IContent
+        const streamResponse = provider.generateChatCompletionIContent!(
+          iContents,
+          tools as
+            | Array<{
+                functionDeclarations: Array<{
+                  name: string;
+                  description?: string;
+                  parameters?: unknown;
+                }>;
+              }>
+            | undefined,
         );
+
+        // Collect all chunks from the stream
+        let lastResponse: IContent | undefined;
+        for await (const iContent of streamResponse) {
+          lastResponse = iContent;
+        }
+
+        if (!lastResponse) {
+          throw new Error('No response from provider');
+        }
+
+        // Convert the final IContent to GenerateContentResponse
+        return this.convertIContentToResponse(lastResponse);
       };
 
       response = await retryWithBackoff(apiCall, {
@@ -684,9 +727,7 @@ export class GeminiChat {
     }
     // Note: requestContents is no longer needed as adapter gets history from HistoryService
 
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    return (async function* () {
+    return (async function* (instance) {
       try {
         let lastError: unknown = new Error('Request failed after all retries.');
 
@@ -696,7 +737,7 @@ export class GeminiChat {
           attempt++
         ) {
           try {
-            const stream = await self.makeApiCallAndProcessStream(
+            const stream = await instance.makeApiCallAndProcessStream(
               params,
               prompt_id,
               userContent,
@@ -731,10 +772,10 @@ export class GeminiChat {
 
         if (lastError) {
           // If the stream fails, remove the user message that was added.
-          const allHistory = self.historyService.getAll();
+          const allHistory = instance.historyService.getAll();
           const lastIContent = allHistory[allHistory.length - 1];
-          const idGen = self.historyService.getIdGeneratorCallback();
-          const matcher = self.makePositionMatcher();
+          const idGen = instance.historyService.getIdGeneratorCallback();
+          const matcher = instance.makePositionMatcher();
           const userIContent = ContentConverters.toIContent(
             userContent,
             idGen,
@@ -749,9 +790,9 @@ export class GeminiChat {
           ) {
             // Remove the last item from history
             const trimmedHistory = allHistory.slice(0, -1);
-            self.historyService.clear();
+            instance.historyService.clear();
             for (const content of trimmedHistory) {
-              self.historyService.add(content, self.config.getModel());
+              instance.historyService.add(content, instance.config.getModel());
             }
           }
           throw lastError;
@@ -759,7 +800,7 @@ export class GeminiChat {
       } finally {
         streamDoneResolver!();
       }
-    })();
+    })(this);
   }
 
   private async makeApiCallAndProcessStream(
@@ -767,7 +808,20 @@ export class GeminiChat {
     prompt_id: string,
     userContent: Content,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    const apiCall = () => {
+    // Get the active provider
+    const provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
+
+    // Check if provider supports IContent interface
+    if (!this.providerSupportsIContent(provider)) {
+      throw new Error(
+        `Provider ${provider.name} does not support IContent interface`,
+      );
+    }
+
+    const apiCall = async () => {
       const modelToUse = this.config.getModel();
       const authType = this.config.getContentGeneratorConfig()?.authType;
 
@@ -782,35 +836,40 @@ export class GeminiChat {
         );
       }
 
-      // Get curated history for the request
+      // Get curated history for the request in IContent format
       const iContents = this.historyService.getCurated();
-      const requestContents = ContentConverters.toGeminiContents(iContents);
 
       // DEBUG: Check for malformed entries
       if (process.env.DEBUG) {
         console.log(
-          '[DEBUG] geminiChat requestContents:',
-          JSON.stringify(requestContents, null, 2),
+          '[DEBUG] geminiChat IContent history:',
+          JSON.stringify(iContents, null, 2),
         );
-        for (let i = 0; i < requestContents.length; i++) {
-          const content = requestContents[i];
-          if (!content.role) {
-            console.error(
-              `[ERROR] Malformed content at index ${i} - missing role:`,
-              content,
-            );
-          }
-        }
       }
 
-      return this.contentGenerator.generateContentStream(
-        {
-          model: modelToUse,
-          contents: requestContents,
-          config: { ...this.generationConfig, ...params.config },
-        },
-        prompt_id,
+      // Get tools in the format the provider expects
+      const tools = this.generationConfig.tools;
+
+      // Call the provider directly with IContent
+      const streamResponse = provider.generateChatCompletionIContent!(
+        iContents,
+        tools as
+          | Array<{
+              functionDeclarations: Array<{
+                name: string;
+                description?: string;
+                parameters?: unknown;
+              }>;
+            }>
+          | undefined,
       );
+
+      // Convert the IContent stream to GenerateContentResponse stream
+      return (async function* (instance) {
+        for await (const iContent of streamResponse) {
+          yield instance.convertIContentToResponse(iContent);
+        }
+      })(this);
     };
 
     const streamResponse = await retryWithBackoff(apiCall, {
@@ -1240,6 +1299,210 @@ export class GeminiChat {
         error.message += extraDetails;
       }
     }
+  }
+
+  /**
+   * Convert PartListUnion (user input) to IContent format for provider/history
+   */
+  convertPartListUnionToIContent(input: PartListUnion): IContent {
+    const blocks: ContentBlock[] = [];
+
+    if (typeof input === 'string') {
+      // Simple string input from user
+      return {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: input }],
+      };
+    }
+
+    // Handle Part or Part[]
+    const parts = Array.isArray(input) ? input : [input];
+
+    // Check if all parts are function responses (tool responses)
+    const allFunctionResponses = parts.every(
+      (part) => part && typeof part === 'object' && 'functionResponse' in part,
+    );
+
+    if (allFunctionResponses) {
+      // Tool responses - speaker is 'tool'
+      for (const part of parts) {
+        if (
+          typeof part === 'object' &&
+          'functionResponse' in part &&
+          part.functionResponse
+        ) {
+          blocks.push({
+            type: 'tool_response',
+            callId: part.functionResponse.id || '',
+            toolName: part.functionResponse.name || '',
+            result:
+              (part.functionResponse.response as Record<string, unknown>) || {},
+            error: undefined,
+          } as ToolResponseBlock);
+        }
+      }
+      return {
+        speaker: 'tool',
+        blocks,
+      };
+    }
+
+    // Mixed content or function calls - must be from AI
+    let hasAIContent = false;
+
+    for (const part of parts) {
+      if (typeof part === 'string') {
+        blocks.push({ type: 'text', text: part });
+      } else if ('text' in part && part.text !== undefined) {
+        blocks.push({ type: 'text', text: part.text });
+      } else if ('functionCall' in part && part.functionCall) {
+        hasAIContent = true; // Function calls only come from AI
+        blocks.push({
+          type: 'tool_call',
+          id: part.functionCall.id || '',
+          name: part.functionCall.name || '',
+          parameters: (part.functionCall.args as Record<string, unknown>) || {},
+        } as ToolCallBlock);
+      } else if ('functionResponse' in part && part.functionResponse) {
+        // Single function response in mixed content
+        blocks.push({
+          type: 'tool_response',
+          callId: part.functionResponse.id || '',
+          toolName: part.functionResponse.name || '',
+          result:
+            (part.functionResponse.response as Record<string, unknown>) || {},
+          error: undefined,
+        } as ToolResponseBlock);
+      }
+    }
+
+    // If we have function calls, it's AI content; otherwise assume human
+    return {
+      speaker: hasAIContent ? 'ai' : 'human',
+      blocks,
+    };
+  }
+
+  /**
+   * Convert IContent (from provider) to GenerateContentResponse for SDK compatibility
+   */
+  private convertIContentToResponse(input: IContent): GenerateContentResponse {
+    // Convert IContent blocks to Gemini Parts
+    const parts: Part[] = [];
+
+    for (const block of input.blocks) {
+      switch (block.type) {
+        case 'text':
+          parts.push({ text: block.text });
+          break;
+        case 'tool_call': {
+          const toolCall = block as ToolCallBlock;
+          parts.push({
+            functionCall: {
+              id: toolCall.id,
+              name: toolCall.name,
+              args: toolCall.parameters as Record<string, unknown>,
+            },
+          });
+          break;
+        }
+        case 'tool_response': {
+          const toolResponse = block as ToolResponseBlock;
+          parts.push({
+            functionResponse: {
+              id: toolResponse.callId,
+              name: toolResponse.toolName,
+              response: toolResponse.result as Record<string, unknown>,
+            },
+          });
+          break;
+        }
+        case 'thinking':
+          // Include thinking blocks as thought parts
+          parts.push({
+            thought: true,
+            text: block.thought,
+          });
+          break;
+        default:
+          // Skip unsupported block types
+          break;
+      }
+    }
+
+    // Build the response structure
+    const response = {
+      candidates: [
+        {
+          content: {
+            role: 'model',
+            parts,
+          },
+        },
+      ],
+      // These are required properties that must be present
+      get text() {
+        return parts.find((p) => 'text' in p)?.text || '';
+      },
+      functionCalls: parts
+        .filter((p) => 'functionCall' in p)
+        .map((p) => p.functionCall!),
+      executableCode: undefined,
+      codeExecutionResult: undefined,
+      // data property will be added below
+    } as GenerateContentResponse;
+
+    // Add data property that returns self-reference
+    Object.defineProperty(response, 'data', {
+      get() {
+        return response;
+      },
+      enumerable: true,
+      configurable: true,
+    });
+
+    // Add usage metadata if present
+    if (input.metadata?.usage) {
+      response.usageMetadata = {
+        promptTokenCount: input.metadata.usage.promptTokens || 0,
+        candidatesTokenCount: input.metadata.usage.completionTokens || 0,
+        totalTokenCount: input.metadata.usage.totalTokens || 0,
+      };
+    }
+
+    return response;
+  }
+
+  /**
+   * Get the active provider from the ProviderManager via Config
+   */
+  private getActiveProvider(): IProvider | undefined {
+    const providerManager = this.config.getProviderManager();
+    if (!providerManager) {
+      return undefined;
+    }
+
+    try {
+      return providerManager.getActiveProvider();
+    } catch {
+      // No active provider set
+      return undefined;
+    }
+  }
+
+  /**
+   * Check if a provider supports the IContent interface
+   */
+  private providerSupportsIContent(provider: IProvider | undefined): boolean {
+    if (!provider) {
+      return false;
+    }
+
+    // Check if the provider has the IContent method
+    return (
+      typeof (provider as { generateChatCompletionIContent?: unknown })
+        .generateChatCompletionIContent === 'function'
+    );
   }
 }
 

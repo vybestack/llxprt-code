@@ -30,7 +30,13 @@ export interface IProvider {
   ): AsyncIterableIterator<unknown>;
   generateChatCompletionIContent?(
     content: IContent[],
-    tools?: ITool[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
   ): AsyncIterableIterator<IContent>;
   setModel?(modelId: string): void;
   getCurrentModel?(): string;
