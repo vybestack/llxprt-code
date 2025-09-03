@@ -114,6 +114,15 @@ export const SETTINGS_SCHEMA = {
     description: 'Display memory usage information in the UI',
     showInDialog: true,
   },
+  customWittyPhrases: {
+    type: 'array',
+    label: 'Custom Witty Phrases',
+    category: 'UI',
+    requiresRestart: false,
+    default: [] as string[],
+    description: 'Custom witty phrases to display during loading.',
+    showInDialog: false,
+  },
 
   usageStatisticsEnabled: {
     type: 'boolean',

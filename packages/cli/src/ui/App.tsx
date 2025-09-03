@@ -1131,8 +1131,10 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
 
-  const { elapsedTime, currentLoadingPhrase } =
-    useLoadingIndicator(streamingState);
+  const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
+    streamingState,
+    settings.merged.ui?.customWittyPhrases,
+  );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
   const handleProQuotaChoice = useCallback(
