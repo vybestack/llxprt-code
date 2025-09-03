@@ -393,12 +393,15 @@ export class OpenAIProvider extends BaseProvider {
         const delta = chunk.choices?.[0]?.delta;
 
         if (delta?.content && !requestConfig.parser) {
+          // Sanitize streaming content for qwen models
+          const sanitizedContent = this.sanitizeJsonContent(delta.content);
+
           if (this.isUsingQwen()) {
             // Handle Qwen whitespace buffering inline for yielding
             // This is needed because we yield during streaming
             // We'll refactor this separately if needed
             const whitespaceResult = this.handleQwenStreamingWhitespace(
-              delta,
+              { ...delta, content: sanitizedContent },
               processedData.pendingWhitespace,
               processedData.fullContent,
             );
@@ -425,10 +428,10 @@ export class OpenAIProvider extends BaseProvider {
             // Deep copy before yielding to prevent immutable object errors
             yield this.deepCopy({
               role: ContentGeneratorRole.ASSISTANT,
-              content: delta.content,
+              content: sanitizedContent,
             });
             processedData = {
-              fullContent: processedData.fullContent + delta.content,
+              fullContent: processedData.fullContent + sanitizedContent,
               accumulatedToolCalls: processedData.accumulatedToolCalls,
               hasStreamedContent: true,
               usageData: processedData.usageData,
@@ -436,9 +439,10 @@ export class OpenAIProvider extends BaseProvider {
             };
           }
         } else if (delta?.content) {
-          // Parser mode - just accumulate
+          // Parser mode - just accumulate, also sanitize
+          const sanitizedContent = this.sanitizeJsonContent(delta.content);
           processedData = {
-            fullContent: processedData.fullContent + delta.content,
+            fullContent: processedData.fullContent + sanitizedContent,
             accumulatedToolCalls: processedData.accumulatedToolCalls,
             hasStreamedContent: processedData.hasStreamedContent,
             usageData: processedData.usageData,
@@ -640,6 +644,94 @@ export class OpenAIProvider extends BaseProvider {
 
   override clearState(): void {
     // No state to clear in base OpenAI provider
+  }
+
+  /**
+   * Sanitize content that may contain control characters breaking JSON parsing
+   * This is especially needed for qwen models that may return unescaped control chars
+   */
+  private sanitizeJsonContent(content: string): string {
+    // Only apply sanitization for qwen models
+    if (!this.isUsingQwen()) {
+      return content;
+    }
+
+    // Check if content looks like it might be JSON (starts with { or [, contains quotes)
+    const looksLikeJson =
+      /^\s*[{[].*[\]}]\s*$/s.test(content) || /"[^"]*":\s*/.test(content);
+
+    if (!looksLikeJson) {
+      return content;
+    }
+
+    // Check for control characters that need sanitization
+    let needsSanitization = false;
+    for (let i = 0; i < content.length; i++) {
+      const code = content.charCodeAt(i);
+      if (
+        (code >= 0x00 && code <= 0x08) ||
+        code === 0x0b ||
+        code === 0x0c ||
+        (code >= 0x0e && code <= 0x1f) ||
+        code === 0x7f
+      ) {
+        needsSanitization = true;
+        break;
+      }
+    }
+
+    if (!needsSanitization) {
+      return content;
+    }
+
+    this.logger.debug(
+      () => '[Qwen] Sanitizing control characters in JSON content',
+    );
+
+    // Sanitize control characters while preserving valid JSON escape sequences
+    const placeholder = '\uFFFD';
+
+    // First protect existing valid escape sequences
+    const protectedContent = content
+      .replace(/\\n/g, `${placeholder}n`)
+      .replace(/\\r/g, `${placeholder}r`)
+      .replace(/\\t/g, `${placeholder}t`)
+      .replace(/\\"/g, `${placeholder}"`)
+      .replace(/\\\\/g, `${placeholder}\\`);
+
+    // Replace actual control characters
+    let sanitized = '';
+    for (let i = 0; i < protectedContent.length; i++) {
+      const char = protectedContent[i];
+      const code = char.charCodeAt(0);
+
+      if (char === '\n') {
+        sanitized += '\\n';
+      } else if (char === '\r') {
+        sanitized += '\\r';
+      } else if (char === '\t') {
+        sanitized += '\\t';
+      } else if (
+        (code >= 0x00 && code <= 0x08) ||
+        code === 0x0b ||
+        code === 0x0c ||
+        (code >= 0x0e && code <= 0x1f) ||
+        code === 0x7f
+      ) {
+        // Skip other control characters
+        continue;
+      } else {
+        sanitized += char;
+      }
+    }
+
+    // Restore protected escape sequences
+    return sanitized
+      .replace(new RegExp(`${placeholder}n`, 'g'), '\\n')
+      .replace(new RegExp(`${placeholder}r`, 'g'), '\\r')
+      .replace(new RegExp(`${placeholder}t`, 'g'), '\\t')
+      .replace(new RegExp(`${placeholder}"`, 'g'), '\\"')
+      .replace(new RegExp(`${placeholder}\\\\`, 'g'), '\\\\');
   }
 
   /**
@@ -1074,7 +1166,8 @@ export class OpenAIProvider extends BaseProvider {
       | undefined;
 
     if (choice?.message.content) {
-      fullContent = choice.message.content;
+      // Sanitize content for qwen models that may have control characters
+      fullContent = this.sanitizeJsonContent(choice.message.content);
     }
 
     if (choice?.message.tool_calls) {
