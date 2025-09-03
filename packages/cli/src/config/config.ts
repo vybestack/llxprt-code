@@ -83,6 +83,7 @@ export interface CliArgs {
   screenReader: boolean | undefined;
   useSmartEdit: boolean | undefined;
   sessionSummary: string | undefined;
+  promptWords: string[] | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -93,7 +94,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       '$0 [options]',
       'LLxprt Code - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
     )
-    .command('$0', 'Launch LLxprt CLI', (yargsInstance) =>
+    .command('$0 [promptWords...]', 'Launch LLxprt CLI', (yargsInstance) =>
       yargsInstance
         .option('model', {
           alias: 'm',
@@ -275,8 +276,23 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           'all-files',
           'Use @ includes in the application instead. This flag will be removed in a future version.',
         )
+        .deprecateOption(
+          'prompt',
+          'Use the positional prompt instead. This flag will be removed in a future version.',
+        )
+        .positional('promptWords', {
+          describe: 'Prompt to run non-interactively',
+          type: 'string',
+          array: true,
+        })
         .check((argv) => {
-          if (argv.prompt && argv.promptInteractive) {
+          const promptWords = argv['promptWords'] as string[] | undefined;
+          if (argv['prompt'] && promptWords && promptWords.length > 0) {
+            throw new Error(
+              'Cannot use both a positional prompt and the --prompt (-p) flag together',
+            );
+          }
+          if (argv['prompt'] && argv['promptInteractive']) {
             throw new Error(
               'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
             );
@@ -672,7 +688,8 @@ export async function loadCliConfig(
   );
 
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
-  const question = argv.promptInteractive || argv.prompt || '';
+  const question =
+    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
 
   // Determine approval mode with backward compatibility
   let approvalMode: ApprovalMode;
