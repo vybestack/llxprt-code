@@ -854,14 +854,8 @@ export async function loadCliConfig(
       redactPersonalInfo: effectiveSettings.telemetry?.redactPersonalInfo,
     },
     usageStatisticsEnabled: effectiveSettings.usageStatisticsEnabled ?? true,
-    // Git-aware file filtering settings
-    fileFiltering: {
-      respectGitIgnore: effectiveSettings.fileFiltering?.respectGitIgnore,
-      respectLlxprtIgnore: effectiveSettings.fileFiltering?.respectLlxprtIgnore,
-      enableRecursiveFileSearch:
-        effectiveSettings.fileFiltering?.enableRecursiveFileSearch,
-      disableFuzzySearch: effectiveSettings.fileFiltering?.disableFuzzySearch,
-    },
+    // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
+    fileFiltering: effectiveSettings.fileFiltering,
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
     proxy:
