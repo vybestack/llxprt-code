@@ -35,6 +35,7 @@ import {
 } from '../../config/endpoints.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import { retryWithBackoff } from '../../utils/retry.js';
 import {
   IContent,
   ToolCallBlock,
@@ -1028,20 +1029,59 @@ export class OpenAIProvider extends BaseProvider {
       ...(this.modelParams || {}),
     };
 
-    // Make direct API call to OpenAI
-    const response = await fetch(`${this.baseURL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
+    // Wrap the API call with retry logic
+    const makeApiCall = async () => {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenAI API error: ${error}`);
-    }
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Create an error object that matches what we check for in isRetryableError
+        const error = new Error(`OpenAI API error: ${errorText}`) as Error & {
+          status?: number;
+          error?: unknown;
+        };
+        error.status = response.status;
+
+        // Try to parse the error response
+        try {
+          const errorObj = JSON.parse(errorText);
+          error.error = errorObj;
+        } catch {
+          // If not JSON, keep as text
+        }
+
+        this.logger.debug(
+          () =>
+            `API call error in generateChatCompletionIContent: status=${response.status}, error=${errorText}`,
+        );
+
+        throw error;
+      }
+
+      return response;
+    };
+
+    // Use retry logic with longer delays for rate limits
+    const response = await retryWithBackoff(makeApiCall, {
+      shouldRetry: (error: Error) => {
+        const shouldRetry = this.isRetryableError(error);
+        this.logger.debug(
+          () =>
+            `Retry decision in generateChatCompletionIContent: shouldRetry=${shouldRetry}, error=${String(error).substring(0, 200)}`,
+        );
+        return shouldRetry;
+      },
+      maxAttempts: 6, // Allow up to 6 attempts (initial + 5 retries)
+      initialDelayMs: 4000, // Start with 4 seconds for 429 errors
+      maxDelayMs: 65000, // Allow up to 65 seconds delay
+    });
 
     // Parse streaming response and emit IContent
     const reader = response.body?.getReader();
@@ -1326,7 +1366,7 @@ export class OpenAIProvider extends BaseProvider {
    * Prepare API request configuration
    */
   private prepareApiRequest(
-    messages: IMessage[],
+    _messages: IMessage[],
     tools?: ITool[],
   ): {
     parser: GemmaToolCallParser | null;
@@ -1395,118 +1435,240 @@ export class OpenAIProvider extends BaseProvider {
           .join(', ')}`,
     );
 
-    try {
-      // Log the formatted tools to debug the issue
-      if (requestConfig.formattedTools) {
+    // Create the API call function for retry logic
+    const apiCall = async () => {
+      try {
+        // Log the formatted tools to debug the issue
+        if (requestConfig.formattedTools) {
+          this.logger.debug(
+            () =>
+              `Formatted tools being sent to API: ${JSON.stringify(requestConfig.formattedTools, null, 2)}`,
+          );
+        }
+
+        // Log messages to help debug 400 errors
         this.logger.debug(
           () =>
-            `Formatted tools being sent to API: ${JSON.stringify(requestConfig.formattedTools, null, 2)}`,
+            `Sending ${messages.length} messages to API. Last 3 messages: ${JSON.stringify(
+              messages.slice(-3).map((m) => ({
+                role: m.role,
+                content: m.content?.substring(0, 100),
+                tool_call_id: m.tool_call_id,
+                tool_calls: m.tool_calls?.map((tc) => ({
+                  id: tc.id,
+                  function: { name: tc.function.name },
+                })),
+              })),
+              null,
+              2,
+            )}`,
         );
+
+        // Build request params with exact order from original
+        const apiParams = {
+          model: this.currentModel,
+          messages:
+            messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+          stream: requestConfig.streamingEnabled,
+          ...(requestConfig.streamingEnabled && requestConfig.finalStreamOptions
+            ? { stream_options: requestConfig.finalStreamOptions }
+            : {}),
+          tools: requestConfig.formattedTools as
+            | OpenAI.Chat.Completions.ChatCompletionTool[]
+            | undefined,
+          tool_choice: this.getToolChoiceForFormat(tools),
+          ...this.modelParams,
+        };
+
+        // For qwen models, we may need to handle the response differently
+        // as they sometimes return immutable JSONResponse objects
+        if (this.isUsingQwen() && requestConfig.streamingEnabled) {
+          try {
+            const response =
+              await this.openai.chat.completions.create(apiParams);
+
+            // If we get a JSONResponse object, we need to handle it specially
+            // This is a workaround for qwen models that return Python JSONResponse objects
+            // Check if response has asyncIterator using 'in' operator
+            if (
+              response &&
+              typeof response === 'object' &&
+              !(Symbol.asyncIterator in response)
+            ) {
+              this.logger.debug(
+                () =>
+                  '[Qwen] Received non-iterable response, attempting to convert',
+              );
+
+              // Try to convert the response to an async iterable
+              // This is a workaround for the JSONResponse immutability issue
+              const chunks = Array.isArray(response) ? response : [response];
+              return {
+                async *[Symbol.asyncIterator]() {
+                  for (const chunk of chunks) {
+                    yield chunk;
+                  }
+                },
+              } as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
+            }
+
+            return response;
+          } catch (error) {
+            // If the error is about JSONResponse, try a non-streaming fallback
+            if (error && String(error).includes('JSONResponse')) {
+              this.logger.debug(
+                () =>
+                  '[Qwen] WARNING: JSONResponse error detected, falling back to non-streaming mode',
+              );
+
+              // Retry without streaming
+              const nonStreamParams = {
+                ...apiParams,
+                stream: false,
+                stream_options: undefined,
+              };
+
+              const response =
+                await this.openai.chat.completions.create(nonStreamParams);
+
+              // Convert non-streaming response to streaming format
+              // Deep copy the response to avoid immutable object errors
+              const responseCopy = this.deepCopy(response);
+              return {
+                async *[Symbol.asyncIterator]() {
+                  // Yield the deep copied response as a single chunk
+                  yield responseCopy;
+                },
+              };
+            }
+            throw error;
+          }
+        }
+
+        return await this.openai.chat.completions.create(apiParams);
+      } catch (error) {
+        // Log the error details for debugging
+        this.logger.debug(
+          () =>
+            `API call error: ${JSON.stringify(
+              {
+                errorType: (error as Error).constructor?.name,
+                errorMessage: String(error),
+                status: (error as { status?: number }).status,
+                errorObject:
+                  error && typeof error === 'object' && 'error' in error
+                    ? (error as { error: unknown }).error
+                    : undefined,
+              },
+              null,
+              2,
+            )}`,
+        );
+        this.handleApiError(error, messages);
+        throw error; // Re-throw after logging
+      }
+    };
+
+    // Wrap the API call with retry logic with longer delays for rate limits
+    return await retryWithBackoff(apiCall, {
+      shouldRetry: (error: Error) => {
+        const shouldRetry = this.isRetryableError(error);
+        this.logger.debug(
+          () =>
+            `Retry decision for error: shouldRetry=${shouldRetry}, errorType=${(error as Error).constructor?.name}`,
+        );
+        return shouldRetry;
+      },
+      maxAttempts: 6, // Allow up to 6 attempts (initial + 5 retries)
+      initialDelayMs: 4000, // Start with 4 seconds for 429 errors
+      maxDelayMs: 65000, // Allow up to 65 seconds delay
+    });
+  }
+
+  /**
+   * Determines if an error should trigger a retry
+   */
+  private isRetryableError(error: Error | unknown): boolean {
+    // Check for OpenAI SDK specific error types
+    // The OpenAI SDK throws specific error classes for different error types
+    if (error && typeof error === 'object') {
+      const errorName = (error as Error).constructor?.name;
+
+      // Check for OpenAI SDK RateLimitError or InternalServerError
+      if (
+        errorName === 'RateLimitError' ||
+        errorName === 'InternalServerError'
+      ) {
+        this.logger.debug(
+          () => `Retryable OpenAI SDK error detected: ${errorName}`,
+        );
+        return true;
       }
 
-      // Log messages to help debug 400 errors
-      this.logger.debug(
-        () =>
-          `Sending ${messages.length} messages to API. Last 3 messages: ${JSON.stringify(
-            messages.slice(-3).map((m) => ({
-              role: m.role,
-              content: m.content?.substring(0, 100),
-              tool_call_id: m.tool_call_id,
-              tool_calls: m.tool_calls?.map((tc) => ({
-                id: tc.id,
-                function: { name: tc.function.name },
-              })),
-            })),
-            null,
-            2,
-          )}`,
-      );
-
-      // Build request params with exact order from original
-      const apiParams = {
-        model: this.currentModel,
-        messages:
-          messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-        stream: requestConfig.streamingEnabled,
-        ...(requestConfig.streamingEnabled && requestConfig.finalStreamOptions
-          ? { stream_options: requestConfig.finalStreamOptions }
-          : {}),
-        tools: requestConfig.formattedTools as
-          | OpenAI.Chat.Completions.ChatCompletionTool[]
-          | undefined,
-        tool_choice: this.getToolChoiceForFormat(tools),
-        ...this.modelParams,
-      };
-
-      // For qwen models, we may need to handle the response differently
-      // as they sometimes return immutable JSONResponse objects
-      if (this.isUsingQwen() && requestConfig.streamingEnabled) {
-        try {
-          const response = await this.openai.chat.completions.create(apiParams);
-
-          // If we get a JSONResponse object, we need to handle it specially
-          // This is a workaround for qwen models that return Python JSONResponse objects
-          // Check if response has asyncIterator using 'in' operator
-          if (
-            response &&
-            typeof response === 'object' &&
-            !(Symbol.asyncIterator in response)
-          ) {
-            this.logger.debug(
-              () =>
-                '[Qwen] Received non-iterable response, attempting to convert',
-            );
-
-            // Try to convert the response to an async iterable
-            // This is a workaround for the JSONResponse immutability issue
-            const chunks = Array.isArray(response) ? response : [response];
-            return {
-              async *[Symbol.asyncIterator]() {
-                for (const chunk of chunks) {
-                  yield chunk;
-                }
-              },
-            } as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
-          }
-
-          return response;
-        } catch (error) {
-          // If the error is about JSONResponse, try a non-streaming fallback
-          if (error && String(error).includes('JSONResponse')) {
-            this.logger.debug(
-              () =>
-                '[Qwen] WARNING: JSONResponse error detected, falling back to non-streaming mode',
-            );
-
-            // Retry without streaming
-            const nonStreamParams = {
-              ...apiParams,
-              stream: false,
-              stream_options: undefined,
-            };
-
-            const response =
-              await this.openai.chat.completions.create(nonStreamParams);
-
-            // Convert non-streaming response to streaming format
-            // Deep copy the response to avoid immutable object errors
-            const responseCopy = this.deepCopy(response);
-            return {
-              async *[Symbol.asyncIterator]() {
-                // Yield the deep copied response as a single chunk
-                yield responseCopy;
-              },
-            };
-          }
-          throw error;
+      // Check for status property (OpenAI APIError has a status property)
+      if ('status' in error) {
+        const status = (error as { status: number }).status;
+        // Retry on 429 (rate limit) and 5xx errors
+        if (status === 429 || (status >= 500 && status < 600)) {
+          this.logger.debug(
+            () => `Retryable error detected - status: ${status}`,
+          );
+          return true;
         }
       }
 
-      return await this.openai.chat.completions.create(apiParams);
-    } catch (error) {
-      this.handleApiError(error, messages);
-      throw error; // Re-throw after logging
+      // Check for nested error object (some OpenAI errors have error.error structure)
+      if (
+        'error' in error &&
+        typeof (error as { error: unknown }).error === 'object'
+      ) {
+        const nestedError = (
+          error as { error: { code?: string; type?: string } }
+        ).error;
+        if (
+          nestedError?.code === 'token_quota_exceeded' ||
+          nestedError?.type === 'too_many_tokens_error' ||
+          nestedError?.code === 'rate_limit_exceeded'
+        ) {
+          this.logger.debug(
+            () =>
+              `Retryable error detected from error code: ${nestedError.code || nestedError.type}`,
+          );
+          return true;
+        }
+      }
     }
+
+    // Check error message for rate limit indicators
+    const errorMessage = String(error).toLowerCase();
+    const retryablePatterns = [
+      'rate limit',
+      'rate_limit',
+      'quota_exceeded',
+      'too_many_tokens',
+      'too many requests',
+      '429',
+      'overloaded',
+      'server_error',
+      'service_unavailable',
+      'internal server error',
+      '500',
+      '502',
+      '503',
+      '504',
+    ];
+
+    const shouldRetry = retryablePatterns.some((pattern) =>
+      errorMessage.includes(pattern),
+    );
+
+    if (shouldRetry) {
+      this.logger.debug(
+        () => `Retryable error detected from message pattern: ${errorMessage}`,
+      );
+    }
+
+    return shouldRetry;
   }
 
   /**

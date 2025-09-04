@@ -63,6 +63,12 @@ export interface ContentMetadata {
 
   /** Additional provider-specific metadata */
   providerMetadata?: Record<string, unknown>;
+
+  /** Whether this content is synthetic (auto-generated) */
+  synthetic?: boolean;
+
+  /** Reason for synthetic content generation */
+  reason?: string;
 }
 
 /**

@@ -297,8 +297,13 @@ export class HistoryService
    * - Always includes user/human messages
    * - Always includes tool messages
    * - Only includes AI messages if they are valid (have content)
+   * - Automatically adds synthetic responses for orphaned tool calls
    */
   getCurated(): IContent[] {
+    // Auto-patch orphaned tool calls in the actual history first
+    this.patchOrphanedToolCalls();
+
+    // Now build the curated list from the patched history
     const curated: IContent[] = [];
     let excludedCount = 0;
 
@@ -595,6 +600,100 @@ export class HistoryService
     }
 
     this.history = fixedHistory;
+  }
+
+  /**
+   * Patch orphaned tool calls by adding synthetic responses to the actual history.
+   * This ensures that all tool calls have matching responses, which is required
+   * by providers like OpenAI.
+   */
+  private patchOrphanedToolCalls(): void {
+    // Find all unmatched tool calls
+    const unmatchedCalls = this.findUnmatchedToolCalls();
+
+    if (unmatchedCalls.length === 0) {
+      return; // Nothing to patch
+    }
+
+    // Check if we've already patched these orphans (avoid duplicate patching)
+    // Synthetic responses have metadata.synthetic = true
+    const syntheticExists = this.history.some(
+      (h) =>
+        h.metadata?.synthetic === true &&
+        h.metadata?.reason === 'orphaned_tool_call',
+    );
+
+    if (syntheticExists) {
+      // Already patched, don't add duplicates
+      return;
+    }
+
+    this.logger.debug('Patching orphaned tool calls:', {
+      count: unmatchedCalls.length,
+      ids: unmatchedCalls.map((c) => c.id),
+    });
+
+    // Group unmatched calls by their position in history
+    // We need to insert synthetic responses after their corresponding AI messages
+    const callPositions = new Map<number, ToolCallBlock[]>();
+
+    for (let i = 0; i < this.history.length; i++) {
+      const content = this.history[i];
+      if (content.speaker === 'ai') {
+        for (const block of content.blocks) {
+          if (block.type === 'tool_call') {
+            const toolCall = block as ToolCallBlock;
+            // Check if this call is unmatched
+            if (unmatchedCalls.some((u) => u.id === toolCall.id)) {
+              if (!callPositions.has(i)) {
+                callPositions.set(i, []);
+              }
+              callPositions.get(i)!.push(toolCall);
+            }
+          }
+        }
+      }
+    }
+
+    // Create synthetic responses and insert them after their AI messages
+    // Process in reverse order to maintain correct indices
+    const positions = Array.from(callPositions.keys()).sort((a, b) => b - a);
+
+    for (const position of positions) {
+      const orphanedCalls = callPositions.get(position)!;
+
+      // Create a single tool response content with all synthetic responses
+      const syntheticContent: IContent = {
+        speaker: 'tool',
+        blocks: orphanedCalls.map((call) => ({
+          type: 'tool_response' as const,
+          callId: call.id,
+          toolName: call.name,
+          result: null,
+          error: 'Tool execution cancelled by user',
+        })),
+        metadata: {
+          synthetic: true,
+          reason: 'orphaned_tool_call',
+        },
+      };
+
+      // Insert the synthetic response after the AI message that contains the tool calls
+      this.history.splice(position + 1, 0, syntheticContent);
+
+      this.logger.debug('Inserted synthetic tool response:', {
+        afterPosition: position,
+        forCallIds: orphanedCalls.map((c) => c.id),
+      });
+    }
+
+    // Log if we added synthetic responses
+    if (positions.length > 0) {
+      this.logger.debug('Added synthetic responses for orphaned tool calls:', {
+        syntheticResponsesAdded: positions.length,
+        totalOrphanedCalls: unmatchedCalls.length,
+      });
+    }
   }
 
   /**
