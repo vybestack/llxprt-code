@@ -40,7 +40,7 @@ export interface ResponsesRequestParams {
 type ResponsesMessage =
   | {
       role: 'assistant' | 'system' | 'developer' | 'user';
-      content: string;
+      content?: string; // Content is optional for assistant messages with tool calls
       usage?: {
         prompt_tokens?: number;
         completion_tokens?: number;
@@ -262,11 +262,25 @@ export function buildResponsesRequest(
           sanitizedContent = ensureJsonSafe(cleanMsg.content);
         }
 
-        return {
+        const result: {
+          role: 'user' | 'assistant' | 'system' | 'developer';
+          content?: string;
+          usage?: typeof usage;
+        } = {
           role: validRole,
-          content: sanitizedContent,
-          ...(usage ? { usage } : {}), // Preserve usage data if present
         };
+
+        // Only add content if it exists
+        if (sanitizedContent) {
+          result.content = sanitizedContent;
+        }
+
+        // Preserve usage data if present
+        if (usage) {
+          result.usage = usage;
+        }
+
+        return result as ResponsesMessage;
       })
       .filter(
         (msg): msg is NonNullable<typeof msg> => msg !== null,

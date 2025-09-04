@@ -48,6 +48,69 @@ import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
+  /**
+   * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
+   */
+  private convertGeminiSchemaToStandard(schema: unknown): unknown {
+    if (!schema || typeof schema !== 'object') {
+      return schema;
+    }
+
+    const newSchema: Record<string, unknown> = { ...schema };
+
+    // Handle properties
+    if (newSchema.properties && typeof newSchema.properties === 'object') {
+      const newProperties: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(newSchema.properties)) {
+        newProperties[key] = this.convertGeminiSchemaToStandard(value);
+      }
+      newSchema.properties = newProperties;
+    }
+
+    // Handle items
+    if (newSchema.items) {
+      if (Array.isArray(newSchema.items)) {
+        newSchema.items = newSchema.items.map((item) =>
+          this.convertGeminiSchemaToStandard(item),
+        );
+      } else {
+        newSchema.items = this.convertGeminiSchemaToStandard(newSchema.items);
+      }
+    }
+
+    // Convert type from UPPERCASE enum to lowercase string
+    if (newSchema.type) {
+      newSchema.type = String(newSchema.type).toLowerCase();
+    }
+
+    // Convert enum values if present
+    if (newSchema.enum && Array.isArray(newSchema.enum)) {
+      newSchema.enum = newSchema.enum.map((v) => String(v));
+    }
+
+    // Convert minLength from string to number if present
+    if (newSchema.minLength && typeof newSchema.minLength === 'string') {
+      const minLengthNum = parseInt(newSchema.minLength, 10);
+      if (!isNaN(minLengthNum)) {
+        newSchema.minLength = minLengthNum;
+      } else {
+        delete newSchema.minLength;
+      }
+    }
+
+    // Convert maxLength from string to number if present
+    if (newSchema.maxLength && typeof newSchema.maxLength === 'string') {
+      const maxLengthNum = parseInt(newSchema.maxLength, 10);
+      if (!isNaN(maxLengthNum)) {
+        newSchema.maxLength = maxLengthNum;
+      } else {
+        delete newSchema.maxLength;
+      }
+    }
+
+    return newSchema;
+  }
+
   private logger: DebugLogger;
   private currentModel: string = 'o3-mini';
   private baseURL: string;
@@ -412,33 +475,68 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    // Return models that support the responses API
-    return [
-      {
-        id: 'o1',
-        name: 'o1',
+    // Try to fetch models dynamically from the API
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      // If no API key, return hardcoded list from RESPONSES_API_MODELS
+      return RESPONSES_API_MODELS.map((modelId) => ({
+        id: modelId,
+        name: modelId,
         provider: 'openai-responses',
         supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'o1-preview',
-        name: 'o1-preview',
-        provider: 'openai-responses',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'o1-mini',
-        name: 'o1-mini',
-        provider: 'openai-responses',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'o3-mini',
-        name: 'o3-mini',
-        provider: 'openai-responses',
-        supportedToolFormats: ['openai'],
-      },
-    ];
+      }));
+    }
+
+    try {
+      // Fetch models from the API
+      const response = await fetch(`${this.baseURL}/models`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as { data: Array<{ id: string }> };
+        const models: IModel[] = [];
+
+        // Add all models without filtering - let them all through
+        for (const model of data.data) {
+          // Skip non-chat models (embeddings, audio, image, etc.)
+          if (
+            !/embedding|whisper|audio|tts|image|vision|dall[- ]?e|moderation/i.test(
+              model.id,
+            )
+          ) {
+            models.push({
+              id: model.id,
+              name: model.id,
+              provider: 'openai-responses',
+              supportedToolFormats: ['openai'],
+            });
+          }
+        }
+
+        return models.length > 0
+          ? models
+          : RESPONSES_API_MODELS.map((modelId) => ({
+              id: modelId,
+              name: modelId,
+              provider: 'openai-responses',
+              supportedToolFormats: ['openai'],
+            }));
+      }
+    } catch (error) {
+      this.logger.debug(() => `Error fetching models from OpenAI: ${error}`);
+    }
+
+    // Fallback to hardcoded list from RESPONSES_API_MODELS
+    return RESPONSES_API_MODELS.map((modelId) => ({
+      id: modelId,
+      name: modelId,
+      provider: 'openai-responses',
+      supportedToolFormats: ['openai'],
+    }));
   }
 
   async *generateChatCompletion(
@@ -687,20 +785,12 @@ export class OpenAIResponsesProvider extends BaseProvider {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
-    // Convert IContent directly to OpenAI format messages
-    const messages: Array<{
-      role: string;
+    // Build Responses API input array directly from IContent
+    // For the Responses API, we only send user and assistant messages
+    // Tool calls and responses from history are not sent as the API handles tools differently
+    const input: Array<{
+      role: 'user' | 'assistant' | 'system';
       content?: string;
-      tool_calls?: Array<{
-        id: string;
-        type: 'function';
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }>;
-      tool_call_id?: string;
-      name?: string;
     }> = [];
 
     for (const c of content) {
@@ -708,11 +798,15 @@ export class OpenAIResponsesProvider extends BaseProvider {
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
           | undefined;
-        messages.push({
-          role: 'user',
-          content: textBlock?.text || '',
-        });
+        if (textBlock?.text) {
+          input.push({
+            role: 'user',
+            content: textBlock.text,
+          });
+        }
       } else if (c.speaker === 'ai') {
+        // For AI messages, we only include the text content
+        // Tool calls are part of the history but not sent to the API
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -721,87 +815,81 @@ export class OpenAIResponsesProvider extends BaseProvider {
         ) as ToolCallBlock[];
 
         const contentText = textBlocks.map((b) => b.text).join('');
-        const message: {
-          role: 'assistant';
-          content: string | undefined;
-          tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            function: {
-              name: string;
-              arguments: string;
-            };
-          }>;
-        } = {
-          role: 'assistant',
-          content: contentText || undefined,
-        };
 
-        if (toolCallBlocks.length > 0) {
-          message.tool_calls = toolCallBlocks.map((tc) => ({
-            id: tc.id.replace(/^hist_tool_/, 'call_'),
-            type: 'function' as const,
-            function: {
-              name: tc.name,
-              arguments: JSON.stringify(tc.parameters),
-            },
-          }));
+        // If there's text content or it's a pure tool call response, include it
+        if (contentText || toolCallBlocks.length > 0) {
+          const assistantMsg: { role: 'assistant'; content?: string } = {
+            role: 'assistant',
+          };
+
+          // Include text content if present
+          if (contentText) {
+            assistantMsg.content = contentText;
+          } else if (toolCallBlocks.length > 0) {
+            // For tool-only responses, add a brief description
+            assistantMsg.content = `[Called ${toolCallBlocks.length} tool${toolCallBlocks.length > 1 ? 's' : ''}: ${toolCallBlocks.map((tc) => tc.name).join(', ')}]`;
+          }
+
+          input.push(assistantMsg);
         }
-
-        messages.push(message);
       } else if (c.speaker === 'tool') {
+        // Tool responses are converted to assistant messages with the result
         const toolResponseBlock = c.blocks.find(
           (b) => b.type === 'tool_response',
         ) as ToolResponseBlock | undefined;
-        if (!toolResponseBlock) {
-          throw new Error('Tool content must have a tool_response block');
+        if (toolResponseBlock) {
+          // Add tool result as an assistant message
+          const result =
+            typeof toolResponseBlock.result === 'string'
+              ? toolResponseBlock.result
+              : JSON.stringify(toolResponseBlock.result);
+          input.push({
+            role: 'assistant',
+            content: `[Tool ${toolResponseBlock.toolName} result]: ${result}`,
+          });
         }
-
-        messages.push({
-          role: 'tool',
-          content: JSON.stringify(toolResponseBlock.result),
-          tool_call_id: toolResponseBlock.callId.replace(
-            /^hist_tool_/,
-            'call_',
-          ),
-          name: toolResponseBlock.toolName,
-        });
       }
     }
 
-    // Convert Gemini format tools to OpenAI format
-    const openaiTools = tools
-      ? tools[0].functionDeclarations.map((decl) => ({
-          type: 'function' as const,
-          function: {
+    // Convert Gemini format tools to Responses API format directly
+    // Based on the ToolFormatter.toResponsesTool format
+    const responsesTools = tools
+      ? tools[0].functionDeclarations.map((decl) => {
+          // Convert parameters from Gemini format to standard format
+          const convertedParams = decl.parameters
+            ? (this.convertGeminiSchemaToStandard(decl.parameters) as Record<
+                string,
+                unknown
+              >)
+            : { type: 'object', properties: {} };
+
+          return {
+            type: 'function' as const,
             name: decl.name,
-            description: decl.description || '',
-            parameters: decl.parameters || { type: 'object', properties: {} },
-          },
-        }))
+            description: decl.description || null,
+            parameters: convertedParams,
+            strict: null,
+          };
+        })
       : undefined;
 
-    // Format tools for Responses API
-    const formattedTools = openaiTools
-      ? this.toolFormatter.toResponsesTool(openaiTools)
-      : undefined;
-
-    // Patch messages to include synthetic responses for cancelled tools
-    const { SyntheticToolResponseHandler } = await import(
-      '../openai/syntheticToolResponses.js'
-    );
-    const patchedMessages = SyntheticToolResponseHandler.patchMessageHistory(
-      messages as IMessage[],
-    );
-
-    // Build the request
-    const request = buildResponsesRequest({
+    // Build the request directly for Responses API
+    const request: {
+      model: string;
+      input: typeof input;
+      tools?: typeof responsesTools;
+      stream: boolean;
+      [key: string]: unknown;
+    } = {
       model: this.currentModel,
-      messages: patchedMessages,
-      tools: formattedTools,
+      input,
       stream: true,
       ...(this.modelParams || {}),
-    });
+    };
+
+    if (responsesTools && responsesTools.length > 0) {
+      request.tools = responsesTools;
+    }
 
     // Make the API call
     const responsesURL = `${this.baseURL}/responses`;
