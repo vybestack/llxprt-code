@@ -991,15 +991,26 @@ export class OpenAIProvider extends BaseProvider {
     }
 
     // Convert Gemini format tools to OpenAI format
+    // Handle both legacy 'parameters' and new 'parametersJsonSchema' formats
     const apiTools = tools
-      ? tools[0].functionDeclarations.map((decl) => ({
-          type: 'function' as const,
-          function: {
-            name: decl.name,
-            description: decl.description || '',
-            parameters: decl.parameters || {},
-          },
-        }))
+      ? tools[0].functionDeclarations.map((decl) => {
+          // Support both old 'parameters' and new 'parametersJsonSchema' formats
+          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
+          const toolParameters =
+            'parametersJsonSchema' in decl
+              ? (decl as { parametersJsonSchema?: unknown })
+                  .parametersJsonSchema
+              : decl.parameters;
+
+          return {
+            type: 'function' as const,
+            function: {
+              name: decl.name,
+              description: decl.description || '',
+              parameters: toolParameters || {},
+            },
+          };
+        })
       : undefined;
 
     // Get auth token

@@ -344,8 +344,14 @@ export class GeminiClient {
   }
 
   async resetChat(): Promise<void> {
-    // Pass the stored history to startChat so it's preserved
-    this.chat = await this.startChat(this._previousHistory);
+    // Clear the existing chat's history if it exists
+    if (this.chat) {
+      this.chat.clearHistory();
+    }
+    // Clear the stored history as well
+    this._previousHistory = [];
+    // Start a fresh chat with no history
+    this.chat = await this.startChat([]);
   }
 
   async addDirectoryContext(): Promise<void> {

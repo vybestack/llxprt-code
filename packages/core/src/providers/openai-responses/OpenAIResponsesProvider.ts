@@ -855,9 +855,17 @@ export class OpenAIResponsesProvider extends BaseProvider {
     // Based on the ToolFormatter.toResponsesTool format
     const responsesTools = tools
       ? tools[0].functionDeclarations.map((decl) => {
+          // Support both old 'parameters' and new 'parametersJsonSchema' formats
+          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
+          const toolParameters =
+            'parametersJsonSchema' in decl
+              ? (decl as { parametersJsonSchema?: unknown })
+                  .parametersJsonSchema
+              : decl.parameters;
+
           // Convert parameters from Gemini format to standard format
-          const convertedParams = decl.parameters
-            ? (this.convertGeminiSchemaToStandard(decl.parameters) as Record<
+          const convertedParams = toolParameters
+            ? (this.convertGeminiSchemaToStandard(toolParameters) as Record<
                 string,
                 unknown
               >)

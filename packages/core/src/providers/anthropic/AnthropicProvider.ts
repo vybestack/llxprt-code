@@ -1076,17 +1076,27 @@ ${llxprtPrompts}`;
 
     // Convert Gemini format tools to Anthropic format
     const anthropicTools = tools
-      ? tools[0].functionDeclarations.map((decl) => ({
-          name: decl.name,
-          description: decl.description || '',
-          input_schema: {
-            type: 'object' as const,
-            properties:
-              (decl.parameters as Record<string, unknown>)?.properties || {},
-            required:
-              (decl.parameters as Record<string, unknown>)?.required || [],
-          },
-        }))
+      ? tools[0].functionDeclarations.map((decl) => {
+          // Support both old 'parameters' and new 'parametersJsonSchema' formats
+          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
+          const toolParameters =
+            'parametersJsonSchema' in decl
+              ? (decl as { parametersJsonSchema?: unknown })
+                  .parametersJsonSchema
+              : decl.parameters;
+
+          return {
+            name: decl.name,
+            description: decl.description || '',
+            input_schema: {
+              type: 'object' as const,
+              properties:
+                (toolParameters as Record<string, unknown>)?.properties || {},
+              required:
+                (toolParameters as Record<string, unknown>)?.required || [],
+            },
+          };
+        })
       : undefined;
 
     // Ensure authentication
