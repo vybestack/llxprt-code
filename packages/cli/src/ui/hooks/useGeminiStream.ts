@@ -664,6 +664,9 @@ export const useGeminiStream = (
               userMessageTimestamp,
             );
             break;
+          case ServerGeminiEventType.Retry:
+            // Will add the missing logic later
+            break;
           default: {
             // enforces exhaustive switch-case
             const unreachable: never = event;

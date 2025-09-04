@@ -62,7 +62,12 @@ export enum GeminiEventType {
   Finished = 'finished',
   LoopDetected = 'loop_detected',
   Citation = 'citation',
+  Retry = 'retry',
 }
+
+export type ServerGeminiRetryEvent = {
+  type: GeminiEventType.Retry;
+};
 
 export interface StructuredError {
   message: string;
@@ -174,7 +179,10 @@ export type ServerGeminiMaxSessionTurnsEvent = {
 
 export type ServerGeminiFinishedEvent = {
   type: GeminiEventType.Finished;
-  value: FinishReason;
+  value: {
+    reason: FinishReason;
+    usageMetadata?: GenerateContentResponseUsageMetadata;
+  };
 };
 
 export type ServerGeminiLoopDetectedEvent = {
@@ -200,7 +208,8 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiMaxSessionTurnsEvent
   | ServerGeminiFinishedEvent
   | ServerGeminiLoopDetectedEvent
-  | ServerGeminiCitationEvent;
+  | ServerGeminiCitationEvent
+  | ServerGeminiRetryEvent;
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
@@ -274,6 +283,8 @@ export class Turn {
     });
 
     try {
+      // Note: This assumes `sendMessageStream` yields events like
+      // { type: StreamEventType.RETRY } or { type: StreamEventType.CHUNK, value: GenerateContentResponse }
       const responseStream = await this.chat.sendMessageStream(
         {
           message: req,
@@ -284,12 +295,22 @@ export class Turn {
         this.prompt_id,
       );
 
-      for await (const resp of responseStream) {
+      for await (const streamEvent of responseStream) {
         if (signal?.aborted) {
           yield { type: GeminiEventType.UserCancelled };
-          // Do not add resp to debugResponses if aborted before processing
           return;
         }
+
+        // Handle the new RETRY event
+        if (streamEvent.type === 'retry') {
+          yield { type: GeminiEventType.Retry };
+          continue; // Skip to the next event in the stream
+        }
+
+        // Assuming other events are chunks with a `value` property
+        const resp = streamEvent.value as GenerateContentResponse;
+        if (!resp) continue; // Skip if there's no response body
+
         this.debugResponses.push(resp);
 
         const thoughtPart = resp.candidates?.[0]?.content?.parts?.[0];
@@ -340,11 +361,15 @@ export class Turn {
         // Check if response was truncated or stopped for various reasons
         const finishReason = resp.candidates?.[0]?.finishReason;
 
+        // This is the key change: Only yield 'Finished' if there is a finishReason.
         if (finishReason) {
           this.finishReason = finishReason;
           yield {
             type: GeminiEventType.Finished,
-            value: finishReason as FinishReason,
+            value: {
+              reason: finishReason,
+              usageMetadata: resp.usageMetadata,
+            },
           };
         }
       }
