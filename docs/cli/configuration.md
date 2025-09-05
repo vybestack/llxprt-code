@@ -871,6 +871,45 @@ LLxprt Code can be integrated with the Zed editor as an AI assistant using the e
 1. In Zed, open your settings (`cmd+,` on macOS)
 2. Add llxprt as an assistant provider:
 
+LLxprt integrates with Zed and is easiest to configure in your `~/.config/zed/settings.json` under "agent_servers" or using Zed's onboarding menu. you need to specify the "whereis llxprt" path to make it work. You also must include `--experimental-acp`. If you want you use any provider except for gemini (or your default profile config) you'll need to supply arguments that are the same as those on the command line. This is an example of using llxprt with a saved profile for Cerebras' Code Max Qwen 3 Coder (480B) model. You could instead do --provider openai --baseurl thebaseurlofyourprovider --key yourkey or --keyfile yourkeyfile but popping open llxprt and saving a profile is usually easier. Don't include the env DEBUG unless you want to generate really big log files in `~/.llxprt/debug/`
+
+zed settings.json example:
+
+```json
+"llxprt": {
+      "command": "node",
+      "args": [
+        "/opt/homebrew/bin/llxprt",
+        "--experimental-acp",
+        "--profile-load",
+        "cerebrasqwen3",
+        "--yolo"
+      ],
+      "env": { "DEBUG": "llxprt:*" }
+    }
+  }
+```
+
+This is an example of the Qwen 3 profile (created with /profile save)
+
+```json
+{
+  "version": 1,
+  "provider": "openai",
+  "model": "qwen-3-coder-480b",
+  "modelParams": {},
+  "ephemeralSettings": {
+    "context-limit": 120000,
+    "auth-keyfile": "~/.cerebras_key",
+    "base-url": "https://api.cerebras.ai/v1",
+    "custom-headers": "response_format.json_schema.strict true",
+    "shell-replacement": true,
+    "streaming": "disabled",
+    "emojifilter": "warn"
+  }
+}
+```
+
 ```json
 {
   "assistant": {
