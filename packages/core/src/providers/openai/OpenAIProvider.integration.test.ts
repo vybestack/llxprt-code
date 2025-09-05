@@ -6,9 +6,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage } from '../IMessage.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import { ITool } from '../ITool.js';
+import { IContent } from '../../services/history/IContent.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const skipTests = !OPENAI_API_KEY;
@@ -52,14 +50,19 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
 
   it('should generate real chat completion', async () => {
     if (!provider) return; // Skip if no API key
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Say "Hello from integration test" and nothing else.',
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'Say "Hello from integration test" and nothing else.',
+          },
+        ],
       },
     ];
 
-    const responses: IMessage[] = [];
+    const responses: IContent[] = [];
     const generator = provider.generateChatCompletion(messages);
 
     for await (const message of generator) {
@@ -71,7 +74,12 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(responses.length).toBeGreaterThan(0);
 
     // Combine all content from messages
-    const fullContent = responses.map((m) => m.content).join('');
+    const fullContent = responses
+      .map((m) => {
+        const textBlocks = m.blocks.filter((b) => b.type === 'text');
+        return textBlocks.map((b) => (b as { text: string }).text).join('');
+      })
+      .join('');
 
     expect(fullContent).toBeTruthy();
     expect(fullContent).toContain('Hello from integration test');
@@ -86,33 +94,38 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
 
   it('should handle tool calls', { timeout: 10000 }, async () => {
     if (!provider) return; // Skip if no API key
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content:
-          'What is the weather in San Francisco? Use the get_weather tool.',
-      },
-    ];
-
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'get_weather',
-          description: 'Get the weather for a location',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: { type: 'string', description: 'The city name' },
-              unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-            },
-            required: ['location'],
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'What is the weather in San Francisco? Use the get_weather tool.',
           },
-        },
+        ],
       },
     ];
 
-    const responses: IMessage[] = [];
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+            description: 'Get the weather for a location',
+            parameters: {
+              type: 'object',
+              properties: {
+                location: { type: 'string', description: 'The city name' },
+                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
+              },
+              required: ['location'],
+            },
+          },
+        ],
+      },
+    ];
+
+    const responses: IContent[] = [];
     const generator = provider.generateChatCompletion(messages, tools);
 
     for await (const message of generator) {
@@ -121,20 +134,26 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     }
 
     // Find message with tool calls
-    const toolCallMessage = responses.find(
-      (m) => m.tool_calls && m.tool_calls.length > 0,
+    const toolCallMessage = responses.find((m) =>
+      m.blocks.some((b) => b.type === 'tool_call'),
     );
     expect(toolCallMessage).toBeDefined();
-    expect(toolCallMessage?.tool_calls).toBeDefined();
-    expect(Array.isArray(toolCallMessage?.tool_calls)).toBe(true);
 
-    if (toolCallMessage?.tool_calls && toolCallMessage.tool_calls.length > 0) {
-      const toolCall = toolCallMessage.tool_calls[0];
-      expect(toolCall.function.name).toBe('get_weather');
-      expect(toolCall.function.arguments).toBeTruthy();
+    const toolCallBlocks =
+      toolCallMessage?.blocks.filter((b) => b.type === 'tool_call') || [];
+    expect(toolCallBlocks.length).toBeGreaterThan(0);
 
-      // Parse and verify arguments
-      const args = JSON.parse(toolCall.function.arguments);
+    if (toolCallBlocks.length > 0) {
+      const toolCall = toolCallBlocks[0] as {
+        type: 'tool_call';
+        name: string;
+        parameters: { location: string };
+      };
+      expect(toolCall.name).toBe('get_weather');
+      expect(toolCall.parameters).toBeTruthy();
+
+      // Verify parameters
+      const args = toolCall.parameters;
       expect(args.location.toLowerCase()).toContain('san francisco');
 
       console.log('Tool call received:', toolCall);

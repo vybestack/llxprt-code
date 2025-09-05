@@ -5,11 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import {
-  OpenAIProvider,
-  ProviderManager,
-  ContentGeneratorRole,
-} from '../../index.js';
+import { OpenAIProvider, ProviderManager } from '../../index.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 
 describe('Multi-Provider Integration Tests', () => {
@@ -182,9 +178,13 @@ describe('Multi-Provider Integration Tests', () => {
 
         const messages = [
           {
-            role: ContentGeneratorRole.USER,
-            content:
-              'Say "Hello from OpenAI integration test" and nothing else.',
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: 'Say "Hello from OpenAI integration test" and nothing else.',
+              },
+            ],
           },
         ];
 
@@ -193,8 +193,9 @@ describe('Multi-Provider Integration Tests', () => {
         const stream = openaiProvider.generateChatCompletion(messages);
 
         for await (const message of stream) {
-          if (message.content) {
-            chunks.push(message.content);
+          const textBlocks = message.blocks.filter((b) => b.type === 'text');
+          for (const block of textBlocks) {
+            chunks.push((block as { type: 'text'; text: string }).text);
           }
         }
 
@@ -216,8 +217,13 @@ describe('Multi-Provider Integration Tests', () => {
 
       const messages = [
         {
-          role: ContentGeneratorRole.USER,
-          content: 'Count from 1 to 5, one number per line.',
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: 'Count from 1 to 5, one number per line.',
+            },
+          ],
         },
       ];
 
@@ -226,8 +232,9 @@ describe('Multi-Provider Integration Tests', () => {
       const stream = openaiProvider.generateChatCompletion(messages);
 
       for await (const message of stream) {
-        if (message.content) {
-          chunks.push(message.content);
+        const textBlocks = message.blocks.filter((b) => b.type === 'text');
+        for (const block of textBlocks) {
+          chunks.push(block.text);
           chunkCount++;
         }
       }
@@ -259,8 +266,13 @@ describe('Multi-Provider Integration Tests', () => {
 
       const messages = [
         {
-          role: ContentGeneratorRole.USER,
-          content: 'What is 2+2? Reply with just the number.',
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'text',
+              text: 'What is 2+2? Reply with just the number.',
+            },
+          ],
         },
       ];
 
@@ -268,8 +280,9 @@ describe('Multi-Provider Integration Tests', () => {
       const stream = openaiProvider.generateChatCompletion(messages);
 
       for await (const message of stream) {
-        if (message.content) {
-          chunks.push(message.content);
+        const textBlocks = message.blocks.filter((b) => b.type === 'text');
+        for (const block of textBlocks) {
+          chunks.push(block.text);
         }
       }
 
@@ -287,26 +300,31 @@ describe('Multi-Provider Integration Tests', () => {
 
         const messages = [
           {
-            role: ContentGeneratorRole.USER,
-            content:
-              'What is the weather in San Francisco? Use the get_weather function.',
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: 'What is the weather in San Francisco? Use the get_weather function.',
+              },
+            ],
           },
         ];
 
         const tools = [
           {
-            type: 'function' as const,
-            function: {
-              name: 'get_weather',
-              description: 'Get the weather for a location',
-              parameters: {
-                type: 'object',
-                properties: {
-                  location: { type: 'string', description: 'The city name' },
+            functionDeclarations: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather for a location',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: { type: 'string', description: 'The city name' },
+                  },
+                  required: ['location'],
                 },
-                required: ['location'],
               },
-            },
+            ],
           },
         ];
 
@@ -315,16 +333,23 @@ describe('Multi-Provider Integration Tests', () => {
           const stream = openaiProvider.generateChatCompletion(messages, tools);
 
           for await (const message of stream) {
-            if (message.tool_calls && message.tool_calls.length > 0) {
+            const toolCallBlocks = message.blocks.filter(
+              (b) => b.type === 'tool_call',
+            );
+            if (toolCallBlocks.length > 0) {
               toolCallReceived = true;
-              const toolCall = message.tool_calls[0];
+              const toolCall = toolCallBlocks[0] as {
+                type: 'tool_call';
+                name: string;
+                parameters: { location: string };
+              };
+              console.log(`\n[OK] Tool call received: ${toolCall.name}`);
               console.log(
-                `\n[OK] Tool call received: ${toolCall.function.name}`,
+                `   Arguments: ${JSON.stringify(toolCall.parameters)}`,
               );
-              console.log(`   Arguments: ${toolCall.function.arguments}`);
 
-              expect(toolCall.function.name).toBe('get_weather');
-              const args = JSON.parse(toolCall.function.arguments);
+              expect(toolCall.name).toBe('get_weather');
+              const args = toolCall.parameters;
               expect(args.location.toLowerCase()).toContain('san francisco');
             }
           }
@@ -357,7 +382,12 @@ describe('Multi-Provider Integration Tests', () => {
       const openaiProvider = new OpenAIProvider(apiKey!, baseURL);
       openaiProvider.setModel('invalid-model-xyz');
 
-      const messages = [{ role: ContentGeneratorRole.USER, content: 'Hello' }];
+      const messages = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Hello' }],
+        },
+      ];
 
       try {
         const stream = openaiProvider.generateChatCompletion(messages);
