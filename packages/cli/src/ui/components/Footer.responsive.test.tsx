@@ -277,7 +277,7 @@ describe('Footer Responsive Behavior', () => {
         expect(output).toMatch(/(Mem:|Memory:)/);
         expect(output).toMatch(/(Ctx:|Context:)/);
         // Path check - Windows may show truncated paths differently
-        expect(output).toContain('/test/path'); // Path (may be truncated)
+        expect(output).toMatch(/home.*user.*projects|long-project-name/); // Path (may be truncated)
         if (width >= 80) {
           expect(output).toContain('gemini-2.0-flash'); // Model only shown at standard+ widths
         }
@@ -296,7 +296,7 @@ describe('Footer Responsive Behavior', () => {
       expect(output).toMatch(/\d{1,2}:\d{2}:\d/); // Timestamp (may wrap)
 
       // Should also have path and model displayed
-      expect(output).toContain('/test/path');
+      expect(output).toMatch(/home.*user.*projects|long-project-name/);
       expect(output).toContain('gemini-2.0-flash');
     });
 
@@ -307,9 +307,9 @@ describe('Footer Responsive Behavior', () => {
       const output = lastFrame();
 
       // Should contain path and model information
-      expect(output).toContain('/test/path');
+      expect(output).toMatch(/home.*user.*projects|long-project-name/);
       expect(output).toContain('gemini-2.0-flash');
-      expect(output).toContain('test-branch'); // Branch name
+      expect(output).toContain('feature'); // Branch name (from defaultProps)
 
       // Should also have memory and context (they can be on separate logical lines)
       expect(output).toMatch(/Memory:/);

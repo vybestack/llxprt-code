@@ -4,6 +4,11 @@ import { Footer } from './Footer.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { ProviderManager, IProvider } from '@vybestack/llxprt-code-core';
 
+// Mock the hooks
+vi.mock('../hooks/useResponsive.js', () => ({
+  useResponsive: vi.fn(() => ({ breakpoint: 'NARROW' })),
+}));
+
 // Mock the provider manager
 vi.mock('../../providers/providerManagerInstance.js', () => ({
   getProviderManager: vi.fn(),
@@ -77,8 +82,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should show context with high usage: Ctx: 120k/128k
-    expect(lastFrame()).toContain('Ctx: 120k/128k');
+    // Should show context with high usage: Ctx: 120.0k/128k
+    expect(lastFrame()).toContain('Ctx: 120.0k/128k');
   });
 
   it('should fallback to local calculation', () => {

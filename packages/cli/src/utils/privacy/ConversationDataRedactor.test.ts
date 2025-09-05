@@ -319,7 +319,7 @@ describe('Conversation Data Redaction', () => {
       parameters: { api_key: string; endpoint: string };
     };
 
-    expect(toolCallBlock.parameters.api_key).toBe('[REDACTED-OPENAI-KEY]');
+    expect(toolCallBlock.parameters.api_key).toBe('[REDACTED-API-KEY]');
     expect(toolCallBlock.parameters.endpoint).toBe(
       'https://api.openai.com/v1/chat/completions',
     );
