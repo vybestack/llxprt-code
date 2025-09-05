@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { ContentConverters } from '../services/history/ContentConverters.js';
-import { MessageConverters } from '../services/history/MessageConverters.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { Content } from '@google/genai';
 import type { IContent, IMessage } from '../services/history/IContent.js';
@@ -92,14 +91,14 @@ describe('Gemini Provider Switching - MUST FAIL FIRST', () => {
       ],
     };
 
-    const openAIMessage = MessageConverters.toOpenAIMessage(historyContent);
+    const openAIMessage = ContentConverters.toOpenAIMessage(historyContent);
     const openAIToolCalls = openAIMessage.tool_calls || [];
 
     expect(openAIToolCalls.length).toBeGreaterThan(0);
     expect(openAIToolCalls[0].id).toMatch(/^call_/);
     expect(openAIToolCalls[0].id).not.toContain('gemini');
 
-    const openAIResponse = MessageConverters.toOpenAIMessage(toolResponse);
+    const openAIResponse = ContentConverters.toOpenAIMessage(toolResponse);
 
     expect(openAIResponse.tool_call_id).toBe(openAIToolCalls[0].id);
   });
@@ -129,7 +128,7 @@ describe('Gemini Provider Switching - MUST FAIL FIRST', () => {
     expect(toolCallBlock?.id).toMatch(/^hist_tool_/);
 
     const anthropicMessage =
-      MessageConverters.toAnthropicMessage(historyContent);
+      ContentConverters.toAnthropicMessage(historyContent);
     const toolUseBlock = (
       anthropicMessage.content as AnthropicContentBlock[]
     )?.find((c): c is AnthropicToolUseContent => c.type === 'tool_use');
@@ -149,7 +148,7 @@ describe('Gemini Provider Switching - MUST FAIL FIRST', () => {
     };
 
     const anthropicResponse =
-      MessageConverters.toAnthropicMessage(toolResponse);
+      ContentConverters.toAnthropicMessage(toolResponse);
     const toolResultBlock = (
       anthropicResponse.content as AnthropicContentBlock[]
     )?.find((c): c is AnthropicToolResultContent => c.type === 'tool_result');
@@ -176,8 +175,8 @@ describe('Gemini Provider Switching - MUST FAIL FIRST', () => {
       content: 'results',
     };
 
-    const callHistory = MessageConverters.toIContent(shortIdCall, 'openai');
-    const responseHistory = MessageConverters.toIContent(
+    const callHistory = ContentConverters.toIContent(shortIdCall, 'openai');
+    const responseHistory = ContentConverters.toIContent(
       shortIdResponse,
       'openai',
     );
@@ -216,15 +215,15 @@ describe('Gemini Provider Switching - MUST FAIL FIRST', () => {
       content: 'result',
     };
 
-    const callHistory = MessageConverters.toIContent(openAICall, 'openai');
-    const responseHistory = MessageConverters.toIContent(
+    const callHistory = ContentConverters.toIContent(openAICall, 'openai');
+    const responseHistory = ContentConverters.toIContent(
       openAIResponse,
       'openai',
     );
 
-    const anthropicCall = MessageConverters.toAnthropicMessage(callHistory);
+    const anthropicCall = ContentConverters.toAnthropicMessage(callHistory);
     const anthropicResponse =
-      MessageConverters.toAnthropicMessage(responseHistory);
+      ContentConverters.toAnthropicMessage(responseHistory);
 
     const toolUse = (anthropicCall.content as AnthropicContentBlock[])?.find(
       (c): c is AnthropicToolUseContent => c.type === 'tool_use',
@@ -270,7 +269,7 @@ describe('Gemini Provider Switching - MUST FAIL FIRST', () => {
 
     // Convert each content to Anthropic messages
     const anthropicMessages = history.map((content) =>
-      MessageConverters.toAnthropicMessage(content),
+      ContentConverters.toAnthropicMessage(content),
     );
 
     const hasOrphanedResponse = anthropicMessages.some((msg) =>

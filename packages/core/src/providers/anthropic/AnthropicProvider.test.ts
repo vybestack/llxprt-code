@@ -3,6 +3,7 @@ import { AnthropicProvider } from './AnthropicProvider.js';
 import { ITool } from '../ITool.js';
 import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 import { IMessage } from '../IMessage.js';
+import { IContent } from '../../services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
 // Mock the ToolFormatter
@@ -210,8 +211,11 @@ describe('AnthropicProvider', () => {
 
       mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
 
-      const messages: IMessage[] = [
-        { role: ContentGeneratorRole.USER, content: 'Say hello' },
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Say hello' }],
+        },
       ];
       const generator = provider.generateChatCompletion(messages);
 
@@ -221,8 +225,16 @@ describe('AnthropicProvider', () => {
       }
 
       expect(chunks).toEqual([
-        { role: 'assistant', content: 'Hello' },
-        { role: 'assistant', content: ' world' },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello' }],
+          metadata: {},
+        },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: ' world' }],
+          metadata: {},
+        },
       ]);
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({

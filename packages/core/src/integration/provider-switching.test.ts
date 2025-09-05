@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { MessageConverters } from '../services/history/MessageConverters.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { IMessage } from '../providers/IMessage.js';
 import type { Content } from '@google/genai';
@@ -46,7 +45,7 @@ describe('Provider Switching Integration', () => {
     };
 
     // Convert to IContent and add to history
-    const callContent = MessageConverters.toIContent(openAIToolCall, 'openai');
+    const callContent = ContentConverters.toIContent(openAIToolCall, 'openai');
     historyService.add(callContent);
 
     // Verify history normalized the IDs
@@ -77,12 +76,12 @@ describe('Provider Switching Integration', () => {
     };
 
     // Convert responses to IContent (they need to match the history IDs)
-    const response1Content = MessageConverters.toIContent(
+    const response1Content = ContentConverters.toIContent(
       toolResponse1,
       'openai',
       idMapping,
     );
-    const response2Content = MessageConverters.toIContent(
+    const response2Content = ContentConverters.toIContent(
       toolResponse2,
       'openai',
       idMapping,
@@ -108,7 +107,7 @@ describe('Provider Switching Integration', () => {
 
     // Convert history to Anthropic messages
     const anthropicMessages = historyContents.map((content: IContent) =>
-      MessageConverters.toAnthropicMessage(content, anthropicIdMap),
+      ContentConverters.toAnthropicMessage(content, anthropicIdMap),
     );
 
     // 4. Verify no mismatched IDs that would cause 400 error
@@ -160,7 +159,7 @@ describe('Provider Switching Integration', () => {
       ],
     };
 
-    const openAIContent = MessageConverters.toIContent(openAICall, 'openai');
+    const openAIContent = ContentConverters.toIContent(openAICall, 'openai');
     historyService.add(openAIContent);
     const historyId1 = (openAIContent.blocks[0] as ToolCallBlock).id;
 
@@ -171,7 +170,7 @@ describe('Provider Switching Integration', () => {
       content: 'Search results',
     };
 
-    const responseContent = MessageConverters.toIContent(
+    const responseContent = ContentConverters.toIContent(
       openAIResponse,
       'openai',
       new Map([['call_oai_123', historyId1]]),
@@ -239,7 +238,7 @@ describe('Provider Switching Integration', () => {
     });
 
     const anthropicMessages = fullHistory.map((c: IContent) =>
-      MessageConverters.toAnthropicMessage(c, anthropicMap),
+      ContentConverters.toAnthropicMessage(c, anthropicMap),
     );
 
     // Verify all tool pairs are properly matched with Anthropic IDs
@@ -287,7 +286,7 @@ describe('Provider Switching Integration', () => {
       ],
     };
 
-    const anthropicContent = MessageConverters.toIContent(
+    const anthropicContent = ContentConverters.toIContent(
       anthropicCall,
       'anthropic',
     );
@@ -301,7 +300,7 @@ describe('Provider Switching Integration', () => {
       content: 'Sunny, 75°F',
     };
 
-    const responseContent = MessageConverters.toIContent(
+    const responseContent = ContentConverters.toIContent(
       anthropicResponse,
       'anthropic',
       new Map([['toolu_abc789xyz', historyId]]),
@@ -315,7 +314,7 @@ describe('Provider Switching Integration', () => {
     const openAIMap = new Map([[historyId, 'call_newopenai_123']]);
 
     const openAIMessages = history.map((c: IContent) =>
-      MessageConverters.toOpenAIMessage(c, openAIMap),
+      ContentConverters.toOpenAIMessage(c, openAIMap),
     );
 
     // Verify OpenAI format
@@ -340,7 +339,7 @@ describe('Provider Switching Integration', () => {
       role: 'user',
       content: 'Help me analyze some data',
     };
-    historyService.add(MessageConverters.toIContent(userMessage, 'user'));
+    historyService.add(ContentConverters.toIContent(userMessage, 'user'));
 
     // OpenAI responds with tool
     const openAICall: IMessage = {
@@ -354,7 +353,7 @@ describe('Provider Switching Integration', () => {
         },
       ],
     };
-    const openAIContent = MessageConverters.toIContent(openAICall, 'openai');
+    const openAIContent = ContentConverters.toIContent(openAICall, 'openai');
     historyService.add(openAIContent);
     const toolId1 = (openAIContent.blocks[1] as ToolCallBlock).id;
 
@@ -365,7 +364,7 @@ describe('Provider Switching Integration', () => {
       content: 'Data loaded: 1000 records',
     };
     historyService.add(
-      MessageConverters.toIContent(
+      ContentConverters.toIContent(
         openAIResponse,
         'openai',
         new Map([['call_1', toolId1]]),
@@ -384,7 +383,7 @@ describe('Provider Switching Integration', () => {
         },
       ],
     };
-    const anthropicContent = MessageConverters.toIContent(
+    const anthropicContent = ContentConverters.toIContent(
       anthropicCall,
       'anthropic',
     );
@@ -398,7 +397,7 @@ describe('Provider Switching Integration', () => {
       content: 'Processing complete',
     };
     historyService.add(
-      MessageConverters.toIContent(
+      ContentConverters.toIContent(
         anthropicResponse,
         'anthropic',
         new Map([['toolu_2', toolId2]]),
@@ -507,7 +506,7 @@ describe('Provider Switching Integration', () => {
       const idMapping = new Map<string, string>();
 
       // Convert using callbacks (not internal generation)
-      const iContent = MessageConverters.toIContent(
+      const iContent = ContentConverters.toIContent(
         openAIMessage,
         'openai',
         idMapping,
@@ -527,12 +526,12 @@ describe('Provider Switching Integration', () => {
     it('should verify NO internal ID generation in converters after refactor', () => {
       // FAILING TEST: After refactor, converters should not generate IDs internally
 
-      // Check that private generateHistoryToolId method doesn't exist in MessageConverters
+      // Check that private generateHistoryToolId method doesn't exist in ContentConverters
       expect(
         (
-          MessageConverters as {
+          ContentConverters as {
             generateHistoryToolId?: () => string;
-          } & typeof MessageConverters
+          } & typeof ContentConverters
         ).generateHistoryToolId,
       ).toBeUndefined();
 
@@ -559,14 +558,14 @@ describe('Provider Switching Integration', () => {
       };
 
       // Without callback, should either fail gracefully or use fallback
-      const _result = MessageConverters.toIContent(
+      const _result = ContentConverters.toIContent(
         openAIMessage,
         'openai',
         new Map(),
       );
 
       // But with HistoryService callback, should work
-      const withCallback = MessageConverters.toIContent(
+      const withCallback = ContentConverters.toIContent(
         openAIMessage,
         'openai',
         new Map(),

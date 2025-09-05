@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { MessageConverters } from '../services/history/MessageConverters.js';
+import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { IMessage } from '../services/history/IContent.js';
 
 describe('REAL BUG: Orphaned Tool Response', () => {
@@ -52,7 +52,7 @@ describe('REAL BUG: Orphaned Tool Response', () => {
 
     // Try to convert to Anthropic format
     const anthropicMessages = history.map((content) =>
-      MessageConverters.toAnthropicMessage(content),
+      ContentConverters.toAnthropicMessage(content),
     );
 
     // The orphaned response should NOT have the original SHORT ID
@@ -117,7 +117,7 @@ describe('REAL BUG: Orphaned Tool Response', () => {
     // Get history for Anthropic
     const history = historyService.getAll();
     const anthropicMessages = history.map((content) =>
-      MessageConverters.toAnthropicMessage(content),
+      ContentConverters.toAnthropicMessage(content),
     );
 
     // We SHOULD filter out orphaned tool responses

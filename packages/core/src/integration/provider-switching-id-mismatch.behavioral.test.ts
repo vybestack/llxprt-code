@@ -18,7 +18,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { OpenAIProvider } from '../providers/openai/OpenAIProvider.js';
 import { AnthropicProvider } from '../providers/anthropic/AnthropicProvider.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { MessageConverters } from '../services/history/MessageConverters.js';
+import { ContentConverters } from '../services/history/ContentConverters.js';
 import type { IMessage } from '../providers/IMessage.js';
 import type { ITool } from '../providers/ITool.js';
 import { ContentGeneratorRole } from '../providers/ContentGeneratorRole.js';
@@ -34,7 +34,7 @@ import { DebugLogger } from '../debug/index.js';
  * - tool_result: "7e6a3cd4d" (original OpenAI/Cerebras ID)
  * - tool_use: "c7be4a88a" (different Anthropic ID)
  *
- * This test demonstrates the flow WITHOUT any MessageConverters normalization
+ * This test demonstrates the flow WITHOUT any ContentConverters normalization
  * to understand exactly where the mismatch occurs.
  */
 describe('Provider Switching ID Mismatch - Behavioral Test', () => {
@@ -90,7 +90,7 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
     );
 
     // Convert message to IContent and add to history
-    const assistantIContent = MessageConverters.toIContent(
+    const assistantIContent = ContentConverters.toIContent(
       assistantMessage,
       'openai',
     );
@@ -109,7 +109,7 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
     logger.debug(`Tool response created with ID: ${toolResponse.tool_call_id}`);
 
     // Convert tool response to IContent and add to history
-    const toolResponseContent = MessageConverters.toIContent(
+    const toolResponseContent = ContentConverters.toIContent(
       toolResponse,
       'openai',
     );
@@ -121,7 +121,7 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
     // Get the conversation history and convert to Anthropic format
     const historyContents = historyService.getAll();
     const historyForAnthropic = historyContents.map((content) =>
-      MessageConverters.toAnthropicMessage(content),
+      ContentConverters.toAnthropicMessage(content),
     );
 
     console.log(
@@ -318,7 +318,7 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
 
     if (toolCallId === toolResponseId) {
       console.log(
-        '✅ SUCCESS: IDs match - the MessageConverters are working correctly!',
+        '✅ SUCCESS: IDs match - the ContentConverters are working correctly!',
       );
       console.log('This means the bug might be elsewhere in the system.');
 
@@ -340,9 +340,9 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
       expect(toolCallId).not.toBe(toolResponseId);
     }
 
-    logger.debug('=== TEST COMPLETE: MessageConverters work correctly ===');
+    logger.debug('=== TEST COMPLETE: ContentConverters work correctly ===');
     logger.debug(
-      'The bug must be in the direct provider switching logic, not in MessageConverters',
+      'The bug must be in the direct provider switching logic, not in ContentConverters',
     );
   });
 
@@ -352,7 +352,7 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
     );
 
     // This test simulates what happens when switching providers directly
-    // without using the MessageConverters normalization layer
+    // without using the ContentConverters normalization layer
 
     // 1. Start with OpenAI/Cerebras conversation
     const openAIMessages: IMessage[] = [
@@ -527,10 +527,10 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
 
     console.log('✅ Direct provider conversion works correctly');
     console.log(
-      'This confirms the bug is in the MessageConverters or HistoryService layer',
+      'This confirms the bug is in the ContentConverters or HistoryService layer',
     );
     console.log(
-      'But wait... our first test showed MessageConverters work correctly too!',
+      'But wait... our first test showed ContentConverters work correctly too!',
     );
     console.log(
       'The bug must be in HOW the real system invokes these components together.',
@@ -568,16 +568,16 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
       `5. Do they match? ${anthropicToolUseId === anthropicToolResultId}`,
     );
 
-    // The issue might be in how the MessageConverters handle different message types
+    // The issue might be in how the ContentConverters handle different message types
     // or in how the history service processes them differently
 
     expect(anthropicToolUseId).toBe(anthropicToolResultId);
   });
 
-  it('demonstrates the issue without MessageConverters normalization', () => {
+  it('demonstrates the issue without ContentConverters normalization', () => {
     logger.debug('=== TESTING WITHOUT MESSAGECONVERTERS NORMALIZATION ===');
 
-    // This test simulates what happens when we bypass MessageConverters
+    // This test simulates what happens when we bypass ContentConverters
     // and go directly through the provider conversion logic
 
     const originalOpenAIMessage: IMessage = {
@@ -695,7 +695,7 @@ describe('Provider Switching ID Mismatch - Behavioral Test', () => {
     console.log(`Mysterious ID: "${mysteriousId}"`);
 
     // Test if the mysterious ID could come from some ID generation function
-    // like the ones in ContentConverters or MessageConverters
+    // like the ones in ContentConverters or ContentConverters
 
     // Check ContentConverters generateId function behavior
     console.log('\n=== TESTING ID GENERATION FUNCTIONS ===');

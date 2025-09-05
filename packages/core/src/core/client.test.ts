@@ -538,6 +538,7 @@ describe('Gemini Client (client.ts)', () => {
           initialChatHistory.push(content);
         }),
         setHistory: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({}),
       } as unknown as GeminiChat;
 
       const mockNewChat = {
@@ -547,6 +548,7 @@ describe('Gemini Client (client.ts)', () => {
         ]),
         addHistory: vi.fn(),
         setHistory: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({}),
       } as unknown as GeminiChat;
 
       // Mock startChat to return the new chat when called

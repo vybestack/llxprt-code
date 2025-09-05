@@ -17,7 +17,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import { IContent, ContentFactory, ToolResponseBlock } from './IContent.js';
-import { MessageConverters } from './MessageConverters.js';
 import { ContentConverters } from './ContentConverters.js';
 
 describe('HistoryService - Behavioral Tests', () => {
@@ -704,8 +703,8 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     describe('Converter integration with HistoryService callbacks', () => {
-      it('should pass ID generation callbacks to MessageConverters.toIContent', () => {
-        // FAILING TEST: MessageConverters.toIContent should accept generateId callback parameter
+      it('should pass ID generation callbacks to ContentConverters.toIContent', () => {
+        // FAILING TEST: ContentConverters.toIContent should accept generateId callback parameter
         const mockMessage = {
           role: 'assistant' as const,
           tool_calls: [
@@ -721,7 +720,7 @@ describe('HistoryService - Behavioral Tests', () => {
 
         // This should work with the new signature
         expect(() => {
-          const result = MessageConverters.toIContent(
+          const result = ContentConverters.toIContent(
             mockMessage,
             'openai',
             generateIdCallback,
@@ -732,11 +731,11 @@ describe('HistoryService - Behavioral Tests', () => {
     });
 
     describe('No internal ID generation in converters', () => {
-      it('should NOT generate IDs internally in MessageConverters', () => {
-        // FAILING TEST: MessageConverters should not have generateHistoryToolId method
+      it('should NOT generate IDs internally in ContentConverters', () => {
+        // FAILING TEST: ContentConverters should not have generateHistoryToolId method
         expect(
           (
-            MessageConverters as unknown as {
+            ContentConverters as unknown as {
               generateHistoryToolId?: () => string;
             }
           ).generateHistoryToolId,
