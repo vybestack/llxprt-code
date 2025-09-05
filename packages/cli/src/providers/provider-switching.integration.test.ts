@@ -45,7 +45,10 @@ describe('Provider Switching Integration', () => {
         ];
       },
       async *generateChatCompletion() {
-        yield { role: 'assistant', content: 'test response' };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'test response' }],
+        };
       },
       getDefaultModel() {
         return 'test-model';
@@ -81,7 +84,10 @@ describe('Provider Switching Integration', () => {
         return [];
       },
       async *generateChatCompletion() {
-        yield { role: 'assistant', content: '' };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: '' }],
+        };
       },
       getDefaultModel() {
         return 'default';
@@ -100,7 +106,10 @@ describe('Provider Switching Integration', () => {
         return [];
       },
       async *generateChatCompletion() {
-        yield { role: 'assistant', content: '' };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: '' }],
+        };
       },
       getDefaultModel() {
         return 'default';

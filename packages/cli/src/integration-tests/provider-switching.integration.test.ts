@@ -258,7 +258,10 @@ function createMockProvider(name: string): IProvider {
     getDefaultModel: () => 'test-model',
 
     async *generateChatCompletion() {
-      yield { content: 'test response' };
+      yield {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: 'test response' }],
+      };
     },
 
     getServerTools: () => [],

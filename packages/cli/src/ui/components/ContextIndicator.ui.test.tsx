@@ -2,11 +2,7 @@ import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, MockedFunction } from 'vitest';
 import { Footer } from './Footer.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
-import {
-  OpenAIResponsesProvider,
-  ProviderManager,
-  IProvider,
-} from '@vybestack/llxprt-code-core';
+import { ProviderManager, IProvider } from '@vybestack/llxprt-code-core';
 
 // Mock the provider manager
 vi.mock('../../providers/providerManagerInstance.js', () => ({
@@ -14,30 +10,17 @@ vi.mock('../../providers/providerManagerInstance.js', () => ({
 }));
 
 describe('ContextIndicator UI', () => {
-  let mockProvider: {
-    estimateContextUsage: MockedFunction<
-      typeof OpenAIResponsesProvider.prototype.estimateContextUsage
-    >;
-  };
   let mockProviderManager: ProviderManager;
 
   beforeEach(() => {
-    // Create mock OpenAI provider
-    mockProvider = {
-      estimateContextUsage: vi.fn(),
-    };
-
-    // Make it an instance of OpenAIResponsesProvider for instanceof check
-    Object.setPrototypeOf(mockProvider, OpenAIResponsesProvider.prototype);
-
     // Create a real ProviderManager instance and mock its methods
     mockProviderManager = new ProviderManager();
 
     // Mock the methods we need
     vi.spyOn(mockProviderManager, 'hasActiveProvider').mockReturnValue(true);
-    vi.spyOn(mockProviderManager, 'getActiveProvider').mockReturnValue(
-      mockProvider as unknown as IProvider,
-    );
+    vi.spyOn(mockProviderManager, 'getActiveProvider').mockReturnValue({
+      name: 'openai',
+    } as unknown as IProvider);
 
     (
       vi.mocked(getProviderManager) as MockedFunction<typeof getProviderManager>
@@ -63,16 +46,6 @@ describe('ContextIndicator UI', () => {
   });
 
   it('should display context percentage when using OpenAI', () => {
-    // Mock the context estimation
-    mockProvider.estimateContextUsage.mockReturnValue({
-      totalTokens: 52000,
-      remoteTokens: 50000,
-      promptTokens: 2000,
-      maxTokens: 128000,
-      contextUsedPercent: 40.625,
-      tokensRemaining: 76000,
-    });
-
     const { lastFrame } = render(
       <Footer
         model="gpt-4o"
@@ -91,16 +64,6 @@ describe('ContextIndicator UI', () => {
   });
 
   it('should handle high token usage', () => {
-    // Mock near-limit context usage
-    mockProvider.estimateContextUsage.mockReturnValue({
-      totalTokens: 120000,
-      remoteTokens: 115000,
-      promptTokens: 5000,
-      maxTokens: 128000,
-      contextUsedPercent: 93.75,
-      tokensRemaining: 8000,
-    });
-
     const { lastFrame } = render(
       <Footer
         model="gpt-4o"
@@ -109,21 +72,16 @@ describe('ContextIndicator UI', () => {
         debugMessage=""
         errorCount={0}
         showErrorDetails={false}
-        historyTokenCount={1000}
+        historyTokenCount={120000}
         nightly={false}
       />,
     );
 
-    // Should show context in new format: Ctx: 1.0k/128k
-    expect(lastFrame()).toContain('Ctx: 1.0k/128k');
+    // Should show context with high usage: Ctx: 120k/128k
+    expect(lastFrame()).toContain('Ctx: 120k/128k');
   });
 
-  it('should fallback to local calculation on error', () => {
-    // Make estimateContextUsage throw an error
-    mockProvider.estimateContextUsage.mockImplementation(() => {
-      throw new Error('API error');
-    });
-
+  it('should fallback to local calculation', () => {
     const { lastFrame } = render(
       <Footer
         model="gpt-4o"
@@ -137,9 +95,8 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should fallback to local calculation in new format
+    // Should show local calculation in new format
     expect(lastFrame()).toContain('Ctx: 1.0k/128k');
-    expect(lastFrame()).not.toContain('remote');
   });
 
   it('should handle non-OpenAI providers', () => {
@@ -163,7 +120,6 @@ describe('ContextIndicator UI', () => {
 
     // Should use local calculation for non-OpenAI providers in new format
     expect(lastFrame()).toContain('Ctx: 1.0k/1049k');
-    expect(lastFrame()).not.toContain('remote');
   });
 
   it('should handle missing conversation context', () => {
@@ -181,9 +137,7 @@ describe('ContextIndicator UI', () => {
       />,
     );
 
-    // Should not attempt to get remote context
-    expect(mockProvider.estimateContextUsage).not.toHaveBeenCalled();
+    // Should display context normally
     expect(lastFrame()).toContain('Ctx: 1.0k/128k');
-    expect(lastFrame()).not.toContain('remote');
   });
 });

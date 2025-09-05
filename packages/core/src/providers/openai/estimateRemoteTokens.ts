@@ -1,4 +1,8 @@
-import { IMessage } from '../IMessage.js';
+import {
+  IContent,
+  TextBlock,
+  ToolResponseBlock,
+} from '../../services/history/IContent.js';
 import { ConversationCache } from './ConversationCache.js';
 
 // Model context size configuration
@@ -76,22 +80,31 @@ export function estimateRemoteTokens(
  * @param messages Array of messages
  * @returns Estimated token count
  */
-export function estimateMessagesTokens(messages: IMessage[]): number {
+export function estimateMessagesTokens(messages: IContent[]): number {
   // Rough estimation: ~4 characters per token
   let totalChars = 0;
 
   for (const message of messages) {
-    // Add role tokens (usually 1-2 tokens)
+    // Add speaker tokens (usually 1-2 tokens)
     totalChars += 8;
 
-    // Add content
-    if (message.content) {
-      totalChars += message.content.length;
-    }
-
-    // Add tool calls overhead
-    if (message.tool_calls) {
-      totalChars += JSON.stringify(message.tool_calls).length;
+    // Add content from blocks
+    for (const block of message.blocks) {
+      if (block.type === 'text') {
+        const textBlock = block as TextBlock;
+        totalChars += textBlock.text.length;
+      } else if (block.type === 'tool_call') {
+        // Add tool call overhead
+        totalChars += JSON.stringify(block).length;
+      } else if (block.type === 'tool_response') {
+        // Add tool response overhead
+        const toolResponseBlock = block as ToolResponseBlock;
+        if (typeof toolResponseBlock.result === 'string') {
+          totalChars += toolResponseBlock.result.length;
+        } else {
+          totalChars += JSON.stringify(toolResponseBlock.result).length;
+        }
+      }
     }
   }
 

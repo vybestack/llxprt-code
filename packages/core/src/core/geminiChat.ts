@@ -536,7 +536,7 @@ export class GeminiChat {
         const tools = this.generationConfig.tools;
 
         // Call the provider directly with IContent
-        const streamResponse = provider.generateChatCompletionIContent!(
+        const streamResponse = provider.generateChatCompletion!(
           iContents,
           tools as
             | Array<{
@@ -908,7 +908,7 @@ export class GeminiChat {
       const tools = this.generationConfig.tools;
 
       // Call the provider directly with IContent
-      const streamResponse = provider.generateChatCompletionIContent!(
+      const streamResponse = provider.generateChatCompletion!(
         requestContents,
         tools as
           | Array<{
@@ -1200,7 +1200,7 @@ export class GeminiChat {
     ];
 
     // Direct provider call without tools for compression
-    const stream = provider.generateChatCompletionIContent!(
+    const stream = provider.generateChatCompletion!(
       compressionRequest,
       undefined, // no tools for compression
     );
@@ -1823,8 +1823,8 @@ export class GeminiChat {
 
     // Check if the provider has the IContent method
     return (
-      typeof (provider as { generateChatCompletionIContent?: unknown })
-        .generateChatCompletionIContent === 'function'
+      typeof (provider as { generateChatCompletion?: unknown })
+        .generateChatCompletion === 'function'
     );
   }
 }

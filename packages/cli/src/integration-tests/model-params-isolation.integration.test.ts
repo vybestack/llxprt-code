@@ -538,7 +538,10 @@ describe('Model Parameters Isolation Between Providers', () => {
         ],
         getDefaultModel: () => 'basic-model',
         async *generateChatCompletion() {
-          yield { content: 'test' };
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'test' }],
+          };
         },
         getServerTools: () => [],
         invokeServerTool: async () => ({ result: 'test' }),
@@ -677,7 +680,10 @@ function createMockProvider(name: string): IProvider {
     getDefaultModel: () => `${name}-model-1`,
 
     async *generateChatCompletion() {
-      yield { content: `Response from ${name}` };
+      yield {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: `Response from ${name}` }],
+      };
     },
 
     getServerTools: () => [],

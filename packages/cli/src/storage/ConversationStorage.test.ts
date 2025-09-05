@@ -6,14 +6,14 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
-import { IMessage, ContentGeneratorRole } from '@vybestack/llxprt-code-core';
+import { IContent } from '@vybestack/llxprt-code-core';
 
 // Interface for conversation log entries
 interface ConversationLogEntry {
   timestamp: string;
   conversation_id: string;
   provider_name: string;
-  messages: IMessage[];
+  messages: IContent[];
   session_id?: string;
   user_id?: string;
 }
@@ -183,7 +183,9 @@ function createLargeConversationEntry(sizeBytes: number): ConversationLogEntry {
     timestamp: new Date().toISOString(),
     conversation_id: 'conv_123',
     provider_name: 'openai',
-    messages: [{ role: ContentGeneratorRole.USER, content: largeContent }],
+    messages: [
+      { speaker: 'human', blocks: [{ type: 'text', text: largeContent }] },
+    ],
   };
 }
 
@@ -194,12 +196,14 @@ function createTypicalConversationEntry(): ConversationLogEntry {
     provider_name: 'anthropic',
     messages: [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello, how can you help me?',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello, how can you help me?' }],
       },
       {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: 'I can help you with various tasks...',
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'I can help you with various tasks...' },
+        ],
       },
     ],
     session_id: 'session_789',
@@ -463,7 +467,7 @@ describe('Conversation Log Storage Management', () => {
       timestamp: new Date().toISOString(),
       conversation_id: 'minimal_conv',
       provider_name: 'test',
-      messages: [{ role: ContentGeneratorRole.USER, content: '' }],
+      messages: [{ speaker: 'human', blocks: [{ type: 'text', text: '' }] }],
     };
 
     await expect(

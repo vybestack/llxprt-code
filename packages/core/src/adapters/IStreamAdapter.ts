@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IMessage } from '../providers/IMessage.js';
+import { IContent } from '../services/history/IContent.js';
 import { ServerGeminiStreamEvent } from '../core/turn.js';
 
 /**
@@ -13,10 +13,10 @@ import { ServerGeminiStreamEvent } from '../core/turn.js';
 export interface IStreamAdapter {
   /**
    * Adapts a provider's stream format to Gemini's event stream format
-   * @param providerStream The provider-specific stream of messages
+   * @param providerStream The provider-specific stream of content
    * @returns An async iterator of Gemini events
    */
   adaptStream(
-    providerStream: AsyncIterableIterator<IMessage>,
+    providerStream: AsyncIterableIterator<IContent>,
   ): AsyncIterableIterator<ServerGeminiStreamEvent>;
 }

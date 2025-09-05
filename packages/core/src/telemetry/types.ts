@@ -10,7 +10,7 @@ import { CompletedToolCall } from '../core/coreToolScheduler.js';
 import { ToolConfirmationOutcome, FileDiff } from '../tools/tools.js';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { AuthType } from '../core/contentGenerator.js';
-import type { IMessage, ITool } from '../providers/IProvider.js';
+import type { IContent } from '../services/history/IContent.js';
 import type {
   ProviderCapabilities,
   ProviderContext,
@@ -348,8 +348,14 @@ export class ConversationRequestEvent {
   conversation_id: string;
   turn_number: number;
   prompt_id: string;
-  redacted_messages: IMessage[];
-  redacted_tools?: ITool[];
+  redacted_messages: IContent[];
+  redacted_tools?: Array<{
+    functionDeclarations: Array<{
+      name: string;
+      description?: string;
+      parameters?: unknown;
+    }>;
+  }>;
   tool_format?: string;
   provider_switched?: boolean;
 
@@ -358,8 +364,14 @@ export class ConversationRequestEvent {
     conversation_id: string,
     turn_number: number,
     prompt_id: string,
-    redacted_messages: IMessage[],
-    redacted_tools?: ITool[],
+    redacted_messages: IContent[],
+    redacted_tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
     tool_format?: string,
     provider_switched?: boolean,
   ) {
