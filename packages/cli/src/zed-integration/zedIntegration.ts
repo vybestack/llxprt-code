@@ -696,8 +696,12 @@ class Session {
 
       // Return paired function call and function response like the TUI does
       // This ensures proper conversation history for providers that need it (like Anthropic)
-      const functionResponseParts = convertToFunctionResponse(fc.name, callId, toolResult.llmContent);
-      
+      const functionResponseParts = convertToFunctionResponse(
+        fc.name,
+        callId,
+        toolResult.llmContent,
+      );
+
       return [
         {
           functionCall: {
@@ -706,7 +710,9 @@ class Session {
             args,
           },
         },
-        ...(Array.isArray(functionResponseParts) ? functionResponseParts : [functionResponseParts]),
+        ...(Array.isArray(functionResponseParts)
+          ? functionResponseParts
+          : [functionResponseParts]),
       ];
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
