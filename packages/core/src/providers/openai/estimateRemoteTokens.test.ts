@@ -5,8 +5,7 @@ import {
   MODEL_CONTEXT_SIZE,
 } from './estimateRemoteTokens.js';
 import { ConversationCache } from './ConversationCache.js';
-import { IMessage } from '../IMessage.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { IContent } from '../../services/history/IContent.js';
 describe('estimateRemoteTokens', () => {
   let cache: ConversationCache;
 
@@ -117,11 +116,14 @@ describe('estimateRemoteTokens', () => {
 
 describe('estimateMessagesTokens', () => {
   it('should estimate tokens for simple messages', () => {
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Hello, how are you?' },
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: 'I am doing well, thank you!',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello, how are you?' }],
+      },
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'I am doing well, thank you!' }],
       },
     ];
 
@@ -137,24 +139,22 @@ describe('estimateMessagesTokens', () => {
   });
 
   it('should handle empty messages', () => {
-    const messages: IMessage[] = [];
+    const messages: IContent[] = [];
     const tokens = estimateMessagesTokens(messages);
     expect(tokens).toBe(0);
   });
 
   it('should include tool calls in estimation', () => {
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: 'Let me search for that.',
-        tool_calls: [
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'Let me search for that.' },
           {
+            type: 'tool_call',
             id: 'call_123',
-            type: 'function',
-            function: {
-              name: 'search',
-              arguments: '{"query": "weather in San Francisco"}',
-            },
+            name: 'search',
+            parameters: { query: 'weather in San Francisco' },
           },
         ],
       },
@@ -167,9 +167,9 @@ describe('estimateMessagesTokens', () => {
   });
 
   it('should handle messages with no content', () => {
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: '' }, // No content
-      { role: ContentGeneratorRole.ASSISTANT, content: '' }, // Empty content
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [] }, // No content
+      { speaker: 'ai', blocks: [] }, // Empty content
     ];
 
     const tokens = estimateMessagesTokens(messages);
@@ -180,8 +180,8 @@ describe('estimateMessagesTokens', () => {
 
   it('should handle very long messages', () => {
     const longContent = 'a'.repeat(10000); // 10k characters
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: longContent },
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: longContent }] },
     ];
 
     const tokens = estimateMessagesTokens(messages);

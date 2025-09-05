@@ -1,20 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
-import { IMessage } from '../IMessage.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { IContent } from '../../services/history/IContent.js';
 describe('buildResponsesRequest - undefined message handling', () => {
   it('should filter out undefined messages', () => {
-    const messages: Array<IMessage | undefined | null> = [
-      { role: ContentGeneratorRole.USER, content: 'Hello' },
+    const messages: Array<IContent | undefined | null> = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
       undefined,
-      { role: ContentGeneratorRole.ASSISTANT, content: 'Hi there!' },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
       null,
-      { role: ContentGeneratorRole.USER, content: 'How are you?' },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'How are you?' }] },
     ];
 
     const request = buildResponsesRequest({
       model: 'gpt-4o',
-      messages: messages as IMessage[],
+      messages: messages as IContent[],
     });
 
     expect(request.input).toBeDefined();
@@ -33,7 +32,7 @@ describe('buildResponsesRequest - undefined message handling', () => {
   });
 
   it('should handle all undefined messages', () => {
-    const messages: Array<IMessage | undefined | null> = [
+    const messages: Array<IContent | undefined | null> = [
       undefined,
       null,
       undefined,
@@ -41,7 +40,7 @@ describe('buildResponsesRequest - undefined message handling', () => {
 
     const request = buildResponsesRequest({
       model: 'gpt-4o',
-      messages: messages as IMessage[],
+      messages: messages as IContent[],
     });
 
     expect(request.input).toBeDefined();
@@ -49,7 +48,7 @@ describe('buildResponsesRequest - undefined message handling', () => {
   });
 
   it('should handle empty array after filtering', () => {
-    const messages: IMessage[] = [];
+    const messages: IContent[] = [];
 
     expect(() => {
       buildResponsesRequest({

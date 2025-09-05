@@ -37,17 +37,17 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       messages.push(message);
     }
 
-    // Should have one message with tool calls
-    const toolCallMessage = messages.find((m) => m.tool_calls);
+    // Should have one message with tool call blocks
+    const toolCallMessage = messages.find((m) =>
+      m.blocks.some((block) => block.type === 'tool_call'),
+    );
     expect(toolCallMessage).toBeDefined();
-    expect(toolCallMessage?.tool_calls).toHaveLength(1);
-    expect(toolCallMessage?.tool_calls?.[0]).toEqual({
+    expect(toolCallMessage?.blocks).toHaveLength(1);
+    expect(toolCallMessage?.blocks[0]).toEqual({
+      type: 'tool_call',
       id: 'call_abc123',
-      type: 'function',
-      function: {
-        name: 'get_weather',
-        arguments: '{"location":"San Francisco, CA"}',
-      },
+      name: 'get_weather',
+      parameters: { location: 'San Francisco, CA' },
     });
   });
 
@@ -68,14 +68,14 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       messages.push(message);
     }
 
-    const toolCallMessage = messages.find((m) => m.tool_calls);
-    expect(toolCallMessage?.tool_calls?.[0]).toEqual({
+    const toolCallMessage = messages.find((m) =>
+      m.blocks.some((block) => block.type === 'tool_call'),
+    );
+    expect(toolCallMessage?.blocks[0]).toEqual({
+      type: 'tool_call',
       id: 'call_def456',
-      type: 'function',
-      function: {
-        name: 'search_products',
-        arguments: '{"query":"laptop","max_price":1500}',
-      },
+      name: 'search_products',
+      parameters: { query: 'laptop', max_price: 1500 },
     });
   });
 
@@ -102,31 +102,47 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       messages.push(message);
     }
 
-    const toolCallMessages = messages.filter((m) => m.tool_calls);
+    const toolCallMessages = messages.filter((m) =>
+      m.blocks.some((block) => block.type === 'tool_call'),
+    );
     expect(toolCallMessages).toHaveLength(2);
 
-    const tool1 = toolCallMessages.find(
-      (m) => m.tool_calls?.[0].function.name === 'tool1',
-    );
-    expect(tool1?.tool_calls?.[0]).toEqual({
+    const tool1 = toolCallMessages.find((m) => {
+      const toolBlock = m.blocks.find((block) => block.type === 'tool_call');
+      return (
+        (toolBlock as { type: 'tool_call'; name: string })?.name === 'tool1'
+      );
+    });
+    const tool1Block = tool1?.blocks[0] as {
+      type: 'tool_call';
+      id: string;
+      name: string;
+      parameters: unknown;
+    };
+    expect(tool1Block).toEqual({
+      type: 'tool_call',
       id: 'call_001',
-      type: 'function',
-      function: {
-        name: 'tool1',
-        arguments: '{"a":1}',
-      },
+      name: 'tool1',
+      parameters: { a: 1 },
     });
 
-    const tool2 = toolCallMessages.find(
-      (m) => m.tool_calls?.[0].function.name === 'tool2',
-    );
-    expect(tool2?.tool_calls?.[0]).toEqual({
+    const tool2 = toolCallMessages.find((m) => {
+      const toolBlock = m.blocks.find((block) => block.type === 'tool_call');
+      return (
+        (toolBlock as { type: 'tool_call'; name: string })?.name === 'tool2'
+      );
+    });
+    const tool2Block = tool2?.blocks[0] as {
+      type: 'tool_call';
+      id: string;
+      name: string;
+      parameters: unknown;
+    };
+    expect(tool2Block).toEqual({
+      type: 'tool_call',
       id: 'call_002',
-      type: 'function',
-      function: {
-        name: 'tool2',
-        arguments: '{"b":2}',
-      },
+      name: 'tool2',
+      parameters: { b: 2 },
     });
   });
 
@@ -143,14 +159,14 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       messages.push(message);
     }
 
-    const toolCallMessage = messages.find((m) => m.tool_calls);
-    expect(toolCallMessage?.tool_calls?.[0]).toEqual({
+    const toolCallMessage = messages.find((m) =>
+      m.blocks.some((block) => block.type === 'tool_call'),
+    );
+    expect(toolCallMessage?.blocks[0]).toEqual({
+      type: 'tool_call',
       id: 'call_empty',
-      type: 'function',
-      function: {
-        name: 'no_args_tool',
-        arguments: '',
-      },
+      name: 'no_args_tool',
+      parameters: {},
     });
   });
 
@@ -171,9 +187,20 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
 
     // Should have content message and tool call message
     expect(
-      messages.some((m) => m.content === 'Let me search for that...'),
+      messages.some((m) =>
+        m.blocks.some(
+          (block) =>
+            block.type === 'text' &&
+            (block as { type: 'text'; text: string }).text ===
+              'Let me search for that...',
+        ),
+      ),
     ).toBe(true);
-    expect(messages.some((m) => m.tool_calls)).toBe(true);
+    expect(
+      messages.some((m) =>
+        m.blocks.some((block) => block.type === 'tool_call'),
+      ),
+    ).toBe(true);
   });
 
   it('should handle usage data in response.completed event', async () => {
@@ -192,9 +219,13 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     }
 
     // Should have tool call message and usage message
-    expect(messages.some((m) => m.tool_calls)).toBe(true);
-    const usageMessage = messages.find((m) => m.usage);
-    expect(usageMessage?.usage).toEqual({
+    expect(
+      messages.some((m) =>
+        m.blocks.some((block) => block.type === 'tool_call'),
+      ),
+    ).toBe(true);
+    const usageMessage = messages.find((m) => m.metadata?.usage);
+    expect(usageMessage?.metadata?.usage).toEqual({
       prompt_tokens: 62,
       completion_tokens: 23,
       total_tokens: 85,
@@ -215,14 +246,14 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
       messages.push(message);
     }
 
-    const toolCallMessage = messages.find((m) => m.tool_calls);
-    expect(toolCallMessage?.tool_calls?.[0]).toEqual({
+    const toolCallMessage = messages.find((m) =>
+      m.blocks.some((block) => block.type === 'tool_call'),
+    );
+    expect(toolCallMessage?.blocks[0]).toEqual({
+      type: 'tool_call',
       id: 'fc_no_call_id', // Falls back to item.id when call_id is not provided
-      type: 'function',
-      function: {
-        name: 'test_tool',
-        arguments: '{"test":true}',
-      },
+      name: 'test_tool',
+      parameters: { test: true },
     });
   });
 });

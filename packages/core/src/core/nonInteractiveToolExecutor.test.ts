@@ -74,13 +74,22 @@ describe('executeToolCall', () => {
     expect(response.callId).toBe('call1');
     expect(response.error).toBeUndefined();
     expect(response.resultDisplay).toBe('Success!');
-    expect(response.responseParts).toEqual({
-      functionResponse: {
-        name: 'testTool',
-        id: 'call1',
-        response: { output: 'Tool executed successfully' },
+    expect(response.responseParts).toEqual([
+      {
+        functionCall: {
+          id: 'call1',
+          name: 'testTool',
+          args: { param1: 'value1' },
+        },
       },
-    });
+      {
+        functionResponse: {
+          name: 'testTool',
+          id: 'call1',
+          response: { output: 'Tool executed successfully' },
+        },
+      },
+    ]);
   });
 
   it('should return an error if tool is not found', async () => {
@@ -108,13 +117,22 @@ describe('executeToolCall', () => {
     expect(response.resultDisplay).toBe(
       'Tool "nonexistentTool" not found in registry.',
     );
-    expect(response.responseParts).toEqual({
-      functionResponse: {
-        name: 'nonexistentTool',
-        id: 'call2',
-        response: { error: 'Tool "nonexistentTool" not found in registry.' },
+    expect(response.responseParts).toEqual([
+      {
+        functionCall: {
+          id: 'call2',
+          name: 'nonexistentTool',
+          args: {},
+        },
       },
-    });
+      {
+        functionResponse: {
+          name: 'nonexistentTool',
+          id: 'call2',
+          response: { error: 'Tool "nonexistentTool" not found in registry.' },
+        },
+      },
+    ]);
   });
 
   it('should return an error if tool validation fails', async () => {
@@ -145,15 +163,24 @@ describe('executeToolCall', () => {
       callId: 'call3',
       error: new Error('Invalid parameters'),
       errorType: ToolErrorType.INVALID_TOOL_PARAMS,
-      responseParts: {
-        functionResponse: {
-          id: 'call3',
-          name: 'testTool',
-          response: {
-            output: 'Error: Invalid parameters',
+      responseParts: [
+        {
+          functionCall: {
+            id: 'call3',
+            name: 'testTool',
+            args: { param1: 'invalid' },
           },
         },
-      },
+        {
+          functionResponse: {
+            id: 'call3',
+            name: 'testTool',
+            response: {
+              output: 'Error: Invalid parameters',
+            },
+          },
+        },
+      ],
       resultDisplay: 'Invalid parameters',
     });
   });
@@ -186,15 +213,24 @@ describe('executeToolCall', () => {
       callId: 'call4',
       error: new Error('Execution failed'),
       errorType: ToolErrorType.EXECUTION_FAILED,
-      responseParts: {
-        functionResponse: {
-          id: 'call4',
-          name: 'testTool',
-          response: {
-            output: 'Error: Execution failed',
+      responseParts: [
+        {
+          functionCall: {
+            id: 'call4',
+            name: 'testTool',
+            args: { param1: 'value1' },
           },
         },
-      },
+        {
+          functionResponse: {
+            id: 'call4',
+            name: 'testTool',
+            response: {
+              output: 'Error: Execution failed',
+            },
+          },
+        },
+      ],
       resultDisplay: 'Execution failed',
     });
   });
@@ -221,13 +257,22 @@ describe('executeToolCall', () => {
     expect(response.error).toBe(executionError);
     expect(response.errorType).toBe(ToolErrorType.UNHANDLED_EXCEPTION);
     expect(response.resultDisplay).toBe('Something went very wrong');
-    expect(response.responseParts).toEqual({
-      functionResponse: {
-        name: 'testTool',
-        id: 'call5',
-        response: { error: 'Something went very wrong' },
+    expect(response.responseParts).toEqual([
+      {
+        functionCall: {
+          id: 'call5',
+          name: 'testTool',
+          args: { param1: 'value1' },
+        },
       },
-    });
+      {
+        functionResponse: {
+          name: 'testTool',
+          id: 'call5',
+          response: { error: 'Something went very wrong' },
+        },
+      },
+    ]);
   });
 
   it('should correctly format llmContent with inlineData', async () => {
@@ -255,15 +300,24 @@ describe('executeToolCall', () => {
     );
 
     expect(response.resultDisplay).toBe('Image processed');
-    expect(response.responseParts).toEqual({
-      functionResponse: {
-        name: 'testTool',
-        id: 'call6',
-        response: {
-          output: 'Binary content of type image/png was processed.',
-          binaryContent: imageDataPart,
+    expect(response.responseParts).toEqual([
+      {
+        functionCall: {
+          id: 'call6',
+          name: 'testTool',
+          args: {},
         },
       },
-    });
+      {
+        functionResponse: {
+          name: 'testTool',
+          id: 'call6',
+          response: {
+            output: 'Binary content of type image/png was processed.',
+            binaryContent: imageDataPart,
+          },
+        },
+      },
+    ]);
   });
 });

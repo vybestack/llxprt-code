@@ -1,11 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OpenAIProvider } from './OpenAIProvider.js';
-import { IMessage } from '../IMessage.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { IContent } from '../../services/history/IContent.js';
 import OpenAI from 'openai';
 
-// Mock fetch globally
-global.fetch = vi.fn();
+// Mock fetch globally - returns empty stream for Responses API
+global.fetch = vi.fn().mockResolvedValue({
+  ok: true,
+  status: 200,
+  headers: new Headers({ 'content-type': 'text/event-stream' }),
+  body: new ReadableStream({
+    start(controller) {
+      controller.close();
+    },
+  }),
+  text: async () => '',
+  json: async () => ({}),
+  blob: async () => new Blob([]),
+  arrayBuffer: async () => new ArrayBuffer(0),
+  formData: async () => new FormData(),
+  clone() {
+    return this;
+  },
+  bodyUsed: false,
+} as Response);
 
 // Mock OpenAI
 vi.mock('openai', () => {
@@ -107,15 +124,15 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
       bodyUsed: false,
     } as Response);
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
     ];
 
     const generator = provider.generateChatCompletion(messages);
-    const results: IMessage[] = [];
+    const results: IContent[] = [];
 
     for await (const message of generator) {
       results.push(message);
@@ -139,23 +156,30 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
     );
 
     // Should have received content from Responses API
-    expect(results.some((m) => m.content === 'Hello from Responses API')).toBe(
-      true,
-    );
+    expect(
+      results.some((m) =>
+        m.blocks.some(
+          (b) =>
+            b.type === 'text' &&
+            (b as { type: 'text'; text: string }).text ===
+              'Hello from Responses API',
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('should use legacy API for gpt-3.5-turbo model', async () => {
     provider.setModel('gpt-3.5-turbo');
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
     ];
 
     const generator = provider.generateChatCompletion(messages);
-    const results: IMessage[] = [];
+    const results: IContent[] = [];
 
     for await (const message of generator) {
       results.push(message);
@@ -163,11 +187,14 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
 
     // Should have received content from legacy API
     expect(results).toHaveLength(2);
-    expect(results[0].content).toBe('Hello from legacy API');
-    expect(results[1].usage).toEqual({
-      prompt_tokens: 10,
-      completion_tokens: 5,
-      total_tokens: 15,
+    expect(results[0].blocks[0]).toEqual({
+      type: 'text',
+      text: 'Hello from legacy API',
+    });
+    expect(results[1].metadata?.usage).toEqual({
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
     });
   });
 
@@ -175,15 +202,15 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
     process.env.OPENAI_RESPONSES_DISABLE = 'true';
     provider.setModel('gpt-4o');
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
     ];
 
     const generator = provider.generateChatCompletion(messages);
-    const results: IMessage[] = [];
+    const results: IContent[] = [];
 
     for await (const message of generator) {
       results.push(message);
@@ -191,7 +218,10 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
 
     // Should have received content from legacy API
     expect(results).toHaveLength(2);
-    expect(results[0].content).toBe('Hello from legacy API');
+    expect(results[0].blocks[0]).toEqual({
+      type: 'text',
+      text: 'Hello from legacy API',
+    });
   });
 
   it.skip('should pass tools to responses API when using gpt-4o', async () => {
@@ -228,29 +258,30 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
       bodyUsed: false,
     } as Response);
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
     ];
 
     const tools = [
       {
-        type: 'function' as const,
-        function: {
-          name: 'test_tool',
-          description: 'A test tool',
-          parameters: {
-            type: 'object',
-            properties: {},
+        functionDeclarations: [
+          {
+            name: 'test_tool',
+            description: 'A test tool',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
           },
-        },
+        ],
       },
     ];
 
     const generator = provider.generateChatCompletion(messages, tools);
-    const results: IMessage[] = [];
+    const results: IContent[] = [];
 
     for await (const message of generator) {
       results.push(message);
@@ -265,35 +296,44 @@ describe('OpenAIProvider generateChatCompletion switch logic', () => {
     );
 
     // Should have received content
-    expect(results.some((m) => m.content === 'Using tool')).toBe(true);
+    expect(
+      results.some((m) =>
+        m.blocks.some(
+          (b) =>
+            b.type === 'text' &&
+            (b as { type: 'text'; text: string }).text === 'Using tool',
+        ),
+      ),
+    ).toBe(true);
   });
 
   it('should pass tools to legacy API when using gpt-3.5-turbo', async () => {
     provider.setModel('gpt-3.5-turbo');
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
     ];
 
     const tools = [
       {
-        type: 'function' as const,
-        function: {
-          name: 'test_tool',
-          description: 'A test tool',
-          parameters: {
-            type: 'object',
-            properties: {},
+        functionDeclarations: [
+          {
+            name: 'test_tool',
+            description: 'A test tool',
+            parameters: {
+              type: 'object',
+              properties: {},
+            },
           },
-        },
+        ],
       },
     ];
 
     const generator = provider.generateChatCompletion(messages, tools);
-    const results: IMessage[] = [];
+    const results: IContent[] = [];
 
     for await (const message of generator) {
       results.push(message);

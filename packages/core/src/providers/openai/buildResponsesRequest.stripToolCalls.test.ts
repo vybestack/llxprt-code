@@ -1,32 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import { buildResponsesRequest } from './buildResponsesRequest.js';
-import { IMessage } from '../IMessage.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
+import { IContent } from '../../services/history/IContent.js';
 describe('buildResponsesRequest - tool_calls stripping', () => {
   it('should strip tool_calls from messages when building request', () => {
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'What is the weather?',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'What is the weather?' }],
       },
       {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: '',
-        tool_calls: [
+        speaker: 'ai',
+        blocks: [
           {
+            type: 'tool_call',
             id: 'call_123',
-            type: 'function',
-            function: {
-              name: 'get_weather',
-              arguments: '{"location": "San Francisco"}',
-            },
+            name: 'get_weather',
+            parameters: { location: 'San Francisco' },
           },
         ],
       },
       {
-        role: ContentGeneratorRole.TOOL,
-        content: 'Sunny, 72°F',
-        tool_call_id: 'call_123',
+        speaker: 'tool',
+        blocks: [
+          {
+            type: 'tool_response',
+            callId: 'call_123',
+            toolName: 'get_weather',
+            result: 'Sunny, 72°F',
+          },
+        ],
       },
     ];
 
@@ -42,14 +44,13 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
 
     // First message should be unchanged
     expect(request.input?.[0]).toEqual({
-      role: ContentGeneratorRole.USER,
+      role: 'user',
       content: 'What is the weather?',
     });
 
     // Second message should have tool_calls stripped
     expect(request.input?.[1]).toEqual({
-      role: ContentGeneratorRole.ASSISTANT,
-      content: '',
+      role: 'assistant',
     });
     expect(
       (request.input?.[1] as Record<string, unknown>).tool_calls,
@@ -60,7 +61,7 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
       type: 'function_call',
       call_id: 'call_123',
       name: 'get_weather',
-      arguments: '{"location": "San Francisco"}',
+      arguments: '{"location":"San Francisco"}',
     });
 
     // Fourth entry should be the function_call_output
@@ -72,14 +73,14 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
   });
 
   it('should handle messages without tool_calls', () => {
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Hello',
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Hello' }],
       },
       {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: 'Hi there!',
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'Hi there!' }],
       },
     ];
 
@@ -90,35 +91,35 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
 
     expect(request.input).toEqual([
       {
-        role: ContentGeneratorRole.USER,
+        role: 'user',
         content: 'Hello',
       },
       {
-        role: ContentGeneratorRole.ASSISTANT,
+        role: 'assistant',
         content: 'Hi there!',
       },
     ]);
   });
 
   it('should preserve usage data when stripping tool_calls', () => {
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: 'Let me check the weather',
-        tool_calls: [
+        speaker: 'ai',
+        blocks: [
+          { type: 'text', text: 'Let me check the weather' },
           {
+            type: 'tool_call',
             id: 'call_456',
-            type: 'function',
-            function: {
-              name: 'get_weather',
-              arguments: '{}',
-            },
+            name: 'get_weather',
+            parameters: {},
           },
         ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30,
+        metadata: {
+          usage: {
+            promptTokens: 10,
+            completionTokens: 20,
+            totalTokens: 30,
+          },
         },
       },
     ];
@@ -130,12 +131,12 @@ describe('buildResponsesRequest - tool_calls stripping', () => {
 
     // Should strip tool_calls but keep usage
     expect(request.input?.[0]).toEqual({
-      role: ContentGeneratorRole.ASSISTANT,
+      role: 'assistant',
       content: 'Let me check the weather',
       usage: {
-        prompt_tokens: 10,
-        completion_tokens: 20,
-        total_tokens: 30,
+        promptTokens: 10,
+        completionTokens: 20,
+        totalTokens: 30,
       },
     });
     expect(

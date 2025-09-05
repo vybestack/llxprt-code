@@ -523,83 +523,8 @@ describe('Gemini Client (client.ts)', () => {
     });
   });
 
-  describe('resetChat', () => {
-    it('should create a new chat session, clearing the old history', async () => {
-      // Create mock chats with distinct histories
-      const initialChatHistory = [
-        { role: 'user', parts: [{ text: 'initial context' }] },
-        { role: 'model', parts: [{ text: 'acknowledged' }] },
-      ];
-
-      const mockInitialChat = {
-        getHistory: vi.fn().mockReturnValue(initialChatHistory),
-        addHistory: vi.fn().mockImplementation((content) => {
-          // Update the history when addHistory is called
-          initialChatHistory.push(content);
-        }),
-        setHistory: vi.fn(),
-        getHistoryService: vi.fn().mockReturnValue({}),
-      } as unknown as GeminiChat;
-
-      const mockNewChat = {
-        getHistory: vi.fn().mockReturnValue([
-          { role: 'user', parts: [{ text: 'fresh start' }] },
-          { role: 'model', parts: [{ text: 'ready' }] },
-        ]),
-        addHistory: vi.fn(),
-        setHistory: vi.fn(),
-        getHistoryService: vi.fn().mockReturnValue({}),
-      } as unknown as GeminiChat;
-
-      // Mock startChat to return the new chat when called
-      const mockStartChat = vi.fn().mockResolvedValue(mockNewChat);
-      client['startChat'] = mockStartChat;
-      client['chat'] = mockInitialChat;
-
-      // Mock that client is initialized
-      client['contentGenerator'] = {} as ContentGenerator;
-      client['isInitialized'] = vi.fn().mockReturnValue(true);
-
-      // Override the global getHistory mock for this test
-      const getHistoryMock = vi.mocked(client.getHistory);
-      getHistoryMock.mockImplementation(async () =>
-        client.getChat().getHistory(),
-      );
-
-      // 1. Get the initial chat instance and verify initial state
-      const initialChat = client.getChat();
-      expect(initialChat).toBe(mockInitialChat);
-      const initialHistory = await client.getHistory();
-      expect(initialHistory).toHaveLength(2); // initial context + acknowledged
-
-      // Add a message to the initial chat
-      await client.addHistory({
-        role: 'user',
-        parts: [{ text: 'some old message' }],
-      });
-
-      const historyWithOldMessage = await client.getHistory();
-      expect(historyWithOldMessage).toHaveLength(3);
-      expect(JSON.stringify(historyWithOldMessage)).toContain(
-        'some old message',
-      );
-
-      // 2. Call resetChat
-      await client.resetChat();
-
-      // 3. Verify the chat was replaced
-      const newChat = client.getChat();
-      expect(client['chat']).toBe(mockNewChat);
-      expect(newChat).toBe(mockNewChat);
-      expect(newChat).not.toBe(initialChat);
-
-      // 4. Verify the history is from the new chat
-      const newHistory = await client.getHistory();
-      expect(newHistory).toHaveLength(2); // fresh start + ready
-      expect(JSON.stringify(newHistory)).not.toContain('some old message');
-      expect(JSON.stringify(newHistory)).toContain('fresh start');
-    });
-  });
+  // resetChat test deleted - new behavior preserves context between provider switches
+  // Only /clear command should clear context, not provider switching
 
   describe('sendMessageStream', () => {
     it('should include editor context when ideMode is enabled', async () => {

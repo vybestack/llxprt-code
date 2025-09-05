@@ -79,6 +79,8 @@ These upstream features have been reimplemented in llxprt with our own approach:
 These upstream features have been completely removed from llxprt for privacy/security reasons:
 
 - **ClearcutLogger (Google telemetry)** - All Google telemetry collection has been completely removed from llxprt. The codebase now uses only local file logging for telemetry, with no data sent to Google servers. Any upstream commits that add ClearcutLogger functionality should be skipped entirely.
+- **NextSpeakerChecker** - removed this as it wastes tokens and causes loops
+- **FlashFallback** - presently disabled but slated to be removed - no one wants to auto fall back to flash to code with if they were using a better model.
 
 #### Handling Conflicts:
 

@@ -1,7 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AnthropicProvider } from './AnthropicProvider.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import { IMessage } from '../IMessage.js';
+import { IContent } from '../../services/history/IContent.js';
 import { ITool } from '../ITool.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 import { OAuthManager } from '../../auth/precedence.js';
@@ -158,8 +157,11 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       };
       mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
 
-      const messages: IMessage[] = [
-        { role: ContentGeneratorRole.USER, content: 'Test OAuth' },
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Test OAuth' }],
+        },
       ];
 
       const generator = provider.generateChatCompletion(messages);
@@ -169,7 +171,10 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       }
 
       expect(chunks).toEqual([
-        { role: 'assistant', content: 'Hello from OAuth' },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello from OAuth' }],
+        },
       ]);
 
       // Should have attempted to get OAuth token
@@ -188,8 +193,11 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
         mockOAuthManager,
       );
 
-      const messages: IMessage[] = [
-        { role: ContentGeneratorRole.USER, content: 'Test' },
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Test' }],
+        },
       ];
 
       const generator = providerNoAuth.generateChatCompletion(messages);
@@ -219,8 +227,11 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       };
       mockAnthropicShared.messages.create.mockResolvedValue(mockStream);
 
-      const messages: IMessage[] = [
-        { role: ContentGeneratorRole.USER, content: 'Test' },
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Test' }],
+        },
       ];
 
       const generator = providerWithApiKey.generateChatCompletion(messages);
@@ -230,7 +241,10 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       }
 
       expect(chunks).toEqual([
-        { role: 'assistant', content: 'Hello from API key' },
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Hello from API key' }],
+        },
       ]);
 
       // Should NOT have attempted to get OAuth token since API key is available

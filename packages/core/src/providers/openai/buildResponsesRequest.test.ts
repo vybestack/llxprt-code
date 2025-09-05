@@ -4,7 +4,6 @@ import {
   ResponsesRequestParams,
   ResponsesRequest,
 } from './buildResponsesRequest.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 describe('buildResponsesRequest', () => {
   beforeEach(() => {
@@ -33,8 +32,8 @@ describe('buildResponsesRequest', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         messages: [
-          { role: ContentGeneratorRole.USER, content: 'Hello' },
-          { role: ContentGeneratorRole.ASSISTANT, content: 'Hi there!' },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
         ],
         stream: false,
       };
@@ -44,8 +43,8 @@ describe('buildResponsesRequest', () => {
       expect(result).toEqual({
         model: 'gpt-4o',
         input: [
-          { role: ContentGeneratorRole.USER, content: 'Hello' },
-          { role: ContentGeneratorRole.ASSISTANT, content: 'Hi there!' },
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
         ],
         stream: false,
       });
@@ -57,7 +56,9 @@ describe('buildResponsesRequest', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         prompt: 'Hello',
-        messages: [{ role: ContentGeneratorRole.USER, content: 'Hi' }],
+        messages: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] },
+        ],
       };
 
       expect(() => buildResponsesRequest(params)).toThrow(
@@ -223,7 +224,9 @@ describe('buildResponsesRequest', () => {
     it('should handle conversationId with messages', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
-        messages: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
+        messages: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+        ],
         conversationId: 'conv-123',
       };
 
@@ -232,7 +235,7 @@ describe('buildResponsesRequest', () => {
       // The implementation doesn't warn, just processes the request
       expect(result.input).toHaveLength(1);
       expect(result.input?.[0]).toEqual({
-        role: ContentGeneratorRole.USER,
+        role: 'user',
         content: 'Hello',
       });
     });
@@ -241,11 +244,23 @@ describe('buildResponsesRequest', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         messages: [
-          { role: ContentGeneratorRole.USER, content: 'First message' },
-          { role: ContentGeneratorRole.ASSISTANT, content: 'First response' },
-          { role: ContentGeneratorRole.USER, content: 'Second message' },
-          { role: ContentGeneratorRole.ASSISTANT, content: 'Second response' },
-          { role: ContentGeneratorRole.USER, content: 'Third message' },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'First message' }],
+          },
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'First response' }] },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Second message' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: 'Second response' }],
+          },
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Third message' }],
+          },
         ],
         conversationId: 'conv-123',
       };
@@ -273,8 +288,8 @@ describe('buildResponsesRequest', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         messages: [
-          { role: ContentGeneratorRole.USER, content: 'Hello' },
-          { role: ContentGeneratorRole.ASSISTANT, content: 'Hi there!' },
+          { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+          { speaker: 'ai', blocks: [{ type: 'text', text: 'Hi there!' }] },
         ],
         conversationId: 'conv-123',
       };
@@ -317,18 +332,19 @@ describe('buildResponsesRequest', () => {
       const params: ResponsesRequestParams = {
         model: 'gpt-4o',
         messages: [
-          { role: ContentGeneratorRole.USER, content: 'Get the weather' },
           {
-            role: ContentGeneratorRole.ASSISTANT,
-            content: "I'll check the weather for you.",
-            tool_calls: [
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Get the weather' }],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              { type: 'text', text: "I'll check the weather for you." },
               {
+                type: 'tool_call',
                 id: 'call_123',
-                type: 'function',
-                function: {
-                  name: 'get_weather',
-                  arguments: '{"location": "London"}',
-                },
+                name: 'get_weather',
+                parameters: { location: 'London' },
               },
             ],
           },
@@ -339,7 +355,7 @@ describe('buildResponsesRequest', () => {
 
       expect(result.input).toHaveLength(3); // 2 messages + 1 function_call
       expect(result.input?.[1]).toEqual({
-        role: ContentGeneratorRole.ASSISTANT,
+        role: 'assistant',
         content: "I'll check the weather for you.",
       });
       expect(
@@ -351,7 +367,7 @@ describe('buildResponsesRequest', () => {
         type: 'function_call',
         call_id: 'call_123',
         name: 'get_weather',
-        arguments: '{"location": "London"}',
+        arguments: '{"location":"London"}',
       });
     });
 
@@ -420,11 +436,13 @@ describe('buildResponsesRequest', () => {
         name: 'minimal messages request',
         params: {
           model: 'gpt-4o',
-          messages: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
+          messages: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+          ],
         },
         expectedSnapshot: {
           model: 'gpt-4o',
-          input: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
+          input: [{ role: 'user', content: 'Hello' }],
         },
       },
       {
@@ -470,7 +488,9 @@ describe('buildResponsesRequest', () => {
         name: 'full stateful request',
         params: {
           model: 'gpt-4o',
-          messages: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
+          messages: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+          ],
           conversationId: 'conv-123',
           parentId: 'parent123',
           stateful: true,
@@ -478,7 +498,7 @@ describe('buildResponsesRequest', () => {
         },
         expectedSnapshot: {
           model: 'gpt-4o',
-          input: [{ role: ContentGeneratorRole.USER, content: 'Hello' }],
+          input: [{ role: 'user', content: 'Hello' }],
           previous_response_id: 'parent123',
           store: true,
           stateful: true,

@@ -3,7 +3,6 @@ import {
   parseResponsesStream,
   parseErrorResponse,
 } from './parseResponsesStream.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
 
 function createSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -40,12 +39,12 @@ describe('parseResponsesStream', () => {
 
     expect(messages).toHaveLength(2);
     expect(messages[0]).toEqual({
-      role: ContentGeneratorRole.ASSISTANT,
-      content: 'Hello',
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: 'Hello' }],
     });
     expect(messages[1]).toEqual({
-      role: ContentGeneratorRole.ASSISTANT,
-      content: ' world',
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: ' world' }],
     });
   });
 
