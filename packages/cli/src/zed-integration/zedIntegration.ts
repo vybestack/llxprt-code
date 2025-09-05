@@ -519,7 +519,13 @@ class Session {
           }
         }
 
-        nextMessage = { role: 'user', parts: toolResponseParts };
+        // For multiple tool responses, send them all together as the TUI does
+        // This ensures proper conversation history structure for providers like Anthropic
+        if (toolResponseParts.length > 0) {
+          nextMessage = { role: 'user', parts: toolResponseParts };
+        } else {
+          nextMessage = null;
+        }
       }
     }
 
@@ -562,7 +568,15 @@ class Session {
             : 'native',
       });
 
+      // Return paired function call and function response for proper conversation history
       return [
+        {
+          functionCall: {
+            id: callId,
+            name: fc.name ?? '',
+            args,
+          },
+        },
         {
           functionResponse: {
             id: callId,
@@ -680,7 +694,20 @@ class Session {
             : 'native',
       });
 
-      return convertToFunctionResponse(fc.name, callId, toolResult.llmContent);
+      // Return paired function call and function response like the TUI does
+      // This ensures proper conversation history for providers that need it (like Anthropic)
+      const functionResponseParts = convertToFunctionResponse(fc.name, callId, toolResult.llmContent);
+      
+      return [
+        {
+          functionCall: {
+            id: callId,
+            name: fc.name,
+            args,
+          },
+        },
+        ...(Array.isArray(functionResponseParts) ? functionResponseParts : [functionResponseParts]),
+      ];
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
 
