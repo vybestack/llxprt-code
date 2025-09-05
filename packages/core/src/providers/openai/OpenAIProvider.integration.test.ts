@@ -87,9 +87,9 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
     expect(fullContent).toBeTruthy();
     expect(fullContent).toContain('Hello from integration test');
 
-    // Check that we have assistant messages
-    const assistantMessages = responses.filter((m) => m.role === 'assistant');
-    expect(assistantMessages.length).toBeGreaterThan(0);
+    // Check that we have AI responses
+    const aiMessages = responses.filter((m) => m.speaker === 'ai');
+    expect(aiMessages.length).toBeGreaterThan(0);
 
     // Note: The exact content may vary based on the model's response
     console.log('Received full response:', fullContent);
