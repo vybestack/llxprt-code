@@ -15,7 +15,7 @@
  */
 
 import { ITool } from '../providers/ITool.js';
-import { IMessage } from '../providers/IMessage.js';
+import { ToolCallBlock } from '../services/history/IContent.js';
 
 export type ToolFormat =
   | 'openai'
@@ -49,9 +49,6 @@ export interface ResponsesTool {
 export interface IToolFormatter {
   toProviderFormat(tools: ITool[], format: 'openai'): OpenAITool[];
   toProviderFormat(tools: ITool[], format: ToolFormat): unknown;
-  fromProviderFormat(
-    rawToolCall: unknown,
-    format: ToolFormat,
-  ): IMessage['tool_calls'];
+  fromProviderFormat(rawToolCall: unknown, format: ToolFormat): ToolCallBlock[];
   toResponsesTool(tools: ITool[]): ResponsesTool[];
 }

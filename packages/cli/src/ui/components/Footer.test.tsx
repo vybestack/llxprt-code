@@ -58,7 +58,7 @@ describe('Footer', () => {
     historyTokenCount: 1000,
     isPaidMode: false,
     nightly: false,
-    contextLimit: undefined,
+    contextLimit: 100000,
   };
 
   beforeEach(() => {

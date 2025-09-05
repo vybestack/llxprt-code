@@ -153,25 +153,8 @@ const unsetCommand: SlashCommand = {
     // so we continue to use the config directly for these session-only settings
     config.setEphemeralSetting(key, undefined);
 
-    // Special handling for context-limit and compression-threshold
-    if (key === 'context-limit' || key === 'compression-threshold') {
-      const geminiClient = config.getGeminiClient();
-      if (geminiClient) {
-        // Reset to defaults by passing undefined
-        geminiClient.setCompressionSettings(
-          key === 'compression-threshold'
-            ? undefined
-            : (config.getEphemeralSetting('compression-threshold') as
-                | number
-                | undefined),
-          key === 'context-limit'
-            ? undefined
-            : (config.getEphemeralSetting('context-limit') as
-                | number
-                | undefined),
-        );
-      }
-    }
+    // Compression settings are now handled via ephemeral settings only
+    // No special handling needed - the unsetEphemeralSetting above handles it
 
     return {
       type: 'message',
@@ -575,16 +558,11 @@ export const setCommand: SlashCommand = {
     const settingsService = config.getSettingsService();
     const useSettingsService = settingsService !== null;
 
-    // Apply settings to GeminiClient for context-limit and compression-threshold
+    // Store compression settings as ephemeral settings
+    // They will be read by geminiChat.ts when compression is needed
     if (key === 'context-limit' || key === 'compression-threshold') {
-      const geminiClient = config.getGeminiClient();
-      if (geminiClient) {
-        const contextLimit =
-          key === 'context-limit' ? (parsedValue as number) : undefined;
-        const compressionThreshold =
-          key === 'compression-threshold' ? (parsedValue as number) : undefined;
-        geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
-      }
+      // Settings are stored via setEphemeralSetting below
+      // geminiChat.ts will read them directly when needed
     }
 
     // Store emojifilter in ephemeral settings like everything else

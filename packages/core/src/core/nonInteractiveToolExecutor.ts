@@ -12,16 +12,20 @@ import {
   ToolErrorType,
   ToolResult,
 } from '../index.js';
+import { PartListUnion } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
 import { ToolCallDecision } from '../telemetry/types.js';
 import { EmojiFilter, FilterResult } from '../filters/EmojiFilter.js';
+import { DebugLogger } from '../debug/index.js';
 
 /**
  * Global emoji filter instance for reuse across tool calls
  */
 let emojiFilter: EmojiFilter | null = null;
+
+const logger = new DebugLogger('llxprt:tool-executor');
 
 /**
  * Gets or creates the emoji filter instance based on current configuration
@@ -152,15 +156,27 @@ export async function executeToolCall(
       tool_type: 'native',
     });
     // Ensure the response structure matches what the API expects for an error
+    // Include both tool call and error response
     return {
       callId: toolCallRequest.callId,
-      responseParts: {
-        functionResponse: {
-          id: toolCallRequest.callId,
-          name: toolCallRequest.name,
-          response: { error: error.message },
+      responseParts: [
+        // Tool call
+        {
+          functionCall: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            args: toolCallRequest.args,
+          },
         },
-      },
+        // Error response
+        {
+          functionResponse: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            response: { error: error.message },
+          },
+        },
+      ],
       resultDisplay: error.message,
       error,
       errorType: ToolErrorType.TOOL_NOT_REGISTERED,
@@ -234,13 +250,24 @@ export async function executeToolCall(
 
         return {
           callId: toolCallRequest.callId,
-          responseParts: {
-            functionResponse: {
-              id: toolCallRequest.callId,
-              name: toolCallRequest.name,
-              response: { error: filterResult.error },
+          responseParts: [
+            // Tool call
+            {
+              functionCall: {
+                id: toolCallRequest.callId,
+                name: toolCallRequest.name,
+                args: toolCallRequest.args,
+              },
             },
-          },
+            // Error response
+            {
+              functionResponse: {
+                id: toolCallRequest.callId,
+                name: toolCallRequest.name,
+                response: { error: filterResult.error },
+              },
+            },
+          ],
           resultDisplay: filterResult.error || 'Tool execution blocked',
           error: new Error(filterResult.error || 'Tool execution blocked'),
           errorType: ToolErrorType.INVALID_TOOL_PARAMS,
@@ -315,9 +342,29 @@ export async function executeToolCall(
       finalLlmContent,
     );
 
+    // Return BOTH the tool call and response as an array
+    // This ensures they're always paired and added to history atomically
+    const responseParts = [
+      // First, the tool call from the model
+      {
+        functionCall: {
+          id: toolCallRequest.callId,
+          name: toolCallRequest.name,
+          args: toolCallRequest.args,
+        },
+      },
+      // Then, the tool response
+      finalResponse,
+    ] as PartListUnion;
+
+    logger.debug(
+      () =>
+        `Returning paired tool call and response for ${toolCallRequest.name} (${toolCallRequest.callId})`,
+    );
+
     return {
       callId: toolCallRequest.callId,
-      responseParts: finalResponse,
+      responseParts,
       resultDisplay: tool_display,
       error:
         toolResult.error === undefined
@@ -347,13 +394,24 @@ export async function executeToolCall(
     });
     return {
       callId: toolCallRequest.callId,
-      responseParts: {
-        functionResponse: {
-          id: toolCallRequest.callId,
-          name: toolCallRequest.name,
-          response: { error: error.message },
+      responseParts: [
+        // Tool call
+        {
+          functionCall: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            args: toolCallRequest.args,
+          },
         },
-      },
+        // Error response
+        {
+          functionResponse: {
+            id: toolCallRequest.callId,
+            name: toolCallRequest.name,
+            response: { error: error.message },
+          },
+        },
+      ],
       resultDisplay: error.message,
       error,
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,

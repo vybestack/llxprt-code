@@ -17,6 +17,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HistoryService } from './HistoryService.js';
 import { IContent, ContentFactory, ToolResponseBlock } from './IContent.js';
+import { MessageConverters } from './MessageConverters.js';
+import { ContentConverters } from './ContentConverters.js';
 
 describe('HistoryService - Behavioral Tests', () => {
   let service: HistoryService;
@@ -660,6 +662,95 @@ describe('HistoryService - Behavioral Tests', () => {
       expect(history).toHaveLength(1);
       expect(history[0].blocks).toHaveLength(2);
       expect(history[0].blocks[1].type).toBe('media');
+    });
+  });
+
+  // NEW TESTS FOR ID NORMALIZATION ARCHITECTURE
+  // These tests SHOULD FAIL initially - that's the point of TDD
+  describe('ID Normalization Architecture - NEW FAILING TESTS', () => {
+    describe('HistoryService as ONLY ID generator', () => {
+      it('should be the ONLY source of ID generation with generateHistoryId method', () => {
+        // FAILING TEST: HistoryService should have generateHistoryId method
+        expect(typeof service.generateHistoryId).toBe('function');
+
+        const id1 = service.generateHistoryId();
+        const id2 = service.generateHistoryId();
+
+        // All IDs should have hist_tool_ format with UUID
+        expect(id1).toMatch(
+          /^hist_tool_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+        expect(id2).toMatch(
+          /^hist_tool_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+
+        // Each call should generate unique IDs
+        expect(id1).not.toBe(id2);
+      });
+
+      it('should provide ID generation callback to converters', () => {
+        // FAILING TEST: HistoryService should provide getIdGeneratorCallback method
+        expect(typeof service.getIdGeneratorCallback).toBe('function');
+
+        const callback = service.getIdGeneratorCallback();
+        expect(typeof callback).toBe('function');
+
+        // Callback should generate proper history IDs
+        const id = callback();
+        expect(id).toMatch(
+          /^hist_tool_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+      });
+    });
+
+    describe('Converter integration with HistoryService callbacks', () => {
+      it('should pass ID generation callbacks to MessageConverters.toIContent', () => {
+        // FAILING TEST: MessageConverters.toIContent should accept generateId callback parameter
+        const mockMessage = {
+          role: 'assistant' as const,
+          tool_calls: [
+            {
+              id: 'call_123',
+              type: 'function' as const,
+              function: { name: 'test', arguments: '{}' },
+            },
+          ],
+        };
+
+        const generateIdCallback = service.getIdGeneratorCallback();
+
+        // This should work with the new signature
+        expect(() => {
+          const result = MessageConverters.toIContent(
+            mockMessage,
+            'openai',
+            generateIdCallback,
+          );
+          expect(result.blocks[0].type).toBe('tool_call');
+        }).not.toThrow();
+      });
+    });
+
+    describe('No internal ID generation in converters', () => {
+      it('should NOT generate IDs internally in MessageConverters', () => {
+        // FAILING TEST: MessageConverters should not have generateHistoryToolId method
+        expect(
+          (
+            MessageConverters as unknown as {
+              generateHistoryToolId?: () => string;
+            }
+          ).generateHistoryToolId,
+        ).toBeUndefined();
+      });
+
+      it('should NOT generate IDs internally in ContentConverters', () => {
+        // FAILING TEST: ContentConverters should not have generateHistoryId function
+        // Check that the internal function is not accessible (it exists but is private)
+        expect(
+          (ContentConverters as unknown as { generateHistoryId?: () => string })
+            .generateHistoryId,
+        ).toBeUndefined();
+      });
     });
   });
 });

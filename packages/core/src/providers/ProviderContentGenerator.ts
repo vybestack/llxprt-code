@@ -19,7 +19,6 @@ import {
   Part,
 } from '@google/genai';
 import type { IProviderManager as ProviderManager } from './IProviderManager.js';
-import { GeminiCompatibleWrapper } from './adapters/GeminiCompatibleWrapper.js';
 
 /**
  * ContentGenerator implementation that delegates to external providers
@@ -33,24 +32,30 @@ export class ProviderContentGenerator implements ContentGenerator {
     void this._config;
   }
 
-  private getWrapper(): GeminiCompatibleWrapper {
+  private getWrapper(): unknown {
     const provider = this.providerManager.getActiveProvider();
     if (!provider) {
       throw new Error('No active provider');
     }
-    return new GeminiCompatibleWrapper(provider);
+    throw new Error(
+      'GeminiCompatibleWrapper has been removed - direct IContent interface is now used',
+    );
   }
 
   async generateContent(
-    request: GenerateContentParameters,
+    _request: GenerateContentParameters,
   ): Promise<GenerateContentResponse> {
-    return this.getWrapper().generateContent(request);
+    // The getWrapper method always throws, so we'll never reach this return
+    this.getWrapper();
+    throw new Error('This should never be reached');
   }
 
   async generateContentStream(
-    request: GenerateContentParameters,
+    _request: GenerateContentParameters,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    return this.getWrapper().generateContentStream(request);
+    // The getWrapper method always throws, so we'll never reach this return
+    this.getWrapper();
+    throw new Error('This should never be reached');
   }
 
   async countTokens(

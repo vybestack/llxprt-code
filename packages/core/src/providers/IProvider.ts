@@ -16,17 +16,22 @@
 
 import { IModel } from './IModel.js';
 import { ITool } from './ITool.js';
-import { IMessage } from './IMessage.js';
+import { IContent } from '../services/history/IContent.js';
 
 export interface IProvider {
   name: string;
   isDefault?: boolean;
   getModels(): Promise<IModel[]>;
   generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
-  ): AsyncIterableIterator<unknown>;
+    content: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ): AsyncIterableIterator<IContent>;
   setModel?(modelId: string): void;
   getCurrentModel?(): string;
   getDefaultModel(): string;
@@ -73,4 +78,4 @@ export interface IProvider {
 }
 
 // Re-export the interfaces for convenience
-export type { IModel, ITool, IMessage };
+export type { IModel, ITool };

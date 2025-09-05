@@ -21,7 +21,7 @@ import {
   ResponsesTool,
 } from './IToolFormatter.js';
 import { ITool } from '../providers/ITool.js';
-import { IMessage } from '../providers/IMessage.js';
+import { ToolCallBlock } from '../services/history/IContent.js';
 import { DebugLogger } from '../debug/DebugLogger.js';
 
 export class ToolFormatter implements IToolFormatter {
@@ -61,6 +61,32 @@ export class ToolFormatter implements IToolFormatter {
       newSchema.type = String(newSchema.type).toLowerCase();
     }
 
+    // Convert enum values if present (they should remain as-is)
+    // But ensure they're arrays of strings, not some other type
+    if (newSchema.enum && Array.isArray(newSchema.enum)) {
+      newSchema.enum = newSchema.enum.map((v) => String(v));
+    }
+
+    // Convert minLength from string to number if present
+    if (newSchema.minLength && typeof newSchema.minLength === 'string') {
+      const minLengthNum = parseInt(newSchema.minLength, 10);
+      if (!isNaN(minLengthNum)) {
+        newSchema.minLength = minLengthNum;
+      } else {
+        delete newSchema.minLength;
+      }
+    }
+
+    // Convert maxLength from string to number if present
+    if (newSchema.maxLength && typeof newSchema.maxLength === 'string') {
+      const maxLengthNum = parseInt(newSchema.maxLength, 10);
+      if (!isNaN(maxLengthNum)) {
+        newSchema.maxLength = maxLengthNum;
+      } else {
+        delete newSchema.maxLength;
+      }
+    }
+
     return newSchema;
   }
 
@@ -75,14 +101,31 @@ export class ToolFormatter implements IToolFormatter {
           () => `Converting ${tools.length} tools to ${format} format`,
         );
         return tools.map((tool) => {
+          const convertedParams = this.convertGeminiSchemaToStandard(
+            tool.function.parameters,
+          );
+
+          // Special debug logging for TodoWrite to catch the issue
+          if (
+            tool.function.name === 'todo_write' ||
+            tool.function.name === 'TodoWrite'
+          ) {
+            this.logger.debug(
+              () =>
+                `TodoWrite schema conversion - Original: ${JSON.stringify(tool.function.parameters, null, 2)}`,
+            );
+            this.logger.debug(
+              () =>
+                `TodoWrite schema conversion - Converted: ${JSON.stringify(convertedParams, null, 2)}`,
+            );
+          }
+
           const converted = {
             type: 'function' as const,
             function: {
               name: tool.function.name,
               description: tool.function.description,
-              parameters: this.convertGeminiSchemaToStandard(
-                tool.function.parameters,
-              ),
+              parameters: convertedParams,
             },
           };
           this.logger.debug(
@@ -139,7 +182,7 @@ export class ToolFormatter implements IToolFormatter {
   fromProviderFormat(
     rawToolCall: unknown,
     format: ToolFormat,
-  ): IMessage['tool_calls'] {
+  ): ToolCallBlock[] {
     switch (format) {
       case 'openai':
       case 'deepseek':
@@ -213,12 +256,10 @@ export class ToolFormatter implements IToolFormatter {
 
         return [
           {
+            type: 'tool_call' as const,
             id: openAiToolCall.id,
-            type: 'function' as const,
-            function: {
-              name: openAiToolCall.function.name,
-              arguments: openAiToolCall.function.arguments,
-            },
+            name: openAiToolCall.function.name,
+            parameters: JSON.parse(openAiToolCall.function.arguments),
           },
         ];
       }
@@ -240,14 +281,10 @@ export class ToolFormatter implements IToolFormatter {
 
         return [
           {
+            type: 'tool_call' as const,
             id: anthropicToolCall.id,
-            type: 'function' as const,
-            function: {
-              name: anthropicToolCall.name,
-              arguments: anthropicToolCall.input
-                ? JSON.stringify(anthropicToolCall.input)
-                : '',
-            },
+            name: anthropicToolCall.name,
+            parameters: anthropicToolCall.input || {},
           },
         ];
       }
@@ -264,12 +301,10 @@ export class ToolFormatter implements IToolFormatter {
 
         return [
           {
+            type: 'tool_call' as const,
             id: `hermes_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            type: 'function' as const,
-            function: {
-              name: hermesToolCall.name,
-              arguments: JSON.stringify(hermesToolCall.arguments || {}),
-            },
+            name: hermesToolCall.name,
+            parameters: hermesToolCall.arguments || {},
           },
         ];
       }
@@ -286,12 +321,10 @@ export class ToolFormatter implements IToolFormatter {
 
         return [
           {
+            type: 'tool_call' as const,
             id: `xml_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-            type: 'function' as const,
-            function: {
-              name: xmlToolCall.name,
-              arguments: JSON.stringify(xmlToolCall.arguments || {}),
-            },
+            name: xmlToolCall.name,
+            parameters: xmlToolCall.arguments || {},
           },
         ];
       }
@@ -314,7 +347,7 @@ export class ToolFormatter implements IToolFormatter {
         arguments?: string;
       };
     },
-    accumulatedToolCalls: NonNullable<IMessage['tool_calls']>,
+    accumulatedToolCalls: ToolCallBlock[],
     format: ToolFormat,
   ): void {
     switch (format) {
@@ -326,28 +359,39 @@ export class ToolFormatter implements IToolFormatter {
         if (deltaToolCall.index !== undefined) {
           if (!accumulatedToolCalls[deltaToolCall.index]) {
             accumulatedToolCalls[deltaToolCall.index] = {
+              type: 'tool_call',
               id: deltaToolCall.id || '',
-              type: 'function',
-              function: { name: '', arguments: '' },
+              name: '',
+              parameters: {},
             };
           }
           const tc = accumulatedToolCalls[deltaToolCall.index];
           if (deltaToolCall.id) tc.id = deltaToolCall.id;
           if (deltaToolCall.function?.name)
-            tc.function.name = deltaToolCall.function.name;
+            tc.name = deltaToolCall.function.name;
           if (deltaToolCall.function?.arguments) {
             // Enhanced debug logging for all formats, especially Qwen
+            // Store accumulated arguments as string first, will parse at the end
+            if (!('_argumentsString' in tc)) {
+              (tc as unknown as { _argumentsString: string })._argumentsString =
+                '';
+            }
+
             this.logger.debug(
               () =>
-                `[${format}] Accumulating argument chunk for tool ${tc.function.name}:`,
+                `[${format}] Accumulating argument chunk for tool ${tc.name}:`,
               {
                 format,
-                toolName: tc.function.name,
+                toolName: tc.name,
                 index: deltaToolCall.index,
                 chunk: deltaToolCall.function.arguments,
                 chunkLength: deltaToolCall.function.arguments.length,
-                currentAccumulated: tc.function.arguments,
-                currentAccumulatedLength: tc.function.arguments.length,
+                currentAccumulated: (
+                  tc as unknown as { _argumentsString: string }
+                )._argumentsString,
+                currentAccumulatedLength: (
+                  tc as unknown as { _argumentsString: string }
+                )._argumentsString.length,
                 startsWithQuote:
                   deltaToolCall.function.arguments.startsWith('"'),
                 endsWithQuote: deltaToolCall.function.arguments.endsWith('"'),
@@ -369,7 +413,7 @@ export class ToolFormatter implements IToolFormatter {
               ) {
                 this.logger.error(
                   () =>
-                    `[Qwen] Detected potential double-stringification in chunk for ${tc.function.name}`,
+                    `[Qwen] Detected potential double-stringification in chunk for ${tc.name}`,
                   {
                     chunk,
                     pattern:
@@ -379,19 +423,36 @@ export class ToolFormatter implements IToolFormatter {
               }
             }
 
-            tc.function.arguments += deltaToolCall.function.arguments;
+            (tc as unknown as { _argumentsString: string })._argumentsString +=
+              deltaToolCall.function.arguments;
 
             // Log the accumulated state after adding chunk
             this.logger.debug(
-              () => `[${format}] After accumulation for ${tc.function.name}:`,
+              () => `[${format}] After accumulation for ${tc.name}:`,
               {
-                totalLength: tc.function.arguments.length,
+                totalLength: (tc as unknown as { _argumentsString: string })
+                  ._argumentsString.length,
                 preview:
-                  tc.function.arguments.length > 100
-                    ? tc.function.arguments.substring(0, 100) + '...'
-                    : tc.function.arguments,
+                  (tc as unknown as { _argumentsString: string })
+                    ._argumentsString.length > 100
+                    ? (
+                        tc as unknown as { _argumentsString: string }
+                      )._argumentsString.substring(0, 100) + '...'
+                    : (tc as unknown as { _argumentsString: string })
+                        ._argumentsString,
               },
             );
+
+            // Try to parse parameters
+            try {
+              const argsStr = (tc as unknown as { _argumentsString: string })
+                ._argumentsString;
+              if (argsStr.trim()) {
+                tc.parameters = JSON.parse(argsStr);
+              }
+            } catch {
+              // Keep accumulating, parameters will be set when complete
+            }
           }
         }
         break;

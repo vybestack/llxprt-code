@@ -47,14 +47,15 @@ export async function validateNonInteractiveAuth(
         | number
         | undefined;
 
-      if (contextLimit || compressionThreshold) {
-        const geminiClient = nonInteractiveConfig.getGeminiClient();
-        if (geminiClient) {
-          geminiClient.setCompressionSettings(
-            compressionThreshold,
-            contextLimit,
-          );
-        }
+      // Set compression settings via ephemeral settings
+      if (compressionThreshold !== undefined) {
+        nonInteractiveConfig.setEphemeralSetting(
+          'compression-threshold',
+          compressionThreshold,
+        );
+      }
+      if (contextLimit !== undefined) {
+        nonInteractiveConfig.setEphemeralSetting('context-limit', contextLimit);
       }
     }
 
@@ -89,21 +90,8 @@ export async function validateNonInteractiveAuth(
 
   await nonInteractiveConfig.refreshAuth(effectiveAuthType);
 
-  // Apply compression settings after authentication
-  if (settings) {
-    const merged = settings.merged as Record<string, unknown>;
-    const contextLimit = merged['context-limit'] as number | undefined;
-    const compressionThreshold = merged['compression-threshold'] as
-      | number
-      | undefined;
-
-    if (contextLimit || compressionThreshold) {
-      const geminiClient = nonInteractiveConfig.getGeminiClient();
-      if (geminiClient) {
-        geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
-      }
-    }
-  }
+  // Compression settings are already set via ephemeral settings
+  // geminiChat.ts will read them directly when needed
 
   // Ensure serverToolsProvider (Gemini) has config set if it's not the active provider
   if (providerManager) {

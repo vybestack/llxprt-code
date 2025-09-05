@@ -5,27 +5,27 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  IProvider,
-  IMessage,
-  ITool,
-  ContentGeneratorRole,
-} from '@vybestack/llxprt-code-core';
+import { IProvider, IContent } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 // Interfaces that will be implemented in the next phase
 interface LoggingProviderWrapper {
   generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
+    messages: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
   ): AsyncIterableIterator<unknown>;
   getWrappedProvider(): IProvider;
 }
 
 interface ConversationDataRedactor {
-  redactMessage(message: IMessage, provider: string): IMessage;
-  redactConversation(messages: IMessage[], provider: string): IMessage[];
+  redactMessage(message: IContent, provider: string): IContent;
+  redactConversation(messages: IContent[], provider: string): IContent[];
 }
 
 interface ConversationStorage {
@@ -37,7 +37,7 @@ interface ConversationLogEntry {
   timestamp: string;
   conversation_id: string;
   provider_name: string;
-  messages: IMessage[];
+  messages: IContent[];
   session_id?: string;
 }
 
@@ -79,23 +79,45 @@ function createMockProvider(
         name: `${name.charAt(0).toUpperCase() + name.slice(1)} Model 1`,
       },
     ]),
-    async *generateChatCompletion(_messages: IMessage[], _tools?: ITool[]) {
+    async *generateChatCompletion(
+      _messages: IContent[],
+      _tools?: Array<{
+        functionDeclarations: Array<{
+          name: string;
+          description?: string;
+          parameters?: unknown;
+        }>;
+      }>,
+    ) {
       // Simulate provider-specific response patterns
       if (name === 'openai') {
         yield {
-          content: 'OpenAI response chunk 1',
-          role: ContentGeneratorRole.ASSISTANT,
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'OpenAI response chunk 1' }],
         };
-        yield { content: ' chunk 2', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: ' chunk 2' }],
+        };
       } else if (name === 'anthropic') {
         yield {
-          content: 'Claude response: I understand your request.',
-          role: ContentGeneratorRole.ASSISTANT,
+          speaker: 'ai' as const,
+          blocks: [
+            {
+              type: 'text' as const,
+              text: 'Claude response: I understand your request.',
+            },
+          ],
         };
       } else if (name === 'gemini') {
         yield {
-          content: 'Gemini response with reasoning...',
-          role: ContentGeneratorRole.ASSISTANT,
+          speaker: 'ai' as const,
+          blocks: [
+            {
+              type: 'text' as const,
+              text: 'Gemini response with reasoning...',
+            },
+          ],
         };
       }
     },
@@ -172,17 +194,25 @@ class MockProviderManager implements ProviderManager {
 }
 
 class MockConversationDataRedactor implements ConversationDataRedactor {
-  redactMessage(message: IMessage, _provider: string): IMessage {
+  redactMessage(message: IContent, _provider: string): IContent {
     return {
       ...message,
-      content: message.content.replace(
-        /sk-[a-zA-Z0-9]{48}/g,
-        '[REDACTED-API-KEY]',
-      ),
+      blocks: message.blocks.map((block) => {
+        if (block.type === 'text') {
+          return {
+            ...block,
+            text: block.text.replace(
+              /sk-[a-zA-Z0-9]{48}/g,
+              '[REDACTED-API-KEY]',
+            ),
+          };
+        }
+        return block;
+      }),
     };
   }
 
-  redactConversation(messages: IMessage[], provider: string): IMessage[] {
+  redactConversation(messages: IContent[], provider: string): IContent[] {
     return messages.map((msg) => this.redactMessage(msg, provider));
   }
 }
@@ -196,9 +226,14 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
   ) {}
 
   async *generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
+    messages: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
   ): AsyncIterableIterator<unknown> {
     const conversationId = `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -229,7 +264,6 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
     for await (const chunk of this.provider.generateChatCompletion(
       messages,
       tools,
-      toolFormat,
     )) {
       responseChunks.push(chunk);
       yield chunk;
@@ -334,8 +368,10 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     await consumeAsyncIterable(
       openaiWrapper.generateChatCompletion([
         {
-          role: ContentGeneratorRole.USER,
-          content: 'Explain quantum computing',
+          speaker: 'human' as const,
+          blocks: [
+            { type: 'text' as const, text: 'Explain quantum computing' },
+          ],
         },
       ]),
     );
@@ -344,8 +380,13 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     await consumeAsyncIterable(
       anthropicWrapper.generateChatCompletion([
         {
-          role: ContentGeneratorRole.USER,
-          content: 'Continue the explanation with practical applications',
+          speaker: 'human' as const,
+          blocks: [
+            {
+              type: 'text' as const,
+              text: 'Continue the explanation with practical applications',
+            },
+          ],
         },
       ]),
     );
@@ -354,8 +395,8 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     await consumeAsyncIterable(
       geminiWrapper.generateChatCompletion([
         {
-          role: ContentGeneratorRole.USER,
-          content: 'Summarize the key points',
+          speaker: 'human' as const,
+          blocks: [{ type: 'text' as const, text: 'Summarize the key points' }],
         },
       ]),
     );
@@ -409,32 +450,19 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       storage,
     );
 
-    const tools: ITool[] = [
+    const messagesWithTools: IContent[] = [
       {
-        type: 'function',
-        function: {
-          name: 'search_web',
-          description: 'Search the web for information',
-          parameters: {
-            type: 'object',
-            properties: { query: { type: 'string' } },
-          },
-        },
-      },
-    ];
-
-    const messagesWithTools: IMessage[] = [
-      {
-        role: ContentGeneratorRole.USER,
-        content: 'Search for information about AI safety',
-        tool_calls: [
+        speaker: 'ai' as const,
+        blocks: [
           {
+            type: 'text' as const,
+            text: 'Search for information about AI safety',
+          },
+          {
+            type: 'tool_call' as const,
             id: 'call_1',
-            type: 'function',
-            function: {
-              name: 'search_web',
-              arguments: JSON.stringify({ query: 'AI safety research 2024' }),
-            },
+            name: 'search_web',
+            parameters: { query: 'AI safety research 2024' },
           },
         ],
       },
@@ -442,12 +470,12 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     // Test with OpenAI (JSON format)
     await consumeAsyncIterable(
-      openaiWrapper.generateChatCompletion(messagesWithTools, tools, 'json'),
+      openaiWrapper.generateChatCompletion(messagesWithTools),
     );
 
     // Test with Anthropic (XML format)
     await consumeAsyncIterable(
-      anthropicWrapper.generateChatCompletion(messagesWithTools, tools, 'xml'),
+      anthropicWrapper.generateChatCompletion(messagesWithTools),
     );
 
     const entries = storage.getEntries();
@@ -455,8 +483,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     // Both entries should have tool calls logged
     entries.forEach((entry) => {
-      expect(entry.messages[0].tool_calls).toBeDefined();
-      expect(entry.messages[0].tool_calls![0].function.name).toBe('search_web');
+      const toolCallBlocks = entry.messages[0].blocks.filter(
+        (block) => block.type === 'tool_call',
+      );
+      expect(toolCallBlocks).toHaveLength(1);
+      expect((toolCallBlocks[0] as { name: string }).name).toBe('search_web');
     });
 
     // Verify telemetry includes tool usage
@@ -481,17 +512,32 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     fastStreamProvider.generateChatCompletion = vi
       .fn()
       .mockImplementation(async function* () {
-        yield { content: 'Fast', role: ContentGeneratorRole.ASSISTANT };
-        yield { content: ' response', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'Fast' }],
+        };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: ' response' }],
+        };
       });
 
     slowStreamProvider.generateChatCompletion = vi
       .fn()
       .mockImplementation(async function* () {
-        yield { content: 'Slow', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'Slow' }],
+        };
         await new Promise((resolve) => setTimeout(resolve, 10)); // Simulate slow streaming
-        yield { content: ' deliberate', role: ContentGeneratorRole.ASSISTANT };
-        yield { content: ' response', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: ' deliberate' }],
+        };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: ' response' }],
+        };
       });
 
     const fastWrapper = new MockLoggingProviderWrapper(
@@ -507,10 +553,12 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       storage,
     );
 
-    const message: IMessage[] = [
+    const message: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Tell me about machine learning',
+        speaker: 'human' as const,
+        blocks: [
+          { type: 'text' as const, text: 'Tell me about machine learning' },
+        ],
       },
     ];
 
@@ -558,8 +606,8 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       .fn()
       .mockImplementation(async function* () {
         yield {
-          content: 'Starting response...',
-          role: ContentGeneratorRole.ASSISTANT,
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'Starting response...' }],
         };
         throw new Error('Provider API error');
       });
@@ -577,8 +625,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
       storage,
     );
 
-    const message: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Test message' },
+    const message: IContent[] = [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'Test message' }],
+      },
     ];
 
     // Test reliable provider first
@@ -619,8 +670,11 @@ describe('Multi-Provider Conversation Logging Integration', () => {
         new MockLoggingProviderWrapper(provider, config, redactor, storage),
     );
 
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Concurrent test message' },
+    const messages: IContent[] = [
+      {
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'Concurrent test message' }],
+      },
     ];
 
     // Start all conversations concurrently
@@ -674,16 +728,31 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     const sensitiveMessages = [
       {
-        role: ContentGeneratorRole.USER as const,
-        content: 'My OpenAI key is sk-1234567890abcdef1234567890abcdef12345678',
+        speaker: 'human' as const,
+        blocks: [
+          {
+            type: 'text' as const,
+            text: 'My OpenAI key is sk-1234567890abcdef1234567890abcdef12345678',
+          },
+        ],
       },
       {
-        role: ContentGeneratorRole.USER as const,
-        content: 'My Anthropic key is sk-ant-api03-abcd1234567890',
+        speaker: 'human' as const,
+        blocks: [
+          {
+            type: 'text' as const,
+            text: 'My Anthropic key is sk-ant-api03-abcd1234567890',
+          },
+        ],
       },
       {
-        role: ContentGeneratorRole.USER as const,
-        content: 'My Google key is AIzaSyAbcd1234567890',
+        speaker: 'human' as const,
+        blocks: [
+          {
+            type: 'text' as const,
+            text: 'My Google key is AIzaSyAbcd1234567890',
+          },
+        ],
       },
     ];
 
@@ -699,9 +768,14 @@ describe('Multi-Provider Conversation Logging Integration', () => {
 
     // Verify redaction occurred for all providers
     entries.forEach((entry) => {
-      expect(entry.messages[0].content).toContain('[REDACTED-API-KEY]');
-      expect(entry.messages[0].content).not.toContain('sk-');
-      expect(entry.messages[0].content).not.toContain('AIza');
+      const textBlocks = entry.messages[0].blocks.filter(
+        (block) => block.type === 'text',
+      );
+      expect(textBlocks.length).toBeGreaterThan(0);
+      const textContent = (textBlocks[0] as { text: string }).text;
+      expect(textContent).toContain('[REDACTED-API-KEY]');
+      expect(textContent).not.toContain('sk-');
+      expect(textContent).not.toContain('AIza');
     });
   });
 
@@ -727,16 +801,21 @@ describe('Multi-Provider Conversation Logging Integration', () => {
     // Simulate conversation progression
     const conversationMessages = [
       {
-        role: ContentGeneratorRole.USER as const,
-        content: 'What is machine learning?',
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'What is machine learning?' }],
       },
       {
-        role: ContentGeneratorRole.USER as const,
-        content: 'Can you give examples?',
+        speaker: 'human' as const,
+        blocks: [{ type: 'text' as const, text: 'Can you give examples?' }],
       },
       {
-        role: ContentGeneratorRole.USER as const,
-        content: 'How about neural networks specifically?',
+        speaker: 'human' as const,
+        blocks: [
+          {
+            type: 'text' as const,
+            text: 'How about neural networks specifically?',
+          },
+        ],
       },
     ];
 

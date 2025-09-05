@@ -41,7 +41,7 @@ describe('clearCommand', () => {
     });
   });
 
-  it('should set debug message, reset chat, reset telemetry, and clear UI when config is available', async () => {
+  it('should set debug message, reset chat, reset telemetry, update history token count, and clear UI when config is available', async () => {
     if (!clearCommand.action) {
       throw new Error('clearCommand must have an action.');
     }
@@ -57,6 +57,8 @@ describe('clearCommand', () => {
     expect(uiTelemetryService.resetLastPromptTokenCount).toHaveBeenCalledTimes(
       1,
     );
+    expect(mockContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(0);
+    expect(mockContext.ui.updateHistoryTokenCount).toHaveBeenCalledTimes(1);
     expect(mockContext.ui.clear).toHaveBeenCalledTimes(1);
 
     // Check the order of operations.
@@ -66,12 +68,16 @@ describe('clearCommand', () => {
     const resetTelemetryOrder = (
       uiTelemetryService.resetLastPromptTokenCount as Mock
     ).mock.invocationCallOrder[0];
+    const updateHistoryTokenCountOrder = (
+      mockContext.ui.updateHistoryTokenCount as Mock
+    ).mock.invocationCallOrder[0];
     const clearOrder = (mockContext.ui.clear as Mock).mock
       .invocationCallOrder[0];
 
     expect(setDebugMessageOrder).toBeLessThan(resetChatOrder);
     expect(resetChatOrder).toBeLessThan(resetTelemetryOrder);
-    expect(resetTelemetryOrder).toBeLessThan(clearOrder);
+    expect(resetTelemetryOrder).toBeLessThan(updateHistoryTokenCountOrder);
+    expect(updateHistoryTokenCountOrder).toBeLessThan(clearOrder);
   });
 
   it('should not attempt to reset chat if config service is not available', async () => {
@@ -92,6 +98,12 @@ describe('clearCommand', () => {
     );
     expect(mockResetChat).not.toHaveBeenCalled();
     expect(uiTelemetryService.resetLastPromptTokenCount).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(nullConfigContext.ui.updateHistoryTokenCount).toHaveBeenCalledWith(
+      0,
+    );
+    expect(nullConfigContext.ui.updateHistoryTokenCount).toHaveBeenCalledTimes(
       1,
     );
     expect(nullConfigContext.ui.clear).toHaveBeenCalledTimes(1);

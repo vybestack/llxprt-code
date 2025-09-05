@@ -52,14 +52,15 @@ export const useAuthCommand = (
           'compression-threshold',
         ) as number | undefined;
 
-        if (contextLimit || compressionThreshold) {
-          const geminiClient = config.getGeminiClient();
-          if (geminiClient) {
-            geminiClient.setCompressionSettings(
-              compressionThreshold,
-              contextLimit,
-            );
-          }
+        // Set compression settings via ephemeral settings
+        if (compressionThreshold !== undefined) {
+          config.setEphemeralSetting(
+            'compression-threshold',
+            compressionThreshold,
+          );
+        }
+        if (contextLimit !== undefined) {
+          config.setEphemeralSetting('context-limit', contextLimit);
         }
 
         // Update serverToolsProvider after authentication

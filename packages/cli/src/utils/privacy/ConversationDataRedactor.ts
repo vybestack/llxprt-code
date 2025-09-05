@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IMessage, ITool } from '@vybestack/llxprt-code-core';
+import { IContent, ITool, ContentBlock } from '@vybestack/llxprt-code-core';
 
 export interface RedactionPattern {
   name: string;
@@ -44,29 +44,28 @@ export class ConversationDataRedactor {
   /**
    * Redact sensitive data from a conversation message
    */
-  redactMessage(message: IMessage, providerName: string): IMessage {
+  redactMessage(message: IContent, providerName: string): IContent {
     if (!this.shouldRedact()) {
       return message;
     }
 
     const redactedMessage = { ...message };
 
-    // Content is always a string in IMessage
-    redactedMessage.content = this.redactContent(
-      redactedMessage.content,
-      providerName,
-    );
-
-    // Redact tool_calls if present
-    if (redactedMessage.tool_calls) {
-      redactedMessage.tool_calls = redactedMessage.tool_calls.map((call) => ({
-        ...call,
-        function: {
-          ...call.function,
-          arguments: this.redactContent(call.function.arguments, providerName),
-        },
-      }));
-    }
+    // Redact content blocks
+    redactedMessage.blocks = message.blocks.map((block: ContentBlock) => {
+      if (block.type === 'text') {
+        return {
+          ...block,
+          text: this.redactContent(block.text, providerName),
+        };
+      } else if (block.type === 'tool_call') {
+        return {
+          ...block,
+          parameters: this.redactToolParameters(block.parameters, block.name),
+        };
+      }
+      return block;
+    });
 
     return redactedMessage;
   }
@@ -120,7 +119,7 @@ export class ConversationDataRedactor {
   /**
    * Redact entire conversation consistently
    */
-  redactConversation(messages: IMessage[], providerName: string): IMessage[] {
+  redactConversation(messages: IContent[], providerName: string): IContent[] {
     return messages.map((message) => this.redactMessage(message, providerName));
   }
 

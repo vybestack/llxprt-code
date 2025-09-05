@@ -27,6 +27,7 @@ import {
   parseAndFormatApiError,
   EmojiFilter,
   FilterConfiguration,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -78,6 +79,8 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   }
   return resultParts;
 }
+
+const debugLogger = new DebugLogger('llxprt:cli:gemini-stream');
 
 enum StreamProcessingStatus {
   Completed,
@@ -257,11 +260,7 @@ export const useGeminiStream = (
       } else if (pendingItem.type === 'tool_group') {
         // Don't add incomplete tool groups - these can corrupt context
         // Tool groups are only valid if they have completed tool calls
-        if (process.env.DEBUG) {
-          console.log(
-            '[useGeminiStream] Skipping incomplete tool_group on cancel',
-          );
-        }
+        debugLogger.debug(() => 'Skipping incomplete tool_group on cancel');
         // Don't add incomplete tool groups to history
       } else {
         // For other types that are complete (info, error, etc), add as-is
@@ -468,14 +467,10 @@ export const useGeminiStream = (
       let newGeminiMessageBuffer = currentGeminiMessageBuffer + eventValue;
 
       // Debug logging for repetition issue
-      if (process.env.DEBUG) {
-        console.log('[useGeminiStream] Content event:', {
-          eventValue: eventValue.substring(0, 100),
-          currentBuffer: currentGeminiMessageBuffer.substring(0, 100),
-          newBuffer: newGeminiMessageBuffer.substring(0, 100),
-          pendingType: pendingHistoryItemRef.current?.type,
-        });
-      }
+      debugLogger.debug(
+        () =>
+          `Content event: eventValue=${eventValue.substring(0, 100)}, currentBuffer=${currentGeminiMessageBuffer.substring(0, 100)}, newBuffer=${newGeminiMessageBuffer.substring(0, 100)}, pendingType=${pendingHistoryItemRef.current?.type}`,
+      );
 
       if (
         pendingHistoryItemRef.current?.type !== 'gemini' &&
@@ -560,8 +555,10 @@ export const useGeminiStream = (
       }
 
       // Log cancelled tool IDs for debugging
-      if (cancelledToolIds.length > 0 && process.env.DEBUG) {
-        console.log('[ESC] Cancelled tool IDs:', cancelledToolIds);
+      if (cancelledToolIds.length > 0) {
+        debugLogger.debug(
+          () => `[ESC] Cancelled tool IDs: ${JSON.stringify(cancelledToolIds)}`,
+        );
       }
 
       addItem(
@@ -803,12 +800,10 @@ export const useGeminiStream = (
             break;
           }
           case ServerGeminiEventType.ToolCallRequest:
-            if (process.env.DEBUG) {
-              console.log(
-                '[DEBUG] ToolCallRequest event:',
-                JSON.stringify(event.value, null, 2),
-              );
-            }
+            debugLogger.debug(
+              () =>
+                `ToolCallRequest event: ${JSON.stringify(event.value, null, 2)}`,
+            );
             toolCallRequests.push(event.value);
             break;
           case ServerGeminiEventType.UserCancelled:
@@ -858,15 +853,10 @@ export const useGeminiStream = (
       }
 
       if (toolCallRequests.length > 0) {
-        if (process.env.DEBUG) {
-          console.log(
-            '[DEBUG] Scheduling tool calls:',
-            toolCallRequests.map((tc) => ({
-              name: tc.name,
-              callId: tc.callId,
-            })),
-          );
-        }
+        debugLogger.debug(
+          () =>
+            `Scheduling tool calls: ${JSON.stringify(toolCallRequests.map((tc) => ({ name: tc.name, callId: tc.callId })))}`,
+        );
         scheduleToolCalls(toolCallRequests, signal);
       }
       return {
@@ -993,12 +983,10 @@ export const useGeminiStream = (
         if (queuedToolResponsesRef.current.length > 0) {
           const queuedTools = [...queuedToolResponsesRef.current];
           queuedToolResponsesRef.current = [];
-          if (process.env.DEBUG) {
-            console.log(
-              '[DEBUG] Processing queued tool responses:',
-              queuedTools.map((tc) => tc.request.name),
-            );
-          }
+          debugLogger.debug(
+            () =>
+              `Processing queued tool responses: ${JSON.stringify(queuedTools.map((tc) => tc.request.name))}`,
+          );
           // Process the queued tools now that we're not responding
           if (handleCompletedToolsRef.current) {
             await handleCompletedToolsRef.current(queuedTools);
@@ -1035,12 +1023,10 @@ export const useGeminiStream = (
           ...queuedToolResponsesRef.current,
           ...completedToolCallsFromScheduler,
         ];
-        if (process.env.DEBUG) {
-          console.log(
-            '[DEBUG] Queuing tool responses while model is responding:',
-            completedToolCallsFromScheduler.map((tc) => tc.request.name),
-          );
-        }
+        debugLogger.debug(
+          () =>
+            `Queuing tool responses while model is responding: ${JSON.stringify(completedToolCallsFromScheduler.map((tc) => tc.request.name))}`,
+        );
         return;
       }
 
@@ -1133,12 +1119,10 @@ export const useGeminiStream = (
 
         if (pendingTools.length > 0) {
           // Still waiting for other tools in this turn, skip for now
-          if (process.env.DEBUG) {
-            console.log(
-              `[DEBUG] Waiting for ${pendingTools.length} more tools to complete for prompt ${promptId}`,
-              pendingTools.map((t: TrackedToolCall) => t.request.name),
-            );
-          }
+          debugLogger.debug(
+            () =>
+              `Waiting for ${pendingTools.length} more tools to complete for prompt ${promptId}: ${JSON.stringify(pendingTools.map((t: TrackedToolCall) => t.request.name))}`,
+          );
           continue;
         }
 
@@ -1148,11 +1132,10 @@ export const useGeminiStream = (
           allToolsInBatch.length > 0 ? allToolsInBatch : toolsInPrompt;
 
         // All tools for this prompt_id are complete, process them
-        if (process.env.DEBUG) {
-          console.log(
-            `[DEBUG] All tools complete for prompt ${promptId}, sending ${toolsToProcess.length} responses`,
-          );
-        }
+        debugLogger.debug(
+          () =>
+            `All tools complete for prompt ${promptId}, sending ${toolsToProcess.length} responses`,
+        );
 
         // If all the tools were cancelled, don't submit a response to Gemini.
         const allToolsCancelled = toolsToProcess.every(
@@ -1189,14 +1172,18 @@ export const useGeminiStream = (
           continue;
         }
 
-        const responsesToSend: Part[] = toolsToProcess.map(
-          (toolCall, index) => {
-            if (process.env.DEBUG) {
-              console.log(
-                `[DEBUG] Tool response for ${toolCall.request.name} (${toolCall.request.callId}):`,
-                JSON.stringify(toolCall.response.responseParts, null, 2),
-              );
-            }
+        const responsesToSend = toolsToProcess
+          .map((toolCall, index) => {
+            // responseParts is now an array with [functionCall, functionResponse]
+            // We need to send BOTH to the model (they're not in history yet)
+            const parts = Array.isArray(toolCall.response.responseParts)
+              ? toolCall.response.responseParts
+              : [toolCall.response.responseParts];
+
+            debugLogger.debug(
+              () =>
+                `Tool response for ${toolCall.request.name} (${toolCall.request.callId}): ${JSON.stringify(parts, null, 2)}`,
+            );
 
             // For the last tool response, append any queued system feedback
             // This ensures the model receives the emoji filter warnings
@@ -1216,10 +1203,11 @@ export const useGeminiStream = (
               );
             }
 
-            // Each responseParts should be a functionResponse object
-            return toolCall.response.responseParts as Part;
-          },
-        );
+            // Return all parts (both tool call and response)
+            // They'll be added to history together after model responds
+            return parts;
+          })
+          .flat(); // Flatten since we now have arrays of parts
 
         const callIdsToMarkAsSubmitted = toolsToProcess.map(
           (toolCall) => toolCall.request.callId,
@@ -1233,31 +1221,22 @@ export const useGeminiStream = (
         }
 
         // Debug logging BEFORE merging
-        if (process.env.DEBUG) {
-          console.log(
-            '[DEBUG] responsesToSend before merge:',
-            JSON.stringify(responsesToSend, null, 2),
+        debugLogger.debug(
+          () =>
+            `responsesToSend before merge: ${JSON.stringify(responsesToSend, null, 2)}, length: ${responsesToSend.length}`,
+        );
+        responsesToSend.forEach((resp, idx) => {
+          debugLogger.debug(
+            () =>
+              `responsesToSend[${idx}] type: ${typeof resp}, isArray: ${Array.isArray(resp)}`,
           );
-          console.log(
-            '[DEBUG] responsesToSend length:',
-            responsesToSend.length,
-          );
-          responsesToSend.forEach((resp, idx) => {
-            console.log(`[DEBUG] responsesToSend[${idx}] type:`, typeof resp);
-            console.log(
-              `[DEBUG] responsesToSend[${idx}] isArray:`,
-              Array.isArray(resp),
-            );
-          });
-        }
+        });
 
         // For Gemini, when there are multiple function responses, they should be sent
         // as an array of parts in a single message
         if (responsesToSend.length === 1) {
           // Single response - send as-is
-          if (process.env.DEBUG) {
-            console.log('[DEBUG] Single function response, sending directly');
-          }
+          debugLogger.debug(() => 'Single function response, sending directly');
           submitQuery(
             responsesToSend[0],
             {
@@ -1269,15 +1248,10 @@ export const useGeminiStream = (
           markToolsAsSubmitted(callIdsToMarkAsSubmitted);
         } else {
           // Multiple responses - send as array of parts
-          if (process.env.DEBUG) {
-            console.log(
-              `[DEBUG] Multiple function responses (${responsesToSend.length}), sending as array`,
-            );
-            console.log(
-              '[DEBUG] Function responses to send:',
-              JSON.stringify(responsesToSend, null, 2),
-            );
-          }
+          debugLogger.debug(
+            () =>
+              `Multiple function responses (${responsesToSend.length}), sending as array: ${JSON.stringify(responsesToSend, null, 2)}`,
+          );
 
           // Send all function responses as an array of parts
           // Gemini expects multiple function responses as separate parts in the same message

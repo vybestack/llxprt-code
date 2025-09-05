@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IMessage, ContentGeneratorRole } from '../../index.js';
+import {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+} from '../../services/history/IContent.js';
 import { DebugLogger } from '../../debug/DebugLogger.js';
 
 /**
@@ -36,20 +40,23 @@ export class SyntheticToolResponseHandler {
    */
   static createSyntheticResponses(
     cancelledTools: CancelledToolInfo[],
-  ): IMessage[] {
-    return cancelledTools.map(
-      (tool) =>
-        ({
-          role: 'tool' as const,
-          tool_call_id: tool.toolCallId,
-          // Use simpler content format for better compatibility with strict providers
-          // Fireworks and Cerebras may reject complex JSON structures
-          content: 'Tool execution cancelled by user',
-          // Mark as synthetic for debugging/filtering
-          _synthetic: true,
-          _cancelled: true,
-        }) as IMessage,
-    );
+  ): IContent[] {
+    return cancelledTools.map((tool) => ({
+      speaker: 'tool' as const,
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: tool.toolCallId,
+          toolName: tool.toolName || 'unknown',
+          result: 'Tool execution cancelled by user',
+          error: 'Cancelled by user',
+        } as ToolResponseBlock,
+      ],
+      metadata: {
+        synthetic: true,
+        reason: 'cancelled_by_user',
+      },
+    }));
   }
 
   /**
@@ -58,17 +65,20 @@ export class SyntheticToolResponseHandler {
    * @param messages The conversation history
    * @returns Array of tool call IDs that need synthetic responses
    */
-  static identifyMissingToolResponses(messages: IMessage[]): string[] {
+  static identifyMissingToolResponses(messages: IContent[]): string[] {
     const toolCallIds = new Set<string>();
     const toolResponseIds = new Set<string>();
     const syntheticResponseIds = new Set<string>();
 
-    // Collect all tool call IDs from assistant messages
+    // Collect all tool call IDs from AI messages
     messages.forEach((msg) => {
-      if (msg.role === 'assistant' && msg.tool_calls) {
-        msg.tool_calls.forEach((toolCall) => {
-          if (toolCall.id) {
-            toolCallIds.add(toolCall.id);
+      if (msg.speaker === 'ai') {
+        msg.blocks.forEach((block) => {
+          if (block.type === 'tool_call') {
+            const toolCallBlock = block as ToolCallBlock;
+            if (toolCallBlock.id) {
+              toolCallIds.add(toolCallBlock.id);
+            }
           }
         });
       }
@@ -76,16 +86,21 @@ export class SyntheticToolResponseHandler {
 
     // Collect all tool response IDs (including synthetic ones)
     messages.forEach((msg) => {
-      if (msg.role === 'tool' && msg.tool_call_id) {
-        toolResponseIds.add(msg.tool_call_id);
+      if (msg.speaker === 'tool') {
+        msg.blocks.forEach((block) => {
+          if (block.type === 'tool_response') {
+            const toolResponseBlock = block as ToolResponseBlock;
+            toolResponseIds.add(toolResponseBlock.callId);
 
-        // Track synthetic responses separately for debugging
-        if (
-          (msg as IMessage & { _synthetic?: boolean })._synthetic ||
-          msg.content === 'Tool execution cancelled by user'
-        ) {
-          syntheticResponseIds.add(msg.tool_call_id);
-        }
+            // Track synthetic responses separately for debugging
+            if (
+              msg.metadata?.synthetic ||
+              toolResponseBlock.result === 'Tool execution cancelled by user'
+            ) {
+              syntheticResponseIds.add(toolResponseBlock.callId);
+            }
+          }
+        });
       }
     });
 
@@ -114,13 +129,23 @@ export class SyntheticToolResponseHandler {
    * @param messages The original message history
    * @returns Patched message history with synthetic responses added
    */
-  static patchMessageHistory(messages: IMessage[]): IMessage[] {
+  static patchMessageHistory(messages: IContent[]): IContent[] {
     logger.debug(
       () => `patchMessageHistory called with ${messages.length} messages`,
     );
     logger.debug(
       () =>
-        `Message roles: ${messages.map((m) => `${m.role}${m.tool_calls ? `(${m.tool_calls.length} tools)` : ''}${m.tool_call_id ? `(response to ${m.tool_call_id})` : ''}`).join(', ')}`,
+        `Message speakers: ${messages
+          .map((m) => {
+            const toolCalls = m.blocks.filter(
+              (b) => b.type === 'tool_call',
+            ).length;
+            const toolResponses = m.blocks.filter(
+              (b) => b.type === 'tool_response',
+            ).length;
+            return `${m.speaker}${toolCalls > 0 ? `(${toolCalls} tools)` : ''}${toolResponses > 0 ? `(${toolResponses} responses)` : ''}`;
+          })
+          .join(', ')}`,
     );
 
     // First identify missing tool responses from original messages
@@ -128,85 +153,70 @@ export class SyntheticToolResponseHandler {
     logger.debug(() => `Missing tool IDs: ${JSON.stringify(missingToolIds)}`);
 
     // Always create a deep copy to avoid mutation issues with immutable objects
-    // This is critical for Cerebras/Qwen which may have JSONResponse objects
-    const deepCopyMessages: IMessage[] = messages.map((msg) => {
-      const copiedMsg: IMessage = {
-        role: msg.role,
-        content: msg.content,
-      };
-
-      // Copy optional properties if they exist
-      if (msg.tool_call_id !== undefined)
-        copiedMsg.tool_call_id = msg.tool_call_id;
-      if (msg.id !== undefined) copiedMsg.id = msg.id;
-      if (msg.usage !== undefined) copiedMsg.usage = { ...msg.usage };
-
-      // Deep copy tool_calls if they exist
-      if (msg.tool_calls) {
-        copiedMsg.tool_calls = msg.tool_calls.map((tc) => ({
-          id: tc.id,
-          type: tc.type,
-          function: {
-            name: tc.function.name,
-            arguments: tc.function.arguments,
-          },
-        }));
-      }
-
-      // Copy any additional properties that might exist (like _synthetic, _cancelled)
-      // These are added by our synthetic response handler
-      // Use Object.assign to preserve any extra properties without type errors
-      Object.assign(copiedMsg, {
-        ...('_synthetic' in msg
-          ? {
-              _synthetic: (msg as IMessage & { _synthetic?: boolean })
-                ._synthetic,
-            }
-          : {}),
-        ...('_cancelled' in msg
-          ? {
-              _cancelled: (msg as IMessage & { _cancelled?: boolean })
-                ._cancelled,
-            }
-          : {}),
-        ...('name' in msg
-          ? { name: (msg as IMessage & { name?: string }).name }
-          : {}),
-      });
-
-      return copiedMsg;
-    });
+    const deepCopyMessages: IContent[] = messages.map((msg) => ({
+      speaker: msg.speaker,
+      blocks: msg.blocks.map((block) => {
+        // Deep copy each block
+        if (block.type === 'tool_call') {
+          const tcBlock = block as ToolCallBlock;
+          return {
+            type: 'tool_call',
+            id: tcBlock.id,
+            name: tcBlock.name,
+            parameters: JSON.parse(JSON.stringify(tcBlock.parameters)),
+            description: tcBlock.description,
+          } as ToolCallBlock;
+        } else if (block.type === 'tool_response') {
+          const trBlock = block as ToolResponseBlock;
+          return {
+            type: 'tool_response',
+            callId: trBlock.callId,
+            toolName: trBlock.toolName,
+            result: JSON.parse(JSON.stringify(trBlock.result)),
+            error: trBlock.error,
+            isComplete: trBlock.isComplete,
+          } as ToolResponseBlock;
+        } else {
+          // For other block types, use structured cloning
+          return JSON.parse(JSON.stringify(block));
+        }
+      }),
+      metadata: msg.metadata
+        ? JSON.parse(JSON.stringify(msg.metadata))
+        : undefined,
+    }));
 
     if (missingToolIds.length === 0) {
       return deepCopyMessages;
     }
 
-    // Find the last assistant message with tool calls
-    let lastAssistantIndex = -1;
+    // Find the last AI message with tool calls
+    let lastAIIndex = -1;
     for (let i = deepCopyMessages.length - 1; i >= 0; i--) {
       if (
-        deepCopyMessages[i].role === 'assistant' &&
-        deepCopyMessages[i].tool_calls
+        deepCopyMessages[i].speaker === 'ai' &&
+        deepCopyMessages[i].blocks.some((b) => b.type === 'tool_call')
       ) {
-        lastAssistantIndex = i;
+        lastAIIndex = i;
         break;
       }
     }
 
-    if (lastAssistantIndex === -1) {
+    if (lastAIIndex === -1) {
       return deepCopyMessages;
     }
 
-    // Extract tool names from the assistant message
+    // Extract tool names from the AI message
     const toolNameMap = new Map<string, string>();
-    const assistantMsg = deepCopyMessages[lastAssistantIndex];
-    if (assistantMsg.tool_calls) {
-      assistantMsg.tool_calls.forEach((toolCall) => {
-        if (toolCall.id && toolCall.function?.name) {
-          toolNameMap.set(toolCall.id, toolCall.function.name);
+    const aiMsg = deepCopyMessages[lastAIIndex];
+    aiMsg.blocks.forEach((block) => {
+      if (block.type === 'tool_call') {
+        const toolCallBlock = block as ToolCallBlock;
+        if (toolCallBlock.id && toolCallBlock.name) {
+          toolNameMap.set(toolCallBlock.id, toolCallBlock.name);
         }
-      });
-    }
+      }
+    });
 
     // Create synthetic responses with tool names
     const cancelledTools: CancelledToolInfo[] = missingToolIds.map((id) => ({
@@ -222,17 +232,15 @@ export class SyntheticToolResponseHandler {
       logger.debug(
         () =>
           `Synthetic response: ${JSON.stringify({
-            role: sr.role,
-            tool_call_id: sr.tool_call_id,
-            content: sr.content,
-            _synthetic: (sr as IMessage & { _synthetic?: boolean })._synthetic,
-            _cancelled: (sr as IMessage & { _cancelled?: boolean })._cancelled,
+            speaker: sr.speaker,
+            blocks: sr.blocks,
+            synthetic: sr.metadata?.synthetic,
           })}`,
       );
     });
 
-    // Insert synthetic responses right after the assistant message
-    deepCopyMessages.splice(lastAssistantIndex + 1, 0, ...syntheticResponses);
+    // Insert synthetic responses right after the AI message
+    deepCopyMessages.splice(lastAIIndex + 1, 0, ...syntheticResponses);
     logger.debug(
       () => `Final message count after patching: ${deepCopyMessages.length}`,
     );
@@ -247,12 +255,17 @@ export class SyntheticToolResponseHandler {
    * @returns Message history with cancellation notice added
    */
   static addCancellationNotice(
-    messages: IMessage[],
+    messages: IContent[],
     cancelledCount: number,
-  ): IMessage[] {
-    const notice: IMessage = {
-      role: ContentGeneratorRole.ASSISTANT,
-      content: `${cancelledCount} tool execution${cancelledCount > 1 ? 's were' : ' was'} cancelled. You can retry specific tools or continue with the conversation.`,
+  ): IContent[] {
+    const notice: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'text',
+          text: `${cancelledCount} tool execution${cancelledCount > 1 ? 's were' : ' was'} cancelled. You can retry specific tools or continue with the conversation.`,
+        },
+      ],
     };
 
     return [...messages, notice];

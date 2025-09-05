@@ -186,6 +186,7 @@ export const useSlashCommandProcessor = (
         toggleCorgiMode,
         toggleVimEnabled,
         setLlxprtMdFileCount,
+        updateHistoryTokenCount: session.updateHistoryTokenCount,
         reloadCommands,
       },
       session: {
@@ -201,6 +202,7 @@ export const useSlashCommandProcessor = (
       loadHistory,
       addItem,
       clearItems,
+      session.updateHistoryTokenCount,
       refreshStatic,
       session.stats,
       onDebugMessage,

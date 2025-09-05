@@ -3,7 +3,12 @@
  * @requirement REQ-INT-001.1
  */
 import { DebugLogger } from '../../debug/index.js';
-import { IMessage } from '../IMessage.js';
+import {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+  TextBlock,
+} from '../../services/history/IContent.js';
 import { ITool } from '../ITool.js';
 import { ResponsesTool } from '../../tools/IToolFormatter.js';
 import {
@@ -12,7 +17,7 @@ import {
 } from '../../utils/unicodeUtils.js';
 
 export interface ResponsesRequestParams {
-  messages?: IMessage[];
+  messages?: IContent[];
   prompt?: string;
   tools?: ITool[] | ResponsesTool[];
   stream?: boolean;
@@ -40,7 +45,7 @@ export interface ResponsesRequestParams {
 type ResponsesMessage =
   | {
       role: 'assistant' | 'system' | 'developer' | 'user';
-      content: string;
+      content?: string; // Content is optional for assistant messages with tool calls
       usage?: {
         prompt_tokens?: number;
         completion_tokens?: number;
@@ -155,16 +160,25 @@ export function buildResponsesRequest(
       while (startIndex > 0) {
         const msg = messages[startIndex];
 
-        // If we find a tool message, we need to include the assistant message with the tool call
-        if (msg.role === 'tool') {
-          // Find the assistant message that contains this tool call
+        // If we find a tool message, we need to include the AI message with the tool call
+        if (msg.speaker === 'tool') {
+          // Find the AI message that contains this tool call
           for (let i = startIndex - 1; i >= 0; i--) {
             const prevMsg = messages[i];
-            if (prevMsg.role === 'assistant' && prevMsg.tool_calls) {
-              // Check if this assistant message contains the tool call for our tool response
-              const hasMatchingCall = prevMsg.tool_calls.some(
-                (call) => call.id === msg.tool_call_id,
-              );
+            if (prevMsg.speaker === 'ai') {
+              // Check if this AI message contains the tool call for our tool response
+              const toolResponseBlocks = msg.blocks.filter(
+                (block) => block.type === 'tool_response',
+              ) as ToolResponseBlock[];
+              const hasMatchingCall = prevMsg.blocks.some((block) => {
+                if (block.type === 'tool_call') {
+                  const toolCallBlock = block as ToolCallBlock;
+                  return toolResponseBlocks.some(
+                    (respBlock) => respBlock.callId === toolCallBlock.id,
+                  );
+                }
+                return false;
+              });
               if (hasMatchingCall) {
                 startIndex = i;
                 break;
@@ -174,7 +188,7 @@ export function buildResponsesRequest(
         }
 
         // If we find a user message after going through tool responses, this is a good starting point
-        if (msg.role === 'user' && startIndex < messages.length - 1) {
+        if (msg.speaker === 'human' && startIndex < messages.length - 1) {
           break;
         }
 
@@ -196,77 +210,103 @@ export function buildResponsesRequest(
   if (processedMessages) {
     // First, extract function calls from assistant messages and function call outputs from tool messages
     processedMessages
-      .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
+      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
       .forEach((msg) => {
-        // Extract function calls from assistant messages
-        if (msg.role === 'assistant' && msg.tool_calls) {
-          msg.tool_calls.forEach((toolCall) => {
-            if (toolCall.type === 'function') {
+        // Extract function calls from AI messages
+        if (msg.speaker === 'ai') {
+          msg.blocks.forEach((block) => {
+            if (block.type === 'tool_call') {
+              const toolCallBlock = block as ToolCallBlock;
               functionCalls.push({
                 type: 'function_call' as const,
-                call_id: toolCall.id,
-                name: toolCall.function.name,
-                arguments: toolCall.function.arguments,
+                call_id: toolCallBlock.id,
+                name: toolCallBlock.name,
+                arguments: JSON.stringify(toolCallBlock.parameters),
               });
             }
           });
         }
 
         // Extract function call outputs from tool messages
-        if (msg.role === 'tool' && msg.tool_call_id && msg.content) {
-          // Sanitize content to ensure it's safe for JSON/API transmission
-          let sanitizedContent = msg.content;
-          if (hasUnicodeReplacements(msg.content)) {
-            logger.debug(
-              () =>
-                'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
-            );
-            sanitizedContent = ensureJsonSafe(msg.content);
-          }
+        if (msg.speaker === 'tool') {
+          msg.blocks.forEach((block) => {
+            if (block.type === 'tool_response') {
+              const toolResponseBlock = block as ToolResponseBlock;
+              // Sanitize content to ensure it's safe for JSON/API transmission
+              const resultStr =
+                typeof toolResponseBlock.result === 'string'
+                  ? toolResponseBlock.result
+                  : JSON.stringify(toolResponseBlock.result);
+              let sanitizedContent = resultStr;
+              if (hasUnicodeReplacements(resultStr)) {
+                logger.debug(
+                  () =>
+                    'Tool output contains Unicode replacement characters (U+FFFD), sanitizing...',
+                );
+                sanitizedContent = ensureJsonSafe(resultStr);
+              }
 
-          functionCallOutputs.push({
-            type: 'function_call_output' as const,
-            call_id: msg.tool_call_id,
-            output: sanitizedContent,
+              functionCallOutputs.push({
+                type: 'function_call_output' as const,
+                call_id: toolResponseBlock.callId,
+                output: sanitizedContent,
+              });
+            }
           });
         }
       });
 
     // Then, create the regular messages array (excluding tool messages)
     transformedMessages = processedMessages
-      .filter((msg): msg is IMessage => msg !== undefined && msg !== null)
-      .filter((msg) => msg.role !== 'tool') // Exclude tool messages
+      .filter((msg): msg is IContent => msg !== undefined && msg !== null)
+      .filter((msg) => msg.speaker !== 'tool') // Exclude tool messages
       .map((msg) => {
-        // Remove tool_calls field as it's not accepted by Responses API
-        const {
-          tool_calls: _tool_calls,
-          tool_call_id: _tool_call_id,
-          usage,
-          ...cleanMsg
-        } = msg;
+        // Extract text content from blocks
+        const textBlocks = msg.blocks.filter(
+          (block) => block.type === 'text',
+        ) as TextBlock[];
+        const content =
+          textBlocks.length > 0
+            ? textBlocks.map((block) => block.text).join('\n')
+            : '';
 
-        // Ensure role is valid for Responses API
-        const validRole = cleanMsg.role as
-          | 'user'
-          | 'assistant'
-          | 'system'
-          | 'developer';
+        // Convert speaker to role for Responses API
+        const role =
+          msg.speaker === 'human'
+            ? 'user'
+            : msg.speaker === 'ai'
+              ? 'assistant'
+              : 'system';
 
         // Sanitize content for safe API transmission
-        let sanitizedContent = cleanMsg.content;
-        if (hasUnicodeReplacements(cleanMsg.content)) {
+        let sanitizedContent = content;
+        if (hasUnicodeReplacements(content)) {
           logger.debug(
             () =>
               'Message content contains Unicode replacement characters (U+FFFD), sanitizing...',
           );
-          sanitizedContent = ensureJsonSafe(cleanMsg.content);
+          sanitizedContent = ensureJsonSafe(content);
         }
 
-        return {
-          role: validRole,
-          content: sanitizedContent,
-          ...(usage ? { usage } : {}), // Preserve usage data if present
+        const result: {
+          role: 'user' | 'assistant' | 'system' | 'developer';
+          content?: string;
+          usage?: unknown;
+        } = {
+          role: role as 'user' | 'assistant' | 'system' | 'developer',
         };
+
+        // Only add content if it exists
+        if (sanitizedContent) {
+          result.content = sanitizedContent;
+        }
+
+        // Preserve usage data if present in metadata
+        if (msg.metadata?.usage) {
+          result.usage = msg.metadata.usage;
+        }
+
+        return result as ResponsesMessage;
       })
       .filter(
         (msg): msg is NonNullable<typeof msg> => msg !== null,

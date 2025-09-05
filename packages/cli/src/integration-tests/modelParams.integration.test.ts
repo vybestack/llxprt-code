@@ -663,7 +663,10 @@ describe('Model Parameters and Profiles Integration Tests', () => {
       vi.mocked(mockProvider.generateChatCompletion).mockImplementation(
         async function* () {
           callOrder.push('generateChatCompletion');
-          yield { content: 'Response' };
+          yield {
+            speaker: 'ai' as const,
+            blocks: [{ type: 'text' as const, text: 'Response' }],
+          };
         },
       );
 

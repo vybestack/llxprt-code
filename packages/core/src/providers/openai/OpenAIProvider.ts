@@ -21,9 +21,6 @@
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
 import { ITool } from '../ITool.js';
-import { IMessage } from '../IMessage.js';
-import { ContentGeneratorRole } from '../ContentGeneratorRole.js';
-import { GemmaToolCallParser } from '../../parsers/TextToolCallParser.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import OpenAI from 'openai';
@@ -35,6 +32,13 @@ import {
 } from '../../config/endpoints.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import { retryWithBackoff } from '../../utils/retry.js';
+import {
+  IContent,
+  ToolCallBlock,
+  ToolResponseBlock,
+  TextBlock,
+} from '../../services/history/IContent.js';
 
 export class OpenAIProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -226,22 +230,6 @@ export class OpenAIProvider extends BaseProvider {
     }
   }
 
-  private requiresTextToolCallParsing(): boolean {
-    if (this.providerConfig?.enableTextToolCallParsing === false) {
-      return false;
-    }
-
-    // Check if current tool format requires text-based parsing
-    const currentFormat = this.getToolFormat();
-    const textBasedFormats: ToolFormat[] = ['hermes', 'xml', 'llama'];
-    if (textBasedFormats.includes(currentFormat)) {
-      return true;
-    }
-
-    const configuredModels = this.providerConfig?.textToolCallModels || [];
-    return configuredModels.includes(this.currentModel);
-  }
-
   override getToolFormat(): ToolFormat {
     // Check manual override first
     if (this.toolFormatOverride) {
@@ -350,166 +338,6 @@ export class OpenAIProvider extends BaseProvider {
         },
       ];
     }
-  }
-
-  async *generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    _toolFormat?: string,
-  ): AsyncIterableIterator<IMessage> {
-    // 1. Validate authentication and messages
-    await this.validateRequestPreconditions(messages);
-
-    // 2. Prepare request configuration
-    const requestConfig = this.prepareApiRequest(messages, tools);
-
-    // 3. Make API call with error handling
-    const response = await this.executeApiCall(messages, tools, requestConfig);
-
-    // 4. Process response based on streaming mode
-    let processedData: {
-      fullContent: string;
-      accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
-      hasStreamedContent: boolean;
-      usageData?: {
-        prompt_tokens: number;
-        completion_tokens: number;
-        total_tokens: number;
-      };
-      pendingWhitespace: string | null;
-    } = {
-      fullContent: '',
-      accumulatedToolCalls: [],
-      hasStreamedContent: false,
-      usageData: undefined,
-      pendingWhitespace: null,
-    };
-
-    if (requestConfig.streamingEnabled) {
-      // Need to yield streaming content as it comes
-      const streamResponse =
-        response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
-      for await (const chunk of streamResponse) {
-        const delta = chunk.choices?.[0]?.delta;
-
-        if (delta?.content && !requestConfig.parser) {
-          if (this.isUsingQwen()) {
-            // Handle Qwen whitespace buffering inline for yielding
-            // This is needed because we yield during streaming
-            // We'll refactor this separately if needed
-            const whitespaceResult = this.handleQwenStreamingWhitespace(
-              delta,
-              processedData.pendingWhitespace,
-              processedData.fullContent,
-            );
-
-            if (whitespaceResult.shouldYield) {
-              yield {
-                role: ContentGeneratorRole.ASSISTANT,
-                content: whitespaceResult.content,
-              };
-            }
-
-            // Update our tracking of processed data
-            processedData = {
-              fullContent: whitespaceResult.updatedFullContent,
-              accumulatedToolCalls: processedData.accumulatedToolCalls,
-              hasStreamedContent:
-                processedData.hasStreamedContent ||
-                whitespaceResult.shouldYield,
-              usageData: processedData.usageData,
-              pendingWhitespace: whitespaceResult.updatedPendingWhitespace,
-            };
-          } else {
-            yield {
-              role: ContentGeneratorRole.ASSISTANT,
-              content: delta.content,
-            };
-            processedData = {
-              fullContent: processedData.fullContent + delta.content,
-              accumulatedToolCalls: processedData.accumulatedToolCalls,
-              hasStreamedContent: true,
-              usageData: processedData.usageData,
-              pendingWhitespace: null,
-            };
-          }
-        } else if (delta?.content) {
-          // Parser mode - just accumulate
-          processedData = {
-            fullContent: processedData.fullContent + delta.content,
-            accumulatedToolCalls: processedData.accumulatedToolCalls,
-            hasStreamedContent: processedData.hasStreamedContent,
-            usageData: processedData.usageData,
-            pendingWhitespace: processedData.pendingWhitespace,
-          };
-        }
-
-        // Handle tool calls
-        if (delta?.tool_calls) {
-          const accumulated: NonNullable<IMessage['tool_calls']> =
-            processedData.accumulatedToolCalls;
-          for (const toolCall of delta.tool_calls) {
-            this.toolFormatter.accumulateStreamingToolCall(
-              toolCall,
-              accumulated,
-              requestConfig.currentToolFormat,
-            );
-          }
-          processedData = {
-            ...processedData,
-            accumulatedToolCalls: accumulated,
-          };
-        }
-
-        // Check for usage data
-        if (chunk.usage) {
-          processedData = {
-            ...processedData,
-            usageData: {
-              prompt_tokens: chunk.usage.prompt_tokens || 0,
-              completion_tokens: chunk.usage.completion_tokens || 0,
-              total_tokens: chunk.usage.total_tokens || 0,
-            },
-          };
-        }
-      }
-    } else {
-      // Non-streaming response
-      processedData = this.processNonStreamingResponse(
-        response as OpenAI.Chat.Completions.ChatCompletion,
-      );
-
-      // For non-streaming, yield content if no parser
-      if (!requestConfig.parser && processedData.fullContent) {
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: processedData.fullContent,
-        };
-        processedData.hasStreamedContent = true;
-      }
-    }
-
-    // 5. Flush pending whitespace if needed (for Qwen)
-    if (
-      processedData.pendingWhitespace &&
-      this.isUsingQwen() &&
-      !requestConfig.parser
-    ) {
-      this.logger.debug(
-        () =>
-          `Flushing trailing pending whitespace (len=${processedData.pendingWhitespace?.length ?? 0}) at stream end`,
-      );
-      yield {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: processedData.pendingWhitespace,
-      };
-      processedData.hasStreamedContent = true;
-      processedData.fullContent += processedData.pendingWhitespace;
-      processedData.pendingWhitespace = null;
-    }
-
-    // 6. Process and yield final results
-    yield* this.processFinalResponse(processedData, requestConfig.parser);
   }
 
   override setModel(modelId: string): void {
@@ -682,6 +510,284 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
+   * Generate chat completion with IContent interface
+   * Internally converts to OpenAI API format, but only yields IContent
+   */
+  async *generateChatCompletion(
+    content: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ): AsyncIterableIterator<IContent> {
+    // Convert IContent directly to OpenAI API format (no IMessage!)
+    const apiMessages: Array<{
+      role: string;
+      content: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }>;
+      tool_call_id?: string;
+    }> = [];
+
+    for (const c of content) {
+      if (c.speaker === 'human') {
+        const textBlock = c.blocks.find((b) => b.type === 'text') as
+          | TextBlock
+          | undefined;
+        apiMessages.push({
+          role: 'user',
+          content: textBlock?.text || '',
+        });
+      } else if (c.speaker === 'ai') {
+        const textBlocks = c.blocks.filter(
+          (b) => b.type === 'text',
+        ) as TextBlock[];
+        const toolCallBlocks = c.blocks.filter(
+          (b) => b.type === 'tool_call',
+        ) as ToolCallBlock[];
+
+        const contentText = textBlocks.map((b) => b.text).join('');
+        const toolCalls =
+          toolCallBlocks.length > 0
+            ? toolCallBlocks.map((tc) => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.parameters),
+                },
+              }))
+            : undefined;
+
+        apiMessages.push({
+          role: 'assistant',
+          content: contentText || null,
+          tool_calls: toolCalls,
+        });
+      } else if (c.speaker === 'tool') {
+        const toolResponseBlock = c.blocks.find(
+          (b) => b.type === 'tool_response',
+        ) as ToolResponseBlock | undefined;
+        if (!toolResponseBlock) {
+          throw new Error('Tool content must have a tool_response block');
+        }
+
+        apiMessages.push({
+          role: 'tool',
+          content: JSON.stringify(toolResponseBlock.result),
+          tool_call_id: toolResponseBlock.callId,
+        });
+      } else {
+        throw new Error(`Unknown speaker type: ${c.speaker}`);
+      }
+    }
+
+    // Debug log the converted messages
+    this.logger.debug(
+      () =>
+        `Converted messages for OpenAI API: ${JSON.stringify(apiMessages, null, 2)}`,
+    );
+
+    // Convert Gemini format tools to OpenAI format
+    // Handle both legacy 'parameters' and new 'parametersJsonSchema' formats
+    const apiTools = tools
+      ? tools[0].functionDeclarations.map((decl) => {
+          // Support both old 'parameters' and new 'parametersJsonSchema' formats
+          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
+          const toolParameters =
+            'parametersJsonSchema' in decl
+              ? (decl as { parametersJsonSchema?: unknown })
+                  .parametersJsonSchema
+              : decl.parameters;
+
+          return {
+            type: 'function' as const,
+            function: {
+              name: decl.name,
+              description: decl.description || '',
+              parameters: toolParameters || {},
+            },
+          };
+        })
+      : undefined;
+
+    // Get auth token
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      throw new Error('OpenAI API key is required');
+    }
+
+    // Build request
+    const requestBody = {
+      model: this.currentModel || 'gpt-4o-mini',
+      messages: apiMessages,
+      ...(apiTools && { tools: apiTools }),
+      stream: true,
+      ...(this.modelParams || {}),
+    };
+
+    // Wrap the API call with retry logic
+    const makeApiCall = async () => {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Create an error object that matches what we check for in isRetryableError
+        const error = new Error(`OpenAI API error: ${errorText}`) as Error & {
+          status?: number;
+          error?: unknown;
+        };
+        error.status = response.status;
+
+        // Try to parse the error response
+        try {
+          const errorObj = JSON.parse(errorText);
+          error.error = errorObj;
+        } catch {
+          // If not JSON, keep as text
+        }
+
+        this.logger.debug(
+          () =>
+            `API call error in generateChatCompletion: status=${response.status}, error=${errorText}`,
+        );
+
+        throw error;
+      }
+
+      return response;
+    };
+
+    // Use retry logic with longer delays for rate limits
+    const response = await retryWithBackoff(makeApiCall, {
+      shouldRetry: (error: Error) => {
+        const shouldRetry = this.isRetryableError(error);
+        this.logger.debug(
+          () =>
+            `Retry decision in generateChatCompletion: shouldRetry=${shouldRetry}, error=${String(error).substring(0, 200)}`,
+        );
+        return shouldRetry;
+      },
+      maxAttempts: 6, // Allow up to 6 attempts (initial + 5 retries)
+      initialDelayMs: 4000, // Start with 4 seconds for 429 errors
+      maxDelayMs: 65000, // Allow up to 65 seconds delay
+    });
+
+    // Parse streaming response and emit IContent
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const accumulatedToolCalls: Array<{
+      id: string;
+      type: 'function';
+      function: {
+        name: string;
+        arguments: string;
+      };
+    }> = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') continue;
+
+        try {
+          const parsed = JSON.parse(data);
+          const delta = parsed.choices?.[0]?.delta;
+
+          if (delta?.content) {
+            // Emit text content immediately as IContent
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: delta.content }],
+            } as IContent;
+          }
+
+          if (delta?.tool_calls) {
+            // Accumulate tool calls
+            for (const toolCall of delta.tool_calls) {
+              if (toolCall.index !== undefined) {
+                if (!accumulatedToolCalls[toolCall.index]) {
+                  accumulatedToolCalls[toolCall.index] = {
+                    id: toolCall.id || '',
+                    type: 'function',
+                    function: { name: '', arguments: '' },
+                  };
+                }
+                const tc = accumulatedToolCalls[toolCall.index];
+                if (toolCall.id) tc.id = toolCall.id;
+                if (toolCall.function?.name)
+                  tc.function.name = toolCall.function.name;
+                if (toolCall.function?.arguments)
+                  tc.function.arguments += toolCall.function.arguments;
+              }
+            }
+          }
+        } catch (e) {
+          // Skip invalid JSON lines
+          this.logger.debug(() => `Failed to parse SSE line: ${e}`);
+        }
+      }
+    }
+
+    // Emit accumulated tool calls as IContent if any
+    if (accumulatedToolCalls.length > 0) {
+      const blocks: ToolCallBlock[] = [];
+      for (const tc of accumulatedToolCalls) {
+        if (!tc) continue;
+        try {
+          blocks.push({
+            type: 'tool_call',
+            id: tc.id,
+            name: tc.function.name,
+            parameters: JSON.parse(tc.function.arguments),
+          });
+        } catch (_e) {
+          // If parsing fails, emit with string parameters
+          blocks.push({
+            type: 'tool_call',
+            id: tc.id,
+            name: tc.function.name,
+            parameters: tc.function.arguments,
+          } as ToolCallBlock);
+        }
+      }
+
+      if (blocks.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks,
+        } as IContent;
+      }
+    }
+  }
+  /**
    * Initialize provider configuration from SettingsService
    */
   private async initializeFromSettings(): Promise<void> {
@@ -782,23 +888,6 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Get appropriate tool_choice value based on detected tool format
-   * @param tools Array of tools (if any)
-   * @returns Appropriate tool_choice value for the current format
-   */
-  private getToolChoiceForFormat(
-    tools: ITool[] | undefined,
-  ): OpenAI.Chat.Completions.ChatCompletionToolChoiceOption | undefined {
-    if (!tools || tools.length === 0) {
-      return undefined;
-    }
-
-    // For all formats, use 'auto' (standard behavior)
-    // Future enhancement: different formats may need different tool_choice values
-    return 'auto';
-  }
-
-  /**
    * Format tools for API based on detected tool format
    * @param tools Array of tools to format
    * @returns Formatted tools for API consumption
@@ -832,413 +921,89 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Validate authentication and message preconditions for API calls
+   * Determines if an error should trigger a retry
    */
-  private async validateRequestPreconditions(
-    messages: IMessage[],
-  ): Promise<void> {
-    // Check if API key is available (using resolved authentication)
-    const apiKey = await this.getAuthToken();
-    if (!apiKey) {
-      const endpoint = this.baseURL || 'https://api.openai.com/v1';
-      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
-        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
-      }
-      throw new Error('OpenAI API key is required to generate completions');
-    }
+  private isRetryableError(error: Error | unknown): boolean {
+    // Check for OpenAI SDK specific error types
+    // The OpenAI SDK throws specific error classes for different error types
+    if (error && typeof error === 'object') {
+      const errorName = (error as Error).constructor?.name;
 
-    // Validate tool messages have required tool_call_id
-    const toolMessages = messages.filter((msg) => msg.role === 'tool');
-    const missingIds = toolMessages.filter((msg) => !msg.tool_call_id);
-
-    if (missingIds.length > 0) {
-      this.logger.error(
-        () =>
-          `FATAL: Tool messages missing tool_call_id: ${JSON.stringify(missingIds)}`,
-      );
-      throw new Error(
-        `OpenAI API requires tool_call_id for all tool messages. Found ${missingIds.length} tool message(s) without IDs.`,
-      );
-    }
-  }
-
-  /**
-   * Prepare API request configuration
-   */
-  private prepareApiRequest(
-    messages: IMessage[],
-    tools?: ITool[],
-  ): {
-    parser: GemmaToolCallParser | null;
-    currentToolFormat: ToolFormat;
-    formattedTools: unknown;
-    finalStreamOptions: unknown;
-    streamingEnabled: boolean;
-  } {
-    const parser = this.requiresTextToolCallParsing()
-      ? new GemmaToolCallParser()
-      : null;
-
-    // Get current tool format (with override support)
-    const currentToolFormat = this.getToolFormat();
-
-    // Format tools using formatToolsForAPI method
-    const formattedTools = tools ? this.formatToolsForAPI(tools) : undefined;
-
-    // Get stream_options from ephemeral settings (not model params)
-    const streamOptions =
-      this.providerConfig?.getEphemeralSettings?.()?.['stream-options'];
-
-    // Default stream_options to { include_usage: true } unless explicitly set
-    const finalStreamOptions =
-      streamOptions !== undefined ? streamOptions : { include_usage: true };
-
-    // Get streaming setting from ephemeral settings (default: enabled)
-    const streamingSetting =
-      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
-    const streamingEnabled = streamingSetting !== 'disabled';
-
-    return {
-      parser,
-      currentToolFormat,
-      formattedTools,
-      finalStreamOptions,
-      streamingEnabled,
-    };
-  }
-
-  /**
-   * Execute API call with error handling
-   */
-  private async executeApiCall(
-    messages: IMessage[],
-    tools: ITool[] | undefined,
-    requestConfig: {
-      formattedTools: unknown;
-      finalStreamOptions: unknown;
-      streamingEnabled: boolean;
-    },
-  ): Promise<unknown> {
-    // Get resolved authentication and update client if needed
-    await this.updateClientWithResolvedAuth();
-
-    this.logger.debug(
-      () =>
-        `About to make API call with model: ${this.currentModel}, baseURL: ${this.openai.baseURL}, apiKey: ${this.openai.apiKey?.substring(0, 10)}..., streaming: ${requestConfig.streamingEnabled}, messages (${messages.length} total): ${messages
-          .map(
-            (m) =>
-              `${m.role}${m.role === 'system' ? ` (length: ${m.content?.length})` : ''}`,
-          )
-          .join(', ')}`,
-    );
-
-    try {
-      // Build request params with exact order from original
-      return await this.openai.chat.completions.create({
-        model: this.currentModel,
-        messages:
-          messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-        stream: requestConfig.streamingEnabled,
-        ...(requestConfig.streamingEnabled && requestConfig.finalStreamOptions
-          ? { stream_options: requestConfig.finalStreamOptions }
-          : {}),
-        tools: requestConfig.formattedTools as
-          | OpenAI.Chat.Completions.ChatCompletionTool[]
-          | undefined,
-        tool_choice: this.getToolChoiceForFormat(tools),
-        ...this.modelParams,
-      });
-    } catch (error) {
-      this.handleApiError(error, messages);
-      throw error; // Re-throw after logging
-    }
-  }
-
-  /**
-   * Handle and log API errors
-   */
-  private handleApiError(error: unknown, messages: IMessage[]): void {
-    const errorStatus =
-      (error as { status?: number })?.status ||
-      (error as { response?: { status?: number } })?.response?.status;
-    const errorLabel = errorStatus === 400 ? '[API Error 400]' : '[API Error]';
-
-    this.logger.error(
-      () =>
-        `${errorLabel} Error caught in API call:\n` +
-        `  Error: ${error}\n` +
-        `  Type: ${(error as Error)?.constructor?.name}\n` +
-        `  Status: ${errorStatus}\n` +
-        `  Response data: ${JSON.stringify((error as { response?: { data?: unknown } })?.response?.data, null, 2)}`,
-    );
-
-    // Log the last few messages to understand what's being sent
-    if (errorStatus === 400) {
-      // Log additional diagnostics for 400 errors
-      const hasPendingToolCalls = messages.some((msg, idx) => {
-        if (msg.role === 'assistant' && msg.tool_calls) {
-          // Check if there's a matching tool response
-          const toolCallIds = msg.tool_calls.map((tc) => tc.id);
-          const hasResponses = toolCallIds.every((id) =>
-            messages
-              .slice(idx + 1)
-              .some((m) => m.role === 'tool' && m.tool_call_id === id),
-          );
-          return !hasResponses;
-        }
-        return false;
-      });
-
-      this.logger.error(
-        () =>
-          `${errorLabel} Last 5 messages being sent:\n` +
-          `  Has pending tool calls without responses: ${hasPendingToolCalls}`,
-      );
-      const lastMessages = messages.slice(-5);
-      lastMessages.forEach((msg, idx) => {
-        this.logger.error(
-          () =>
-            `  [${messages.length - 5 + idx}] ${msg.role}${msg.tool_call_id ? ` (tool response for ${msg.tool_call_id})` : ''}${msg.tool_calls ? ` (${msg.tool_calls.length} tool calls)` : ''}`,
+      // Check for OpenAI SDK RateLimitError or InternalServerError
+      if (
+        errorName === 'RateLimitError' ||
+        errorName === 'InternalServerError'
+      ) {
+        this.logger.debug(
+          () => `Retryable OpenAI SDK error detected: ${errorName}`,
         );
-        if (msg.tool_calls) {
-          msg.tool_calls.forEach((tc) => {
-            this.logger.error(
-              () => `    - Tool call: ${tc.id} -> ${tc.function.name}`,
-            );
-          });
-        }
-      });
-    }
-  }
+        return true;
+      }
 
-  /**
-   * Process non-streaming response
-   */
-  private processNonStreamingResponse(
-    response: OpenAI.Chat.Completions.ChatCompletion,
-  ): {
-    fullContent: string;
-    accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
-    hasStreamedContent: boolean;
-    usageData?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-    };
-    pendingWhitespace: string | null;
-  } {
-    const choice = response.choices[0];
-    let fullContent = '';
-    const accumulatedToolCalls: NonNullable<IMessage['tool_calls']> = [];
-    let usageData:
-      | {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        }
-      | undefined;
-
-    if (choice?.message.content) {
-      fullContent = choice.message.content;
-    }
-
-    if (choice?.message.tool_calls) {
-      // Convert tool calls to the standard format
-      for (const toolCall of choice.message.tool_calls) {
-        if (toolCall.type === 'function' && toolCall.function) {
-          // Don't fix double stringification here - it's handled later in the final processing
-          accumulatedToolCalls.push({
-            id: toolCall.id,
-            type: 'function' as const,
-            function: toolCall.function,
-          });
+      // Check for status property (OpenAI APIError has a status property)
+      if ('status' in error) {
+        const status = (error as { status: number }).status;
+        // Retry on 429 (rate limit) and 5xx errors
+        if (status === 429 || (status >= 500 && status < 600)) {
+          this.logger.debug(
+            () => `Retryable error detected - status: ${status}`,
+          );
+          return true;
         }
       }
-    }
 
-    if (response.usage) {
-      usageData = {
-        prompt_tokens: response.usage.prompt_tokens,
-        completion_tokens: response.usage.completion_tokens,
-        total_tokens: response.usage.total_tokens,
-      };
-    }
-
-    return {
-      fullContent,
-      accumulatedToolCalls,
-      hasStreamedContent: false, // Non-streaming never has streamed content
-      usageData,
-      pendingWhitespace: null,
-    };
-  }
-
-  /**
-   * Process and build final response messages
-   */
-  private *processFinalResponse(
-    processedData: {
-      fullContent: string;
-      accumulatedToolCalls: NonNullable<IMessage['tool_calls']>;
-      hasStreamedContent: boolean;
-      usageData?: {
-        prompt_tokens: number;
-        completion_tokens: number;
-        total_tokens: number;
-      };
-      pendingWhitespace: string | null;
-    },
-    parser: GemmaToolCallParser | null,
-  ): Generator<IMessage> {
-    const {
-      fullContent,
-      accumulatedToolCalls,
-      hasStreamedContent,
-      usageData,
-      pendingWhitespace,
-    } = processedData;
-
-    // Flush any remaining pending whitespace for Qwen
-    let finalFullContent = fullContent;
-    if (pendingWhitespace && this.isUsingQwen() && !parser) {
-      this.logger.debug(
-        () =>
-          `Flushing trailing pending whitespace (len=${pendingWhitespace?.length ?? 0}) at stream end`,
-      );
-      finalFullContent += pendingWhitespace;
-    }
-
-    // After stream ends, parse text-based tool calls if needed
-    if (parser && finalFullContent) {
-      const { cleanedContent, toolCalls } = parser.parse(finalFullContent);
-
-      if (toolCalls.length > 0) {
-        // Convert to standard format
-        const standardToolCalls = toolCalls.map((tc, index) => ({
-          id: `call_${Date.now()}_${index}`,
-          type: 'function' as const,
-          function: {
-            name: tc.name,
-            arguments: JSON.stringify(tc.arguments),
-          },
-        }));
-
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: cleanedContent,
-          tool_calls: standardToolCalls,
-          usage: usageData,
-        };
-      } else {
-        // No tool calls found, yield cleaned content
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: cleanedContent,
-          usage: usageData,
-        };
-      }
-    } else {
-      // Standard OpenAI tool call handling
-      if (accumulatedToolCalls.length > 0) {
-        // Process tool calls with Qwen-specific fixes if needed
-        const fixedToolCalls = this.processQwenToolCalls(accumulatedToolCalls);
-
-        if (this.isUsingQwen()) {
+      // Check for nested error object (some OpenAI errors have error.error structure)
+      if (
+        'error' in error &&
+        typeof (error as { error: unknown }).error === 'object'
+      ) {
+        const nestedError = (
+          error as { error: { code?: string; type?: string } }
+        ).error;
+        if (
+          nestedError?.code === 'token_quota_exceeded' ||
+          nestedError?.type === 'too_many_tokens_error' ||
+          nestedError?.code === 'rate_limit_exceeded'
+        ) {
           this.logger.debug(
             () =>
-              `Final message with tool calls: ${JSON.stringify({
-                contentLength: finalFullContent.length,
-                content:
-                  finalFullContent.substring(0, 200) +
-                  (finalFullContent.length > 200 ? '...' : ''),
-                toolCallCount: accumulatedToolCalls.length,
-                hasStreamedContent,
-              })}`,
+              `Retryable error detected from error code: ${nestedError.code || nestedError.type}`,
           );
+          return true;
         }
-
-        // Build the final message based on provider-specific requirements
-        const finalMessage = this.buildFinalToolCallMessage(
-          hasStreamedContent,
-          finalFullContent,
-          fixedToolCalls,
-          usageData,
-        );
-        yield finalMessage;
-      } else if (usageData) {
-        // Always emit usage data so downstream consumers can update stats
-        yield {
-          role: ContentGeneratorRole.ASSISTANT,
-          content: '',
-          usage: usageData,
-        };
       }
     }
-  }
 
-  /**
-   * Handle Qwen-specific whitespace buffering during streaming
-   * @param delta The stream delta containing content
-   * @param pendingWhitespace Current buffered whitespace
-   * @param fullContent Accumulated full content
-   * @returns Object with updated state and whether to yield content
-   */
-  private handleQwenStreamingWhitespace(
-    delta: { content?: string | null },
-    pendingWhitespace: string | null,
-    fullContent: string,
-  ): {
-    shouldYield: boolean;
-    content: string;
-    updatedPendingWhitespace: string | null;
-    updatedFullContent: string;
-  } {
-    if (!delta.content) {
-      return {
-        shouldYield: false,
-        content: '',
-        updatedPendingWhitespace: pendingWhitespace,
-        updatedFullContent: fullContent,
-      };
-    }
+    // Check error message for rate limit indicators
+    const errorMessage = String(error).toLowerCase();
+    const retryablePatterns = [
+      'rate limit',
+      'rate_limit',
+      'quota_exceeded',
+      'too_many_tokens',
+      'too many requests',
+      '429',
+      'overloaded',
+      'server_error',
+      'service_unavailable',
+      'internal server error',
+      '500',
+      '502',
+      '503',
+      '504',
+    ];
 
-    const isWhitespaceOnly = delta.content.trim() === '';
+    const shouldRetry = retryablePatterns.some((pattern) =>
+      errorMessage.includes(pattern),
+    );
 
-    if (isWhitespaceOnly) {
-      // Buffer whitespace-only chunk
-      const newPendingWhitespace = (pendingWhitespace || '') + delta.content;
+    if (shouldRetry) {
       this.logger.debug(
-        () =>
-          `[Whitespace Buffering] Buffered whitespace-only chunk (len=${delta.content?.length ?? 0}). pendingWhitespace now len=${newPendingWhitespace?.length ?? 0}`,
+        () => `Retryable error detected from message pattern: ${errorMessage}`,
       );
-      return {
-        shouldYield: false,
-        content: '',
-        updatedPendingWhitespace: newPendingWhitespace,
-        updatedFullContent: fullContent + delta.content,
-      };
     }
 
-    // Non-whitespace content - flush any pending whitespace first
-    if (pendingWhitespace) {
-      this.logger.debug(
-        () =>
-          `Flushing pending whitespace (len=${pendingWhitespace?.length ?? 0}) before non-empty chunk`,
-      );
-      return {
-        shouldYield: true,
-        content: pendingWhitespace + delta.content,
-        updatedPendingWhitespace: null,
-        updatedFullContent: fullContent + pendingWhitespace + delta.content,
-      };
-    }
-
-    return {
-      shouldYield: true,
-      content: delta.content,
-      updatedPendingWhitespace: null,
-      updatedFullContent: fullContent + delta.content,
-    };
+    return shouldRetry;
   }
 
   /**
@@ -1246,229 +1011,4 @@ export class OpenAIProvider extends BaseProvider {
    * @param toolCalls The tool calls to process
    * @returns Processed tool calls with fixes applied
    */
-  private processQwenToolCalls(
-    toolCalls: NonNullable<IMessage['tool_calls']>,
-  ): NonNullable<IMessage['tool_calls']> {
-    if (!this.isUsingQwen()) {
-      return toolCalls;
-    }
-
-    this.logger.debug(
-      () =>
-        `[Qwen Fix] Processing ${toolCalls.length} tool calls for double-stringification fix`,
-    );
-
-    return toolCalls.map((toolCall, index) => {
-      this.logger.debug(
-        () =>
-          `[Qwen Fix] Tool call ${index}: ${JSON.stringify({
-            name: toolCall.function.name,
-            argumentsType: typeof toolCall.function.arguments,
-            argumentsLength: toolCall.function.arguments?.length,
-            argumentsSample: toolCall.function.arguments?.substring(0, 100),
-          })}`,
-      );
-      return this.fixQwenDoubleStringification(toolCall);
-    });
-  }
-
-  /**
-   * Determine how to yield the final message with tool calls based on provider quirks
-   * @param hasStreamedContent Whether content was already streamed
-   * @param fullContent The complete content
-   * @param toolCalls The tool calls to include
-   * @param usageData Optional usage statistics
-   * @returns The message to yield
-   */
-  private buildFinalToolCallMessage(
-    hasStreamedContent: boolean,
-    fullContent: string,
-    toolCalls: NonNullable<IMessage['tool_calls']>,
-    usageData?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
-    },
-  ): IMessage {
-    const isCerebras = this.baseURL?.toLowerCase().includes('cerebras.ai');
-
-    if (isCerebras) {
-      this.logger.debug(
-        () =>
-          '[Cerebras] Special handling for Cerebras provider after tool responses',
-        {
-          hasStreamedContent,
-          willSendSpace: hasStreamedContent,
-        },
-      );
-    }
-
-    const shouldOmitContent =
-      hasStreamedContent && this.isUsingQwen() && !isCerebras;
-
-    this.logger.debug(
-      () => '[Tool Call Handling] Deciding how to yield tool calls',
-      {
-        hasStreamedContent,
-        isUsingQwen: this.isUsingQwen(),
-        isCerebras,
-        shouldOmitContent,
-        fullContentLength: fullContent.length,
-        toolCallCount: toolCalls?.length || 0,
-      },
-    );
-
-    if (shouldOmitContent || (isCerebras && hasStreamedContent)) {
-      // Send just a space to prevent stream stopping or duplication
-      if (isCerebras && hasStreamedContent) {
-        this.logger.debug(
-          () =>
-            '[Cerebras] Sending minimal space content to prevent duplication',
-        );
-      }
-      return {
-        role: ContentGeneratorRole.ASSISTANT,
-        content: ' ',
-        tool_calls: toolCalls,
-        usage: usageData,
-      };
-    }
-
-    // Include full content with tool calls
-    return {
-      role: ContentGeneratorRole.ASSISTANT,
-      content: fullContent || '',
-      tool_calls: toolCalls,
-      usage: usageData,
-    };
-  }
-
-  /**
-   * Fix Qwen's double stringification of tool call arguments
-   * Qwen models stringify array/object values WITHIN the JSON arguments
-   * @param toolCall The tool call to fix
-   * @returns The fixed tool call or the original if no fix is needed
-   */
-  private fixQwenDoubleStringification(
-    toolCall: NonNullable<IMessage['tool_calls']>[0],
-  ): NonNullable<IMessage['tool_calls']>[0] {
-    if (
-      !toolCall.function.arguments ||
-      typeof toolCall.function.arguments !== 'string'
-    ) {
-      return toolCall;
-    }
-
-    try {
-      // First, parse the arguments to get the JSON object
-      const parsedArgs = JSON.parse(toolCall.function.arguments);
-      let hasNestedStringification = false;
-
-      // Check each property to see if it's a stringified array/object/number
-      const fixedArgs: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(parsedArgs)) {
-        if (typeof value === 'string') {
-          const trimmed = value.trim();
-
-          // Check if it's a stringified number (integer or float)
-          if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-            const numValue = trimmed.includes('.')
-              ? parseFloat(trimmed)
-              : parseInt(trimmed, 10);
-            fixedArgs[key] = numValue;
-            hasNestedStringification = true;
-            this.logger.debug(
-              () =>
-                `[Qwen Fix] Fixed stringified number in property '${key}' for ${toolCall.function.name}: "${value}" -> ${numValue}`,
-            );
-          }
-          // Check if it looks like a stringified array or object
-          // Also check for Python-style dictionaries with single quotes
-          else if (
-            (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
-            (trimmed.startsWith('{') && trimmed.endsWith('}'))
-          ) {
-            try {
-              // Try to parse it as JSON
-              const nestedParsed = JSON.parse(value);
-              fixedArgs[key] = nestedParsed;
-              hasNestedStringification = true;
-              this.logger.debug(
-                () =>
-                  `[Qwen Fix] Fixed nested stringification in property '${key}' for ${toolCall.function.name}`,
-              );
-            } catch {
-              // Try to convert Python-style to JSON (single quotes to double quotes)
-              try {
-                const jsonified = value
-                  .replace(/'/g, '"')
-                  .replace(/: True/g, ': true')
-                  .replace(/: False/g, ': false')
-                  .replace(/: None/g, ': null');
-                const nestedParsed = JSON.parse(jsonified);
-                fixedArgs[key] = nestedParsed;
-                hasNestedStringification = true;
-                this.logger.debug(
-                  () =>
-                    `[Qwen Fix] Fixed Python-style nested stringification in property '${key}' for ${toolCall.function.name}`,
-                );
-              } catch {
-                // Not valid JSON even after conversion, keep as string
-                fixedArgs[key] = value;
-              }
-            }
-          } else {
-            fixedArgs[key] = value;
-          }
-        } else {
-          fixedArgs[key] = value;
-        }
-      }
-
-      if (hasNestedStringification) {
-        this.logger.debug(
-          () =>
-            `[Qwen Fix] Fixed nested double-stringification for ${toolCall.function.name}`,
-        );
-        return {
-          ...toolCall,
-          function: {
-            ...toolCall.function,
-            arguments: JSON.stringify(fixedArgs),
-          },
-        };
-      }
-    } catch (_e) {
-      // If parsing fails, check for old-style double-stringification
-      if (
-        toolCall.function.arguments.startsWith('"') &&
-        toolCall.function.arguments.endsWith('"')
-      ) {
-        try {
-          // Old fix: entire arguments were double-stringified
-          const parsedArgs = JSON.parse(toolCall.function.arguments);
-          this.logger.debug(
-            () =>
-              `[Qwen Fix] Fixed whole-argument double-stringification for ${toolCall.function.name}`,
-          );
-          return {
-            ...toolCall,
-            function: {
-              ...toolCall.function,
-              arguments: JSON.stringify(parsedArgs),
-            },
-          };
-        } catch {
-          // Leave as-is if we can't parse
-        }
-      }
-    }
-
-    // No fix needed
-    this.logger.debug(
-      () =>
-        `[Qwen Fix] No double-stringification detected for ${toolCall.function.name}, keeping original`,
-    );
-    return toolCall;
-  }
 }

@@ -304,11 +304,12 @@ const loadCommand: SlashCommand = {
         context.services.config.setEphemeralSetting(key, undefined);
       }
 
-      // Reset GeminiClient compression settings
-      const geminiClient = context.services.config.getGeminiClient();
-      if (geminiClient) {
-        geminiClient.setCompressionSettings(undefined, undefined);
-      }
+      // Reset compression ephemeral settings
+      context.services.config.setEphemeralSetting(
+        'compression-threshold',
+        undefined,
+      );
+      context.services.config.setEphemeralSetting('context-limit', undefined);
 
       // Clear model parameters on the provider
       const activeProvider = providerManager?.getActiveProvider();
@@ -358,12 +359,16 @@ const loadCommand: SlashCommand = {
       const compressionThreshold = profile.ephemeralSettings[
         'compression-threshold'
       ] as number | undefined;
-      if (
-        (contextLimit !== undefined || compressionThreshold !== undefined) &&
-        geminiClient
-      ) {
-        geminiClient.setCompressionSettings(compressionThreshold, contextLimit);
-      }
+      // Apply compression settings via ephemeral settings
+      // Always set them (even if undefined) to ensure proper reset
+      context.services.config.setEphemeralSetting(
+        'compression-threshold',
+        compressionThreshold,
+      );
+      context.services.config.setEphemeralSetting(
+        'context-limit',
+        contextLimit,
+      );
 
       // 5. Call provider.setModelParams() with the profile's model params
       if (

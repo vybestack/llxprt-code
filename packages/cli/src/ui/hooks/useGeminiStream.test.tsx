@@ -719,7 +719,20 @@ describe('useGeminiStream', () => {
 
   it('should not flicker streaming state to Idle between tool completion and submission', async () => {
     const toolCallResponseParts: PartListUnion = [
-      { text: 'tool 1 final response' },
+      {
+        functionCall: {
+          id: 'call1',
+          name: 'tool1',
+          args: {},
+        },
+      },
+      {
+        functionResponse: {
+          id: 'call1',
+          name: 'tool1',
+          response: { output: 'tool 1 final response' },
+        },
+      },
     ];
 
     const initialToolCalls: TrackedToolCall[] = [

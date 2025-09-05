@@ -254,13 +254,24 @@ const createErrorResponse = (
 ): ToolCallResponseInfo => ({
   callId: request.callId,
   error,
-  responseParts: {
-    functionResponse: {
-      id: request.callId,
-      name: request.name,
-      response: { error: error.message },
+  responseParts: [
+    // First, the tool call
+    {
+      functionCall: {
+        id: request.callId,
+        name: request.name,
+        args: request.args,
+      },
     },
-  },
+    // Then, the error response
+    {
+      functionResponse: {
+        id: request.callId,
+        name: request.name,
+        response: { error: error.message },
+      },
+    },
+  ],
   resultDisplay: error.message,
   errorType,
 });
@@ -424,15 +435,26 @@ export class CoreToolScheduler {
             status: 'cancelled',
             response: {
               callId: currentCall.request.callId,
-              responseParts: {
-                functionResponse: {
-                  id: currentCall.request.callId,
-                  name: currentCall.request.name,
-                  response: {
-                    error: `[Operation Cancelled] Reason: ${auxiliaryData}`,
+              responseParts: [
+                // First, the tool call
+                {
+                  functionCall: {
+                    id: currentCall.request.callId,
+                    name: currentCall.request.name,
+                    args: currentCall.request.args,
                   },
                 },
-              },
+                // Then, the cancellation response
+                {
+                  functionResponse: {
+                    id: currentCall.request.callId,
+                    name: currentCall.request.name,
+                    response: {
+                      error: `[Operation Cancelled] Reason: ${auxiliaryData}`,
+                    },
+                  },
+                },
+              ],
               resultDisplay,
               error: undefined,
               errorType: undefined,
@@ -910,14 +932,27 @@ export class CoreToolScheduler {
         }
 
         if (toolResult.error === undefined) {
-          const response = convertToFunctionResponse(
+          const functionResponse = convertToFunctionResponse(
             toolName,
             callId,
             toolResult.llmContent,
           );
+          // Return BOTH the tool call and response as an array
+          const responseParts = [
+            // First, the tool call
+            {
+              functionCall: {
+                id: callId,
+                name: toolName,
+                args: scheduledCall.request.args,
+              },
+            },
+            // Then, the response
+            functionResponse,
+          ];
           const successResponse: ToolCallResponseInfo = {
             callId,
-            responseParts: response,
+            responseParts: responseParts as PartListUnion,
             resultDisplay: toolResult.returnDisplay,
             error: undefined,
             errorType: undefined,

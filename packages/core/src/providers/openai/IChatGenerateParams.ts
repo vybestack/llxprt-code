@@ -1,9 +1,14 @@
-import { IMessage } from '../IMessage.js';
-import { ITool } from '../ITool.js';
+import { IContent } from '../../services/history/IContent.js';
 
 export interface IChatGenerateParams {
-  messages: IMessage[];
-  tools?: ITool[];
+  content: IContent[];
+  tools?: Array<{
+    functionDeclarations: Array<{
+      name: string;
+      description?: string;
+      parameters?: unknown;
+    }>;
+  }>;
   stream?: boolean;
   conversationId?: string;
   parentId?: string;

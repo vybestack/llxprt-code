@@ -84,6 +84,11 @@ export const providerCommand: SlashCommand = {
       const config = context.services.config;
       if (config) {
         config.setEphemeralSetting('base-url', undefined);
+        // Also clear base URL on the provider itself if it has the method
+        const currentProvider = providerManager.getActiveProvider();
+        if (currentProvider.setBaseUrl) {
+          currentProvider.setBaseUrl(undefined);
+        }
       }
 
       // Use SettingsService for provider switching

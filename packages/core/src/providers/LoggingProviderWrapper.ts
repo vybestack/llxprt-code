@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IProvider, IModel, ITool, IMessage } from './IProvider.js';
+import { IProvider, IModel, ITool } from './IProvider.js';
+import { IContent } from '../services/history/IContent.js';
 import { Config, RedactionConfig } from '../config/config.js';
 import {
   logConversationRequest,
@@ -17,7 +18,7 @@ import {
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
 
 export interface ConversationDataRedactor {
-  redactMessage(message: IMessage, provider: string): IMessage;
+  redactMessage(content: IContent, provider: string): IContent;
   redactToolCall(tool: ITool): ITool;
   redactResponseContent(content: string, provider: string): string;
 }
@@ -26,32 +27,35 @@ export interface ConversationDataRedactor {
 class ConfigBasedRedactor implements ConversationDataRedactor {
   constructor(private redactionConfig: RedactionConfig) {}
 
-  redactMessage(message: IMessage, providerName: string): IMessage {
+  redactMessage(content: IContent, providerName: string): IContent {
     if (!this.shouldRedact()) {
-      return message;
+      return content;
     }
 
-    const redactedMessage = { ...message };
+    const redactedContent = { ...content };
 
-    if (typeof redactedMessage.content === 'string') {
-      redactedMessage.content = this.redactContent(
-        redactedMessage.content,
-        providerName,
-      );
-    }
+    // Redact text blocks
+    redactedContent.blocks = redactedContent.blocks.map((block) => {
+      if (block.type === 'text') {
+        return {
+          ...block,
+          text: this.redactContent(block.text, providerName),
+        };
+      } else if (block.type === 'tool_call') {
+        // For tool calls, we'll redact the parameters as JSON strings then parse back
+        const redactedParams = this.redactContent(
+          JSON.stringify(block.parameters),
+          providerName,
+        );
+        return {
+          ...block,
+          parameters: JSON.parse(redactedParams),
+        };
+      }
+      return block;
+    });
 
-    // Redact tool_calls if present
-    if (redactedMessage.tool_calls) {
-      redactedMessage.tool_calls = redactedMessage.tool_calls.map((call) => ({
-        ...call,
-        function: {
-          ...call.function,
-          arguments: this.redactContent(call.function.arguments, providerName),
-        },
-      }));
-    }
-
-    return redactedMessage;
+    return redactedContent;
   }
 
   redactToolCall(tool: ITool): ITool {
@@ -210,24 +214,25 @@ export class LoggingProviderWrapper implements IProvider {
 
   // Only method that includes logging - everything else is passthrough
   async *generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
-  ): AsyncIterableIterator<unknown> {
+    content: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ): AsyncIterableIterator<IContent> {
     const promptId = this.generatePromptId();
     this.turnNumber++;
 
     // Log request if logging is enabled
     if (this.config.getConversationLoggingEnabled()) {
-      await this.logRequest(messages, tools, toolFormat, promptId);
+      await this.logRequest(content, tools, promptId);
     }
 
     // Get stream from wrapped provider
-    const stream = this.wrapped.generateChatCompletion(
-      messages,
-      tools,
-      toolFormat,
-    );
+    const stream = this.wrapped.generateChatCompletion(content, tools);
 
     // If logging not enabled, just pass through
     if (!this.config.getConversationLoggingEnabled()) {
@@ -240,28 +245,32 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async logRequest(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
+    content: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
     promptId?: string,
   ): Promise<void> {
     try {
-      // Apply redaction to messages and tools
-      const redactedMessages = messages.map((msg) =>
-        this.redactor.redactMessage(msg, this.wrapped.name),
+      // Apply redaction to content and tools
+      const redactedContent = content.map((item) =>
+        this.redactor.redactMessage(item, this.wrapped.name),
       );
-      const redactedTools = tools?.map((tool) =>
-        this.redactor.redactToolCall(tool),
-      );
+      // Note: tools format is different now, keeping minimal logging for now
+      const redactedTools = tools;
 
       const event = new ConversationRequestEvent(
         this.wrapped.name,
         this.conversationId,
         this.turnNumber,
         promptId || this.generatePromptId(),
-        redactedMessages,
+        redactedContent,
         redactedTools,
-        toolFormat,
+        'default', // toolFormat is no longer passed in
       );
 
       logConversationRequest(this.config, event);
@@ -270,12 +279,12 @@ export class LoggingProviderWrapper implements IProvider {
       const fileWriter = getConversationFileWriter(
         this.config.getConversationLogPath(),
       );
-      fileWriter.writeRequest(this.wrapped.name, redactedMessages, {
+      fileWriter.writeRequest(this.wrapped.name, redactedContent, {
         conversationId: this.conversationId,
         turnNumber: this.turnNumber,
         promptId: promptId || this.generatePromptId(),
         tools: redactedTools,
-        toolFormat,
+        toolFormat: 'default',
       });
     } catch (error) {
       // Log error but don't fail the request
@@ -284,9 +293,9 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *logResponseStream(
-    stream: AsyncIterableIterator<unknown>,
+    stream: AsyncIterableIterator<IContent>,
     promptId: string,
-  ): AsyncIterableIterator<unknown> {
+  ): AsyncIterableIterator<IContent> {
     const startTime = performance.now();
     let responseContent = '';
     let responseComplete = false;

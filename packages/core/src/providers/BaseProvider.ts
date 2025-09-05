@@ -10,8 +10,7 @@
 
 import { IProvider } from './IProvider.js';
 import { IModel } from './IModel.js';
-import { ITool } from './ITool.js';
-import { IMessage } from './IMessage.js';
+import { IContent } from '../services/history/IContent.js';
 import {
   AuthPrecedenceResolver,
   AuthPrecedenceConfig,
@@ -262,14 +261,19 @@ export abstract class BaseProvider implements IProvider {
     }
   }
 
-  // Abstract methods that must be implemented by concrete providers
   abstract getModels(): Promise<IModel[]>;
   abstract getDefaultModel(): string;
+
   abstract generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
-  ): AsyncIterableIterator<unknown>;
+    content: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ): AsyncIterableIterator<IContent>;
 
   // Optional methods with default implementations
   setModel?(_modelId: string): void {}

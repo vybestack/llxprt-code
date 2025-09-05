@@ -37,7 +37,10 @@ describe('Provider-Gemini Switching', () => {
         ];
       },
       async *generateChatCompletion() {
-        yield { role: 'assistant', content: 'test response' };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text' as const, text: 'test response' }],
+        };
       },
       getCurrentModel() {
         return 'model-1';

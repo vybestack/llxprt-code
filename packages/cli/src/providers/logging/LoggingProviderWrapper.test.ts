@@ -7,24 +7,28 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   IProvider,
-  IMessage,
+  IContent,
   ITool,
-  ContentGeneratorRole,
   type Config,
 } from '@vybestack/llxprt-code-core';
 
 // These interfaces will be implemented in the next phase
 interface LoggingProviderWrapper {
   generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
-  ): AsyncIterableIterator<unknown>;
+    messages: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ): AsyncIterableIterator<IContent>;
   getWrappedProvider(): IProvider;
 }
 
 interface ConversationDataRedactor {
-  redactMessage(message: IMessage, provider: string): IMessage;
+  redactMessage(message: IContent, provider: string): IContent;
   redactToolCall(tool: ITool): ITool;
 }
 
@@ -43,8 +47,8 @@ function createMockProvider(name: string): IProvider {
     getModels: vi.fn().mockResolvedValue([]),
     generateChatCompletion: vi.fn().mockImplementation(async function* () {
       yield {
-        content: `Response from ${name}`,
-        role: ContentGeneratorRole.ASSISTANT,
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text', text: `Response from ${name}` }],
       };
     }),
     getDefaultModel: vi.fn().mockReturnValue(`${name}-default-model`),
@@ -78,10 +82,15 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
   ) {}
 
   async *generateChatCompletion(
-    messages: IMessage[],
-    tools?: ITool[],
-    toolFormat?: string,
-  ): AsyncIterableIterator<unknown> {
+    messages: IContent[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ): AsyncIterableIterator<IContent> {
     // This should log the conversation request when logging is enabled
     if (this.config.getConversationLoggingEnabled?.()) {
       try {
@@ -101,7 +110,7 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
     }
 
     // Delegate to wrapped provider
-    yield* this.provider.generateChatCompletion(messages, tools, toolFormat);
+    yield* this.provider.generateChatCompletion(messages, tools);
   }
 
   getWrappedProvider(): IProvider {
@@ -110,9 +119,9 @@ class MockLoggingProviderWrapper implements LoggingProviderWrapper {
 }
 
 class MockConversationDataRedactor implements ConversationDataRedactor {
-  redactMessage(message: IMessage, _provider: string): IMessage {
+  redactMessage(message: IContent, _provider: string): IContent {
     // This is a placeholder - actual implementation will handle redaction
-    return { ...message, content: message.content };
+    return message;
   }
 
   redactToolCall(tool: ITool): ITool {
@@ -148,8 +157,8 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Test prompt' },
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Test prompt' }] },
     ];
 
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
@@ -163,8 +172,8 @@ describe('Multi-Provider Conversation Logging', () => {
         provider_name: 'openai',
         redacted_messages: expect.arrayContaining([
           expect.objectContaining({
-            role: ContentGeneratorRole.USER,
-            content: 'Test prompt',
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Test prompt' }],
           }),
         ]),
       }),
@@ -188,19 +197,17 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [
+    const messages: IContent[] = [
       {
-        role: ContentGeneratorRole.USER,
-        content: 'Read my API key file',
-        tool_calls: [
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'Read my API key file' },
           {
+            type: 'tool_call',
             id: 'call_1',
-            type: 'function',
-            function: {
-              name: 'read_file',
-              arguments: JSON.stringify({
-                file_path: '/home/user/.openai/key',
-              }),
+            name: 'read_file',
+            parameters: {
+              file_path: '/home/user/.openai/key',
             },
           },
         ],
@@ -218,8 +225,10 @@ describe('Multi-Provider Conversation Logging', () => {
         provider_name: 'anthropic',
         redacted_messages: expect.arrayContaining([
           expect.objectContaining({
-            role: ContentGeneratorRole.USER,
-            tool_calls: expect.any(Array),
+            speaker: 'human',
+            blocks: expect.arrayContaining([
+              expect.objectContaining({ type: 'tool_call' }),
+            ]),
           }),
         ]),
       }),
@@ -243,9 +252,12 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [
-      { role: 'system', content: 'You are a helpful assistant' },
-      { role: ContentGeneratorRole.USER, content: 'Hello' },
+    const messages: IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'You are a helpful assistant' }],
+      },
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
     ];
 
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
@@ -258,10 +270,9 @@ describe('Multi-Provider Conversation Logging', () => {
       expect.objectContaining({
         provider_name: 'gemini',
         redacted_messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'system' }),
           expect.objectContaining({
-            role: ContentGeneratorRole.USER,
-            content: 'Hello',
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'Hello' }],
           }),
         ]),
       }),
@@ -285,8 +296,8 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Test prompt' },
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Test prompt' }] },
     ];
 
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
@@ -301,7 +312,7 @@ describe('Multi-Provider Conversation Logging', () => {
    * @requirement LOGGING-005: Tool format preservation
    * @scenario Provider with custom tool format
    * @given LoggingProviderWrapper wrapping provider with hermes tool format
-   * @when generateChatCompletion() is called with toolFormat parameter
+   * @when generateChatCompletion() is called with tools parameter
    * @then Tool format is passed through to wrapped provider unchanged
    * @and Logging captures the tool format used
    */
@@ -314,27 +325,33 @@ describe('Multi-Provider Conversation Logging', () => {
       redactor,
     );
 
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Test' },
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Test' }] },
     ];
-    const tools: ITool[] = [
+    const tools: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }> = [
       {
-        type: 'function',
-        function: {
-          name: 'test_tool',
-          description: 'A test tool',
-          parameters: { type: 'object', properties: {} },
-        },
+        functionDeclarations: [
+          {
+            name: 'test_tool',
+            description: 'A test tool',
+            parameters: { type: 'object', properties: {} },
+          },
+        ],
       },
     ];
 
-    const stream = wrapper.generateChatCompletion(messages, tools, 'hermes');
+    const stream = wrapper.generateChatCompletion(messages, tools);
     await consumeAsyncIterable(stream);
 
     expect(mockProvider.generateChatCompletion).toHaveBeenCalledWith(
       messages,
       tools,
-      'hermes',
     );
   });
 
@@ -362,8 +379,8 @@ describe('Multi-Provider Conversation Logging', () => {
       config,
       redactor,
     );
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Test' },
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Test' }] },
     ];
 
     // Should not throw despite logging error
@@ -371,7 +388,9 @@ describe('Multi-Provider Conversation Logging', () => {
     const results = await consumeAsyncIterable(stream);
 
     expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ content: 'Response from openai' });
+    expect(results[0]).toMatchObject({
+      blocks: [{ type: 'text', text: 'Response from openai' }],
+    });
   });
 
   /**
@@ -387,9 +406,18 @@ describe('Multi-Provider Conversation Logging', () => {
       name: 'streaming',
       getModels: vi.fn().mockResolvedValue([]),
       async *generateChatCompletion() {
-        yield { content: 'Chunk 1', role: ContentGeneratorRole.ASSISTANT };
-        yield { content: 'Chunk 2', role: ContentGeneratorRole.ASSISTANT };
-        yield { content: 'Chunk 3', role: ContentGeneratorRole.ASSISTANT };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text', text: 'Chunk 1' }],
+        };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text', text: 'Chunk 2' }],
+        };
+        yield {
+          speaker: 'ai' as const,
+          blocks: [{ type: 'text', text: 'Chunk 3' }],
+        };
       },
       getDefaultModel: vi.fn().mockReturnValue('streaming-default-model'),
       getServerTools: vi.fn().mockReturnValue([]),
@@ -404,8 +432,8 @@ describe('Multi-Provider Conversation Logging', () => {
     );
     const logSpy = vi.spyOn(telemetryLoggers, 'logConversationRequest');
 
-    const messages: IMessage[] = [
-      { role: ContentGeneratorRole.USER, content: 'Stream test' },
+    const messages: IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'Stream test' }] },
     ];
     const results = await consumeAsyncIterable(
       wrapper.generateChatCompletion(messages),
@@ -413,10 +441,10 @@ describe('Multi-Provider Conversation Logging', () => {
 
     expect(logSpy).toHaveBeenCalled();
     expect(results).toHaveLength(3);
-    expect(results.map((r) => (r as { content: string }).content)).toEqual([
-      'Chunk 1',
-      'Chunk 2',
-      'Chunk 3',
-    ]);
+    expect(
+      results
+        .map((r) => (r as IContent).blocks[0])
+        .map((block) => (block as { text: string }).text),
+    ).toEqual(['Chunk 1', 'Chunk 2', 'Chunk 3']);
   });
 });
