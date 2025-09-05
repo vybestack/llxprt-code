@@ -16,6 +16,10 @@ import {
   ToolResponseBlock,
   TextBlock,
 } from '../../services/history/IContent.js';
+import {
+  processToolParameters,
+  logDoubleEscapingInChunk,
+} from '../../tools/doubleEscapeUtils.js';
 
 export class AnthropicProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -398,6 +402,68 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * Detect the appropriate tool format for the current model/configuration
+   * @returns The detected tool format
+   */
+  detectToolFormat(): ToolFormat {
+    try {
+      const settingsService = getSettingsService();
+
+      // First check SettingsService for toolFormat override in provider settings
+      // Note: This is synchronous access to cached settings, not async
+      const currentSettings = settingsService['settings'];
+      const providerSettings = currentSettings?.providers?.[this.name];
+      const toolFormatOverride = providerSettings?.toolFormat as
+        | ToolFormat
+        | 'auto'
+        | undefined;
+
+      // If explicitly set to a specific format (not 'auto'), use it
+      if (toolFormatOverride && toolFormatOverride !== 'auto') {
+        return toolFormatOverride;
+      }
+
+      // Auto-detect based on model name if set to 'auto' or not set
+      const modelName = this.currentModel.toLowerCase();
+
+      // Check for GLM-4.5 models (glm-4.5, glm-4-5)
+      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+        return 'qwen';
+      }
+
+      // Check for qwen models
+      if (modelName.includes('qwen')) {
+        return 'qwen';
+      }
+
+      // Default to 'anthropic' format
+      return 'anthropic';
+    } catch (error) {
+      this.logger.debug(
+        () => `Failed to detect tool format from SettingsService: ${error}`,
+      );
+
+      // Fallback detection without SettingsService
+      const modelName = this.currentModel.toLowerCase();
+
+      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+        return 'qwen';
+      }
+
+      if (modelName.includes('qwen')) {
+        return 'qwen';
+      }
+
+      return 'anthropic';
+    }
+  }
+
+  override getToolFormat(): ToolFormat {
+    // Use the same detection logic as detectToolFormat()
+    return this.detectToolFormat();
+  }
+
+  /**
    * Generate chat completion with IContent interface
    * Convert IContent directly to Anthropic API format
    */
@@ -607,37 +673,36 @@ export class AnthropicProvider extends BaseProvider {
             currentToolCall
           ) {
             currentToolCall.input += chunk.delta.partial_json;
+
+            // Check for double-escaping patterns
+            const detectedFormat = this.detectToolFormat();
+            logDoubleEscapingInChunk(
+              chunk.delta.partial_json,
+              currentToolCall.name,
+              detectedFormat,
+            );
           }
         } else if (chunk.type === 'content_block_stop') {
           if (currentToolCall) {
-            // Emit tool call as IContent
-            try {
-              const input = JSON.parse(currentToolCall.input);
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'tool_call',
-                    id: currentToolCall.id.replace(/^toolu_/, 'hist_tool_'),
-                    name: currentToolCall.name,
-                    parameters: input,
-                  },
-                ],
-              } as IContent;
-            } catch (_e) {
-              // If parsing fails, emit with string parameters
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'tool_call',
-                    id: currentToolCall.id.replace(/^toolu_/, 'hist_tool_'),
-                    name: currentToolCall.name,
-                    parameters: currentToolCall.input,
-                  } as ToolCallBlock,
-                ],
-              } as IContent;
-            }
+            // Process tool parameters with double-escape handling
+            const detectedFormat = this.detectToolFormat();
+            const processedParameters = processToolParameters(
+              currentToolCall.input,
+              currentToolCall.name,
+              detectedFormat,
+            );
+
+            yield {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'tool_call',
+                  id: currentToolCall.id.replace(/^toolu_/, 'hist_tool_'),
+                  name: currentToolCall.name,
+                  parameters: processedParameters,
+                },
+              ],
+            } as IContent;
             currentToolCall = undefined;
           }
         } else if (chunk.type === 'message_delta' && chunk.usage) {
@@ -663,15 +728,24 @@ export class AnthropicProvider extends BaseProvider {
       const blocks: ContentBlock[] = [];
 
       // Process content blocks
+      const detectedFormat = this.detectToolFormat();
+
       for (const contentBlock of message.content) {
         if (contentBlock.type === 'text') {
           blocks.push({ type: 'text', text: contentBlock.text } as TextBlock);
         } else if (contentBlock.type === 'tool_use') {
+          // Process tool parameters with double-escape handling
+          const processedParameters = processToolParameters(
+            JSON.stringify(contentBlock.input),
+            contentBlock.name,
+            detectedFormat,
+          );
+
           blocks.push({
             type: 'tool_call',
             id: contentBlock.id.replace(/^toolu_/, 'hist_tool_'),
             name: contentBlock.name,
-            parameters: contentBlock.input,
+            parameters: processedParameters,
           } as ToolCallBlock);
         }
       }

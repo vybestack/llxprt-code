@@ -39,6 +39,7 @@ import {
   ToolResponseBlock,
   TextBlock,
 } from '../../services/history/IContent.js';
+import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 
 export class OpenAIProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -800,24 +801,24 @@ export class OpenAIProvider extends BaseProvider {
     // Emit accumulated tool calls as IContent if any
     if (accumulatedToolCalls.length > 0) {
       const blocks: ToolCallBlock[] = [];
+      const detectedFormat = this.detectToolFormat();
+
       for (const tc of accumulatedToolCalls) {
         if (!tc) continue;
-        try {
-          blocks.push({
-            type: 'tool_call',
-            id: tc.id,
-            name: tc.function.name,
-            parameters: JSON.parse(tc.function.arguments),
-          });
-        } catch (_e) {
-          // If parsing fails, emit with string parameters
-          blocks.push({
-            type: 'tool_call',
-            id: tc.id,
-            name: tc.function.name,
-            parameters: tc.function.arguments,
-          } as ToolCallBlock);
-        }
+
+        // Process tool parameters with double-escape handling
+        const processedParameters = processToolParameters(
+          tc.function.arguments,
+          tc.function.name,
+          detectedFormat,
+        );
+
+        blocks.push({
+          type: 'tool_call',
+          id: tc.id,
+          name: tc.function.name,
+          parameters: processedParameters,
+        });
       }
 
       if (blocks.length > 0) {
@@ -828,6 +829,7 @@ export class OpenAIProvider extends BaseProvider {
       }
     }
   }
+
   /**
    * Initialize provider configuration from SettingsService
    */
@@ -1046,10 +1048,4 @@ export class OpenAIProvider extends BaseProvider {
 
     return shouldRetry;
   }
-
-  /**
-   * Process tool calls for Qwen models, fixing double stringification
-   * @param toolCalls The tool calls to process
-   * @returns Processed tool calls with fixes applied
-   */
 }
