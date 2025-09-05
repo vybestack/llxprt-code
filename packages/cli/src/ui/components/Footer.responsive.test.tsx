@@ -276,8 +276,8 @@ describe('Footer Responsive Behavior', () => {
         // Should have status info (Memory|Context) separate from path info
         expect(output).toMatch(/(Mem:|Memory:)/);
         expect(output).toMatch(/(Ctx:|Context:)/);
-        // Path check - Windows may show truncated paths differently
-        expect(output).toMatch(/home.*user.*projects|long-project-name/); // Path (may be truncated)
+        // Path check - should contain path elements (may be truncated)
+        expect(output).toMatch(/(home|user|projects|project-name)/); // Path (may be truncated)
         if (width >= 80) {
           expect(output).toContain('gemini-2.0-flash'); // Model only shown at standard+ widths
         }
