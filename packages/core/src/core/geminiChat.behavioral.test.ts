@@ -62,6 +62,25 @@ describe('GeminiChat - Behavioral Tests for HistoryService Migration', () => {
       getAllTools: vi.fn().mockReturnValue([]),
     };
 
+    // Mock provider that supports IContent
+    const mockProvider = {
+      name: 'mock-provider',
+      generateChatCompletionIContent: vi
+        .fn()
+        .mockImplementation(async function* (_content) {
+          // Default mock implementation - tests can override
+          yield {
+            speaker: 'ai',
+            blocks: [{ type: 'text', text: "I'm doing well, thank you!" }],
+          };
+        }),
+    };
+
+    // Mock ProviderManager
+    const mockProviderManager = {
+      getActiveProvider: vi.fn().mockReturnValue(mockProvider),
+    };
+
     // Mock Config
     config = {
       getModel: vi.fn().mockReturnValue('gemini-2.0-flash'),
@@ -74,7 +93,7 @@ describe('GeminiChat - Behavioral Tests for HistoryService Migration', () => {
       getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
       getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getProviderManager: vi.fn().mockReturnValue(undefined),
+      getProviderManager: vi.fn().mockReturnValue(mockProviderManager),
       flashFallbackHandler: undefined,
     } as unknown as Config;
 

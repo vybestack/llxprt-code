@@ -235,13 +235,22 @@ describe('useReactToolScheduler in YOLO Mode', () => {
         request,
         response: expect.objectContaining({
           resultDisplay: 'YOLO Formatted tool output',
-          responseParts: {
-            functionResponse: {
-              id: 'yoloCall',
-              name: 'mockToolRequiresConfirmation',
-              response: { output: expectedOutput },
+          responseParts: [
+            {
+              functionCall: {
+                id: 'yoloCall',
+                name: 'mockToolRequiresConfirmation',
+                args: { data: 'any data' },
+              },
             },
-          },
+            {
+              functionResponse: {
+                id: 'yoloCall',
+                name: 'mockToolRequiresConfirmation',
+                response: { output: expectedOutput },
+              },
+            },
+          ],
         }),
       }),
     ]);
@@ -385,13 +394,22 @@ describe('useReactToolScheduler', () => {
         request,
         response: expect.objectContaining({
           resultDisplay: 'Formatted tool output',
-          responseParts: {
-            functionResponse: {
-              id: 'call1',
-              name: 'mockTool',
-              response: { output: 'Tool output' },
+          responseParts: [
+            {
+              functionCall: {
+                id: 'call1',
+                name: 'mockTool',
+                args: { param: 'value' },
+              },
             },
-          },
+            {
+              functionResponse: {
+                id: 'call1',
+                name: 'mockTool',
+                response: { output: 'Tool output' },
+              },
+            },
+          ],
         }),
       }),
     ]);
@@ -770,13 +788,22 @@ describe('useReactToolScheduler', () => {
       request: requests[0],
       response: expect.objectContaining({
         resultDisplay: 'Display 1',
-        responseParts: {
-          functionResponse: {
-            id: 'multi1',
-            name: 'tool1',
-            response: { output: 'Output 1' },
+        responseParts: [
+          {
+            functionCall: {
+              id: 'multi1',
+              name: 'tool1',
+              args: { p: 1 },
+            },
           },
-        },
+          {
+            functionResponse: {
+              id: 'multi1',
+              name: 'tool1',
+              response: { output: 'Output 1' },
+            },
+          },
+        ],
       }),
     });
     expect(call2Result).toMatchObject({
@@ -784,13 +811,22 @@ describe('useReactToolScheduler', () => {
       request: requests[1],
       response: expect.objectContaining({
         resultDisplay: 'Display 2',
-        responseParts: {
-          functionResponse: {
-            id: 'multi2',
-            name: 'tool2',
-            response: { output: 'Output 2' },
+        responseParts: [
+          {
+            functionCall: {
+              id: 'multi2',
+              name: 'tool2',
+              args: { p: 2 },
+            },
           },
-        },
+          {
+            functionResponse: {
+              id: 'multi2',
+              name: 'tool2',
+              response: { output: 'Output 2' },
+            },
+          },
+        ],
       }),
     });
     expect(result.current[0]).toEqual([]);
