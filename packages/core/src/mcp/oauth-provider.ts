@@ -787,9 +787,11 @@ export class MCPOAuthProvider {
       token.expiresAt = Date.now() + tokenResponse.expires_in * 1000;
     }
 
+    const tokenStorage = new MCPOAuthTokenStorage();
+
     // Save token
     try {
-      await MCPOAuthTokenStorage.saveToken(
+      await tokenStorage.saveToken(
         serverName,
         token,
         config.clientId,
@@ -799,7 +801,7 @@ export class MCPOAuthProvider {
       console.log('Authentication successful! Token saved.');
 
       // Verify token was saved
-      const savedToken = await MCPOAuthTokenStorage.getToken(serverName);
+      const savedToken = await tokenStorage.getCredentials(serverName);
       if (savedToken && savedToken.token && savedToken.token.accessToken) {
         const tokenPreview =
           savedToken.token.accessToken.length > 20
@@ -831,7 +833,8 @@ export class MCPOAuthProvider {
     config: MCPOAuthConfig,
   ): Promise<string | null> {
     console.debug(`Getting valid token for server: ${serverName}`);
-    const credentials = await MCPOAuthTokenStorage.getToken(serverName);
+    const tokenStorage = new MCPOAuthTokenStorage();
+    const credentials = await tokenStorage.getCredentials(serverName);
 
     if (!credentials) {
       console.debug(`No credentials found for server: ${serverName}`);
@@ -873,7 +876,7 @@ export class MCPOAuthProvider {
           newToken.expiresAt = Date.now() + newTokenResponse.expires_in * 1000;
         }
 
-        await MCPOAuthTokenStorage.saveToken(
+        await tokenStorage.saveToken(
           serverName,
           newToken,
           config.clientId,
@@ -885,7 +888,7 @@ export class MCPOAuthProvider {
       } catch (error) {
         console.error(`Failed to refresh token: ${getErrorMessage(error)}`);
         // Remove invalid token
-        await MCPOAuthTokenStorage.removeToken(serverName);
+        await tokenStorage.deleteCredentials(serverName);
       }
     }
 
