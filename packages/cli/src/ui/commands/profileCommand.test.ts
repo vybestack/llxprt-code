@@ -61,9 +61,7 @@ describe('profileCommand', () => {
     getActiveProvider: ReturnType<typeof vi.fn>;
     setActiveProvider: ReturnType<typeof vi.fn>;
   };
-  let mockGeminiClient: {
-    setCompressionSettings: ReturnType<typeof vi.fn>;
-  };
+  let mockGeminiClient: Record<string, unknown>;
 
   beforeEach(() => {
     // Reset all mocks
@@ -109,9 +107,7 @@ describe('profileCommand', () => {
     };
 
     // Create mock GeminiClient
-    mockGeminiClient = {
-      setCompressionSettings: vi.fn(),
-    };
+    mockGeminiClient = {};
 
     // Create context with mocks
     context = createMockCommandContext({
@@ -153,10 +149,14 @@ describe('profileCommand', () => {
         'test-profile',
       );
 
-      // Verify compression settings were applied
-      expect(mockGeminiClient.setCompressionSettings).toHaveBeenCalledWith(
-        0.8, // compression-threshold
-        100000, // context-limit
+      // Verify compression settings were applied via ephemeral settings
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'compression-threshold',
+        0.8,
+      );
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'context-limit',
+        100000,
       );
 
       // Verify success message
@@ -181,9 +181,13 @@ describe('profileCommand', () => {
 
       await loadCommand.action!(context, 'test-profile');
 
-      expect(mockGeminiClient.setCompressionSettings).toHaveBeenCalledWith(
-        undefined, // compression-threshold not set
-        50000, // context-limit
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'compression-threshold',
+        undefined,
+      );
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'context-limit',
+        50000,
       );
     });
 
@@ -201,9 +205,13 @@ describe('profileCommand', () => {
 
       await loadCommand.action!(context, 'test-profile');
 
-      expect(mockGeminiClient.setCompressionSettings).toHaveBeenCalledWith(
-        0.6, // compression-threshold
-        undefined, // context-limit not set
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'compression-threshold',
+        0.6,
+      );
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'context-limit',
+        undefined,
       );
     });
 
@@ -233,8 +241,12 @@ describe('profileCommand', () => {
       await loadCommand.action!(context, 'test-profile');
 
       // Verify compression settings were reset with undefined values first
-      expect(mockGeminiClient.setCompressionSettings).toHaveBeenCalledWith(
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'compression-threshold',
         undefined,
+      );
+      expect(context.services.config!.setEphemeralSetting).toHaveBeenCalledWith(
+        'context-limit',
         undefined,
       );
     });

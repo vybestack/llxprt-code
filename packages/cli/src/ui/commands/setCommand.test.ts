@@ -61,9 +61,7 @@ describe('setCommand', () => {
       setEphemeralSetting: vi.fn(),
       getEphemeralSetting: vi.fn(() => undefined),
       getEphemeralSettings: vi.fn(() => ({})),
-      getGeminiClient: vi.fn(() => ({
-        setCompressionSettings: vi.fn(),
-      })),
+      getGeminiClient: vi.fn(() => null),
       getSettingsService: vi.fn().mockReturnValue(null), // Return null to use fallback behavior
     };
 

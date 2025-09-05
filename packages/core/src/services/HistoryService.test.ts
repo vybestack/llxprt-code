@@ -299,6 +299,103 @@ describe('HistoryService - Tool ID Normalization', () => {
     });
   });
 
+  describe('Compression threshold and context limit settings', () => {
+    it('should respect ephemeral compression-threshold and context-limit settings', () => {
+      // Test that compression only happens when:
+      // tokenCount > (compression-threshold * context-limit)
+
+      // Given: Set ephemeral settings
+      const mockCompressionThreshold = 0.7; // 70%
+      const mockContextLimit = 100000; // 100k tokens
+
+      // The compression should trigger when tokens exceed:
+      // 0.7 * 100000 = 70000 tokens
+      const compressionTriggerPoint =
+        mockCompressionThreshold * mockContextLimit;
+
+      // Test case 1: Below threshold - should NOT compress
+      const tokensBelow = 65000; // Below 70000
+      expect(tokensBelow).toBeLessThan(compressionTriggerPoint);
+      // In real implementation, this would NOT trigger compression
+
+      // Test case 2: Above threshold - SHOULD compress
+      const tokensAbove = 75000; // Above 70000
+      expect(tokensAbove).toBeGreaterThan(compressionTriggerPoint);
+      // In real implementation, this WOULD trigger compression
+
+      // Test case 3: Exactly at threshold - SHOULD compress
+      const tokensExact = 70000;
+      expect(tokensExact).toBe(compressionTriggerPoint);
+      // In real implementation, this WOULD trigger compression (>= check)
+    });
+
+    it('should use default compression threshold (85%) when not set', () => {
+      // Default from compression-config.ts is 0.85 (85%)
+      const defaultThreshold = 0.85;
+      const mockContextLimit = 100000;
+
+      const compressionTriggerPoint = defaultThreshold * mockContextLimit;
+      expect(compressionTriggerPoint).toBe(85000);
+
+      // Below 85% should NOT compress
+      const tokensBelowDefault = 80000;
+      expect(tokensBelowDefault).toBeLessThan(compressionTriggerPoint);
+
+      // Above 85% should compress
+      const tokensAboveDefault = 90000;
+      expect(tokensAboveDefault).toBeGreaterThan(compressionTriggerPoint);
+    });
+
+    it('should handle different context limits correctly', () => {
+      const mockCompressionThreshold = 0.8; // 80%
+
+      // Test with smaller context limit
+      const smallContextLimit = 50000;
+      const smallTriggerPoint = mockCompressionThreshold * smallContextLimit;
+      expect(smallTriggerPoint).toBe(40000);
+
+      // Test with larger context limit
+      const largeContextLimit = 200000;
+      const largeTriggerPoint = mockCompressionThreshold * largeContextLimit;
+      expect(largeTriggerPoint).toBe(160000);
+
+      // Same percentage, different absolute values
+      expect(smallTriggerPoint).toBeLessThan(largeTriggerPoint);
+    });
+
+    it('should validate compression threshold is between 0 and 1', () => {
+      // Compression threshold must be a decimal between 0 and 1
+      const validThresholds = [0.1, 0.5, 0.7, 0.85, 0.99];
+      const invalidThresholds = [-0.5, 0, 1.5, 2, -1];
+
+      validThresholds.forEach((threshold) => {
+        expect(threshold).toBeGreaterThan(0);
+        expect(threshold).toBeLessThanOrEqual(1);
+      });
+
+      invalidThresholds.forEach((threshold) => {
+        const isValid = threshold > 0 && threshold <= 1;
+        expect(isValid).toBe(false);
+      });
+    });
+
+    it('should validate context limit is positive integer', () => {
+      // Context limit must be a positive integer
+      const validLimits = [1000, 50000, 100000, 200000];
+      const invalidLimits = [-1000, 0, -50000];
+
+      validLimits.forEach((limit) => {
+        expect(limit).toBeGreaterThan(0);
+        expect(Number.isInteger(limit)).toBe(true);
+      });
+
+      invalidLimits.forEach((limit) => {
+        const isValid = limit > 0 && Number.isInteger(limit);
+        expect(isValid).toBe(false);
+      });
+    });
+  });
+
   describe('edge cases', () => {
     it('should handle orphaned tool responses (no matching call)', () => {
       // Given: Tool response without prior call

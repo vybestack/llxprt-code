@@ -44,6 +44,16 @@ interface HistoryServiceEventEmitter {
 }
 
 /**
+ * Configuration for compression behavior
+ */
+export interface CompressionConfig {
+  orphanTimeoutMs: number; // Time before considering a call orphaned
+  orphanMessageDistance: number; // Messages before considering orphaned
+  pendingGracePeriodMs: number; // Grace period for pending calls
+  minMessagesForCompression: number; // Minimum messages before compression
+}
+
+/**
  * Service for managing conversation history in a provider-agnostic way.
  * All history is stored as IContent. Providers are responsible for converting
  * to/from their own formats.
@@ -57,6 +67,10 @@ export class HistoryService
   private tokenizerCache = new Map<string, ITokenizer>();
   private tokenizerLock: Promise<void> = Promise.resolve();
   private logger = new DebugLogger('llxprt:history:service');
+
+  // Compression state and queue
+  private isCompressing: boolean = false;
+  private pendingOperations: Array<() => void> = [];
 
   /**
    * Get or create tokenizer for a specific model
@@ -114,6 +128,24 @@ export class HistoryService
    * Filtering happens only when getting curated history.
    */
   add(content: IContent, modelName?: string): void {
+    // If compression is active, queue this operation
+    if (this.isCompressing) {
+      this.logger.debug('Queueing add operation during compression', {
+        speaker: content.speaker,
+        blockTypes: content.blocks?.map((b) => b.type),
+      });
+
+      this.pendingOperations.push(() => {
+        this.addInternal(content, modelName);
+      });
+      return;
+    }
+
+    // Otherwise, add immediately
+    this.addInternal(content, modelName);
+  }
+
+  private addInternal(content: IContent, modelName?: string): void {
     // Log content being added with any tool call/response IDs
     this.logger.debug('Adding content to history:', {
       speaker: content.speaker,
@@ -134,6 +166,7 @@ export class HistoryService
     // Only do basic validation - must have valid speaker
     if (content.speaker && ['human', 'ai', 'tool'].includes(content.speaker)) {
       this.history.push(content);
+
       this.logger.debug(
         'Content added successfully, history length:',
         this.history.length,
@@ -203,13 +236,33 @@ export class HistoryService
           blockText = block.text;
           break;
         case 'tool_call':
-          blockText = JSON.stringify({
-            name: block.name,
-            parameters: block.parameters,
-          });
+          try {
+            blockText = JSON.stringify({
+              name: block.name,
+              parameters: block.parameters,
+            });
+          } catch (error) {
+            // Handle circular references or other JSON.stringify errors
+            this.logger.debug(
+              'Error stringifying tool_call parameters, using fallback:',
+              error,
+            );
+            // Fallback to just the tool name for token estimation
+            blockText = `tool_call: ${block.name}`;
+          }
           break;
         case 'tool_response':
-          blockText = JSON.stringify(block.result || block.error || '');
+          try {
+            blockText = JSON.stringify(block.result || block.error || '');
+          } catch (error) {
+            // Handle circular references or other JSON.stringify errors
+            this.logger.debug(
+              'Error stringifying tool_response result/error, using fallback:',
+              error,
+            );
+            // Fallback to just the tool name for token estimation
+            blockText = `tool_response: ${block.toolName || 'unknown'}`;
+          }
           break;
         case 'thinking':
           blockText = block.thought;
@@ -273,13 +326,32 @@ export class HistoryService
    * Clear all history
    */
   clear(): void {
+    // If compression is active, queue this operation
+    if (this.isCompressing) {
+      this.logger.debug('Queueing clear operation during compression');
+      this.pendingOperations.push(() => {
+        this.clearInternal();
+      });
+      return;
+    }
+
+    // Otherwise, clear immediately
+    this.clearInternal();
+  }
+
+  private clearInternal(): void {
+    this.logger.debug('Clearing history', {
+      previousLength: this.history.length,
+    });
+
+    const previousTokens = this.totalTokens;
     this.history = [];
     this.totalTokens = 0;
 
     // Emit event with reset count
     this.emit('tokensUpdated', {
       totalTokens: 0,
-      addedTokens: -this.totalTokens, // Negative to indicate removal
+      addedTokens: -previousTokens, // Negative to indicate removal
       contentId: null,
     });
   }
@@ -297,13 +369,16 @@ export class HistoryService
    * - Always includes user/human messages
    * - Always includes tool messages
    * - Only includes AI messages if they are valid (have content)
-   * - Automatically adds synthetic responses for orphaned tool calls
    */
   getCurated(): IContent[] {
-    // Auto-patch orphaned tool calls in the actual history first
-    this.patchOrphanedToolCalls();
+    // Wait if compression is in progress
+    if (this.isCompressing) {
+      this.logger.debug(
+        'getCurated called during compression - returning snapshot',
+      );
+    }
 
-    // Now build the curated list from the patched history
+    // Build the curated list without modifying history
     const curated: IContent[] = [];
     let excludedCount = 0;
 
@@ -341,6 +416,7 @@ export class HistoryService
           acc + c.blocks.filter((b) => b.type === 'tool_response').length,
         0,
       ),
+      isCompressing: this.isCompressing,
     });
 
     return curated;
@@ -474,225 +550,122 @@ export class HistoryService
    * Find unmatched tool calls (tool calls without responses)
    */
   findUnmatchedToolCalls(): ToolCallBlock[] {
-    const unmatchedCalls: ToolCallBlock[] = [];
-    const matchedCallIds = new Set<string>();
-
-    // First, collect all tool response call IDs
-    for (const content of this.history) {
-      if (content.speaker === 'tool') {
-        for (const block of content.blocks) {
-          if (block.type === 'tool_response') {
-            const callId = (block as ToolResponseBlock).callId;
-            matchedCallIds.add(callId);
-            this.logger.debug('Found tool response with callId:', callId);
-          }
-        }
-      }
-    }
-
-    // Then find tool calls without responses
-    for (const content of this.history) {
-      if (content.speaker === 'ai') {
-        for (const block of content.blocks) {
-          if (block.type === 'tool_call') {
-            const toolCall = block as ToolCallBlock;
-            if (!matchedCallIds.has(toolCall.id)) {
-              unmatchedCalls.push(toolCall);
-              this.logger.debug('Found unmatched tool call:', {
-                id: toolCall.id,
-                name: toolCall.name,
-              });
-            } else {
-              this.logger.debug('Found matched tool call:', {
-                id: toolCall.id,
-                name: toolCall.name,
-              });
-            }
-          }
-        }
-      }
-    }
-
-    this.logger.debug('Unmatched tool calls summary:', {
-      totalUnmatched: unmatchedCalls.length,
-      unmatchedIds: unmatchedCalls.map((c) => c.id),
-      totalMatched: matchedCallIds.size,
-    });
-
-    return unmatchedCalls;
+    // With atomic tool call/response implementation, orphans are impossible by design
+    // Always return empty array since orphans cannot exist
+    this.logger.debug(
+      'No unmatched tool calls - atomic implementation prevents orphans',
+    );
+    return [];
   }
 
   /**
    * Validate and fix the history to ensure proper tool call/response pairing
    */
   validateAndFix(): void {
-    const fixedHistory: IContent[] = [];
-    const pendingToolCalls: Map<string, { callId: string; toolName: string }> =
-      new Map();
-
-    for (let i = 0; i < this.history.length; i++) {
-      const content = this.history[i];
-      fixedHistory.push(content);
-
-      // Track tool calls from AI
-      if (content.speaker === 'ai') {
-        for (const block of content.blocks) {
-          if (block.type === 'tool_call') {
-            const toolCall = block as ToolCallBlock;
-            pendingToolCalls.set(toolCall.id, {
-              callId: toolCall.id,
-              toolName: toolCall.name,
-            });
-          }
-        }
-      }
-
-      // Remove matched tool calls when we see responses
-      if (content.speaker === 'tool') {
-        for (const block of content.blocks) {
-          if (block.type === 'tool_response') {
-            const response = block as ToolResponseBlock;
-            pendingToolCalls.delete(response.callId);
-          }
-        }
-      }
-
-      // Check if next message is not a tool response but we have pending calls
-      const nextContent = this.history[i + 1];
-      if (
-        nextContent &&
-        nextContent.speaker !== 'tool' &&
-        pendingToolCalls.size > 0
-      ) {
-        // Add synthetic error responses for unmatched calls
-        for (const [, info] of pendingToolCalls) {
-          fixedHistory.push({
-            speaker: 'tool',
-            blocks: [
-              {
-                type: 'tool_response',
-                callId: info.callId,
-                toolName: info.toolName,
-                result: null,
-                error: 'Error: Tool execution was interrupted. Please retry.',
-              },
-            ],
-          });
-        }
-        pendingToolCalls.clear();
-      }
-    }
-
-    // Handle any remaining pending calls at the end
-    for (const [, info] of pendingToolCalls) {
-      fixedHistory.push({
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: info.callId,
-            toolName: info.toolName,
-            result: null,
-            error: 'Error: Tool execution was interrupted. Please retry.',
-          },
-        ],
-      });
-    }
-
-    this.history = fixedHistory;
+    // With atomic tool call/response implementation, the history is always valid by design
+    // No fixing needed since orphans cannot exist
+    this.logger.debug(
+      'History validation skipped - atomic implementation ensures validity',
+    );
   }
 
   /**
-   * Patch orphaned tool calls by adding synthetic responses to the actual history.
-   * This ensures that all tool calls have matching responses, which is required
-   * by providers like OpenAI.
+   * Get curated history with circular references removed for providers.
+   * This ensures the history can be safely serialized and sent to providers.
    */
-  private patchOrphanedToolCalls(): void {
-    // Find all unmatched tool calls
-    const unmatchedCalls = this.findUnmatchedToolCalls();
+  getCuratedForProvider(): IContent[] {
+    // Get the curated history
+    const curated = this.getCurated();
 
-    if (unmatchedCalls.length === 0) {
-      return; // Nothing to patch
-    }
+    // Deep clone to avoid circular references in tool call parameters
+    // We need a clean copy that can be serialized
+    return this.deepCloneWithoutCircularRefs(curated);
+  }
 
-    // Check if we've already patched these orphans (avoid duplicate patching)
-    // Synthetic responses have metadata.synthetic = true
-    const syntheticExists = this.history.some(
-      (h) =>
-        h.metadata?.synthetic === true &&
-        h.metadata?.reason === 'orphaned_tool_call',
-    );
-
-    if (syntheticExists) {
-      // Already patched, don't add duplicates
-      return;
-    }
-
-    this.logger.debug('Patching orphaned tool calls:', {
-      count: unmatchedCalls.length,
-      ids: unmatchedCalls.map((c) => c.id),
-    });
-
-    // Group unmatched calls by their position in history
-    // We need to insert synthetic responses after their corresponding AI messages
-    const callPositions = new Map<number, ToolCallBlock[]>();
-
-    for (let i = 0; i < this.history.length; i++) {
-      const content = this.history[i];
-      if (content.speaker === 'ai') {
-        for (const block of content.blocks) {
+  /**
+   * Deep clone content array, removing circular references
+   */
+  private deepCloneWithoutCircularRefs(contents: IContent[]): IContent[] {
+    return contents.map((content) => {
+      // Create a clean copy of the content
+      const cloned: IContent = {
+        speaker: content.speaker,
+        blocks: content.blocks.map((block) => {
           if (block.type === 'tool_call') {
             const toolCall = block as ToolCallBlock;
-            // Check if this call is unmatched
-            if (unmatchedCalls.some((u) => u.id === toolCall.id)) {
-              if (!callPositions.has(i)) {
-                callPositions.set(i, []);
-              }
-              callPositions.get(i)!.push(toolCall);
+            // For tool calls, sanitize the parameters to remove circular refs
+            return {
+              type: 'tool_call',
+              id: toolCall.id,
+              name: toolCall.name,
+              parameters: this.sanitizeParams(toolCall.parameters),
+            } as ToolCallBlock;
+          } else if (block.type === 'tool_response') {
+            const toolResponse = block as ToolResponseBlock;
+            // For tool responses, sanitize the result to remove circular refs
+            return {
+              type: 'tool_response',
+              callId: toolResponse.callId,
+              toolName: toolResponse.toolName,
+              result: this.sanitizeParams(toolResponse.result),
+              error: toolResponse.error,
+            } as ToolResponseBlock;
+          } else {
+            // Other blocks should be safe to clone
+            try {
+              return JSON.parse(JSON.stringify(block));
+            } catch {
+              // If any block fails, return minimal version
+              return { ...block };
             }
           }
-        }
-      }
-    }
-
-    // Create synthetic responses and insert them after their AI messages
-    // Process in reverse order to maintain correct indices
-    const positions = Array.from(callPositions.keys()).sort((a, b) => b - a);
-
-    for (const position of positions) {
-      const orphanedCalls = callPositions.get(position)!;
-
-      // Create a single tool response content with all synthetic responses
-      const syntheticContent: IContent = {
-        speaker: 'tool',
-        blocks: orphanedCalls.map((call) => ({
-          type: 'tool_response' as const,
-          callId: call.id,
-          toolName: call.name,
-          result: null,
-          error: 'Tool execution cancelled by user',
-        })),
-        metadata: {
-          synthetic: true,
-          reason: 'orphaned_tool_call',
-        },
+        }),
+        metadata: content.metadata ? { ...content.metadata } : {},
       };
+      return cloned;
+    });
+  }
 
-      // Insert the synthetic response after the AI message that contains the tool calls
-      this.history.splice(position + 1, 0, syntheticContent);
+  /**
+   * Sanitize parameters to remove circular references
+   */
+  private sanitizeParams(params: unknown): unknown {
+    const seen = new WeakSet();
 
-      this.logger.debug('Inserted synthetic tool response:', {
-        afterPosition: position,
-        forCallIds: orphanedCalls.map((c) => c.id),
-      });
-    }
+    const sanitize = (obj: unknown): unknown => {
+      // Handle primitives
+      if (obj === null || typeof obj !== 'object') {
+        return obj;
+      }
 
-    // Log if we added synthetic responses
-    if (positions.length > 0) {
-      this.logger.debug('Added synthetic responses for orphaned tool calls:', {
-        syntheticResponsesAdded: positions.length,
-        totalOrphanedCalls: unmatchedCalls.length,
-      });
+      // Check for circular reference
+      if (seen.has(obj)) {
+        return { _circular: true };
+      }
+
+      seen.add(obj);
+
+      // Handle arrays
+      if (Array.isArray(obj)) {
+        return obj.map((item) => sanitize(item));
+      }
+
+      // Handle objects
+      const result: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(obj)) {
+        result[key] = sanitize(value);
+      }
+
+      return result;
+    };
+
+    try {
+      return sanitize(params);
+    } catch (error) {
+      this.logger.debug('Error sanitizing params:', error);
+      return {
+        _note: 'Parameters contained circular references and were sanitized',
+      };
     }
   }
 
@@ -763,6 +736,48 @@ export class HistoryService
     const history = JSON.parse(json);
     service.addAll(history);
     return service;
+  }
+
+  /**
+   * Mark compression as starting
+   * This will cause add() operations to queue until compression completes
+   */
+  startCompression(): void {
+    this.logger.debug('Starting compression - locking history');
+    this.isCompressing = true;
+  }
+
+  /**
+   * Mark compression as complete
+   * This will flush all queued operations
+   */
+  endCompression(): void {
+    this.logger.debug('Compression complete - unlocking history', {
+      pendingCount: this.pendingOperations.length,
+    });
+
+    this.isCompressing = false;
+
+    // Flush all pending operations
+    const operations = this.pendingOperations;
+    this.pendingOperations = [];
+
+    for (const operation of operations) {
+      operation();
+    }
+
+    this.logger.debug('Flushed pending operations', {
+      count: operations.length,
+    });
+  }
+
+  /**
+   * Wait for all pending operations to complete
+   * For synchronous operations, this is now a no-op but kept for API compatibility
+   */
+  async waitForPendingOperations(): Promise<void> {
+    // Since operations are now synchronous, nothing to wait for
+    return Promise.resolve();
   }
 
   /**

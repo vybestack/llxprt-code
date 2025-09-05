@@ -46,6 +46,11 @@ import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
 import { hasCycleInSchema } from '../tools/tools.js';
 import { isStructuredError } from '../utils/quotaErrorDetection.js';
 import { DebugLogger } from '../debug/index.js';
+import { getCompressionPrompt } from './prompts.js';
+import {
+  COMPRESSION_TOKEN_THRESHOLD,
+  COMPRESSION_PRESERVE_THRESHOLD,
+} from './compression-config.js';
 
 /**
  * Custom createUserContent function that properly handles function response arrays.
@@ -101,12 +106,6 @@ function createUserContentWithFunctionResponseFix(
           parts.push({ text: item });
         } else if (Array.isArray(item)) {
           // Nested array case - flatten it
-          if (process.env.DEBUG) {
-            console.log(
-              '[DEBUG] createUserContentWithFunctionResponseFix - flattening nested array:',
-              JSON.stringify(item, null, 2),
-            );
-          }
           for (const subItem of item) {
             parts.push(subItem);
           }
@@ -257,8 +256,12 @@ export class GeminiChat {
   // A promise to represent the current state of the message being sent to the
   // model.
   private sendPromise: Promise<void> = Promise.resolve();
+  // A promise to represent any ongoing compression operation
+  private compressionPromise: Promise<void> | null = null;
   private historyService: HistoryService;
   private logger = new DebugLogger('llxprt:gemini:chat');
+  // Cache the compression threshold to avoid recalculating
+  private cachedCompressionThreshold: number | null = null;
 
   constructor(
     private readonly config: Config,
@@ -459,18 +462,24 @@ export class GeminiChat {
     prompt_id: string,
   ): Promise<GenerateContentResponse> {
     await this.sendPromise;
+
+    // Check compression - first check if already compressing, then check if needed
+    if (this.compressionPromise) {
+      this.logger.debug('Waiting for ongoing compression to complete');
+      await this.compressionPromise;
+    } else if (this.shouldCompress()) {
+      // Only check shouldCompress if not already compressing
+      this.logger.debug('Triggering compression before message send');
+      this.compressionPromise = this.performCompression(prompt_id);
+      await this.compressionPromise;
+      this.compressionPromise = null;
+    }
+
     const userContent = createUserContentWithFunctionResponseFix(
       params.message,
     );
-    // Add user content to history service
-    {
-      const idGen = this.historyService.getIdGeneratorCallback();
-      const matcher = this.makePositionMatcher();
-      this.historyService.add(
-        ContentConverters.toIContent(userContent, idGen, matcher),
-        this.config.getModel(),
-      );
-    }
+
+    // DO NOT add user content to history yet - use send-then-commit pattern
 
     // Get the active provider
     const provider = this.getActiveProvider();
@@ -485,8 +494,20 @@ export class GeminiChat {
       );
     }
 
-    // Get curated history in IContent format
-    const iContents = this.historyService.getCurated();
+    // Get curated history WITHOUT the new user message
+    const currentHistory = this.historyService.getCuratedForProvider();
+
+    // Convert user content to IContent
+    const idGen = this.historyService.getIdGeneratorCallback();
+    const matcher = this.makePositionMatcher();
+    const userIContent = ContentConverters.toIContent(
+      userContent,
+      idGen,
+      matcher,
+    );
+
+    // Build request with history + new message
+    const iContents = [...currentHistory, userIContent];
 
     this._logApiRequest(
       ContentConverters.toGeminiContents(iContents),
@@ -566,34 +587,25 @@ export class GeminiChat {
 
       this.sendPromise = (async () => {
         const outputContent = response.candidates?.[0]?.content;
-        // Because the AFC input contains the entire curated chat history in
-        // addition to the new user input, we need to truncate the AFC history
-        // to deduplicate the existing chat history.
+
+        // Send-then-commit: Now that we have a successful response, add both user and model messages
+        const currentModel = this.config.getModel();
+
+        // Handle AFC history or regular history
         const fullAutomaticFunctionCallingHistory =
           response.automaticFunctionCallingHistory;
-        const curatedHistory = this.historyService.getCurated();
-        const index = ContentConverters.toGeminiContents(curatedHistory).length;
-        let automaticFunctionCallingHistory: Content[] = [];
-        if (fullAutomaticFunctionCallingHistory != null) {
-          automaticFunctionCallingHistory =
-            fullAutomaticFunctionCallingHistory.slice(index) ?? [];
-        }
-        // Note: modelOutput variable no longer used directly since we handle
-        // responses inline below
-        // Remove the user content we added and handle AFC history if present
-        // Only do this if AFC history actually has content
+
         if (
-          automaticFunctionCallingHistory &&
-          automaticFunctionCallingHistory.length > 0
+          fullAutomaticFunctionCallingHistory &&
+          fullAutomaticFunctionCallingHistory.length > 0
         ) {
-          // Pop the user content and replace with AFC history
-          const allHistory = this.historyService.getAll();
-          const trimmedHistory = allHistory.slice(0, -1);
-          this.historyService.clear();
-          const currentModel = this.config.getModel();
-          for (const content of trimmedHistory) {
-            this.historyService.add(content, currentModel);
-          }
+          // AFC case: Add the AFC history which includes the user input
+          const curatedHistory = this.historyService.getCurated();
+          const index =
+            ContentConverters.toGeminiContents(curatedHistory).length;
+          const automaticFunctionCallingHistory =
+            fullAutomaticFunctionCallingHistory.slice(index) ?? [];
+
           for (const content of automaticFunctionCallingHistory) {
             const idGen = this.historyService.getIdGeneratorCallback();
             const matcher = this.makePositionMatcher();
@@ -602,7 +614,16 @@ export class GeminiChat {
               currentModel,
             );
           }
+        } else {
+          // Regular case: Add user content first
+          const idGen = this.historyService.getIdGeneratorCallback();
+          const matcher = this.makePositionMatcher();
+          this.historyService.add(
+            ContentConverters.toIContent(userContent, idGen, matcher),
+            currentModel,
+          );
         }
+
         // Add model response if we have one (but filter out pure thinking responses)
         if (outputContent) {
           // Check if this is pure thinking content that should be filtered
@@ -611,7 +632,7 @@ export class GeminiChat {
             const idGen = this.historyService.getIdGeneratorCallback();
             this.historyService.add(
               ContentConverters.toIContent(outputContent, idGen),
-              this.config.getModel(),
+              currentModel,
             );
           }
           // If it's pure thinking content, don't add it to history
@@ -619,14 +640,14 @@ export class GeminiChat {
           // We have candidates but no content - add empty model response
           // This handles the case where the model returns empty content
           if (
-            !automaticFunctionCallingHistory ||
-            automaticFunctionCallingHistory.length === 0
+            !fullAutomaticFunctionCallingHistory ||
+            fullAutomaticFunctionCallingHistory.length === 0
           ) {
             const emptyModelContent: Content = { role: 'model', parts: [] };
             const idGen = this.historyService.getIdGeneratorCallback();
             this.historyService.add(
               ContentConverters.toIContent(emptyModelContent, idGen),
-              this.config.getModel(),
+              currentModel,
             );
           }
         }
@@ -706,26 +727,61 @@ export class GeminiChat {
     }
     await this.sendPromise;
 
+    // Check compression - first check if already compressing, then check if needed
+    if (this.compressionPromise) {
+      this.logger.debug('Waiting for ongoing compression to complete');
+      await this.compressionPromise;
+    } else if (this.shouldCompress()) {
+      // Only check shouldCompress if not already compressing
+      this.logger.debug('Triggering compression before message send in stream');
+      this.compressionPromise = this.performCompression(prompt_id);
+      await this.compressionPromise;
+      this.compressionPromise = null;
+    }
+
+    // Check if this is a paired tool call/response array
+    let userContent: Content | Content[];
+
+    // Quick check for paired tool call/response
+    const messageArray = Array.isArray(params.message) ? params.message : null;
+    const isPairedToolResponse =
+      messageArray &&
+      messageArray.length === 2 &&
+      messageArray[0] &&
+      typeof messageArray[0] === 'object' &&
+      'functionCall' in messageArray[0] &&
+      messageArray[1] &&
+      typeof messageArray[1] === 'object' &&
+      'functionResponse' in messageArray[1];
+
+    if (isPairedToolResponse && messageArray) {
+      // This is a paired tool call/response from the executor
+      // Create separate Content objects with correct roles
+      userContent = [
+        {
+          role: 'model' as const,
+          parts: [messageArray[0] as Part],
+        },
+        {
+          role: 'user' as const,
+          parts: [messageArray[1] as Part],
+        },
+      ];
+    } else {
+      userContent = createUserContentWithFunctionResponseFix(params.message);
+    }
+
+    // DO NOT add anything to history here - wait until after successful send!
+    // Tool responses will be handled in recordHistory after the model responds
+
     let streamDoneResolver: () => void;
     const streamDonePromise = new Promise<void>((resolve) => {
       streamDoneResolver = resolve;
     });
     this.sendPromise = streamDonePromise;
 
-    const userContent = createUserContentWithFunctionResponseFix(
-      params.message,
-    );
-
-    // Add user content to history ONCE before any attempts.
-    {
-      const idGen = this.historyService.getIdGeneratorCallback();
-      const matcher = this.makePositionMatcher();
-      this.historyService.add(
-        ContentConverters.toIContent(userContent, idGen, matcher),
-        this.config.getModel(),
-      );
-    }
-    // Note: requestContents is no longer needed as adapter gets history from HistoryService
+    // DO NOT add user content to history yet - wait until successful send
+    // This is the send-then-commit pattern to avoid orphaned tool calls
 
     return (async function* (instance) {
       try {
@@ -771,30 +827,8 @@ export class GeminiChat {
         }
 
         if (lastError) {
-          // If the stream fails, remove the user message that was added.
-          const allHistory = instance.historyService.getAll();
-          const lastIContent = allHistory[allHistory.length - 1];
-          const idGen = instance.historyService.getIdGeneratorCallback();
-          const matcher = instance.makePositionMatcher();
-          const userIContent = ContentConverters.toIContent(
-            userContent,
-            idGen,
-            matcher,
-          );
-
-          // Check if the last content is the user content we just added
-          if (
-            lastIContent?.speaker === userIContent.speaker &&
-            JSON.stringify(lastIContent?.blocks) ===
-              JSON.stringify(userIContent.blocks)
-          ) {
-            // Remove the last item from history
-            const trimmedHistory = allHistory.slice(0, -1);
-            instance.historyService.clear();
-            for (const content of trimmedHistory) {
-              instance.historyService.add(content, instance.config.getModel());
-            }
-          }
+          // With send-then-commit pattern, we don't add to history until success,
+          // so there's nothing to remove on failure
           throw lastError;
         }
       } finally {
@@ -804,9 +838,9 @@ export class GeminiChat {
   }
 
   private async makeApiCallAndProcessStream(
-    params: SendMessageParameters,
-    prompt_id: string,
-    userContent: Content,
+    _params: SendMessageParameters,
+    _prompt_id: string,
+    userContent: Content | Content[],
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
     // Get the active provider
     const provider = this.getActiveProvider();
@@ -836,14 +870,37 @@ export class GeminiChat {
         );
       }
 
-      // Get curated history for the request in IContent format
-      const iContents = this.historyService.getCurated();
+      // Convert user content to IContent first so we can check if it's a tool response
+      const idGen = this.historyService.getIdGeneratorCallback();
+      const matcher = this.makePositionMatcher();
+
+      let requestContents: IContent[];
+      if (Array.isArray(userContent)) {
+        // This is a paired tool call/response - convert each separately
+        const userIContents = userContent.map((content) =>
+          ContentConverters.toIContent(content, idGen, matcher),
+        );
+        // Get curated history WITHOUT the new user message (since we haven't added it yet)
+        const currentHistory = this.historyService.getCuratedForProvider();
+        // Build request with history + new messages (but don't commit to history yet)
+        requestContents = [...currentHistory, ...userIContents];
+      } else {
+        const userIContent = ContentConverters.toIContent(
+          userContent,
+          idGen,
+          matcher,
+        );
+        // Get curated history WITHOUT the new user message (since we haven't added it yet)
+        const currentHistory = this.historyService.getCuratedForProvider();
+        // Build request with history + new message (but don't commit to history yet)
+        requestContents = [...currentHistory, userIContent];
+      }
 
       // DEBUG: Check for malformed entries
       if (process.env.DEBUG) {
         console.log(
-          '[DEBUG] geminiChat IContent history:',
-          JSON.stringify(iContents, null, 2),
+          '[DEBUG] geminiChat IContent request (history + new message):',
+          JSON.stringify(requestContents, null, 2),
         );
       }
 
@@ -852,7 +909,7 @@ export class GeminiChat {
 
       // Call the provider directly with IContent
       const streamResponse = provider.generateChatCompletionIContent!(
-        iContents,
+        requestContents,
         tools as
           | Array<{
               functionDeclarations: Array<{
@@ -957,6 +1014,250 @@ export class GeminiChat {
     this.generationConfig.tools = tools;
   }
 
+  /**
+   * Check if compression is needed based on token count
+   */
+  private shouldCompress(): boolean {
+    // Calculate compression threshold only if not cached
+    if (this.cachedCompressionThreshold === null) {
+      const threshold =
+        (this.config.getEphemeralSetting('compression-threshold') as
+          | number
+          | undefined) ?? COMPRESSION_TOKEN_THRESHOLD;
+      const contextLimit =
+        (this.config.getEphemeralSetting('context-limit') as
+          | number
+          | undefined) ?? 60000; // Default context limit
+
+      this.cachedCompressionThreshold = threshold * contextLimit;
+      this.logger.debug('Calculated compression threshold:', {
+        threshold,
+        contextLimit,
+        compressionThreshold: this.cachedCompressionThreshold,
+      });
+    }
+
+    const currentTokens = this.historyService.getTotalTokens();
+    const shouldCompress = currentTokens >= this.cachedCompressionThreshold;
+
+    if (shouldCompress) {
+      this.logger.debug('Compression needed:', {
+        currentTokens,
+        threshold: this.cachedCompressionThreshold,
+      });
+    }
+
+    return shouldCompress;
+  }
+
+  /**
+   * Perform compression of chat history
+   * Made public to allow manual compression triggering
+   */
+  async performCompression(prompt_id: string): Promise<void> {
+    this.logger.debug('Starting compression');
+    // Reset cached threshold after compression in case settings changed
+    this.cachedCompressionThreshold = null;
+
+    // Lock history service
+    this.historyService.startCompression();
+
+    try {
+      // Get compression split
+      const { toCompress, toKeep } = this.getCompressionSplit();
+
+      if (toCompress.length === 0) {
+        this.logger.debug('Nothing to compress');
+        return;
+      }
+
+      // Perform direct compression API call
+      const summary = await this.directCompressionCall(toCompress, prompt_id);
+
+      // Apply compression atomically
+      this.applyCompression(summary, toKeep);
+
+      this.logger.debug('Compression completed successfully');
+    } catch (error) {
+      this.logger.error('Compression failed:', error);
+      throw error;
+    } finally {
+      // Always unlock
+      this.historyService.endCompression();
+    }
+  }
+
+  /**
+   * Get the split point for compression
+   */
+  private getCompressionSplit(): {
+    toCompress: IContent[];
+    toKeep: IContent[];
+  } {
+    const curated = this.historyService.getCurated();
+
+    // Calculate split point (keep last 30%)
+    const preserveThreshold =
+      (this.config.getEphemeralSetting('compression-preserve-threshold') as
+        | number
+        | undefined) ?? COMPRESSION_PRESERVE_THRESHOLD;
+    let splitIndex = Math.floor(curated.length * (1 - preserveThreshold));
+
+    // Adjust for tool call boundaries
+    splitIndex = this.adjustForToolCallBoundary(curated, splitIndex);
+
+    // Never compress if too few messages
+    if (splitIndex < 4) {
+      return { toCompress: [], toKeep: curated };
+    }
+
+    return {
+      toCompress: curated.slice(0, splitIndex),
+      toKeep: curated.slice(splitIndex),
+    };
+  }
+
+  /**
+   * Adjust compression boundary to not split tool call/response pairs
+   */
+  private adjustForToolCallBoundary(
+    history: IContent[],
+    index: number,
+  ): number {
+    // Don't split tool responses from their calls
+    while (index < history.length && history[index].speaker === 'tool') {
+      index++;
+    }
+
+    // Check if previous message has unmatched tool calls
+    if (index > 0) {
+      const prev = history[index - 1];
+      if (prev.speaker === 'ai') {
+        const toolCalls = prev.blocks.filter((b) => b.type === 'tool_call');
+        if (toolCalls.length > 0) {
+          // Check if there are matching tool responses in the kept portion
+          const keptHistory = history.slice(index);
+          const hasMatchingResponses = toolCalls.every((call) => {
+            const toolCall = call as ToolCallBlock;
+            return keptHistory.some(
+              (msg) =>
+                msg.speaker === 'tool' &&
+                msg.blocks.some(
+                  (b) =>
+                    b.type === 'tool_response' &&
+                    (b as ToolResponseBlock).callId === toolCall.id,
+                ),
+            );
+          });
+
+          if (!hasMatchingResponses) {
+            // Include the AI message with unmatched calls in the compression
+            return index - 1;
+          }
+        }
+      }
+    }
+
+    return index;
+  }
+
+  /**
+   * Direct API call for compression, bypassing normal message flow
+   */
+  private async directCompressionCall(
+    historyToCompress: IContent[],
+    _prompt_id: string,
+  ): Promise<string> {
+    const provider = this.getActiveProvider();
+    if (!provider || !this.providerSupportsIContent(provider)) {
+      throw new Error('Provider does not support compression');
+    }
+
+    // Build compression request with system prompt and user history
+    const compressionRequest: IContent[] = [
+      // Add system instruction as the first message
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: getCompressionPrompt(),
+          },
+        ],
+      },
+      // Add the history to compress
+      ...historyToCompress,
+      // Add the trigger instruction
+      {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'text',
+            text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+          },
+        ],
+      },
+    ];
+
+    // Direct provider call without tools for compression
+    const stream = provider.generateChatCompletionIContent!(
+      compressionRequest,
+      undefined, // no tools for compression
+    );
+
+    // Collect response
+    let summary = '';
+    for await (const chunk of stream) {
+      if (chunk.blocks) {
+        for (const block of chunk.blocks) {
+          if (block.type === 'text') {
+            summary += block.text;
+          }
+        }
+      }
+    }
+
+    return summary;
+  }
+
+  /**
+   * Apply compression results to history
+   */
+  private applyCompression(summary: string, toKeep: IContent[]): void {
+    // Clear and rebuild history atomically
+    this.historyService.clear();
+
+    const currentModel = this.config.getModel();
+
+    // Add compressed summary as user message
+    this.historyService.add(
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: summary }],
+      },
+      currentModel,
+    );
+
+    // Add acknowledgment from AI
+    this.historyService.add(
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: 'Got it. Thanks for the additional context!',
+          },
+        ],
+      },
+      currentModel,
+    );
+
+    // Add back the kept messages
+    for (const content of toKeep) {
+      this.historyService.add(content, currentModel);
+    }
+  }
+
   getFinalUsageMetadata(
     chunks: GenerateContentResponse[],
   ): GenerateContentResponseUsageMetadata | undefined {
@@ -970,7 +1271,7 @@ export class GeminiChat {
 
   private async *processStreamResponse(
     streamResponse: AsyncGenerator<GenerateContentResponse>,
-    userInput: Content,
+    userInput: Content | Content[],
   ): AsyncGenerator<GenerateContentResponse> {
     const modelResponseParts: Part[] = [];
     let hasReceivedValidContent = false;
@@ -1039,7 +1340,7 @@ export class GeminiChat {
   }
 
   private recordHistory(
-    userInput: Content,
+    userInput: Content | Content[],
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
   ) {
@@ -1055,19 +1356,28 @@ export class GeminiChat {
         newHistoryEntries.push(ContentConverters.toIContent(content));
       }
     } else {
-      // Guard for streaming calls where the user input might already be in the history.
-      const allHistory = this.historyService.getAll();
-      const lastEntry = allHistory[allHistory.length - 1];
-      const userIContent = ContentConverters.toIContent(userInput);
+      // Handle both single Content and Content[] (for paired tool call/response)
+      const idGen = this.historyService.getIdGeneratorCallback();
+      const matcher = this.makePositionMatcher();
 
-      // Check if user input is already in history
-      const isAlreadyInHistory =
-        lastEntry &&
-        lastEntry.speaker === userIContent.speaker &&
-        JSON.stringify(lastEntry.blocks) ===
-          JSON.stringify(userIContent.blocks);
-
-      if (!isAlreadyInHistory) {
+      if (Array.isArray(userInput)) {
+        // This is a paired tool call/response from the executor
+        // Add each part to history
+        for (const content of userInput) {
+          const userIContent = ContentConverters.toIContent(
+            content,
+            idGen,
+            matcher,
+          );
+          newHistoryEntries.push(userIContent);
+        }
+      } else {
+        // Normal user message
+        const userIContent = ContentConverters.toIContent(
+          userInput,
+          idGen,
+          matcher,
+        );
         newHistoryEntries.push(userIContent);
       }
     }
@@ -1082,6 +1392,7 @@ export class GeminiChat {
       outputContents = nonThoughtModelOutput;
     } else if (
       modelOutput.length === 0 &&
+      !Array.isArray(userInput) &&
       !isFunctionResponse(userInput) &&
       !automaticFunctionCallingHistory
     ) {
@@ -1112,10 +1423,21 @@ export class GeminiChat {
       this.historyService.add(entry, currentModel);
     }
     for (const content of consolidatedOutputContents) {
-      this.historyService.add(
-        ContentConverters.toIContent(content),
-        currentModel,
+      // Check if this contains tool calls
+      const hasToolCalls = content.parts?.some(
+        (part) => part && typeof part === 'object' && 'functionCall' in part,
       );
+
+      if (!hasToolCalls) {
+        // Only add non-tool-call responses to history immediately
+        // Tool calls will be added when the executor returns with the response
+        this.historyService.add(
+          ContentConverters.toIContent(content),
+          currentModel,
+        );
+      }
+      // Tool calls are NOT added here - they'll come back from the executor
+      // along with their responses and be added together
     }
   }
 
@@ -1280,7 +1602,7 @@ export class GeminiChat {
     // Check for potentially problematic cyclic tools with cyclic schemas
     // and include a recommendation to remove potentially problematic tools.
     if (isStructuredError(error) && isSchemaDepthError(error.message)) {
-      const tools = (await this.config.getToolRegistry()).getAllTools();
+      const tools = this.config.getToolRegistry().getAllTools();
       const cyclicSchemaTools: string[] = [];
       for (const tool of tools) {
         if (
@@ -1453,11 +1775,12 @@ export class GeminiChat {
     } as GenerateContentResponse;
 
     // Add data property that returns self-reference
+    // Make it non-enumerable to avoid circular reference in JSON.stringify
     Object.defineProperty(response, 'data', {
       get() {
         return response;
       },
-      enumerable: true,
+      enumerable: false, // Changed from true to false
       configurable: true,
     });
 

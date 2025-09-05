@@ -73,6 +73,8 @@ describe('GeminiChat - Behavioral Tests for HistoryService Migration', () => {
       getProxy: vi.fn(),
       getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
       getToolRegistry: vi.fn().mockResolvedValue(mockToolRegistry),
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
+      getProviderManager: vi.fn().mockReturnValue(undefined),
       flashFallbackHandler: undefined,
     } as unknown as Config;
 

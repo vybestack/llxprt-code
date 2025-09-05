@@ -991,6 +991,12 @@ export class OpenAIProvider extends BaseProvider {
       }
     }
 
+    // Debug log the converted messages
+    this.logger.debug(
+      () =>
+        `Converted messages for OpenAI API: ${JSON.stringify(apiMessages, null, 2)}`,
+    );
+
     // Convert Gemini format tools to OpenAI format
     // Handle both legacy 'parameters' and new 'parametersJsonSchema' formats
     const apiTools = tools

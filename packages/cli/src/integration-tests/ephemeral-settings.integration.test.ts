@@ -92,29 +92,12 @@ describe('Ephemeral Settings Integration Tests', () => {
       config.setEphemeralSetting('compression-threshold', 0.6);
 
       // Get the GeminiClient from config
-      const geminiClient = config.getGeminiClient();
+      // Verify compression settings are stored in ephemeral settings
+      // (actual compression happens internally in geminiChat when needed)
+      expect(config.getEphemeralSetting('compression-threshold')).toBe(0.6);
+      expect(config.getEphemeralSetting('context-limit')).toBe(100000);
 
-      // Apply compression settings
-      geminiClient.setCompressionSettings(
-        config.getEphemeralSetting('compression-threshold') as number,
-        config.getEphemeralSetting('context-limit') as number,
-      );
-
-      // Verify the client received the compression settings
-      // Note: We can't directly access private properties, but we can verify
-      // that the settings were accepted without error
-      expect(() => {
-        geminiClient.setCompressionSettings(0.6, 100000);
-      }).not.toThrow();
-
-      // Test invalid compression threshold values
-      expect(() => {
-        geminiClient.setCompressionSettings(-0.1, 100000);
-      }).not.toThrow(); // Should be ignored
-
-      expect(() => {
-        geminiClient.setCompressionSettings(1.5, 100000);
-      }).not.toThrow(); // Should be ignored
+      // Compression validation now happens in geminiChat when it reads the settings
     });
   });
 

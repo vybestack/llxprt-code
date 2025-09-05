@@ -71,6 +71,7 @@ describe('GeminiChat IContent Integration', () => {
       setQuotaErrorOccurred: vi.fn(),
       setFallbackMode: vi.fn(),
       setModel: vi.fn(),
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
     } as unknown as Config;
 
     mockContentGenerator = {
