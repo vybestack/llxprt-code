@@ -9,6 +9,7 @@ import { OpenAIProvider } from './OpenAIProvider.js';
 import { IContent } from '../../services/history/IContent.js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 const skipTests = !OPENAI_API_KEY;
 
 describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
@@ -16,10 +17,12 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
 
   beforeAll(() => {
     if (!OPENAI_API_KEY) {
-      console.log('Skipping OpenAI integration tests: ~/.openai_key not found');
+      console.log(
+        'Skipping OpenAI integration tests: OPENAI_API_KEY not found',
+      );
       return;
     }
-    provider = new OpenAIProvider(OPENAI_API_KEY);
+    provider = new OpenAIProvider(OPENAI_API_KEY, OPENAI_BASE_URL);
   });
 
   it('should fetch real models from OpenAI API', async () => {
