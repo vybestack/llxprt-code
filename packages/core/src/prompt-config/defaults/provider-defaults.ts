@@ -7,6 +7,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
+import { DebugLogger } from '../../debug/index.js';
 
 // In bundled environment, use global __dirname if available
 const __dirname =
@@ -26,25 +27,34 @@ function loadMarkdownFile(filename: string): string {
   }
 
   if (debugLog) {
-    console.log(`\n[PROMPT_LOADER] ========== Loading ${filename} ==========`);
-    console.log(`[PROMPT_LOADER] __dirname: ${__dirname}`);
-    console.log(
-      `[PROMPT_LOADER] process.cwd(): ${typeof process !== 'undefined' ? process.cwd() : 'N/A'}`,
+    const logger = new DebugLogger('llxprt:prompt:loader:provider');
+    logger.debug(
+      () => `\n[PROMPT_LOADER] ========== Loading ${filename} ==========`,
     );
-    console.log(
-      `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv?.[0] : 'N/A'}`,
+    logger.debug(() => `[PROMPT_LOADER] __dirname: ${__dirname}`);
+    logger.debug(
+      () =>
+        `[PROMPT_LOADER] process.cwd(): ${typeof process !== 'undefined' ? process.cwd() : 'N/A'}`,
     );
-    console.log(
-      `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv?.[1] : 'N/A'}`,
+    logger.debug(
+      () =>
+        `[PROMPT_LOADER] process.argv[0]: ${typeof process !== 'undefined' ? process.argv?.[0] : 'N/A'}`,
     );
-    console.log(
-      `[PROMPT_LOADER] process.platform: ${typeof process !== 'undefined' ? process.platform : 'N/A'}`,
+    logger.debug(
+      () =>
+        `[PROMPT_LOADER] process.argv[1]: ${typeof process !== 'undefined' ? process.argv?.[1] : 'N/A'}`,
     );
-    console.log(
-      `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'}`,
+    logger.debug(
+      () =>
+        `[PROMPT_LOADER] process.platform: ${typeof process !== 'undefined' ? process.platform : 'N/A'}`,
     );
-    console.log(
-      `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
+    logger.debug(
+      () =>
+        `[PROMPT_LOADER] NODE_ENV: ${typeof process !== 'undefined' ? process.env?.NODE_ENV : 'N/A'}`,
+    );
+    logger.debug(
+      () =>
+        `[PROMPT_LOADER] CI: ${typeof process !== 'undefined' ? process.env?.CI : 'N/A'}`,
     );
   }
 
@@ -53,24 +63,30 @@ function loadMarkdownFile(filename: string): string {
     // This fixes the Windows CI issue where __dirname is already bundle
     const currentDir = resolve(__dirname);
     if (debugLog) {
-      console.log(`[PROMPT_LOADER] currentDir: ${currentDir}`);
-      console.log(
-        `[PROMPT_LOADER] basename(currentDir): ${basename(currentDir)}`,
+      const logger = new DebugLogger('llxprt:prompt:loader:provider');
+      logger.debug(() => `[PROMPT_LOADER] currentDir: ${currentDir}`);
+      logger.debug(
+        () => `[PROMPT_LOADER] basename(currentDir): ${basename(currentDir)}`,
       );
     }
 
     if (basename(currentDir) === 'bundle') {
       const directPath = join(currentDir, filename);
       if (debugLog) {
-        console.log(
-          `[PROMPT_LOADER] In bundle dir, checking directPath: ${directPath}`,
+        const logger = new DebugLogger('llxprt:prompt:loader:provider');
+        logger.debug(
+          () =>
+            `[PROMPT_LOADER] In bundle dir, checking directPath: ${directPath}`,
         );
-        console.log(
-          `[PROMPT_LOADER] directPath exists: ${existsSync(directPath)}`,
+        logger.debug(
+          () => `[PROMPT_LOADER] directPath exists: ${existsSync(directPath)}`,
         );
       }
       if (existsSync(directPath)) {
-        if (debugLog) console.log(`[PROMPT_LOADER] Found at directPath`);
+        if (debugLog) {
+          const logger = new DebugLogger('llxprt:prompt:loader:provider');
+          logger.debug(() => `[PROMPT_LOADER] Found at directPath`);
+        }
         return readFileSync(directPath, 'utf-8');
       }
     }
@@ -78,13 +94,17 @@ function loadMarkdownFile(filename: string): string {
     // Then try the normal path (works in development and non-bundled builds)
     const normalPath = join(__dirname, filename);
     if (debugLog) {
-      console.log(`[PROMPT_LOADER] Checking normalPath: ${normalPath}`);
-      console.log(
-        `[PROMPT_LOADER] normalPath exists: ${existsSync(normalPath)}`,
+      const logger = new DebugLogger('llxprt:prompt:loader:provider');
+      logger.debug(() => `[PROMPT_LOADER] Checking normalPath: ${normalPath}`);
+      logger.debug(
+        () => `[PROMPT_LOADER] normalPath exists: ${existsSync(normalPath)}`,
       );
     }
     if (existsSync(normalPath)) {
-      if (debugLog) console.log(`[PROMPT_LOADER] Found at normalPath`);
+      if (debugLog) {
+        const logger = new DebugLogger('llxprt:prompt:loader:provider');
+        logger.debug(() => `[PROMPT_LOADER] Found at normalPath`);
+      }
       return readFileSync(normalPath, 'utf-8');
     }
 
@@ -147,7 +167,8 @@ function loadMarkdownFile(filename: string): string {
     ].filter((p) => p && p !== '');
 
     if (debugLog) {
-      console.log(`[PROMPT_LOADER] Searching in paths:`, searchPaths);
+      const logger = new DebugLogger('llxprt:prompt:loader:provider');
+      logger.debug(() => `[PROMPT_LOADER] Searching in paths:`, searchPaths);
 
       // List files in key directories to debug CI issue
       const checkDirs = [
@@ -164,10 +185,11 @@ function loadMarkdownFile(filename: string): string {
               f === 'providers' ||
               f === 'env',
           );
-          console.log(`[PROMPT_LOADER] Files in ${dir}:`, files);
+          logger.debug(() => `[PROMPT_LOADER] Files in ${dir}:`, files);
         } catch (e) {
-          console.log(
-            `[PROMPT_LOADER] Could not list ${dir}: ${e instanceof Error ? e.message : String(e)}`,
+          logger.debug(
+            () =>
+              `[PROMPT_LOADER] Could not list ${dir}: ${e instanceof Error ? e.message : String(e)}`,
           );
         }
       }
@@ -177,14 +199,20 @@ function loadMarkdownFile(filename: string): string {
       // Try direct path
       const directTry = join(base, filename);
       if (existsSync(directTry)) {
-        if (debugLog) console.log(`[PROMPT_LOADER] Found at: ${directTry}`);
+        if (debugLog) {
+          const logger = new DebugLogger('llxprt:prompt:loader:provider');
+          logger.debug(() => `[PROMPT_LOADER] Found at: ${directTry}`);
+        }
         return readFileSync(directTry, 'utf-8');
       }
 
       // Try with bundle subdirectory
       const bundleTry = join(base, 'bundle', filename);
       if (existsSync(bundleTry)) {
-        if (debugLog) console.log(`[PROMPT_LOADER] Found at: ${bundleTry}`);
+        if (debugLog) {
+          const logger = new DebugLogger('llxprt:prompt:loader:provider');
+          logger.debug(() => `[PROMPT_LOADER] Found at: ${bundleTry}`);
+        }
         return readFileSync(bundleTry, 'utf-8');
       }
 
@@ -192,7 +220,10 @@ function loadMarkdownFile(filename: string): string {
       if (basename(base) === 'bundle') {
         const inBundleTry = join(base, filename);
         if (existsSync(inBundleTry)) {
-          if (debugLog) console.log(`[PROMPT_LOADER] Found at: ${inBundleTry}`);
+          if (debugLog) {
+            const logger = new DebugLogger('llxprt:prompt:loader:provider');
+            logger.debug(() => `[PROMPT_LOADER] Found at: ${inBundleTry}`);
+          }
           return readFileSync(inBundleTry, 'utf-8');
         }
       }

@@ -693,38 +693,35 @@ export class GeminiChat {
     params: SendMessageParameters,
     prompt_id: string,
   ): Promise<AsyncGenerator<GenerateContentResponse>> {
-    if (process.env.DEBUG) {
-      console.log('DEBUG [geminiChat]: ===== SEND MESSAGE STREAM START =====');
-      console.log(
-        'DEBUG [geminiChat]: Model from config:',
-        this.config.getModel(),
-      );
-      console.log(
-        'DEBUG [geminiChat]: Params:',
-        JSON.stringify(params, null, 2),
-      );
-      console.log('DEBUG [geminiChat]: Message type:', typeof params.message);
-      console.log(
-        'DEBUG [geminiChat]: Message content:',
-        JSON.stringify(params.message, null, 2),
-      );
-    }
-
-    if (process.env.DEBUG) {
-      console.log('DEBUG: GeminiChat.sendMessageStream called');
-      console.log(
-        'DEBUG: GeminiChat.sendMessageStream params:',
-        JSON.stringify(params, null, 2),
-      );
-      console.log(
-        'DEBUG: GeminiChat.sendMessageStream params.message type:',
-        typeof params.message,
-      );
-      console.log(
-        'DEBUG: GeminiChat.sendMessageStream params.message:',
-        JSON.stringify(params.message, null, 2),
-      );
-    }
+    this.logger.debug(
+      () => 'DEBUG [geminiChat]: ===== SEND MESSAGE STREAM START =====',
+    );
+    this.logger.debug(
+      () => `DEBUG [geminiChat]: Model from config: ${this.config.getModel()}`,
+    );
+    this.logger.debug(
+      () => `DEBUG [geminiChat]: Params: ${JSON.stringify(params, null, 2)}`,
+    );
+    this.logger.debug(
+      () => `DEBUG [geminiChat]: Message type: ${typeof params.message}`,
+    );
+    this.logger.debug(
+      () =>
+        `DEBUG [geminiChat]: Message content: ${JSON.stringify(params.message, null, 2)}`,
+    );
+    this.logger.debug(() => 'DEBUG: GeminiChat.sendMessageStream called');
+    this.logger.debug(
+      () =>
+        `DEBUG: GeminiChat.sendMessageStream params: ${JSON.stringify(params, null, 2)}`,
+    );
+    this.logger.debug(
+      () =>
+        `DEBUG: GeminiChat.sendMessageStream params.message type: ${typeof params.message}`,
+    );
+    this.logger.debug(
+      () =>
+        `DEBUG: GeminiChat.sendMessageStream params.message: ${JSON.stringify(params.message, null, 2)}`,
+    );
     await this.sendPromise;
 
     // Check compression - first check if already compressing, then check if needed
@@ -897,12 +894,10 @@ export class GeminiChat {
       }
 
       // DEBUG: Check for malformed entries
-      if (process.env.DEBUG) {
-        console.log(
-          '[DEBUG] geminiChat IContent request (history + new message):',
-          JSON.stringify(requestContents, null, 2),
-        );
-      }
+      this.logger.debug(
+        () =>
+          `[DEBUG] geminiChat IContent request (history + new message): ${JSON.stringify(requestContents, null, 2)}`,
+      );
 
       // Get tools in the format the provider expects
       const tools = this.generationConfig.tools;

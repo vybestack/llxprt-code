@@ -23,6 +23,7 @@ import { getCoreSystemPromptAsync } from './prompts.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
+import { DebugLogger } from '../debug/index.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
 import { retryWithBackoff } from '../utils/retry.js';
@@ -353,9 +354,10 @@ export class GeminiClient {
     try {
       const userMemory = this.config.getUserMemory();
       const model = this.config.getModel();
-      if (process.env.DEBUG) {
-        console.log('DEBUG [client.startChat]: Model from config:', model);
-      }
+      const logger = new DebugLogger('llxprt:client:start');
+      logger.debug(
+        () => `DEBUG [client.startChat]: Model from config: ${model}`,
+      );
       let systemInstruction = await getCoreSystemPromptAsync(userMemory, model);
 
       // Add environment context to system instruction
@@ -365,14 +367,13 @@ export class GeminiClient {
       if (envContextText) {
         systemInstruction = `${envContextText}\n\n${systemInstruction}`;
       }
-      if (process.env.DEBUG) {
-        console.log(
-          'DEBUG [client.startChat]: System instruction includes Flash instructions:',
-          systemInstruction.includes(
+
+      logger.debug(
+        () =>
+          `DEBUG [client.startChat]: System instruction includes Flash instructions: ${systemInstruction.includes(
             'IMPORTANT: You MUST use the provided tools',
-          ),
-        );
-      }
+          )}`,
+      );
 
       const generateContentConfigWithThinking = isThinkingSupported(
         this.config.getModel(),
@@ -581,21 +582,20 @@ export class GeminiClient {
     turns: number = this.MAX_TURNS,
     originalModel?: string,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
-    if (process.env.DEBUG) {
-      console.log('DEBUG: GeminiClient.sendMessageStream called');
-      console.log(
-        'DEBUG: GeminiClient.sendMessageStream request:',
-        JSON.stringify(request, null, 2),
-      );
-      console.log(
-        'DEBUG: GeminiClient.sendMessageStream typeof request:',
-        typeof request,
-      );
-      console.log(
-        'DEBUG: GeminiClient.sendMessageStream Array.isArray(request):',
-        Array.isArray(request),
-      );
-    }
+    const logger = new DebugLogger('llxprt:client:stream');
+    logger.debug(() => 'DEBUG: GeminiClient.sendMessageStream called');
+    logger.debug(
+      () =>
+        `DEBUG: GeminiClient.sendMessageStream request: ${JSON.stringify(request, null, 2)}`,
+    );
+    logger.debug(
+      () =>
+        `DEBUG: GeminiClient.sendMessageStream typeof request: ${typeof request}`,
+    );
+    logger.debug(
+      () =>
+        `DEBUG: GeminiClient.sendMessageStream Array.isArray(request): ${Array.isArray(request)}`,
+    );
     await this.lazyInitialize();
 
     // Ensure chat is initialized after lazyInitialize
