@@ -811,13 +811,13 @@ describe('Settings Loading and Merging', () => {
       });
     });
 
-    it('should ignore folderTrust from workspace settings', () => {
+    it('should use folderTrust from workspace settings when trusted', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         folderTrust: true,
       };
       const workspaceSettingsContent = {
-        folderTrust: false, // This should be ignored
+        folderTrust: false, // Workspace value should override when trusted
       };
       const systemSettingsContent = {
         // No folderTrust here
@@ -836,7 +836,7 @@ describe('Settings Loading and Merging', () => {
       );
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
-      expect(settings.merged.folderTrust).toBe(true); // User setting should be used
+      expect(settings.merged.folderTrust).toBe(false); // Workspace setting should be used
     });
 
     it('should use system folderTrust over user setting', () => {

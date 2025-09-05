@@ -182,10 +182,6 @@ function mergeSettings(
 ): Settings {
   const safeWorkspace = isTrusted ? workspace : ({} as Settings);
 
-  // folderTrust is not supported at workspace level.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { folderTrust, ...safeWorkspaceWithoutFolderTrust } = safeWorkspace;
-
   // Get defaults from schema
   const schemaDefaults = getSchemaDefaults();
 
@@ -203,7 +199,7 @@ function mergeSettings(
     ...schemaDefaults,
     ...systemDefaults,
     ...user,
-    ...safeWorkspaceWithoutFolderTrust,
+    ...safeWorkspace,
     ...system,
     customThemes: {
       ...(systemDefaults.customThemes || {}),
