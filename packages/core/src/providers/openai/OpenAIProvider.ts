@@ -100,7 +100,7 @@ export class OpenAIProvider extends BaseProvider {
       () =>
         `Constructor - baseURL: ${baseURL}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, oauthManager: ${!!oauthManager}, shouldEnableQwenOAuth: ${shouldEnableQwenOAuth}`,
     );
-    this.baseURL = baseURL;
+    this.baseURL = baseURL || 'https://api.openai.com/v1';
     this.providerConfig = config;
     this.toolFormatter = new ToolFormatter();
 
@@ -403,8 +403,9 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   override setBaseUrl(baseUrl?: string): void {
-    // If no baseUrl is provided, clear to default (undefined)
-    this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+    // If no baseUrl is provided, use default OpenAI URL
+    this.baseURL =
+      baseUrl && baseUrl.trim() !== '' ? baseUrl : 'https://api.openai.com/v1';
 
     // Persist to SettingsService if available
     this.setBaseUrlInSettings(this.baseURL).catch((error) => {
@@ -801,7 +802,7 @@ export class OpenAIProvider extends BaseProvider {
       // Load saved base URL if available
       const savedBaseUrl = await this.getBaseUrlFromSettings();
       if (savedBaseUrl !== undefined) {
-        this.baseURL = savedBaseUrl;
+        this.baseURL = savedBaseUrl || 'https://api.openai.com/v1';
       }
 
       // Load saved model parameters if available
