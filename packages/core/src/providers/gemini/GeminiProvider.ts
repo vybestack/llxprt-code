@@ -681,10 +681,7 @@ export class GeminiProvider extends BaseProvider {
             }
 
             // For OAuth, use the code assist content generator
-            this.logger.debug(
-              () =>
-                `invokeServerTool: calling createCodeAssistContentGenerator`,
-            );
+            // Note: Detailed logging is now handled by DebugLogger in codeAssist.ts with namespace llxprt:code:assist
             const oauthContentGenerator =
               await createCodeAssistContentGenerator(
                 httpOptions,

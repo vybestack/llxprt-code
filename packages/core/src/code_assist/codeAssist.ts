@@ -9,6 +9,7 @@ import { getOauthClient } from './oauth2.js';
 import { setupUser } from './setup.js';
 import { CodeAssistServer, HttpOptions } from './server.js';
 import { Config } from '../config/config.js';
+import { DebugLogger } from '../debug/index.js';
 
 export async function createCodeAssistContentGenerator(
   httpOptions: HttpOptions,
@@ -17,8 +18,11 @@ export async function createCodeAssistContentGenerator(
   baseURL?: string, // Add baseURL parameter
   _sessionId?: string, // PRIVACY FIX: parameter kept for backward compatibility but not used
 ): Promise<ContentGenerator> {
-  console.log(
-    `createCodeAssistContentGenerator: authType=${authType}, config=${!!config}, baseURL=${baseURL}`,
+  const logger = new DebugLogger('llxprt:code:assist');
+
+  logger.debug(
+    () =>
+      `createCodeAssistContentGenerator: authType=${authType}, config=${!!config}, baseURL=${baseURL}`,
   );
 
   if (
@@ -26,16 +30,19 @@ export async function createCodeAssistContentGenerator(
     authType === AuthType.CLOUD_SHELL
   ) {
     try {
-      console.log(
-        `createCodeAssistContentGenerator: calling getOauthClient for authType ${authType}`,
+      logger.debug(
+        () =>
+          `createCodeAssistContentGenerator: calling getOauthClient for authType ${authType}`,
       );
       const authClient = await getOauthClient(authType, config);
-      console.log(
-        `createCodeAssistContentGenerator: OAuth client created, calling setupUser`,
+      logger.debug(
+        () =>
+          `createCodeAssistContentGenerator: OAuth client created, calling setupUser`,
       );
       const userData = await setupUser(authClient);
-      console.log(
-        `createCodeAssistContentGenerator: setupUser completed, projectId=${userData.projectId}, userTier=${userData.userTier}`,
+      logger.debug(
+        () =>
+          `createCodeAssistContentGenerator: setupUser completed, projectId=${userData.projectId}, userTier=${userData.userTier}`,
       );
       return new CodeAssistServer(
         authClient,
@@ -47,10 +54,13 @@ export async function createCodeAssistContentGenerator(
         baseURL, // Pass baseURL to constructor
       );
     } catch (error) {
-      console.log(
-        `createCodeAssistContentGenerator: ERROR during OAuth setup: ${error}`,
+      logger.debug(
+        () =>
+          `createCodeAssistContentGenerator: ERROR during OAuth setup: ${error}`,
       );
-      console.log(`createCodeAssistContentGenerator: Error details:`, error);
+      logger.debug(
+        () => `createCodeAssistContentGenerator: Error details: ${error}`,
+      );
       throw error;
     }
   }
