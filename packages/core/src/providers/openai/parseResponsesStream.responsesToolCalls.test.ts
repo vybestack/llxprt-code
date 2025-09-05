@@ -226,9 +226,9 @@ describe('parseResponsesStream - Responses API Tool Calls', () => {
     ).toBe(true);
     const usageMessage = messages.find((m) => m.metadata?.usage);
     expect(usageMessage?.metadata?.usage).toEqual({
-      prompt_tokens: 62,
-      completion_tokens: 23,
-      total_tokens: 85,
+      promptTokens: 62,
+      completionTokens: 23,
+      totalTokens: 85,
     });
   });
 

@@ -523,17 +523,7 @@ export class OpenAIProvider extends BaseProvider {
       }>;
     }>,
   ): AsyncIterableIterator<IContent> {
-    // Decide whether to use legacy API or Responses API
-    const shouldUseLegacyAPI =
-      this.currentModel === 'gpt-3.5-turbo' ||
-      process.env.OPENAI_RESPONSES_DISABLE === 'true';
-
-    if (shouldUseLegacyAPI) {
-      yield* this.generateChatCompletionLegacy(content, tools);
-      return;
-    }
-
-    // Use Responses API - convert IContent directly to OpenAI API format (no IMessage!)
+    // Convert IContent directly to OpenAI API format (no IMessage!)
     const apiMessages: Array<{
       role: string;
       content: string | null;
@@ -624,10 +614,7 @@ export class OpenAIProvider extends BaseProvider {
             function: {
               name: decl.name,
               description: decl.description || '',
-              parameters: (toolParameters as Record<string, unknown>) || {
-                type: 'object',
-                properties: {},
-              },
+              parameters: toolParameters || {},
             },
           };
         })
@@ -800,177 +787,6 @@ export class OpenAIProvider extends BaseProvider {
       }
     }
   }
-
-  /**
-   * Generate chat completion using legacy OpenAI SDK
-   */
-  private async *generateChatCompletionLegacy(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
-  ): AsyncIterableIterator<IContent> {
-    // Convert IContent to OpenAI SDK message format
-    const messages: Array<
-      | { role: 'user'; content: string }
-      | {
-          role: 'assistant';
-          content: string;
-          tool_calls?: Array<{
-            id: string;
-            type: 'function';
-            function: { name: string; arguments: string };
-          }>;
-        }
-      | { role: 'tool'; content: string; tool_call_id: string }
-    > = [];
-
-    for (const c of content) {
-      if (c.speaker === 'human') {
-        const textBlock = c.blocks.find((b) => b.type === 'text') as
-          | TextBlock
-          | undefined;
-        messages.push({
-          role: 'user',
-          content: textBlock?.text || '',
-        });
-      } else if (c.speaker === 'ai') {
-        const textBlocks = c.blocks.filter(
-          (b) => b.type === 'text',
-        ) as TextBlock[];
-        const toolCallBlocks = c.blocks.filter(
-          (b) => b.type === 'tool_call',
-        ) as ToolCallBlock[];
-
-        const contentText = textBlocks.map((b) => b.text).join('');
-        const toolCalls =
-          toolCallBlocks.length > 0
-            ? toolCallBlocks.map((tc) => ({
-                id: tc.id,
-                type: 'function' as const,
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.parameters),
-                },
-              }))
-            : undefined;
-
-        messages.push({
-          role: 'assistant',
-          content: contentText || '',
-          ...(toolCalls && { tool_calls: toolCalls }),
-        });
-      } else if (c.speaker === 'tool') {
-        const toolResponseBlocks = c.blocks.filter(
-          (b) => b.type === 'tool_response',
-        ) as ToolResponseBlock[];
-
-        for (const trb of toolResponseBlocks) {
-          messages.push({
-            role: 'tool',
-            content:
-              typeof trb.result === 'string'
-                ? trb.result
-                : JSON.stringify(trb.result),
-            tool_call_id: trb.callId,
-          });
-        }
-      }
-    }
-
-    // Convert tools to OpenAI format
-    const apiTools = tools
-      ? tools[0].functionDeclarations.map((decl) => {
-          const toolParameters =
-            'parametersJsonSchema' in decl
-              ? (decl as { parametersJsonSchema?: unknown })
-                  .parametersJsonSchema
-              : decl.parameters;
-
-          return {
-            type: 'function' as const,
-            function: {
-              name: decl.name,
-              description: decl.description || '',
-              parameters: (toolParameters as Record<string, unknown>) || {
-                type: 'object',
-                properties: {},
-              },
-            },
-          };
-        })
-      : undefined;
-
-    // Use OpenAI SDK
-    const stream = await this.openai.chat.completions.create({
-      model: this.currentModel || 'gpt-3.5-turbo',
-      messages,
-      ...(apiTools && { tools: apiTools, tool_choice: 'auto' }),
-      stream: true,
-      ...(this.modelParams || {}),
-    });
-
-    // Convert OpenAI SDK response to IContent format
-    const accumulatedToolCalls: Array<{
-      id: string;
-      name: string;
-      arguments: string;
-    }> = [];
-
-    for await (const chunk of stream) {
-      if (chunk.choices?.[0]?.delta?.content) {
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: chunk.choices[0].delta.content }],
-        };
-      }
-
-      if (chunk.choices?.[0]?.delta?.tool_calls) {
-        // Handle tool calls (this is complex, but for the test we just need basic support)
-        for (const toolCall of chunk.choices[0].delta.tool_calls) {
-          if (toolCall.id && toolCall.function?.name) {
-            accumulatedToolCalls.push({
-              id: toolCall.id,
-              name: toolCall.function.name,
-              arguments: toolCall.function.arguments || '',
-            });
-          }
-        }
-      }
-
-      if (chunk.usage) {
-        yield {
-          speaker: 'ai',
-          blocks: [],
-          metadata: {
-            usage: {
-              promptTokens: chunk.usage.prompt_tokens,
-              completionTokens: chunk.usage.completion_tokens,
-              totalTokens: chunk.usage.total_tokens,
-            },
-          },
-        };
-      }
-    }
-
-    // Yield any accumulated tool calls
-    if (accumulatedToolCalls.length > 0) {
-      yield {
-        speaker: 'ai',
-        blocks: accumulatedToolCalls.map((tc) => ({
-          type: 'tool_call',
-          id: tc.id,
-          name: tc.name,
-          parameters: JSON.parse(tc.arguments || '{}'),
-        })),
-      };
-    }
-  }
-
   /**
    * Initialize provider configuration from SettingsService
    */
