@@ -165,12 +165,25 @@ export class OpenAIProvider extends BaseProvider {
   private async updateClientWithResolvedAuth(): Promise<void> {
     const resolvedKey = await this.getAuthToken();
     if (!resolvedKey) {
-      // Provide specific error message based on endpoint validation
+      // Only require auth for official OpenAI endpoints or when OAuth is enabled
       const endpoint = this.baseURL || 'https://api.openai.com/v1';
       if (this.isOAuthEnabled() && !this.supportsOAuth()) {
         throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
       }
-      throw new Error('No authentication available for OpenAI API calls');
+      // For local/self-hosted endpoints, allow proceeding without auth
+      if (
+        endpoint.includes('api.openai.com') ||
+        endpoint.includes('openai.com')
+      ) {
+        throw new Error(
+          'OpenAI API key is required for official OpenAI endpoints',
+        );
+      }
+      // For other endpoints (local/self-hosted), use empty string as API key
+      this.logger.debug(
+        () =>
+          `No authentication provided, attempting to proceed with local/self-hosted endpoint: ${endpoint}`,
+      );
     }
 
     // Check if we're using Qwen OAuth and need to update the baseURL
@@ -268,7 +281,19 @@ export class OpenAIProvider extends BaseProvider {
       if (this.isOAuthEnabled() && !this.supportsOAuth()) {
         throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
       }
-      throw new Error('OpenAI API key is required to fetch models');
+      // For local/self-hosted endpoints, allow proceeding without auth
+      if (
+        endpoint.includes('api.openai.com') ||
+        endpoint.includes('openai.com')
+      ) {
+        throw new Error(
+          'OpenAI API key is required for official OpenAI endpoints',
+        );
+      }
+      this.logger.debug(
+        () =>
+          `No authentication provided, attempting to fetch models from local/self-hosted endpoint: ${endpoint}`,
+      );
     }
 
     try {
@@ -622,9 +647,24 @@ export class OpenAIProvider extends BaseProvider {
       : undefined;
 
     // Get auth token
-    const apiKey = await this.getAuthToken();
+    let apiKey = await this.getAuthToken();
     if (!apiKey) {
-      throw new Error('OpenAI API key is required');
+      const endpoint = this.baseURL || 'https://api.openai.com/v1';
+      // For local/self-hosted endpoints, allow proceeding without auth
+      if (
+        endpoint.includes('api.openai.com') ||
+        endpoint.includes('openai.com')
+      ) {
+        throw new Error(
+          'OpenAI API key is required for official OpenAI endpoints',
+        );
+      }
+      this.logger.debug(
+        () =>
+          `No authentication provided, attempting to proceed with local/self-hosted endpoint: ${endpoint}`,
+      );
+      // Use empty string as API key for local/self-hosted endpoints
+      apiKey = '';
     }
 
     // Build request
