@@ -18,6 +18,8 @@ import {
 } from '../auth/precedence.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 import { UnauthorizedError } from '../utils/errors.js';
+import { Config } from '../config/config.js';
+import { IProviderConfig } from './types/IProviderConfig.js';
 
 export interface BaseProviderConfig {
   // Basic provider config
@@ -42,13 +44,21 @@ export abstract class BaseProvider implements IProvider {
   readonly name: string;
   protected authResolver: AuthPrecedenceResolver;
   protected baseProviderConfig: BaseProviderConfig;
+  protected providerConfig?: IProviderConfig;
+  protected globalConfig?: Config;
   private cachedAuthToken?: string;
   private authCacheTimestamp?: number;
   private readonly AUTH_CACHE_DURATION = 60000; // 1 minute in milliseconds
 
-  constructor(config: BaseProviderConfig) {
+  constructor(
+    config: BaseProviderConfig,
+    providerConfig?: IProviderConfig,
+    globalConfig?: Config,
+  ) {
     this.name = config.name;
     this.baseProviderConfig = config;
+    this.providerConfig = providerConfig;
+    this.globalConfig = globalConfig;
 
     // If an initial apiKey is provided, store it in SettingsService
     if (config.apiKey) {
@@ -290,7 +300,9 @@ export abstract class BaseProvider implements IProvider {
   clearState?(): void {
     this.clearAuthCache();
   }
-  setConfig?(_config: unknown): void {}
+  setConfig?(config: IProviderConfig): void {
+    this.providerConfig = config;
+  }
   getServerTools(): string[] {
     return [];
   }

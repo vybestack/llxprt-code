@@ -111,7 +111,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
   constructor(
     apiKey: string | undefined,
     baseURL?: string,
-    _config?: IProviderConfig,
+    config?: IProviderConfig,
   ) {
     const baseConfig: BaseProviderConfig = {
       name: 'openai-responses',
@@ -123,7 +123,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
       oauthManager: undefined,
     };
 
-    super(baseConfig);
+    super(baseConfig, config);
 
     this.logger = new DebugLogger('llxprt:providers:openai-responses');
     this.logger.debug(
@@ -289,8 +289,10 @@ export class OpenAIResponsesProvider extends BaseProvider {
     super.setBaseUrl?.(baseUrl);
   }
 
-  override setConfig(_config: IProviderConfig): void {
-    // Config not used by this provider
+  override setConfig(config: IProviderConfig): void {
+    // Update the providerConfig reference but don't store it locally
+    // The parent class will manage it through the protected property
+    super.setConfig?.(config);
   }
 
   override setToolFormatOverride(format: ToolFormat | null): void {

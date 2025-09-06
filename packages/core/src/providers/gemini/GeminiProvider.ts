@@ -50,7 +50,6 @@ type GeminiAuthMode = 'oauth' | 'gemini-api-key' | 'vertex-ai' | 'none';
 export class GeminiProvider extends BaseProvider {
   private logger: DebugLogger;
   private authMode: GeminiAuthMode = 'none';
-  private geminiConfig?: Config;
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
   private baseURL?: string;
@@ -74,11 +73,9 @@ export class GeminiProvider extends BaseProvider {
       oauthManager, // Keep the manager for checking enablement
     };
 
-    super(baseConfig);
+    super(baseConfig, undefined, config);
 
     this.logger = new DebugLogger('llxprt:gemini:provider');
-    // Store Gemini-specific configuration
-    this.geminiConfig = config;
     this.baseURL = baseURL;
     this.geminiOAuthManager = oauthManager;
 
@@ -184,7 +181,7 @@ export class GeminiProvider extends BaseProvider {
       }
 
       // Handle case where no auth is available
-      const authType = this.geminiConfig?.getContentGeneratorConfig()?.authType;
+      const authType = this.globalConfig?.getContentGeneratorConfig()?.authType;
       if (authType === AuthType.USE_NONE) {
         this.authMode = 'none';
         throw new AuthenticationRequiredError(
@@ -265,8 +262,6 @@ export class GeminiProvider extends BaseProvider {
    * Sets the config instance for reading OAuth credentials
    */
   override setConfig(config: Config): void {
-    this.geminiConfig = config;
-
     // Sync with config model if user hasn't explicitly set a model
     // This ensures consistency between config and provider state
     const configModel = config.getModel();
@@ -461,8 +456,8 @@ export class GeminiProvider extends BaseProvider {
 
     // Always update config if available, not just in OAuth mode
     // This ensures the model is properly synchronized
-    if (this.geminiConfig) {
-      this.geminiConfig.setModel(modelId);
+    if (this.globalConfig) {
+      this.globalConfig.setModel(modelId);
     }
   }
 
@@ -502,6 +497,9 @@ export class GeminiProvider extends BaseProvider {
       this.currentModel = 'gemini-2.5-pro';
     }
     // Note: We don't clear config or apiKey as they might be needed
+
+    // Clear auth cache
+    this.clearAuthCache();
   }
 
   /**
@@ -545,7 +543,7 @@ export class GeminiProvider extends BaseProvider {
       );
       this.logger.debug(
         () =>
-          `invokeServerTool: geminiConfig is ${this.geminiConfig ? 'set' : 'null/undefined'}`,
+          `invokeServerTool: globalConfig is ${this.globalConfig ? 'set' : 'null/undefined'}`,
       );
       this.logger.debug(
         () => `invokeServerTool: current authMode is ${this.authMode}`,
@@ -660,13 +658,13 @@ export class GeminiProvider extends BaseProvider {
               () => `invokeServerTool: OAuth case - creating content generator`,
             );
 
-            // If geminiConfig is not set (e.g., when using non-Gemini provider),
+            // If globalConfig is not set (e.g., when using non-Gemini provider),
             // create a minimal config for OAuth
-            let configForOAuth = this.geminiConfig;
+            let configForOAuth = this.globalConfig;
             if (!configForOAuth) {
               this.logger.debug(
                 () =>
-                  `invokeServerTool: geminiConfig is null, creating minimal config for OAuth`,
+                  `invokeServerTool: globalConfig is null, creating minimal config for OAuth`,
               );
               // Use crypto for UUID generation
               const { randomUUID } = await import('crypto');
@@ -824,7 +822,7 @@ export class GeminiProvider extends BaseProvider {
           const oauthContentGenerator = await createCodeAssistContentGenerator(
             httpOptions,
             AuthType.LOGIN_WITH_GOOGLE,
-            this.geminiConfig!,
+            this.globalConfig!,
           );
 
           // For web fetch, always use gemini-2.5-flash regardless of the active model
@@ -974,7 +972,7 @@ export class GeminiProvider extends BaseProvider {
 
     if (this.authMode === 'oauth') {
       // OAuth mode
-      const configForOAuth = this.geminiConfig || {
+      const configForOAuth = this.globalConfig || {
         getProxy: () => undefined,
       };
 
@@ -985,8 +983,8 @@ export class GeminiProvider extends BaseProvider {
         this.baseURL,
       );
 
-      const userMemory = this.geminiConfig?.getUserMemory
-        ? this.geminiConfig.getUserMemory()
+      const userMemory = this.globalConfig?.getUserMemory
+        ? this.globalConfig.getUserMemory()
         : '';
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,
@@ -1018,8 +1016,8 @@ export class GeminiProvider extends BaseProvider {
       });
 
       const contentGenerator = genAI.models;
-      const userMemory = this.geminiConfig?.getUserMemory
-        ? this.geminiConfig.getUserMemory()
+      const userMemory = this.globalConfig?.getUserMemory
+        ? this.globalConfig.getUserMemory()
         : '';
       const systemInstruction = await getCoreSystemPromptAsync(
         userMemory,

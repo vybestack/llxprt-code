@@ -18,23 +18,16 @@
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
-import { DebugLogger } from '../../debug/index.js';
-import { IModel } from '../IModel.js';
-import { ITool } from '../ITool.js';
-import { ToolFormatter } from '../../tools/ToolFormatter.js';
-import { ToolFormat } from '../../tools/IToolFormatter.js';
+
 import OpenAI from 'openai';
-import { IProviderConfig } from '../types/IProviderConfig.js';
-import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
+import { IProvider, IContent, ITool } from '../../types/index.js';
+import { IProviderConfig, ToolFormat } from '../../config/types.js';
+import { BaseProvider } from '../base.js';
+import { DebugLogger } from '../../debug/index.js';
+import { OAuthManager, IOAuthEndpoints } from '../../oauth/index.js';
+import { ToolFormatter } from '../../tools/ToolFormatter.js';
+import { HistoryService } from '../../services/history/HistoryService.js';
 import {
-  isQwenEndpoint,
-  generateOAuthEndpointMismatchError,
-} from '../../config/endpoints.js';
-import { OAuthManager } from '../../auth/precedence.js';
-import { getSettingsService } from '../../settings/settingsServiceInstance.js';
-import { retryWithBackoff } from '../../utils/retry.js';
-import {
-  IContent,
   ToolCallBlock,
   ToolResponseBlock,
   TextBlock,
@@ -60,698 +53,114 @@ export class OpenAIProvider extends BaseProvider {
     oauthManager?: OAuthManager,
   ) {
     // Initialize base provider with auth configuration
-    // Check if we should enable OAuth for Qwen
-    // Check OAuth enablement from OAuth manager if available
-    let shouldEnableQwenOAuth = false;
-    if (oauthManager) {
-      // Check if OAuth is enabled for qwen in the OAuth manager (from settings)
-      const manager = oauthManager as OAuthManager & {
-        isOAuthEnabled?(provider: string): boolean;
-      };
-      if (
-        manager.isOAuthEnabled &&
-        typeof manager.isOAuthEnabled === 'function'
-      ) {
-        shouldEnableQwenOAuth = manager.isOAuthEnabled('qwen');
-      }
+    super('OPENAI', apiKey, oauthManager);
 
-      // Also enable if this looks like a Qwen endpoint
-      if (!shouldEnableQwenOAuth) {
-        shouldEnableQwenOAuth =
-          isQwenEndpoint(baseURL || '') ||
-          (!baseURL && (!apiKey || apiKey === '')) ||
-          baseURL === 'https://portal.qwen.ai/v1';
-      }
-    }
-
-    const baseConfig: BaseProviderConfig = {
-      name: 'openai',
-      apiKey,
-      baseURL,
-      envKeyNames: ['OPENAI_API_KEY'],
-      isOAuthEnabled: shouldEnableQwenOAuth,
-      oauthProvider: shouldEnableQwenOAuth ? 'qwen' : undefined,
-      oauthManager,
-    };
-
-    super(baseConfig);
-
-    this.logger = new DebugLogger('llxprt:providers:openai');
-    this.logger.debug(
-      () =>
-        `Constructor - baseURL: ${baseURL}, apiKey: ${apiKey?.substring(0, 10) || 'none'}, oauthManager: ${!!oauthManager}, shouldEnableQwenOAuth: ${shouldEnableQwenOAuth}`,
-    );
-    this.baseURL = baseURL || 'https://api.openai.com/v1';
+    this.baseURL = baseURL;
     this.providerConfig = config;
-    this.toolFormatter = new ToolFormatter();
-
-    // Initialize from SettingsService
-    this.initializeFromSettings().catch((error) => {
-      this.logger.debug(
-        () => `Failed to initialize from SettingsService: ${error}`,
-      );
-    });
-
-    // Set appropriate default model based on the provider
-    if (shouldEnableQwenOAuth || isQwenEndpoint(baseURL || '')) {
-      // Default to Qwen model when using Qwen endpoints
-      this.currentModel = 'qwen3-coder-plus';
-    } else if (process.env.LLXPRT_DEFAULT_MODEL) {
-      // Use environment variable if set
-      this.currentModel = process.env.LLXPRT_DEFAULT_MODEL;
-    }
-
-    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      apiKey: apiKey || 'placeholder', // OpenAI client requires a string, use placeholder if OAuth will be used
-      // Allow browser environment if explicitly configured
-      dangerouslyAllowBrowser: config?.allowBrowserEnvironment || false,
-    };
-    // Only include baseURL if it's defined
-    if (baseURL) {
-      clientOptions.baseURL = baseURL;
-    }
-    this.openai = new OpenAI(clientOptions);
-    this._cachedClientKey = apiKey; // Track the initial key used
-
-    // Cached client reserved for future optimization
-    void this._cachedClient;
-  }
-
-  /**
-   * Implementation of BaseProvider abstract method
-   * Determines if this provider supports OAuth authentication
-   */
-  protected supportsOAuth(): boolean {
-    // Only support Qwen OAuth for Qwen endpoints
-    // Use baseProviderConfig.baseURL if this.baseURL not set yet (during constructor)
-    const baseURL =
-      this.baseURL ||
-      this.baseProviderConfig.baseURL ||
-      'https://api.openai.com/v1';
-    return isQwenEndpoint(baseURL);
-  }
-
-  /**
-   * Helper method to determine if we're using Qwen (via OAuth or direct endpoint)
-   */
-  private isUsingQwen(): boolean {
-    // Check if we're using qwen format based on tool format detection
-    const toolFormat = this.detectToolFormat();
-    return toolFormat === 'qwen';
-  }
-
-  /**
-   * Update the OpenAI client with resolved authentication if needed
-   */
-  private async updateClientWithResolvedAuth(): Promise<void> {
-    const resolvedKey = await this.getAuthToken();
-    if (!resolvedKey) {
-      // Only require auth for official OpenAI endpoints or when OAuth is enabled
-      const endpoint = this.baseURL || 'https://api.openai.com/v1';
-      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
-        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
-      }
-      // For local/self-hosted endpoints, allow proceeding without auth
-      if (
-        endpoint.includes('api.openai.com') ||
-        endpoint.includes('openai.com')
-      ) {
-        throw new Error(
-          'OpenAI API key is required for official OpenAI endpoints',
-        );
-      }
-      // For other endpoints (local/self-hosted), use empty string as API key
-      this.logger.debug(
-        () =>
-          `No authentication provided, attempting to proceed with local/self-hosted endpoint: ${endpoint}`,
-      );
-    }
-
-    // Check if we're using Qwen OAuth and need to update the baseURL
-    let effectiveBaseURL = this.baseURL;
-
-    this.logger.debug(
-      () =>
-        `updateClientWithResolvedAuth - OAuth enabled: ${this.isOAuthEnabled()}, OAuth provider: ${this.baseProviderConfig.oauthProvider}, baseURL: ${this.baseURL}, resolvedKey: ${resolvedKey?.substring(0, 10)}...`,
+    this.toolFormatter = new ToolFormatter(
+      this.logger || new DebugLogger('llxprt:core:toolformatter'),
     );
 
-    if (
-      this.isOAuthEnabled() &&
-      this.baseProviderConfig.oauthProvider === 'qwen'
-    ) {
-      // Get the OAuth token to check for resource_url
-      const oauthManager = this.baseProviderConfig.oauthManager;
-      if (oauthManager?.getOAuthToken) {
-        const oauthToken = await oauthManager.getOAuthToken('qwen');
-        this.logger.debug(
-          () =>
-            `OAuth token retrieved:\n` +
-            `  resource_url: ${oauthToken?.resource_url}\n` +
-            `  access_token: ${oauthToken?.access_token?.substring(0, 10)}...`,
-        );
-        if (oauthToken?.resource_url) {
-          // Use the resource_url from the OAuth token
-          effectiveBaseURL = `https://${oauthToken.resource_url}/v1`;
-          this.logger.debug(
-            () => `Using Qwen OAuth endpoint: ${effectiveBaseURL}`,
-          );
-        }
-      }
-    }
+    // Initialize OpenAI client
+    this.openai = this.getClient();
 
-    // Only update client if the key or URL has changed
-    if (
-      this._cachedClientKey !== resolvedKey ||
-      this.baseURL !== effectiveBaseURL
-    ) {
-      const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-        apiKey: resolvedKey,
-        // Allow browser environment if explicitly configured
-        dangerouslyAllowBrowser:
-          this.providerConfig?.allowBrowserEnvironment || false,
-      };
-      // Only include baseURL if it's defined
-      if (effectiveBaseURL) {
-        clientOptions.baseURL = effectiveBaseURL;
-      }
-
-      this.openai = new OpenAI(clientOptions);
-      this._cachedClientKey = resolvedKey;
-      // Update the baseURL to track changes
-      if (effectiveBaseURL !== this.baseURL) {
-        this.baseURL = effectiveBaseURL;
-      }
-    }
+    // Setup debug logger
+    this.logger = new DebugLogger('llxprt:provider:openai');
   }
 
-  override getToolFormat(): ToolFormat {
-    // Check manual override first
-    if (this.toolFormatOverride) {
-      return this.toolFormatOverride;
-    }
-
-    // Check for settings override
-    if (this.providerConfig?.providerToolFormatOverrides?.[this.name]) {
-      return this.providerConfig.providerToolFormatOverrides[
-        this.name
-      ] as ToolFormat;
-    }
-
-    // Auto-detect tool format based on model or base URL
-    if (
-      this.currentModel.includes('deepseek') ||
-      this.baseURL?.includes('deepseek')
-    ) {
-      return 'deepseek';
-    }
-
-    // Check for Qwen - including OAuth authenticated Qwen
-    if (this.isUsingQwen()) {
-      return 'qwen';
-    }
-
-    // Default to OpenAI format
-    return 'openai';
+  /**
+   * Initialize provider configuration from SettingsService
+   */
+  initializeConfig(): void {
+    const settings = this.providerConfig?.getEphemeralSettings?.() || {};
+    this.toolFormatOverride = settings['tool-format'] as ToolFormat | undefined;
+    this.modelParams = settings['model-params'] as Record<string, unknown>;
   }
 
-  override async getModels(): Promise<IModel[]> {
-    // Check if API key is available (using resolved authentication)
-    const apiKey = await this.getAuthToken();
-    if (!apiKey) {
-      const endpoint = this.baseURL || 'https://api.openai.com/v1';
-      if (this.isOAuthEnabled() && !this.supportsOAuth()) {
-        throw new Error(generateOAuthEndpointMismatchError(endpoint, 'qwen'));
-      }
-      // For local/self-hosted endpoints, allow proceeding without auth
-      if (
-        endpoint.includes('api.openai.com') ||
-        endpoint.includes('openai.com')
-      ) {
-        throw new Error(
-          'OpenAI API key is required for official OpenAI endpoints',
-        );
-      }
-      this.logger.debug(
-        () =>
-          `No authentication provided, attempting to fetch models from local/self-hosted endpoint: ${endpoint}`,
-      );
+  /**
+   * Get or create OpenAI client instance
+   * Will use the API key from resolved auth
+   * @returns OpenAI client instance
+   */
+  private getClient(): OpenAI {
+    const resolvedKey = this.getResolvedAuthToken();
+    const clientKey = `${this.baseURL}-${resolvedKey}`;
+
+    // Return cached client if available and auth hasn't changed
+    if (this._cachedClient && this._cachedClientKey === clientKey) {
+      return this._cachedClient;
     }
 
-    try {
-      // Get resolved authentication and update client if needed
-      await this.updateClientWithResolvedAuth();
-
-      const response = await this.openai.models.list();
-      const models: IModel[] = [];
-
-      for await (const model of response) {
-        // Filter out non-chat models (embeddings, audio, image, moderation, DALL·E, etc.)
-        if (
-          !/embedding|whisper|audio|tts|image|vision|dall[- ]?e|moderation/i.test(
-            model.id,
-          )
-        ) {
-          models.push({
-            id: model.id,
-            name: model.id,
-            provider: 'openai',
-            supportedToolFormats: ['openai'],
-          });
-        }
-      }
-
-      return models;
-    } catch (error) {
-      this.logger.debug(() => `Error fetching models from OpenAI: ${error}`);
-      // Return a hardcoded list as fallback
-      // Check if this is a Qwen endpoint
-      if (isQwenEndpoint(this.baseURL || '')) {
-        return [
-          {
-            id: 'qwen3-coder-plus',
-            name: 'qwen3-coder-plus',
-            provider: 'openai',
-            supportedToolFormats: ['openai'],
-          },
-        ];
-      }
-
-      // Default OpenAI models
-      return [
-        {
-          id: 'gpt-4o',
-          name: 'gpt-4o',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'gpt-4o-mini',
-          name: 'gpt-4o-mini',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'gpt-4-turbo',
-          name: 'gpt-4-turbo',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'gpt-3.5-turbo',
-          name: 'gpt-3.5-turbo',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-      ];
-    }
-  }
-
-  override setModel(modelId: string): void {
-    // Update SettingsService as the source of truth
-    this.setModelInSettings(modelId).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model to SettingsService: ${error}`,
-      );
+    // Create new client with current auth
+    this._cachedClient = new OpenAI({
+      apiKey: resolvedKey || '',
+      baseURL: this.baseURL,
     });
-    // Keep local cache for performance
-    this.currentModel = modelId;
-  }
+    this._cachedClientKey = clientKey;
 
-  override getCurrentModel(): string {
-    // Try to get from SettingsService first (source of truth)
-    try {
-      const settingsService = getSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
-      if (providerSettings.model) {
-        return providerSettings.model as string;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to get model from SettingsService: ${error}`,
-      );
-    }
-    // Fall back to cached value or default
-    return this.currentModel || this.getDefaultModel();
-  }
-
-  override getDefaultModel(): string {
-    // Return the default model for this provider
-    // This can be overridden based on configuration or endpoint
-    if (this.isUsingQwen()) {
-      return 'qwen3-coder-plus';
-    }
-    return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
-  }
-
-  override setApiKey(apiKey: string): void {
-    // Call base provider implementation
-    super.setApiKey(apiKey);
-
-    // Persist to SettingsService if available
-    this.setApiKeyInSettings(apiKey).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist API key to SettingsService: ${error}`,
-      );
-    });
-
-    // Create a new OpenAI client with the updated API key
-    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      apiKey,
-      dangerouslyAllowBrowser:
-        this.providerConfig?.allowBrowserEnvironment || false,
-    };
-    // Only include baseURL if it's defined
-    if (this.baseURL) {
-      clientOptions.baseURL = this.baseURL;
-    }
-    this.openai = new OpenAI(clientOptions);
-    this._cachedClientKey = apiKey; // Update cached key
-  }
-
-  override setBaseUrl(baseUrl?: string): void {
-    // If no baseUrl is provided, use default OpenAI URL
-    this.baseURL =
-      baseUrl && baseUrl.trim() !== '' ? baseUrl : 'https://api.openai.com/v1';
-
-    // Persist to SettingsService if available
-    this.setBaseUrlInSettings(this.baseURL).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist base URL to SettingsService: ${error}`,
-      );
-    });
-
-    // Update OAuth configuration based on endpoint validation
-    // Enable OAuth for Qwen endpoints if we have an OAuth manager
-    const shouldEnableQwenOAuth =
-      !!this.baseProviderConfig.oauthManager &&
-      (isQwenEndpoint(this.baseURL || '') ||
-        this.baseURL === 'https://portal.qwen.ai/v1');
-
-    this.updateOAuthConfig(
-      shouldEnableQwenOAuth,
-      shouldEnableQwenOAuth ? 'qwen' : undefined,
-      this.baseProviderConfig.oauthManager, // Pass the existing OAuth manager
-    );
-
-    // Call base provider implementation
-    super.setBaseUrl?.(baseUrl);
-
-    // Create a new OpenAI client with the updated (or cleared) base URL
-    const clientOptions: ConstructorParameters<typeof OpenAI>[0] = {
-      // Use existing key or empty string as placeholder
-      apiKey: this._cachedClientKey || 'placeholder',
-      dangerouslyAllowBrowser:
-        this.providerConfig?.allowBrowserEnvironment || false,
-    };
-    // Only include baseURL if it's defined
-    if (this.baseURL) {
-      clientOptions.baseURL = this.baseURL;
-    }
-    this.openai = new OpenAI(clientOptions);
-    // Clear cached key to force re-resolution on next API call
-    this._cachedClientKey = undefined;
-  }
-
-  override setConfig(config: IProviderConfig): void {
-    this.providerConfig = config;
-  }
-
-  override setToolFormatOverride(format: ToolFormat | null): void {
-    this.toolFormatOverride = format || undefined;
-  }
-
-  /**
-   * OpenAI always requires payment (API key)
-   */
-  override isPaidMode(): boolean {
-    return true;
-  }
-
-  override clearState(): void {
-    // No state to clear in base OpenAI provider
-  }
-
-  /**
-   * Get the list of server tools supported by this provider
-   */
-  override getServerTools(): string[] {
-    return [];
-  }
-
-  /**
-   * Invoke a server tool (native provider tool)
-   */
-  override async invokeServerTool(
-    _toolName: string,
-    _params: unknown,
-    _config?: unknown,
-  ): Promise<unknown> {
-    throw new Error('Server tools not supported by OpenAI provider');
-  }
-
-  /**
-   * Set model parameters to be included in API calls
-   * @param params Parameters to merge with existing, or undefined to clear all
-   */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-    } else {
-      this.modelParams = { ...this.modelParams, ...params };
-    }
-
-    // Persist to SettingsService if available
-    this.setModelParamsInSettings(this.modelParams).catch((error) => {
-      this.logger.debug(
-        () => `Failed to persist model params to SettingsService: ${error}`,
-      );
-    });
-  }
-
-  /**
-   * Get current model parameters
-   * @returns Current parameters or undefined if not set
-   */
-  override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
-  }
-
-  /**
-   * Create a custom fetch function with socket configuration if specified in ephemeral settings
-   * Enhanced socket configuration for local AI servers (e.g., LM Studio, Ollama)
-   * @returns Custom fetch function or undefined to use default
-   */
-  private createCustomFetch(): typeof fetch | undefined {
-    const ephemeralSettings =
-      this.providerConfig?.getEphemeralSettings?.() || {};
-
-    // Check for any socket-related ephemeral settings
-    const hasSocketTimeout = ephemeralSettings['socket-timeout'] !== undefined;
-    const hasSocketKeepalive =
-      ephemeralSettings['socket-keepalive'] !== undefined;
-    const hasSocketNodelay = ephemeralSettings['socket-nodelay'] !== undefined;
-
-    // Only use custom fetch if user explicitly configured socket options
-    if (!hasSocketTimeout && !hasSocketKeepalive && !hasSocketNodelay) {
-      return undefined; // Use default fetch
-    }
-
-    const timeout = (ephemeralSettings['socket-timeout'] as number) || 60000;
-    const keepalive = ephemeralSettings['socket-keepalive'] !== false;
-    const nodelay = ephemeralSettings['socket-nodelay'] !== false;
-
-    this.logger.debug(
-      () =>
-        `Creating custom fetch with socket options - timeout: ${timeout}ms, keepalive: ${keepalive}, nodelay: ${nodelay}`,
-    );
-
-    return (url: RequestInfo | URL, init?: RequestInit) => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        this.logger.debug(() => 'Socket timeout reached, aborting request');
-        controller.abort();
-      }, timeout);
-
-      const requestInit: RequestInit = {
-        ...init,
-        signal: controller.signal,
-      };
-
-      // Apply keepalive if supported and enabled
-      if (
-        keepalive &&
-        typeof (globalThis as unknown as { fetch?: unknown }).fetch !==
-          'undefined'
-      ) {
-        (requestInit as RequestInit & { keepalive?: boolean }).keepalive =
-          keepalive;
-      }
-
-      // Note: TCP_NODELAY cannot be controlled directly through fetch API
-      // This is a limitation of browser/Node.js fetch - socket-level options
-      // would need to be handled at the HTTP agent level, but we use ephemeral
-      // settings here for user configurability
-
-      return fetch(url, requestInit).finally(() => {
-        clearTimeout(timeoutId);
-      });
-    };
+    return this._cachedClient;
   }
 
   /**
    * Generate chat completion with IContent interface
    * Internally converts to OpenAI API format, but only yields IContent
+   * @param contents Array of content blocks (text and tool_call)
+   * @param tools Array of available tools
+   * @param maxTokens Maximum tokens to generate
+   * @param abortSignal Abort signal for cancellation
+   * @param modelName Model name to use (optional)
    */
   async *generateChatCompletion(
-    content: IContent[],
-    tools?: Array<{
-      functionDeclarations: Array<{
-        name: string;
-        description?: string;
-        parameters?: unknown;
-      }>;
-    }>,
-  ): AsyncIterableIterator<IContent> {
-    // Convert IContent directly to OpenAI API format (no IMessage!)
-    const apiMessages: Array<{
-      role: string;
-      content: string | null;
-      tool_calls?: Array<{
-        id: string;
-        type: 'function';
-        function: {
-          name: string;
-          arguments: string;
-        };
-      }>;
-      tool_call_id?: string;
-    }> = [];
+    contents: IContent[],
+    tools?: ITool[],
+    maxTokens?: number,
+    abortSignal?: AbortSignal,
+    modelName?: string,
+  ): AsyncGenerator<IContent, void, unknown> {
+    // Use provided model name or fallback to current model
+    const model = modelName || this.currentModel;
 
-    for (const c of content) {
-      if (c.speaker === 'human') {
-        const textBlock = c.blocks.find((b) => b.type === 'text') as
-          | TextBlock
-          | undefined;
-        apiMessages.push({
-          role: 'user',
-          content: textBlock?.text || '',
-        });
-      } else if (c.speaker === 'ai') {
-        const textBlocks = c.blocks.filter(
-          (b) => b.type === 'text',
-        ) as TextBlock[];
-        const toolCallBlocks = c.blocks.filter(
-          (b) => b.type === 'tool_call',
-        ) as ToolCallBlock[];
+    // Convert IContent to OpenAI messages format
+    const messages = HistoryService.toOpenAIFormat(contents);
 
-        const contentText = textBlocks.map((b) => b.text).join('');
-        const toolCalls =
-          toolCallBlocks.length > 0
-            ? toolCallBlocks.map((tc) => ({
-                id: tc.id,
-                type: 'function' as const,
-                function: {
-                  name: tc.name,
-                  arguments: JSON.stringify(tc.parameters),
-                },
-              }))
-            : undefined;
-
-        apiMessages.push({
-          role: 'assistant',
-          content: contentText || null,
-          tool_calls: toolCalls,
-        });
-      } else if (c.speaker === 'tool') {
-        const toolResponseBlock = c.blocks.find(
-          (b) => b.type === 'tool_response',
-        ) as ToolResponseBlock | undefined;
-        if (!toolResponseBlock) {
-          throw new Error('Tool content must have a tool_response block');
-        }
-
-        apiMessages.push({
-          role: 'tool',
-          content: JSON.stringify(toolResponseBlock.result),
-          tool_call_id: toolResponseBlock.callId,
-        });
-      } else {
-        throw new Error(`Unknown speaker type: ${c.speaker}`);
-      }
-    }
-
-    // Debug log the converted messages
-    this.logger.debug(
-      () =>
-        `Converted messages for OpenAI API: ${JSON.stringify(apiMessages, null, 2)}`,
-    );
-
-    // Convert Gemini format tools to OpenAI format
-    // Handle both legacy 'parameters' and new 'parametersJsonSchema' formats
-    const apiTools = tools
-      ? tools[0].functionDeclarations.map((decl) => {
-          // Support both old 'parameters' and new 'parametersJsonSchema' formats
-          // DeclarativeTool uses parametersJsonSchema, while legacy tools use parameters
+    // Format tools for API
+    const formattedTools = tools
+      ? tools.map((decl) => {
+          // Get parameters schema (either JSON schema or Gemini schema if provided)
           const toolParameters =
             'parametersJsonSchema' in decl
-              ? (decl as { parametersJsonSchema?: unknown })
-                  .parametersJsonSchema
+              ? decl.parametersJsonSchema
               : decl.parameters;
-
-          // Use ToolFormatter to properly convert Gemini schema to OpenAI format
-          // This handles all nested type conversions (STRING -> string, OBJECT -> object, etc.)
-          const processedParameters = this.toolFormatter[
-            'convertGeminiSchemaToStandard'
-          ](toolParameters || {});
 
           return {
             type: 'function' as const,
             function: {
               name: decl.name,
               description: decl.description || '',
-              parameters: processedParameters,
+              parameters: toolParameters || {},
             },
           };
         })
       : undefined;
 
     // Get auth token
-    let apiKey = await this.getAuthToken();
+    const apiKey = await this.getAuthToken();
     if (!apiKey) {
-      const endpoint = this.baseURL || 'https://api.openai.com/v1';
-      // For local/self-hosted endpoints, allow proceeding without auth
-      if (
-        endpoint.includes('api.openai.com') ||
-        endpoint.includes('openai.com')
-      ) {
-        throw new Error(
-          'OpenAI API key is required for official OpenAI endpoints',
-        );
-      }
-      this.logger.debug(
-        () =>
-          `No authentication provided, attempting to proceed with local/self-hosted endpoint: ${endpoint}`,
-      );
-      // Use empty string as API key for local/self-hosted endpoints
-      apiKey = '';
+      throw new Error('OpenAI API key is required');
     }
 
     // Build request
     const requestBody = {
-      model: this.currentModel || 'gpt-4o-mini',
-      messages: apiMessages,
-      ...(apiTools && { tools: apiTools }),
+      model,
+      messages,
+      tools: formattedTools,
+      max_tokens: maxTokens,
       stream: true,
-      ...(this.modelParams || {}),
     };
-
-    // Get custom fetch function if socket options are configured
-    const customFetch = this.createCustomFetch();
-    const fetchFunction = customFetch || fetch;
 
     // Wrap the API call with retry logic
     const makeApiCall = async () => {
-      const response = await fetchFunction(`${this.baseURL}/chat/completions`, {
+      const response = await fetch(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -759,115 +168,141 @@ export class OpenAIProvider extends BaseProvider {
         },
         body: JSON.stringify(requestBody),
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        // Create an error object that matches what we check for in isRetryableError
-        const error = new Error(`OpenAI API error: ${errorText}`) as Error & {
-          status?: number;
-          error?: unknown;
-        };
-        error.status = response.status;
-
-        // Try to parse the error response
-        try {
-          const errorObj = JSON.parse(errorText);
-          error.error = errorObj;
-        } catch {
-          // If not JSON, keep as text
-        }
-
-        this.logger.debug(
-          () =>
-            `API call error in generateChatCompletion: status=${response.status}, error=${errorText}`,
-        );
-
-        throw error;
-      }
-
       return response;
     };
 
-    // Use retry logic with longer delays for rate limits
-    const response = await retryWithBackoff(makeApiCall, {
-      shouldRetry: (error: Error) => {
-        const shouldRetry = this.isRetryableError(error);
+    let retryCount = 0;
+    const maxRetries = 3;
+    let response;
+
+    while (retryCount <= maxRetries) {
+      try {
+        response = await makeApiCall();
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        break; // Success, exit retry loop
+      } catch (error) {
+        if (retryCount === maxRetries) {
+          throw error; // Max retries reached, re-throw error
+        }
+        retryCount++;
         this.logger.debug(
-          () =>
-            `Retry decision in generateChatCompletion: shouldRetry=${shouldRetry}, error=${String(error).substring(0, 200)}`,
+          () => `API call failed (attempt ${retryCount}), retrying...`,
+          error,
         );
-        return shouldRetry;
-      },
-      maxAttempts: 6, // Allow up to 6 attempts (initial + 5 retries)
-      initialDelayMs: 4000, // Start with 4 seconds for 429 errors
-      maxDelayMs: 65000, // Allow up to 65 seconds delay
-    });
+        await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
 
-    // Parse streaming response and emit IContent
+    if (!response) {
+      throw new Error('Failed to get response after retries');
+    }
+
+    // Process streaming response
     const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
+    if (!reader) {
+      throw new Error('Response body is not readable');
+    }
 
-    const decoder = new TextDecoder();
-    let buffer = '';
-    const accumulatedToolCalls: Array<{
-      id: string;
-      type: 'function';
-      function: {
-        name: string;
-        arguments: string;
-      };
-    }> = [];
+    let accumulatedText = '';
+    let accumulatedToolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] =
+      [];
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (!abortSignal?.aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+        const chunk = new TextDecoder().decode(value);
 
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
+        // Split chunk into lines (SSE format)
+        const lines = chunk
+          .split('\n')
+          .filter((line) => line.trim() !== '')
+          .map((line) => line.trim());
 
-        try {
-          const parsed = JSON.parse(data);
-          const delta = parsed.choices?.[0]?.delta;
+        for (const line of lines) {
+          // Each line is a separate SSE event in streaming mode
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6); // Remove 'data: ' prefix
 
-          if (delta?.content) {
-            // Emit text content immediately as IContent
-            yield {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: delta.content }],
-            } as IContent;
-          }
+            if (data === '[DONE]') {
+              // Stream finished, emit any remaining text
+              if (accumulatedText) {
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'text',
+                      text: accumulatedText,
+                    } as TextBlock,
+                  ],
+                } as IContent;
+              }
+              return;
+            }
 
-          if (delta?.tool_calls) {
-            // Accumulate tool calls
-            for (const toolCall of delta.tool_calls) {
-              if (toolCall.index !== undefined) {
-                if (!accumulatedToolCalls[toolCall.index]) {
-                  accumulatedToolCalls[toolCall.index] = {
-                    id: toolCall.id || '',
+            let parsedData;
+            try {
+              parsedData = JSON.parse(data);
+            } catch (_e) {
+              // If parsing fails, skip this line
+              continue;
+            }
+
+            const choice = parsedData.choices?.[0];
+            if (!choice) continue;
+
+            // Handle text content
+            const deltaContent = choice.delta?.content;
+            if (deltaContent) {
+              accumulatedText += deltaContent;
+              // Emit text in chunks rather than waiting for full accumulation
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'text',
+                    text: accumulatedText,
+                  } as TextBlock,
+                ],
+              } as IContent;
+              accumulatedText = ''; // Reset accumulated text after emitting
+            }
+
+            // Handle tool calls
+            const deltaToolCalls = choice.delta?.tool_calls;
+            if (deltaToolCalls && deltaToolCalls.length > 0) {
+              for (const deltaToolCall of deltaToolCalls) {
+                if (deltaToolCall.index === undefined) continue;
+
+                // Initialize or update accumulated tool call
+                if (!accumulatedToolCalls[deltaToolCall.index]) {
+                  accumulatedToolCalls[deltaToolCall.index] = {
+                    id: deltaToolCall.id || '',
                     type: 'function',
-                    function: { name: '', arguments: '' },
+                    function: {
+                      name: deltaToolCall.function?.name || '',
+                      arguments: '',
+                    },
                   };
                 }
-                const tc = accumulatedToolCalls[toolCall.index];
-                if (toolCall.id) tc.id = toolCall.id;
-                if (toolCall.function?.name)
-                  tc.function.name = toolCall.function.name;
-                if (toolCall.function?.arguments)
-                  tc.function.arguments += toolCall.function.arguments;
+
+                const tc = accumulatedToolCalls[deltaToolCall.index];
+                if (deltaToolCall.id) tc.id = deltaToolCall.id;
+                if (deltaToolCall.function?.name)
+                  tc.function.name = deltaToolCall.function.name;
+                if (deltaToolCall.function?.arguments) {
+                  tc.function.arguments += deltaToolCall.function.arguments;
+                }
               }
             }
           }
-        } catch (e) {
-          // Skip invalid JSON lines
-          this.logger.debug(() => `Failed to parse SSE line: ${e}`);
         }
       }
+    } finally {
+      reader.releaseLock();
     }
 
     // Emit accumulated tool calls as IContent if any
@@ -903,85 +338,18 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Initialize provider configuration from SettingsService
+   * Detects the tool call format based on the model being used
+   * @returns The detected tool format ('openai' or 'qwen')
    */
-  private async initializeFromSettings(): Promise<void> {
+  private detectToolFormat(): ToolFormat {
     try {
-      // Load saved model if available
-      const savedModel = await this.getModelFromSettings();
-      if (savedModel) {
-        this.currentModel = savedModel;
+      // Try to get format from SettingsService if available
+      const settings = this.providerConfig
+        ? this.providerConfig.getEphemeralSettings()
+        : undefined;
+      if (settings && settings['tool-format']) {
+        return settings['tool-format'] as ToolFormat;
       }
-
-      // Load saved base URL if available
-      const savedBaseUrl = await this.getBaseUrlFromSettings();
-      if (savedBaseUrl !== undefined) {
-        this.baseURL = savedBaseUrl || 'https://api.openai.com/v1';
-      }
-
-      // Load saved model parameters if available
-      const savedParams = await this.getModelParamsFromSettings();
-      if (savedParams) {
-        this.modelParams = savedParams;
-      }
-
-      this.logger.debug(
-        () =>
-          `Initialized from SettingsService - model: ${this.currentModel}, baseURL: ${this.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
-      );
-    } catch (error) {
-      this.logger.debug(
-        () =>
-          `Failed to initialize OpenAI provider from SettingsService: ${error}`,
-      );
-    }
-  }
-
-  /**
-   * Check if the provider is authenticated using any available method
-   * Uses the base provider's isAuthenticated implementation
-   */
-  override async isAuthenticated(): Promise<boolean> {
-    return super.isAuthenticated();
-  }
-
-  /**
-   * Detect the appropriate tool format for the current model/configuration
-   * @returns The detected tool format
-   */
-  detectToolFormat(): ToolFormat {
-    try {
-      const settingsService = getSettingsService();
-
-      // First check SettingsService for toolFormat override in provider settings
-      // Note: This is synchronous access to cached settings, not async
-      const currentSettings = settingsService['settings'];
-      const providerSettings = currentSettings?.providers?.[this.name];
-      const toolFormatOverride = providerSettings?.toolFormat as
-        | ToolFormat
-        | 'auto'
-        | undefined;
-
-      // If explicitly set to a specific format (not 'auto'), use it
-      if (toolFormatOverride && toolFormatOverride !== 'auto') {
-        return toolFormatOverride;
-      }
-
-      // Auto-detect based on model name if set to 'auto' or not set
-      const modelName = this.currentModel.toLowerCase();
-
-      // Check for GLM-4.5 models (glm-4.5, glm-4-5)
-      if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
-        return 'qwen';
-      }
-
-      // Check for qwen models
-      if (modelName.includes('qwen')) {
-        return 'qwen';
-      }
-
-      // Default to 'openai' format
-      return 'openai';
     } catch (error) {
       this.logger.debug(
         () => `Failed to detect tool format from SettingsService: ${error}`,
@@ -1036,87 +404,29 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
-   * Determines if an error should trigger a retry
+   * Determines whether a response should be retried based on error codes
+   * @param error The error object from the API response
+   * @returns true if the request should be retried, false otherwise
    */
-  private isRetryableError(error: Error | unknown): boolean {
-    // Check for OpenAI SDK specific error types
-    // The OpenAI SDK throws specific error classes for different error types
-    if (error && typeof error === 'object') {
-      const errorName = (error as Error).constructor?.name;
-
-      // Check for OpenAI SDK RateLimitError or InternalServerError
-      if (
-        errorName === 'RateLimitError' ||
-        errorName === 'InternalServerError'
-      ) {
-        this.logger.debug(
-          () => `Retryable OpenAI SDK error detected: ${errorName}`,
-        );
-        return true;
-      }
-
-      // Check for status property (OpenAI APIError has a status property)
-      if ('status' in error) {
-        const status = (error as { status: number }).status;
-        // Retry on 429 (rate limit) and 5xx errors
-        if (status === 429 || (status >= 500 && status < 600)) {
-          this.logger.debug(
-            () => `Retryable error detected - status: ${status}`,
-          );
-          return true;
-        }
-      }
-
-      // Check for nested error object (some OpenAI errors have error.error structure)
-      if (
-        'error' in error &&
-        typeof (error as { error: unknown }).error === 'object'
-      ) {
-        const nestedError = (
-          error as { error: { code?: string; type?: string } }
-        ).error;
-        if (
-          nestedError?.code === 'token_quota_exceeded' ||
-          nestedError?.type === 'too_many_tokens_error' ||
-          nestedError?.code === 'rate_limit_exceeded'
-        ) {
-          this.logger.debug(
-            () =>
-              `Retryable error detected from error code: ${nestedError.code || nestedError.type}`,
-          );
-          return true;
-        }
-      }
+  shouldRetryResponse(error: unknown): boolean {
+    // Don't retry if we're streaming chunks - just continue processing
+    if (
+      error &&
+      typeof error === 'object' &&
+      'status' in error &&
+      error.status === 200
+    ) {
+      return false;
     }
 
-    // Check error message for rate limit indicators
-    const errorMessage = String(error).toLowerCase();
-    const retryablePatterns = [
-      'rate limit',
-      'rate_limit',
-      'quota_exceeded',
-      'too_many_tokens',
-      'too many requests',
-      '429',
-      'overloaded',
-      'server_error',
-      'service_unavailable',
-      'internal server error',
-      '500',
-      '502',
-      '503',
-      '504',
-    ];
-
-    const shouldRetry = retryablePatterns.some((pattern) =>
-      errorMessage.includes(pattern),
-    );
-
-    if (shouldRetry) {
-      this.logger.debug(
-        () => `Retryable error detected from message pattern: ${errorMessage}`,
-      );
-    }
+    // Retry on 429 rate limit errors or 5xx server errors
+    const shouldRetry =
+      (error &&
+        typeof error === 'object' &&
+        'status' in error &&
+        (error.status === 429 ||
+          (error.status >= 500 && error.status < 600))) ||
+      false;
 
     return shouldRetry;
   }

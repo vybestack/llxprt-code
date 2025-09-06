@@ -135,8 +135,8 @@ export function detectDoubleEscapingInChunk(chunk: string): boolean {
   return (
     chunk.includes('\\[') ||
     chunk.includes('\\\\') ||
-    chunk.includes('\\"') ||
-    (chunk.startsWith('"\\') && chunk.endsWith('\\"'))
+    chunk.includes('\\\"') ||
+    (chunk.startsWith('\"\\') && chunk.endsWith('\\\"'))
   );
 }
 
@@ -158,20 +158,9 @@ export function processToolParameters(
 
   // Only apply double-escape handling for formats that need it
   if (!shouldUseDoubleEscapeHandling(format)) {
-    // For formats that don't need double-escape handling, just parse normally
-    try {
-      return JSON.parse(parametersString);
-    } catch (parseError) {
-      logger.error(
-        () => `[${format}] Failed to parse parameters for ${toolName}`,
-        {
-          tool: toolName,
-          format,
-          error: String(parseError),
-        },
-      );
-      return parametersString;
-    }
+    // For formats that don't need double-escape handling, just return the string as-is
+    // This prevents accidentally processing legitimate multi-line strings from other models
+    return parametersString;
   }
 
   // Apply double-escape detection and fixing for qwen format

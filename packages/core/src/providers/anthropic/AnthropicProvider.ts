@@ -27,7 +27,6 @@ export class AnthropicProvider extends BaseProvider {
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
   private baseURL?: string;
-  private _config?: IProviderConfig;
   private currentModel: string = 'claude-sonnet-4-20250514'; // Default model
   private modelParams?: Record<string, unknown>;
   private _cachedAuthKey?: string; // Track cached auth key for client recreation
@@ -61,14 +60,10 @@ export class AnthropicProvider extends BaseProvider {
       oauthManager,
     };
 
-    super(baseConfig);
+    super(baseConfig, config);
 
     this.logger = new DebugLogger('llxprt:anthropic:provider');
     this.baseURL = baseURL;
-    this._config = config;
-
-    // Config reserved for future provider customization
-    void this._config;
 
     this.anthropic = new Anthropic({
       apiKey: apiKey || '', // Empty string if OAuth will be used
@@ -617,7 +612,7 @@ export class AnthropicProvider extends BaseProvider {
 
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
-      this._config?.getEphemeralSettings?.()?.['streaming'];
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
     const streamingEnabled = streamingSetting !== 'disabled';
 
     // Build request with proper typing
