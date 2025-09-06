@@ -33,11 +33,11 @@ export class OpenAITokenizer implements ITokenizer {
           encoder = encoding_for_model(model as TiktokenModel);
           this.encoderCache.set(model, encoder);
         } catch (_error) {
-          // Fall back to cl100k_base encoding for newer models
+          // Fall back to o200k_base encoding for newer models
           console.warn(
-            `No specific encoding for model ${model}, using cl100k_base`,
+            `No specific encoding for model ${model}, using o200k_base`,
           );
-          encoder = encoding_for_model('gpt-4');
+          encoder = encoding_for_model('gpt-4o-mini');
           this.encoderCache.set(model, encoder);
         }
       }
