@@ -440,11 +440,6 @@ class Session {
     let nextMessage: Content | null = { role: 'user', parts };
 
     while (nextMessage !== null) {
-      if (pendingSend.signal.aborted) {
-        chat.addHistory(nextMessage);
-        return { stopReason: 'cancelled' };
-      }
-
       const functionCalls: FunctionCall[] = [];
 
       try {
@@ -461,7 +456,9 @@ class Session {
 
         for await (const resp of responseStream) {
           if (pendingSend.signal.aborted) {
-            return { stopReason: 'cancelled' };
+            // Let the stream processing complete naturally to handle cancellation properly
+            // Don't return early here - let the tool pipeline handle cleanup
+            break;
           }
 
           if (resp.candidates && resp.candidates.length > 0) {
@@ -499,13 +496,44 @@ class Session {
           );
         }
 
-        throw error;
+        // If this is an abort error due to cancellation, handle it gracefully
+        if (
+          pendingSend.signal.aborted &&
+          isNodeError(error) &&
+          error.name === 'AbortError'
+        ) {
+          // Don't throw - let the cancellation be handled below
+        } else {
+          throw error;
+        }
+      }
+
+      // Check for cancellation after stream processing but before tool execution
+      if (pendingSend.signal.aborted) {
+        // Add cancellation message to conversation history like the TUI does
+        chat.addHistory({
+          role: 'user',
+          parts: [{ text: '[Request cancelled by user]' }],
+        });
+        return { stopReason: 'cancelled' };
       }
 
       if (functionCalls.length > 0) {
         const toolResponseParts: Part[] = [];
 
         for (const fc of functionCalls) {
+          // Check for cancellation before each tool execution
+          if (pendingSend.signal.aborted) {
+            // Add cancellation message and mark this tool as cancelled
+            chat.addHistory({
+              role: 'user',
+              parts: [
+                { text: '[Request cancelled by user during tool execution]' },
+              ],
+            });
+            return { stopReason: 'cancelled' };
+          }
+
           const response = await this.runTool(pendingSend.signal, promptId, fc);
 
           const parts = Array.isArray(response) ? response : [response];
