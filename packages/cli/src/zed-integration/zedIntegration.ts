@@ -548,11 +548,8 @@ class Session {
 
       // Check for cancellation after stream processing but before tool execution
       if (pendingSend.signal.aborted) {
-        // Add cancellation message to conversation history like the TUI does
-        chat.addHistory({
-          role: 'user',
-          parts: [{ text: '[Request cancelled by user]' }],
-        });
+        // Return cancellation without adding to conversation history
+        // The conversation state should remain clean for proper context handling
         return { stopReason: 'cancelled' };
       }
 
@@ -562,13 +559,8 @@ class Session {
         for (const fc of functionCalls) {
           // Check for cancellation before each tool execution
           if (pendingSend.signal.aborted) {
-            // Add cancellation message and mark this tool as cancelled
-            chat.addHistory({
-              role: 'user',
-              parts: [
-                { text: '[Request cancelled by user during tool execution]' },
-              ],
-            });
+            // Return cancellation without polluting conversation history
+            // Tool execution cancellation should be handled by the tool execution system
             return { stopReason: 'cancelled' };
           }
 
