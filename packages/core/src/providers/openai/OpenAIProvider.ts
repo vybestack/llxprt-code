@@ -537,6 +537,63 @@ export class OpenAIProvider extends BaseProvider {
   }
 
   /**
+   * Create a custom fetch function with socket configuration if specified in ephemeral settings
+   * Enhanced socket configuration for local AI servers (e.g., LM Studio, Ollama)
+   * @returns Custom fetch function or undefined to use default
+   */
+  private createCustomFetch(): typeof fetch | undefined {
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+
+    // Check for any socket-related ephemeral settings
+    const hasSocketTimeout = ephemeralSettings['socket-timeout'] !== undefined;
+    const hasSocketKeepalive =
+      ephemeralSettings['socket-keepalive'] !== undefined;
+    const hasSocketNodelay = ephemeralSettings['socket-nodelay'] !== undefined;
+
+    // Only use custom fetch if user explicitly configured socket options
+    if (!hasSocketTimeout && !hasSocketKeepalive && !hasSocketNodelay) {
+      return undefined; // Use default fetch
+    }
+
+    const timeout = (ephemeralSettings['socket-timeout'] as number) || 60000;
+    const keepalive = ephemeralSettings['socket-keepalive'] !== false;
+    const nodelay = ephemeralSettings['socket-nodelay'] !== false;
+
+    this.logger.debug(
+      () =>
+        `Creating custom fetch with socket options - timeout: ${timeout}ms, keepalive: ${keepalive}, nodelay: ${nodelay}`,
+    );
+
+    return (url: RequestInfo | URL, init?: RequestInit) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        this.logger.debug(() => 'Socket timeout reached, aborting request');
+        controller.abort();
+      }, timeout);
+
+      const requestInit: RequestInit = {
+        ...init,
+        signal: controller.signal,
+      };
+
+      // Apply keepalive if supported and enabled
+      if (keepalive && typeof (globalThis as any).fetch !== 'undefined') {
+        (requestInit as any).keepalive = keepalive;
+      }
+
+      // Note: TCP_NODELAY cannot be controlled directly through fetch API
+      // This is a limitation of browser/Node.js fetch - socket-level options
+      // would need to be handled at the HTTP agent level, but we use ephemeral
+      // settings here for user configurability
+
+      return fetch(url, requestInit).finally(() => {
+        clearTimeout(timeoutId);
+      });
+    };
+  }
+
+  /**
    * Generate chat completion with IContent interface
    * Internally converts to OpenAI API format, but only yields IContent
    */
@@ -677,9 +734,13 @@ export class OpenAIProvider extends BaseProvider {
       ...(this.modelParams || {}),
     };
 
+    // Get custom fetch function if socket options are configured
+    const customFetch = this.createCustomFetch();
+    const fetchFunction = customFetch || fetch;
+
     // Wrap the API call with retry logic
     const makeApiCall = async () => {
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
+      const response = await fetchFunction(`${this.baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
