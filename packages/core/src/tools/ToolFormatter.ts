@@ -29,7 +29,7 @@ export class ToolFormatter implements IToolFormatter {
   /**
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
-  private convertGeminiSchemaToStandard(schema: unknown): unknown {
+  convertGeminiSchemaToStandard(schema: unknown): unknown {
     if (!schema || typeof schema !== 'object') {
       return schema;
     }

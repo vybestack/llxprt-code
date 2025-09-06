@@ -363,6 +363,13 @@ const ephemeralSettingHelp: Record<string, string> = {
     'Enable or disable streaming responses (enabled/disabled, default: enabled)',
   'shell-replacement':
     'Allow command substitution ($(), <(), backticks) in shell commands (default: false)',
+  // Socket configuration for local AI servers (LM Studio, Ollama, etc.)
+  'socket-timeout':
+    'Request timeout in milliseconds for local AI servers (default: 60000)',
+  'socket-keepalive':
+    'Enable TCP keepalive for local AI server connections (true/false, default: true)',
+  'socket-nodelay':
+    'Enable TCP_NODELAY concept for local AI servers (true/false, default: true)',
   // Tool output limit settings - apply to all tools that can return large outputs
   'tool-output-max-items':
     'Maximum number of items/files/matches returned by tools (default: 50)',
@@ -461,6 +468,32 @@ export const setCommand: SlashCommand = {
           type: 'message',
           messageType: 'error',
           content: `context-limit must be a positive integer (e.g., 100000)`,
+        };
+      }
+    }
+
+    // Validate socket configuration settings
+    if (key === 'socket-timeout') {
+      const numValue = parsedValue as number;
+      if (
+        typeof numValue !== 'number' ||
+        numValue <= 0 ||
+        !Number.isInteger(numValue)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `socket-timeout must be a positive integer in milliseconds (e.g., 60000)`,
+        };
+      }
+    }
+
+    if (key === 'socket-keepalive' || key === 'socket-nodelay') {
+      if (typeof parsedValue !== 'boolean') {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be either 'true' or 'false'`,
         };
       }
     }
@@ -640,6 +673,17 @@ export const setCommand: SlashCommand = {
             );
           }
           return modes;
+        }
+
+        // Provide completions for socket boolean settings
+        if (key === 'socket-keepalive' || key === 'socket-nodelay') {
+          const values = ['true', 'false'];
+          if (parts[1]) {
+            return values.filter((value) =>
+              value.startsWith(parts[1].toLowerCase()),
+            );
+          }
+          return values;
         }
       }
     }

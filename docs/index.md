@@ -20,6 +20,7 @@ This documentation is organized into the following sections:
   - **[OAuth Setup](./oauth-setup.md):** Configure OAuth authentication for providers.
   - **[Provider Configuration](./cli/providers.md):** Configure and manage LLM providers.
   - **[OpenAI Responses API](./cli/providers-openai-responses.md):** Using OpenAI's enhanced Responses API.
+  - **[Local Models](./local-models.md):** Complete guide to using local AI models with LM Studio, Ollama, llama.cpp, and more.
   - **[Prompt Configuration](./prompt-configuration.md):** How to customize AI behavior with prompts.
   - **[Settings and Profiles](./settings-and-profiles.md):** How to manage settings and use profiles.
   - **[Emoji Filter](./EMOJI-FILTER.md):** Control emoji usage in LLM responses.

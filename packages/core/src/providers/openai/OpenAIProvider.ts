@@ -578,8 +578,13 @@ export class OpenAIProvider extends BaseProvider {
       };
 
       // Apply keepalive if supported and enabled
-      if (keepalive && typeof (globalThis as any).fetch !== 'undefined') {
-        (requestInit as any).keepalive = keepalive;
+      if (
+        keepalive &&
+        typeof (globalThis as unknown as { fetch?: unknown }).fetch !==
+          'undefined'
+      ) {
+        (requestInit as RequestInit & { keepalive?: boolean }).keepalive =
+          keepalive;
       }
 
       // Note: TCP_NODELAY cannot be controlled directly through fetch API
@@ -693,12 +698,18 @@ export class OpenAIProvider extends BaseProvider {
                   .parametersJsonSchema
               : decl.parameters;
 
+          // Use ToolFormatter to properly convert Gemini schema to OpenAI format
+          // This handles all nested type conversions (STRING -> string, OBJECT -> object, etc.)
+          const processedParameters = this.toolFormatter[
+            'convertGeminiSchemaToStandard'
+          ](toolParameters || {});
+
           return {
             type: 'function' as const,
             function: {
               name: decl.name,
               description: decl.description || '',
-              parameters: toolParameters || {},
+              parameters: processedParameters,
             },
           };
         })
