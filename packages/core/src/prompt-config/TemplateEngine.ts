@@ -152,6 +152,9 @@ export class TemplateEngine {
       if (context.environment.workingDirectory) {
         variables['WORKING_DIRECTORY'] = context.environment.workingDirectory;
       }
+      if (context.environment.folderStructure) {
+        variables['FOLDER_STRUCTURE'] = context.environment.folderStructure;
+      }
     }
 
     // Add derived variables

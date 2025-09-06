@@ -10,6 +10,7 @@ import process from 'node:process';
 import { isGitRepository } from '../utils/gitUtils.js';
 import { PromptService } from '../prompt-config/prompt-service.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
+import { getFolderStructure } from '../utils/getFolderStructure.js';
 import type {
   PromptContext,
   PromptEnvironment,
@@ -74,16 +75,28 @@ function getToolNameMapping(): Record<string, string> {
 /**
  * Build PromptContext from current environment and parameters
  */
-function buildPromptContext(
+async function buildPromptContext(
   model?: string,
   tools?: string[],
   provider?: string,
-): PromptContext {
+): Promise<PromptContext> {
+  // Generate folder structure for the current working directory
+  let folderStructure: string | undefined;
+  try {
+    folderStructure = await getFolderStructure(process.cwd(), {
+      maxItems: 100, // Limit for startup performance
+    });
+  } catch (error) {
+    // If folder structure generation fails, continue without it
+    console.warn('Failed to generate folder structure:', error);
+  }
+
   const environment: PromptEnvironment = {
     isGitRepository: isGitRepository(process.cwd()),
     isSandboxed: !!process.env.SANDBOX,
     hasIdeCompanion: false,
     workingDirectory: process.cwd(),
+    folderStructure,
   };
 
   // Determine sandbox type
@@ -156,7 +169,7 @@ export async function getCoreSystemPromptAsync(
   tools?: string[],
 ): Promise<string> {
   const service = await getPromptService();
-  const context = buildPromptContext(model, tools);
+  const context = await buildPromptContext(model, tools);
   return await service.getPrompt(context, userMemory);
 }
 
@@ -195,41 +208,35 @@ The structure MUST be as follows:
         <!-- Example:
          - Build Command: \`npm run build\`
          - Testing: Tests are run with \`npm test\`. Test files must end in \`.test.ts\`.
-         - API Endpoint: The primary API endpoint is \`https://api.example.com/v2\`.
-         - User Preference: The user wants all file modifications to be thoroughly explained.
+         - Authentication: Uses Firebase Auth, API keys stored in \`config/keys.json\`
         -->
-        <!-- Preserve sufficient detail to avoid confusion on restarting -->
     </key_knowledge>
 
-    <file_system_state>
-        <!-- List files that have been created, read, modified, or deleted. Note their status and critical learnings. -->
+    <current_progress>
+        <!-- What has been accomplished so far? Use bullet points. -->
         <!-- Example:
-         - CWD: \`/home/user/project/src\`
-         - READ: \`package.json\` - Confirmed 'axios' is a dependency.
-         - MODIFIED: \`services/auth.ts\` - Replaced 'jsonwebtoken' with 'jose'.
-         - CREATED: \`tests/new-feature.test.ts\` - Initial test structure for the new feature.
+         - Created new authentication middleware in \`src/auth/middleware.ts\`
+         - Updated user registration endpoint to use new JWT library
+         - Started refactoring login endpoint but encountered TypeScript errors
         -->
-    </file_system_state>
+    </current_progress>
 
-    <recent_actions>
-        <!-- A summary of the last few significant agent actions and their outcomes. Focus on facts. -->
+    <active_tasks>
+        <!-- What specific tasks need to be completed next? Use bullet points. -->
         <!-- Example:
-         - Ran \`grep 'old_function'\` which returned 3 results in 2 files.
-         - Ran \`npm run test\`, which failed due to a snapshot mismatch in \`UserProfile.test.ts\`.
-         - Ran \`ls -F static/\` and discovered image assets are stored as \`.webp\`.
+         - Fix TypeScript errors in \`src/auth/login.ts\`
+         - Update unit tests for authentication middleware
+         - Remove deprecated auth helper functions
         -->
-        <!-- Include enough recent actions to maintain context -->
-    </recent_actions>
+    </active_tasks>
 
-    <current_plan>
-        <!-- The agent's step-by-step plan. Mark completed steps. -->
+    <open_questions>
+        <!-- Any unresolved issues, errors, or questions that need attention? Use bullet points. -->
         <!-- Example:
-         1. [DONE] Identify all files using the deprecated 'UserAPI'.
-         2. [IN PROGRESS] Refactor \`src/components/UserProfile.tsx\` to use the new 'ProfileAPI'.
-         3. [TODO] Refactor the remaining files.
-         4. [TODO] Update tests to reflect the API change.
+         - Need to decide if old JWT tokens should be invalidated immediately
+         - Database migration for user table might be needed
         -->
-    </current_plan>
+    </open_questions>
 </state_snapshot>
 `.trim();
 }

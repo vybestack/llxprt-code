@@ -23,6 +23,7 @@ export interface PromptEnvironment {
   hasIdeCompanion: boolean;
   sandboxType?: 'macos-seatbelt' | 'generic';
   workingDirectory?: string;
+  folderStructure?: string;
 }
 
 // Runtime context for prompt assembly
