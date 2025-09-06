@@ -83,6 +83,7 @@ function buildPromptContext(
     isGitRepository: isGitRepository(process.cwd()),
     isSandboxed: !!process.env.SANDBOX,
     hasIdeCompanion: false,
+    workingDirectory: process.cwd(),
   };
 
   // Determine sandbox type

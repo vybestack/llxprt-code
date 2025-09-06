@@ -881,19 +881,9 @@ export class GeminiProvider extends BaseProvider {
 
     // Convert IContent directly to Gemini format
     const contents: Array<{ role: string; parts: Part[] }> = [];
-    let systemMessage: string | undefined;
 
     for (const c of content) {
       if (c.speaker === 'human') {
-        const textBlock = c.blocks.find((b) => b.type === 'text') as
-          | TextBlock
-          | undefined;
-        if (textBlock?.text?.includes('You are') && contents.length === 0) {
-          // First message might be system prompt
-          systemMessage = textBlock.text;
-          continue;
-        }
-
         const parts: Part[] = [];
         for (const block of c.blocks) {
           if (block.type === 'text') {
@@ -952,27 +942,25 @@ export class GeminiProvider extends BaseProvider {
 
     // Ensure tools have proper type: 'object' for Gemini
     const geminiTools = tools
-      ? [
-          {
-            functionDeclarations: tools[0].functionDeclarations.map((decl) => {
-              let parameters = decl.parameters;
-              if (
-                parameters &&
-                typeof parameters === 'object' &&
-                !('type' in (parameters as Record<string, unknown>))
-              ) {
-                parameters = { type: Type.OBJECT, ...parameters };
-              } else if (!parameters) {
-                parameters = { type: Type.OBJECT, properties: {} };
-              }
-              return {
-                name: decl.name,
-                description: decl.description,
-                parameters: parameters as Schema,
-              };
-            }),
-          },
-        ]
+      ? tools.map((toolGroup) => ({
+          functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
+            let parameters = decl.parameters;
+            if (
+              parameters &&
+              typeof parameters === 'object' &&
+              !('type' in (parameters as Record<string, unknown>))
+            ) {
+              parameters = { type: Type.OBJECT, ...parameters };
+            } else if (!parameters) {
+              parameters = { type: Type.OBJECT, properties: {} };
+            }
+            return {
+              name: decl.name,
+              description: decl.description,
+              parameters: parameters as Schema,
+            };
+          }),
+        }))
       : undefined;
 
     // Create appropriate client and generate content
@@ -1000,9 +988,10 @@ export class GeminiProvider extends BaseProvider {
       const userMemory = this.geminiConfig?.getUserMemory
         ? this.geminiConfig.getUserMemory()
         : '';
-      const systemInstruction =
-        systemMessage ||
-        (await getCoreSystemPromptAsync(userMemory, this.currentModel));
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        this.currentModel,
+      );
 
       const request = {
         model: this.currentModel,
@@ -1032,9 +1021,10 @@ export class GeminiProvider extends BaseProvider {
       const userMemory = this.geminiConfig?.getUserMemory
         ? this.geminiConfig.getUserMemory()
         : '';
-      const systemInstruction =
-        systemMessage ||
-        (await getCoreSystemPromptAsync(userMemory, this.currentModel));
+      const systemInstruction = await getCoreSystemPromptAsync(
+        userMemory,
+        this.currentModel,
+      );
 
       const request = {
         model: this.currentModel,

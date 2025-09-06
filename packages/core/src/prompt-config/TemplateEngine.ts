@@ -149,6 +149,9 @@ export class TemplateEngine {
       if (context.environment.hasIdeCompanion === true) {
         variables['HAS_IDE'] = 'true';
       }
+      if (context.environment.workingDirectory) {
+        variables['WORKING_DIRECTORY'] = context.environment.workingDirectory;
+      }
     }
 
     // Add derived variables
@@ -158,6 +161,18 @@ export class TemplateEngine {
     if (context.model) {
       variables['MODEL_SAFE'] = context.model.replace(/[^a-zA-Z0-9]/g, '_');
     }
+
+    // Add current date and time
+    const now = new Date();
+    variables['CURRENT_DATE'] = now.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    variables['CURRENT_TIME'] = now.toLocaleTimeString();
+    variables['CURRENT_DATETIME'] = now.toLocaleString();
+    variables['PLATFORM'] = process.platform;
 
     return variables;
   }

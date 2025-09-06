@@ -24,6 +24,8 @@ import {
   DiscoveredMCPTool,
   DebugLogger,
   getFunctionCalls,
+  EmojiFilter,
+  FilterConfiguration,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -410,13 +412,24 @@ class GeminiAgent {
 
 class Session {
   private pendingPrompt: AbortController | null = null;
+  private emojiFilter: EmojiFilter;
 
   constructor(
     private readonly id: string,
     private readonly chat: GeminiChat,
     private readonly config: Config,
     private readonly client: acp.Client,
-  ) {}
+  ) {
+    // Initialize emoji filter from settings
+    const emojiFilterMode =
+      (this.config.getEphemeralSetting('emojifilter') as
+        | 'allowed'
+        | 'auto'
+        | 'warn'
+        | 'error') || 'auto';
+    const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
+    this.emojiFilter = new EmojiFilter(filterConfig);
+  }
 
   async cancelPendingPrompt(): Promise<void> {
     if (!this.pendingPrompt) {
@@ -468,9 +481,34 @@ class Session {
                 continue;
               }
 
+              // Filter the content through emoji filter
+              const filterResult = this.emojiFilter.filterStreamChunk(
+                part.text,
+              );
+
+              if (filterResult.blocked) {
+                // In error mode: inject error feedback to model for retry
+                this.sendUpdate({
+                  sessionUpdate: 'agent_message_chunk',
+                  content: {
+                    type: 'text',
+                    text: '[Error: Response blocked due to emoji detection]',
+                  },
+                });
+
+                // Add system feedback to be sent with next tool response
+                // This could be done by queueing feedback similar to TUI implementation
+                continue;
+              }
+
+              const filteredText =
+                typeof filterResult.filtered === 'string'
+                  ? filterResult.filtered
+                  : '';
+
               const content: acp.ContentBlock = {
                 type: 'text',
-                text: part.text,
+                text: filteredText,
               };
 
               this.sendUpdate({
