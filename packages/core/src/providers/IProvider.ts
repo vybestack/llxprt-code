@@ -28,7 +28,7 @@ export interface IProvider {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
   ): AsyncIterableIterator<IContent>;

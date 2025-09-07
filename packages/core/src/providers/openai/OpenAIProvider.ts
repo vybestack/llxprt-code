@@ -38,7 +38,7 @@ import {
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
-// import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
@@ -378,7 +378,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
   ): AsyncIterableIterator<IContent> {
@@ -497,7 +497,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
     maxTokens?: number,
@@ -540,10 +540,26 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
     const streamingEnabled = streamingSetting !== 'disabled';
 
+    // Get the system prompt
+    const userMemory = this.globalConfig?.getUserMemory
+      ? this.globalConfig.getUserMemory()
+      : '';
+    const systemPrompt = await getCoreSystemPromptAsync(
+      userMemory,
+      model,
+      undefined,
+    );
+
+    // Add system prompt as the first message in the array
+    const messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[] = [
+      { role: 'system', content: systemPrompt },
+      ...messages,
+    ];
+
     // Build request - only include tools if they exist and are not empty
     const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
       model,
-      messages,
+      messages: messagesWithSystem,
       ...(formattedTools && formattedTools.length > 0
         ? { tools: formattedTools }
         : {}),

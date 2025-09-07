@@ -37,6 +37,7 @@ import {
 } from '../openai/parseResponsesStream.js';
 import { BaseProvider, BaseProviderConfig } from '../BaseProvider.js';
 import { getSettingsService } from '../../settings/settingsServiceInstance.js';
+import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
 export class OpenAIResponsesProvider extends BaseProvider {
   /**
@@ -431,13 +432,30 @@ export class OpenAIResponsesProvider extends BaseProvider {
       throw new Error('OpenAI API key is required to generate completions');
     }
 
+    // Get the system prompt
+    const userMemory = this.globalConfig?.getUserMemory
+      ? this.globalConfig.getUserMemory()
+      : '';
+    const systemPrompt = await getCoreSystemPromptAsync(
+      userMemory,
+      this.currentModel,
+      undefined,
+    );
+
     // Build Responses API input array directly from IContent
-    // For the Responses API, we only send user and assistant messages
-    // Tool calls and responses from history are not sent as the API handles tools differently
+    // For the Responses API, we send system, user and assistant messages
     const input: Array<{
       role: 'user' | 'assistant' | 'system';
       content?: string;
     }> = [];
+
+    // Add system prompt as the first message if available
+    if (systemPrompt) {
+      input.push({
+        role: 'system',
+        content: systemPrompt,
+      });
+    }
 
     for (const c of content) {
       if (c.speaker === 'human') {

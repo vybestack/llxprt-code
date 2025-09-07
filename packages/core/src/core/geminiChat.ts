@@ -570,7 +570,7 @@ export class GeminiChat {
                 functionDeclarations: Array<{
                   name: string;
                   description?: string;
-                  parameters?: unknown;
+                  parametersJsonSchema?: unknown;
                 }>;
               }>
             | undefined,
@@ -937,7 +937,7 @@ export class GeminiChat {
               functionDeclarations: Array<{
                 name: string;
                 description?: string;
-                parameters?: unknown;
+                parametersJsonSchema?: unknown;
               }>;
             }>
           | undefined,

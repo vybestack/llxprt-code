@@ -865,7 +865,7 @@ export class GeminiProvider extends BaseProvider {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
     _toolFormat?: string,
@@ -941,7 +941,7 @@ export class GeminiProvider extends BaseProvider {
     const geminiTools = tools
       ? tools.map((toolGroup) => ({
           functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
-            let parameters = decl.parameters;
+            let parameters = decl.parametersJsonSchema;
             if (
               parameters &&
               typeof parameters === 'object' &&

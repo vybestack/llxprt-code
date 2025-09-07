@@ -531,7 +531,7 @@ export class AnthropicProvider extends BaseProvider {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
   ): AsyncIterableIterator<IContent> {
@@ -770,8 +770,27 @@ export class AnthropicProvider extends BaseProvider {
     // Build request with proper typing
     const currentModel = this.getCurrentModel();
     // Get the system prompt for non-OAuth mode
+    const userMemory = this.globalConfig?.getUserMemory
+      ? this.globalConfig.getUserMemory()
+      : '';
+
+    // For OAuth mode, inject core system prompt as the first human message
+    if (isOAuth) {
+      const corePrompt = await getCoreSystemPromptAsync(
+        userMemory,
+        currentModel,
+        undefined,
+      );
+      if (corePrompt) {
+        anthropicMessages.unshift({
+          role: 'user',
+          content: `<system>\n${corePrompt}\n</system>\n\nUser provided conversation begins here:`,
+        });
+      }
+    }
+
     const systemPrompt = !isOAuth
-      ? await getCoreSystemPromptAsync(undefined, currentModel, undefined)
+      ? await getCoreSystemPromptAsync(userMemory, currentModel, undefined)
       : undefined;
     const requestBody = {
       model: currentModel,
