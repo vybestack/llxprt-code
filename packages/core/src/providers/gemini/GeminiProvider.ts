@@ -12,13 +12,11 @@ import {
   ToolCallBlock,
   ToolResponseBlock,
 } from '../../services/history/IContent.js';
-import {
-  Config,
-  AuthType,
-  AuthenticationRequiredError,
-  getCoreSystemPromptAsync,
-  createCodeAssistContentGenerator,
-} from '@vybestack/llxprt-code-core';
+import { Config } from '../../config/config.js';
+import { AuthType } from '../../core/contentGenerator.js';
+import { AuthenticationRequiredError } from '../errors.js';
+import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { createCodeAssistContentGenerator } from '../../code_assist/codeAssist.js';
 import {
   Type,
   type Part,
