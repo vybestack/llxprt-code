@@ -127,6 +127,11 @@ const saveCommand: SlashCommand = {
         'tool-output-item-size-limit',
         'max-prompt-tokens',
         'shell-replacement',
+        'todo-continuation',
+        'socket-timeout',
+        'socket-keepalive',
+        'socket-nodelay',
+        'streaming',
       ];
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};
@@ -297,6 +302,17 @@ const loadCommand: SlashCommand = {
         'api-version',
         'custom-headers',
         'disabled-tools',
+        'socket-timeout',
+        'socket-keepalive',
+        'socket-nodelay',
+        'streaming',
+        'todo-continuation',
+        'shell-replacement',
+        'tool-output-max-items',
+        'tool-output-max-tokens',
+        'tool-output-truncate-mode',
+        'tool-output-item-size-limit',
+        'max-prompt-tokens',
       ];
 
       // Clear all known ephemeral settings

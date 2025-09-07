@@ -474,26 +474,50 @@ export class AnthropicProvider extends BaseProvider {
    * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
    */
   private normalizeToAnthropicToolId(id: string): string {
-    // Remove any known prefixes and re-add Anthropic prefix
-    const normalized = id
-      .replace(/^call_/, '') // OpenAI prefix
-      .replace(/^toolu_/, '') // Anthropic prefix (already correct)
-      .replace(/^hist_tool_/, ''); // History prefix
+    // If already in Anthropic format, return as-is
+    if (id.startsWith('toolu_')) {
+      return id;
+    }
 
-    return 'toolu_' + normalized;
+    // For history format, extract the UUID and add Anthropic prefix
+    if (id.startsWith('hist_tool_')) {
+      const uuid = id.substring('hist_tool_'.length);
+      return 'toolu_' + uuid;
+    }
+
+    // For OpenAI format, extract the UUID and add Anthropic prefix
+    if (id.startsWith('call_')) {
+      const uuid = id.substring('call_'.length);
+      return 'toolu_' + uuid;
+    }
+
+    // Unknown format - assume it's a raw UUID
+    return 'toolu_' + id;
   }
 
   /**
    * Normalize tool IDs from Anthropic format to history format
    */
   private normalizeToHistoryToolId(id: string): string {
-    // Remove any known prefixes and add history prefix
-    const normalized = id
-      .replace(/^call_/, '') // OpenAI prefix
-      .replace(/^toolu_/, '') // Anthropic prefix
-      .replace(/^hist_tool_/, ''); // History prefix (already correct)
+    // If already in history format, return as-is
+    if (id.startsWith('hist_tool_')) {
+      return id;
+    }
 
-    return 'hist_tool_' + normalized;
+    // For Anthropic format, extract the UUID and add history prefix
+    if (id.startsWith('toolu_')) {
+      const uuid = id.substring('toolu_'.length);
+      return 'hist_tool_' + uuid;
+    }
+
+    // For OpenAI format, extract the UUID and add history prefix
+    if (id.startsWith('call_')) {
+      const uuid = id.substring('call_'.length);
+      return 'hist_tool_' + uuid;
+    }
+
+    // Unknown format - assume it's a raw UUID
+    return 'hist_tool_' + id;
   }
 
   /**
@@ -525,8 +549,44 @@ export class AnthropicProvider extends BaseProvider {
     // Extract system message if present
     let systemMessage: string | undefined;
 
-    for (const c of content) {
+    // Filter out orphaned tool responses at the beginning of the conversation
+    // TODO: Investigate post-0.2.2 - These shouldn't be truly orphaned since the same
+    // history works with OpenAI/Cerebras. Likely Anthropic has stricter formatting
+    // requirements for tool responses that we're not fully meeting yet.
+    let startIndex = 0;
+    while (
+      startIndex < content.length &&
+      content[startIndex].speaker === 'tool'
+    ) {
+      this.logger.debug(
+        () => `Skipping orphaned tool response at beginning of conversation`,
+      );
+      startIndex++;
+    }
+    const filteredContent = content.slice(startIndex);
+
+    // Group consecutive tool responses together for Anthropic API
+    let pendingToolResults: Array<{
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string;
+    }> = [];
+
+    const flushToolResults = () => {
+      if (pendingToolResults.length > 0) {
+        anthropicMessages.push({
+          role: 'user',
+          content: pendingToolResults,
+        });
+        pendingToolResults = [];
+      }
+    };
+
+    for (const c of filteredContent) {
       if (c.speaker === 'human') {
+        // Flush any pending tool results before adding a human message
+        flushToolResults();
+
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
           | undefined;
@@ -545,6 +605,8 @@ export class AnthropicProvider extends BaseProvider {
           content: textBlock?.text || '',
         });
       } else if (c.speaker === 'ai') {
+        // Flush any pending tool results before adding an AI message
+        flushToolResults();
         const textBlocks = c.blocks.filter(
           (b) => b.type === 'text',
         ) as TextBlock[];
@@ -607,22 +669,94 @@ export class AnthropicProvider extends BaseProvider {
           throw new Error('Tool content must have a tool_response block');
         }
 
-        // Anthropic expects tool results as user messages
-        anthropicMessages.push({
-          role: 'user',
-          content: [
-            {
-              type: 'tool_result',
-              tool_use_id: this.normalizeToAnthropicToolId(
-                toolResponseBlock.callId,
-              ),
-              content: JSON.stringify(toolResponseBlock.result),
-            },
-          ],
+        // Collect tool results to be grouped together
+        pendingToolResults.push({
+          type: 'tool_result',
+          tool_use_id: this.normalizeToAnthropicToolId(
+            toolResponseBlock.callId,
+          ),
+          content: JSON.stringify(toolResponseBlock.result),
         });
       } else {
         throw new Error(`Unknown speaker type: ${c.speaker}`);
       }
+    }
+
+    // Flush any remaining tool results at the end
+    flushToolResults();
+
+    // Validate that all tool_results have corresponding tool_uses
+    // Anthropic requires strict pairing between tool_use and tool_result
+    const toolUseIds = new Set<string>();
+    const toolResultIds = new Set<string>();
+
+    for (const msg of anthropicMessages) {
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === 'tool_use') {
+            toolUseIds.add(block.id);
+          }
+        }
+      } else if (msg.role === 'user' && Array.isArray(msg.content)) {
+        for (const block of msg.content) {
+          if (block.type === 'tool_result') {
+            toolResultIds.add(block.tool_use_id);
+          }
+        }
+      }
+    }
+
+    // Remove orphaned tool results (results without corresponding tool uses)
+    const orphanedResults = Array.from(toolResultIds).filter(
+      (id) => !toolUseIds.has(id),
+    );
+    if (orphanedResults.length > 0) {
+      this.logger.debug(
+        () =>
+          `Found ${orphanedResults.length} orphaned tool results, removing them`,
+      );
+
+      // Filter out messages that only contain orphaned tool results
+      const filteredMessages = anthropicMessages.filter((msg) => {
+        if (msg.role === 'user' && Array.isArray(msg.content)) {
+          const filteredContent = msg.content.filter(
+            (block) =>
+              block.type !== 'tool_result' ||
+              !orphanedResults.includes(block.tool_use_id),
+          );
+          if (filteredContent.length === 0) {
+            // Remove empty user messages
+            return false;
+          }
+          msg.content = filteredContent;
+        }
+        return true;
+      });
+
+      // Replace the messages array
+      anthropicMessages.length = 0;
+      anthropicMessages.push(...filteredMessages);
+    }
+
+    // Ensure the conversation starts with a valid message type
+    // Anthropic requires the first message to be from the user
+    if (anthropicMessages.length > 0 && anthropicMessages[0].role !== 'user') {
+      // If the first message is not from the user, add a minimal user message
+      this.logger.debug(
+        () => `First message is not from user, adding placeholder user message`,
+      );
+      anthropicMessages.unshift({
+        role: 'user',
+        content: 'Continue the conversation',
+      });
+    }
+
+    // Ensure we have at least one message
+    if (anthropicMessages.length === 0) {
+      anthropicMessages.push({
+        role: 'user',
+        content: 'Hello',
+      });
     }
 
     // Convert Gemini format tools directly to Anthropic format using the new method

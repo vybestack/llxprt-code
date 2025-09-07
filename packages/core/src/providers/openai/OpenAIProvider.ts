@@ -20,6 +20,9 @@
  */
 
 import OpenAI from 'openai';
+import * as http from 'http';
+import * as https from 'https';
+import * as net from 'net';
 import { IContent } from '../../services/history/IContent.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
@@ -84,6 +87,74 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Create HTTP/HTTPS agents with socket configuration for local AI servers
+   * Returns undefined if no socket settings are configured
+   */
+  private createHttpAgents():
+    | { httpAgent: http.Agent; httpsAgent: https.Agent }
+    | undefined {
+    // Get socket configuration from ephemeral settings
+    const settings = this.providerConfig?.getEphemeralSettings?.() || {};
+
+    // Check if any socket settings are explicitly configured
+    const hasSocketSettings =
+      'socket-timeout' in settings ||
+      'socket-keepalive' in settings ||
+      'socket-nodelay' in settings;
+
+    // Only create custom agents if socket settings are configured
+    if (!hasSocketSettings) {
+      return undefined;
+    }
+
+    // Socket configuration with defaults for when settings ARE configured
+    const socketTimeout = (settings['socket-timeout'] as number) || 60000; // 60 seconds default
+    const socketKeepAlive = settings['socket-keepalive'] !== false; // true by default
+    const socketNoDelay = settings['socket-nodelay'] !== false; // true by default
+
+    // Create HTTP agent with socket options
+    const httpAgent = new http.Agent({
+      keepAlive: socketKeepAlive,
+      keepAliveMsecs: 1000,
+      timeout: socketTimeout,
+    });
+
+    // Create HTTPS agent with socket options
+    const httpsAgent = new https.Agent({
+      keepAlive: socketKeepAlive,
+      keepAliveMsecs: 1000,
+      timeout: socketTimeout,
+    });
+
+    // Apply TCP_NODELAY if enabled (reduces latency for local servers)
+    if (socketNoDelay) {
+      const originalCreateConnection = httpAgent.createConnection;
+      httpAgent.createConnection = function (options, callback) {
+        const socket = originalCreateConnection.call(this, options, callback);
+        if (socket instanceof net.Socket) {
+          socket.setNoDelay(true);
+        }
+        return socket;
+      };
+
+      const originalHttpsCreateConnection = httpsAgent.createConnection;
+      httpsAgent.createConnection = function (options, callback) {
+        const socket = originalHttpsCreateConnection.call(
+          this,
+          options,
+          callback,
+        );
+        if (socket instanceof net.Socket) {
+          socket.setNoDelay(true);
+        }
+        return socket;
+      };
+    }
+
+    return { httpAgent, httpsAgent };
+  }
+
+  /**
    * Get or create OpenAI client instance
    * Will use the API key from resolved auth
    * @returns OpenAI client instance
@@ -99,11 +170,30 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return this._cachedClient;
     }
 
-    // Create new client with current auth
-    this._cachedClient = new OpenAI({
+    // Create HTTP agents with socket configuration (if configured)
+    const agents = this.createHttpAgents();
+
+    // Build client options - OpenAI SDK accepts httpAgent/httpsAgent at runtime
+    // even though they're not in the TypeScript definitions
+    const baseOptions = {
       apiKey: resolvedKey || '',
       baseURL,
-    });
+    };
+
+    // Add socket configuration if available
+    const clientOptions = agents
+      ? {
+          ...baseOptions,
+          httpAgent: agents.httpAgent,
+          httpsAgent: agents.httpsAgent,
+        }
+      : baseOptions;
+
+    // Create new client with current auth and optional socket configuration
+    // Cast to unknown then to the expected type to bypass TypeScript's structural checking
+    this._cachedClient = new OpenAI(
+      clientOptions as unknown as ConstructorParameters<typeof OpenAI>[0],
+    );
     this._cachedClientKey = clientKey;
 
     return this._cachedClient;
@@ -229,26 +319,50 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
    */
   private normalizeToOpenAIToolId(id: string): string {
-    // Remove any known prefixes and re-add OpenAI prefix
-    const normalized = id
-      .replace(/^call_/, '') // OpenAI prefix (already correct)
-      .replace(/^toolu_/, '') // Anthropic prefix
-      .replace(/^hist_tool_/, ''); // History prefix
+    // If already in OpenAI format, return as-is
+    if (id.startsWith('call_')) {
+      return id;
+    }
 
-    return 'call_' + normalized;
+    // For history format, extract the UUID and add OpenAI prefix
+    if (id.startsWith('hist_tool_')) {
+      const uuid = id.substring('hist_tool_'.length);
+      return 'call_' + uuid;
+    }
+
+    // For Anthropic format, extract the UUID and add OpenAI prefix
+    if (id.startsWith('toolu_')) {
+      const uuid = id.substring('toolu_'.length);
+      return 'call_' + uuid;
+    }
+
+    // Unknown format - assume it's a raw UUID
+    return 'call_' + id;
   }
 
   /**
    * Normalize tool IDs from OpenAI format to history format
    */
   private normalizeToHistoryToolId(id: string): string {
-    // Remove any known prefixes and add history prefix
-    const normalized = id
-      .replace(/^call_/, '') // OpenAI prefix
-      .replace(/^toolu_/, '') // Anthropic prefix
-      .replace(/^hist_tool_/, ''); // History prefix (already correct)
+    // If already in history format, return as-is
+    if (id.startsWith('hist_tool_')) {
+      return id;
+    }
 
-    return 'hist_tool_' + normalized;
+    // For OpenAI format, extract the UUID and add history prefix
+    if (id.startsWith('call_')) {
+      const uuid = id.substring('call_'.length);
+      return 'hist_tool_' + uuid;
+    }
+
+    // For Anthropic format, extract the UUID and add history prefix
+    if (id.startsWith('toolu_')) {
+      const uuid = id.substring('toolu_'.length);
+      return 'hist_tool_' + uuid;
+    }
+
+    // Unknown format - assume it's a raw UUID
+    return 'hist_tool_' + id;
   }
 
   /**
@@ -456,7 +570,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     };
 
     let retryCount = 0;
-    const maxRetries = 3;
+    const maxRetries = 5;
     let response:
       | OpenAI.Chat.Completions.ChatCompletion
       | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
@@ -474,7 +588,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           () => `API call failed (attempt ${retryCount}), retrying...`,
           error,
         );
-        await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
+        // Exponential backoff: 4s, 8s, 16s, 32s, 64s
+        const delay = 4000 * Math.pow(2, retryCount - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 

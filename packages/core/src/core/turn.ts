@@ -28,6 +28,7 @@ import {
   toFriendlyError,
 } from '../utils/errors.js';
 import { GeminiChat } from './geminiChat.js';
+import { DebugLogger } from '../debug/index.js';
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
@@ -180,6 +181,7 @@ export class Turn {
   readonly pendingToolCalls: ToolCallRequestInfo[];
   private debugResponses: GenerateContentResponse[];
   finishReason: FinishReason | undefined;
+  private logger: DebugLogger;
 
   constructor(
     private readonly chat: GeminiChat,
@@ -189,18 +191,18 @@ export class Turn {
     this.pendingToolCalls = [];
     this.debugResponses = [];
     this.finishReason = undefined;
+    this.logger = new DebugLogger('llxprt:core:turn');
   }
   // The run method yields simpler events suitable for server logic
   async *run(
     req: PartListUnion,
     signal: AbortSignal,
   ): AsyncGenerator<ServerGeminiStreamEvent> {
-    if (process.env.DEBUG) {
-      console.log('DEBUG: Turn.run called');
-      console.log('DEBUG: Turn.run req:', JSON.stringify(req, null, 2));
-      console.log('DEBUG: Turn.run typeof req:', typeof req);
-      console.log('DEBUG: Turn.run Array.isArray(req):', Array.isArray(req));
-    }
+    this.logger.debug('Turn.run called', {
+      req: JSON.stringify(req, null, 2),
+      typeofReq: typeof req,
+      isArray: Array.isArray(req),
+    });
 
     try {
       const responseStream = await this.chat.sendMessageStream(

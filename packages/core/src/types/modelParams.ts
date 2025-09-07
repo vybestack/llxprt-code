@@ -62,6 +62,14 @@ export interface EphemeralSettings {
   'shell-replacement'?: boolean;
   /** Enable todo continuation after stream completion (default: true) */
   'todo-continuation'?: boolean;
+  /** Socket timeout in milliseconds for local AI servers */
+  'socket-timeout'?: number;
+  /** Enable socket keep-alive for local AI servers */
+  'socket-keepalive'?: boolean;
+  /** Enable TCP_NODELAY for local AI servers */
+  'socket-nodelay'?: boolean;
+  /** Enable streaming responses from providers */
+  streaming?: 'enabled' | 'disabled';
 }
 
 /**

@@ -198,8 +198,9 @@ export const providerCommand: SlashCommand = {
           );
         }
 
-        // Clear UI history to prevent tool call ID mismatches
-        context.ui.clear();
+        // Note: We no longer clear UI history when switching providers
+        // The whole point of provider switching is to maintain conversation context
+        // Tool call ID conversion is handled by the content converters
       }
 
       // Trigger payment mode check if available
