@@ -19,6 +19,7 @@ import {
   processToolParameters,
   logDoubleEscapingInChunk,
 } from '../../tools/doubleEscapeUtils.js';
+import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
 export class AnthropicProvider extends BaseProvider {
   private logger: DebugLogger;
@@ -547,7 +548,7 @@ export class AnthropicProvider extends BaseProvider {
     }> = [];
 
     // Extract system message if present
-    let systemMessage: string | undefined;
+    // let systemMessage: string | undefined;
 
     // Filter out orphaned tool responses at the beginning of the conversation
     // TODO: Investigate post-0.2.2 - These shouldn't be truly orphaned since the same
@@ -591,15 +592,7 @@ export class AnthropicProvider extends BaseProvider {
           | TextBlock
           | undefined;
 
-        // Check for system message (this is a hack for now - should be explicit)
-        if (
-          anthropicMessages.length === 0 &&
-          textBlock?.text?.includes('You are')
-        ) {
-          systemMessage = textBlock.text;
-          continue;
-        }
-
+        // Add text block as user message
         anthropicMessages.push({
           role: 'user',
           content: textBlock?.text || '',
@@ -776,6 +769,10 @@ export class AnthropicProvider extends BaseProvider {
 
     // Build request with proper typing
     const currentModel = this.getCurrentModel();
+    // Get the system prompt for non-OAuth mode
+    const systemPrompt = !isOAuth
+      ? await getCoreSystemPromptAsync(undefined, currentModel, undefined)
+      : undefined;
     const requestBody = {
       model: currentModel,
       messages: anthropicMessages,
@@ -786,8 +783,8 @@ export class AnthropicProvider extends BaseProvider {
         ? {
             system: "You are Claude Code, Anthropic's official CLI for Claude.",
           }
-        : systemMessage
-          ? { system: systemMessage }
+        : systemPrompt
+          ? { system: systemPrompt }
           : {}),
       ...(anthropicTools && anthropicTools.length > 0
         ? { tools: anthropicTools }

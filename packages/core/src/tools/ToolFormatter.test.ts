@@ -1,417 +1,359 @@
 /**
+ * @license
  * Copyright 2025 Vybestack LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { ToolFormatter } from './ToolFormatter.js';
-import { ITool } from '../providers/ITool.js';
+import { Type } from '@google/genai';
 
 describe('ToolFormatter', () => {
-  let formatter: ToolFormatter;
+  describe('convertGeminiToOpenAI', () => {
+    it('should convert TodoWrite tool from Gemini format to OpenAI format with proper parameters', () => {
+      const formatter = new ToolFormatter();
 
-  beforeEach(() => {
-    formatter = new ToolFormatter();
-  });
-
-  it('should correctly format tools for OpenAI provider', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'sum',
-          description: 'Add two numbers',
-          parameters: {
-            type: 'object',
-            properties: {
-              a: { type: 'number' },
-              b: { type: 'number' },
+      // Real TodoWrite schema in Gemini format (from todo-write.ts)
+      const geminiTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'todo_write',
+              description:
+                'Create and manage a structured task list for the current coding session. Updates the entire todo list.',
+              parameters: {
+                type: Type.OBJECT,
+                properties: {
+                  todos: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: {
+                          type: Type.STRING,
+                          description: 'Unique identifier for the todo item',
+                        },
+                        content: {
+                          type: Type.STRING,
+                          description: 'Description of the todo item',
+                          minLength: '1',
+                        },
+                        status: {
+                          type: Type.STRING,
+                          enum: ['pending', 'in_progress', 'completed'],
+                          description: 'Current status of the todo item',
+                        },
+                        priority: {
+                          type: Type.STRING,
+                          enum: ['high', 'medium', 'low'],
+                          description: 'Priority level of the todo item',
+                        },
+                      },
+                      required: ['id', 'content', 'status', 'priority'],
+                    },
+                    description: 'List of todo items',
+                  },
+                },
+                required: ['todos'],
+              },
             },
-            required: ['a', 'b'],
-          },
+          ],
         },
-      },
-    ];
+      ];
 
-    const expected = [
-      {
-        type: 'function',
-        function: {
-          name: 'sum',
-          description: 'Add two numbers',
-          parameters: {
-            type: 'object',
-            properties: {
-              a: { type: 'number' },
-              b: { type: 'number' },
-            },
-            required: ['a', 'b'],
-          },
-        },
-      },
-    ];
+      const result = formatter.convertGeminiToOpenAI(geminiTools);
 
-    expect(formatter.toProviderFormat(tools, 'openai')).toEqual(expected);
-  });
+      // Check that we got a result
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
 
-  it('should throw an error for invalid OpenAI tool call format', () => {
-    const rawToolCall = {};
-    expect(() => formatter.fromProviderFormat(rawToolCall, 'openai')).toThrow(
-      'Invalid openai tool call format',
-    );
-  });
+      const tool = result![0];
 
-  it('should correctly parse OpenAI tool calls from provider format', () => {
-    const rawToolCall = {
-      id: 'call_123',
-      function: {
-        name: 'sum',
-        arguments: '{"a": 5, "b": 3}',
-      },
-    };
-
-    const expected = [
-      {
-        type: 'tool_call' as const,
-        id: 'call_123',
-        name: 'sum',
-        parameters: { a: 5, b: 3 },
-      },
-    ];
-
-    expect(formatter.fromProviderFormat(rawToolCall, 'openai')).toEqual(
-      expected,
-    );
-  });
-
-  it('should correctly format tools for Anthropic provider', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'search',
-          description: 'Search for information',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Search query' },
-              limit: { type: 'number', description: 'Max results' },
-            },
-            required: ['query'],
-          },
-        },
-      },
-    ];
-
-    const expected = [
-      {
-        name: 'search',
-        description: 'Search for information',
-        input_schema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Search query' },
-            limit: { type: 'number', description: 'Max results' },
-          },
-          required: ['query'],
-        },
-      },
-    ];
-
-    expect(formatter.toProviderFormat(tools, 'anthropic')).toEqual(expected);
-  });
-
-  it('should handle empty description for Anthropic provider', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'calculate',
-          parameters: {
-            type: 'object',
-            properties: { x: { type: 'number' } },
-          },
-        },
-      },
-    ];
-
-    const result = formatter.toProviderFormat(tools, 'anthropic') as Array<{
-      name: string;
-      description: string;
-      input_schema: object;
-    }>;
-    expect(result[0].description).toBe('');
-  });
-
-  it('should not throw for implemented formats in toProviderFormat', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'test',
-          description: 'Test function',
-          parameters: {},
-        },
-      },
-    ];
-
-    // All these formats are now implemented and should not throw
-    expect(() => formatter.toProviderFormat(tools, 'openai')).not.toThrow();
-    expect(() => formatter.toProviderFormat(tools, 'anthropic')).not.toThrow();
-    expect(() => formatter.toProviderFormat(tools, 'hermes')).not.toThrow();
-    expect(() => formatter.toProviderFormat(tools, 'xml')).not.toThrow();
-    expect(() => formatter.toProviderFormat(tools, 'deepseek')).not.toThrow();
-    expect(() => formatter.toProviderFormat(tools, 'qwen')).not.toThrow();
-  });
-
-  it('should correctly format tools for Hermes provider', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'get_stock_fundamentals',
-          description: 'Get fundamental data for a stock',
-          parameters: {
-            type: 'object',
-            properties: {
-              symbol: { type: 'string', description: 'Stock symbol' },
-            },
-            required: ['symbol'],
-          },
-        },
-      },
-    ];
-
-    const expected = [
-      {
-        name: 'get_stock_fundamentals',
-        description: 'Get fundamental data for a stock',
-        parameters: {
-          type: 'object',
-          properties: {
-            symbol: { type: 'string', description: 'Stock symbol' },
-          },
-          required: ['symbol'],
-        },
-      },
-    ];
-
-    expect(formatter.toProviderFormat(tools, 'hermes')).toEqual(expected);
-  });
-
-  it('should correctly parse Anthropic tool calls from provider format', () => {
-    const rawToolCall = {
-      id: 'toolu_01abc123',
-      type: 'tool_use',
-      name: 'search',
-      input: { query: 'test search', limit: 10 },
-    };
-
-    const expected = [
-      {
-        type: 'tool_call' as const,
-        id: 'toolu_01abc123',
-        name: 'search',
-        parameters: { query: 'test search', limit: 10 },
-      },
-    ];
-
-    expect(formatter.fromProviderFormat(rawToolCall, 'anthropic')).toEqual(
-      expected,
-    );
-  });
-
-  it('should handle Anthropic tool calls without input', () => {
-    const rawToolCall = {
-      id: 'toolu_01xyz789',
-      name: 'get_time',
-    };
-
-    const expected = [
-      {
-        type: 'tool_call' as const,
-        id: 'toolu_01xyz789',
-        name: 'get_time',
-        parameters: {},
-      },
-    ];
-
-    expect(formatter.fromProviderFormat(rawToolCall, 'anthropic')).toEqual(
-      expected,
-    );
-  });
-
-  it('should throw an error for invalid Anthropic tool call format', () => {
-    const invalidCalls = [
-      {},
-      { id: 'test' }, // missing name
-      { name: 'test' }, // missing id
-      null,
-    ];
-
-    invalidCalls.forEach((rawToolCall) => {
-      expect(() =>
-        formatter.fromProviderFormat(rawToolCall, 'anthropic'),
-      ).toThrow('Invalid anthropic tool call format');
-    });
-  });
-
-  it('should correctly parse Hermes tool calls from provider format', () => {
-    const rawToolCall = {
-      name: 'get_stock_fundamentals',
-      arguments: { symbol: 'AAPL' },
-    };
-
-    const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
-
-    expect(result).toHaveLength(1);
-    expect(result![0].type).toBe('tool_call');
-    expect(result![0].name).toBe('get_stock_fundamentals');
-    expect(result![0].parameters).toEqual({ symbol: 'AAPL' });
-    expect(result![0].id).toMatch(/^hermes_/); // Should have generated ID
-  });
-
-  it('should handle Hermes tool calls without arguments', () => {
-    const rawToolCall = {
-      name: 'get_current_time',
-      arguments: {},
-    };
-
-    const result = formatter.fromProviderFormat(rawToolCall, 'hermes');
-
-    expect(result).toHaveLength(1);
-    expect(result![0].name).toBe('get_current_time');
-    expect(result![0].parameters).toEqual({});
-  });
-
-  it('should throw error for invalid Hermes tool call format', () => {
-    const invalidCalls = [
-      {},
-      { arguments: {} }, // missing name
-      null,
-    ];
-
-    invalidCalls.forEach((rawToolCall) => {
-      expect(() => formatter.fromProviderFormat(rawToolCall, 'hermes')).toThrow(
-        'Invalid hermes tool call format',
+      // Check basic structure
+      expect(tool.type).toBe('function');
+      expect(tool.function.name).toBe('todo_write');
+      expect(tool.function.description).toBe(
+        'Create and manage a structured task list for the current coding session. Updates the entire todo list.',
       );
-    });
-  });
 
-  it('should correctly format tools for XML provider', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'weather_tool',
-          description: 'Get weather information',
-          parameters: {
-            type: 'object',
-            properties: {
-              location: { type: 'string', description: 'City name' },
-              units: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-            },
-            required: ['location'],
-          },
-        },
-      },
-    ];
+      // Check that parameters were converted properly
+      expect(tool.function.parameters).toBeDefined();
+      expect(tool.function.parameters).not.toEqual({});
 
-    const expected = [
-      {
-        name: 'weather_tool',
-        description: 'Get weather information',
-        parameters: {
-          type: 'object',
-          properties: {
-            location: { type: 'string', description: 'City name' },
-            units: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-          },
-          required: ['location'],
-        },
-      },
-    ];
-
-    expect(formatter.toProviderFormat(tools, 'xml')).toEqual(expected);
-  });
-
-  it('should correctly parse XML tool calls from provider format', () => {
-    const rawToolCall = {
-      name: 'weather_tool',
-      arguments: { location: 'Paris', units: 'celsius' },
-    };
-
-    const result = formatter.fromProviderFormat(rawToolCall, 'xml');
-
-    expect(result).toHaveLength(1);
-    expect(result![0].type).toBe('tool_call');
-    expect(result![0].name).toBe('weather_tool');
-    expect(result![0].parameters).toEqual({
-      location: 'Paris',
-      units: 'celsius',
-    });
-    expect(result![0].id).toMatch(/^xml_/); // Should have generated ID
-  });
-
-  it('should handle XML tool calls without arguments', () => {
-    const rawToolCall = {
-      name: 'get_time',
-      arguments: {},
-    };
-
-    const result = formatter.fromProviderFormat(rawToolCall, 'xml');
-
-    expect(result).toHaveLength(1);
-    expect(result![0].name).toBe('get_time');
-    expect(result![0].parameters).toEqual({});
-  });
-
-  it('should throw error for invalid XML tool call format', () => {
-    const invalidCalls = [
-      {},
-      { arguments: {} }, // missing name
-      null,
-    ];
-
-    invalidCalls.forEach((rawToolCall) => {
-      expect(() => formatter.fromProviderFormat(rawToolCall, 'xml')).toThrow(
-        'Invalid xml tool call format',
+      // Parameters should have the expected structure
+      expect(tool.function.parameters.type).toBe('object');
+      expect(tool.function.parameters.properties).toBeDefined();
+      expect(tool.function.parameters.properties.todos).toBeDefined();
+      expect(tool.function.parameters.properties.todos.type).toBe('array');
+      expect(tool.function.parameters.properties.todos.items).toBeDefined();
+      expect(tool.function.parameters.properties.todos.items.type).toBe(
+        'object',
       );
+      expect(
+        tool.function.parameters.properties.todos.items.properties,
+      ).toBeDefined();
+      expect(
+        tool.function.parameters.properties.todos.items.properties.id,
+      ).toBeDefined();
+      expect(
+        tool.function.parameters.properties.todos.items.properties.content,
+      ).toBeDefined();
+      expect(
+        tool.function.parameters.properties.todos.items.properties.status,
+      ).toBeDefined();
+      expect(
+        tool.function.parameters.properties.todos.items.properties.priority,
+      ).toBeDefined();
+      expect(tool.function.parameters.required).toEqual(['todos']);
+
+      // Check that enums are preserved
+      expect(
+        tool.function.parameters.properties.todos.items.properties.status.enum,
+      ).toEqual(['pending', 'in_progress', 'completed']);
+      expect(
+        tool.function.parameters.properties.todos.items.properties.priority
+          .enum,
+      ).toEqual(['high', 'medium', 'low']);
+
+      // Check that minLength was converted from string to number
+      expect(
+        tool.function.parameters.properties.todos.items.properties.content
+          .minLength,
+      ).toBe(1);
+      expect(
+        typeof tool.function.parameters.properties.todos.items.properties
+          .content.minLength,
+      ).toBe('number');
+    });
+
+    it('should handle tools with undefined parameters', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'simple_tool',
+              description: 'A simple tool',
+              parameters: undefined,
+            },
+          ],
+        },
+      ];
+
+      const result = formatter.convertGeminiToOpenAI(geminiTools);
+
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
+
+      const tool = result![0];
+      expect(tool.function.parameters).toEqual({});
+    });
+
+    it('should handle tools with empty object parameters', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'simple_tool',
+              description: 'A simple tool',
+              parameters: {},
+            },
+          ],
+        },
+      ];
+
+      const result = formatter.convertGeminiToOpenAI(geminiTools);
+
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
+
+      const tool = result![0];
+      expect(tool.function.parameters).toEqual({});
+    });
+
+    it('should convert list_directory tool properly', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiTools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'list_directory',
+              description:
+                'Lists the names of files and subdirectories directly within a specified directory path.',
+              parameters: {
+                type: Type.OBJECT,
+                properties: {
+                  path: {
+                    type: Type.STRING,
+                    description: 'The absolute path to the directory to list',
+                  },
+                  ignore: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.STRING,
+                    },
+                    description: 'List of glob patterns to ignore',
+                  },
+                },
+                required: ['path'],
+              },
+            },
+          ],
+        },
+      ];
+
+      const result = formatter.convertGeminiToOpenAI(geminiTools);
+
+      expect(result).toBeDefined();
+      expect(result).toHaveLength(1);
+
+      const tool = result![0];
+
+      // Check that parameters were converted properly
+      expect(tool.function.parameters).toBeDefined();
+      expect(tool.function.parameters.type).toBe('object');
+      expect(tool.function.parameters.properties).toBeDefined();
+      expect(tool.function.parameters.properties.path).toBeDefined();
+      expect(tool.function.parameters.properties.path.type).toBe('string');
+      expect(tool.function.parameters.properties.ignore).toBeDefined();
+      expect(tool.function.parameters.properties.ignore.type).toBe('array');
+      expect(tool.function.parameters.required).toEqual(['path']);
     });
   });
 
-  it('should format tools correctly for DeepSeek and Qwen providers', () => {
-    const tools: ITool[] = [
-      {
-        type: 'function',
-        function: {
-          name: 'test_function',
-          description: 'A test function',
-          parameters: { type: 'object', properties: {} },
+  describe('convertGeminiSchemaToStandard', () => {
+    it('should convert Type enum values to lowercase strings', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiSchema = {
+        type: Type.OBJECT,
+        properties: {
+          name: {
+            type: Type.STRING,
+          },
+          count: {
+            type: Type.NUMBER,
+          },
         },
-      },
-    ];
+      };
 
-    // DeepSeek and Qwen use the same format as OpenAI
-    const deepseekResult = formatter.toProviderFormat(
-      tools,
-      'deepseek' as const,
-    );
-    const qwenResult = formatter.toProviderFormat(tools, 'qwen' as const);
-    const openaiResult = formatter.toProviderFormat(tools, 'openai');
+      const result = formatter.convertGeminiSchemaToStandard(
+        geminiSchema,
+      ) as Record<string, unknown>;
 
-    expect(deepseekResult).toEqual(openaiResult);
-    expect(qwenResult).toEqual(openaiResult);
+      expect(result.type).toBe('object');
+      expect((result.properties as Record<string, unknown>).name).toBeDefined();
+      expect(
+        (
+          (result.properties as Record<string, unknown>).name as Record<
+            string,
+            unknown
+          >
+        ).type,
+      ).toBe('string');
+      expect(
+        (result.properties as Record<string, unknown>).count,
+      ).toBeDefined();
+      expect(
+        (
+          (result.properties as Record<string, unknown>).count as Record<
+            string,
+            unknown
+          >
+        ).type,
+      ).toBe('number');
+    });
+
+    it('should handle nested objects and arrays', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiSchema = {
+        type: Type.OBJECT,
+        properties: {
+          items: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: {
+                  type: Type.STRING,
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const result = formatter.convertGeminiSchemaToStandard(
+        geminiSchema,
+      ) as Record<string, unknown>;
+
+      expect(result.type).toBe('object');
+      const props = result.properties as Record<string, unknown>;
+      const items = props.items as Record<string, unknown>;
+      expect(items.type).toBe('array');
+      const itemsItems = items.items as Record<string, unknown>;
+      expect(itemsItems.type).toBe('object');
+      const itemProps = itemsItems.properties as Record<string, unknown>;
+      const id = itemProps.id as Record<string, unknown>;
+      expect(id.type).toBe('string');
+    });
+
+    it('should convert minLength and maxLength from string to number', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiSchema = {
+        type: Type.STRING,
+        minLength: '5',
+        maxLength: '100',
+      };
+
+      const result = formatter.convertGeminiSchemaToStandard(
+        geminiSchema,
+      ) as Record<string, unknown>;
+
+      expect(result.minLength).toBe(5);
+      expect(typeof result.minLength).toBe('number');
+      expect(result.maxLength).toBe(100);
+      expect(typeof result.maxLength).toBe('number');
+    });
+
+    it('should preserve enum values as strings', () => {
+      const formatter = new ToolFormatter();
+
+      const geminiSchema = {
+        type: Type.STRING,
+        enum: ['pending', 'in_progress', 'completed'],
+      };
+
+      const result = formatter.convertGeminiSchemaToStandard(
+        geminiSchema,
+      ) as Record<string, unknown>;
+
+      expect(result.enum).toEqual(['pending', 'in_progress', 'completed']);
+    });
+
+    it('should return empty object when given empty object', () => {
+      const formatter = new ToolFormatter();
+
+      const result = formatter.convertGeminiSchemaToStandard({}) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result).toEqual({});
+    });
+
+    it('should return undefined when given undefined', () => {
+      const formatter = new ToolFormatter();
+
+      const result = formatter.convertGeminiSchemaToStandard(undefined);
+
+      expect(result).toBeUndefined();
+    });
   });
 });

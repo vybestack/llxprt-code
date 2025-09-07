@@ -38,6 +38,7 @@ import {
 import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
+// import { getCoreSystemPromptAsync } from '../../core/prompts.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
@@ -509,6 +510,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
 
+    // Debug log what we're about to convert
+    this.logger.debug(() => `[OpenAIProvider] Before convertGeminiToOpenAI:`, {
+      inputTools: tools ? JSON.stringify(tools).substring(0, 500) : 'undefined',
+      hasTools: !!tools,
+      toolsLength: tools?.length,
+      firstToolStructure: tools?.[0]
+        ? JSON.stringify(tools[0]).substring(0, 300)
+        : 'undefined',
+    });
+
     // Convert Gemini format tools directly to OpenAI format using the new method
     const formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
 
@@ -519,6 +530,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       outputToolsLength: formattedTools?.length,
       outputFirstTool: formattedTools?.[0],
       outputToolNames: formattedTools?.map((t) => t.function.name),
+      firstToolParameters: formattedTools?.[0]
+        ? JSON.stringify(formattedTools[0].function.parameters)
+        : 'undefined',
     });
 
     // Get streaming setting from ephemeral settings (default: enabled)

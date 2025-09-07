@@ -50,10 +50,33 @@ export class ToolFormatter implements IToolFormatter {
         };
       }>
     | undefined {
-    if (!geminiTools) return undefined;
+    if (!geminiTools) {
+      this.logger.debug(
+        () => `convertGeminiToOpenAI called with undefined tools`,
+      );
+      return undefined;
+    }
+
+    this.logger.debug(() => `convertGeminiToOpenAI input:`, {
+      toolGroupCount: geminiTools.length,
+      firstGroup: geminiTools[0]
+        ? JSON.stringify(geminiTools[0]).substring(0, 500)
+        : 'undefined',
+    });
 
     const openAITools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
+        this.logger.debug(
+          () => `Processing tool declaration for ${decl.name}`,
+          {
+            hasParameters: !!decl.parameters,
+            parametersType: typeof decl.parameters,
+            parametersPreview: decl.parameters
+              ? JSON.stringify(decl.parameters).substring(0, 200)
+              : 'undefined',
+          },
+        );
+
         const convertedParams = this.convertGeminiSchemaToStandard(
           decl.parameters || {},
         ) as Record<string, unknown>;
@@ -64,6 +87,7 @@ export class ToolFormatter implements IToolFormatter {
             name: decl.name,
             originalParams: decl.parameters,
             convertedParams,
+            convertedParamsJSON: JSON.stringify(convertedParams),
           },
         );
 
@@ -84,6 +108,9 @@ export class ToolFormatter implements IToolFormatter {
       {
         toolNames: openAITools.map((t) => t.function.name),
         firstTool: openAITools[0],
+        firstToolParams: openAITools[0]
+          ? JSON.stringify(openAITools[0].function.parameters)
+          : 'undefined',
       },
     );
 
