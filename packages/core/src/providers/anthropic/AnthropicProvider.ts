@@ -541,11 +541,23 @@ export class AnthropicProvider extends BaseProvider {
 
           // Add tool uses
           for (const tc of toolCallBlocks) {
+            // Ensure parameters are an object, not a string
+            let parametersObj = tc.parameters;
+            if (typeof parametersObj === 'string') {
+              try {
+                parametersObj = JSON.parse(parametersObj);
+              } catch (e) {
+                this.logger.debug(
+                  () => `Failed to parse tool parameters as JSON: ${e}`,
+                );
+                parametersObj = {};
+              }
+            }
             contentArray.push({
               type: 'tool_use',
               id: tc.id.replace(/^hist_tool_/, 'toolu_'),
               name: tc.name,
-              input: tc.parameters,
+              input: parametersObj,
             });
           }
 
@@ -591,15 +603,17 @@ export class AnthropicProvider extends BaseProvider {
     // Convert Gemini format tools to ITool format then use toolFormatter
     const anthropicTools = tools
       ? (() => {
-          // First convert to ITool format
-          const iTools: ITool[] = tools[0].functionDeclarations.map((decl) => ({
-            type: 'function' as const,
-            function: {
-              name: decl.name,
-              description: decl.description || '',
-              parameters: decl.parameters || {},
-            },
-          }));
+          // First convert ALL tools to ITool format (not just first group)
+          const iTools: ITool[] = tools.flatMap((toolGroup) =>
+            toolGroup.functionDeclarations.map((decl) => ({
+              type: 'function' as const,
+              function: {
+                name: decl.name,
+                description: decl.description || '',
+                parameters: decl.parameters || {},
+              },
+            })),
+          );
 
           // Then use the toolFormatter to properly convert to Anthropic format
           // This handles schema validation, type conversion, and filtering

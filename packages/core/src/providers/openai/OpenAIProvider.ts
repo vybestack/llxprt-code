@@ -146,18 +146,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }>,
   ): AsyncIterableIterator<IContent> {
     // Convert function declarations to ITool format for compatibility
-    const convertedTools: ITool[] | undefined = tools?.map((toolGroup) => {
-      // Use first function declaration from each group
-      const func = toolGroup.functionDeclarations[0];
-      return {
-        type: 'function',
-        function: {
-          name: func.name,
-          description: func.description || '',
-          parameters: func.parameters || {},
-        },
-      };
-    });
+    const convertedTools: ITool[] | undefined = tools
+      ? tools.flatMap((toolGroup) =>
+          // Convert all function declarations from each group
+          toolGroup.functionDeclarations.map((func) => ({
+            type: 'function' as const,
+            function: {
+              name: func.name,
+              description: func.description || '',
+              parameters: func.parameters || {},
+            },
+          })),
+        )
+      : undefined;
 
     const generator = this.generateChatCompletionImpl(
       contents,
@@ -332,7 +333,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     // Process streaming response
-    let accumulatedText = '';
+    let _accumulatedText = '';
     const accumulatedToolCalls: Array<{
       id: string;
       type: 'function';
@@ -341,6 +342,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         arguments: string;
       };
     }> = [];
+
+    // Buffer for small text chunks to avoid word-per-line display
+    let textBuffer = '';
+    const MIN_BUFFER_SIZE = 10; // Minimum characters to buffer before emitting
+    const BUFFER_TIMEOUT_MS = 100; // Max time to hold buffer
+    let lastEmitTime = Date.now();
 
     try {
       // Handle streaming response
@@ -355,18 +362,31 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         // Handle text content
         const deltaContent = choice.delta?.content;
         if (deltaContent) {
-          accumulatedText += deltaContent;
-          // Emit text in chunks rather than waiting for full accumulation
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'text',
-                text: accumulatedText,
-              } as TextBlock,
-            ],
-          } as IContent;
-          accumulatedText = ''; // Reset accumulated text after emitting
+          _accumulatedText += deltaContent;
+          textBuffer += deltaContent;
+
+          const currentTime = Date.now();
+          const shouldEmit =
+            textBuffer.length >= MIN_BUFFER_SIZE || // Buffer is large enough
+            currentTime - lastEmitTime >= BUFFER_TIMEOUT_MS || // Timeout reached
+            deltaContent.includes('\n') || // Contains newline
+            deltaContent.endsWith('. ') || // End of sentence
+            deltaContent.endsWith('! ') || // End of exclamation
+            deltaContent.endsWith('? '); // End of question
+
+          if (shouldEmit && textBuffer.length > 0) {
+            yield {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'text',
+                  text: textBuffer,
+                } as TextBlock,
+              ],
+            } as IContent;
+            textBuffer = '';
+            lastEmitTime = currentTime;
+          }
         }
 
         // Handle tool calls
@@ -406,6 +426,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         this.logger.error('Error processing streaming response:', error);
         throw error;
       }
+    }
+
+    // Flush any remaining text buffer
+    if (textBuffer.length > 0) {
+      yield {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'text',
+            text: textBuffer,
+          } as TextBlock,
+        ],
+      } as IContent;
     }
 
     // Emit accumulated tool calls as IContent if any

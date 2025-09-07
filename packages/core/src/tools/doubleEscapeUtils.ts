@@ -181,9 +181,13 @@ export function processToolParameters(
 
   // Only apply double-escape handling for formats that need it
   if (!shouldUseDoubleEscapeHandling(format)) {
-    // For formats that don't need double-escape handling, just return the string as-is
-    // This prevents accidentally processing legitimate multi-line strings from other models
-    return parametersString;
+    // For formats that don't need double-escape handling, parse the JSON string
+    try {
+      return JSON.parse(parametersString);
+    } catch (e) {
+      logger.debug(() => `Failed to parse tool parameters as JSON: ${e}`);
+      return parametersString; // Return as-is if not valid JSON
+    }
   }
 
   // Apply double-escape detection and fixing for qwen format
@@ -199,7 +203,8 @@ export function processToolParameters(
         fixed: true,
       },
     );
-    return detection.correctedValue;
+    // Convert string numbers to actual numbers for qwen format
+    return convertStringNumbersToNumbers(detection.correctedValue);
   } else if (detection.detectionDetails.error) {
     logger.error(
       () => `[${format}] Failed to parse parameters for ${toolName}`,
@@ -213,7 +218,48 @@ export function processToolParameters(
     return parametersString;
   }
 
-  return detection.correctedValue;
+  // Convert string numbers to actual numbers for qwen format
+  return convertStringNumbersToNumbers(detection.correctedValue);
+}
+
+/**
+ * Converts string numbers to actual numbers in an object
+ * This is needed for qwen models that stringify numeric parameters
+ * @param obj - The object to fix
+ * @returns The object with numeric strings converted to numbers
+ */
+function convertStringNumbersToNumbers(obj: unknown): unknown {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Check if it's a numeric string
+    if (/^-?\d+$/.test(obj)) {
+      // Integer
+      const num = parseInt(obj, 10);
+      if (!isNaN(num)) return num;
+    } else if (/^-?\d*\.?\d+$/.test(obj)) {
+      // Float
+      const num = parseFloat(obj);
+      if (!isNaN(num)) return num;
+    }
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(convertStringNumbersToNumbers);
+  }
+
+  if (typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = convertStringNumbersToNumbers(value);
+    }
+    return result;
+  }
+
+  return obj;
 }
 
 /**

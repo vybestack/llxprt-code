@@ -12,6 +12,7 @@ import {
   CommandKind,
 } from './types.js';
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
+import { AuthType } from '@vybestack/llxprt-code-core';
 
 export const modelCommand: SlashCommand = {
   name: 'model',
@@ -62,6 +63,25 @@ export const modelCommand: SlashCommand = {
         } else if (config) {
           // Fallback to direct config update
           config.setModel(modelName);
+        }
+
+        // Check if the provider needs authentication after model switch
+        // This is important for providers like Anthropic that support OAuth
+        if (activeProvider.name === 'anthropic' && config) {
+          // Check if provider has isAuthenticated method (BaseProvider does)
+          const providerWithAuth = activeProvider as unknown as {
+            isAuthenticated?: () => Promise<boolean>;
+          };
+          if (typeof providerWithAuth.isAuthenticated === 'function') {
+            const hasAuth = await providerWithAuth.isAuthenticated();
+            if (!hasAuth) {
+              // Trigger auth refresh for Anthropic (will prompt for OAuth if no other auth available)
+              const currentAuthType =
+                config.getContentGeneratorConfig()?.authType ||
+                AuthType.LOGIN_WITH_GOOGLE;
+              await config.refreshAuth(currentAuthType);
+            }
+          }
         }
 
         return {

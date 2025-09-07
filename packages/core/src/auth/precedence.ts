@@ -18,6 +18,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as os from 'node:os';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
 
 export interface AuthPrecedenceConfig {
@@ -194,14 +195,19 @@ export class AuthPrecedenceResolver {
   }
 
   /**
-   * Reads API key from a file path, handling both absolute and relative paths
+   * Reads API key from a file path, handling tilde expansion, absolute and relative paths
    */
   private async readKeyFile(filePath: string): Promise<string | null> {
     try {
+      // Handle tilde expansion for home directory
+      const expandedPath = filePath.startsWith('~')
+        ? path.join(os.homedir(), filePath.slice(1))
+        : filePath;
+
       // Handle relative paths from current working directory
-      const resolvedPath = path.isAbsolute(filePath)
-        ? filePath
-        : path.resolve(process.cwd(), filePath);
+      const resolvedPath = path.isAbsolute(expandedPath)
+        ? expandedPath
+        : path.resolve(process.cwd(), expandedPath);
 
       const content = await fs.readFile(resolvedPath, 'utf-8');
       const key = content.trim();
