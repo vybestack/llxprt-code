@@ -42,7 +42,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
     }),
     convertGeminiToAnthropic: vi.fn((geminiTools) => {
       if (!geminiTools || !Array.isArray(geminiTools)) return [];
-      
+
       const tools = [];
       for (const group of geminiTools) {
         if (group.functionDeclarations) {
@@ -321,7 +321,7 @@ describe('AnthropicProvider', () => {
           blocks: [
             {
               type: 'tool_call',
-              id: 'hist_tool_tool-123',  // ID gets normalized to history format
+              id: 'hist_tool_tool-123', // ID gets normalized to history format
               name: 'get_weather',
               parameters: { location: 'San Francisco' },
             },
@@ -510,22 +510,22 @@ describe('AnthropicProvider', () => {
       );
       const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
 
-      expect(toolFormatterInstance.convertGeminiToAnthropic).toHaveBeenCalledWith(
-        [
-          {
-            functionDeclarations: [
-              {
-                name: 'test_tool',
-                description: 'A test tool',
-                parameters: {
-                  type: 'object',
-                  properties: { foo: { type: 'string' } },
-                },
+      expect(
+        toolFormatterInstance.convertGeminiToAnthropic,
+      ).toHaveBeenCalledWith([
+        {
+          functionDeclarations: [
+            {
+              name: 'test_tool',
+              description: 'A test tool',
+              parameters: {
+                type: 'object',
+                properties: { foo: { type: 'string' } },
               },
-            ],
-          },
-        ],
-      );
+            },
+          ],
+        },
+      ]);
     });
 
     it('should retry on rate limit errors', { timeout: 10000 }, async () => {

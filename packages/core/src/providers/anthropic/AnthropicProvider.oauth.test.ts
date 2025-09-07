@@ -26,7 +26,7 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
     }),
     convertGeminiToAnthropic: vi.fn((geminiTools) => {
       if (!geminiTools || !Array.isArray(geminiTools)) return [];
-      
+
       const tools = [];
       for (const group of geminiTools) {
         if (group.functionDeclarations) {

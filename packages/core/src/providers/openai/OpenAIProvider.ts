@@ -50,13 +50,26 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     config?: IProviderConfig,
     oauthManager?: OAuthManager,
   ) {
+    // Normalize empty string to undefined for proper precedence handling
+    const normalizedApiKey =
+      apiKey && apiKey.trim() !== '' ? apiKey : undefined;
+
+    // Detect if this is a Qwen endpoint
+    const isQwenEndpoint =
+      baseURL &&
+      (baseURL.includes('dashscope.aliyuncs.com') ||
+        baseURL.includes('api.qwen.com') ||
+        baseURL.includes('qwen'));
+
     // Initialize base provider with auth configuration
     super(
       {
         name: 'openai',
-        apiKey,
+        apiKey: normalizedApiKey,
         baseURL,
-        isOAuthEnabled: false,
+        envKeyNames: ['OPENAI_API_KEY'], // Support environment variable fallback
+        isOAuthEnabled: isQwenEndpoint && !!oauthManager,
+        oauthProvider: isQwenEndpoint ? 'qwen' : undefined,
         oauthManager,
       },
       config,
@@ -97,9 +110,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   /**
    * Check if OAuth is supported for this provider
+   * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
-    return false; // OpenAI provider doesn't support OAuth
+    const baseURL = this.getBaseURL();
+
+    // Check if this is a Qwen endpoint that supports OAuth
+    if (
+      baseURL &&
+      (baseURL.includes('dashscope.aliyuncs.com') ||
+        baseURL.includes('api.qwen.com') ||
+        baseURL.includes('qwen'))
+    ) {
+      return true;
+    }
+
+    // Standard OpenAI endpoints don't support OAuth
+    return false;
   }
 
   override async getModels(): Promise<IModel[]> {

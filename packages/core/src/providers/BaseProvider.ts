@@ -61,7 +61,8 @@ export abstract class BaseProvider implements IProvider {
     this.globalConfig = globalConfig;
 
     // If an initial apiKey is provided, store it in SettingsService
-    if (config.apiKey) {
+    // Only store non-empty API keys to ensure proper precedence fallback
+    if (config.apiKey && config.apiKey.trim() !== '') {
       const settingsService = getSettingsService();
       settingsService.set('auth-key', config.apiKey);
     }
