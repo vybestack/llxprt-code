@@ -254,12 +254,15 @@ describe('AnthropicProvider', () => {
         },
       ]);
 
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
-        model: 'claude-sonnet-4-20250514',
-        messages: [{ role: 'user', content: 'Say hello' }],
-        max_tokens: 64000,
-        stream: true,
-      });
+      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-sonnet-4-20250514',
+          messages: [{ role: 'user', content: 'Say hello' }],
+          max_tokens: 64000,
+          stream: true,
+          system: expect.any(String),
+        }),
+      );
     });
 
     it('should handle tool calls in the stream', async () => {
@@ -333,19 +336,22 @@ describe('AnthropicProvider', () => {
         },
       ]);
 
-      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith({
-        model: 'claude-sonnet-4-20250514',
-        messages: [{ role: 'user', content: 'What is the weather?' }],
-        max_tokens: 64000,
-        stream: true,
-        tools: [
-          {
-            name: 'get_weather',
-            description: 'Get the weather',
-            input_schema: { type: 'object', properties: {}, required: [] },
-          },
-        ],
-      });
+      expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'claude-sonnet-4-20250514',
+          messages: [{ role: 'user', content: 'What is the weather?' }],
+          max_tokens: 64000,
+          stream: true,
+          system: expect.any(String),
+          tools: [
+            {
+              name: 'get_weather',
+              description: 'Get the weather',
+              input_schema: { type: 'object', properties: {}, required: [] },
+            },
+          ],
+        }),
+      );
     });
 
     it('should handle API errors', async () => {

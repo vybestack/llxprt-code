@@ -362,8 +362,45 @@ export class AnthropicProvider extends BaseProvider {
    * Set model parameters that will be merged into API calls
    * @param params Parameters to merge with existing, or undefined to clear all
    */
-  override setModelParams(_params: Record<string, unknown> | undefined): void {
-    // No local storage needed - just update SettingsService above
+  override setModelParams(params: Record<string, unknown> | undefined): void {
+    const settingsService = getSettingsService();
+
+    if (params === undefined) {
+      // Clear all model params
+      settingsService.setProviderSetting(this.name, 'temperature', undefined);
+      settingsService.setProviderSetting(this.name, 'max_tokens', undefined);
+      settingsService.setProviderSetting(this.name, 'top_p', undefined);
+      settingsService.setProviderSetting(this.name, 'top_k', undefined);
+    } else {
+      // Set each param individually
+      if ('temperature' in params) {
+        settingsService.setProviderSetting(
+          this.name,
+          'temperature',
+          params.temperature,
+        );
+      }
+      if ('max_tokens' in params) {
+        settingsService.setProviderSetting(
+          this.name,
+          'max_tokens',
+          params.max_tokens,
+        );
+      }
+      if ('top_p' in params) {
+        settingsService.setProviderSetting(this.name, 'top_p', params.top_p);
+      }
+      if ('top_k' in params) {
+        settingsService.setProviderSetting(this.name, 'top_k', params.top_k);
+      }
+      if ('stop_sequences' in params) {
+        settingsService.setProviderSetting(
+          this.name,
+          'stop_sequences',
+          params.stop_sequences,
+        );
+      }
+    }
   }
 
   /**
@@ -388,6 +425,8 @@ export class AnthropicProvider extends BaseProvider {
       params.top_p = providerSettings.top_p;
     if (providerSettings.top_k !== undefined)
       params.top_k = providerSettings.top_k;
+    if (providerSettings.stop_sequences !== undefined)
+      params.stop_sequences = providerSettings.stop_sequences;
 
     return Object.keys(params).length > 0 ? params : undefined;
   }

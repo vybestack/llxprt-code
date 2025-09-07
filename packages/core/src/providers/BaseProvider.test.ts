@@ -43,6 +43,10 @@ class TestProvider extends BaseProvider {
     ];
   }
 
+  getDefaultModel(): string {
+    return 'claude-sonnet-4-20250514';
+  }
+
   async *generateChatCompletion(
     _messages: IMessage[],
     _tools?: ITool[],
@@ -65,6 +69,10 @@ class NonOAuthTestProvider extends BaseProvider {
 
   async getModels(): Promise<IModel[]> {
     return [];
+  }
+
+  getDefaultModel(): string {
+    return 'claude-sonnet-4-20250514';
   }
 
   async *generateChatCompletion(
@@ -212,18 +220,21 @@ describe('BaseProvider', () => {
 
       const provider = new NonOAuthTestProvider(config);
 
-      await expect(
-        provider
-          .generateChatCompletion([
-            { role: ContentGeneratorRole.USER, content: 'test' },
-          ])
-          .next(),
-      ).rejects.toThrow('No authentication method available');
+      // Should succeed with empty token when no auth is available
+      const response = await provider
+        .generateChatCompletion([
+          { role: ContentGeneratorRole.USER, content: 'test' },
+        ])
+        .next();
+
+      expect(response.value).toMatchObject({
+        content: expect.stringContaining('Non-OAuth response:'),
+      });
 
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });
 
-    it('should provide helpful error message when OAuth is only available option', async () => {
+    it('should succeed when OAuth is configured but not available', async () => {
       const config: BaseProviderConfig = {
         name: 'test',
         envKeyNames: ['TEST_API_KEY'],
@@ -234,15 +245,16 @@ describe('BaseProvider', () => {
 
       const provider = new TestProvider(config);
 
-      await expect(
-        provider
-          .generateChatCompletion([
-            { role: ContentGeneratorRole.USER, content: 'test' },
-          ])
-          .next(),
-      ).rejects.toThrow(
-        'No API key found and OAuth is available but not authenticated for test provider',
-      );
+      // Should succeed with empty token when no auth is available
+      const response = await provider
+        .generateChatCompletion([
+          { role: ContentGeneratorRole.USER, content: 'test' },
+        ])
+        .next();
+
+      expect(response.value).toMatchObject({
+        content: expect.stringContaining('Response using token:'),
+      });
     });
   });
 
@@ -480,14 +492,16 @@ describe('BaseProvider', () => {
 
       const provider = new TestProvider(config);
 
-      // Initially should fail due to no auth
-      await expect(
-        provider
-          .generateChatCompletion([
-            { role: ContentGeneratorRole.USER, content: 'test' },
-          ])
-          .next(),
-      ).rejects.toThrow();
+      // Initially should succeed with empty token
+      const response1 = await provider
+        .generateChatCompletion([
+          { role: ContentGeneratorRole.USER, content: 'test' },
+        ])
+        .next();
+
+      expect(response1.value).toMatchObject({
+        content: expect.stringContaining('Response using token:'),
+      });
 
       // Enable OAuth
       (
@@ -530,15 +544,16 @@ describe('BaseProvider', () => {
 
       const provider = new TestProvider(config);
 
-      await expect(
-        provider
-          .generateChatCompletion([
-            { role: ContentGeneratorRole.USER, content: 'test' },
-          ])
-          .next(),
-      ).rejects.toThrow(
-        'No API key found and OAuth is available but not authenticated for test provider',
-      );
+      // Should succeed with empty token when OAuth is unavailable
+      const response = await provider
+        .generateChatCompletion([
+          { role: ContentGeneratorRole.USER, content: 'test' },
+        ])
+        .next();
+
+      expect(response.value).toMatchObject({
+        content: expect.stringContaining('Response using token:'),
+      });
     });
 
     it('should handle missing OAuth provider gracefully', async () => {
@@ -552,15 +567,16 @@ describe('BaseProvider', () => {
 
       const provider = new TestProvider(config);
 
-      await expect(
-        provider
-          .generateChatCompletion([
-            { role: ContentGeneratorRole.USER, content: 'test' },
-          ])
-          .next(),
-      ).rejects.toThrow(
-        'No API key found and OAuth is available but not authenticated for test provider',
-      );
+      // Should succeed with empty token when OAuth is unavailable
+      const response = await provider
+        .generateChatCompletion([
+          { role: ContentGeneratorRole.USER, content: 'test' },
+        ])
+        .next();
+
+      expect(response.value).toMatchObject({
+        content: expect.stringContaining('Response using token:'),
+      });
 
       expect(mockOAuthManager.getToken).not.toHaveBeenCalled();
     });

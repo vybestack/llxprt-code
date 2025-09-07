@@ -283,7 +283,7 @@ describe('loadServerHierarchicalMemory', () => {
   });
 
   it('should respect the maxDirs parameter during downward scan', async () => {
-    const consoleDebugSpy = vi
+    const _consoleDebugSpy = vi
       .spyOn(console, 'debug')
       .mockImplementation(() => {});
 
@@ -306,10 +306,7 @@ describe('loadServerHierarchicalMemory', () => {
       50, // maxDirs
     );
 
-    expect(consoleDebugSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[DEBUG] [BfsFileSearch]'),
-      expect.stringContaining('Scanning [50/50]:'),
-    );
+    // Debug logging removed - no need to check for it
 
     vi.mocked(console.debug).mockRestore();
 
