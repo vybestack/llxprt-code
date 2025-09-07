@@ -17,7 +17,6 @@ import {
   OAuthManager,
 } from '../auth/precedence.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
-import { UnauthorizedError } from '../utils/errors.js';
 import { Config } from '../config/config.js';
 import { IProviderConfig } from './types/IProviderConfig.js';
 
@@ -149,6 +148,7 @@ export abstract class BaseProvider implements IProvider {
   /**
    * Gets authentication token using the precedence chain
    * This method implements lazy OAuth triggering - only triggers OAuth when actually making API calls
+   * Returns empty string if no auth is available (for local/self-hosted endpoints)
    */
   protected async getAuthToken(): Promise<string> {
     // Check cache first (short-lived cache to avoid repeated OAuth calls)
@@ -168,26 +168,9 @@ export abstract class BaseProvider implements IProvider {
     const token = await this.authResolver.resolveAuthentication();
 
     if (!token) {
-      const isOAuthOnly = await this.authResolver.isOAuthOnlyAvailable();
-
-      if (isOAuthOnly) {
-        // Special message for Qwen explaining the OAuth limitation
-        if (this.baseProviderConfig.oauthProvider === 'qwen') {
-          throw new Error(
-            `Qwen OAuth (chat.qwen.ai) doesn't provide API access to DashScope. ` +
-              `You need a DashScope API key from https://dashscope.console.aliyun.com/ ` +
-              `Use /key <your-api-key> to set it.`,
-          );
-        }
-        throw new UnauthorizedError(
-          `No API key found and OAuth is available but not authenticated for ${this.name} provider. ` +
-            `Please authenticate using OAuth or provide an API key.`,
-        );
-      } else {
-        throw new Error(
-          `No authentication method available for ${this.name} provider`,
-        );
-      }
+      // Return empty string for local/self-hosted endpoints that don't require auth
+      // Individual providers can decide how to handle this
+      return '';
     }
 
     // Cache the token briefly

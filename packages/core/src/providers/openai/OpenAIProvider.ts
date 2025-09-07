@@ -55,11 +55,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
 
     // Detect if this is a Qwen endpoint
-    const isQwenEndpoint =
+    const isQwenEndpoint = !!(
       baseURL &&
       (baseURL.includes('dashscope.aliyuncs.com') ||
         baseURL.includes('api.qwen.com') ||
-        baseURL.includes('qwen'));
+        baseURL.includes('qwen'))
+    );
 
     // Initialize base provider with auth configuration
     super(
@@ -130,32 +131,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    // Check if API key is available (using resolved authentication)
-    const apiKey = await this.getAuthToken();
-    const endpoint = this.getBaseURL() || 'https://api.openai.com/v1';
-
-    if (!apiKey) {
-      // Only require auth for official OpenAI endpoints
-      if (
-        endpoint.includes('api.openai.com') ||
-        endpoint.includes('openai.com')
-      ) {
-        this.logger.debug(
-          () =>
-            'No authentication for official OpenAI endpoint, returning fallback models',
-        );
-        // Return fallback models for official OpenAI without auth
-        return this.getFallbackModels();
-      }
-      // For local/self-hosted endpoints, continue without auth
-      this.logger.debug(
-        () =>
-          `No authentication provided, attempting to fetch models from local/self-hosted endpoint: ${endpoint}`,
-      );
-    }
-
     try {
-      // Get OpenAI client
+      // Always try to fetch models, regardless of auth status
+      // Local endpoints often work without authentication
       const client = await this.getClient();
       const response = await client.models.list();
       const models: IModel[] = [];

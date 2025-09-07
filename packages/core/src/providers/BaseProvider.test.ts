@@ -178,7 +178,7 @@ describe('BaseProvider', () => {
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('test');
     });
 
-    it('should throw error when no authentication available', async () => {
+    it('should return empty string when no authentication available', async () => {
       const config: BaseProviderConfig = {
         name: 'test',
         envKeyNames: ['TEST_API_KEY'],
@@ -189,13 +189,12 @@ describe('BaseProvider', () => {
       // No environment variables set
       const provider = new TestProvider(config);
 
-      await expect(
-        provider
-          .generateChatCompletion([
-            { role: ContentGeneratorRole.USER, content: 'test' },
-          ])
-          .next(),
-      ).rejects.toThrow('No authentication method available for test provider');
+      // BaseProvider now returns empty string for no auth (local endpoints)
+      // Access protected method through type assertion
+      const authToken = await (
+        provider as unknown as { getAuthToken(): Promise<string> }
+      ).getAuthToken();
+      expect(authToken).toBe('');
     });
   });
 
