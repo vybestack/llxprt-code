@@ -132,17 +132,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   override async getModels(): Promise<IModel[]> {
     // Check if API key is available (using resolved authentication)
     const apiKey = await this.getAuthToken();
+    const endpoint = this.getBaseURL() || 'https://api.openai.com/v1';
+
     if (!apiKey) {
-      const endpoint = this.getBaseURL() || 'https://api.openai.com/v1';
-      // For local/self-hosted endpoints, allow proceeding without auth
+      // Only require auth for official OpenAI endpoints
       if (
         endpoint.includes('api.openai.com') ||
         endpoint.includes('openai.com')
       ) {
-        throw new Error(
-          'OpenAI API key is required for official OpenAI endpoints',
+        this.logger.debug(
+          () =>
+            'No authentication for official OpenAI endpoint, returning fallback models',
         );
+        // Return fallback models for official OpenAI without auth
+        return this.getFallbackModels();
       }
+      // For local/self-hosted endpoints, continue without auth
       this.logger.debug(
         () =>
           `No authentication provided, attempting to fetch models from local/self-hosted endpoint: ${endpoint}`,
@@ -175,45 +180,49 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     } catch (error) {
       this.logger.debug(() => `Error fetching models from OpenAI: ${error}`);
       // Return a hardcoded list as fallback
-      return [
-        {
-          id: 'gpt-5',
-          name: 'GPT-5',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'gpt-4.1',
-          name: 'GPT-4.1',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'gpt-4o',
-          name: 'GPT-4o',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'o3',
-          name: 'O3',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'o4-mini',
-          name: 'O4 Mini',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-        {
-          id: 'gpt-3.5-turbo',
-          name: 'GPT-3.5 Turbo (Legacy)',
-          provider: 'openai',
-          supportedToolFormats: ['openai'],
-        },
-      ];
+      return this.getFallbackModels();
     }
+  }
+
+  private getFallbackModels(): IModel[] {
+    return [
+      {
+        id: 'gpt-5',
+        name: 'GPT-5',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-4.1',
+        name: 'GPT-4.1',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'o3',
+        name: 'O3',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'o4-mini',
+        name: 'O4 Mini',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+      {
+        id: 'gpt-3.5-turbo',
+        name: 'GPT-3.5 Turbo (Legacy)',
+        provider: 'openai',
+        supportedToolFormats: ['openai'],
+      },
+    ];
   }
 
   override getDefaultModel(): string {
@@ -419,12 +428,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       outputFirstTool: formattedTools?.[0],
       outputToolNames: formattedTools?.map((t) => t.function.name),
     });
-
-    // Get auth token
-    const apiKey = await this.getAuthToken();
-    if (!apiKey) {
-      throw new Error('OpenAI API key is required');
-    }
 
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
