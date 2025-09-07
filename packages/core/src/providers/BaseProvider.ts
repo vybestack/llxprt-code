@@ -82,6 +82,70 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
+   * Gets the base URL with proper precedence:
+   * 1. Ephemeral settings (highest priority - from /baseurl or profile)
+   * 2. Provider config (from IProviderConfig)
+   * 3. Base provider config (initial constructor value)
+   * 4. undefined (use provider default)
+   */
+  protected getBaseURL(): string | undefined {
+    const settingsService = getSettingsService();
+
+    // 1. Check ephemeral settings first (from /baseurl command or profile)
+    const ephemeralBaseUrl = settingsService.get('base-url') as
+      | string
+      | undefined;
+    if (ephemeralBaseUrl && ephemeralBaseUrl !== 'none') {
+      return ephemeralBaseUrl;
+    }
+
+    // 2. Check provider config (from IProviderConfig)
+    if (this.providerConfig?.baseUrl) {
+      return this.providerConfig.baseUrl;
+    }
+
+    // 3. Check base provider config (constructor value)
+    if (this.baseProviderConfig.baseURL) {
+      return this.baseProviderConfig.baseURL;
+    }
+
+    // 4. Return undefined to use provider's default
+    return undefined;
+  }
+
+  /**
+   * Gets the current model with proper precedence:
+   * 1. Ephemeral settings (highest priority)
+   * 2. Provider-specific settings in SettingsService
+   * 3. Provider config
+   * 4. Default model
+   */
+  protected getModel(): string {
+    const settingsService = getSettingsService();
+
+    // 1. Check ephemeral settings first
+    const ephemeralModel = settingsService.get('model') as string | undefined;
+    if (ephemeralModel) {
+      return ephemeralModel;
+    }
+
+    // 2. Check provider-specific settings
+    const providerSettings = settingsService.getProviderSettings(this.name);
+    const providerModel = providerSettings?.model as string | undefined;
+    if (providerModel) {
+      return providerModel;
+    }
+
+    // 3. Check provider config
+    if (this.providerConfig?.defaultModel) {
+      return this.providerConfig.defaultModel;
+    }
+
+    // 4. Return default
+    return this.getDefaultModel();
+  }
+
+  /**
    * Gets authentication token using the precedence chain
    * This method implements lazy OAuth triggering - only triggers OAuth when actually making API calls
    */
@@ -218,11 +282,20 @@ export abstract class BaseProvider implements IProvider {
   }
 
   /**
-   * Updates the base URL
+   * Updates the base URL in ephemeral settings
    */
   setBaseUrl?(baseUrl?: string): void {
-    this.baseProviderConfig.baseURL = baseUrl;
-    // Providers may override to implement endpoint-specific OAuth logic
+    const settingsService = getSettingsService();
+
+    // Store in ephemeral settings as the highest priority source
+    if (!baseUrl || baseUrl.trim() === '' || baseUrl === 'none') {
+      // Clear the ephemeral setting
+      settingsService.set('base-url', undefined);
+    } else {
+      settingsService.set('base-url', baseUrl);
+    }
+
+    // Clear auth cache as base URL change might affect auth
     this.clearAuthCache();
   }
 
@@ -288,7 +361,8 @@ export abstract class BaseProvider implements IProvider {
   // Optional methods with default implementations
   setModel?(_modelId: string): void {}
   getCurrentModel?(): string {
-    return 'default';
+    // Use the same logic as getModel() to check ephemeral settings
+    return this.getModel();
   }
   getToolFormat?(): string {
     return 'default';

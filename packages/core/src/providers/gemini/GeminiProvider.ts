@@ -52,7 +52,6 @@ export class GeminiProvider extends BaseProvider {
   private authMode: GeminiAuthMode = 'none';
   private currentModel: string = 'gemini-2.5-pro';
   private modelExplicitlySet: boolean = false;
-  private baseURL?: string;
   private modelParams?: Record<string, unknown>;
   private geminiOAuthManager?: OAuthManager;
 
@@ -76,7 +75,6 @@ export class GeminiProvider extends BaseProvider {
     super(baseConfig, undefined, config);
 
     this.logger = new DebugLogger('llxprt:gemini:provider');
-    this.baseURL = baseURL;
     this.geminiOAuthManager = oauthManager;
 
     // Do not determine auth mode on instantiation.
@@ -307,8 +305,9 @@ export class GeminiProvider extends BaseProvider {
       const apiKey = (await this.getAuthToken()) || process.env.GEMINI_API_KEY;
       if (apiKey) {
         try {
-          const url = this.baseURL
-            ? `${this.baseURL.replace(/\/$/, '')}/v1beta/models?key=${apiKey}`
+          const baseURL = this.getBaseURL();
+          const url = baseURL
+            ? `${baseURL.replace(/\/$/, '')}/v1beta/models?key=${apiKey}`
             : `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
 
           const response = await fetch(url, {
@@ -382,8 +381,8 @@ export class GeminiProvider extends BaseProvider {
   }
 
   override setBaseUrl(baseUrl?: string): void {
-    // If no baseUrl is provided or it's an empty string, clear to undefined
-    this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
+    // Call base provider implementation which stores in ephemeral settings
+    super.setBaseUrl?.(baseUrl);
   }
 
   /**
@@ -590,10 +589,10 @@ export class GeminiProvider extends BaseProvider {
 
           genAI = new GoogleGenAI({
             apiKey: authToken,
-            httpOptions: this.baseURL
+            httpOptions: this.getBaseURL()
               ? {
                   ...httpOptions,
-                  baseUrl: this.baseURL,
+                  baseUrl: this.getBaseURL(),
                 }
               : httpOptions,
           });
@@ -623,10 +622,10 @@ export class GeminiProvider extends BaseProvider {
           genAI = new GoogleGenAI({
             apiKey: authToken,
             vertexai: true,
-            httpOptions: this.baseURL
+            httpOptions: this.getBaseURL()
               ? {
                   ...httpOptions,
-                  baseUrl: this.baseURL,
+                  baseUrl: this.getBaseURL(),
                 }
               : httpOptions,
           });
@@ -755,10 +754,10 @@ export class GeminiProvider extends BaseProvider {
         case 'gemini-api-key': {
           genAI = new GoogleGenAI({
             apiKey: authToken,
-            httpOptions: this.baseURL
+            httpOptions: this.getBaseURL()
               ? {
                   ...httpOptions,
-                  baseUrl: this.baseURL,
+                  baseUrl: this.getBaseURL(),
                 }
               : httpOptions,
           });
@@ -788,10 +787,10 @@ export class GeminiProvider extends BaseProvider {
           genAI = new GoogleGenAI({
             apiKey: authToken,
             vertexai: true,
-            httpOptions: this.baseURL
+            httpOptions: this.getBaseURL()
               ? {
                   ...httpOptions,
-                  baseUrl: this.baseURL,
+                  baseUrl: this.getBaseURL(),
                 }
               : httpOptions,
           });
@@ -980,7 +979,7 @@ export class GeminiProvider extends BaseProvider {
         httpOptions,
         AuthType.LOGIN_WITH_GOOGLE,
         configForOAuth as Config,
-        this.baseURL,
+        this.getBaseURL(),
       );
 
       const userMemory = this.globalConfig?.getUserMemory
@@ -1010,8 +1009,8 @@ export class GeminiProvider extends BaseProvider {
       const genAI = new GoogleGenAI({
         apiKey: authToken,
         vertexai: this.authMode === 'vertex-ai',
-        httpOptions: this.baseURL
-          ? { ...httpOptions, baseUrl: this.baseURL }
+        httpOptions: this.getBaseURL()
+          ? { ...httpOptions, baseUrl: this.getBaseURL() }
           : httpOptions,
       });
 

@@ -26,9 +26,6 @@ export class AnthropicProvider extends BaseProvider {
   private anthropic: Anthropic;
   private toolFormatter: ToolFormatter;
   toolFormat: ToolFormat = 'anthropic';
-  private baseURL?: string;
-  private currentModel: string = 'claude-sonnet-4-20250514'; // Default model
-  private modelParams?: Record<string, unknown>;
   private _cachedAuthKey?: string; // Track cached auth key for client recreation
 
   // Model patterns for max output tokens
@@ -63,11 +60,10 @@ export class AnthropicProvider extends BaseProvider {
     super(baseConfig, config);
 
     this.logger = new DebugLogger('llxprt:anthropic:provider');
-    this.baseURL = baseURL;
 
     this.anthropic = new Anthropic({
       apiKey: apiKey || '', // Empty string if OAuth will be used
-      baseURL,
+      baseURL: config?.baseUrl || baseURL,
       dangerouslyAllowBrowser: true,
     });
 
@@ -101,12 +97,15 @@ export class AnthropicProvider extends BaseProvider {
       // Check if this is an OAuth token (starts with sk-ant-oat)
       const isOAuthToken = resolvedToken.startsWith('sk-ant-oat');
 
+      // Use the unified getBaseURL() method from BaseProvider
+      const baseURL = this.getBaseURL();
+
       if (isOAuthToken) {
         // For OAuth tokens, use authToken field which sends Bearer token
         // Don't pass apiKey at all - just authToken
         const oauthConfig: Record<string, unknown> = {
           authToken: resolvedToken, // Use authToken for OAuth Bearer tokens
-          baseURL: this.baseURL,
+          baseURL,
           dangerouslyAllowBrowser: true,
           defaultHeaders: {
             'anthropic-beta': 'oauth-2025-04-20', // Still need the beta header
@@ -118,7 +117,7 @@ export class AnthropicProvider extends BaseProvider {
         // Regular API key auth
         this.anthropic = new Anthropic({
           apiKey: resolvedToken,
-          baseURL: this.baseURL,
+          baseURL,
           dangerouslyAllowBrowser: true,
         });
       }
@@ -214,25 +213,25 @@ export class AnthropicProvider extends BaseProvider {
     super.setApiKey(apiKey);
 
     // Create a new Anthropic client with the updated API key
+    const resolvedBaseURL =
+      this.providerConfig?.baseUrl || this.baseProviderConfig.baseURL;
     this.anthropic = new Anthropic({
       apiKey,
-      baseURL: this.baseURL,
+      baseURL: resolvedBaseURL,
       dangerouslyAllowBrowser: true,
     });
   }
 
   override setBaseUrl(baseUrl?: string): void {
-    // If no baseUrl is provided, clear to default (undefined)
-    this.baseURL = baseUrl && baseUrl.trim() !== '' ? baseUrl : undefined;
-
-    // Call base provider implementation
+    // Call base provider implementation which stores in ephemeral settings
     super.setBaseUrl?.(baseUrl);
 
     // Create a new Anthropic client with the updated (or cleared) base URL
     // Will be updated with actual token in updateClientWithResolvedAuth
+    const resolvedBaseURL = this.getBaseURL();
     this.anthropic = new Anthropic({
       apiKey: '', // Empty string, will be replaced when auth is resolved
-      baseURL: this.baseURL,
+      baseURL: resolvedBaseURL,
       dangerouslyAllowBrowser: true,
     });
   }
@@ -247,8 +246,7 @@ export class AnthropicProvider extends BaseProvider {
         () => `Failed to persist model to SettingsService: ${error}`,
       );
     }
-    // Keep local cache for performance
-    this.currentModel = modelId;
+    // No local caching - always look up from SettingsService
   }
 
   override getCurrentModel(): string {
@@ -264,12 +262,12 @@ export class AnthropicProvider extends BaseProvider {
         () => `Failed to get model from SettingsService: ${error}`,
       );
     }
-    // Fall back to cached value or default
-    return this.currentModel || this.getDefaultModel();
+    // Always return from getDefaultModel, no caching
+    return this.getDefaultModel();
   }
 
   override getDefaultModel(): string {
-    // Return the default model for this provider
+    // Return hardcoded default - do NOT call getModel() to avoid circular dependency
     return 'claude-sonnet-4-20250514';
   }
 
@@ -364,12 +362,8 @@ export class AnthropicProvider extends BaseProvider {
    * Set model parameters that will be merged into API calls
    * @param params Parameters to merge with existing, or undefined to clear all
    */
-  override setModelParams(params: Record<string, unknown> | undefined): void {
-    if (params === undefined) {
-      this.modelParams = undefined;
-    } else {
-      this.modelParams = { ...this.modelParams, ...params };
-    }
+  override setModelParams(_params: Record<string, unknown> | undefined): void {
+    // No local storage needed - just update SettingsService above
   }
 
   /**
@@ -377,7 +371,25 @@ export class AnthropicProvider extends BaseProvider {
    * @returns Current parameters or undefined if not set
    */
   override getModelParams(): Record<string, unknown> | undefined {
-    return this.modelParams;
+    // Always get from SettingsService
+    const settingsService = getSettingsService();
+    const providerSettings = settingsService.getProviderSettings(this.name);
+
+    if (!providerSettings) {
+      return undefined;
+    }
+
+    const params: Record<string, unknown> = {};
+    if (providerSettings.temperature !== undefined)
+      params.temperature = providerSettings.temperature;
+    if (providerSettings.max_tokens !== undefined)
+      params.max_tokens = providerSettings.max_tokens;
+    if (providerSettings.top_p !== undefined)
+      params.top_p = providerSettings.top_p;
+    if (providerSettings.top_k !== undefined)
+      params.top_k = providerSettings.top_k;
+
+    return Object.keys(params).length > 0 ? params : undefined;
   }
 
   /**
@@ -419,7 +431,7 @@ export class AnthropicProvider extends BaseProvider {
       }
 
       // Auto-detect based on model name if set to 'auto' or not set
-      const modelName = this.currentModel.toLowerCase();
+      const modelName = this.getCurrentModel().toLowerCase();
 
       // Check for GLM-4.5 models (glm-4.5, glm-4-5)
       if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
@@ -439,7 +451,7 @@ export class AnthropicProvider extends BaseProvider {
       );
 
       // Fallback detection without SettingsService
-      const modelName = this.currentModel.toLowerCase();
+      const modelName = this.getCurrentModel().toLowerCase();
 
       if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
         return 'qwen';
@@ -616,12 +628,13 @@ export class AnthropicProvider extends BaseProvider {
     const streamingEnabled = streamingSetting !== 'disabled';
 
     // Build request with proper typing
+    const currentModel = this.getCurrentModel();
     const requestBody = {
-      model: this.currentModel,
+      model: currentModel,
       messages: anthropicMessages,
-      max_tokens: this.getMaxTokensForModel(this.currentModel),
+      max_tokens: this.getMaxTokensForModel(currentModel),
       stream: streamingEnabled,
-      ...(this.modelParams || {}),
+      ...(this.getModelParams() || {}),
       ...(isOAuth
         ? {
             system: "You are Claude Code, Anthropic's official CLI for Claude.",

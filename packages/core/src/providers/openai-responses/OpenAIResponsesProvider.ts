@@ -104,7 +104,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
   private logger: DebugLogger;
   private currentModel: string = 'o3-mini';
-  private baseURL: string;
   private conversationCache: ConversationCache;
   private modelParams?: Record<string, unknown>;
 
@@ -130,7 +129,6 @@ export class OpenAIResponsesProvider extends BaseProvider {
       () =>
         `Constructor - baseURL: ${baseURL || 'https://api.openai.com/v1'}, apiKey: ${apiKey?.substring(0, 10) || 'none'}`,
     );
-    this.baseURL = baseURL || 'https://api.openai.com/v1';
     this.conversationCache = new ConversationCache();
 
     // Initialize from SettingsService
@@ -178,7 +176,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
     try {
       // Fetch models from the API
-      const response = await fetch(`${this.baseURL}/models`, {
+      const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
+      const response = await fetch(`${baseURL}/models`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -274,19 +273,17 @@ export class OpenAIResponsesProvider extends BaseProvider {
   }
 
   override setBaseUrl(baseUrl?: string): void {
-    // If no baseUrl is provided, use default
-    this.baseURL =
-      baseUrl && baseUrl.trim() !== '' ? baseUrl : 'https://api.openai.com/v1';
+    // Call base provider implementation which stores in ephemeral settings
+    super.setBaseUrl?.(baseUrl);
 
-    // Persist to SettingsService if available
-    this.setBaseUrlInSettings(this.baseURL).catch((error) => {
+    // Also persist to SettingsService if available
+    const urlToStore =
+      baseUrl && baseUrl.trim() !== '' ? baseUrl : 'https://api.openai.com/v1';
+    this.setBaseUrlInSettings(urlToStore).catch((error) => {
       this.logger.debug(
         () => `Failed to persist base URL to SettingsService: ${error}`,
       );
     });
-
-    // Call base provider implementation
-    super.setBaseUrl?.(baseUrl);
   }
 
   override setConfig(config: IProviderConfig): void {
@@ -384,7 +381,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
       // Load saved base URL if available
       const savedBaseUrl = await this.getBaseUrlFromSettings();
       if (savedBaseUrl !== undefined) {
-        this.baseURL = savedBaseUrl || 'https://api.openai.com/v1';
+        this.baseProviderConfig.baseURL =
+          savedBaseUrl || 'https://api.openai.com/v1';
       }
 
       // Load saved model parameters if available
@@ -395,7 +393,7 @@ export class OpenAIResponsesProvider extends BaseProvider {
 
       this.logger.debug(
         () =>
-          `Initialized from SettingsService - model: ${this.currentModel}, baseURL: ${this.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
+          `Initialized from SettingsService - model: ${this.currentModel}, baseURL: ${this.baseProviderConfig.baseURL}, params: ${JSON.stringify(this.modelParams)}`,
       );
     } catch (error) {
       this.logger.debug(
@@ -548,7 +546,8 @@ export class OpenAIResponsesProvider extends BaseProvider {
     }
 
     // Make the API call
-    const responsesURL = `${this.baseURL}/responses`;
+    const baseURL = this.getBaseURL() || 'https://api.openai.com/v1';
+    const responsesURL = `${baseURL}/responses`;
     const requestBody = JSON.stringify(request);
     const bodyBlob = new Blob([requestBody], {
       type: 'application/json; charset=utf-8',

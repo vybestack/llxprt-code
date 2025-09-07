@@ -1,4 +1,20 @@
 /**
+ * Copyright 2025 Vybestack LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
  * Utility functions for detecting and handling double-escaped tool calls
  * Used by providers that need to work with models that double-escape JSON parameters
  * (e.g., Qwen models, GLM-4.5 models)
@@ -132,11 +148,18 @@ export function detectDoubleEscaping(jsonString: string): {
  */
 export function detectDoubleEscapingInChunk(chunk: string): boolean {
   // Check for common double-escaping patterns in streaming chunks
+  // Using String.raw to avoid eslint no-useless-escape issues
+  const backslashBracket = String.raw`\\[`;
+  const doubleBackslash = String.raw`\\\\`;
+  const backslashQuote = String.raw`\\"`;
+  const startPattern = String.raw`"\\`;
+  const endPattern = String.raw`\\"`;
+
   return (
-    chunk.includes('\\[') ||
-    chunk.includes('\\\\') ||
-    chunk.includes('\\\"') ||
-    (chunk.startsWith('\"\\') && chunk.endsWith('\\\"'))
+    chunk.includes(backslashBracket) ||
+    chunk.includes(doubleBackslash) ||
+    chunk.includes(backslashQuote) ||
+    (chunk.startsWith(startPattern) && chunk.endsWith(endPattern))
   );
 }
 
