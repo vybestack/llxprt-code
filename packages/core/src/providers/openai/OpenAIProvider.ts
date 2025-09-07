@@ -211,6 +211,33 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Normalize tool IDs from various formats to OpenAI format
+   * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
+   */
+  private normalizeToOpenAIToolId(id: string): string {
+    // Remove any known prefixes and re-add OpenAI prefix
+    const normalized = id
+      .replace(/^call_/, '') // OpenAI prefix (already correct)
+      .replace(/^toolu_/, '') // Anthropic prefix
+      .replace(/^hist_tool_/, ''); // History prefix
+
+    return 'call_' + normalized;
+  }
+
+  /**
+   * Normalize tool IDs from OpenAI format to history format
+   */
+  private normalizeToHistoryToolId(id: string): string {
+    // Remove any known prefixes and add history prefix
+    const normalized = id
+      .replace(/^call_/, '') // OpenAI prefix
+      .replace(/^toolu_/, '') // Anthropic prefix
+      .replace(/^hist_tool_/, ''); // History prefix (already correct)
+
+    return 'hist_tool_' + normalized;
+  }
+
+  /**
    * Generate chat completion with IContent interface
    * Internally converts to OpenAI API format, but only yields IContent
    * @param contents Array of content blocks (text and tool_call)
@@ -292,7 +319,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             role: 'assistant',
             content: text || null,
             tool_calls: toolCalls.map((tc) => ({
-              id: tc.id,
+              id: this.normalizeToOpenAIToolId(tc.id),
               type: 'function' as const,
               function: {
                 name: tc.name,
@@ -323,7 +350,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
               typeof tr.result === 'string'
                 ? tr.result
                 : JSON.stringify(tr.result),
-            tool_call_id: tr.callId,
+            tool_call_id: this.normalizeToOpenAIToolId(tr.callId),
           });
         }
       }
@@ -575,7 +602,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
           blocks.push({
             type: 'tool_call',
-            id: tc.id,
+            id: this.normalizeToHistoryToolId(tc.id),
             name: tc.function.name || '',
             parameters: processedParameters,
           });
@@ -622,7 +649,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
             blocks.push({
               type: 'tool_call',
-              id: toolCall.id,
+              id: this.normalizeToHistoryToolId(toolCall.id),
               name: toolCall.function.name || '',
               parameters: processedParameters,
             } as ToolCallBlock);

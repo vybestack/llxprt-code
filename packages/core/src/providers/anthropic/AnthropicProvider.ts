@@ -470,6 +470,33 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * Normalize tool IDs from various formats to Anthropic format
+   * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
+   */
+  private normalizeToAnthropicToolId(id: string): string {
+    // Remove any known prefixes and re-add Anthropic prefix
+    const normalized = id
+      .replace(/^call_/, '') // OpenAI prefix
+      .replace(/^toolu_/, '') // Anthropic prefix (already correct)
+      .replace(/^hist_tool_/, ''); // History prefix
+
+    return 'toolu_' + normalized;
+  }
+
+  /**
+   * Normalize tool IDs from Anthropic format to history format
+   */
+  private normalizeToHistoryToolId(id: string): string {
+    // Remove any known prefixes and add history prefix
+    const normalized = id
+      .replace(/^call_/, '') // OpenAI prefix
+      .replace(/^toolu_/, '') // Anthropic prefix
+      .replace(/^hist_tool_/, ''); // History prefix (already correct)
+
+    return 'hist_tool_' + normalized;
+  }
+
+  /**
    * Generate chat completion with IContent interface
    * Convert IContent directly to Anthropic API format
    */
@@ -554,7 +581,7 @@ export class AnthropicProvider extends BaseProvider {
             }
             contentArray.push({
               type: 'tool_use',
-              id: tc.id.replace(/^hist_tool_/, 'toolu_'),
+              id: this.normalizeToAnthropicToolId(tc.id),
               name: tc.name,
               input: parametersObj,
             });
@@ -586,9 +613,8 @@ export class AnthropicProvider extends BaseProvider {
           content: [
             {
               type: 'tool_result',
-              tool_use_id: toolResponseBlock.callId.replace(
-                /^hist_tool_/,
-                'toolu_',
+              tool_use_id: this.normalizeToAnthropicToolId(
+                toolResponseBlock.callId,
               ),
               content: JSON.stringify(toolResponseBlock.result),
             },
@@ -702,7 +728,7 @@ export class AnthropicProvider extends BaseProvider {
               blocks: [
                 {
                   type: 'tool_call',
-                  id: currentToolCall.id.replace(/^toolu_/, 'hist_tool_'),
+                  id: this.normalizeToHistoryToolId(currentToolCall.id),
                   name: currentToolCall.name,
                   parameters: processedParameters,
                 },
@@ -748,7 +774,7 @@ export class AnthropicProvider extends BaseProvider {
 
           blocks.push({
             type: 'tool_call',
-            id: contentBlock.id.replace(/^toolu_/, 'hist_tool_'),
+            id: this.normalizeToHistoryToolId(contentBlock.id),
             name: contentBlock.name,
             parameters: processedParameters,
           } as ToolCallBlock);
