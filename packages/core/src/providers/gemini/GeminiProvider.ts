@@ -72,7 +72,7 @@ export class GeminiProvider extends BaseProvider {
       oauthManager, // Keep the manager for checking enablement
     };
 
-    super(baseConfig, undefined, config);
+    super(baseConfig, config, undefined);
 
     this.logger = new DebugLogger('llxprt:gemini:provider');
     this.geminiOAuthManager = oauthManager;
