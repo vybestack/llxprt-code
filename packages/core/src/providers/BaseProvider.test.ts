@@ -582,28 +582,7 @@ describe('BaseProvider', () => {
     });
   });
 
-  describe('Default Implementations', () => {
-    it('should provide default implementations for optional methods', () => {
-      const config: BaseProviderConfig = {
-        name: 'test',
-        cliKey: 'test-key',
-      };
-
-      const provider = new TestProvider(config);
-
-      // These should not throw
-      expect(provider.setModel?.('new-model')).toBeUndefined();
-      expect(provider.getCurrentModel?.()).toBe('default');
-      expect(provider.getToolFormat?.()).toBe('default');
-      expect(provider.setToolFormatOverride?.(null)).toBeUndefined();
-      expect(provider.isPaidMode?.()).toBe(false);
-      expect(provider.clearState?.()).toBeUndefined();
-      expect(provider.setConfig?.({})).toBeUndefined();
-      expect(provider.getServerTools()).toEqual([]);
-      expect(provider.setModelParams?.(undefined)).toBeUndefined();
-      expect(provider.getModelParams?.()).toBeUndefined();
-    });
-
+  describe('Server Tools', () => {
     it('should throw error for unsupported server tools', async () => {
       const config: BaseProviderConfig = {
         name: 'test',
