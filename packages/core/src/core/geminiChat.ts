@@ -535,6 +535,33 @@ export class GeminiChat {
         // Get tools in the format the provider expects
         const tools = this.generationConfig.tools;
 
+        // Debug log what tools we're passing to the provider
+        this.logger.debug(
+          () =>
+            `[GeminiChat] Passing tools to provider.generateChatCompletion:`,
+          {
+            hasTools: !!tools,
+            toolsLength: tools?.length,
+            toolsType: typeof tools,
+            isArray: Array.isArray(tools),
+            firstTool: tools?.[0],
+            toolNames: Array.isArray(tools)
+              ? tools.map((t: unknown) => {
+                  const toolObj = t as {
+                    functionDeclarations?: Array<{ name?: string }>;
+                    name?: string;
+                  };
+                  return (
+                    toolObj.functionDeclarations?.[0]?.name ||
+                    toolObj.name ||
+                    'unknown'
+                  );
+                })
+              : 'not-an-array',
+            providerName: provider.name,
+          },
+        );
+
         // Call the provider directly with IContent
         const streamResponse = provider.generateChatCompletion!(
           iContents,

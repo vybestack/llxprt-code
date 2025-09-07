@@ -538,13 +538,17 @@ export class WriteFileTool
               "The absolute path to the file to write to (e.g., '/home/user/project/file.txt'). Relative paths are not supported.",
             type: 'string',
           },
+          absolute_path: {
+            description:
+              'Alternative parameter name for file_path (for compatibility). The absolute path to the file to write.',
+            type: 'string',
+          },
           content: {
             description: 'The content to write to the file.',
             type: 'string',
           },
         },
-        required: ['file_path', 'content'],
-        requireOne: [['file_path', 'absolute_path']], // Accept either file_path or absolute_path
+        required: ['content'], // Content is always required, path validation in validateToolParamValues
         type: 'object',
       },
     );

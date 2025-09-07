@@ -123,7 +123,7 @@ describe('ReadFileTool', () => {
     it('should throw error for schema validation failure (e.g. missing path)', () => {
       const params = { offset: 0 } as unknown as ReadFileToolParams;
       expect(() => tool.build(params)).toThrow(
-        `params must have required property 'absolute_path'`,
+        `Either 'absolute_path' or 'file_path' parameter must be provided and non-empty.`,
       );
     });
   });

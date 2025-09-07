@@ -26,6 +26,130 @@ import { DebugLogger } from '../debug/DebugLogger.js';
 
 export class ToolFormatter implements IToolFormatter {
   private logger = new DebugLogger('llxprt:tools:formatter');
+
+  /**
+   * Convert Gemini format tools directly to OpenAI format
+   * @param geminiTools Tools in Gemini format with functionDeclarations
+   * @returns Tools in OpenAI format with type: "function" wrapper
+   */
+  convertGeminiToOpenAI(
+    geminiTools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ):
+    | Array<{
+        type: 'function';
+        function: {
+          name: string;
+          description: string;
+          parameters: Record<string, unknown>;
+        };
+      }>
+    | undefined {
+    if (!geminiTools) return undefined;
+
+    const openAITools = geminiTools.flatMap((toolGroup) =>
+      toolGroup.functionDeclarations.map((decl) => {
+        const convertedParams = this.convertGeminiSchemaToStandard(
+          decl.parameters || {},
+        ) as Record<string, unknown>;
+
+        this.logger.debug(
+          () => `Converting Gemini tool ${decl.name} to OpenAI format`,
+          {
+            name: decl.name,
+            originalParams: decl.parameters,
+            convertedParams,
+          },
+        );
+
+        return {
+          type: 'function' as const,
+          function: {
+            name: decl.name,
+            description: decl.description || '',
+            parameters: convertedParams,
+          },
+        };
+      }),
+    );
+
+    this.logger.debug(
+      () =>
+        `Converted ${openAITools.length} tools from Gemini to OpenAI format`,
+      {
+        toolNames: openAITools.map((t) => t.function.name),
+        firstTool: openAITools[0],
+      },
+    );
+
+    return openAITools;
+  }
+
+  /**
+   * Convert Gemini format tools directly to Anthropic format
+   * @param geminiTools Tools in Gemini format with functionDeclarations
+   * @returns Tools in Anthropic format with input_schema
+   */
+  convertGeminiToAnthropic(
+    geminiTools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
+  ):
+    | Array<{
+        name: string;
+        description: string;
+        input_schema: { type: 'object'; [key: string]: unknown };
+      }>
+    | undefined {
+    if (!geminiTools) return undefined;
+
+    const anthropicTools = geminiTools.flatMap((toolGroup) =>
+      toolGroup.functionDeclarations.map((decl) => {
+        const convertedParams = this.convertGeminiSchemaToStandard(
+          decl.parameters || {},
+        ) as Record<string, unknown>;
+
+        this.logger.debug(
+          () => `Converting Gemini tool ${decl.name} to Anthropic format`,
+          {
+            name: decl.name,
+            originalParams: decl.parameters,
+            convertedParams,
+          },
+        );
+
+        return {
+          name: decl.name,
+          description: decl.description || '',
+          input_schema: {
+            type: 'object' as const,
+            ...convertedParams,
+          },
+        };
+      }),
+    );
+
+    this.logger.debug(
+      () =>
+        `Converted ${anthropicTools.length} tools from Gemini to Anthropic format`,
+      {
+        toolNames: anthropicTools.map((t) => t.name),
+        firstTool: anthropicTools[0],
+      },
+    );
+
+    return anthropicTools;
+  }
+
   /**
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */

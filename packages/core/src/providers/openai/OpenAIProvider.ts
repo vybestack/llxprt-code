@@ -21,7 +21,6 @@
 
 import OpenAI from 'openai';
 import { IContent } from '../../services/history/IContent.js';
-import { ITool } from '../ITool.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import { BaseProvider } from '../BaseProvider.js';
@@ -104,8 +103,90 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   override async getModels(): Promise<IModel[]> {
-    // TODO: Implement model listing for OpenAI provider
-    return [];
+    // Check if API key is available (using resolved authentication)
+    const apiKey = await this.getAuthToken();
+    if (!apiKey) {
+      const endpoint = this.getBaseURL() || 'https://api.openai.com/v1';
+      // For local/self-hosted endpoints, allow proceeding without auth
+      if (
+        endpoint.includes('api.openai.com') ||
+        endpoint.includes('openai.com')
+      ) {
+        throw new Error(
+          'OpenAI API key is required for official OpenAI endpoints',
+        );
+      }
+      this.logger.debug(
+        () =>
+          `No authentication provided, attempting to fetch models from local/self-hosted endpoint: ${endpoint}`,
+      );
+    }
+
+    try {
+      // Get OpenAI client
+      const client = await this.getClient();
+      const response = await client.models.list();
+      const models: IModel[] = [];
+
+      for await (const model of response) {
+        // Filter out non-chat models (embeddings, audio, image, vision, DALL·E, etc.)
+        if (
+          !/embedding|whisper|audio|tts|image|vision|dall[- ]?e|moderation/i.test(
+            model.id,
+          )
+        ) {
+          models.push({
+            id: model.id,
+            name: model.id,
+            provider: 'openai',
+            supportedToolFormats: ['openai'],
+          });
+        }
+      }
+
+      return models;
+    } catch (error) {
+      this.logger.debug(() => `Error fetching models from OpenAI: ${error}`);
+      // Return a hardcoded list as fallback
+      return [
+        {
+          id: 'gpt-5',
+          name: 'GPT-5',
+          provider: 'openai',
+          supportedToolFormats: ['openai'],
+        },
+        {
+          id: 'gpt-4.1',
+          name: 'GPT-4.1',
+          provider: 'openai',
+          supportedToolFormats: ['openai'],
+        },
+        {
+          id: 'gpt-4o',
+          name: 'GPT-4o',
+          provider: 'openai',
+          supportedToolFormats: ['openai'],
+        },
+        {
+          id: 'o3',
+          name: 'O3',
+          provider: 'openai',
+          supportedToolFormats: ['openai'],
+        },
+        {
+          id: 'o4-mini',
+          name: 'O4 Mini',
+          provider: 'openai',
+          supportedToolFormats: ['openai'],
+        },
+        {
+          id: 'gpt-3.5-turbo',
+          name: 'GPT-3.5 Turbo (Legacy)',
+          provider: 'openai',
+          supportedToolFormats: ['openai'],
+        },
+      ];
+    }
   }
 
   override getDefaultModel(): string {
@@ -145,24 +226,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       }>;
     }>,
   ): AsyncIterableIterator<IContent> {
-    // Convert function declarations to ITool format for compatibility
-    const convertedTools: ITool[] | undefined = tools
-      ? tools.flatMap((toolGroup) =>
-          // Convert all function declarations from each group
-          toolGroup.functionDeclarations.map((func) => ({
-            type: 'function' as const,
-            function: {
-              name: func.name,
-              description: func.description || '',
-              parameters: func.parameters || {},
-            },
-          })),
-        )
-      : undefined;
+    // Debug log what we receive
+    this.logger.debug(
+      () => `[OpenAIProvider] generateChatCompletion received tools:`,
+      {
+        hasTools: !!tools,
+        toolsLength: tools?.length,
+        toolsType: typeof tools,
+        isArray: Array.isArray(tools),
+        firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
+        toolsStructure: tools
+          ? JSON.stringify(tools).substring(0, 200)
+          : 'undefined',
+      },
+    );
 
+    // Pass tools directly in Gemini format - they'll be converted in generateChatCompletionImpl
     const generator = this.generateChatCompletionImpl(
       contents,
-      convertedTools,
+      tools,
       undefined,
       undefined,
       undefined,
@@ -255,7 +337,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    */
   private async *generateChatCompletionImpl(
     contents: IContent[],
-    tools?: ITool[],
+    tools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parameters?: unknown;
+      }>;
+    }>,
     maxTokens?: number,
     abortSignal?: AbortSignal,
     modelName?: string,
@@ -266,18 +354,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
 
-    // Format tools for API
-    const formattedTools = tools
-      ? tools.map((tool) => ({
-          type: 'function' as const,
-          function: {
-            name: tool.function.name,
-            description: tool.function.description || '',
-            parameters:
-              (tool.function.parameters as Record<string, unknown>) || {},
-          },
-        }))
-      : undefined;
+    // Convert Gemini format tools directly to OpenAI format using the new method
+    const formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
+
+    // Debug log the conversion result
+    this.logger.debug(() => `[OpenAIProvider] After convertGeminiToOpenAI:`, {
+      inputHadTools: !!tools,
+      outputHasTools: !!formattedTools,
+      outputToolsLength: formattedTools?.length,
+      outputFirstTool: formattedTools?.[0],
+      outputToolNames: formattedTools?.map((t) => t.function.name),
+    });
 
     // Get auth token
     const apiKey = await this.getAuthToken();
@@ -285,14 +372,42 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       throw new Error('OpenAI API key is required');
     }
 
+    // Get streaming setting from ephemeral settings (default: enabled)
+    const streamingSetting =
+      this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
+    const streamingEnabled = streamingSetting !== 'disabled';
+
     // Build request
     const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
       model,
       messages,
       tools: formattedTools,
       max_tokens: maxTokens,
-      stream: true,
+      stream: streamingEnabled,
     };
+
+    // Debug log the full request for Cerebras/Qwen
+    if (
+      model.toLowerCase().includes('qwen') ||
+      this.getBaseURL()?.includes('cerebras')
+    ) {
+      this.logger.debug(
+        () => `Full request to ${this.getBaseURL()} for model ${model}:`,
+        {
+          baseURL: this.getBaseURL(),
+          model,
+          streamingEnabled,
+          hasTools: !!formattedTools,
+          toolCount: formattedTools?.length || 0,
+          messageCount: messages.length,
+          requestBody: {
+            ...requestBody,
+            messages: messages.slice(-2), // Only log last 2 messages for brevity
+            tools: formattedTools?.slice(0, 2), // Only log first 2 tools for brevity
+          },
+        },
+      );
+    }
 
     // Get OpenAI client
     const client = await this.getClient();
@@ -332,138 +447,190 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       throw new Error('Failed to get response after retries');
     }
 
-    // Process streaming response
-    let _accumulatedText = '';
-    const accumulatedToolCalls: Array<{
-      id: string;
-      type: 'function';
-      function: {
-        name: string;
-        arguments: string;
-      };
-    }> = [];
+    // Check if response is streaming or not
+    if (streamingEnabled) {
+      // Process streaming response
+      let _accumulatedText = '';
+      const accumulatedToolCalls: Array<{
+        id: string;
+        type: 'function';
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }> = [];
 
-    // Buffer for small text chunks to avoid word-per-line display
-    let textBuffer = '';
-    const MIN_BUFFER_SIZE = 10; // Minimum characters to buffer before emitting
-    const BUFFER_TIMEOUT_MS = 100; // Max time to hold buffer
-    let lastEmitTime = Date.now();
+      // Buffer for small text chunks to avoid word-per-line display
+      let textBuffer = '';
+      const MIN_BUFFER_SIZE = 10; // Minimum characters to buffer before emitting
+      const BUFFER_TIMEOUT_MS = 100; // Max time to hold buffer
+      let lastEmitTime = Date.now();
 
-    try {
-      // Handle streaming response
-      for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
-        if (abortSignal?.aborted) {
-          break;
-        }
-
-        const choice = chunk.choices?.[0];
-        if (!choice) continue;
-
-        // Handle text content
-        const deltaContent = choice.delta?.content;
-        if (deltaContent) {
-          _accumulatedText += deltaContent;
-          textBuffer += deltaContent;
-
-          const currentTime = Date.now();
-          const shouldEmit =
-            textBuffer.length >= MIN_BUFFER_SIZE || // Buffer is large enough
-            currentTime - lastEmitTime >= BUFFER_TIMEOUT_MS || // Timeout reached
-            deltaContent.includes('\n') || // Contains newline
-            deltaContent.endsWith('. ') || // End of sentence
-            deltaContent.endsWith('! ') || // End of exclamation
-            deltaContent.endsWith('? '); // End of question
-
-          if (shouldEmit && textBuffer.length > 0) {
-            yield {
-              speaker: 'ai',
-              blocks: [
-                {
-                  type: 'text',
-                  text: textBuffer,
-                } as TextBlock,
-              ],
-            } as IContent;
-            textBuffer = '';
-            lastEmitTime = currentTime;
+      try {
+        // Handle streaming response
+        for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
+          if (abortSignal?.aborted) {
+            break;
           }
-        }
 
-        // Handle tool calls
-        const deltaToolCalls = choice.delta?.tool_calls;
-        if (deltaToolCalls && deltaToolCalls.length > 0) {
-          for (const deltaToolCall of deltaToolCalls) {
-            if (deltaToolCall.index === undefined) continue;
+          const choice = chunk.choices?.[0];
+          if (!choice) continue;
 
-            // Initialize or update accumulated tool call
-            if (!accumulatedToolCalls[deltaToolCall.index]) {
-              accumulatedToolCalls[deltaToolCall.index] = {
-                id: deltaToolCall.id || '',
-                type: 'function',
-                function: {
-                  name: deltaToolCall.function?.name || '',
-                  arguments: '',
-                },
-              };
+          // Handle text content
+          const deltaContent = choice.delta?.content;
+          if (deltaContent) {
+            _accumulatedText += deltaContent;
+            textBuffer += deltaContent;
+
+            const currentTime = Date.now();
+            const shouldEmit =
+              textBuffer.length >= MIN_BUFFER_SIZE || // Buffer is large enough
+              currentTime - lastEmitTime >= BUFFER_TIMEOUT_MS || // Timeout reached
+              deltaContent.includes('\n') || // Contains newline
+              deltaContent.endsWith('. ') || // End of sentence
+              deltaContent.endsWith('! ') || // End of exclamation
+              deltaContent.endsWith('? '); // End of question
+
+            if (shouldEmit && textBuffer.length > 0) {
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'text',
+                    text: textBuffer,
+                  } as TextBlock,
+                ],
+              } as IContent;
+              textBuffer = '';
+              lastEmitTime = currentTime;
             }
+          }
 
-            const tc = accumulatedToolCalls[deltaToolCall.index];
-            if (tc) {
-              if (deltaToolCall.id) tc.id = deltaToolCall.id;
-              if (deltaToolCall.function?.name)
-                tc.function.name = deltaToolCall.function.name;
-              if (deltaToolCall.function?.arguments) {
-                tc.function.arguments += deltaToolCall.function.arguments;
+          // Handle tool calls
+          const deltaToolCalls = choice.delta?.tool_calls;
+          if (deltaToolCalls && deltaToolCalls.length > 0) {
+            for (const deltaToolCall of deltaToolCalls) {
+              if (deltaToolCall.index === undefined) continue;
+
+              // Initialize or update accumulated tool call
+              if (!accumulatedToolCalls[deltaToolCall.index]) {
+                accumulatedToolCalls[deltaToolCall.index] = {
+                  id: deltaToolCall.id || '',
+                  type: 'function',
+                  function: {
+                    name: deltaToolCall.function?.name || '',
+                    arguments: '',
+                  },
+                };
+              }
+
+              const tc = accumulatedToolCalls[deltaToolCall.index];
+              if (tc) {
+                if (deltaToolCall.id) tc.id = deltaToolCall.id;
+                if (deltaToolCall.function?.name)
+                  tc.function.name = deltaToolCall.function.name;
+                if (deltaToolCall.function?.arguments) {
+                  tc.function.arguments += deltaToolCall.function.arguments;
+                }
               }
             }
           }
         }
+      } catch (error) {
+        if (abortSignal?.aborted) {
+          throw error;
+        } else {
+          this.logger.error('Error processing streaming response:', error);
+          throw error;
+        }
       }
-    } catch (error) {
-      if (abortSignal?.aborted) {
-        throw error;
-      } else {
-        this.logger.error('Error processing streaming response:', error);
-        throw error;
+
+      // Flush any remaining text buffer
+      if (textBuffer.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'text',
+              text: textBuffer,
+            } as TextBlock,
+          ],
+        } as IContent;
       }
-    }
 
-    // Flush any remaining text buffer
-    if (textBuffer.length > 0) {
-      yield {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'text',
-            text: textBuffer,
-          } as TextBlock,
-        ],
-      } as IContent;
-    }
+      // Emit accumulated tool calls as IContent if any
+      if (accumulatedToolCalls.length > 0) {
+        const blocks: ToolCallBlock[] = [];
+        const detectedFormat = this.detectToolFormat();
 
-    // Emit accumulated tool calls as IContent if any
-    if (accumulatedToolCalls.length > 0) {
-      const blocks: ToolCallBlock[] = [];
-      const detectedFormat = this.detectToolFormat();
+        for (const tc of accumulatedToolCalls) {
+          if (!tc) continue;
 
-      for (const tc of accumulatedToolCalls) {
-        if (!tc) continue;
+          // Process tool parameters with double-escape handling
+          const processedParameters = processToolParameters(
+            tc.function.arguments || '',
+            tc.function.name || '',
+            detectedFormat,
+          );
 
-        // Process tool parameters with double-escape handling
-        const processedParameters = processToolParameters(
-          tc.function.arguments || '',
-          tc.function.name || '',
-          detectedFormat,
-        );
+          blocks.push({
+            type: 'tool_call',
+            id: tc.id,
+            name: tc.function.name || '',
+            parameters: processedParameters,
+          });
+        }
 
+        if (blocks.length > 0) {
+          yield {
+            speaker: 'ai',
+            blocks,
+          } as IContent;
+        }
+      }
+    } else {
+      // Handle non-streaming response
+      const completion = response as OpenAI.Chat.Completions.ChatCompletion;
+      const choice = completion.choices?.[0];
+
+      if (!choice) {
+        throw new Error('No choices in completion response');
+      }
+
+      const blocks: Array<TextBlock | ToolCallBlock> = [];
+
+      // Handle text content
+      if (choice.message?.content) {
         blocks.push({
-          type: 'tool_call',
-          id: tc.id,
-          name: tc.function.name || '',
-          parameters: processedParameters,
-        });
+          type: 'text',
+          text: choice.message.content,
+        } as TextBlock);
       }
 
+      // Handle tool calls
+      if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
+        const detectedFormat = this.detectToolFormat();
+
+        for (const toolCall of choice.message.tool_calls) {
+          if (toolCall.type === 'function') {
+            // Process tool parameters with double-escape handling
+            const processedParameters = processToolParameters(
+              toolCall.function.arguments || '',
+              toolCall.function.name || '',
+              detectedFormat,
+            );
+
+            blocks.push({
+              type: 'tool_call',
+              id: toolCall.id,
+              name: toolCall.function.name || '',
+              parameters: processedParameters,
+            } as ToolCallBlock);
+          }
+        }
+      }
+
+      // Emit the complete response as a single IContent
       if (blocks.length > 0) {
         yield {
           speaker: 'ai',
@@ -502,28 +669,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     return 'openai';
-  }
-
-  /**
-   * Format tools for API based on detected tool format
-   * @param tools Array of tools to format
-   * @returns Formatted tools for API consumption
-   */
-  formatToolsForAPI(tools: ITool[]): unknown {
-    // For now, always use OpenAI format through OpenRouter
-    // TODO: Investigate if OpenRouter needs special handling for GLM/Qwen
-    // const detectedFormat = this.detectToolFormat();
-    // if (detectedFormat === 'qwen') {
-    //   // Convert OpenAI format to Qwen format: {name, description, parameters} without type/function wrapper
-    //   return tools.map((tool) => ({
-    //     name: tool.function.name,
-    //     description: tool.function.description,
-    //     parameters: tool.function.parameters,
-    //   }));
-    // }
-
-    // For all formats, use the existing ToolFormatter
-    return this.toolFormatter.toProviderFormat(tools, 'openai');
   }
 
   /**

@@ -192,6 +192,11 @@ export class ReadFileTool extends BaseDeclarativeTool<
               "The absolute path to the file to read (e.g., '/home/user/project/file.txt'). Relative paths are not supported. You must provide an absolute path.",
             type: 'string',
           },
+          file_path: {
+            description:
+              'Alternative parameter name for absolute_path (for backward compatibility). The absolute path to the file to read.',
+            type: 'string',
+          },
           offset: {
             description:
               "Optional: For text files, the 0-based line number to start reading from. Requires 'limit' to be set. Use for paginating through large files.",
@@ -203,8 +208,7 @@ export class ReadFileTool extends BaseDeclarativeTool<
             type: 'number',
           },
         },
-        required: ['absolute_path'],
-        requireOne: [['absolute_path', 'file_path']], // Accept either absolute_path or file_path
+        // Don't require either in schema - validation handles this
         type: 'object',
       },
     );

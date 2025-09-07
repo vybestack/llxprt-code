@@ -2,7 +2,6 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 import { DebugLogger } from '../../debug/index.js';
 import { IModel } from '../IModel.js';
-import { ITool } from '../ITool.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import type { ToolFormat } from '../../tools/IToolFormatter.js';
 import { IProviderConfig } from '../types/IProviderConfig.js';
@@ -600,34 +599,8 @@ export class AnthropicProvider extends BaseProvider {
       }
     }
 
-    // Convert Gemini format tools to ITool format then use toolFormatter
-    const anthropicTools = tools
-      ? (() => {
-          // First convert ALL tools to ITool format (not just first group)
-          const iTools: ITool[] = tools.flatMap((toolGroup) =>
-            toolGroup.functionDeclarations.map((decl) => ({
-              type: 'function' as const,
-              function: {
-                name: decl.name,
-                description: decl.description || '',
-                parameters: decl.parameters || {},
-              },
-            })),
-          );
-
-          // Then use the toolFormatter to properly convert to Anthropic format
-          // This handles schema validation, type conversion, and filtering
-          const converted = this.toolFormatter.toProviderFormat(
-            iTools,
-            'anthropic',
-          );
-          return converted as Array<{
-            name: string;
-            description: string;
-            input_schema: { type: 'object'; [key: string]: unknown };
-          }>;
-        })()
-      : undefined;
+    // Convert Gemini format tools directly to Anthropic format using the new method
+    const anthropicTools = this.toolFormatter.convertGeminiToAnthropic(tools);
 
     // Ensure authentication
     await this.updateClientWithResolvedAuth();
@@ -660,6 +633,16 @@ export class AnthropicProvider extends BaseProvider {
         ? { tools: anthropicTools }
         : {}),
     };
+
+    // Debug log the tools being sent to Anthropic
+    if (anthropicTools && anthropicTools.length > 0) {
+      this.logger.debug(() => `[AnthropicProvider] Sending tools to API:`, {
+        toolCount: anthropicTools.length,
+        toolNames: anthropicTools.map((t) => t.name),
+        firstTool: anthropicTools[0],
+        requestHasTools: 'tools' in requestBody,
+      });
+    }
 
     // Make the API call directly with type assertion
     const response = await this.anthropic.messages.create(
