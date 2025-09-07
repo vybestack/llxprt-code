@@ -37,7 +37,7 @@ export class ToolFormatter implements IToolFormatter {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
   ):
@@ -69,23 +69,23 @@ export class ToolFormatter implements IToolFormatter {
         this.logger.debug(
           () => `Processing tool declaration for ${decl.name}`,
           {
-            hasParameters: !!decl.parameters,
-            parametersType: typeof decl.parameters,
-            parametersPreview: decl.parameters
-              ? JSON.stringify(decl.parameters).substring(0, 200)
+            hasParametersJsonSchema: !!decl.parametersJsonSchema,
+            parametersType: typeof decl.parametersJsonSchema,
+            parametersPreview: decl.parametersJsonSchema
+              ? JSON.stringify(decl.parametersJsonSchema).substring(0, 200)
               : 'undefined',
           },
         );
 
         const convertedParams = this.convertGeminiSchemaToStandard(
-          decl.parameters || {},
+          decl.parametersJsonSchema || {},
         ) as Record<string, unknown>;
 
         this.logger.debug(
           () => `Converting Gemini tool ${decl.name} to OpenAI format`,
           {
             name: decl.name,
-            originalParams: decl.parameters,
+            originalParams: decl.parametersJsonSchema,
             convertedParams,
             convertedParamsJSON: JSON.stringify(convertedParams),
           },
@@ -127,7 +127,7 @@ export class ToolFormatter implements IToolFormatter {
       functionDeclarations: Array<{
         name: string;
         description?: string;
-        parameters?: unknown;
+        parametersJsonSchema?: unknown;
       }>;
     }>,
   ):
@@ -142,14 +142,14 @@ export class ToolFormatter implements IToolFormatter {
     const anthropicTools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
         const convertedParams = this.convertGeminiSchemaToStandard(
-          decl.parameters || {},
+          decl.parametersJsonSchema || {},
         ) as Record<string, unknown>;
 
         this.logger.debug(
           () => `Converting Gemini tool ${decl.name} to Anthropic format`,
           {
             name: decl.name,
-            originalParams: decl.parameters,
+            originalParams: decl.parametersJsonSchema,
             convertedParams,
           },
         );

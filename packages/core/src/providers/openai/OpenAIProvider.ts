@@ -540,11 +540,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
     const streamingEnabled = streamingSetting !== 'disabled';
 
-    // Build request
+    // Build request - only include tools if they exist and are not empty
     const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
       model,
       messages,
-      tools: formattedTools,
+      ...(formattedTools && formattedTools.length > 0
+        ? { tools: formattedTools }
+        : {}),
       max_tokens: maxTokens,
       stream: streamingEnabled,
     };
@@ -560,13 +562,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           baseURL: this.getBaseURL(),
           model,
           streamingEnabled,
-          hasTools: !!formattedTools,
+          hasTools: 'tools' in requestBody,
           toolCount: formattedTools?.length || 0,
           messageCount: messages.length,
+          toolsInRequest:
+            'tools' in requestBody ? requestBody.tools?.length : 'not included',
           requestBody: {
             ...requestBody,
             messages: messages.slice(-2), // Only log last 2 messages for brevity
-            tools: formattedTools?.slice(0, 2), // Only log first 2 tools for brevity
+            tools: requestBody.tools?.slice(0, 2), // Only log first 2 tools for brevity if they exist
           },
         },
       );
@@ -625,12 +629,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         };
       }> = [];
 
-      // Buffer for small text chunks to avoid word-per-line display
-      let textBuffer = '';
-      const MIN_BUFFER_SIZE = 10; // Minimum characters to buffer before emitting
-      const BUFFER_TIMEOUT_MS = 100; // Max time to hold buffer
-      let lastEmitTime = Date.now();
-
       try {
         // Handle streaming response
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
@@ -641,34 +639,21 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const choice = chunk.choices?.[0];
           if (!choice) continue;
 
-          // Handle text content
+          // Handle text content - emit immediately without buffering
           const deltaContent = choice.delta?.content;
           if (deltaContent) {
             _accumulatedText += deltaContent;
-            textBuffer += deltaContent;
 
-            const currentTime = Date.now();
-            const shouldEmit =
-              textBuffer.length >= MIN_BUFFER_SIZE || // Buffer is large enough
-              currentTime - lastEmitTime >= BUFFER_TIMEOUT_MS || // Timeout reached
-              deltaContent.includes('\n') || // Contains newline
-              deltaContent.endsWith('. ') || // End of sentence
-              deltaContent.endsWith('! ') || // End of exclamation
-              deltaContent.endsWith('? '); // End of question
-
-            if (shouldEmit && textBuffer.length > 0) {
-              yield {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'text',
-                    text: textBuffer,
-                  } as TextBlock,
-                ],
-              } as IContent;
-              textBuffer = '';
-              lastEmitTime = currentTime;
-            }
+            // Emit text immediately without buffering
+            yield {
+              speaker: 'ai',
+              blocks: [
+                {
+                  type: 'text',
+                  text: deltaContent,
+                } as TextBlock,
+              ],
+            } as IContent;
           }
 
           // Handle tool calls
@@ -710,18 +695,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
 
-      // Flush any remaining text buffer
-      if (textBuffer.length > 0) {
-        yield {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'text',
-              text: textBuffer,
-            } as TextBlock,
-          ],
-        } as IContent;
-      }
+      // No need to flush buffer since we're emitting immediately
 
       // Emit accumulated tool calls as IContent if any
       if (accumulatedToolCalls.length > 0) {

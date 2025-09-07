@@ -21,7 +21,7 @@ describe('ToolFormatter', () => {
               name: 'todo_write',
               description:
                 'Create and manage a structured task list for the current coding session. Updates the entire todo list.',
-              parameters: {
+              parametersJsonSchema: {
                 type: Type.OBJECT,
                 properties: {
                   todos: {
@@ -184,7 +184,7 @@ describe('ToolFormatter', () => {
               name: 'list_directory',
               description:
                 'Lists the names of files and subdirectories directly within a specified directory path.',
-              parameters: {
+              parametersJsonSchema: {
                 type: Type.OBJECT,
                 properties: {
                   path: {
