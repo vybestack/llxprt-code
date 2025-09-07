@@ -23,6 +23,18 @@ vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
 
+vi.mock('../../providers/providerManagerInstance.js', async () => {
+  const actual = await vi.importActual(
+    '../../providers/providerManagerInstance.js',
+  );
+  return {
+    ...actual,
+    getProviderManager: vi.fn(() => {
+      throw new Error('Provider manager not available in test');
+    }),
+  };
+});
+
 describe('aboutCommand', () => {
   let mockContext: CommandContext;
   let mockFileSystem: MockFileSystem;

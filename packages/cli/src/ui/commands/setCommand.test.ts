@@ -96,7 +96,7 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Usage: /set temperature <value>\n\nValid ephemeral keys:\n  context-limit: Maximum number of tokens for the context window (e.g., 100000)\n  compression-threshold: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)\n  base-url: Base URL for API requests\n  tool-format: Tool format override for the provider\n  api-version: API version to use\n  custom-headers: Custom HTTP headers as JSON object\n  stream-options: Stream options for OpenAI API (default: { include_usage: true })\n  streaming: Enable or disable streaming responses (enabled/disabled, default: enabled)\n  shell-replacement: Allow command substitution ($(), <(), backticks) in shell commands (default: false)\n  tool-output-max-items: Maximum number of items/files/matches returned by tools (default: 50)\n  tool-output-max-tokens: Maximum tokens in tool output (default: 50000)\n  tool-output-truncate-mode: How to handle exceeding limits: warn, truncate, or sample (default: warn)\n  tool-output-item-size-limit: Maximum size per item/file in bytes (default: 524288 = 512KB)\n  max-prompt-tokens: Maximum tokens allowed in any prompt sent to LLM (default: 200000)\n  emojifilter: Emoji filter mode (allowed, auto, warn, error)',
+        'Usage: /set temperature <value>\n\nValid ephemeral keys:\n  context-limit: Maximum number of tokens for the context window (e.g., 100000)\n  compression-threshold: Fraction of context limit that triggers compression (0.0-1.0, e.g., 0.7 for 70%)\n  base-url: Base URL for API requests\n  tool-format: Tool format override for the provider\n  api-version: API version to use\n  custom-headers: Custom HTTP headers as JSON object\n  stream-options: Stream options for OpenAI API (default: { include_usage: true })\n  streaming: Enable or disable streaming responses (enabled/disabled, default: enabled)\n  shell-replacement: Allow command substitution ($(), <(), backticks) in shell commands (default: false)\n  socket-timeout: Request timeout in milliseconds for local AI servers (default: 60000)\n  socket-keepalive: Enable TCP keepalive for local AI server connections (true/false, default: true)\n  socket-nodelay: Enable TCP_NODELAY concept for local AI servers (true/false, default: true)\n  tool-output-max-items: Maximum number of items/files/matches returned by tools (default: 50)\n  tool-output-max-tokens: Maximum tokens in tool output (default: 50000)\n  tool-output-truncate-mode: How to handle exceeding limits: warn, truncate, or sample (default: warn)\n  tool-output-item-size-limit: Maximum size per item/file in bytes (default: 524288 = 512KB)\n  max-prompt-tokens: Maximum tokens allowed in any prompt sent to LLM (default: 200000)\n  emojifilter: Emoji filter mode (allowed, auto, warn, error)',
     });
   });
 
@@ -147,7 +147,7 @@ describe('setCommand', () => {
       type: 'message',
       messageType: 'error',
       content:
-        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter',
+        'Invalid setting key: invalid-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter',
     });
   });
 
@@ -332,7 +332,7 @@ describe('setCommand', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid setting key: auth-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter',
+          'Invalid setting key: auth-key. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter',
       });
     });
 
@@ -346,7 +346,7 @@ describe('setCommand', () => {
         type: 'message',
         messageType: 'error',
         content:
-          'Invalid setting key: auth-keyfile. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter',
+          'Invalid setting key: auth-keyfile. Valid keys are: context-limit, compression-threshold, base-url, tool-format, api-version, custom-headers, stream-options, streaming, shell-replacement, socket-timeout, socket-keepalive, socket-nodelay, tool-output-max-items, tool-output-max-tokens, tool-output-truncate-mode, tool-output-item-size-limit, max-prompt-tokens, emojifilter',
       });
     });
 
