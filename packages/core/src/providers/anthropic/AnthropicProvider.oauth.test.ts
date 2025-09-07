@@ -24,6 +24,27 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       }
       return tools;
     }),
+    convertGeminiToAnthropic: vi.fn((geminiTools) => {
+      if (!geminiTools || !Array.isArray(geminiTools)) return [];
+      
+      const tools = [];
+      for (const group of geminiTools) {
+        if (group.functionDeclarations) {
+          for (const func of group.functionDeclarations) {
+            tools.push({
+              name: func.name,
+              description: func.description || '',
+              input_schema: {
+                type: 'object',
+                properties: func.parameters?.properties || {},
+                required: func.parameters?.required || [],
+              },
+            });
+          }
+        }
+      }
+      return tools;
+    }),
   })),
 }));
 

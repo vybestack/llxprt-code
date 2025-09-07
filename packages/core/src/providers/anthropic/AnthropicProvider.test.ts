@@ -40,6 +40,27 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       }
       return [rawToolCall];
     }),
+    convertGeminiToAnthropic: vi.fn((geminiTools) => {
+      if (!geminiTools || !Array.isArray(geminiTools)) return [];
+      
+      const tools = [];
+      for (const group of geminiTools) {
+        if (group.functionDeclarations) {
+          for (const func of group.functionDeclarations) {
+            tools.push({
+              name: func.name,
+              description: func.description || '',
+              input_schema: {
+                type: 'object',
+                properties: func.parameters?.properties || {},
+                required: func.parameters?.required || [],
+              },
+            });
+          }
+        }
+      }
+      return tools;
+    }),
   })),
 }));
 
@@ -300,7 +321,7 @@ describe('AnthropicProvider', () => {
           blocks: [
             {
               type: 'tool_call',
-              id: 'tool-123',
+              id: 'hist_tool_tool-123',  // ID gets normalized to history format
               name: 'get_weather',
               parameters: { location: 'San Francisco' },
             },
@@ -321,7 +342,7 @@ describe('AnthropicProvider', () => {
           {
             name: 'get_weather',
             description: 'Get the weather',
-            input_schema: { type: 'object', properties: {} },
+            input_schema: { type: 'object', properties: {}, required: [] },
           },
         ],
       });
@@ -483,27 +504,27 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      // Verify ToolFormatter was used
+      // Verify ToolFormatter was used with the new convertGeminiToAnthropic method
       const ToolFormatterMock = vi.mocked(
         (await import('../../tools/ToolFormatter.js')).ToolFormatter,
       );
       const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
 
-      expect(toolFormatterInstance.toProviderFormat).toHaveBeenCalledWith(
+      expect(toolFormatterInstance.convertGeminiToAnthropic).toHaveBeenCalledWith(
         [
           {
-            type: 'function',
-            function: {
-              name: 'test_tool',
-              description: 'A test tool',
-              parameters: {
-                type: 'object',
-                properties: { foo: { type: 'string' } },
+            functionDeclarations: [
+              {
+                name: 'test_tool',
+                description: 'A test tool',
+                parameters: {
+                  type: 'object',
+                  properties: { foo: { type: 'string' } },
+                },
               },
-            },
+            ],
           },
         ],
-        'anthropic',
       );
     });
 
