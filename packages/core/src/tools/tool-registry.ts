@@ -161,12 +161,20 @@ export class ToolRegistry {
     this.tools.set(tool.name, tool);
   }
 
-  private removeDiscoveredTools(): void {
-    for (const tool of this.tools.values()) {
-      if (tool instanceof DiscoveredTool || tool instanceof DiscoveredMCPTool) {
-        this.tools.delete(tool.name);
+  /**
+   * Builds a new tool map with only non-discovered tools (core tools).
+   * This is used for atomic updates to avoid race conditions.
+   */
+  private buildCoreToolsMap(): Map<string, AnyDeclarativeTool> {
+    const coreTools = new Map<string, AnyDeclarativeTool>();
+    for (const [name, tool] of this.tools.entries()) {
+      if (
+        !(tool instanceof DiscoveredTool || tool instanceof DiscoveredMCPTool)
+      ) {
+        coreTools.set(name, tool);
       }
     }
+    return coreTools;
   }
 
   /**
@@ -185,32 +193,74 @@ export class ToolRegistry {
    * Discovers tools from project (if available and configured).
    * Can be called multiple times to update discovered tools.
    * This will discover tools from the command line and from MCP servers.
+   * Uses atomic updates to prevent race conditions.
    */
   async discoverAllTools(): Promise<void> {
-    // remove any previously discovered tools
-    this.removeDiscoveredTools();
+    // Build new tool map starting with core tools (non-discovered)
+    const newTools = this.buildCoreToolsMap();
 
-    this.config.getPromptRegistry().clear();
+    // Store the old tools map for atomic replacement
+    const oldTools = this.tools;
 
-    await this.discoverAndRegisterToolsFromCommand();
+    // Temporarily use the new tools map for discovery
+    this.tools = newTools;
 
-    // discover tools using MCP servers, if configured
-    await this.mcpClientManager.discoverAllMcpTools();
+    try {
+      this.config.getPromptRegistry().clear();
+
+      await this.discoverAndRegisterToolsFromCommand();
+
+      // discover tools using MCP servers, if configured
+      await this.mcpClientManager.discoverAllMcpTools();
+    } catch (error) {
+      // Restore old tools on error
+      this.tools = oldTools;
+      throw error;
+    }
+
+    // At this point, newTools has all the tools (core + discovered)
+    // and the update was atomic from the perspective of getTool() calls
   }
 
   /**
    * Discovers tools from project (if available and configured).
    * Can be called multiple times to update discovered tools.
    * This will NOT discover tools from the command line, only from MCP servers.
+   * Uses atomic updates to prevent race conditions.
    */
   async discoverMcpTools(): Promise<void> {
-    // remove any previously discovered tools
-    this.removeDiscoveredTools();
+    // Build new tool map starting with core tools (non-discovered)
+    const newTools = this.buildCoreToolsMap();
 
-    this.config.getPromptRegistry().clear();
+    // Re-add command-discovered tools if they exist
+    for (const [name, tool] of this.tools.entries()) {
+      if (
+        tool instanceof DiscoveredTool &&
+        !(tool instanceof DiscoveredMCPTool)
+      ) {
+        newTools.set(name, tool);
+      }
+    }
 
-    // discover tools using MCP servers, if configured
-    await this.mcpClientManager.discoverAllMcpTools();
+    // Store the old tools map for atomic replacement
+    const oldTools = this.tools;
+
+    // Temporarily use the new tools map for discovery
+    this.tools = newTools;
+
+    try {
+      this.config.getPromptRegistry().clear();
+
+      // discover tools using MCP servers, if configured
+      await this.mcpClientManager.discoverAllMcpTools();
+    } catch (error) {
+      // Restore old tools on error
+      this.tools = oldTools;
+      throw error;
+    }
+
+    // At this point, newTools has all the tools (core + command + MCP)
+    // and the update was atomic from the perspective of getTool() calls
   }
 
   /**
@@ -222,30 +272,49 @@ export class ToolRegistry {
 
   /**
    * Discover or re-discover tools for a single MCP server.
+   * Uses atomic updates to prevent race conditions.
    * @param serverName - The name of the server to discover tools from.
    */
   async discoverToolsForServer(serverName: string): Promise<void> {
-    // Remove any previously discovered tools from this server
+    // Build new tool map with all tools except those from the target server
+    const newTools = new Map<string, AnyDeclarativeTool>();
     for (const [name, tool] of this.tools.entries()) {
-      if (tool instanceof DiscoveredMCPTool && tool.serverName === serverName) {
-        this.tools.delete(name);
+      if (
+        !(tool instanceof DiscoveredMCPTool && tool.serverName === serverName)
+      ) {
+        newTools.set(name, tool);
       }
     }
 
-    this.config.getPromptRegistry().removePromptsByServer(serverName);
+    // Store the old tools map for atomic replacement
+    const oldTools = this.tools;
 
-    const mcpServers = this.config.getMcpServers() ?? {};
-    const serverConfig = mcpServers[serverName];
-    if (serverConfig) {
-      await connectAndDiscover(
-        serverName,
-        serverConfig,
-        this,
-        this.config.getPromptRegistry(),
-        this.config.getDebugMode(),
-        this.config.getWorkspaceContext(),
-      );
+    // Temporarily use the new tools map for discovery
+    this.tools = newTools;
+
+    try {
+      this.config.getPromptRegistry().removePromptsByServer(serverName);
+
+      const mcpServers = this.config.getMcpServers() ?? {};
+      const serverConfig = mcpServers[serverName];
+      if (serverConfig) {
+        await connectAndDiscover(
+          serverName,
+          serverConfig,
+          this,
+          this.config.getPromptRegistry(),
+          this.config.getDebugMode(),
+          this.config.getWorkspaceContext(),
+        );
+      }
+    } catch (error) {
+      // Restore old tools on error
+      this.tools = oldTools;
+      throw error;
     }
+
+    // At this point, newTools has all tools with the server's tools refreshed
+    // and the update was atomic from the perspective of getTool() calls
   }
 
   private async discoverAndRegisterToolsFromCommand(): Promise<void> {

@@ -70,6 +70,10 @@ export interface EphemeralSettings {
   'socket-nodelay'?: boolean;
   /** Enable streaming responses from providers */
   streaming?: 'enabled' | 'disabled';
+  /** Maximum number of retry attempts for API calls */
+  retries?: number;
+  /** Initial delay in milliseconds between retry attempts */
+  retrywait?: number;
 }
 
 /**

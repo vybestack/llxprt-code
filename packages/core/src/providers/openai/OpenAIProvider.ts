@@ -39,6 +39,7 @@ import { processToolParameters } from '../../tools/doubleEscapeUtils.js';
 import { IModel } from '../IModel.js';
 import { IProvider } from '../IProvider.js';
 import { getCoreSystemPromptAsync } from '../../core/prompts.js';
+import { retryWithBackoff } from '../../utils/retry.js';
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
   override readonly name: string = 'openai';
@@ -561,7 +562,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       model,
       messages: messagesWithSystem,
       ...(formattedTools && formattedTools.length > 0
-        ? { tools: formattedTools }
+        ? {
+            tools: formattedTools,
+            // Add tool_choice for Qwen/Cerebras to ensure proper tool calling
+            tool_choice: 'auto',
+          }
         : {}),
       max_tokens: maxTokens,
       stream: streamingEnabled,
@@ -586,7 +591,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           requestBody: {
             ...requestBody,
             messages: messages.slice(-2), // Only log last 2 messages for brevity
-            tools: requestBody.tools?.slice(0, 2), // Only log first 2 tools for brevity if they exist
+            tools: requestBody.tools
+              ? [...requestBody.tools].slice(0, 2)
+              : undefined, // Create a copy before slicing for logging
           },
         },
       );
@@ -595,42 +602,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Get OpenAI client
     const client = await this.getClient();
 
-    // Wrap the API call with retry logic
-    const makeApiCall = async () => {
-      const response = await client.chat.completions.create(requestBody, {
-        signal: abortSignal,
-      });
-      return response;
-    };
+    // Get retry settings from ephemeral settings
+    const ephemeralSettings =
+      this.providerConfig?.getEphemeralSettings?.() || {};
+    const maxRetries =
+      (ephemeralSettings['retries'] as number | undefined) ?? 6; // Default for OpenAI
+    const initialDelayMs =
+      (ephemeralSettings['retrywait'] as number | undefined) ?? 4000; // Default for OpenAI
 
-    let retryCount = 0;
-    const maxRetries = 5;
-    let response:
-      | OpenAI.Chat.Completions.ChatCompletion
-      | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>;
-
-    while (retryCount <= maxRetries) {
-      try {
-        response = await makeApiCall();
-        break; // Success, exit retry loop
-      } catch (error) {
-        if (retryCount === maxRetries) {
-          throw error; // Max retries reached, re-throw error
-        }
-        retryCount++;
-        this.logger.debug(
-          () => `API call failed (attempt ${retryCount}), retrying...`,
-          error,
-        );
-        // Exponential backoff: 4s, 8s, 16s, 32s, 64s
-        const delay = 4000 * Math.pow(2, retryCount - 1);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-      }
-    }
-
-    if (!response!) {
-      throw new Error('Failed to get response after retries');
-    }
+    // Wrap the API call with retry logic using centralized retry utility
+    const response = await retryWithBackoff(
+      () =>
+        client.chat.completions.create(requestBody, { signal: abortSignal }),
+      {
+        maxAttempts: maxRetries,
+        initialDelayMs,
+        maxDelayMs: 30000, // 30 seconds
+        shouldRetry: this.shouldRetryResponse.bind(this),
+      },
+    );
 
     // Check if response is streaming or not
     if (streamingEnabled) {
@@ -645,6 +635,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         };
       }> = [];
 
+      // Buffer for accumulating text chunks for providers that need it
+      let textBuffer = '';
+      const detectedFormat = this.detectToolFormat();
+      // Buffer text for Qwen format providers to avoid stanza formatting
+      const shouldBufferText = detectedFormat === 'qwen';
+
       try {
         // Handle streaming response
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
@@ -655,21 +651,96 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           const choice = chunk.choices?.[0];
           if (!choice) continue;
 
-          // Handle text content - emit immediately without buffering
+          // Check for finish_reason to detect proper stream ending
+          if (choice.finish_reason) {
+            this.logger.debug(
+              () =>
+                `[Streaming] Stream finished with reason: ${choice.finish_reason}`,
+              {
+                model,
+                finishReason: choice.finish_reason,
+                hasAccumulatedText: _accumulatedText.length > 0,
+                hasAccumulatedTools: accumulatedToolCalls.length > 0,
+                hasBufferedText: textBuffer.length > 0,
+              },
+            );
+
+            // If finish_reason is 'length', the response was cut off
+            if (choice.finish_reason === 'length') {
+              this.logger.debug(
+                () =>
+                  `Response truncated due to length limit for model ${model}`,
+              );
+            }
+
+            // Flush any buffered text when stream finishes
+            if (textBuffer.length > 0) {
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'text',
+                    text: textBuffer,
+                  } as TextBlock,
+                ],
+              } as IContent;
+              textBuffer = '';
+            }
+          }
+
+          // Handle text content - buffer for Qwen format, emit immediately for others
           const deltaContent = choice.delta?.content;
           if (deltaContent) {
             _accumulatedText += deltaContent;
 
-            // Emit text immediately without buffering
-            yield {
-              speaker: 'ai',
-              blocks: [
+            // Debug log for providers that need buffering
+            if (shouldBufferText) {
+              this.logger.debug(
+                () => `[Streaming] Chunk content for ${detectedFormat} format:`,
                 {
-                  type: 'text',
-                  text: deltaContent,
-                } as TextBlock,
-              ],
-            } as IContent;
+                  deltaContent,
+                  length: deltaContent.length,
+                  hasNewline: deltaContent.includes('\n'),
+                  escaped: JSON.stringify(deltaContent),
+                  bufferSize: textBuffer.length,
+                },
+              );
+
+              // Buffer text to avoid stanza formatting
+              textBuffer += deltaContent;
+
+              // Emit buffered text when we have a complete sentence or paragraph
+              // Look for natural break points
+              if (
+                textBuffer.includes('\n') ||
+                textBuffer.endsWith('. ') ||
+                textBuffer.endsWith('! ') ||
+                textBuffer.endsWith('? ') ||
+                textBuffer.length > 100
+              ) {
+                yield {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'text',
+                      text: textBuffer,
+                    } as TextBlock,
+                  ],
+                } as IContent;
+                textBuffer = '';
+              }
+            } else {
+              // For other providers, emit text immediately as before
+              yield {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'text',
+                    text: deltaContent,
+                  } as TextBlock,
+                ],
+              } as IContent;
+            }
           }
 
           // Handle tool calls
@@ -711,7 +782,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
       }
 
-      // No need to flush buffer since we're emitting immediately
+      // Flush any remaining buffered text
+      if (textBuffer.length > 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'text',
+              text: textBuffer,
+            } as TextBlock,
+          ],
+        } as IContent;
+        textBuffer = '';
+      }
 
       // Emit accumulated tool calls as IContent if any
       if (accumulatedToolCalls.length > 0) {

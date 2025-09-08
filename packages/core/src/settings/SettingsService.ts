@@ -16,6 +16,8 @@ interface EphemeralSettings {
   providers: Record<string, Record<string, unknown>>;
   global: Record<string, unknown>;
   activeProvider: string | null;
+  // Required properties for correct TypeScript handling in tests
+  n?: unknown;
 }
 
 export class SettingsService extends EventEmitter implements ISettingsService {

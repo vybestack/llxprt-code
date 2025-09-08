@@ -383,6 +383,11 @@ const ephemeralSettingHelp: Record<string, string> = {
     'Maximum tokens allowed in any prompt sent to LLM (default: 200000)',
   // Emoji filter settings
   emojifilter: 'Emoji filter mode (allowed, auto, warn, error)',
+  // Retry settings
+  retries:
+    'Maximum number of retry attempts for API calls (default: varies by provider)',
+  retrywait:
+    'Initial delay in milliseconds between retry attempts (default: varies by provider)',
 };
 
 export const setCommand: SlashCommand = {

@@ -132,6 +132,8 @@ const saveCommand: SlashCommand = {
         'socket-keepalive',
         'socket-nodelay',
         'streaming',
+        'retries',
+        'retrywait',
       ];
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};
@@ -306,6 +308,8 @@ const loadCommand: SlashCommand = {
         'socket-keepalive',
         'socket-nodelay',
         'streaming',
+        'retries',
+        'retrywait',
         'todo-continuation',
         'shell-replacement',
         'tool-output-max-items',
