@@ -83,13 +83,8 @@ describe('Logger', () => {
     // Clean up before the test
     await cleanupLogAndCheckpointFiles();
     // Ensure the directory exists for the test
-<<<<<<< HEAD
     await fs.mkdir(TEST_LLXPRT_DIR, { recursive: true });
-    logger = new Logger(testSessionId);
-=======
-    await fs.mkdir(TEST_GEMINI_DIR, { recursive: true });
     logger = new Logger(testSessionId, new Storage(process.cwd()));
->>>>>>> 21c6480b6 (Refac: Centralize storage file management (#4078))
     await logger.initialize();
   });
 

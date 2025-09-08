@@ -19,7 +19,6 @@ import type { IProviderManager as ProviderManager } from '../providers/IProvider
 import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
 import { UserTierId } from '../code_assist/types.js';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
-import { LoggingContentGenerator } from './loggingContentGenerator.js';
 import { InstallationManager } from '../utils/installationManager.js';
 
 /**
