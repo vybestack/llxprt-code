@@ -512,10 +512,27 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const messages = this.convertToOpenAIMessages(contents);
 
     // Convert Gemini format tools directly to OpenAI format using the new method
-    const formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
+    let formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
+
+    // CRITICAL FIX: Ensure we never pass an empty tools array
+    // The OpenAI API errors when tools=[] but a tool call is attempted
+    if (Array.isArray(formattedTools) && formattedTools.length === 0) {
+      this.logger.warn(
+        () =>
+          `[OpenAIProvider] CRITICAL: Formatted tools is empty array! Setting to undefined to prevent API errors.`,
+        {
+          model,
+          inputTools: tools,
+          inputToolsLength: tools?.length,
+          inputFirstGroup: tools?.[0],
+          stackTrace: new Error().stack,
+        },
+      );
+      formattedTools = undefined;
+    }
 
     // Debug log the conversion result - enhanced logging for intermittent issues
-    if (this.logger.enabled) {
+    if (this.logger.enabled && formattedTools) {
       this.logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
         inputHadTools: !!tools,
         inputToolsLength: tools?.length,
@@ -525,22 +542,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         outputHasTools: !!formattedTools,
         outputToolsLength: formattedTools?.length,
         outputToolNames: formattedTools?.map((t) => t.function.name),
-        isFormattedToolsEmptyArray:
-          Array.isArray(formattedTools) && formattedTools.length === 0,
       });
-    }
-
-    // Add critical logging for empty tools scenario
-    if (formattedTools && formattedTools.length === 0) {
-      this.logger.warn(
-        () =>
-          `[OpenAIProvider] WARNING: Formatted tools is empty array! This will cause 'Tool not present' errors.`,
-        {
-          model,
-          inputTools: tools,
-          stackTrace: new Error().stack,
-        },
-      );
     }
 
     // Get streaming setting from ephemeral settings (default: enabled)
@@ -612,16 +614,42 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       (ephemeralSettings['retrywait'] as number | undefined) ?? 4000; // Default for OpenAI
 
     // Wrap the API call with retry logic using centralized retry utility
-    const response = await retryWithBackoff(
-      () =>
-        client.chat.completions.create(requestBody, { signal: abortSignal }),
-      {
-        maxAttempts: maxRetries,
-        initialDelayMs,
-        maxDelayMs: 30000, // 30 seconds
-        shouldRetry: this.shouldRetryResponse.bind(this),
-      },
-    );
+    let response;
+    try {
+      response = await retryWithBackoff(
+        () =>
+          client.chat.completions.create(requestBody, { signal: abortSignal }),
+        {
+          maxAttempts: maxRetries,
+          initialDelayMs,
+          maxDelayMs: 30000, // 30 seconds
+          shouldRetry: this.shouldRetryResponse.bind(this),
+        },
+      );
+    } catch (error) {
+      // Special handling for Cerebras/Qwen "Tool not present" errors
+      const errorMessage = String(error);
+      if (
+        errorMessage.includes('Tool is not present in the tools list') &&
+        (model.toLowerCase().includes('qwen') ||
+          this.getBaseURL()?.includes('cerebras'))
+      ) {
+        this.logger.error(
+          'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+          {
+            error,
+            model,
+            toolsProvided: formattedTools?.length || 0,
+            toolNames: formattedTools?.map((t) => t.function.name),
+            streamingEnabled,
+          },
+        );
+        // Re-throw as is, with additional log context
+        throw error;
+      }
+      // Re-throw other errors as-is
+      throw error;
+    }
 
     // Check if response is streaming or not
     if (streamingEnabled) {
@@ -778,6 +806,25 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         if (abortSignal?.aborted) {
           throw error;
         } else {
+          // Special handling for Cerebras/Qwen "Tool not present" errors
+          const errorMessage = String(error);
+          if (
+            errorMessage.includes('Tool is not present in the tools list') &&
+            (model.toLowerCase().includes('qwen') ||
+              this.getBaseURL()?.includes('cerebras'))
+          ) {
+            this.logger.error(
+              'Cerebras/Qwen API error: Tool not found despite being in request. This is a known API issue.',
+              {
+                error,
+                model,
+                toolsProvided: formattedTools?.length || 0,
+                toolNames: formattedTools?.map((t) => t.function.name),
+              },
+            );
+            // Re-throw as is, with additional log context
+            throw error;
+          }
           this.logger.error('Error processing streaming response:', error);
           throw error;
         }
