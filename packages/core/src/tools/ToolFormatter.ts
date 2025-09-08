@@ -66,8 +66,20 @@ export class ToolFormatter implements IToolFormatter {
       });
     }
 
-    const openAITools = geminiTools.flatMap((toolGroup) =>
-      toolGroup.functionDeclarations.map((decl) => {
+    const openAITools = geminiTools.flatMap((toolGroup) => {
+      // Add safety check for malformed tool groups
+      if (
+        !toolGroup?.functionDeclarations ||
+        !Array.isArray(toolGroup.functionDeclarations)
+      ) {
+        this.logger.warn(
+          () => `convertGeminiToOpenAI: Skipping malformed tool group`,
+          { toolGroup },
+        );
+        return [];
+      }
+
+      return toolGroup.functionDeclarations.map((decl) => {
         const convertedParams = this.convertGeminiSchemaToStandard(
           decl.parametersJsonSchema || {},
         ) as Record<string, unknown>;
@@ -80,8 +92,8 @@ export class ToolFormatter implements IToolFormatter {
             parameters: convertedParams,
           },
         };
-      }),
-    );
+      });
+    });
 
     if (this.logger.enabled) {
       this.logger.debug(

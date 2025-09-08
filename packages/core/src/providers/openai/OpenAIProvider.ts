@@ -514,15 +514,33 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert Gemini format tools directly to OpenAI format using the new method
     const formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
 
-    // Debug log the conversion result
+    // Debug log the conversion result - enhanced logging for intermittent issues
     if (this.logger.enabled) {
       this.logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
         inputHadTools: !!tools,
         inputToolsLength: tools?.length,
+        inputFirstGroup: tools?.[0],
+        inputFunctionDeclarationsLength:
+          tools?.[0]?.functionDeclarations?.length,
         outputHasTools: !!formattedTools,
         outputToolsLength: formattedTools?.length,
         outputToolNames: formattedTools?.map((t) => t.function.name),
+        isFormattedToolsEmptyArray:
+          Array.isArray(formattedTools) && formattedTools.length === 0,
       });
+    }
+
+    // Add critical logging for empty tools scenario
+    if (formattedTools && formattedTools.length === 0) {
+      this.logger.warn(
+        () =>
+          `[OpenAIProvider] WARNING: Formatted tools is empty array! This will cause 'Tool not present' errors.`,
+        {
+          model,
+          inputTools: tools,
+          stackTrace: new Error().stack,
+        },
+      );
     }
 
     // Get streaming setting from ephemeral settings (default: enabled)

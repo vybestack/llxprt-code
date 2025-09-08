@@ -99,6 +99,7 @@ export class GeminiClient {
   private chat?: GeminiChat;
   private contentGenerator?: ContentGenerator;
   private embeddingModel: string;
+  private logger: DebugLogger;
   private generateContentConfig: GenerateContentConfig = {
     temperature: 0,
     topP: 1,
@@ -122,6 +123,7 @@ export class GeminiClient {
       setGlobalDispatcher(new ProxyAgent(config.getProxy() as string));
     }
 
+    this.logger = new DebugLogger('llxprt:core:client');
     this.embeddingModel = config.getEmbeddingModel();
     this.loopDetector = new LoopDetectionService(config);
     this.lastPromptId = this.config.getSessionId();
@@ -290,6 +292,22 @@ export class GeminiClient {
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
+
+    // Debug log for intermittent tool issues
+    const logger = new DebugLogger('llxprt:client:setTools');
+    logger.debug(
+      () => `setTools called, declarations count: ${toolDeclarations.length}`,
+    );
+
+    if (toolDeclarations.length === 0) {
+      logger.warn(
+        () => `WARNING: setTools called but toolDeclarations is empty!`,
+        {
+          stackTrace: new Error().stack,
+        },
+      );
+    }
+
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
     // Ensure chat is initialized before setting tools
     if (!this.hasChatInitialized()) {
@@ -456,7 +474,9 @@ export class GeminiClient {
       ];
 
       if (this.config.getDebugMode()) {
-        console.log(contextParts.join('\n'));
+        this.logger.debug(() => 'IDE Context:', {
+          context: contextParts.join('\n'),
+        });
       }
       return {
         contextParts,
@@ -566,7 +586,9 @@ export class GeminiClient {
       ];
 
       if (this.config.getDebugMode()) {
-        console.log(contextParts.join('\n'));
+        this.logger.debug(() => 'IDE Context:', {
+          context: contextParts.join('\n'),
+        });
       }
       return {
         contextParts,
@@ -820,8 +842,9 @@ export class GeminiClient {
             ),
           )
         ) {
-          console.warn(
-            `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
+          this.logger.warn(
+            () =>
+              `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
           );
           return {
             reasoning: 'Gemini returned plain text response',
@@ -1010,7 +1033,7 @@ export class GeminiClient {
         };
       }
     } catch (error) {
-      console.error('Compression failed:', error);
+      this.logger.error(() => 'Compression failed:', { error });
     }
 
     return null;
@@ -1057,7 +1080,7 @@ export class GeminiClient {
           return null; // Model was switched but don't continue with current prompt
         }
       } catch (error) {
-        console.warn('Flash fallback handler failed:', error);
+        this.logger.warn(() => 'Flash fallback handler failed:', { error });
       }
     }
 
