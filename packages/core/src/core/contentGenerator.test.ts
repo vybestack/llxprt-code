@@ -17,7 +17,9 @@ import { Config } from '../config/config.js';
 vi.mock('../code_assist/codeAssist.js');
 vi.mock('@google/genai');
 
-const mockConfig = {} as unknown as Config;
+const mockConfig = {
+  getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
+} as unknown as Config;
 
 describe('createContentGenerator', () => {
   it('should create a CodeAssistContentGenerator', async () => {
@@ -53,9 +55,7 @@ describe('createContentGenerator', () => {
       apiKey: 'test-api-key',
       vertexai: undefined,
       httpOptions: {
-        headers: {
-          'User-Agent': expect.any(String),
-        },
+        headers: {},
       },
     });
     // Now we expect a GoogleGenAIWrapper instance, not the raw models

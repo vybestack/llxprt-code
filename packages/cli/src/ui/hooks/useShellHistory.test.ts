@@ -12,6 +12,11 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 
 vi.mock('fs/promises', () => ({
+  default: {
+    readFile: vi.fn(),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+  },
   readFile: vi.fn(),
   writeFile: vi.fn(),
   mkdir: vi.fn(),
@@ -25,15 +30,15 @@ vi.mock('fs', async (importOriginal) => {
     mkdirSync: vi.fn(),
   };
 });
-vi.mock('@google/gemini-cli-core', () => {
+vi.mock('@vybestack/llxprt-code-core', () => {
   class Storage {
     getProjectTempDir(): string {
-      return path.join('/test/home/', '.gemini', 'tmp', 'mocked_hash');
+      return path.join('/test/home/', '.llxprt', 'tmp', 'mocked_hash');
     }
     getHistoryFilePath(): string {
       return path.join(
         '/test/home/',
-        '.gemini',
+        '.llxprt',
         'tmp',
         'mocked_hash',
         'shell_history',

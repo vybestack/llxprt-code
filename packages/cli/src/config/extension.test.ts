@@ -22,7 +22,7 @@ vi.mock('os', async (importOriginal) => {
   };
 });
 
-const EXTENSIONS_DIRECTORY_NAME = path.join('.gemini', 'extensions');
+const EXTENSIONS_DIRECTORY_NAME = path.join('.llxprt', 'extensions');
 
 describe('loadExtensions', () => {
   let tempWorkspaceDir: string;
@@ -30,10 +30,10 @@ describe('loadExtensions', () => {
 
   beforeEach(() => {
     tempWorkspaceDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-workspace-'),
+      path.join(os.tmpdir(), 'llxprt-code-test-workspace-'),
     );
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
   });

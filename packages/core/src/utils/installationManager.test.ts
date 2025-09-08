@@ -40,11 +40,11 @@ describe('InstallationManager', () => {
   let tempHomeDir: string;
   let installationManager: InstallationManager;
   const installationIdFile = () =>
-    path.join(tempHomeDir, '.gemini', 'installation_id');
+    path.join(tempHomeDir, '.llxprt', 'installation_id');
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-code-test-home-'),
     );
     (os.homedir as Mock).mockReturnValue(tempHomeDir);
     installationManager = new InstallationManager();

@@ -13,7 +13,17 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 vi.mock('../../config/settings.js');
 vi.mock('../../config/extension.js');
-vi.mock('@vybestack/llxprt-code-core');
+vi.mock('@vybestack/llxprt-code-core', () => ({
+  createTransport: vi.fn(),
+  Storage: {
+    getGlobalSettingsPath: vi.fn().mockReturnValue('/mock/home/.llxprt/settings.json'),
+    getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
+  },
+  MCPServerStatus: {
+    CONNECTED: 'CONNECTED',
+    DISCONNECTED: 'DISCONNECTED',
+  },
+}));
 vi.mock('@modelcontextprotocol/sdk/client/index.js');
 
 const mockedLoadSettings = loadSettings as vi.Mock;
