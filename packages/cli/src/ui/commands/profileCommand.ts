@@ -11,12 +11,8 @@ import {
   OpenDialogActionReturn,
   CommandKind,
 } from './types.js';
-import {
-  ProfileManager,
-  Profile,
-  EphemeralSettings,
-  AuthType,
-} from '@vybestack/llxprt-code-core';
+import { ProfileManager, Profile, AuthType } from '@vybestack/llxprt-code-core';
+import type { EphemeralSettings } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
 
 /**
@@ -113,7 +109,7 @@ const saveCommand: SlashCommand = {
       // Get ephemeral settings from config
       const allEphemeralSettings =
         context.services.config.getEphemeralSettings();
-      const ephemeralKeys: Array<keyof EphemeralSettings> = [
+      const ephemeralKeys = [
         'context-limit',
         'compression-threshold',
         'base-url',
@@ -134,7 +130,7 @@ const saveCommand: SlashCommand = {
         'streaming',
         'retries',
         'retrywait',
-      ];
+      ] as const;
 
       const ephemeralSettings: Partial<EphemeralSettings> = {};
       for (const key of ephemeralKeys) {

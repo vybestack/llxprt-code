@@ -57,39 +57,20 @@ export class ToolFormatter implements IToolFormatter {
       return undefined;
     }
 
-    this.logger.debug(() => `convertGeminiToOpenAI input:`, {
-      toolGroupCount: geminiTools.length,
-      firstGroup: geminiTools[0]
-        ? JSON.stringify(geminiTools[0]).substring(0, 500)
-        : 'undefined',
-    });
+    if (this.logger.enabled) {
+      this.logger.debug(() => `convertGeminiToOpenAI input:`, {
+        toolGroupCount: geminiTools.length,
+        hasFirstGroup: !!geminiTools[0],
+        firstGroupFunctionCount:
+          geminiTools[0]?.functionDeclarations?.length || 0,
+      });
+    }
 
     const openAITools = geminiTools.flatMap((toolGroup) =>
       toolGroup.functionDeclarations.map((decl) => {
-        this.logger.debug(
-          () => `Processing tool declaration for ${decl.name}`,
-          {
-            hasParametersJsonSchema: !!decl.parametersJsonSchema,
-            parametersType: typeof decl.parametersJsonSchema,
-            parametersPreview: decl.parametersJsonSchema
-              ? JSON.stringify(decl.parametersJsonSchema).substring(0, 200)
-              : 'undefined',
-          },
-        );
-
         const convertedParams = this.convertGeminiSchemaToStandard(
           decl.parametersJsonSchema || {},
         ) as Record<string, unknown>;
-
-        this.logger.debug(
-          () => `Converting Gemini tool ${decl.name} to OpenAI format`,
-          {
-            name: decl.name,
-            originalParams: decl.parametersJsonSchema,
-            convertedParams,
-            convertedParamsJSON: JSON.stringify(convertedParams),
-          },
-        );
 
         return {
           type: 'function' as const,
@@ -102,17 +83,17 @@ export class ToolFormatter implements IToolFormatter {
       }),
     );
 
-    this.logger.debug(
-      () =>
-        `Converted ${openAITools.length} tools from Gemini to OpenAI format`,
-      {
-        toolNames: openAITools.map((t) => t.function.name),
-        firstTool: openAITools[0],
-        firstToolParams: openAITools[0]
-          ? JSON.stringify(openAITools[0].function.parameters)
-          : 'undefined',
-      },
-    );
+    if (this.logger.enabled) {
+      this.logger.debug(
+        () =>
+          `Converted ${openAITools.length} tools from Gemini to OpenAI format`,
+        {
+          toolNames: openAITools.map((t) => t.function.name),
+          hasFirstTool: !!openAITools[0],
+          firstToolName: openAITools[0]?.function?.name,
+        },
+      );
+    }
 
     return openAITools;
   }
@@ -145,14 +126,7 @@ export class ToolFormatter implements IToolFormatter {
           decl.parametersJsonSchema || {},
         ) as Record<string, unknown>;
 
-        this.logger.debug(
-          () => `Converting Gemini tool ${decl.name} to Anthropic format`,
-          {
-            name: decl.name,
-            originalParams: decl.parametersJsonSchema,
-            convertedParams,
-          },
-        );
+        // Remove verbose per-tool logging
 
         return {
           name: decl.name,
@@ -165,14 +139,16 @@ export class ToolFormatter implements IToolFormatter {
       }),
     );
 
-    this.logger.debug(
-      () =>
-        `Converted ${anthropicTools.length} tools from Gemini to Anthropic format`,
-      {
-        toolNames: anthropicTools.map((t) => t.name),
-        firstTool: anthropicTools[0],
-      },
-    );
+    if (this.logger.enabled) {
+      this.logger.debug(
+        () =>
+          `Converted ${anthropicTools.length} tools from Gemini to Anthropic format`,
+        {
+          toolNames: anthropicTools.map((t) => t.name),
+          hasFirstTool: !!anthropicTools[0],
+        },
+      );
+    }
 
     return anthropicTools;
   }
@@ -248,28 +224,16 @@ export class ToolFormatter implements IToolFormatter {
       case 'openai':
       case 'deepseek': // DeepSeek uses same format as OpenAI for now
       case 'qwen': // Qwen uses same format as OpenAI for now
-        this.logger.debug(
-          () => `Converting ${tools.length} tools to ${format} format`,
-        );
+        // Guard verbose conversion logging
+        if (this.logger.enabled) {
+          this.logger.debug(
+            () => `Converting ${tools.length} tools to ${format} format`,
+          );
+        }
         return tools.map((tool) => {
           const convertedParams = this.convertGeminiSchemaToStandard(
             tool.function.parameters,
           );
-
-          // Special debug logging for TodoWrite to catch the issue
-          if (
-            tool.function.name === 'todo_write' ||
-            tool.function.name === 'TodoWrite'
-          ) {
-            this.logger.debug(
-              () =>
-                `TodoWrite schema conversion - Original: ${JSON.stringify(tool.function.parameters, null, 2)}`,
-            );
-            this.logger.debug(
-              () =>
-                `TodoWrite schema conversion - Converted: ${JSON.stringify(convertedParams, null, 2)}`,
-            );
-          }
 
           const converted = {
             type: 'function' as const,
@@ -279,13 +243,6 @@ export class ToolFormatter implements IToolFormatter {
               parameters: convertedParams,
             },
           };
-          this.logger.debug(
-            () => `Converted tool ${tool.function.name} to ${format} format:`,
-            {
-              original: tool.function.parameters,
-              converted: converted.function.parameters,
-            },
-          );
           return converted;
         });
       case 'anthropic':
@@ -354,21 +311,18 @@ export class ToolFormatter implements IToolFormatter {
           throw new Error(`Invalid ${format} tool call format`);
         }
 
-        // Debug logging for tool call conversion
-        this.logger.debug(
-          () => `Converting ${format} tool call from provider format:`,
-          {
-            format,
-            toolName: openAiToolCall.function.name,
-            argumentsType: typeof openAiToolCall.function.arguments,
-            argumentsLength: openAiToolCall.function.arguments.length,
-            argumentsPreview:
-              openAiToolCall.function.arguments.length > 100
-                ? openAiToolCall.function.arguments.substring(0, 100) + '...'
-                : openAiToolCall.function.arguments,
-            rawArguments: openAiToolCall.function.arguments,
-          },
-        );
+        // Only log tool call conversions if debug is enabled to avoid performance overhead
+        if (this.logger.enabled) {
+          this.logger.debug(
+            () => `Converting ${format} tool call from provider format:`,
+            {
+              format,
+              toolName: openAiToolCall.function.name,
+              argumentsType: typeof openAiToolCall.function.arguments,
+              argumentsLength: openAiToolCall.function.arguments.length,
+            },
+          );
+        }
 
         // Check if arguments look double-stringified
         if (format === 'qwen') {
@@ -528,30 +482,22 @@ export class ToolFormatter implements IToolFormatter {
                 '';
             }
 
-            this.logger.debug(
-              () =>
-                `[${format}] Accumulating argument chunk for tool ${tc.name}:`,
-              {
-                format,
-                toolName: tc.name,
-                index: deltaToolCall.index,
-                chunk: deltaToolCall.function.arguments,
-                chunkLength: deltaToolCall.function.arguments.length,
-                currentAccumulated: (
-                  tc as unknown as { _argumentsString: string }
-                )._argumentsString,
-                currentAccumulatedLength: (
-                  tc as unknown as { _argumentsString: string }
-                )._argumentsString.length,
-                startsWithQuote:
-                  deltaToolCall.function.arguments.startsWith('"'),
-                endsWithQuote: deltaToolCall.function.arguments.endsWith('"'),
-                containsEscapedQuote:
-                  deltaToolCall.function.arguments.includes('\\"'),
-                containsDoubleEscapedQuote:
-                  deltaToolCall.function.arguments.includes('\\\\"'),
-              },
-            );
+            // Only log argument accumulation in debug mode to prevent performance issues
+            if (this.logger.enabled) {
+              this.logger.debug(
+                () =>
+                  `[${format}] Accumulating argument chunk for tool ${tc.name}`,
+                {
+                  format,
+                  toolName: tc.name,
+                  index: deltaToolCall.index,
+                  chunkLength: deltaToolCall.function.arguments.length,
+                  currentAccumulatedLength: (
+                    tc as unknown as { _argumentsString: string }
+                  )._argumentsString.length,
+                },
+              );
+            }
 
             // Special Qwen double-stringification detection
             if (format === 'qwen') {
@@ -577,22 +523,7 @@ export class ToolFormatter implements IToolFormatter {
             (tc as unknown as { _argumentsString: string })._argumentsString +=
               deltaToolCall.function.arguments;
 
-            // Log the accumulated state after adding chunk
-            this.logger.debug(
-              () => `[${format}] After accumulation for ${tc.name}:`,
-              {
-                totalLength: (tc as unknown as { _argumentsString: string })
-                  ._argumentsString.length,
-                preview:
-                  (tc as unknown as { _argumentsString: string })
-                    ._argumentsString.length > 100
-                    ? (
-                        tc as unknown as { _argumentsString: string }
-                      )._argumentsString.substring(0, 100) + '...'
-                    : (tc as unknown as { _argumentsString: string })
-                        ._argumentsString,
-              },
-            );
+            // Remove excessive accumulation logging
 
             // Try to parse parameters
             try {

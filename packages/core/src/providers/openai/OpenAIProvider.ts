@@ -384,19 +384,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }>,
   ): AsyncIterableIterator<IContent> {
     // Debug log what we receive
-    this.logger.debug(
-      () => `[OpenAIProvider] generateChatCompletion received tools:`,
-      {
-        hasTools: !!tools,
-        toolsLength: tools?.length,
-        toolsType: typeof tools,
-        isArray: Array.isArray(tools),
-        firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
-        toolsStructure: tools
-          ? JSON.stringify(tools).substring(0, 200)
-          : 'undefined',
-      },
-    );
+    if (this.logger.enabled) {
+      this.logger.debug(
+        () => `[OpenAIProvider] generateChatCompletion received tools:`,
+        {
+          hasTools: !!tools,
+          toolsLength: tools?.length,
+          toolsType: typeof tools,
+          isArray: Array.isArray(tools),
+          firstToolName: tools?.[0]?.functionDeclarations?.[0]?.name,
+          toolsStructure: tools ? 'available' : 'undefined',
+        },
+      );
+    }
 
     // Pass tools directly in Gemini format - they'll be converted in generateChatCompletionImpl
     const generator = this.generateChatCompletionImpl(
@@ -511,30 +511,19 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
 
-    // Debug log what we're about to convert
-    this.logger.debug(() => `[OpenAIProvider] Before convertGeminiToOpenAI:`, {
-      inputTools: tools ? JSON.stringify(tools).substring(0, 500) : 'undefined',
-      hasTools: !!tools,
-      toolsLength: tools?.length,
-      firstToolStructure: tools?.[0]
-        ? JSON.stringify(tools[0]).substring(0, 300)
-        : 'undefined',
-    });
-
     // Convert Gemini format tools directly to OpenAI format using the new method
     const formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
 
     // Debug log the conversion result
-    this.logger.debug(() => `[OpenAIProvider] After convertGeminiToOpenAI:`, {
-      inputHadTools: !!tools,
-      outputHasTools: !!formattedTools,
-      outputToolsLength: formattedTools?.length,
-      outputFirstTool: formattedTools?.[0],
-      outputToolNames: formattedTools?.map((t) => t.function.name),
-      firstToolParameters: formattedTools?.[0]
-        ? JSON.stringify(formattedTools[0].function.parameters)
-        : 'undefined',
-    });
+    if (this.logger.enabled) {
+      this.logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
+        inputHadTools: !!tools,
+        inputToolsLength: tools?.length,
+        outputHasTools: !!formattedTools,
+        outputToolsLength: formattedTools?.length,
+        outputToolNames: formattedTools?.map((t) => t.function.name),
+      });
+    }
 
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
@@ -572,13 +561,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       stream: streamingEnabled,
     };
 
-    // Debug log the full request for Cerebras/Qwen
+    // Debug log request summary for Cerebras/Qwen
     if (
-      model.toLowerCase().includes('qwen') ||
-      this.getBaseURL()?.includes('cerebras')
+      this.logger.enabled &&
+      (model.toLowerCase().includes('qwen') ||
+        this.getBaseURL()?.includes('cerebras'))
     ) {
       this.logger.debug(
-        () => `Full request to ${this.getBaseURL()} for model ${model}:`,
+        () => `Request to ${this.getBaseURL()} for model ${model}:`,
         {
           baseURL: this.getBaseURL(),
           model,
@@ -588,13 +578,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           messageCount: messages.length,
           toolsInRequest:
             'tools' in requestBody ? requestBody.tools?.length : 'not included',
-          requestBody: {
-            ...requestBody,
-            messages: messages.slice(-2), // Only log last 2 messages for brevity
-            tools: requestBody.tools
-              ? [...requestBody.tools].slice(0, 2)
-              : undefined, // Create a copy before slicing for logging
-          },
         },
       );
     }
