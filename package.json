@@ -64,6 +64,7 @@
     "LICENSE"
   ],
   "devDependencies": {
+    "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
     "@types/micromatch": "^4.0.9",
     "@types/mime-types": "^3.0.1",
@@ -98,9 +99,9 @@
     "@vybestack/llxprt-code-core": "^0.1.18",
     "execa": "^9.6.0",
     "fast-uri": "^3.0.6",
+    "node-fetch": "^3.3.2",
     "openai": "^5.10.1",
     "path-scurry": "^2.0.0",
-    "node-fetch": "^3.3.2",
     "strip-ansi": "^7.1.0"
   },
   "optionalDependencies": {
