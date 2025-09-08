@@ -5,7 +5,13 @@
  */
 
 import { FunctionDeclaration } from '@google/genai';
-import { AnyDeclarativeTool, Kind, ToolResult, BaseTool } from './tools.js';
+import {
+  AnyDeclarativeTool,
+  Kind,
+  ToolResult,
+  BaseTool,
+  BaseToolInvocation,
+} from './tools.js';
 import { ToolContext } from './tool-context.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
@@ -54,17 +60,18 @@ Signal: Signal number or \`(none)\` if no signal was received.
     );
   }
 
-  getDescription(): string {
-    return safeJsonStringify(this.params);
+  override build(params: ToolParams): DiscoveredToolInvocation {
+    return new DiscoveredToolInvocation(this, params);
   }
 
   async execute(
+    params: ToolParams,
     _signal: AbortSignal,
     _updateOutput?: (output: string) => void,
   ): Promise<ToolResult> {
     const callCommand = this.config.getToolCallCommand()!;
     const child = spawn(callCommand, [this.name]);
-    child.stdin.write(JSON.stringify(this.params));
+    child.stdin.write(JSON.stringify(params));
     child.stdin.end();
 
     let stdout = '';
@@ -131,6 +138,29 @@ Signal: Signal number or \`(none)\` if no signal was received.
       llmContent: stdout,
       returnDisplay: stdout,
     };
+  }
+}
+
+class DiscoveredToolInvocation extends BaseToolInvocation<
+  ToolParams,
+  ToolResult
+> {
+  constructor(
+    private readonly tool: DiscoveredTool,
+    params: ToolParams,
+  ) {
+    super(params);
+  }
+
+  getDescription(): string {
+    return safeJsonStringify(this.params);
+  }
+
+  async execute(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    return this.tool.execute(this.params, signal, updateOutput);
   }
 }
 

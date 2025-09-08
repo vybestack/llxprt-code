@@ -32,7 +32,6 @@ import {
   GeminiClient,
   GeminiEventType as ServerGeminiEventType,
   AnyToolInvocation,
-  ToolErrorType, // <-- Import ToolErrorType
 } from '@vybestack/llxprt-code-core';
 import { Part, PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
@@ -509,49 +508,6 @@ describe('useGeminiStream', () => {
     const list2: PartListUnion = [
       { text: 'Some text' },
       { functionResponse: { name: 'func3', response: { result: 'data3' } } },
-    ];
-    const toolCall2ResponseParts: PartListUnion = [
-      { text: 'tool 2 final response' },
-    ];
-    const completedToolCalls: TrackedToolCall[] = [
-      {
-        request: {
-          callId: 'call1',
-          name: 'tool1',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'success',
-        responseSubmittedToGemini: false,
-        response: {
-          callId: 'call1',
-          responseParts: toolCall1ResponseParts,
-          errorType: undefined, // FIX: Added missing property
-        },
-        tool: {
-          displayName: 'MockTool',
-        },
-        invocation: {
-          getDescription: () => `Mock description`,
-        } as unknown as AnyToolInvocation,
-      } as TrackedCompletedToolCall,
-      {
-        request: {
-          callId: 'call2',
-          name: 'tool2',
-          args: {},
-          isClientInitiated: false,
-          prompt_id: 'prompt-id-2',
-        },
-        status: 'error',
-        responseSubmittedToGemini: false,
-        response: {
-          callId: 'call2',
-          responseParts: toolCall2ResponseParts,
-          errorType: ToolErrorType.UNHANDLED_EXCEPTION, // FIX: Added missing property
-        },
-      } as TrackedCompletedToolCall, // Treat error as a form of completion for submission
     ];
 
     const result = mergePartListUnions([list1, list2]);

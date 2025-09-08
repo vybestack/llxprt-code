@@ -141,7 +141,7 @@ export async function createContentGenerator(
     config.authType === AuthType.USE_GEMINI ||
     config.authType === AuthType.USE_VERTEX_AI
   ) {
-    let headers: Record<string, string> = { ...baseHeaders };
+    let headers: Record<string, string> = {};
     if (gcConfig?.getUsageStatisticsEnabled()) {
       const installationManager = new InstallationManager();
       const installationId = installationManager.getInstallationId();

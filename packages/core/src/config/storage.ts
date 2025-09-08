@@ -44,6 +44,10 @@ export class Storage {
     return path.join(Storage.getGlobalLlxprtDir(), PROVIDER_ACCOUNTS_FILENAME);
   }
 
+  static getGoogleAccountsPath(): string {
+    return path.join(Storage.getGlobalLlxprtDir(), 'google_accounts.json');
+  }
+
   static getUserCommandsDir(): string {
     return path.join(Storage.getGlobalLlxprtDir(), 'commands');
   }
