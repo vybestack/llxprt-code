@@ -18,16 +18,14 @@ import {
   isNodeError,
   MessageSenderType,
   ToolCallRequestInfo,
+  logUserPrompt,
   GitService,
   EditorType,
   ThoughtSummary,
   UnauthorizedError,
+  UserPromptEvent,
   DEFAULT_GEMINI_FLASH_MODEL,
-  AuthType,
   parseAndFormatApiError,
-  EmojiFilter,
-  FilterConfiguration,
-  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import {
@@ -39,7 +37,7 @@ import {
   SlashCommandProcessorResult,
   ToolCallStatus,
 } from '../types.js';
-import { isAtCommand, isSlashCommand } from '../utils/commandUtils.js';
+import { isAtCommand } from '../utils/commandUtils.js';
 import { useShellCommandProcessor } from './shellCommandProcessor.js';
 import { handleAtCommand } from './atCommandProcessor.js';
 import { findLastSafeSplitPoint } from '../utils/markdownUtilities.js';
@@ -56,7 +54,6 @@ import {
   TrackedCancelledToolCall,
 } from './useReactToolScheduler.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
-import { useTodoContinuation } from './useTodoContinuation.js';
 import { useKeypress } from './useKeypress.js';
 
 export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
@@ -80,16 +77,10 @@ export function mergePartListUnions(list: PartListUnion[]): PartListUnion {
   return resultParts;
 }
 
-const debugLogger = new DebugLogger('llxprt:cli:gemini-stream');
 enum StreamProcessingStatus {
   Completed,
   UserCancelled,
   Error,
-}
-
-interface StreamProcessingResult {
-  status: StreamProcessingStatus;
-  hadToolCalls: boolean;
 }
 
 /**
@@ -100,7 +91,6 @@ export const useGeminiStream = (
   geminiClient: GeminiClient,
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
-  setShowHelp: React.Dispatch<React.SetStateAction<boolean>>,
   config: Config,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
@@ -114,41 +104,18 @@ export const useGeminiStream = (
   setModelSwitchedFromQuotaError: React.Dispatch<React.SetStateAction<boolean>>,
   onEditorClose: () => void,
   onCancelSubmit: () => void,
-  _onOAuthCodeNeeded?: (provider: string) => void,
 ) => {
   const [initError, setInitError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const turnCancelledRef = useRef(false);
   const [isResponding, setIsResponding] = useState<boolean>(false);
   const [thought, setThought] = useState<ThoughtSummary | null>(null);
-  const queuedToolResponsesRef = useRef<TrackedToolCall[]>([]);
-  const queuedSystemFeedbackRef = useRef<string[]>([]);
-  const handleCompletedToolsRef = useRef<
-    ((tools: TrackedToolCall[]) => Promise<void>) | null
-  >(null);
   const [pendingHistoryItemRef, setPendingHistoryItem] =
     useStateAndRef<HistoryItemWithoutId | null>(null);
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
-  // FIX: Use ref to access latest history without causing re-renders
-  // This prevents infinite loops in the useEffect that saves checkpoints
-  const historyRef = useRef<HistoryItem[]>(history);
-
-  // Keep historyRef updated with latest history value
-  useEffect(() => {
-    historyRef.current = history;
-  }, [history]);
-
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const storage = config.storage;
   const logger = useLogger(storage);
-
-  // Todo continuation hook integration - stub implementation
-  const { handleStreamCompleted: _handleStreamCompleted } = useTodoContinuation(
-    geminiClient,
-    config,
-    isResponding,
-    onDebugMessage,
-  );
   const gitService = useMemo(() => {
     if (!config.getProjectRoot()) {
       return;
@@ -235,39 +202,9 @@ export const useGeminiStream = (
     }
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
-    setThought(null); // Reset thought when user cancels
-
-    // Don't add incomplete/partial assistant messages to history
-    // These can corrupt the context and cause 400 errors
     if (pendingHistoryItemRef.current) {
-      // Only add if there's actual content worth preserving
-      const pendingItem = pendingHistoryItemRef.current;
-      if (
-        pendingItem.type === 'gemini' ||
-        pendingItem.type === 'gemini_content'
-      ) {
-        // Check if the message has meaningful content
-        if (pendingItem.text && pendingItem.text.trim().length > 0) {
-          // Add the partial response without cancellation marker to preserve clean content
-          addItem(
-            {
-              ...pendingItem,
-            },
-            Date.now(),
-          );
-        }
-        // Otherwise, don't add empty/incomplete messages that could corrupt context
-      } else if (pendingItem.type === 'tool_group') {
-        // Don't add incomplete tool groups - these can corrupt context
-        // Tool groups are only valid if they have completed tool calls
-        debugLogger.debug(() => 'Skipping incomplete tool_group on cancel');
-        // Don't add incomplete tool groups to history
-      } else {
-        // For other types that are complete (info, error, etc), add as-is
-        addItem(pendingHistoryItemRef.current, Date.now());
-      }
+      addItem(pendingHistoryItemRef.current, Date.now());
     }
-
     addItem(
       {
         type: MessageType.INFO,
@@ -290,9 +227,6 @@ export const useGeminiStream = (
     (key) => {
       if (key.name === 'escape') {
         cancelOngoingRequest();
-        // Clear the queues on cancel - we don't want to process tools or feedback after user cancellation
-        queuedToolResponsesRef.current = [];
-        queuedSystemFeedbackRef.current = [];
       }
     },
     { isActive: streamingState === StreamingState.Responding },
@@ -315,50 +249,24 @@ export const useGeminiStream = (
         return { queryToSend: null, shouldProceed: false };
       }
 
-      // Lazily refresh auth if needed.
-      if (!geminiClient.isInitialized()) {
-        onDebugMessage('[Auth] GeminiClient not initialized, checking auth...');
-        // First check if we already have a content generator config
-        // This would be the case if refreshAuth was already called (e.g., from /key command)
-        let authType = config.getContentGeneratorConfig()?.authType;
-        onDebugMessage(`[Auth] Current authType from config: ${authType}`);
-
-        // If authType is not set, determine it from environment variables
-        if (!authType) {
-          if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-            authType = AuthType.USE_VERTEX_AI;
-          } else if (process.env.GEMINI_API_KEY) {
-            authType = AuthType.USE_GEMINI;
-          } else {
-            authType = AuthType.LOGIN_WITH_GOOGLE; // Default to OAuth (interactive)
-          }
-          onDebugMessage(
-            `[Auth] Determined authType from environment: ${authType}`,
-          );
-        }
-
-        // Only refresh auth if we don't have a valid content generator config
-        // or if the auth type differs from what's configured
-        const currentAuthType = config.getContentGeneratorConfig()?.authType;
-        if (!currentAuthType || currentAuthType !== authType) {
-          onDebugMessage(`[Auth] Refreshing auth with type: ${authType}`);
-          await config.refreshAuth(authType);
-        } else {
-          onDebugMessage(`[Auth] Auth type unchanged, skipping refresh`);
-        }
-      }
-
       let localQueryToSendToGemini: PartListUnion | null = null;
 
       if (typeof query === 'string') {
         const trimmedQuery = query.trim();
+        logUserPrompt(
+          config,
+          new UserPromptEvent(
+            trimmedQuery.length,
+            prompt_id,
+            config.getContentGeneratorConfig()?.authType,
+            trimmedQuery,
+          ),
+        );
         onDebugMessage(`User query: '${trimmedQuery}'`);
         await logger?.logMessage(MessageSenderType.USER, trimmedQuery);
 
         // Handle UI-only commands first
-        const slashCommandResult = isSlashCommand(trimmedQuery)
-          ? await handleSlashCommand(trimmedQuery)
-          : false;
+        const slashCommandResult = await handleSlashCommand(trimmedQuery);
 
         if (slashCommandResult) {
           switch (slashCommandResult.type) {
@@ -449,7 +357,6 @@ export const useGeminiStream = (
       logger,
       shellModeActive,
       scheduleToolCalls,
-      geminiClient,
     ],
   );
 
@@ -463,17 +370,9 @@ export const useGeminiStream = (
     ): string => {
       if (turnCancelledRef.current) {
         // Prevents additional output after a user initiated cancel.
-        // Return the current buffer unchanged to preserve existing content
-        return currentGeminiMessageBuffer;
+        return '';
       }
       let newGeminiMessageBuffer = currentGeminiMessageBuffer + eventValue;
-
-      // Debug logging for repetition issue
-      debugLogger.debug(
-        () =>
-          `Content event: eventValue=${eventValue.substring(0, 100)}, currentBuffer=${currentGeminiMessageBuffer.substring(0, 100)}, newBuffer=${newGeminiMessageBuffer.substring(0, 100)}, pendingType=${pendingHistoryItemRef.current?.type}`,
-      );
-
       if (
         pendingHistoryItemRef.current?.type !== 'gemini' &&
         pendingHistoryItemRef.current?.type !== 'gemini_content'
@@ -526,24 +425,15 @@ export const useGeminiStream = (
       if (turnCancelledRef.current) {
         return;
       }
-      // Track cancelled tool IDs for synthetic response generation
-      const cancelledToolIds: string[] = [];
-
       if (pendingHistoryItemRef.current) {
         if (pendingHistoryItemRef.current.type === 'tool_group') {
           const updatedTools = pendingHistoryItemRef.current.tools.map(
-            (tool) => {
-              if (
-                tool.status === ToolCallStatus.Pending ||
-                tool.status === ToolCallStatus.Confirming ||
-                tool.status === ToolCallStatus.Executing
-              ) {
-                // Track the cancelled tool ID
-                cancelledToolIds.push(tool.callId);
-                return { ...tool, status: ToolCallStatus.Canceled };
-              }
-              return tool;
-            },
+            (tool) =>
+              tool.status === ToolCallStatus.Pending ||
+              tool.status === ToolCallStatus.Confirming ||
+              tool.status === ToolCallStatus.Executing
+                ? { ...tool, status: ToolCallStatus.Canceled }
+                : tool,
           );
           const pendingItem: HistoryItemToolGroup = {
             ...pendingHistoryItemRef.current,
@@ -555,19 +445,8 @@ export const useGeminiStream = (
         }
         setPendingHistoryItem(null);
       }
-
-      // Log cancelled tool IDs for debugging
-      if (cancelledToolIds.length > 0) {
-        debugLogger.debug(
-          () => `[ESC] Cancelled tool IDs: ${JSON.stringify(cancelledToolIds)}`,
-        );
-      }
-
       addItem(
-        {
-          type: MessageType.INFO,
-          text: `User cancelled the request${cancelledToolIds.length > 0 ? ` (${cancelledToolIds.length} tool${cancelledToolIds.length > 1 ? 's' : ''} cancelled)` : ''}.`,
-        },
+        { type: MessageType.INFO, text: 'User cancelled the request.' },
         userMessageTimestamp,
       );
       setIsResponding(false);
@@ -582,46 +461,22 @@ export const useGeminiStream = (
         addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         setPendingHistoryItem(null);
       }
-
-      setThought(null); // Reset thought when there is an error
-
-      const errorText = parseAndFormatApiError(
-        eventValue.error,
-        config.getContentGeneratorConfig()?.authType,
-        undefined,
-        config.getModel(),
-        DEFAULT_GEMINI_FLASH_MODEL,
-      );
-
-      // Check if this is an authentication error that should trigger onAuthError
-      // Match various authentication error patterns from different providers
-      // But DON'T trigger if we're in the middle of OAuth flow
-      if (
-        (errorText.includes('Failed to resolve authentication') ||
-          errorText.includes('Authentication required')) &&
-        !(global as Record<string, unknown>).__oauth_needs_code
-      ) {
-        // Call the onAuthError callback which will be handled by App.tsx
-        onAuthError();
-      }
-
       addItem(
         {
           type: MessageType.ERROR,
-          text: errorText,
+          text: parseAndFormatApiError(
+            eventValue.error,
+            config.getContentGeneratorConfig()?.authType,
+            undefined,
+            config.getModel(),
+            DEFAULT_GEMINI_FLASH_MODEL,
+          ),
         },
         userMessageTimestamp,
       );
       setThought(null); // Reset thought when there's an error
     },
-    [
-      addItem,
-      pendingHistoryItemRef,
-      setPendingHistoryItem,
-      config,
-      setThought,
-      onAuthError,
-    ],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought],
   );
 
   const handleFinishedEvent = useCallback(
@@ -655,7 +510,7 @@ export const useGeminiStream = (
         addItem(
           {
             type: 'info',
-            text: `WARNING: ${message}`,
+            text: `⚠️  ${message}`,
           },
           userMessageTimestamp,
         );
@@ -709,103 +564,22 @@ export const useGeminiStream = (
       stream: AsyncIterable<GeminiEvent>,
       userMessageTimestamp: number,
       signal: AbortSignal,
-    ): Promise<StreamProcessingResult> => {
+    ): Promise<StreamProcessingStatus> => {
       let geminiMessageBuffer = '';
       const toolCallRequests: ToolCallRequestInfo[] = [];
-
-      // Initialize emoji filter for stream processing from settings
-      const emojiFilterMode =
-        (config.getEphemeralSetting('emojifilter') as
-          | 'allowed'
-          | 'auto'
-          | 'warn'
-          | 'error') || 'auto';
-      /**
-       * @requirement REQ-004.1 - Silent filtering in auto mode
-       * Use mode from settings or default to auto
-       */
-      const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
-      const emojiFilter = new EmojiFilter(filterConfig);
-
       for await (const event of stream) {
         switch (event.type) {
           case ServerGeminiEventType.Thought:
             setThought(event.value);
             break;
-          case ServerGeminiEventType.Content: {
-            // Filter the content chunk through emoji filter
-            const filterResult = emojiFilter.filterStreamChunk(event.value);
-
-            if (filterResult.blocked) {
-              // In error mode: stop displaying and inject error feedback as tool response
-
-              // Clear any partial content that was being built (don't display it)
-              if (geminiMessageBuffer.trim()) {
-                geminiMessageBuffer = '';
-              }
-
-              // Show a brief message to user
-              addItem(
-                {
-                  type: 'info',
-                  text: 'Emojis detected - requesting retry without emojis...',
-                },
-                userMessageTimestamp,
-              );
-
-              // Queue the error feedback to be sent with the next tool response
-              // This ensures the model gets the feedback on the next interaction
-              if (!queuedSystemFeedbackRef.current) {
-                queuedSystemFeedbackRef.current = [];
-              }
-              queuedSystemFeedbackRef.current.push(
-                `<system-reminder>ERROR: Your response contained emojis which are strictly prohibited. Please regenerate your response without using any emojis.</system-reminder>`,
-              );
-
-              // Cancel current stream to stop processing
-              if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
-              }
-
-              // Stop processing this chunk
-              break;
-            }
-
-            // Handle the filtered content
-            const filteredText =
-              typeof filterResult.filtered === 'string'
-                ? filterResult.filtered
-                : '';
+          case ServerGeminiEventType.Content:
             geminiMessageBuffer = handleContentEvent(
-              filteredText,
+              event.value,
               geminiMessageBuffer,
               userMessageTimestamp,
             );
-
-            // Queue system feedback to be sent to model in next tool response
-            // This feedback is for the LLM, not for display to the user
-            if (filterResult.systemFeedback) {
-              // We'll append this to the next tool response or create a special system message
-              // Store it in a ref so it persists across renders
-              if (!queuedSystemFeedbackRef.current) {
-                queuedSystemFeedbackRef.current = [];
-              }
-              queuedSystemFeedbackRef.current.push(
-                `<system-reminder>${filterResult.systemFeedback}</system-reminder>`,
-              );
-            }
-
-            // If cancelled after processing this content event, stop further processing
-            if (turnCancelledRef.current) {
-              break;
-            }
             break;
-          }
           case ServerGeminiEventType.ToolCallRequest:
-            debugLogger.debug(
-              () =>
-                `ToolCallRequest event: ${JSON.stringify(event.value, null, 2)}`,
-            );
             toolCallRequests.push(event.value);
             break;
           case ServerGeminiEventType.UserCancelled:
@@ -819,7 +593,6 @@ export const useGeminiStream = (
             break;
           case ServerGeminiEventType.ToolCallConfirmation:
           case ServerGeminiEventType.ToolCallResponse:
-          case ServerGeminiEventType.UsageMetadata:
             // do nothing
             break;
           case ServerGeminiEventType.MaxSessionTurns:
@@ -843,28 +616,10 @@ export const useGeminiStream = (
           }
         }
       }
-
-      // Flush any remaining content from emoji filter buffer
-      const remainingContent = emojiFilter.flushBuffer();
-      if (remainingContent.length > 0) {
-        geminiMessageBuffer = handleContentEvent(
-          remainingContent,
-          geminiMessageBuffer,
-          userMessageTimestamp,
-        );
-      }
-
       if (toolCallRequests.length > 0) {
-        debugLogger.debug(
-          () =>
-            `Scheduling tool calls: ${JSON.stringify(toolCallRequests.map((tc) => ({ name: tc.name, callId: tc.callId })))}`,
-        );
         scheduleToolCalls(toolCallRequests, signal);
       }
-      return {
-        status: StreamProcessingStatus.Completed,
-        hadToolCalls: toolCallRequests.length > 0,
-      };
+      return StreamProcessingStatus.Completed;
     },
     [
       handleContentEvent,
@@ -874,8 +629,6 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
-      config,
-      addItem,
     ],
   );
 
@@ -893,7 +646,6 @@ export const useGeminiStream = (
         return;
 
       const userMessageTimestamp = Date.now();
-      setShowHelp(false);
 
       // Reset quota error flag when starting a new query (not a continuation)
       if (!options?.isContinuation) {
@@ -929,21 +681,18 @@ export const useGeminiStream = (
       setInitError(null);
 
       try {
-        onDebugMessage(
-          `[Submit] Sending message to Gemini: ${typeof queryToSend === 'string' ? queryToSend : 'non-string content'}`,
-        );
         const stream = geminiClient.sendMessageStream(
           queryToSend,
           abortSignal,
           prompt_id!,
         );
-        const processingResult = await processGeminiStreamEvents(
+        const processingStatus = await processGeminiStreamEvents(
           stream,
           userMessageTimestamp,
           abortSignal,
         );
 
-        if (processingResult.status === StreamProcessingStatus.UserCancelled) {
+        if (processingStatus === StreamProcessingStatus.UserCancelled) {
           return;
         }
 
@@ -955,11 +704,6 @@ export const useGeminiStream = (
           loopDetectedRef.current = false;
           handleLoopDetectedEvent();
         }
-
-        // TODO: Continuation hook integration point - stub implementation
-        // This triggers todo continuation logic when stream completes
-        // without tool calls but with active todos
-        _handleStreamCompleted(processingResult.hadToolCalls);
       } catch (error: unknown) {
         if (error instanceof UnauthorizedError) {
           onAuthError();
@@ -980,25 +724,10 @@ export const useGeminiStream = (
         }
       } finally {
         setIsResponding(false);
-
-        // Process any queued tool responses after the response completes
-        if (queuedToolResponsesRef.current.length > 0) {
-          const queuedTools = [...queuedToolResponsesRef.current];
-          queuedToolResponsesRef.current = [];
-          debugLogger.debug(
-            () =>
-              `Processing queued tool responses: ${JSON.stringify(queuedTools.map((tc) => tc.request.name))}`,
-          );
-          // Process the queued tools now that we're not responding
-          if (handleCompletedToolsRef.current) {
-            await handleCompletedToolsRef.current(queuedTools);
-          }
-        }
       }
     },
     [
       streamingState,
-      setShowHelp,
       setModelSwitchedFromQuotaError,
       prepareQueryForGemini,
       processGeminiStreamEvents,
@@ -1012,23 +741,12 @@ export const useGeminiStream = (
       startNewPrompt,
       getPromptCount,
       handleLoopDetectedEvent,
-      onDebugMessage,
-      _handleStreamCompleted,
     ],
   );
 
   const handleCompletedTools = useCallback(
     async (completedToolCallsFromScheduler: TrackedToolCall[]) => {
       if (isResponding) {
-        // Queue the tools to be processed after the current response completes
-        queuedToolResponsesRef.current = [
-          ...queuedToolResponsesRef.current,
-          ...completedToolCallsFromScheduler,
-        ];
-        debugLogger.debug(
-          () =>
-            `Queuing tool responses while model is responding: ${JSON.stringify(completedToolCallsFromScheduler.map((tc) => tc.request.name))}`,
-        );
         return;
       }
 
@@ -1087,47 +805,11 @@ export const useGeminiStream = (
         return;
       }
 
-      // Group tools by prompt_id to ensure we send all tools from the same turn together
-      const toolsByPromptId = new Map<string, typeof geminiTools>();
+      // If all the tools were cancelled, don't submit a response to Gemini.
+      const allToolsCancelled = geminiTools.every(
+        (tc) => tc.status === 'cancelled',
+      );
 
-<<<<<<< HEAD
-      geminiTools.forEach((tool) => {
-        const promptId = tool.request.prompt_id;
-        if (!toolsByPromptId.has(promptId)) {
-          toolsByPromptId.set(promptId, []);
-        }
-        toolsByPromptId.get(promptId)!.push(tool);
-      });
-
-      // Process each prompt_id group
-      for (const [promptId, toolsInPrompt] of toolsByPromptId) {
-        // Check if we're still waiting for other tools with the same prompt_id
-        // Include both global toolCalls and the current batch to ensure we have all tools
-        const allToolCallsGlobal = toolCalls.filter(
-          (tc: TrackedToolCall) =>
-            !tc.request.isClientInitiated && tc.request.prompt_id === promptId,
-        );
-
-        // Also check if there are other tools in the current batch that we haven't processed yet
-        const allToolsInBatch = geminiTools.filter(
-          (tc) => tc.request.prompt_id === promptId,
-        );
-
-        const pendingTools = allToolCallsGlobal.filter(
-          (tc: TrackedToolCall) =>
-            tc.status !== 'success' &&
-            tc.status !== 'error' &&
-            tc.status !== 'cancelled',
-        );
-
-        if (pendingTools.length > 0) {
-          // Still waiting for other tools in this turn, skip for now
-          debugLogger.debug(
-            () =>
-              `Waiting for ${pendingTools.length} more tools to complete for prompt ${promptId}: ${JSON.stringify(pendingTools.map((t: TrackedToolCall) => t.request.name))}`,
-          );
-          continue;
-=======
       if (allToolsCancelled) {
         if (geminiClient) {
           // We need to manually add the function responses to the history
@@ -1139,161 +821,33 @@ export const useGeminiStream = (
             role: 'user',
             parts: combinedParts,
           });
->>>>>>> 75822d350 (Change the type of ToolResult.responseParts (#6875))
         }
 
-        // If all tools for this prompt_id in the current batch are complete, use them all
-        // This ensures that if multiple tools complete together, they're processed together
-        const toolsToProcess =
-          allToolsInBatch.length > 0 ? allToolsInBatch : toolsInPrompt;
-
-        // All tools for this prompt_id are complete, process them
-        debugLogger.debug(
-          () =>
-            `All tools complete for prompt ${promptId}, sending ${toolsToProcess.length} responses`,
-        );
-
-        // If all the tools were cancelled, don't submit a response to Gemini.
-        const allToolsCancelled = toolsToProcess.every(
-          (tc) => tc.status === 'cancelled',
-        );
-
-        if (allToolsCancelled) {
-          if (geminiClient) {
-            // We need to manually add the function responses to the history
-            // so the model knows the tools were cancelled.
-            const responsesToAdd = toolsToProcess.flatMap(
-              (toolCall) => toolCall.response.responseParts,
-            );
-            const combinedParts: Part[] = [];
-            for (const response of responsesToAdd) {
-              if (Array.isArray(response)) {
-                combinedParts.push(...response);
-              } else if (typeof response === 'string') {
-                combinedParts.push({ text: response });
-              } else {
-                combinedParts.push(response);
-              }
-            }
-            geminiClient.addHistory({
-              role: 'user',
-              parts: combinedParts,
-            });
-          }
-
-          const callIdsToMarkAsSubmitted = toolsToProcess.map(
-            (toolCall) => toolCall.request.callId,
-          );
-          markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-          continue;
-        }
-
-        const responsesToSend = toolsToProcess
-          .map((toolCall, index) => {
-            // responseParts is now an array with [functionCall, functionResponse]
-            // We need to send BOTH to the model (they're not in history yet)
-            const parts = Array.isArray(toolCall.response.responseParts)
-              ? toolCall.response.responseParts
-              : [toolCall.response.responseParts];
-
-            debugLogger.debug(
-              () =>
-                `Tool response for ${toolCall.request.name} (${toolCall.request.callId}): ${JSON.stringify(parts, null, 2)}`,
-            );
-
-            // For the last tool response, append any queued system feedback
-            // This ensures the model receives the emoji filter warnings
-            if (
-              index === toolsToProcess.length - 1 &&
-              queuedSystemFeedbackRef.current.length > 0
-            ) {
-              const feedbackMessages =
-                queuedSystemFeedbackRef.current.join('\n');
-              queuedSystemFeedbackRef.current = []; // Clear the queue
-
-              // Since we need to return a single Part (functionResponse),
-              // we can't append text directly. Log a warning instead.
-              console.warn(
-                '[Warning] System feedback queued but cannot be appended to function response:',
-                feedbackMessages,
-              );
-            }
-
-            // Return all parts (both tool call and response)
-            // They'll be added to history together after model responds
-            return parts;
-          })
-          .flat(); // Flatten since we now have arrays of parts
-
-        const callIdsToMarkAsSubmitted = toolsToProcess.map(
+        const callIdsToMarkAsSubmitted = geminiTools.map(
           (toolCall) => toolCall.request.callId,
         );
+        markToolsAsSubmitted(callIdsToMarkAsSubmitted);
+        return;
+      }
 
-<<<<<<< HEAD
-        // Don't mark as submitted yet - wait until after responses are actually sent
-=======
       const responsesToSend: Part[] = geminiTools.flatMap(
         (toolCall) => toolCall.response.responseParts,
       );
       const callIdsToMarkAsSubmitted = geminiTools.map(
         (toolCall) => toolCall.request.callId,
       );
->>>>>>> 75822d350 (Change the type of ToolResult.responseParts (#6875))
 
-        // Don't continue if model was switched due to quota error
-        if (modelSwitchedFromQuotaError) {
-          return;
-        }
+      const prompt_ids = geminiTools.map(
+        (toolCall) => toolCall.request.prompt_id,
+      );
 
-        // Debug logging BEFORE merging
-        debugLogger.debug(
-          () =>
-            `responsesToSend before merge: ${JSON.stringify(responsesToSend, null, 2)}, length: ${responsesToSend.length}`,
-        );
-        responsesToSend.forEach((resp, idx) => {
-          debugLogger.debug(
-            () =>
-              `responsesToSend[${idx}] type: ${typeof resp}, isArray: ${Array.isArray(resp)}`,
-          );
-        });
+      markToolsAsSubmitted(callIdsToMarkAsSubmitted);
 
-        // For Gemini, when there are multiple function responses, they should be sent
-        // as an array of parts in a single message
-        if (responsesToSend.length === 1) {
-          // Single response - send as-is
-          debugLogger.debug(() => 'Single function response, sending directly');
-          submitQuery(
-            responsesToSend[0],
-            {
-              isContinuation: true,
-            },
-            promptId,
-          );
-          // Mark as submitted after sending
-          markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-        } else {
-          // Multiple responses - send as array of parts
-          debugLogger.debug(
-            () =>
-              `Multiple function responses (${responsesToSend.length}), sending as array: ${JSON.stringify(responsesToSend, null, 2)}`,
-          );
+      // Don't continue if model was switched due to quota error
+      if (modelSwitchedFromQuotaError) {
+        return;
+      }
 
-<<<<<<< HEAD
-          // Send all function responses as an array of parts
-          // Gemini expects multiple function responses as separate parts in the same message
-          submitQuery(
-            responsesToSend,
-            {
-              isContinuation: true,
-            },
-            promptId, // All tool calls from same turn should have same prompt_id
-          );
-
-          // Mark all as submitted after sending
-          markToolsAsSubmitted(callIdsToMarkAsSubmitted);
-        }
-      } // End of prompt_id loop
-=======
       submitQuery(
         responsesToSend,
         {
@@ -1301,7 +855,6 @@ export const useGeminiStream = (
         },
         prompt_ids[0],
       );
->>>>>>> 75822d350 (Change the type of ToolResult.responseParts (#6875))
     },
     [
       isResponding,
@@ -1310,12 +863,8 @@ export const useGeminiStream = (
       geminiClient,
       performMemoryRefresh,
       modelSwitchedFromQuotaError,
-      toolCalls,
     ],
   );
-
-  // Assign the function to the ref so submitQuery can access it
-  handleCompletedToolsRef.current = handleCompletedTools;
 
   const pendingHistoryItems = [
     pendingHistoryItemRef.current,
@@ -1408,7 +957,7 @@ export const useGeminiStream = (
               toolCallWithSnapshotFilePath,
               JSON.stringify(
                 {
-                  history: historyRef.current,
+                  history,
                   clientHistory,
                   toolCall: {
                     name: toolCall.request.name,
@@ -1432,9 +981,15 @@ export const useGeminiStream = (
       }
     };
     saveRestorableToolCalls();
-    // FIX: Removed 'history' from dependencies to prevent infinite loops
-    // We use historyRef.current to access the latest history value
-  }, [toolCalls, config, onDebugMessage, gitService, geminiClient, storage]);
+  }, [
+    toolCalls,
+    config,
+    onDebugMessage,
+    gitService,
+    history,
+    geminiClient,
+    storage,
+  ]);
 
   return {
     streamingState,
