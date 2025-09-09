@@ -38,10 +38,16 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
+import { tokenLimit } from './tokenLimits.js';
+import {
+  COMPRESSION_TOKEN_THRESHOLD,
+  COMPRESSION_PRESERVE_THRESHOLD,
+} from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, IdeContext, File } from '../ide/ideContext.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { isFunctionResponse } from '../utils/messageInspectors.js';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -340,14 +346,10 @@ export class GeminiClient {
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
     this.forceFullIdeContext = true;
-<<<<<<< HEAD
+    this.hasFailedCompressionAttempt = false;
 
     // Ensure content generator is initialized before creating chat
     await this.lazyInitialize();
-
-=======
-    this.hasFailedCompressionAttempt = false;
->>>>>>> cd2e237c7 (fix(compression): Discard compression result if it results in more token usage (#7047))
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
@@ -652,15 +654,12 @@ export class GeminiClient {
     // Track the original model from the first call to detect model switching
     const initialModel = originalModel || this.config.getModel();
 
-<<<<<<< HEAD
-=======
     const compressed = await this.tryCompressChat(prompt_id);
 
     if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
       yield { type: GeminiEventType.ChatCompressed, value: compressed };
     }
 
->>>>>>> cd2e237c7 (fix(compression): Discard compression result if it results in more token usage (#7047))
     // Prevent context updates from being sent while a tool call is
     // waiting for a response. The Gemini API requires that a functionResponse
     // part from the user immediately follows a functionCall part from the model
@@ -1002,16 +1001,18 @@ export class GeminiClient {
    */
   async tryCompressChat(
     prompt_id: string,
-<<<<<<< HEAD
-    _force: boolean = false,
-  ): Promise<{ originalTokenCount: number; newTokenCount: number } | null> {
+    force: boolean = false,
+  ): Promise<ChatCompressionInfo> {
     await this.lazyInitialize();
 
     if (!this.hasChatInitialized()) {
-      return null;
-=======
-    force: boolean = false,
-  ): Promise<ChatCompressionInfo> {
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus: CompressionStatus.NOOP,
+      };
+    }
+
     const curatedHistory = this.getChat().getHistory(true);
 
     // Regardless of `force`, don't do anything if the history is empty.
@@ -1024,19 +1025,11 @@ export class GeminiClient {
         newTokenCount: 0,
         compressionStatus: CompressionStatus.NOOP,
       };
->>>>>>> cd2e237c7 (fix(compression): Discard compression result if it results in more token usage (#7047))
     }
 
-    const chat = this.getChat();
-    const historyService = chat.getHistoryService();
+    // Note: chat variable used later in method
 
-<<<<<<< HEAD
-    // Get current token count
-    const originalTokenCount = historyService.getTotalTokens();
-
-    if (originalTokenCount === 0) {
-      return null;
-=======
+    const model = this.config.getModel();
     const { totalTokens: originalTokenCount } =
       await this.getContentGenerator().countTokens({
         model,
@@ -1051,23 +1044,11 @@ export class GeminiClient {
         compressionStatus:
           CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
       };
->>>>>>> cd2e237c7 (fix(compression): Discard compression result if it results in more token usage (#7047))
     }
 
-    // Perform compression
-    try {
-      await chat.performCompression(prompt_id);
+    const contextPercentageThreshold =
+      this.config.getChatCompression()?.contextPercentageThreshold;
 
-<<<<<<< HEAD
-      // Get new token count after compression
-      const newTokenCount = historyService.getTotalTokens();
-
-      // Check if compression actually happened
-      if (newTokenCount < originalTokenCount) {
-        return {
-          originalTokenCount,
-          newTokenCount,
-=======
     // Don't compress if not forced and we are under the limit.
     if (!force) {
       const threshold =
@@ -1077,16 +1058,10 @@ export class GeminiClient {
           originalTokenCount,
           newTokenCount: originalTokenCount,
           compressionStatus: CompressionStatus.NOOP,
->>>>>>> cd2e237c7 (fix(compression): Discard compression result if it results in more token usage (#7047))
         };
       }
-    } catch (error) {
-      console.error('Compression failed:', error);
     }
 
-<<<<<<< HEAD
-    return null;
-=======
     let compressBeforeIndex = findIndexAfterFraction(
       curatedHistory,
       1 - COMPRESSION_PRESERVE_THRESHOLD,
@@ -1117,7 +1092,7 @@ export class GeminiClient {
       },
       prompt_id,
     );
-    const chat = await this.startChat([
+    const compressedChat = await this.startChat([
       {
         role: 'user',
         parts: [{ text: summary }],
@@ -1134,7 +1109,7 @@ export class GeminiClient {
       await this.getContentGenerator().countTokens({
         // model might change after calling `sendMessage`, so we get the newest value from config
         model: this.config.getModel(),
-        contents: chat.getHistory(),
+        contents: compressedChat.getHistory(),
       });
     if (newTokenCount === undefined) {
       console.warn('Could not determine compressed history token count.');
@@ -1147,12 +1122,9 @@ export class GeminiClient {
       };
     }
 
-    logChatCompression(
-      this.config,
-      makeChatCompressionEvent({
-        tokens_before: originalTokenCount,
-        tokens_after: newTokenCount,
-      }),
+    // TODO: Add proper telemetry logging once available
+    console.debug(
+      `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
     );
 
     if (newTokenCount > originalTokenCount) {
@@ -1165,7 +1137,7 @@ export class GeminiClient {
           CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
       };
     } else {
-      this.chat = chat; // Chat compression successful, set new state.
+      this.chat = compressedChat; // Chat compression successful, set new state.
     }
 
     return {
@@ -1173,7 +1145,6 @@ export class GeminiClient {
       newTokenCount,
       compressionStatus: CompressionStatus.COMPRESSED,
     };
->>>>>>> cd2e237c7 (fix(compression): Discard compression result if it results in more token usage (#7047))
   }
 
   /**

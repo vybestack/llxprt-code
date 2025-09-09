@@ -6,14 +6,18 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { type Config } from '@vybestack/llxprt-code-core';
-import { LoadedSettings, Settings } from '../../config/settings.js';
+import { LoadedSettings } from '../../config/settings.js';
 import { FolderTrustChoice } from '../components/FolderTrustDialog.js';
-import { loadTrustedFolders, TrustLevel, isWorkspaceTrusted } from '../../config/trustedFolders.js';
+import {
+  loadTrustedFolders,
+  TrustLevel,
+  isWorkspaceTrusted,
+} from '../../config/trustedFolders.js';
 import * as process from 'process';
 
 export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
   const [isTrusted, setIsTrusted] = useState<boolean | undefined>(
-    config.isTrustedFolder()
+    config.isTrustedFolder(),
   );
   const [isFolderTrustDialogOpen, setIsFolderTrustDialogOpen] = useState(
     config.isTrustedFolder() === undefined,
@@ -22,10 +26,7 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
 
   const { folderTrust, folderTrustFeature } = settings.merged;
   useEffect(() => {
-    const trusted = isWorkspaceTrusted({
-      folderTrust,
-      folderTrustFeature,
-    } as Settings);
+    const trusted = isWorkspaceTrusted();
     setIsTrusted(trusted);
     if (trusted === undefined) {
       setIsFolderTrustDialogOpen(true);
@@ -59,11 +60,9 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
         trustLevel === TrustLevel.TRUST_FOLDER ||
         trustLevel === TrustLevel.TRUST_PARENT;
       setIsTrusted(newIsTrusted);
-      
-      // Update config's trust state
-      if (config.setIsTrustedFolder) {
-        config.setIsTrustedFolder(newIsTrusted);
-      }
+
+      // Update config's trust state - method not available
+      // TODO: Implement trust folder setting
 
       const needsRestart = wasTrusted !== newIsTrusted;
       if (needsRestart) {

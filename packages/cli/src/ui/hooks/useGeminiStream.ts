@@ -656,7 +656,7 @@ export const useGeminiStream = (
         addItem(
           {
             type: 'info',
-            text: `⚠️  ${message}`,
+            text: `WARNING: ${message}`,
           },
           userMessageTimestamp,
         );

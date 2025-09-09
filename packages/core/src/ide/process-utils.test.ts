@@ -41,24 +41,46 @@ describe('getIdeProcessInfo', () => {
       (os.platform as Mock).mockReturnValue('linux');
       // process (1000) -> shell (800) -> IDE (700)
       mockedExec
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // pid 1000 -> ppid 800 (shell)
-        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }) // pid 800 -> ppid 700 (IDE)
-        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }); // get command for pid 700
+        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // pid 1000 -> ppid 800, comm (shell)
+        .mockResolvedValueOnce({ stdout: '/usr/bin/bash --login' }) // pid 1000 full command
+        .mockResolvedValueOnce({ stdout: '700 /usr/bin/code' }) // pid 800 -> ppid 700 (IDE)
+        .mockResolvedValueOnce({ stdout: '/usr/lib/vscode/code' }) // pid 800 full command
+        .mockResolvedValueOnce({ stdout: '1 systemd' }) // pid 700 -> ppid 1
+        .mockResolvedValueOnce({ stdout: '/usr/lib/vscode/code --no-sandbox' }); // pid 700 full command
 
       const result = await getIdeProcessInfo();
 
-      expect(result).toEqual({ pid: 700, command: '/usr/lib/vscode/code' });
+      expect(result).toEqual({
+        pid: 700,
+        command: '/usr/lib/vscode/code --no-sandbox',
+      });
     });
 
     it('should return parent process info if grandparent lookup fails', async () => {
       (os.platform as Mock).mockReturnValue('linux');
       mockedExec
         .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // pid 1000 -> ppid 800 (shell)
-        .mockRejectedValueOnce(new Error('ps failed')) // lookup for ppid of 800 fails
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }); // get command for pid 800
+        .mockResolvedValueOnce({ stdout: '/usr/bin/bash --login' }) // pid 1000 full command
+        .mockRejectedValueOnce(new Error('ps failed')) // lookup for ppid of 800 fails (grandparent)
+        .mockResolvedValueOnce({ stdout: '700 /usr/bin/code' }) // get ppid/comm for pid 800 (final lookup)
+        .mockResolvedValueOnce({ stdout: '/usr/lib/vscode/code --no-sandbox' }); // get command for pid 800 (final lookup)
 
       const result = await getIdeProcessInfo();
-      expect(result).toEqual({ pid: 800, command: '/bin/bash' });
+      expect(result).toEqual({
+        pid: 800,
+        command: '/usr/lib/vscode/code --no-sandbox',
+      });
+    });
+
+    it('should handle process command failure gracefully', async () => {
+      (os.platform as Mock).mockReturnValue('linux');
+      // Simulate ps command failure
+      mockedExec.mockRejectedValue(new Error('ps command failed'));
+
+      const result = await getIdeProcessInfo();
+
+      // Should return fallback values with current process
+      expect(result).toEqual({ pid: 1000, command: '' });
     });
   });
 
@@ -85,6 +107,17 @@ describe('getIdeProcessInfo', () => {
 
       const result = await getIdeProcessInfo();
       expect(result).toEqual({ pid: 900, command: 'powershell.exe' });
+    });
+
+    it('should handle process command failure gracefully on Windows', async () => {
+      (os.platform as Mock).mockReturnValue('win32');
+      // Simulate wmic command failure
+      mockedExec.mockRejectedValue(new Error('wmic command failed'));
+
+      const result = await getIdeProcessInfo();
+
+      // Should return fallback values with current process
+      expect(result).toEqual({ pid: 1000, command: '' });
     });
   });
 });

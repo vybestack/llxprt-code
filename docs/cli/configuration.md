@@ -641,7 +641,7 @@ Arguments passed directly when running the CLI can override other configurations
   - Can be specified multiple times or as comma-separated values.
   - 5 directories can be added at maximum.
   - Example: `--include-directories /path/to/project1,/path/to/project2` or `--include-directories /path/to/project1 --include-directories /path/to/project2`
-<<<<<<< HEAD
+    <<<<<<< HEAD
 - **`--profile-load <profile_name>`**:
   - Load a saved profile configuration on startup.
   - Example: `llxprt --profile-load my-project`
@@ -654,12 +654,11 @@ Arguments passed directly when running the CLI can override other configurations
   - Redirects console output to stderr to keep stdout clean for protocol communication.
   - Example: `llxprt --experimental-acp`
   - **Note:** This is an experimental feature primarily used by the Zed editor integration.
-- **`--version`** (**`-v`**):
-=======
+- # **`--version`** (**`-v`**):
 - **`--screen-reader`**:
   - Enables screen reader mode for accessibility.
 - **`--version`**:
->>>>>>> 10286934e (Introduce initial screen reader mode handling and flag (#6653))
+  > > > > > > > 10286934e (Introduce initial screen reader mode handling and flag (#6653))
   - Displays the version of the CLI.
 
 ## Provider API Keys

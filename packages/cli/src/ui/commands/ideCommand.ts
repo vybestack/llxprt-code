@@ -14,10 +14,7 @@ import {
   IdeClient,
   type File,
   ideContext,
-  IdeClient,
-  getIdeInstaller,
   LLXPRT_CODE_COMPANION_EXTENSION_NAME,
-  type File,
 } from '@vybestack/llxprt-code-core';
 import {
   CommandContext,

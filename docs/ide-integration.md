@@ -127,7 +127,7 @@ If you encounter issues with IDE integration, here are some common error message
 
 - **Message:** `🔴 Disconnected: Directory mismatch. LLxprt Code is running in a different location than the open workspace in [IDE Name]. Please run the CLI from one of the following directories: [List of directories]`
   - **Cause:** The CLI's current working directory is outside the workspace you have open in your IDE.
->>>>>>> 776627c85 (refactor(ide): Improve IDE detection discovery (#6765))
+    > > > > > > > 776627c85 (refactor(ide): Improve IDE detection discovery (#6765))
   - **Solution:** `cd` into the same directory that is open in your IDE and restart the CLI.
 
 - **Message:** `🔴 Disconnected: To use this feature, please open a workspace folder in [IDE Name] and try again.`

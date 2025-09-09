@@ -334,32 +334,6 @@ export class IdeClient {
     return port;
   }
 
-  private getStdioConfigFromEnv(): StdioConfig | undefined {
-    const command = process.env['LLXPRT_CODE_IDE_SERVER_STDIO_COMMAND'];
-    if (!command) {
-      return undefined;
-    }
-
-    const argsStr = process.env['LLXPRT_CODE_IDE_SERVER_STDIO_ARGS'];
-    let args: string[] = [];
-    if (argsStr) {
-      try {
-        const parsedArgs = JSON.parse(argsStr);
-        if (Array.isArray(parsedArgs)) {
-          args = parsedArgs;
-        } else {
-          logger.error(
-            'LLXPRT_CODE_IDE_SERVER_STDIO_ARGS must be a JSON array string.',
-          );
-        }
-      } catch (e) {
-        logger.error('Failed to parse LLXPRT_CODE_IDE_SERVER_STDIO_ARGS:', e);
-      }
-    }
-
-    return { command, args };
-  }
-
   private async getConnectionConfigFromFile(): Promise<
     (ConnectionConfig & { workspacePath?: string }) | undefined
   > {

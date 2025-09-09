@@ -31,10 +31,6 @@ import {
   AuthType,
   getOauthClient,
   setGitStatsService,
-  logUserPrompt,
-  logIdeConnection,
-  IdeConnectionEvent,
-  IdeConnectionType,
   FatalConfigError,
   // IDE connection logging removed - telemetry disabled in llxprt
 } from '@vybestack/llxprt-code-core';
@@ -174,7 +170,7 @@ export async function startInteractiveUI(
   // Detect and enable Kitty keyboard protocol once at startup
   await detectAndEnableKittyProtocol();
   setWindowTitle(basename(workspaceRoot), settings);
-  
+
   // Initialize authentication before rendering to ensure geminiClient is available
   if (settings.merged.selectedAuthType) {
     try {
@@ -188,7 +184,7 @@ export async function startInteractiveUI(
       process.exit(1);
     }
   }
-  
+
   const instance = render(
     <React.StrictMode>
       <ErrorBoundary
@@ -205,7 +201,7 @@ export async function startInteractiveUI(
         </SettingsContext.Provider>
       </ErrorBoundary>
     </React.StrictMode>,
-    { exitOnCtrlC: false, isScreenReaderEnabled: config.getScreenReader() },
+    { exitOnCtrlC: false },
   );
 
   checkForUpdates()

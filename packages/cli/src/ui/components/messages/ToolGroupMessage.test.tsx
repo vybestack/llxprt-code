@@ -9,7 +9,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { Text } from 'ink';
 import { ToolGroupMessage } from './ToolGroupMessage.js';
 import { IndividualToolCallDisplay, ToolCallStatus } from '../../types.js';
-import { Config, ToolCallConfirmationDetails } from '@google/gemini-cli-core';
+import {
+  Config,
+  ToolCallConfirmationDetails,
+} from '@vybestack/llxprt-code-core';
 
 // Mock child components to isolate ToolGroupMessage behavior
 vi.mock('./ToolMessage.js', () => ({

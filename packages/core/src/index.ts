@@ -122,6 +122,12 @@ export {
   MCPOAuthCredentials,
   MCPOAuthTokenStorage,
 } from './mcp/oauth-token-storage.js';
+export {
+  BaseTokenStore,
+  MCPOAuthToken as MCPOAuthTokenInterface,
+  MCPOAuthCredentials as MCPOAuthCredentialsInterface,
+} from './mcp/token-store.js';
+export { FileTokenStore } from './mcp/file-token-store.js';
 export type { MCPOAuthConfig } from './mcp/oauth-provider.js';
 export type {
   OAuthAuthorizationServerMetadata,

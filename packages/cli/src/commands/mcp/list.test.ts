@@ -16,7 +16,9 @@ vi.mock('../../config/extension.js');
 vi.mock('@vybestack/llxprt-code-core', () => ({
   createTransport: vi.fn(),
   Storage: {
-    getGlobalSettingsPath: vi.fn().mockReturnValue('/mock/home/.llxprt/settings.json'),
+    getGlobalSettingsPath: vi
+      .fn()
+      .mockReturnValue('/mock/home/.llxprt/settings.json'),
     getGlobalLlxprtDir: vi.fn().mockReturnValue('/mock/home/.llxprt'),
   },
   MCPServerStatus: {

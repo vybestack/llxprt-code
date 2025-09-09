@@ -377,13 +377,12 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     prompt: result.prompt as string | undefined,
     promptInteractive: result.promptInteractive as string | undefined,
     allFiles: result.allFiles as boolean | undefined,
-    all_files: result.all_files as boolean | undefined,
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
-    show_memory_usage: result.show_memory_usage as boolean | undefined,
     yolo: result.yolo as boolean | undefined,
     approvalMode: result.approvalMode as string | undefined,
     telemetry: result.telemetry as boolean | undefined,
     checkpointing: result.checkpointing as boolean | undefined,
+    screenReader: result.screenReader as boolean | undefined,
     telemetryTarget: result.telemetryTarget as string | undefined,
     telemetryOtlpEndpoint: result.telemetryOtlpEndpoint as string | undefined,
     telemetryLogPrompts: result.telemetryLogPrompts as boolean | undefined,
@@ -556,7 +555,7 @@ export async function loadCliConfig(
 
   // ideModeFeature flag removed - now using ideMode directly
 
-  const ideClient = IdeClient.getInstance();
+  const ideClient = await IdeClient.getInstance();
 
   const folderTrustFeature = settings.folderTrustFeature ?? false;
   const folderTrustSetting = settings.folderTrust ?? true;
@@ -828,7 +827,6 @@ export async function loadCliConfig(
     shellReplacement: effectiveSettings.shellReplacement,
     useRipgrep: effectiveSettings.useRipgrep,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
-    skipNextSpeakerCheck: effectiveSettings.skipNextSpeakerCheck,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
   });
 

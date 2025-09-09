@@ -10,7 +10,7 @@
 
 import './src/gemini.js';
 import { main } from './src/gemini.js';
-import { FatalError } from '@google/gemini-cli-core';
+import { FatalError } from '@vybestack/llxprt-code-core';
 
 // --- Global Entry Point ---
 main().catch((error) => {

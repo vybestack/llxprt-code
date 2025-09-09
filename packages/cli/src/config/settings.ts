@@ -113,7 +113,7 @@ function mergeSettings(
       ...(systemDefaults.customThemes || {}),
       ...(user.customThemes || {}),
       ...(safeWorkspace.customThemes || {}),
-      ...(system.customThemes || {})
+      ...(system.customThemes || {}),
     },
     mcpServers: {
       ...(systemDefaults.mcpServers || {}),
@@ -131,7 +131,7 @@ function mergeSettings(
       ...(systemDefaults.chatCompression || {}),
       ...(user.chatCompression || {}),
       ...(safeWorkspace.chatCompression || {}),
-      ...(system.chatCompression || {})
+      ...(system.chatCompression || {}),
     },
   };
 }
@@ -503,9 +503,7 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
     }
   }
 
-  // For the initial trust check, we can only use user and system settings.
-  const initialTrustCheckSettings = { ...systemSettings, ...userSettings };
-  const isTrusted = isWorkspaceTrusted(initialTrustCheckSettings) ?? true;
+  const isTrusted = isWorkspaceTrusted() ?? true;
 
   // Create a temporary merged settings object to pass to loadEnvironment.
   const tempMergedSettings = mergeSettings(

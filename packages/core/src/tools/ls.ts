@@ -164,9 +164,9 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         respectGitIgnore:
           this.params.file_filtering_options?.respect_git_ignore ??
           defaultFileIgnores.respectGitIgnore,
-        respectGeminiIgnore:
+        respectLlxprtIgnore:
           this.params.file_filtering_options?.respect_gemini_ignore ??
-          defaultFileIgnores.respectGeminiIgnore,
+          defaultFileIgnores.respectLlxprtIgnore,
       };
 
       // Get centralized file discovery service
@@ -205,8 +205,8 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
           continue;
         }
         if (
-          fileFilteringOptions.respectGeminiIgnore &&
-          fileDiscovery.shouldGeminiIgnoreFile(relativePath)
+          fileFilteringOptions.respectLlxprtIgnore &&
+          fileDiscovery.shouldLlxprtIgnoreFile(relativePath)
         ) {
           geminiIgnoredCount++;
           continue;

@@ -227,3 +227,68 @@ export const ansi = {
   gray: (text: string) => applyColor(Colors.Gray, text),
   bold: (text: string) => chalk.bold(text),
 };
+
+/**
+ * Export the semantic theme for UI components
+ */
+export const theme = {
+  text: {
+    get primary() {
+      return themeManager.getSemanticColors().text.primary;
+    },
+    get secondary() {
+      return themeManager.getSemanticColors().text.secondary;
+    },
+    get link() {
+      return themeManager.getSemanticColors().text.link;
+    },
+    get accent() {
+      return themeManager.getSemanticColors().text.accent;
+    },
+  },
+  status: {
+    get success() {
+      return themeManager.getSemanticColors().status.success;
+    },
+    get warning() {
+      return themeManager.getSemanticColors().status.warning;
+    },
+    get error() {
+      return themeManager.getSemanticColors().status.error;
+    },
+  },
+  background: {
+    get primary() {
+      return themeManager.getSemanticColors().background.primary;
+    },
+    get diff() {
+      return {
+        get added() {
+          return themeManager.getSemanticColors().background.diff.added;
+        },
+        get removed() {
+          return themeManager.getSemanticColors().background.diff.removed;
+        },
+      };
+    },
+  },
+  ui: {
+    get comment() {
+      return themeManager.getSemanticColors().ui.comment;
+    },
+    get symbol() {
+      return themeManager.getSemanticColors().ui.symbol;
+    },
+    get gradient() {
+      return themeManager.getSemanticColors().ui.gradient;
+    },
+  },
+  border: {
+    get default() {
+      return themeManager.getSemanticColors().border.default;
+    },
+    get focused() {
+      return themeManager.getSemanticColors().border.focused;
+    },
+  },
+};

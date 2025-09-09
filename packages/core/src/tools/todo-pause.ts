@@ -136,7 +136,6 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     return {
       llmContent: llmMessage,
       returnDisplay: userMessage,
-      summary: `AI paused: ${reason.length > 50 ? reason.substring(0, 47) + '...' : reason}`,
     };
   }
 }

@@ -21,7 +21,6 @@ import {
   processSingleFileContent,
   DEFAULT_ENCODING,
   getSpecificMimeType,
-  ProcessedFileReadResult,
 } from '../utils/fileUtils.js';
 import { PartListUnion } from '@google/genai';
 import { Config, DEFAULT_FILE_FILTERING_OPTIONS } from '../config/config.js';
@@ -85,31 +84,13 @@ export interface ReadManyFilesParams {
 }
 
 /**
- * Result type for file processing operations
- */
-type FileProcessingResult =
-  | {
-      success: true;
-      filePath: string;
-      relativePathForDisplay: string;
-      fileReadResult: ProcessedFileReadResult;
-      reason?: undefined;
-    }
-  | {
-      success: false;
-      filePath: string;
-      relativePathForDisplay: string;
-      fileReadResult?: undefined;
-      reason: string;
-    };
-
-/**
  * Creates the default exclusion patterns including dynamic patterns.
  * This combines the shared patterns with dynamic patterns like LLXPRT.md.
  * TODO(adh): Consider making this configurable or extendable through a command line argument.
  */
 function getDefaultExcludes(config?: Config): string[] {
-  const baseExcludes = config?.getFileExclusions().getReadManyFilesExcludes() ?? [];
+  const baseExcludes =
+    config?.getFileExclusions().getReadManyFilesExcludes() ?? [];
   return [...baseExcludes, `**/${getCurrentLlxprtMdFilename()}`];
 }
 
@@ -213,7 +194,11 @@ ${finalExclusionPatternsForDescription
     const contentParts: PartListUnion = [];
 
     const effectiveExcludes = useDefaultExcludes
-      ? [...getDefaultExcludes(this.config), ...exclude, ...this.llxprtIgnorePatterns]
+      ? [
+          ...getDefaultExcludes(this.config),
+          ...exclude,
+          ...this.llxprtIgnorePatterns,
+        ]
       : [...exclude, ...this.llxprtIgnorePatterns];
 
     const searchPatterns = [...inputPatterns, ...include];

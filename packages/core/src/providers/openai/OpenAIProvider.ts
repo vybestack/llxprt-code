@@ -167,6 +167,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const baseURL = this.getBaseURL();
     const clientKey = `${baseURL}-${resolvedKey}`;
 
+    // Clear cache if we have no valid auth (e.g., after logout)
+    if (!resolvedKey && this._cachedClient) {
+      this._cachedClient = undefined;
+      this._cachedClientKey = undefined;
+    }
+
     // Return cached client if available and auth hasn't changed
     if (this._cachedClient && this._cachedClientKey === clientKey) {
       return this._cachedClient;
@@ -255,49 +261,29 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   private getFallbackModels(): IModel[] {
-    return [
-      {
-        id: 'gpt-5',
-        name: 'GPT-5',
-        provider: 'openai',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-4.1',
-        name: 'GPT-4.1',
-        provider: 'openai',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-4o',
-        name: 'GPT-4o',
-        provider: 'openai',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'o3',
-        name: 'O3',
-        provider: 'openai',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'o4-mini',
-        name: 'O4 Mini',
-        provider: 'openai',
-        supportedToolFormats: ['openai'],
-      },
-      {
-        id: 'gpt-3.5-turbo',
-        name: 'GPT-3.5 Turbo (Legacy)',
-        provider: 'openai',
-        supportedToolFormats: ['openai'],
-      },
-    ];
+    return [];
   }
 
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
+    // Check if this is a Qwen provider instance based on baseURL
+    const baseURL = this.getBaseURL();
+    if (
+      baseURL &&
+      (baseURL.includes('qwen') || baseURL.includes('dashscope'))
+    ) {
+      return process.env.LLXPRT_DEFAULT_MODEL || 'qwen3-coder-plus';
+    }
     return process.env.LLXPRT_DEFAULT_MODEL || 'gpt-5';
+  }
+
+  /**
+   * Clear the cached OpenAI client
+   * Should be called when authentication state changes (e.g., after logout)
+   */
+  public clearClientCache(): void {
+    this._cachedClient = undefined;
+    this._cachedClientKey = undefined;
   }
 
   override getServerTools(): string[] {

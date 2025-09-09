@@ -103,7 +103,13 @@ describe('Settings Loading and Merging', () => {
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
     (fs.readFileSync as Mock).mockReturnValue('{}'); // Return valid empty JSON
-    (mockFsMkdirSync as Mock).mockImplementation(() => undefined);
+    (mockFsMkdirSync as Mock).mockImplementation((dir: string, options?: unknown) => {
+      // Mock implementation that validates directory creation
+      if (!dir || typeof dir !== 'string') {
+        throw new Error('Invalid directory path');
+      }
+      return dir; // Return the created directory path for verification
+    });
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
   });
 
@@ -1559,6 +1565,276 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.sandbox).toBe(false); // User setting
       expect(settings.merged.contextFileName).toBe('USER.md'); // User setting
       expect(settings.merged.theme).toBe('dark'); // User setting
+    });
+  });
+
+  describe('Settings validation and error handling improvements', () => {
+    it('should validate directory creation during setValue operations', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      // Test that mkdirSync is called with proper parameters
+      loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
+      
+      expect(mockFsMkdirSync).toHaveBeenCalled();
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        USER_SETTINGS_PATH,
+        JSON.stringify({ theme: 'dark' }, null, 2),
+        'utf-8',
+      );
+    });
+
+    it('should handle file system errors gracefully during directory creation', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Mock mkdirSync to throw an error
+      (mockFsMkdirSync as Mock).mockImplementation(() => {
+        throw new Error('Permission denied');
+      });
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      // Should not throw but may handle error internally
+      expect(() => {
+        loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
+      }).not.toThrow();
+    });
+
+    it('should properly validate JSON structure in settings files', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const complexSettingsContent = {
+        theme: 'dark',
+        mcpServers: {
+          'test-server': {
+            command: 'node',
+            args: ['server.js'],
+            env: {
+              NODE_ENV: 'production',
+              PORT: '3000'
+            }
+          }
+        },
+        customThemes: {
+          'my-theme': {
+            colors: {
+              primary: '#007acc',
+              secondary: '#6c757d'
+            }
+          }
+        }
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(complexSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings).toEqual(complexSettingsContent);
+      expect(settings.merged.mcpServers).toHaveProperty('test-server');
+      expect(settings.merged.customThemes).toHaveProperty('my-theme');
+      expect(settings.merged.mcpServers['test-server'].env).toEqual({
+        NODE_ENV: 'production',
+        PORT: '3000'
+      });
+    });
+
+    it('should handle malformed JSON with detailed error information', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const malformedJson = '{ "theme": "dark", "mcpServers": { "test": } }'; // Missing value
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH) {
+            return malformedJson;
+          }
+          return '{}';
+        },
+      );
+
+      // Mock JSON.parse to throw a detailed error only for the malformed JSON
+      const parseError = new SyntaxError('Unexpected token } in JSON at position 42');
+      let parseCallCount = 0;
+      const originalParse = JSON.parse;
+      vi.spyOn(JSON, 'parse').mockImplementation((text: string) => {
+        parseCallCount++;
+        // Only throw on the specific malformed JSON content
+        if (text === malformedJson) {
+          throw parseError;
+        }
+        // Use original parse for other JSON calls
+        return originalParse(text);
+      });
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings).toEqual({});
+      expect(settings.errors).toHaveLength(1);
+      expect(settings.errors[0].path).toBe(USER_SETTINGS_PATH);
+      expect(settings.errors[0].message).toBe(parseError.message);
+
+      vi.restoreAllMocks();
+    });
+
+    it('should validate environment variable resolution with complex scenarios', () => {
+      process.env['MULTI_VALUE'] = 'part1:part2:part3';
+      process.env['JSON_CONFIG'] = '{"key": "value", "number": 42}';
+      process.env['EMPTY_VAR'] = '';
+      
+      const userSettingsContent = {
+        complexPath: '${HOME}/configs/${MULTI_VALUE}/app.json',
+        configData: '${JSON_CONFIG}',
+        fallbackValue: '${EMPTY_VAR:-default_value}',
+        multipleVars: 'user:${USER}@host:${HOST}:${PORT:-8080}'
+      };
+
+      // Set some additional env vars for testing
+      process.env['HOME'] = '/home/testuser';
+      process.env['USER'] = 'testuser';
+      process.env['HOST'] = 'testhost';
+
+      (mockFsExistsSync as Mock).mockImplementation(
+        (p: fs.PathLike) => p === USER_SETTINGS_PATH,
+      );
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      expect(settings.user.settings.complexPath).toBe('/home/testuser/configs/part1:part2:part3/app.json');
+      expect(settings.user.settings.configData).toBe('{"key": "value", "number": 42}');
+      expect(settings.user.settings.fallbackValue).toBe('${EMPTY_VAR:-default_value}'); // Should not resolve bash-style fallbacks
+      expect(settings.user.settings.multipleVars).toBe('user:testuser@host:testhost:${PORT:-8080}');
+
+      // Cleanup
+      delete process.env['MULTI_VALUE'];
+      delete process.env['JSON_CONFIG'];
+      delete process.env['EMPTY_VAR'];
+      delete process.env['HOME'];
+      delete process.env['USER'];
+      delete process.env['HOST'];
+    });
+
+    it('should properly merge arrays without overwriting in includeDirectories', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      const systemDefaultsContent = {
+        includeDirectories: ['/system/defaults/common', '/system/defaults/shared'],
+      };
+      const systemSettingsContent = {
+        includeDirectories: ['/system/admin'],
+      };
+      const userSettingsContent = {
+        includeDirectories: ['/home/user/projects', '/home/user/scripts'],
+      };
+      const workspaceSettingsContent = {
+        includeDirectories: ['/workspace/src', '/workspace/tests'],
+      };
+
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === getSystemDefaultsPath())
+            return JSON.stringify(systemDefaultsContent);
+          if (p === getSystemSettingsPath())
+            return JSON.stringify(systemSettingsContent);
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      // Verify the merge order and uniqueness
+      const expectedDirectories = [
+        '/system/defaults/common',
+        '/system/defaults/shared',
+        '/home/user/projects',
+        '/home/user/scripts',
+        '/workspace/src',
+        '/workspace/tests',
+        '/system/admin'
+      ];
+
+      expect(settings.merged.includeDirectories).toEqual(expectedDirectories);
+      expect(settings.merged.includeDirectories).toHaveLength(expectedDirectories.length);
+    });
+
+    it('should validate setValue operations with complex nested objects', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+      // Test setting complex nested configuration
+      const complexMcpServer = {
+        command: 'node',
+        args: ['--experimental-modules', 'server.mjs'],
+        env: {
+          NODE_ENV: 'development',
+          DEBUG: '*'
+        },
+        cwd: '/project/mcp-server',
+        timeout: 30000
+      };
+
+      loadedSettings.setValue(SettingScope.User, 'mcpServers', {
+        'complex-server': complexMcpServer
+      });
+
+      expect(loadedSettings.user.settings.mcpServers).toEqual({
+        'complex-server': complexMcpServer
+      });
+      expect(loadedSettings.merged.mcpServers).toEqual({
+        'complex-server': complexMcpServer
+      });
+
+      // Verify the JSON was written correctly
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        USER_SETTINGS_PATH,
+        JSON.stringify({ mcpServers: { 'complex-server': complexMcpServer } }, null, 2),
+        'utf-8',
+      );
+    });
+
+    it('should handle concurrent setValue operations correctly', () => {
+      (mockFsExistsSync as Mock).mockReturnValue(false);
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+
+      let writeCallCount = 0;
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {
+        writeCallCount++;
+      });
+
+      // Simulate multiple rapid setValue calls
+      loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
+      loadedSettings.setValue(SettingScope.User, 'sandbox', true);
+      loadedSettings.setValue(SettingScope.User, 'contextFileName', 'CONTEXT.md');
+
+      expect(loadedSettings.user.settings).toEqual({
+        theme: 'dark',
+        sandbox: true,
+        contextFileName: 'CONTEXT.md'
+      });
+      expect(loadedSettings.merged.theme).toBe('dark');
+      expect(loadedSettings.merged.sandbox).toBe(true);
+      expect(loadedSettings.merged.contextFileName).toBe('CONTEXT.md');
+
+      // Should have written 3 times (once per setValue call)
+      expect(writeCallCount).toBe(3);
     });
   });
 });
