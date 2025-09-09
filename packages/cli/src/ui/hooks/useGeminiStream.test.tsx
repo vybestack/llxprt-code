@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,7 +15,7 @@ import {
   MockInstance,
 } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useGeminiStream } from './useGeminiStream.js';
+import { useGeminiStream , mergePartListUnions } from './useGeminiStream.js';
 import { useKeypress } from './useKeypress.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import {
@@ -35,7 +35,6 @@ import {
   ToolErrorType, // <-- Import ToolErrorType
 } from '@google/gemini-cli-core';
 import { Part, PartListUnion } from '@google/genai';
-import { mergePartListUnions } from './useGeminiStream.js';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   HistoryItem,

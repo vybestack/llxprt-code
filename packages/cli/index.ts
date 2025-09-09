@@ -1,5 +1,11 @@
 #!/usr/bin/env -S node --no-deprecation
 
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 // Note: Using --no-deprecation in shebang to suppress deprecation warnings from dependencies
 
 /**

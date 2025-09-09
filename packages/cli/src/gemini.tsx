@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -188,7 +188,7 @@ export async function startInteractiveUI(
   const instance = render(
     <React.StrictMode>
       <ErrorBoundary
-        // eslint-disable-next-line react/jsx-no-bind
+         
         onError={handleError}
       >
         <SettingsContext.Provider value={settings}>

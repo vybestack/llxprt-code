@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -65,7 +65,7 @@ const mockConfig = {
 class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
   constructor(
     private readonly tool: MockTool,
-    public override readonly params: object,
+    override readonly params: object,
   ) {
     super(params);
   }
@@ -97,10 +97,10 @@ class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
 }
 
 class MockTool extends BaseDeclarativeTool<object, ToolResult> {
-  public override name: string;
-  public override displayName: string;
-  public override build: any;
-  
+  override name: string;
+  override displayName: string;
+  override build: any;
+
   constructor(
     name: string,
     displayName: string,

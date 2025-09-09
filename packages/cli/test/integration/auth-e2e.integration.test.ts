@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * @plan:PLAN-20250823-AUTHFIXES.P15
  * @requirement:REQ-004
  * End-to-end integration tests for OAuth authentication

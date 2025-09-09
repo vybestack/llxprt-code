@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,7 +17,7 @@ import {
   FileDiscoveryService,
   DEFAULT_FILE_FILTERING_OPTIONS,
   SHELL_SPECIAL_CHARS,
-} from '@vybestack/llxprt-code-core';
+ DebugLogger } from '@vybestack/llxprt-code-core';
 import { Suggestion } from '../components/SuggestionsDisplay.js';
 import { CommandContext, SlashCommand } from '../commands/types.js';
 import {
@@ -27,7 +27,6 @@ import {
 import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
 import { useCompletion } from './useCompletion.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 export interface UseSlashCompletionReturn {
   suggestions: Suggestion[];

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -935,18 +935,14 @@ You can switch authentication methods by typing /auth or switch to a different m
     }
 
     const lastUserMessage = userMessages.at(-1);
-    let textToSet = lastUserMessage || '';
+    const textToSet = lastUserMessage || '';
 
     // Queue functionality removed - no queued messages to append
 
     if (textToSet) {
       buffer.setText(textToSet);
     }
-  }, [
-    buffer,
-    userMessages,
-    pendingHistoryItems,
-  ]);
+  }, [buffer, userMessages, pendingHistoryItems]);
 
   // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(
