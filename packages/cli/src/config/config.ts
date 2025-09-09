@@ -407,6 +407,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     loadMemoryFromIncludeDirectories:
       result.loadMemoryFromIncludeDirectories as boolean | undefined,
     ideMode: result.ideMode as string | undefined,
+    allowedTools: result.allowedTools as string[] | undefined,
   };
 
   return cliArgs;

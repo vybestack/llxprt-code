@@ -9,7 +9,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import { HistoryItem, MessageType } from '../types.js';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
-import type { Config } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 
 // Mock child components
 vi.mock('./messages/ToolGroupMessage.js', () => ({
