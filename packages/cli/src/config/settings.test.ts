@@ -103,13 +103,15 @@ describe('Settings Loading and Merging', () => {
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
     (fs.readFileSync as Mock).mockReturnValue('{}'); // Return valid empty JSON
-    (mockFsMkdirSync as Mock).mockImplementation((dir: string, options?: unknown) => {
-      // Mock implementation that validates directory creation
-      if (!dir || typeof dir !== 'string') {
-        throw new Error('Invalid directory path');
-      }
-      return dir; // Return the created directory path for verification
-    });
+    (mockFsMkdirSync as Mock).mockImplementation(
+      (dir: string, options?: unknown) => {
+        // Mock implementation that validates directory creation
+        if (!dir || typeof dir !== 'string') {
+          throw new Error('Invalid directory path');
+        }
+        return dir; // Return the created directory path for verification
+      },
+    );
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
   });
 
@@ -1577,7 +1579,7 @@ describe('Settings Loading and Merging', () => {
 
       // Test that mkdirSync is called with proper parameters
       loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
-      
+
       expect(mockFsMkdirSync).toHaveBeenCalled();
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         USER_SETTINGS_PATH,
@@ -1613,18 +1615,18 @@ describe('Settings Loading and Merging', () => {
             args: ['server.js'],
             env: {
               NODE_ENV: 'production',
-              PORT: '3000'
-            }
-          }
+              PORT: '3000',
+            },
+          },
         },
         customThemes: {
           'my-theme': {
             colors: {
               primary: '#007acc',
-              secondary: '#6c757d'
-            }
-          }
-        }
+              secondary: '#6c757d',
+            },
+          },
+        },
       };
 
       (fs.readFileSync as Mock).mockImplementation(
@@ -1642,7 +1644,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.customThemes).toHaveProperty('my-theme');
       expect(settings.merged.mcpServers['test-server'].env).toEqual({
         NODE_ENV: 'production',
-        PORT: '3000'
+        PORT: '3000',
       });
     });
 
@@ -1660,7 +1662,9 @@ describe('Settings Loading and Merging', () => {
       );
 
       // Mock JSON.parse to throw a detailed error only for the malformed JSON
-      const parseError = new SyntaxError('Unexpected token } in JSON at position 42');
+      const parseError = new SyntaxError(
+        'Unexpected token } in JSON at position 42',
+      );
       let parseCallCount = 0;
       const originalParse = JSON.parse;
       vi.spyOn(JSON, 'parse').mockImplementation((text: string) => {
@@ -1687,12 +1691,12 @@ describe('Settings Loading and Merging', () => {
       process.env['MULTI_VALUE'] = 'part1:part2:part3';
       process.env['JSON_CONFIG'] = '{"key": "value", "number": 42}';
       process.env['EMPTY_VAR'] = '';
-      
+
       const userSettingsContent = {
         complexPath: '${HOME}/configs/${MULTI_VALUE}/app.json',
         configData: '${JSON_CONFIG}',
         fallbackValue: '${EMPTY_VAR:-default_value}',
-        multipleVars: 'user:${USER}@host:${HOST}:${PORT:-8080}'
+        multipleVars: 'user:${USER}@host:${HOST}:${PORT:-8080}',
       };
 
       // Set some additional env vars for testing
@@ -1713,10 +1717,18 @@ describe('Settings Loading and Merging', () => {
 
       const settings = loadSettings(MOCK_WORKSPACE_DIR);
 
-      expect(settings.user.settings.complexPath).toBe('/home/testuser/configs/part1:part2:part3/app.json');
-      expect(settings.user.settings.configData).toBe('{"key": "value", "number": 42}');
-      expect(settings.user.settings.fallbackValue).toBe('${EMPTY_VAR:-default_value}'); // Should not resolve bash-style fallbacks
-      expect(settings.user.settings.multipleVars).toBe('user:testuser@host:testhost:${PORT:-8080}');
+      expect(settings.user.settings.complexPath).toBe(
+        '/home/testuser/configs/part1:part2:part3/app.json',
+      );
+      expect(settings.user.settings.configData).toBe(
+        '{"key": "value", "number": 42}',
+      );
+      expect(settings.user.settings.fallbackValue).toBe(
+        '${EMPTY_VAR:-default_value}',
+      ); // Should not resolve bash-style fallbacks
+      expect(settings.user.settings.multipleVars).toBe(
+        'user:testuser@host:testhost:${PORT:-8080}',
+      );
 
       // Cleanup
       delete process.env['MULTI_VALUE'];
@@ -1730,7 +1742,10 @@ describe('Settings Loading and Merging', () => {
     it('should properly merge arrays without overwriting in includeDirectories', () => {
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const systemDefaultsContent = {
-        includeDirectories: ['/system/defaults/common', '/system/defaults/shared'],
+        includeDirectories: [
+          '/system/defaults/common',
+          '/system/defaults/shared',
+        ],
       };
       const systemSettingsContent = {
         includeDirectories: ['/system/admin'],
@@ -1766,11 +1781,13 @@ describe('Settings Loading and Merging', () => {
         '/home/user/scripts',
         '/workspace/src',
         '/workspace/tests',
-        '/system/admin'
+        '/system/admin',
       ];
 
       expect(settings.merged.includeDirectories).toEqual(expectedDirectories);
-      expect(settings.merged.includeDirectories).toHaveLength(expectedDirectories.length);
+      expect(settings.merged.includeDirectories).toHaveLength(
+        expectedDirectories.length,
+      );
     });
 
     it('should validate setValue operations with complex nested objects', () => {
@@ -1785,27 +1802,31 @@ describe('Settings Loading and Merging', () => {
         args: ['--experimental-modules', 'server.mjs'],
         env: {
           NODE_ENV: 'development',
-          DEBUG: '*'
+          DEBUG: '*',
         },
         cwd: '/project/mcp-server',
-        timeout: 30000
+        timeout: 30000,
       };
 
       loadedSettings.setValue(SettingScope.User, 'mcpServers', {
-        'complex-server': complexMcpServer
+        'complex-server': complexMcpServer,
       });
 
       expect(loadedSettings.user.settings.mcpServers).toEqual({
-        'complex-server': complexMcpServer
+        'complex-server': complexMcpServer,
       });
       expect(loadedSettings.merged.mcpServers).toEqual({
-        'complex-server': complexMcpServer
+        'complex-server': complexMcpServer,
       });
 
       // Verify the JSON was written correctly
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         USER_SETTINGS_PATH,
-        JSON.stringify({ mcpServers: { 'complex-server': complexMcpServer } }, null, 2),
+        JSON.stringify(
+          { mcpServers: { 'complex-server': complexMcpServer } },
+          null,
+          2,
+        ),
         'utf-8',
       );
     });
@@ -1822,12 +1843,16 @@ describe('Settings Loading and Merging', () => {
       // Simulate multiple rapid setValue calls
       loadedSettings.setValue(SettingScope.User, 'theme', 'dark');
       loadedSettings.setValue(SettingScope.User, 'sandbox', true);
-      loadedSettings.setValue(SettingScope.User, 'contextFileName', 'CONTEXT.md');
+      loadedSettings.setValue(
+        SettingScope.User,
+        'contextFileName',
+        'CONTEXT.md',
+      );
 
       expect(loadedSettings.user.settings).toEqual({
         theme: 'dark',
         sandbox: true,
-        contextFileName: 'CONTEXT.md'
+        contextFileName: 'CONTEXT.md',
       });
       expect(loadedSettings.merged.theme).toBe('dark');
       expect(loadedSettings.merged.sandbox).toBe(true);

@@ -34,7 +34,9 @@ export class FileTokenStore extends BaseTokenStore {
     try {
       await fs.mkdir(configDir, { recursive: true });
     } catch (error) {
-      console.error(`Failed to create config directory ${configDir}: ${getErrorMessage(error)}`);
+      console.error(
+        `Failed to create config directory ${configDir}: ${getErrorMessage(error)}`,
+      );
       throw error;
     }
   }
@@ -61,13 +63,17 @@ export class FileTokenStore extends BaseTokenStore {
         if (this.isValidCredentials(credential)) {
           tokenMap.set(credential.serverName, credential);
         } else {
-          console.warn(`Skipping invalid credential entry for server: ${(credential as any)?.serverName || 'unknown'}`);
+          console.warn(
+            `Skipping invalid credential entry for server: ${(credential as any)?.serverName || 'unknown'}`,
+          );
         }
       }
     } catch (error) {
       // File doesn't exist or is invalid, return empty map
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(`Failed to load MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`);
+        console.error(
+          `Failed to load MCP OAuth tokens from ${this.tokenFilePath}: ${getErrorMessage(error)}`,
+        );
       }
     }
 
@@ -114,7 +120,9 @@ export class FileTokenStore extends BaseTokenStore {
 
       // Token saved successfully
     } catch (error) {
-      console.error(`Failed to save MCP OAuth token for ${serverName}: ${getErrorMessage(error)}`);
+      console.error(
+        `Failed to save MCP OAuth token for ${serverName}: ${getErrorMessage(error)}`,
+      );
       throw error;
     }
   }
@@ -163,7 +171,9 @@ export class FileTokenStore extends BaseTokenStore {
           // Token removed successfully
         }
       } catch (error) {
-        console.error(`Failed to remove MCP OAuth token for ${serverName}: ${getErrorMessage(error)}`);
+        console.error(
+          `Failed to remove MCP OAuth token for ${serverName}: ${getErrorMessage(error)}`,
+        );
         // Don't throw - removal from memory map succeeded
       }
     } else {
@@ -182,7 +192,9 @@ export class FileTokenStore extends BaseTokenStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         // No token file to clear
       } else {
-        console.error(`Failed to clear MCP OAuth tokens: ${getErrorMessage(error)}`);
+        console.error(
+          `Failed to clear MCP OAuth tokens: ${getErrorMessage(error)}`,
+        );
       }
     }
   }

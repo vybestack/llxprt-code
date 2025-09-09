@@ -253,7 +253,10 @@ export const useSlashCommandProcessor = (
         loaders,
         controller.signal,
       );
-      setCommands(commandService.getCommands());
+      // Only update commands if not aborted
+      if (!controller.signal.aborted) {
+        setCommands(commandService.getCommands());
+      }
     };
 
     load();

@@ -8,35 +8,64 @@ import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   const commonEmojis = [
-    '✅', '⚠️', '🎉', '🔥', '💯', '🚫', '🎯', '🤔', '💭', '🚀', 
-    '⏳', '📝', '🔧', '🐛', '💾', '📊', '📈', '📉', '🔍', '🎨',
-    '👍', '👎', '❤️', '💡', '🌟', '📱', '💻', '🖥️', '⌨️'
+    '✅',
+    '⚠️',
+    '🎉',
+    '🔥',
+    '💯',
+    '🚫',
+    '🎯',
+    '🤔',
+    '💭',
+    '🚀',
+    '⏳',
+    '📝',
+    '🔧',
+    '🐛',
+    '💾',
+    '📊',
+    '📈',
+    '📉',
+    '🔍',
+    '🎨',
+    '👍',
+    '👎',
+    '❤️',
+    '💡',
+    '🌟',
+    '📱',
+    '💻',
+    '🖥️',
+    '⌨️',
   ];
 
   const emojiModes = ['auto', 'warn', 'error'] as const;
 
   describe('Consistent emoji detection across all modes', () => {
-    it.each(commonEmojis)('should consistently detect emoji "%s" in all filtering modes', (emoji) => {
-      emojiModes.forEach(mode => {
-        const filter = new EmojiFilter({ mode });
-        const input = `Test message with ${emoji} emoji`;
-        const result = filter.filterText(input);
+    it.each(commonEmojis)(
+      'should consistently detect emoji "%s" in all filtering modes',
+      (emoji) => {
+        emojiModes.forEach((mode) => {
+          const filter = new EmojiFilter({ mode });
+          const input = `Test message with ${emoji} emoji`;
+          const result = filter.filterText(input);
 
-        if (mode === 'allowed') {
-          expect(result.emojiDetected).toBe(false);
-          expect(result.filtered).toBe(input);
-        } else {
-          expect(result.emojiDetected).toBe(true);
-          if (mode === 'error') {
-            expect(result.blocked).toBe(true);
-            expect(result.filtered).toBeNull();
+          if (mode === 'allowed') {
+            expect(result.emojiDetected).toBe(false);
+            expect(result.filtered).toBe(input);
           } else {
-            expect(result.blocked).toBe(false);
-            expect(result.filtered).toBeDefined();
+            expect(result.emojiDetected).toBe(true);
+            if (mode === 'error') {
+              expect(result.blocked).toBe(true);
+              expect(result.filtered).toBeNull();
+            } else {
+              expect(result.blocked).toBe(false);
+              expect(result.filtered).toBeDefined();
+            }
           }
-        }
-      });
-    });
+        });
+      },
+    );
   });
 
   describe('Consistent emoji removal in output content', () => {
@@ -45,26 +74,33 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         name: 'CLI command responses',
         input: '✅ Command executed successfully! 🎉 All tests passed.',
         expectedAuto: '[OK] Command executed successfully!  All tests passed.',
-        expectedWarn: '[OK] Command executed successfully!  All tests passed.'
+        expectedWarn: '[OK] Command executed successfully!  All tests passed.',
       },
       {
         name: 'Error messages',
         input: '⚠️ Warning: Configuration issue detected! 🚫 Build failed.',
-        expectedAuto: 'WARNING: Warning: Configuration issue detected!  Build failed.',
-        expectedWarn: 'WARNING: Warning: Configuration issue detected!  Build failed.'
+        expectedAuto:
+          'WARNING: Warning: Configuration issue detected!  Build failed.',
+        expectedWarn:
+          'WARNING: Warning: Configuration issue detected!  Build failed.',
       },
       {
         name: 'Code file content',
-        input: '// ✅ TODO: Refactor this function 🔧\nfunction test() { /* 🎯 Focus here */ }',
-        expectedAuto: '// [OK] TODO: Refactor this function \nfunction test() { /*  Focus here */ }',
-        expectedWarn: '// [OK] TODO: Refactor this function \nfunction test() { /*  Focus here */ }'
+        input:
+          '// ✅ TODO: Refactor this function 🔧\nfunction test() { /* 🎯 Focus here */ }',
+        expectedAuto:
+          '// [OK] TODO: Refactor this function \nfunction test() { /*  Focus here */ }',
+        expectedWarn:
+          '// [OK] TODO: Refactor this function \nfunction test() { /*  Focus here */ }',
       },
       {
         name: 'Log messages',
         input: 'INFO: Database connected ✅\nERROR: Connection timeout ⚠️',
-        expectedAuto: 'INFO: Database connected [OK]\nERROR: Connection timeout WARNING:',
-        expectedWarn: 'INFO: Database connected [OK]\nERROR: Connection timeout WARNING:'
-      }
+        expectedAuto:
+          'INFO: Database connected [OK]\nERROR: Connection timeout WARNING:',
+        expectedWarn:
+          'INFO: Database connected [OK]\nERROR: Connection timeout WARNING:',
+      },
     ];
 
     testCases.forEach(({ name, input, expectedAuto, expectedWarn }) => {
@@ -85,7 +121,9 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         expect(result.filtered).toBe(expectedWarn);
         expect(result.emojiDetected).toBe(true);
         expect(result.blocked).toBe(false);
-        expect(result.systemFeedback).toBe('Emojis were detected and removed. Please avoid using emojis.');
+        expect(result.systemFeedback).toBe(
+          'Emojis were detected and removed. Please avoid using emojis.',
+        );
       });
 
       it(`should consistently block ${name} in error mode`, () => {
@@ -103,7 +141,7 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   describe('Tool parameter filtering consistency', () => {
     it('should consistently filter emojis from all tool parameters', () => {
       const filter = new EmojiFilter({ mode: 'warn' });
-      
+
       const testArgs = {
         filePath: '/src/test.js',
         content: 'console.log("✅ Success!"); // 🎉 Celebration',
@@ -112,10 +150,10 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         config: {
           notifications: {
             success: '🎯 Target achieved',
-            warning: '⚠️ Attention needed'
+            warning: '⚠️ Attention needed',
           },
-          metadata: ['priority 🔥', 'reviewed ✅']
-        }
+          metadata: ['priority 🔥', 'reviewed ✅'],
+        },
       };
 
       const result = filter.filterToolArgs(testArgs);
@@ -130,20 +168,22 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         config: {
           notifications: {
             success: ' Target achieved',
-            warning: 'WARNING: Attention needed'
+            warning: 'WARNING: Attention needed',
           },
-          metadata: ['priority ', 'reviewed [OK]']
-        }
+          metadata: ['priority ', 'reviewed [OK]'],
+        },
       });
-      expect(result.systemFeedback).toBe('Emojis were detected and removed from your tool call. Please avoid using emojis in tool parameters.');
+      expect(result.systemFeedback).toBe(
+        'Emojis were detected and removed from your tool call. Please avoid using emojis in tool parameters.',
+      );
     });
 
     it('should block tool execution in error mode when emojis are present', () => {
       const filter = new EmojiFilter({ mode: 'error' });
-      
+
       const testArgs = {
         content: 'Simple task ✅',
-        path: '/test'
+        path: '/test',
       };
 
       const result = filter.filterToolArgs(testArgs);
@@ -151,18 +191,44 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
       expect(result.emojiDetected).toBe(true);
       expect(result.blocked).toBe(true);
       expect(result.filtered).toBeNull();
-      expect(result.error).toBe('Cannot execute tool with emojis in parameters');
+      expect(result.error).toBe(
+        'Cannot execute tool with emojis in parameters',
+      );
     });
   });
 
   describe('File content filtering consistency', () => {
     const fileTypes = [
-      { name: 'JavaScript', content: '// ✅ Working\nconst success = "🎉";', tool: 'WriteFileTool' },
-      { name: 'TypeScript', content: 'interface Config {\n  status: "✅" | "⚠️";\n}', tool: 'EditTool' },
-      { name: 'Python', content: '# 🐍 Python script\nprint("Done ✅")', tool: 'WriteFileTool' },
-      { name: 'Markdown', content: '# Project Status ✅\n\n- Feature complete 🎉\n- Testing ⚠️', tool: 'EditTool' },
-      { name: 'JSON', content: '{\n  "status": "✅ complete",\n  "priority": "🔥 high"\n}', tool: 'WriteFileTool' },
-      { name: 'CSS', content: '/* 🎨 Styling */\n.success::after { content: "✅"; }', tool: 'EditTool' }
+      {
+        name: 'JavaScript',
+        content: '// ✅ Working\nconst success = "🎉";',
+        tool: 'WriteFileTool',
+      },
+      {
+        name: 'TypeScript',
+        content: 'interface Config {\n  status: "✅" | "⚠️";\n}',
+        tool: 'EditTool',
+      },
+      {
+        name: 'Python',
+        content: '# 🐍 Python script\nprint("Done ✅")',
+        tool: 'WriteFileTool',
+      },
+      {
+        name: 'Markdown',
+        content: '# Project Status ✅\n\n- Feature complete 🎉\n- Testing ⚠️',
+        tool: 'EditTool',
+      },
+      {
+        name: 'JSON',
+        content: '{\n  "status": "✅ complete",\n  "priority": "🔥 high"\n}',
+        tool: 'WriteFileTool',
+      },
+      {
+        name: 'CSS',
+        content: '/* 🎨 Styling */\n.success::after { content: "✅"; }',
+        tool: 'EditTool',
+      },
     ];
 
     fileTypes.forEach(({ name, content, tool }) => {
@@ -200,13 +266,13 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
         'proceeding to next ',
         '⚠️ Warning detected, ',
         'continuing... 🎉 ',
-        'All done!'
+        'All done!',
       ];
 
       let fullResult = '';
       let detectedEmojis = false;
 
-      chunks.forEach(chunk => {
+      chunks.forEach((chunk) => {
         const result = filter.filterStreamChunk(chunk);
         if (result.filtered) {
           fullResult += result.filtered;
@@ -237,12 +303,12 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
       'Code: function test() { return "success"; }',
       'Log: INFO - Operation completed successfully',
       'Documentation: This function handles user authentication',
-      'Error: Connection timeout after 30 seconds'
+      'Error: Connection timeout after 30 seconds',
     ];
 
-    cleanTexts.forEach(text => {
+    cleanTexts.forEach((text) => {
       it(`should pass through emoji-free text unchanged: "${text}"`, () => {
-        emojiModes.forEach(mode => {
+        emojiModes.forEach((mode) => {
           const filter = new EmojiFilter({ mode });
           const result = filter.filterText(text);
 
@@ -259,25 +325,25 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   describe('Configuration consistency validation', () => {
     it('should create consistent filter instances for each mode', () => {
       const modes = ['allowed', 'auto', 'warn', 'error'] as const;
-      
-      modes.forEach(mode => {
+
+      modes.forEach((mode) => {
         const config: FilterConfiguration = { mode };
         const filter = new EmojiFilter(config);
-        
+
         expect(filter).toBeDefined();
-        
+
         // Test basic functionality works consistently
         const testInput = 'Test with ✅ emoji';
         const result = filter.filterText(testInput);
-        
+
         expect(result).toBeDefined();
         expect(typeof result.emojiDetected).toBe('boolean');
         expect(typeof result.blocked).toBe('boolean');
-        
+
         if (result.filtered !== null) {
           expect(typeof result.filtered).toBe('string');
         }
-        
+
         // Mode-specific assertions
         switch (mode) {
           case 'allowed':
@@ -304,7 +370,7 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
   describe('Performance and memory consistency', () => {
     it('should handle large amounts of emoji-containing content consistently', () => {
       const filter = new EmojiFilter({ mode: 'warn' });
-      
+
       // Create large content with mixed emojis and text
       const chunks = [];
       for (let i = 0; i < 100; i++) {
@@ -327,14 +393,14 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
 
     it('should handle buffer flushing consistently', () => {
       const filter = new EmojiFilter({ mode: 'warn' });
-      
+
       // Add content to buffer without triggering immediate processing
       filter.filterStreamChunk('Partial content ✅');
-      
+
       // Flush should return consistent results
       const flushed = filter.flushBuffer();
       expect(flushed).toBe('Partial content [OK]');
-      
+
       // Second flush should be empty
       const secondFlush = filter.flushBuffer();
       expect(secondFlush).toBe('');

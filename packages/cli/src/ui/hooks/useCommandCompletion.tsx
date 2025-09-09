@@ -163,13 +163,13 @@ export function useCommandCompletion(
     setIsLoadingSuggestions,
   });
 
-  const slashCompletionRange = useSlashCompletion(
+  const slashCompletionResults = useSlashCompletion(
     buffer,
     dirs,
     cwd,
     slashCommands,
     commandContext,
-    false, // reverseSearchActive
+    reverseSearchActive,
     config,
   );
 
@@ -249,9 +249,28 @@ export function useCommandCompletion(
       completionMode,
       completionStart,
       completionEnd,
-      slashCompletionRange,
+      slashCompletionResults,
     ],
   );
+
+  // Use the appropriate completion results based on mode
+  if (completionMode === CompletionMode.SLASH) {
+    return {
+      suggestions: slashCompletionResults.suggestions,
+      activeSuggestionIndex: slashCompletionResults.activeSuggestionIndex,
+      visibleStartIndex: slashCompletionResults.visibleStartIndex,
+      showSuggestions: slashCompletionResults.showSuggestions,
+      isLoadingSuggestions: slashCompletionResults.isLoadingSuggestions,
+      isPerfectMatch: slashCompletionResults.isPerfectMatch,
+      setActiveSuggestionIndex: slashCompletionResults.setActiveSuggestionIndex,
+      setShowSuggestions: slashCompletionResults.setShowSuggestions,
+      resetCompletionState: slashCompletionResults.resetCompletionState,
+      navigateUp: slashCompletionResults.navigateUp,
+      navigateDown: slashCompletionResults.navigateDown,
+      handleAutocomplete: slashCompletionResults.handleAutocomplete,
+      promptCompletion,
+    };
+  }
 
   return {
     suggestions,
