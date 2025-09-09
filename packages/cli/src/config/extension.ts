@@ -8,12 +8,14 @@ import {
   MCPServerConfig,
   GeminiCLIExtension,
   Storage,
+  getErrorMessage,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { simpleGit } from 'simple-git';
 import { recursivelyHydrateStrings } from './extensions/variables.js';
+import { SettingScope, loadSettings } from './settings.js';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.gemini/extensions';
 
@@ -38,6 +40,11 @@ export interface ExtensionConfig {
 export interface ExtensionInstallMetadata {
   source: string;
   type: 'git' | 'local';
+}
+
+export interface ExtensionUpdateInfo {
+  originalVersion: string;
+  updatedVersion: string;
 }
 
 export class ExtensionStorage {
@@ -433,8 +440,8 @@ export async function updateExtension(
   const tempDir = await ExtensionStorage.createTmpDir();
   try {
     await copyExtension(extension.path, tempDir);
-    await uninstallExtension(extensionName, cwd);
-    await installExtension(extension.installMetadata, cwd);
+    await uninstallExtension(extensionName);
+    await installExtension(extension.installMetadata);
 
     const updatedExtension = loadExtension(extension.path);
     if (!updatedExtension) {

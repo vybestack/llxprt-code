@@ -138,7 +138,6 @@ import { ToolsDialog } from './components/ToolsDialog.js';
 // Todo UI imports
 import { TodoPanel } from './components/TodoPanel.js';
 import { useTodoContext } from './contexts/TodoContext.js';
-import { isNarrowWidth } from './utils/isNarrowWidth.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { WorkspaceMigrationDialog } from './components/WorkspaceMigrationDialog.js';
 
@@ -1553,38 +1552,6 @@ You can switch authentication methods by typing /auth or switch to a different m
                 }
                 elapsedTime={elapsedTime}
               />
-
-              {/* Display queued messages below loading indicator */}
-              {messageQueue.length > 0 && (
-                <Box flexDirection="column" marginTop={1}>
-                  {messageQueue
-                    .slice(0, MAX_DISPLAYED_QUEUED_MESSAGES)
-                    .map((message, index) => {
-                      // Ensure multi-line messages are collapsed for the preview.
-                      // Replace all whitespace (including newlines) with a single space.
-                      const preview = message.replace(/\s+/g, ' ');
-
-                      return (
-                        // Ensure the Box takes full width so truncation calculates correctly
-                        <Box key={index} paddingLeft={2} width="100%">
-                          {/* Use wrap="truncate" to ensure it fits the terminal width and doesn't wrap */}
-                          <Text dimColor wrap="truncate">
-                            {preview}
-                          </Text>
-                        </Box>
-                      );
-                    })}
-                  {messageQueue.length > MAX_DISPLAYED_QUEUED_MESSAGES && (
-                    <Box paddingLeft={2}>
-                      <Text dimColor>
-                        ... (+
-                        {messageQueue.length - MAX_DISPLAYED_QUEUED_MESSAGES}
-                        more)
-                      </Text>
-                    </Box>
-                  )}
-                </Box>
-              )}
               <Box
                 marginTop={1}
                 display="flex"

@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { type CommandModule } from 'yargs';
-import { FatalConfigError, getErrorMessage } from '@google/gemini-cli-core';
+import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
 import { enableExtension } from '../../config/extension.js';
 import { SettingScope } from '../../config/settings.js';
 
@@ -35,7 +35,7 @@ export async function handleEnable(args: EnableArgs) {
 }
 
 export const enableCommand: CommandModule = {
-  command: 'disable [--scope] <name>',
+  command: 'enable [--scope] <name>',
   describe: 'Enables an extension.',
   builder: (yargs) =>
     yargs
