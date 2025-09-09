@@ -548,7 +548,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
       this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
-    const streamingEnabled = streamingSetting !== 'disabled';
+    let streamingEnabled = streamingSetting !== 'disabled';
+
+    // WORKAROUND: Disable streaming for Cerebras/Qwen when tools are present
+    // Their API has a bug where mixing text + tool calls in streaming fails
+    if (
+      streamingEnabled &&
+      formattedTools &&
+      formattedTools.length > 0 &&
+      (model.toLowerCase().includes('qwen') ||
+        this.getBaseURL()?.includes('cerebras'))
+    ) {
+      this.logger.warn(
+        () =>
+          `[OpenAIProvider] Disabling streaming for ${model} with tools due to known API bug with mixed text/tool responses`,
+      );
+      streamingEnabled = false;
+    }
 
     // Get the system prompt
     const userMemory = this.globalConfig?.getUserMemory
@@ -567,12 +583,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     ];
 
     // Build request - only include tools if they exist and are not empty
+    // IMPORTANT: Create a deep copy of tools to prevent mutation issues
     const requestBody: OpenAI.Chat.ChatCompletionCreateParams = {
       model,
       messages: messagesWithSystem,
       ...(formattedTools && formattedTools.length > 0
         ? {
-            tools: formattedTools,
+            // Deep clone the tools array to prevent any mutation issues
+            tools: JSON.parse(JSON.stringify(formattedTools)),
             // Add tool_choice for Qwen/Cerebras to ensure proper tool calling
             tool_choice: 'auto',
           }
@@ -613,6 +631,20 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const initialDelayMs =
       (ephemeralSettings['retrywait'] as number | undefined) ?? 4000; // Default for OpenAI
 
+    // Log the exact tools being sent for debugging
+    if (this.logger.enabled && 'tools' in requestBody) {
+      this.logger.debug(
+        () => `[OpenAIProvider] Exact tools being sent to API:`,
+        {
+          toolCount: requestBody.tools?.length,
+          toolNames: requestBody.tools?.map((t) =>
+            'function' in t ? t.function?.name : undefined,
+          ),
+          firstTool: requestBody.tools?.[0],
+        },
+      );
+    }
+
     // Wrap the API call with retry logic using centralized retry utility
     let response;
     try {
@@ -644,8 +676,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
             streamingEnabled,
           },
         );
-        // Re-throw as is, with additional log context
-        throw error;
+        // Re-throw but with better context
+        const enhancedError = new Error(
+          `Cerebras/Qwen API bug: Tool not found in list. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+        );
+        (enhancedError as Error & { originalError?: unknown }).originalError =
+          error;
+        throw enhancedError;
       }
       // Re-throw other errors as-is
       throw error;
@@ -822,8 +859,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
                 toolNames: formattedTools?.map((t) => t.function.name),
               },
             );
-            // Re-throw as is, with additional log context
-            throw error;
+            // Re-throw but with better context
+            const enhancedError = new Error(
+              `Cerebras/Qwen API bug: Tool not found in list during streaming. We sent ${formattedTools?.length || 0} tools. Known API issue.`,
+            );
+            (
+              enhancedError as Error & { originalError?: unknown }
+            ).originalError = error;
+            throw enhancedError;
           }
           this.logger.error('Error processing streaming response:', error);
           throw error;

@@ -280,7 +280,7 @@ export class ToolRegistry {
    * Restarts all MCP servers and re-discovers tools.
    */
   async restartMcpServers(): Promise<void> {
-    await this.discoverMcpTools();
+    await this.mcpClientManager.discoverAllMcpTools();
   }
 
   /**
