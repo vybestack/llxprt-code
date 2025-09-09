@@ -166,6 +166,66 @@ export class ToolFormatter implements IToolFormatter {
   }
 
   /**
+   * Convert Gemini format tools to the specified provider format
+   * @param geminiTools Tools in Gemini format with functionDeclarations
+   * @param format The target format to convert to
+   * @returns Tools in the specified provider format
+   */
+  convertGeminiToFormat(
+    geminiTools?: Array<{
+      functionDeclarations: Array<{
+        name: string;
+        description?: string;
+        parametersJsonSchema?: unknown;
+      }>;
+    }>,
+    format: ToolFormat = 'openai',
+  ): unknown {
+    if (!geminiTools) {
+      this.logger.debug(
+        () => `convertGeminiToFormat called with undefined tools`,
+      );
+      return undefined;
+    }
+
+    this.logger.debug(
+      () => `Converting ${geminiTools.length} tool groups to ${format} format`,
+    );
+
+    // For OpenAI-compatible formats (openai, qwen, deepseek), use the OpenAI conversion
+    if (format === 'openai' || format === 'qwen' || format === 'deepseek') {
+      return this.convertGeminiToOpenAI(geminiTools);
+    }
+
+    // For Anthropic format
+    if (format === 'anthropic') {
+      return this.convertGeminiToAnthropic(geminiTools);
+    }
+
+    // For other formats, convert to ITool first then use toProviderFormat
+    const itools = geminiTools.flatMap((toolGroup) => {
+      if (
+        !toolGroup?.functionDeclarations ||
+        !Array.isArray(toolGroup.functionDeclarations)
+      ) {
+        return [];
+      }
+
+      return toolGroup.functionDeclarations.map((decl) => ({
+        type: 'function' as const,
+        function: {
+          name: decl.name,
+          description: decl.description || '',
+          parameters: decl.parametersJsonSchema || {},
+        },
+      }));
+    });
+
+    // Convert using the generic toProviderFormat method
+    return this.toProviderFormat(itools as ITool[], format);
+  }
+
+  /**
    * Converts Gemini schema format (with uppercase Type enums) to standard JSON Schema format
    */
   convertGeminiSchemaToStandard(schema: unknown): unknown {

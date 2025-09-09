@@ -28,6 +28,7 @@ import { IProviderConfig } from '../types/IProviderConfig.js';
 import { ToolFormat } from '../../tools/IToolFormatter.js';
 import { BaseProvider } from '../BaseProvider.js';
 import { DebugLogger } from '../../debug/index.js';
+import { getSettingsService } from '../../settings/settingsServiceInstance.js';
 import { OAuthManager } from '../../auth/precedence.js';
 import { ToolFormatter } from '../../tools/ToolFormatter.js';
 import {
@@ -511,8 +512,34 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Convert IContent to OpenAI messages format
     const messages = this.convertToOpenAIMessages(contents);
 
-    // Convert Gemini format tools directly to OpenAI format using the new method
-    let formattedTools = this.toolFormatter.convertGeminiToOpenAI(tools);
+    // Detect the tool format to use (once at the start of the method)
+    const detectedFormat = this.detectToolFormat();
+
+    // Log the detected format for debugging
+    this.logger.debug(
+      () =>
+        `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
+      {
+        model,
+        detectedFormat,
+        provider: this.name,
+      },
+    );
+
+    // Convert Gemini format tools to the detected format
+    let formattedTools = this.toolFormatter.convertGeminiToFormat(
+      tools,
+      detectedFormat,
+    ) as
+      | Array<{
+          type: 'function';
+          function: {
+            name: string;
+            description: string;
+            parameters: Record<string, unknown>;
+          };
+        }>
+      | undefined;
 
     // CRITICAL FIX: Ensure we never pass an empty tools array
     // The OpenAI API errors when tools=[] but a tool call is attempted
@@ -534,6 +561,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Debug log the conversion result - enhanced logging for intermittent issues
     if (this.logger.enabled && formattedTools) {
       this.logger.debug(() => `[OpenAIProvider] Tool conversion summary:`, {
+        detectedFormat,
         inputHadTools: !!tools,
         inputToolsLength: tools?.length,
         inputFirstGroup: tools?.[0],
@@ -703,7 +731,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Buffer for accumulating text chunks for providers that need it
       let textBuffer = '';
-      const detectedFormat = this.detectToolFormat();
+      // Use the same detected format from earlier for consistency
       // Buffer text for Qwen format providers to avoid stanza formatting
       const shouldBufferText = detectedFormat === 'qwen';
 
@@ -890,7 +918,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Emit accumulated tool calls as IContent if any
       if (accumulatedToolCalls.length > 0) {
         const blocks: ToolCallBlock[] = [];
-        const detectedFormat = this.detectToolFormat();
+        // Use the same detected format from earlier for consistency
 
         for (const tc of accumulatedToolCalls) {
           if (!tc) continue;
@@ -926,6 +954,33 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         throw new Error('No choices in completion response');
       }
 
+      // Log finish reason for debugging Qwen issues
+      if (choice.finish_reason) {
+        this.logger.debug(
+          () =>
+            `[Non-streaming] Response finish_reason: ${choice.finish_reason}`,
+          {
+            model,
+            finishReason: choice.finish_reason,
+            hasContent: !!choice.message?.content,
+            hasToolCalls: !!(
+              choice.message?.tool_calls && choice.message.tool_calls.length > 0
+            ),
+            contentLength: choice.message?.content?.length || 0,
+            toolCallCount: choice.message?.tool_calls?.length || 0,
+            detectedFormat,
+          },
+        );
+
+        // Warn if the response was truncated
+        if (choice.finish_reason === 'length') {
+          this.logger.warn(
+            () =>
+              `Response truncated due to max_tokens limit for model ${model}. Consider increasing max_tokens.`,
+          );
+        }
+      }
+
       const blocks: Array<TextBlock | ToolCallBlock> = [];
 
       // Handle text content
@@ -938,7 +993,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Handle tool calls
       if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
-        const detectedFormat = this.detectToolFormat();
+        // Use the same detected format from earlier for consistency
 
         for (const toolCall of choice.message.tool_calls) {
           if (toolCall.type === 'function') {
@@ -970,15 +1025,62 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Get the tool format for this provider
+   * @returns The tool format to use
+   */
+  override getToolFormat(): string {
+    const format = this.detectToolFormat();
+    this.logger.debug(() => `getToolFormat() called, returning: ${format}`, {
+      provider: this.name,
+      model: this.getModel(),
+      format,
+    });
+    return format;
+  }
+
+  /**
+   * Set tool format override for this provider
+   * @param format The format to use, or null to clear override
+   */
+  override setToolFormatOverride(format: string | null): void {
+    const settingsService = getSettingsService();
+    if (format === null) {
+      settingsService.setProviderSetting(this.name, 'toolFormat', 'auto');
+      this.logger.debug(() => `Tool format override cleared for ${this.name}`);
+    } else {
+      settingsService.setProviderSetting(this.name, 'toolFormat', format);
+      this.logger.debug(
+        () => `Tool format override set to '${format}' for ${this.name}`,
+      );
+    }
+
+    // Clear cached client to ensure new format takes effect
+    this._cachedClient = undefined;
+    this._cachedClientKey = undefined;
+  }
+
+  /**
    * Detects the tool call format based on the model being used
    * @returns The detected tool format ('openai' or 'qwen')
    */
   private detectToolFormat(): ToolFormat {
     try {
-      // Try to get format from SettingsService if available
-      const settings = this.providerConfig?.getEphemeralSettings?.();
-      if (settings && settings['tool-format']) {
-        return settings['tool-format'] as ToolFormat;
+      // Check for toolFormat override in provider settings
+      const settingsService = getSettingsService();
+      const currentSettings = settingsService['settings'];
+      const providerSettings = currentSettings?.providers?.[this.name];
+      const toolFormatOverride = providerSettings?.toolFormat as
+        | ToolFormat
+        | 'auto'
+        | undefined;
+
+      // If explicitly set to a specific format (not 'auto'), use it
+      if (toolFormatOverride && toolFormatOverride !== 'auto') {
+        this.logger.debug(
+          () =>
+            `Using tool format override '${toolFormatOverride}' for ${this.name}`,
+        );
+        return toolFormatOverride;
       }
     } catch (error) {
       this.logger.debug(
@@ -986,17 +1088,29 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
 
-    // Fallback detection without SettingsService - always look up current model
+    // Auto-detect based on model name if set to 'auto' or not set
     const modelName = (this.getModel() || this.getDefaultModel()).toLowerCase();
 
+    // Check for GLM-4.5 models (glm-4.5, glm-4-5)
     if (modelName.includes('glm-4.5') || modelName.includes('glm-4-5')) {
+      this.logger.debug(
+        () => `Auto-detected 'qwen' format for GLM-4.5 model: ${modelName}`,
+      );
       return 'qwen';
     }
 
+    // Check for qwen models
     if (modelName.includes('qwen')) {
+      this.logger.debug(
+        () => `Auto-detected 'qwen' format for Qwen model: ${modelName}`,
+      );
       return 'qwen';
     }
 
+    // Default to 'openai' format
+    this.logger.debug(
+      () => `Using default 'openai' format for model: ${modelName}`,
+    );
     return 'openai';
   }
 
