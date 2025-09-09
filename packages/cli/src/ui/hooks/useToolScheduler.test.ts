@@ -29,7 +29,7 @@ import {
   ToolInvocation,
   AnyDeclarativeTool,
   AnyToolInvocation,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import {
   HistoryItemWithoutId,
   ToolCallStatus,
@@ -37,8 +37,8 @@ import {
 } from '../types.js';
 
 // Mocks
-vi.mock('@google/gemini-cli-core', async () => {
-  const actual = await vi.importActual('@google/gemini-cli-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
     ToolRegistry: vi.fn(),
@@ -65,12 +65,12 @@ const mockConfig = {
 class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
   constructor(
     private readonly tool: MockTool,
-    params: object,
+    public override readonly params: object,
   ) {
     super(params);
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     return JSON.stringify(this.params);
   }
 
@@ -97,6 +97,10 @@ class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
 }
 
 class MockTool extends BaseDeclarativeTool<object, ToolResult> {
+  public override name: string;
+  public override displayName: string;
+  public override build: any;
+  
   constructor(
     name: string,
     displayName: string,
@@ -113,6 +117,9 @@ class MockTool extends BaseDeclarativeTool<object, ToolResult> {
       isOutputMarkdown,
       canUpdateOutput,
     );
+    this.name = name;
+    this.displayName = displayName;
+    this.build = vi.fn();
     if (shouldConfirm) {
       this.shouldConfirmExecute.mockImplementation(
         async (): Promise<ToolCallConfirmationDetails | false> => ({

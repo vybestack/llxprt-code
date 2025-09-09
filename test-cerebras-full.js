@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { OpenAIProvider } from './packages/core/dist/src/providers/openai/OpenAIProvider.js';
 import { getSettingsService } from './packages/core/dist/src/settings/settingsServiceInstance.js';
 import { ProfileManager } from './packages/core/dist/src/config/profileManager.js';

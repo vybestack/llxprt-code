@@ -8,11 +8,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { homedir } from 'node:os';
 
-import type { MCPServerConfig } from '@google/gemini-cli-core';
+import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import {
   getErrorMessage,
   type TelemetrySettings,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 
 export const SETTINGS_DIRECTORY_NAME = '.gemini';

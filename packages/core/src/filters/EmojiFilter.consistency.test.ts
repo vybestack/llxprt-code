@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Emoji consistency tests for llxprt's emoji-free policy
  * These tests ensure that emojis are consistently filtered across all contexts
  */

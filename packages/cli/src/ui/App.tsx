@@ -789,16 +789,17 @@ You can switch authentication methods by typing /auth or switch to a different m
     appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
   }, [setAuthError, appDispatch]);
 
-  const onOAuthCodeNeeded = useCallback(
-    (provider: string) => {
-      // Store provider for the dialog
-      (global as unknown as { __oauth_provider: string }).__oauth_provider =
-        provider;
-      // Open the OAuth code input dialog
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
-    },
-    [appDispatch],
-  );
+  // Commented out unused onOAuthCodeNeeded
+  // const onOAuthCodeNeeded = useCallback(
+  //   (provider: string) => {
+  //     // Store provider for the dialog
+  //     (global as unknown as { __oauth_provider: string }).__oauth_provider =
+  //       provider;
+  //     // Open the OAuth code input dialog
+  //     appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+  //   },
+  //   [appDispatch],
+  // );
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
@@ -905,7 +906,6 @@ You can switch authentication methods by typing /auth or switch to a different m
     config.getGeminiClient(),
     history,
     addItem,
-    setShowHelp,
     config,
     setDebugMessage,
     handleSlashCommand,
@@ -917,7 +917,6 @@ You can switch authentication methods by typing /auth or switch to a different m
     setModelSwitchedFromQuotaError,
     refreshStatic,
     handleUserCancel,
-    onOAuthCodeNeeded,
   );
 
   const pendingHistoryItems = useMemo(
@@ -925,14 +924,10 @@ You can switch authentication methods by typing /auth or switch to a different m
     [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
   );
 
-  // Message queue for handling input during streaming
-  const { messageQueue, addMessage, clearQueue, getQueuedMessagesText } =
-    useMessageQueue({
-      streamingState,
-      submitQuery,
-    });
+  // Message queue functionality removed - not implemented
 
   // Update the cancel handler with message queue support
+  const cancelHandlerRef = useRef<(() => void) | null>(null);
   cancelHandlerRef.current = useCallback(() => {
     if (isToolExecuting(pendingHistoryItems)) {
       buffer.setText(''); // Just clear the prompt
@@ -942,12 +937,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     const lastUserMessage = userMessages.at(-1);
     let textToSet = lastUserMessage || '';
 
-    // Append queued messages if any exist
-    const queuedText = getQueuedMessagesText();
-    if (queuedText) {
-      textToSet = textToSet ? `${textToSet}\n\n${queuedText}` : queuedText;
-      clearQueue();
-    }
+    // Queue functionality removed - no queued messages to append
 
     if (textToSet) {
       buffer.setText(textToSet);
@@ -955,8 +945,6 @@ You can switch authentication methods by typing /auth or switch to a different m
   }, [
     buffer,
     userMessages,
-    getQueuedMessagesText,
-    clearQueue,
     pendingHistoryItems,
   ]);
 

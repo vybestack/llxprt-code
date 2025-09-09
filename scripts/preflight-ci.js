@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Custom preflight script for CI/CD that handles the rollup platform dependency issue
  */
 

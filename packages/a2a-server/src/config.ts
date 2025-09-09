@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 import * as dotenv from 'dotenv';
 
-import type { TelemetryTarget } from '@google/gemini-cli-core';
+import type { TelemetryTarget } from '@vybestack/llxprt-code-core';
 import {
   AuthType,
   Config,
@@ -17,10 +17,10 @@ import {
   FileDiscoveryService,
   ApprovalMode,
   loadServerHierarchicalMemory,
-  GEMINI_CONFIG_DIR,
+  LLXPRT_CONFIG_DIR as GEMINI_CONFIG_DIR,
   DEFAULT_GEMINI_EMBEDDING_MODEL,
   DEFAULT_GEMINI_MODEL,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 
 import { logger } from './logger.js';
 import type { Settings } from './settings.js';
@@ -73,7 +73,7 @@ export async function loadConfig(
 
   const fileService = new FileDiscoveryService(workspaceDir);
   const extensionContextFilePaths = extensions.flatMap((e) => e.contextFiles);
-  const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
+  const { memoryContent } = await loadServerHierarchicalMemory(
     workspaceDir,
     [workspaceDir],
     false,
@@ -81,7 +81,6 @@ export async function loadConfig(
     extensionContextFilePaths,
   );
   configParams.userMemory = memoryContent;
-  configParams.geminiMdFileCount = fileCount;
 
   const config = new Config({
     ...configParams,

@@ -21,8 +21,8 @@ import type {
   ToolCallRequestInfo,
   ServerGeminiToolCallRequestEvent,
   Config,
-} from '@google/gemini-cli-core';
-import { GeminiEventType } from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
+import { GeminiEventType } from '@vybestack/llxprt-code-core';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './logger.js';
 import type { StateChange, AgentSettings } from './types.js';
@@ -163,9 +163,10 @@ class CoderAgentExecutor implements AgentExecutor {
       eventBus,
     );
     runtimeTask.taskState = persistedState._taskState;
-    await runtimeTask.geminiClient.initialize(
-      runtimeTask.config.getContentGeneratorConfig(),
-    );
+    const contentGeneratorConfig = runtimeTask.config.getContentGeneratorConfig();
+    if (contentGeneratorConfig) {
+      await runtimeTask.geminiClient.initialize(contentGeneratorConfig);
+    }
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);
     this.tasks.set(sdkTask.id, wrapper);
@@ -182,9 +183,10 @@ class CoderAgentExecutor implements AgentExecutor {
     const agentSettings = agentSettingsInput || ({} as AgentSettings);
     const config = await this.getConfig(agentSettings, taskId);
     const runtimeTask = await Task.create(taskId, contextId, config, eventBus);
-    await runtimeTask.geminiClient.initialize(
-      runtimeTask.config.getContentGeneratorConfig(),
-    );
+    const contentGeneratorConfig2 = runtimeTask.config.getContentGeneratorConfig();
+    if (contentGeneratorConfig2) {
+      await runtimeTask.geminiClient.initialize(contentGeneratorConfig2);
+    }
 
     const wrapper = new TaskWrapper(runtimeTask, agentSettings);
     this.tasks.set(taskId, wrapper);

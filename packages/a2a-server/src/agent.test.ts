@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@google/gemini-cli-core';
+import type { Config } from '@vybestack/llxprt-code-core';
 import {
   GeminiEventType,
   ApprovalMode,
   type ToolCallConfirmationDetails,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import type {
   TaskStatusUpdateEvent,
   SendStreamingMessageSuccessResponse,
@@ -95,8 +95,8 @@ vi.mock('./config.js', async () => {
 
 // Mock the GeminiClient to avoid actual API calls
 const sendMessageStreamSpy = vi.fn();
-vi.mock('@google/gemini-cli-core', async () => {
-  const actual = await vi.importActual('@google/gemini-cli-core');
+vi.mock('@vybestack/llxprt-code-core', async () => {
+  const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
     GeminiClient: vi.fn().mockImplementation(() => ({

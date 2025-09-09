@@ -14,7 +14,7 @@ import {
   MCPServerStatus,
   isNodeError,
   parseAndFormatApiError,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import type {
   ToolConfirmationPayload,
   CompletedToolCall,
@@ -25,7 +25,7 @@ import type {
   ToolCallConfirmationDetails,
   Config,
   UserTierId,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import type { RequestContext } from '@a2a-js/sdk/server';
 import { type ExecutionEventBus } from '@a2a-js/sdk/server';
 import type {
@@ -116,14 +116,14 @@ export class Task {
     const servers = Object.keys(mcpServers).map((serverName) => ({
       name: serverName,
       status: serverStatuses.get(serverName) || MCPServerStatus.DISCONNECTED,
-      tools: toolRegistry.getToolsByServer(serverName).map((tool) => ({
+      tools: toolRegistry.getToolsByServer(serverName).map((tool: any) => ({
         name: tool.name,
         description: tool.description,
         parameterSchema: tool.schema.parameters,
       })),
     }));
 
-    const availableTools = toolRegistry.getAllTools().map((tool) => ({
+    const availableTools = toolRegistry.getAllTools().map((tool: any) => ({
       name: tool.name,
       description: tool.description,
       parameterSchema: tool.schema.parameters,
@@ -133,7 +133,7 @@ export class Task {
       id: this.id,
       contextId: this.contextId,
       taskState: this.taskState,
-      model: this.config.getContentGeneratorConfig().model,
+      model: this.config.getContentGeneratorConfig()?.model || 'unknown',
       mcpServers: servers,
       availableTools,
     };
@@ -487,7 +487,7 @@ export class Task {
         old_string === '' && currentContent === '',
       );
     } catch (err) {
-      if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
+      if (!isNodeError(err) || (err as any).code !== 'ENOENT') throw err;
       return '';
     }
   }

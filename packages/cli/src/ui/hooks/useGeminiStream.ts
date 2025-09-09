@@ -609,6 +609,9 @@ export const useGeminiStream = (
             // before we add loop detected message to history
             loopDetectedRef.current = true;
             break;
+          case ServerGeminiEventType.UsageMetadata:
+            // Handle usage metadata - for now just ignore
+            break;
           default: {
             // enforces exhaustive switch-case
             const unreachable: never = event;

@@ -13,12 +13,12 @@ import {
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import type {
   ToolCallConfirmationDetails,
   ToolResult,
   ToolInvocation,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { expect, vi } from 'vitest';
 
 export const mockOnUserConfirmForToolConfirmation = vi.fn();
@@ -26,12 +26,12 @@ export const mockOnUserConfirmForToolConfirmation = vi.fn();
 export class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
   constructor(
     private readonly tool: MockTool,
-    params: object,
+    public override readonly params: object,
   ) {
     super(params);
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     return JSON.stringify(this.params);
   }
 

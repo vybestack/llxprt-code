@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * EmojiFilter - Filters emojis from text content based on configuration
  * Implementation stub based on pseudocode lines 01-186
  */
