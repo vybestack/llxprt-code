@@ -24,30 +24,49 @@ async function getProcessInfo(pid: number): Promise<{
   name: string;
   command: string;
 }> {
-  const platform = os.platform();
-  if (platform === 'win32') {
-    const command = `wmic process where "ProcessId=${pid}" get Name,ParentProcessId,CommandLine /value`;
-    const { stdout } = await execAsync(command);
-    const nameMatch = stdout.match(/Name=([^\n]*)/);
-    const processName = nameMatch ? nameMatch[1].trim() : '';
-    const ppidMatch = stdout.match(/ParentProcessId=(\d+)/);
-    const parentPid = ppidMatch ? parseInt(ppidMatch[1], 10) : 0;
-    const commandLineMatch = stdout.match(/CommandLine=([^\n]*)/);
-    const commandLine = commandLineMatch ? commandLineMatch[1].trim() : '';
-    return { parentPid, name: processName, command: commandLine };
-  } else {
-    const command = `ps -o ppid=,command= -p ${pid}`;
-    const { stdout } = await execAsync(command);
-    const trimmedStdout = stdout.trim();
-    const ppidString = trimmedStdout.split(/\s+/)[0];
-    const parentPid = parseInt(ppidString, 10);
-    const fullCommand = trimmedStdout.substring(ppidString.length).trim();
-    const processName = path.basename(fullCommand.split(' ')[0]);
-    return {
-      parentPid: isNaN(parentPid) ? 1 : parentPid,
-      name: processName,
-      command: fullCommand,
-    };
+  try {
+    const platform = os.platform();
+    if (platform === 'win32') {
+      const command = `wmic process where "ProcessId=${pid}" get Name,ParentProcessId,CommandLine /value`;
+      const { stdout } = await execAsync(command);
+      const nameMatch = stdout.match(/Name=([^\n]*)/);
+      const processName = nameMatch ? nameMatch[1].trim() : '';
+      const ppidMatch = stdout.match(/ParentProcessId=(\d+)/);
+      const parentPid = ppidMatch ? parseInt(ppidMatch[1], 10) : 0;
+      const commandLineMatch = stdout.match(/CommandLine=([^\n]*)/);
+      const commandLine = commandLineMatch ? commandLineMatch[1].trim() : '';
+      return { parentPid, name: processName, command: commandLine };
+    } else {
+      // Use comm= to get executable name without arguments
+      const command = `ps -o ppid=,comm= -p ${pid}`;
+      const { stdout } = await execAsync(command);
+      const trimmedStdout = stdout.trim();
+      
+      // Parse the output - ppid is first, then executable path
+      const match = trimmedStdout.match(/^\s*(\d+)\s+(.+)$/);
+      if (!match) {
+        throw new Error(`Failed to parse ps output: ${trimmedStdout}`);
+      }
+      
+      const parentPid = parseInt(match[1], 10);
+      const execPath = match[2].trim();
+      
+      // Get the full command line separately
+      const { stdout: fullCmdStdout } = await execAsync(`ps -o command= -p ${pid}`);
+      const fullCommand = fullCmdStdout.trim();
+      
+      // Extract just the executable name from path (e.g., /bin/zsh -> zsh)
+      const processName = path.basename(execPath);
+      
+      return {
+        parentPid: isNaN(parentPid) ? 1 : parentPid,
+        name: processName,
+        command: fullCommand,
+      };
+    }
+  } catch (_e) {
+    console.debug(`Failed to get process info for pid ${pid}:`, _e);
+    return { parentPid: 0, name: '', command: '' };
   }
 }
 
@@ -69,9 +88,16 @@ async function getIdeProcessInfoForUnix(): Promise<{
 
   for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
     try {
-      const { parentPid, name } = await getProcessInfo(currentPid);
+      const { parentPid, name, command } = await getProcessInfo(currentPid);
+      
+      // Debug logging
+      if (process.env.DEBUG_PROCESS_TREE) {
+        console.error(`[Process Tree] PID: ${currentPid}, Parent: ${parentPid}, Name: "${name}", Command: "${command}"`);
+      }
 
-      const isShell = shells.some((shell) => name === shell);
+      // Check if it's a shell (handle both 'zsh' and '/bin/zsh' formats)
+      const baseName = path.basename(name);
+      const isShell = shells.some((shell) => baseName === shell || name === shell);
       if (isShell) {
         // The direct parent of the shell is often a utility process (e.g. VS
         // Code's `ptyhost` process). To get the true IDE process, we need to
@@ -99,9 +125,20 @@ async function getIdeProcessInfoForUnix(): Promise<{
     }
   }
 
-  console.error(
-    'Failed to find shell process in the process tree. Falling back to top-level process, which may be inaccurate. If you see this, please file a bug via /bug.',
-  );
+  // Only show the warning if we're not in a known CI environment
+  if (!process.env.CI && !process.env.GITHUB_ACTIONS) {
+    if (process.env.DEBUG_PROCESS_TREE) {
+      console.error(
+        `Failed to find shell process in the process tree (looked for: ${shells.join(', ')}). ` +
+        `Falling back to top-level process (PID: ${currentPid}).`,
+      );
+    } else {
+      console.error(
+        'Failed to find shell process in the process tree. Falling back to top-level process. ' +
+        'Set DEBUG_PROCESS_TREE=1 for more details.',
+      );
+    }
+  }
   const { command } = await getProcessInfo(currentPid);
   return { pid: currentPid, command };
 }
@@ -163,7 +200,6 @@ async function getIdeProcessInfoForWindows(): Promise<{
  * top-level ancestor process ID and command as a fallback.
  *
  * @returns A promise that resolves to the PID and command of the IDE process.
- * @throws Will throw an error if the underlying shell commands fail.
  */
 export async function getIdeProcessInfo(): Promise<{
   pid: number;
