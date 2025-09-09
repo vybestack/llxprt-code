@@ -359,12 +359,19 @@ export async function parseArguments(): Promise<CliArgs> {
     });
 
   yargsInstance.wrap(yargsInstance.terminalWidth());
-  const result = yargsInstance.parseSync();
+  const result = await yargsInstance.parseAsync();
 
   // The import format is now only controlled by settings.memoryImportFormat
   // We no longer accept it as a CLI argument
 
   // Map camelCase names to match CliArgs interface
+  // Check if an MCP subcommand was handled
+  // The _ array contains the commands that were run
+  if (result._ && result._.length > 0 && result._[0] === 'mcp') {
+    // An MCP subcommand was executed (like 'mcp list'), exit cleanly
+    process.exit(0);
+  }
+
   const cliArgs: CliArgs = {
     model: result.model as string | undefined,
     sandbox: result.sandbox as boolean | string | undefined,

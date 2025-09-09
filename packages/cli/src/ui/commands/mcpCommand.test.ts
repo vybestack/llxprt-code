@@ -89,6 +89,7 @@ describe('mcpCommand', () => {
     mockConfig = {
       getToolRegistry: vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue([]),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       }),
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -96,11 +97,15 @@ describe('mcpCommand', () => {
         getAllPrompts: vi.fn().mockReturnValue([]),
         getPromptsByServer: vi.fn().mockReturnValue([]),
       }),
+      getGeminiClient: vi.fn().mockReturnValue(null),
     };
 
     mockContext = createMockCommandContext({
       services: {
         config: mockConfig,
+      },
+      ui: {
+        reloadCommands: vi.fn(),
       },
     });
   });
@@ -110,6 +115,9 @@ describe('mcpCommand', () => {
       const contextWithoutConfig = createMockCommandContext({
         services: {
           config: null,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
         },
       });
 
@@ -123,9 +131,19 @@ describe('mcpCommand', () => {
     });
 
     it('should show an error if tool registry is not available', async () => {
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue(undefined);
+      const contextWithNoRegistry = createMockCommandContext({
+        services: {
+          config: {
+            ...mockConfig,
+            getToolRegistry: vi.fn().mockReturnValue(undefined),
+          },
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
 
-      const result = await mcpCommand.action!(mockContext, '');
+      const result = await mcpCommand.action!(contextWithNoRegistry, '');
 
       expect(result).toEqual({
         type: 'message',
@@ -139,6 +157,7 @@ describe('mcpCommand', () => {
     beforeEach(() => {
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue([]),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
       mockConfig.getMcpServers = vi.fn().mockReturnValue({});
     });
@@ -164,6 +183,22 @@ describe('mcpCommand', () => {
       };
 
       mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
+
+      // Ensure the tool registry is properly set up with tools
+      mockConfig.getToolRegistry = vi.fn().mockReturnValue({
+        getAllTools: vi.fn().mockReturnValue([]),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Update the mockContext with the new config
+      mockContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
     });
 
     it('should display configured MCP servers with status indicators and their tools', async () => {
@@ -190,9 +225,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(allTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Update mockContext with the new config for this test
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(result).toEqual({
         type: 'message',
@@ -249,9 +295,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, 'desc');
+      // Update context with new config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, 'desc');
 
       expect(result).toEqual({
         type: 'message',
@@ -302,9 +359,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, 'nodesc');
+      // Update context with new config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, 'nodesc');
 
       expect(result).toEqual({
         type: 'message',
@@ -346,9 +414,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Update context with new config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -392,9 +471,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Update context with new config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -424,7 +514,17 @@ describe('mcpCommand', () => {
       };
       mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -440,7 +540,17 @@ describe('mcpCommand', () => {
       ];
       mockConfig.getBlockedMcpServers = vi.fn().mockReturnValue(blockedServers);
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -461,7 +571,17 @@ describe('mcpCommand', () => {
       ];
       mockConfig.getBlockedMcpServers = vi.fn().mockReturnValue(blockedServers);
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -529,9 +649,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, 'schema');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, 'schema');
 
       expect(result).toEqual({
         type: 'message',
@@ -572,9 +703,20 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, 'schema');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, 'schema');
 
       expect(result).toEqual({
         type: 'message',
@@ -609,6 +751,17 @@ describe('mcpCommand', () => {
 
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue(mockServerTools),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Recreate context with updated config
+      mockContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
       });
     });
 
@@ -772,9 +925,20 @@ describe('mcpCommand', () => {
       mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue([]),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(result).toEqual({
         type: 'message',
@@ -793,9 +957,20 @@ describe('mcpCommand', () => {
       mockConfig.getMcpServers = vi.fn().mockReturnValue(mockMcpServers);
       mockConfig.getToolRegistry = vi.fn().mockReturnValue({
         getAllTools: vi.fn().mockReturnValue([]),
+        discoverAllTools: vi.fn().mockResolvedValue(undefined),
       });
 
-      const result = await mcpCommand.action!(mockContext, '');
+      // Create new context with updated config
+      const testContext = createMockCommandContext({
+        services: {
+          config: mockConfig,
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
+
+      const result = await mcpCommand.action!(testContext, '');
 
       expect(isMessageAction(result)).toBe(true);
       if (isMessageAction(result)) {
@@ -975,8 +1150,7 @@ describe('mcpCommand', () => {
   describe('refresh subcommand', () => {
     it('should refresh the list of tools and display the status', async () => {
       const mockToolRegistry = {
-        discoverMcpTools: vi.fn(),
-        restartMcpServers: vi.fn(),
+        discoverAllTools: vi.fn(),
         getAllTools: vi.fn().mockReturnValue([]),
       };
       const mockGeminiClient = {
@@ -1013,7 +1187,7 @@ describe('mcpCommand', () => {
         },
         expect.any(Number),
       );
-      expect(mockToolRegistry.restartMcpServers).toHaveBeenCalled();
+      expect(mockToolRegistry.discoverAllTools).toHaveBeenCalled();
       expect(mockGeminiClient.setTools).toHaveBeenCalled();
       expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
 
@@ -1044,12 +1218,22 @@ describe('mcpCommand', () => {
     });
 
     it('should show an error if tool registry is not available', async () => {
-      mockConfig.getToolRegistry = vi.fn().mockReturnValue(undefined);
+      const contextWithNoRegistry = createMockCommandContext({
+        services: {
+          config: {
+            ...mockConfig,
+            getToolRegistry: vi.fn().mockReturnValue(undefined),
+          },
+        },
+        ui: {
+          reloadCommands: vi.fn(),
+        },
+      });
 
       const refreshCommand = mcpCommand.subCommands?.find(
         (cmd) => cmd.name === 'refresh',
       );
-      const result = await refreshCommand!.action!(mockContext, '');
+      const result = await refreshCommand!.action!(contextWithNoRegistry, '');
 
       expect(result).toEqual({
         type: 'message',

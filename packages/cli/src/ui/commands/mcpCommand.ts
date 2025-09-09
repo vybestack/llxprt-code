@@ -68,6 +68,9 @@ const getMcpStatus = async (
     };
   }
 
+  // At this point, we have a tool registry and some servers
+  // Continue with the rest of the function
+
   // Check if any servers are still connecting
   const connectingServers = serverNames.filter(
     (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
@@ -506,7 +509,7 @@ const refreshCommand: SlashCommand = {
       Date.now(),
     );
 
-    await toolRegistry.restartMcpServers();
+    await toolRegistry.discoverAllTools();
 
     // Update the client with the new tools
     const geminiClient = config.getGeminiClient();
