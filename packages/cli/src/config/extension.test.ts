@@ -19,6 +19,7 @@ import {
   loadExtensions,
   performWorkspaceExtensionMigration,
   uninstallExtension,
+  updateExtension,
 } from './extension.js';
 import {
   type GeminiCLIExtension,
@@ -48,7 +49,7 @@ vi.mock('child_process', async (importOriginal) => {
   };
 });
 
-const EXTENSIONS_DIRECTORY_NAME = path.join('.gemini', 'extensions');
+const EXTENSIONS_DIRECTORY_NAME = path.join('.llxprt', 'extensions');
 
 describe('loadExtensions', () => {
   let tempWorkspaceDir: string;
@@ -227,10 +228,10 @@ describe('installExtension', () => {
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    userExtensionsDir = path.join(tempHomeDir, '.gemini', 'extensions');
+    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -277,14 +278,14 @@ describe('installExtension', () => {
     );
   });
 
-  it('should throw an error and cleanup if gemini-extension.json is missing', async () => {
+  it('should throw an error and cleanup if llxprt-extension.json is missing', async () => {
     const sourceExtDir = path.join(tempHomeDir, 'bad-extension');
     fs.mkdirSync(sourceExtDir, { recursive: true });
 
     await expect(
       installExtension({ source: sourceExtDir, type: 'local' }),
     ).rejects.toThrow(
-      `Invalid extension at ${sourceExtDir}. Please make sure it has a valid gemini-extension.json file.`,
+      `Invalid extension at ${sourceExtDir}. Please make sure it has a valid llxprt-extension.json file.`,
     );
 
     const targetExtDir = path.join(userExtensionsDir, 'bad-extension');
@@ -292,8 +293,8 @@ describe('installExtension', () => {
   });
 
   it('should install an extension from a git URL', async () => {
-    const gitUrl = 'https://github.com/google/gemini-extensions.git';
-    const extensionName = 'gemini-extensions';
+    const gitUrl = 'https://github.com/google/llxprt-extensions.git';
+    const extensionName = 'llxprt-extensions';
     const targetExtDir = path.join(userExtensionsDir, extensionName);
     const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
 
@@ -327,10 +328,10 @@ describe('uninstallExtension', () => {
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    userExtensionsDir = path.join(tempHomeDir, '.gemini', 'extensions');
+    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -386,10 +387,10 @@ describe('performWorkspaceExtensionMigration', () => {
 
   beforeEach(() => {
     tempWorkspaceDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-workspace-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-workspace-'),
     );
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
   });
@@ -417,7 +418,7 @@ describe('performWorkspaceExtensionMigration', () => {
 
     expect(failed).toEqual([]);
 
-    const userExtensionsDir = path.join(tempHomeDir, '.gemini', 'extensions');
+    const userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
     const userExt1Path = path.join(userExtensionsDir, 'ext1');
     const extensions = loadExtensions(tempWorkspaceDir);
 
@@ -485,10 +486,10 @@ describe('updateExtension', () => {
 
   beforeEach(() => {
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-    userExtensionsDir = path.join(tempHomeDir, '.gemini', 'extensions');
+    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -502,8 +503,8 @@ describe('updateExtension', () => {
 
   it('should update a git-installed extension', async () => {
     // 1. "Install" an extension
-    const gitUrl = 'https://github.com/google/gemini-extensions.git';
-    const extensionName = 'gemini-extensions';
+    const gitUrl = 'https://github.com/google/llxprt-extensions.git';
+    const extensionName = 'llxprt-extensions';
     const targetExtDir = path.join(userExtensionsDir, extensionName);
     const metadataPath = path.join(targetExtDir, INSTALL_METADATA_FILENAME);
 
@@ -559,10 +560,10 @@ describe('disableExtension', () => {
 
   beforeEach(() => {
     tempWorkspaceDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-workspace-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-workspace-'),
     );
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
@@ -612,12 +613,12 @@ describe('enableExtension', () => {
 
   beforeEach(() => {
     tempWorkspaceDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-workspace-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-workspace-'),
     );
     tempHomeDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'gemini-cli-test-home-'),
+      path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
-    userExtensionsDir = path.join(tempHomeDir, '.gemini', 'extensions');
+    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
   });

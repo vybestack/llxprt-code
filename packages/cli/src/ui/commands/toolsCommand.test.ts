@@ -5,9 +5,10 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { toolsCommand } from './toolsCommand.js';
+import { toolsCommand } from './toolsCommand.tsx';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
+import type { Tool } from '@vybestack/llxprt-code-core';
 
 // Mock tools for testing
 const mockTools = [

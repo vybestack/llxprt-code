@@ -33,7 +33,7 @@ import {
   GeminiEventType as ServerGeminiEventType,
   AnyToolInvocation,
   ToolErrorType, // <-- Import ToolErrorType
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import { Part, PartListUnion } from '@google/genai';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
@@ -64,7 +64,7 @@ const MockedUserPromptEvent = vi.hoisted(() =>
 );
 const mockParseAndFormatApiError = vi.hoisted(() => vi.fn());
 
-vi.mock('@google/gemini-cli-core', async (importOriginal) => {
+vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actualCoreModule = (await importOriginal()) as any;
   return {
     ...actualCoreModule,

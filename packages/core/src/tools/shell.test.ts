@@ -15,11 +15,25 @@ import {
 } from 'vitest';
 
 const mockShellExecutionService = vi.hoisted(() => vi.fn());
+const mockOsHomedir = vi.hoisted(() => vi.fn(() => '/home/user'));
+const mockOsTmpdir = vi.hoisted(() => vi.fn(() => '/tmp'));
+const mockOsPlatform = vi.hoisted(() => vi.fn(() => 'linux'));
 vi.mock('../services/shellExecutionService.js', () => ({
   ShellExecutionService: { execute: mockShellExecutionService },
 }));
 vi.mock('fs');
-vi.mock('os');
+vi.mock('os', () => ({
+  default: {
+    homedir: mockOsHomedir,
+    tmpdir: mockOsTmpdir,
+    platform: mockOsPlatform,
+    EOL: '\n',
+  },
+  homedir: mockOsHomedir,
+  tmpdir: mockOsTmpdir,
+  platform: mockOsPlatform,
+  EOL: '\n',
+}));
 vi.mock('crypto');
 
 import { isCommandAllowed } from '../utils/shell-utils.js';
@@ -75,8 +89,8 @@ describe('ShellTool', () => {
 
     shellTool = new ShellTool(mockConfig);
 
-    vi.mocked(os.platform).mockReturnValue('linux');
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    mockOsPlatform.mockReturnValue('linux');
+    mockOsTmpdir.mockReturnValue('/tmp');
     (vi.mocked(crypto.randomBytes) as Mock).mockReturnValue(
       Buffer.from('abcdef', 'hex'),
     );
@@ -175,7 +189,7 @@ describe('ShellTool', () => {
     });
 
     it('should not wrap command on windows', async () => {
-      vi.mocked(os.platform).mockReturnValue('win32');
+      mockOsPlatform.mockReturnValue('win32');
       const invocation = shellTool.build({ command: 'dir' });
       const promise = invocation.execute(mockAbortSignal);
       resolveShellExecution({
@@ -424,13 +438,13 @@ describe('ShellTool', () => {
 
   describe('getDescription', () => {
     it('should return the windows description when on windows', () => {
-      vi.mocked(os.platform).mockReturnValue('win32');
+      mockOsPlatform.mockReturnValue('win32');
       const shellTool = new ShellTool(mockConfig);
       expect(shellTool.description).toMatchSnapshot();
     });
 
     it('should return the non-windows description when not on windows', () => {
-      vi.mocked(os.platform).mockReturnValue('linux');
+      mockOsPlatform.mockReturnValue('linux');
       const shellTool = new ShellTool(mockConfig);
       expect(shellTool.description).toMatchSnapshot();
     });

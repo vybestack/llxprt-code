@@ -121,7 +121,9 @@ class MockTool extends BaseDeclarativeTool<object, ToolResult> {
     );
     this.name = name;
     this.displayName = displayName;
-    this.build = vi.fn();
+    this.build = vi.fn().mockImplementation((params: object) => 
+      new MockToolInvocation(this, params)
+    );
     if (shouldConfirm) {
       this.shouldConfirmExecute.mockImplementation(
         async (): Promise<ToolCallConfirmationDetails | false> => ({

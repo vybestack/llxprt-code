@@ -78,6 +78,7 @@ interface MockServerConfig {
   getUserMemory: Mock<() => string>;
   setUserMemory: Mock<(newUserMemory: string) => void>;
   getGeminiMdFileCount: Mock<() => number>;
+  getLlxprtMdFileCount: Mock<() => number>;
   setGeminiMdFileCount: Mock<(count: number) => void>;
   getApprovalMode: Mock<() => ApprovalMode>;
   setApprovalMode: Mock<(skip: ApprovalMode) => void>;
@@ -143,6 +144,7 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getUserMemory: vi.fn(() => opts.userMemory || ''),
         setUserMemory: vi.fn(),
         getGeminiMdFileCount: vi.fn(() => opts.geminiMdFileCount || 0),
+        getLlxprtMdFileCount: vi.fn(() => opts.geminiMdFileCount || 0),
         setGeminiMdFileCount: vi.fn(),
         getApprovalMode: vi.fn(() => opts.approvalMode ?? ApprovalMode.DEFAULT),
         setApprovalMode: vi.fn(),
@@ -172,6 +174,10 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         })),
         isTrustedFolder: vi.fn(() => true),
         getScreenReader: vi.fn(() => false),
+        getEphemeralSetting: vi.fn(() => undefined),
+        getEphemeralSettings: vi.fn(() => ({})),
+        setEphemeralSetting: vi.fn(),
+        clearEphemeralSetting: vi.fn(),
       };
     });
 
@@ -218,6 +224,10 @@ vi.mock('./hooks/useFolderTrust', () => ({
     handleFolderTrustSelect: vi.fn(),
     isRestarting: false,
   })),
+}));
+
+vi.mock('./hooks/useFocus', () => ({
+  useFocus: vi.fn(() => true),
 }));
 
 vi.mock('./hooks/useLogger', () => ({
@@ -271,6 +281,14 @@ const { isGitRepository: mockedIsGitRepository } = vi.mocked(
 );
 
 vi.mock('node:child_process');
+
+vi.mock('../providers/providerManagerInstance.js', () => ({
+  getProviderManager: vi.fn(() => ({
+    getActiveProvider: vi.fn(() => ({
+      getCurrentModel: vi.fn(() => 'gemini-pro'),
+    })),
+  })),
+}));
 
 describe('App UI', () => {
   let mockConfig: MockServerConfig;
@@ -347,6 +365,11 @@ describe('App UI', () => {
         getDirectories: vi.fn(() => ['/test/dir']),
       }));
     }
+
+    // Ensure getEphemeralSetting is available if not added by the constructor
+    if (!mockConfig.getEphemeralSetting) {
+      mockConfig.getEphemeralSetting = vi.fn(() => undefined);
+    }
     vi.mocked(ideContext.getIdeContext).mockReturnValue(undefined);
   });
 
@@ -396,9 +419,8 @@ describe('App UI', () => {
       currentUnmount = unmount;
 
       // Wait for any potential async operations to complete
-      await waitFor(() => {
-        expect(spawn).not.toHaveBeenCalled();
-      });
+      await Promise.resolve();
+      expect(spawn).not.toHaveBeenCalled();
     });
 
     it('should show a success message when update succeeds', async () => {
@@ -425,11 +447,10 @@ describe('App UI', () => {
       updateEventEmitter.emit('update-success', info);
 
       // Wait for the success message to appear
-      await waitFor(() => {
-        expect(lastFrame()).toContain(
-          'Update successful! The new version will be used on your next run.',
-        );
-      });
+      await Promise.resolve();
+      expect(lastFrame()).toContain(
+        'Update successful! The new version will be used on your next run.',
+      );
     });
 
     it('should show an error message when update fails', async () => {
@@ -456,11 +477,10 @@ describe('App UI', () => {
       updateEventEmitter.emit('update-failed', info);
 
       // Wait for the error message to appear
-      await waitFor(() => {
-        expect(lastFrame()).toContain(
-          'Automatic update failed. Please try updating manually',
-        );
-      });
+      await Promise.resolve();
+      expect(lastFrame()).toContain(
+        'Automatic update failed. Please try updating manually',
+      );
     });
 
     it('should show an error message when spawn fails', async () => {
@@ -489,11 +509,10 @@ describe('App UI', () => {
       updateEventEmitter.emit('update-failed', info);
 
       // Wait for the error message to appear
-      await waitFor(() => {
-        expect(lastFrame()).toContain(
-          'Automatic update failed. Please try updating manually',
-        );
-      });
+      await Promise.resolve();
+      expect(lastFrame()).toContain(
+        'Automatic update failed. Please try updating manually',
+      );
     });
 
     it('should not auto-update if GEMINI_CLI_DISABLE_AUTOUPDATER is true', async () => {
@@ -520,9 +539,8 @@ describe('App UI', () => {
       currentUnmount = unmount;
 
       // Wait for any potential async operations to complete
-      await waitFor(() => {
-        expect(spawn).not.toHaveBeenCalled();
-      });
+      await Promise.resolve();
+      expect(spawn).not.toHaveBeenCalled();
     });
   });
 
@@ -1643,9 +1661,8 @@ describe('App UI', () => {
 
       // The prompt should now be empty as a result of the cancellation handler's logic.
       // We can't directly test the buffer's state, but we can see the rendered output.
-      await waitFor(() => {
-        expect(lastFrame()).not.toContain('some text');
-      });
+      await Promise.resolve();
+      expect(lastFrame()).not.toContain('some text');
     });
   });
 });

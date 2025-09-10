@@ -69,7 +69,7 @@ describe('ReadManyFilesTool', () => {
     const mockConfig = {
       getFileService: () => fileService,
       getFileSystemService: () => new StandardFileSystemService(),
-
+      getEphemeralSettings: () => ({}),
       getFileFilteringOptions: () => ({
         respectGitIgnore: true,
         respectGeminiIgnore: true,
@@ -485,6 +485,7 @@ describe('ReadManyFilesTool', () => {
       const mockConfig = {
         getFileService: () => fileService,
         getFileSystemService: () => new StandardFileSystemService(),
+        getEphemeralSettings: () => ({}),
         getFileFilteringOptions: () => ({
           respectGitIgnore: true,
           respectGeminiIgnore: true,

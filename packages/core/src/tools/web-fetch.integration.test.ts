@@ -67,6 +67,9 @@ describe('WebFetchTool Integration Tests', () => {
       getContentGeneratorConfig: vi.fn().mockReturnValue({
         providerManager: mockProviderManager,
       } as ContentGeneratorConfig),
+      getGeminiClient: vi.fn().mockReturnValue({
+        generateContent: vi.fn(),
+      }),
       getApprovalMode: vi.fn().mockReturnValue('auto_edit'),
       setApprovalMode: vi.fn(),
       getProxy: vi.fn().mockReturnValue(null),

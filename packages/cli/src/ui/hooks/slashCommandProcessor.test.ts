@@ -87,7 +87,7 @@ import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import {
   SlashCommandStatus,
   ToolConfirmationOutcome,
-  makeFakeConfig,
+  type Config,
   type IdeClient,
 } from '@vybestack/llxprt-code-core/index.js';
 
@@ -109,11 +109,21 @@ describe('useSlashCommandProcessor', () => {
   const mockOpenAuthDialog = vi.fn();
   const mockSetQuittingMessages = vi.fn();
 
-  const mockConfig = makeFakeConfig({});
-  vi.spyOn(mockConfig, 'getIdeClient').mockReturnValue({
-    addStatusChangeListener: vi.fn(),
-    removeStatusChangeListener: vi.fn(),
-  } as unknown as IdeClient);
+  const mockConfig = {
+    getIdeClient: vi.fn().mockReturnValue({
+      addStatusChangeListener: vi.fn(),
+      removeStatusChangeListener: vi.fn(),
+    } as unknown as IdeClient),
+    getProjectRoot: vi.fn().mockReturnValue('/test/project'),
+    getSessionId: vi.fn().mockReturnValue('test-session-id'),
+    getDebugMode: vi.fn().mockReturnValue(false),
+    getTargetDir: vi.fn().mockReturnValue('/test/project'),
+    getUserMemory: vi.fn().mockReturnValue(''),
+    setUserMemory: vi.fn(),
+    getApprovalMode: vi.fn().mockReturnValue('default'),
+    setApprovalMode: vi.fn(),
+    getGeminiClient: vi.fn().mockReturnValue(undefined),
+  } as unknown as Config;
 
   const mockSettings = {} as LoadedSettings;
 

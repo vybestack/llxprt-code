@@ -17,13 +17,16 @@ import { Config } from '../config/config.js';
 
 const mockPlatform = vi.hoisted(() => vi.fn());
 const mockHomedir = vi.hoisted(() => vi.fn());
+const mockTmpdir = vi.hoisted(() => vi.fn(() => '/tmp'));
 vi.mock('os', () => ({
   default: {
     platform: mockPlatform,
     homedir: mockHomedir,
+    tmpdir: mockTmpdir,
   },
   platform: mockPlatform,
   homedir: mockHomedir,
+  tmpdir: mockTmpdir,
 }));
 
 const mockQuote = vi.hoisted(() => vi.fn());

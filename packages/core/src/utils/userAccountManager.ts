@@ -15,7 +15,7 @@ interface UserAccounts {
 
 export class UserAccountManager {
   private getGoogleAccountsCachePath(): string {
-    return Storage.getGoogleAccountsPath();
+    return Storage.getProviderAccountsPath();
   }
 
   /**
@@ -29,28 +29,33 @@ export class UserAccountManager {
       return defaultState;
     }
 
-    const parsed = JSON.parse(content);
+    try {
+      const parsed = JSON.parse(content);
 
-    // Inlined validation logic
-    if (typeof parsed !== 'object' || parsed === null) {
-      console.log('Invalid accounts file schema, starting fresh.');
+      // Inlined validation logic
+      if (typeof parsed !== 'object' || parsed === null) {
+        console.log('Invalid accounts file schema, starting fresh.');
+        return defaultState;
+      }
+      const { active, old } = parsed as Partial<UserAccounts>;
+      const isValid =
+        (active === undefined || active === null || typeof active === 'string') &&
+        (old === undefined ||
+          (Array.isArray(old) && old.every((i) => typeof i === 'string')));
+
+      if (!isValid) {
+        console.log('Invalid accounts file schema, starting fresh.');
+        return defaultState;
+      }
+
+      return {
+        active: parsed.active ?? null,
+        old: parsed.old ?? [],
+      };
+    } catch (error) {
+      console.log('Could not parse accounts file, starting fresh.', error);
       return defaultState;
     }
-    const { active, old } = parsed as Partial<UserAccounts>;
-    const isValid =
-      (active === undefined || active === null || typeof active === 'string') &&
-      (old === undefined ||
-        (Array.isArray(old) && old.every((i) => typeof i === 'string')));
-
-    if (!isValid) {
-      console.log('Invalid accounts file schema, starting fresh.');
-      return defaultState;
-    }
-
-    return {
-      active: parsed.active ?? null,
-      old: parsed.old ?? [],
-    };
   }
 
   private readAccountsSync(filePath: string): UserAccounts {

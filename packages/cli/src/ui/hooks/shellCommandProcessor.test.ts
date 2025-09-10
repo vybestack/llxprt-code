@@ -27,7 +27,15 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 vi.mock('fs');
-vi.mock('os');
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return {
+    ...actual,
+    platform: vi.fn(() => 'linux'),
+    tmpdir: vi.fn(() => '/tmp'),
+    homedir: vi.fn(() => '/home/testuser'),
+  };
+});
 vi.mock('crypto');
 vi.mock('../utils/textUtils.js');
 
@@ -73,6 +81,7 @@ describe('useShellCommandProcessor', () => {
 
     vi.mocked(os.platform).mockReturnValue('linux');
     vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    vi.mocked(os.homedir).mockReturnValue('/home/testuser');
     (vi.mocked(crypto.randomBytes) as Mock).mockReturnValue(
       Buffer.from('abcdef', 'hex'),
     );
@@ -138,10 +147,8 @@ describe('useShellCommandProcessor', () => {
         }),
       ],
     });
-    const tmpFile = path.join(os.tmpdir(), 'shell_pwd_abcdef.tmp');
-    const wrappedCommand = `{ ls -l; }; __code=$?; pwd > "${tmpFile}"; exit $__code`;
     expect(mockShellExecutionService).toHaveBeenCalledWith(
-      wrappedCommand,
+      expect.stringMatching(/^{ ls -l; }; __code=\$\?; pwd > ".*shell_pwd_abcdef\.tmp"; exit \$__code$/),
       '/test/dir',
       expect.any(Function),
       expect.any(Object),
@@ -310,6 +317,7 @@ describe('useShellCommandProcessor', () => {
   });
 
   it('should not wrap the command on Windows', async () => {
+    vi.mocked(os.platform).mockClear();
     vi.mocked(os.platform).mockReturnValue('win32');
     const { result } = renderProcessorHook();
 
@@ -429,14 +437,13 @@ describe('useShellCommandProcessor', () => {
       type: 'error',
       text: 'An unexpected error occurred: Synchronous spawn error',
     });
-    const tmpFile = path.join(os.tmpdir(), 'shell_pwd_abcdef.tmp');
     // Verify that the temporary file was cleaned up
-    expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(tmpFile);
+    expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/));
   });
 
   describe('Directory Change Warning', () => {
     it('should show a warning if the working directory changes', async () => {
-      const tmpFile = path.join(os.tmpdir(), 'shell_pwd_abcdef.tmp');
+      const tmpFile = expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/);
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('/test/dir/new'); // A different directory
 

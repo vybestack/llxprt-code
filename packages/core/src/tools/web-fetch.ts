@@ -100,24 +100,10 @@ class WebFetchToolInvocation extends BaseToolInvocation<
         ],
       }).substring(0, MAX_CONTENT_LENGTH);
 
-      const geminiClient = this.config.getGeminiClient();
-      const fallbackPrompt = `The user requested the following: "${this.params.prompt}".
-
-I was unable to access the URL directly. Instead, I have fetched the raw content of the page. Please use the following content to answer the request. Do not attempt to access the URL again.
-
----
-${textContent}
----
-`;
-      const result = await geminiClient.generateContent(
-        [{ role: 'user', parts: [{ text: fallbackPrompt }] }],
-        {},
-        signal,
-      );
-      const resultText = getResponseText(result) || '';
+      // For private URLs, just return the raw content without AI processing
       return {
-        llmContent: resultText,
-        returnDisplay: `Content for ${url} processed using fallback fetch.`,
+        llmContent: textContent,
+        returnDisplay: `Content for ${url} fetched directly.`,
       };
     } catch (e) {
       const error = e as Error;
@@ -180,16 +166,59 @@ ${textContent}
     const isPrivate = isPrivateIp(url);
 
     if (isPrivate) {
-      return this.executeFallback(signal);
+      const errorMessage = 'Private/local URLs cannot be processed with AI analysis. Processing content directly.';
+      const result = await this.executeFallback(signal);
+      // Add the private URL message to the result
+      return {
+        ...result,
+        llmContent: `${errorMessage}\n\nContent from ${url}:\n\n${result.llmContent}`,
+      };
     }
 
-    const geminiClient = this.config.getGeminiClient();
+    // Get provider manager
+    const providerManager = this.config.getContentGeneratorConfig()?.providerManager;
+    if (!providerManager) {
+      return {
+        llmContent: 'Web fetch requires a provider. Please use --provider gemini with authentication.',
+        returnDisplay: 'Web fetch requires a provider.',
+        error: {
+          message: 'No provider manager available',
+          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+        },
+      };
+    }
+
+    // Get server tools provider (should be Gemini)
+    const serverToolsProvider = providerManager.getServerToolsProvider();
+    if (!serverToolsProvider) {
+      return {
+        llmContent: 'Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.',
+        returnDisplay: 'Web fetch requires Gemini provider.',
+        error: {
+          message: 'No server tools provider available',
+          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+        },
+      };
+    }
+
+    // Check if provider supports web_fetch
+    const supportedTools = serverToolsProvider.getServerTools();
+    if (!supportedTools.includes('web_fetch')) {
+      return {
+        llmContent: 'Web fetch is not available. The server tools provider does not support web fetch.',
+        returnDisplay: 'Web fetch not available.',
+        error: {
+          message: 'Server tools provider does not support web_fetch',
+          type: ToolErrorType.WEB_FETCH_PROCESSING_ERROR,
+        },
+      };
+    }
 
     try {
-      const response = await geminiClient.generateContent(
-        [{ role: 'user', parts: [{ text: userPrompt }] }],
-        { tools: [{ urlContext: {} }] },
-        signal, // Pass signal
+      const response = await serverToolsProvider.invokeServerTool(
+        'web_fetch',
+        { prompt: userPrompt },
+        { signal },
       );
 
       console.debug(
@@ -238,6 +267,13 @@ ${textContent}
       }
 
       if (processingError) {
+        // If it's not a private IP, don't fallback - just return no content found
+        if (!isPrivate) {
+          return {
+            llmContent: 'No content found or URL retrieval failed.',
+            returnDisplay: 'No content found.',
+          };
+        }
         return this.executeFallback(signal);
       }
 
@@ -288,13 +324,10 @@ ${sourceListFormatted.join('\n')}`;
 
       return {
         llmContent,
-        returnDisplay: `Content processed from prompt.`,
+        returnDisplay: responseText,
       };
     } catch (error: unknown) {
-      const errorMessage = `Error processing web content for prompt "${userPrompt.substring(
-        0,
-        50,
-      )}...": ${getErrorMessage(error)}`;
+      const errorMessage = `Error during web fetch: ${getErrorMessage(error)}`;
       console.error(errorMessage, error);
       return {
         llmContent: `Error: ${errorMessage}`,

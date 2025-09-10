@@ -17,7 +17,7 @@ import { simpleGit } from 'simple-git';
 import { recursivelyHydrateStrings } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 
-export const EXTENSIONS_DIRECTORY_NAME = '.gemini/extensions';
+export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 
 export const EXTENSIONS_CONFIG_FILENAME = 'llxprt-extension.json';
 export const INSTALL_METADATA_FILENAME = '.llxprt-extension-install.json';
@@ -76,7 +76,7 @@ export class ExtensionStorage {
 
   static async createTmpDir(): Promise<string> {
     return await fs.promises.mkdtemp(
-      path.join(os.tmpdir(), 'gemini-extension'),
+      path.join(os.tmpdir(), 'llxprt-extension'),
     );
   }
 }
@@ -341,11 +341,11 @@ export async function installExtension(
     const newExtension = loadExtension(localSourcePath);
     if (!newExtension) {
       throw new Error(
-        `Invalid extension at ${installMetadata.source}. Please make sure it has a valid gemini-extension.json file.`,
+        `Invalid extension at ${installMetadata.source}. Please make sure it has a valid llxprt-extension.json file.`,
       );
     }
 
-    // ~/.gemini/extensions/{ExtensionConfig.name}.
+    // ~/.llxprt/extensions/{ExtensionConfig.name}.
     newExtensionName = newExtension.config.name;
     const extensionStorage = new ExtensionStorage(newExtensionName);
     const destinationPath = extensionStorage.getExtensionDir();

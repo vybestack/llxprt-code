@@ -7,11 +7,23 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 const mockShellExecutionService = vi.hoisted(() => vi.fn());
+const mockOsHomedir = vi.hoisted(() => vi.fn(() => '/home/user'));
+const mockOsTmpdir = vi.hoisted(() => vi.fn(() => '/tmp'));
+const mockOsPlatform = vi.hoisted(() => vi.fn(() => 'linux'));
 vi.mock('../services/shellExecutionService.js', () => ({
   ShellExecutionService: { execute: mockShellExecutionService },
 }));
 vi.mock('fs');
-vi.mock('os');
+vi.mock('os', () => ({
+  default: {
+    homedir: mockOsHomedir,
+    tmpdir: mockOsTmpdir,
+    platform: mockOsPlatform,
+  },
+  homedir: mockOsHomedir,
+  tmpdir: mockOsTmpdir,
+  platform: mockOsPlatform,
+}));
 vi.mock('crypto');
 
 import { ShellTool } from './shell.js';
@@ -59,8 +71,8 @@ describe('ShellTool multibyte handling', () => {
 
     tool = new ShellTool(config);
 
-    vi.mocked(os.platform).mockReturnValue('linux');
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
+    mockOsPlatform.mockReturnValue('linux');
+    mockOsTmpdir.mockReturnValue('/tmp');
     (vi.mocked(crypto.randomBytes) as unknown as Mock).mockReturnValue(
       Buffer.from('a1b2c3', 'hex'),
     );

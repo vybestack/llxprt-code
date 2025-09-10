@@ -15,6 +15,7 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { ToolInvocation, ToolResult } from './tools.js';
+import { ToolErrorType } from './tool-error.js';
 
 describe('ReadFileTool', () => {
   let tempRootDir: string;
