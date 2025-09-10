@@ -14,7 +14,6 @@ import {
   afterEach,
   type Mock,
 } from 'vitest';
-import os from 'os';
 
 const mockIsBinary = vi.hoisted(() => vi.fn());
 const mockShellExecutionService = vi.hoisted(() => vi.fn());

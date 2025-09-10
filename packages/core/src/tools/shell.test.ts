@@ -57,6 +57,8 @@ vi.mock('../utils/summarizer.js', () => ({
   summarizeToolOutput: vi.fn(),
 }));
 
+import * as summarizer from '../utils/summarizer.js';
+
 describe('ShellTool', () => {
   let shellTool: ShellTool;
   let mockConfig: Config;

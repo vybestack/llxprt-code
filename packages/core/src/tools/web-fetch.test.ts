@@ -35,6 +35,9 @@ describe('WebFetchTool', () => {
       setApprovalMode: vi.fn(),
       getProxy: vi.fn(),
       getGeminiClient: mockGetGeminiClient,
+      getContentGeneratorConfig: vi.fn().mockReturnValue({
+        providerManager: null,
+      }),
     } as unknown as Config;
   });
 

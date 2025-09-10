@@ -41,7 +41,6 @@ describe('useFolderTrust', () => {
 
     mockConfig = {
       isTrustedFolder: vi.fn(),
-      setIsTrustedFolder: vi.fn(),
     } as unknown as Config;
 
     mockTrustedFolders = {
@@ -106,7 +105,7 @@ describe('useFolderTrust', () => {
       TrustLevel.TRUST_FOLDER,
     );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
-    expect(mockConfig.setIsTrustedFolder).toHaveBeenCalledWith(true);
+    // Config trust state is managed by trustedFolders, not directly on config
   });
 
   it('should handle TRUST_PARENT choice', () => {
@@ -127,7 +126,7 @@ describe('useFolderTrust', () => {
       TrustLevel.TRUST_PARENT,
     );
     expect(result.current.isFolderTrustDialogOpen).toBe(false);
-    expect(mockConfig.setIsTrustedFolder).toHaveBeenCalledWith(true);
+    // Config trust state is managed by trustedFolders, not directly on config
   });
 
   it('should handle DO_NOT_TRUST choice and trigger restart', () => {
@@ -147,7 +146,7 @@ describe('useFolderTrust', () => {
       '/test/path',
       TrustLevel.DO_NOT_TRUST,
     );
-    expect(mockConfig.setIsTrustedFolder).toHaveBeenCalledWith(false);
+    // Config trust state is managed by trustedFolders, not directly on config
     expect(result.current.isRestarting).toBe(true);
     expect(result.current.isFolderTrustDialogOpen).toBe(true);
   });
@@ -207,8 +206,7 @@ describe('useFolderTrust', () => {
       useFolderTrust(mockSettings, mockConfig),
     );
 
-    // Reset the mock to track new calls
-    (mockConfig.setIsTrustedFolder as vi.Mock).mockClear();
+    // No need to reset mock since setIsTrustedFolder is no longer called
 
     act(() => {
       result.current.handleFolderTrustSelect(FolderTrustChoice.TRUST_FOLDER);

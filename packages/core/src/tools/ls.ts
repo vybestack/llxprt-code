@@ -246,7 +246,7 @@ class LSToolInvocation extends BaseToolInvocation<LSToolParams, ToolResult> {
         ignoredMessages.push(`${gitIgnoredCount} git-ignored`);
       }
       if (geminiIgnoredCount > 0) {
-        ignoredMessages.push(`${geminiIgnoredCount} gemini-ignored`);
+        ignoredMessages.push(`${geminiIgnoredCount} llxprt-ignored`);
       }
 
       if (ignoredMessages.length > 0) {

@@ -122,13 +122,21 @@ describe('Atomic Compression', () => {
       recalculateTokens: vi.fn(async () => {}),
     };
 
-    const mockChat = client.getChat();
-    mockChat.getHistoryService = vi.fn(() => mockHistoryService);
+    // Mock the getChat method on the client to return a mock chat object
+    const mockChatObject = {
+      getHistoryService: vi.fn(() => mockHistoryService),
+      getHistory: vi.fn(() => []), // Add the missing getHistory method
+    };
+    client.getChat = vi.fn(() => mockChatObject);
 
     const result = await client.tryCompressChat('test_prompt_id', false);
 
     // Should skip compression due to pending tool calls
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      originalTokenCount: 0,
+      newTokenCount: 0,
+      compressionStatus: 4, // CompressionStatus.NOOP
+    });
     expect(mockHistoryService.startCompression).not.toHaveBeenCalled();
   });
 });

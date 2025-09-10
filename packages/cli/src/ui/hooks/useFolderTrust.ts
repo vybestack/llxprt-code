@@ -61,8 +61,7 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
         trustLevel === TrustLevel.TRUST_PARENT;
       setIsTrusted(newIsTrusted);
 
-      // Update config's trust state
-      config.setIsTrustedFolder(newIsTrusted);
+      // Trust state is managed by trustedFolders and doesn't need to be set on config
 
       const needsRestart = wasTrusted !== newIsTrusted;
       if (needsRestart) {

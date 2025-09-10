@@ -98,7 +98,7 @@ describe('ide-installer', () => {
         });
         await installer.install();
         expect(child_process.execSync).toHaveBeenCalledWith(
-          '"code" --install-extension google.gemini-cli-vscode-ide-companion --force',
+          '"code" --install-extension vybestack.llxprt-code-vscode-ide-companion --force',
           { stdio: 'pipe' },
         );
       });

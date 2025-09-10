@@ -12,14 +12,14 @@ import { useCommandCompletion } from './useCommandCompletion.js';
 import { CommandContext } from '../commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Suggestion } from '../components/SuggestionsDisplay.js';
 import { UseAtCompletionProps, useAtCompletion } from './useAtCompletion.js';
 import {
-  UseSlashCompletionProps,
+  UseSlashCompletionProps as _UseSlashCompletionProps,
   useSlashCompletion,
 } from './useSlashCompletion.js';
-import { useCompletion } from './useCompletion.js';
+import { useCompletion as _useCompletion } from './useCompletion.js';
 
 vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),

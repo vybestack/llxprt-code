@@ -27,7 +27,7 @@ export class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
   constructor(
     private readonly tool: MockTool,
     // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
-    public readonly params: object,
+    public override readonly params: object,
   ) {
     super(params);
   }

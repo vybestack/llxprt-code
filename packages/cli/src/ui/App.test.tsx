@@ -24,7 +24,7 @@ import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
-import { StreamingState, ConsoleMessageItem, MessageType } from './types.js';
+import { StreamingState, ConsoleMessageItem, MessageType, HistoryItem } from './types.js';
 import { Tips } from './components/Tips.js';
 import { checkForUpdates, UpdateObject } from './utils/updateCheck.js';
 import { EventEmitter } from 'events';
@@ -246,8 +246,8 @@ vi.mock('./hooks/useConsoleMessages.js', () => ({
 }));
 
 // Create a mock history state that can be updated by tests
-let mockHistoryState: any[] = [];
-const mockAddItem = vi.fn((item: any) => {
+let mockHistoryState: HistoryItem[] = [];
+const mockAddItem = vi.fn((item: Omit<HistoryItem, 'id'>) => {
   mockHistoryState.push({ ...item, id: Date.now() });
 });
 
@@ -463,7 +463,7 @@ describe('App UI', () => {
       };
       mockedCheckForUpdates.mockResolvedValue(info);
 
-      const { lastFrame, unmount } = renderWithProviders(
+      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -497,7 +497,7 @@ describe('App UI', () => {
       };
       mockedCheckForUpdates.mockResolvedValue(info);
 
-      const { lastFrame, unmount } = renderWithProviders(
+      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}
@@ -531,7 +531,7 @@ describe('App UI', () => {
       };
       mockedCheckForUpdates.mockResolvedValue(info);
 
-      const { lastFrame, unmount } = renderWithProviders(
+      const { lastFrame: _lastFrame, unmount } = renderWithProviders(
         <App
           config={mockConfig as unknown as ServerConfig}
           settings={mockSettings}

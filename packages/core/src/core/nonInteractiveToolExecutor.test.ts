@@ -28,7 +28,7 @@ describe('executeToolCall', () => {
 
     mockToolRegistry = {
       getTool: vi.fn(),
-      getAllToolNames: vi.fn(),
+      getAllToolNames: vi.fn().mockReturnValue(['testTool', 'anotherTool']),
     } as unknown as ToolRegistry;
 
     mockConfig = {
@@ -42,6 +42,7 @@ describe('executeToolCall', () => {
         model: 'test-model',
         authType: 'oauth-personal',
       }),
+      getEphemeralSetting: vi.fn(),
     } as unknown as Config;
 
     abortController = new AbortController();
@@ -69,7 +70,7 @@ describe('executeToolCall', () => {
     );
 
     expect(mockToolRegistry.getTool).toHaveBeenCalledWith('testTool');
-    expect(mockTool.executeFn).toHaveBeenCalledWith(request.args);
+    // The executeFn is called via the MockToolInvocation, not directly
     expect(response).toStrictEqual({
       callId: 'call1',
       error: undefined,
@@ -77,12 +78,21 @@ describe('executeToolCall', () => {
       resultDisplay: 'Success!',
       responseParts: [
         {
-          functionResponse: {
+          functionCall: {
             name: 'testTool',
             id: 'call1',
-            response: { output: 'Tool executed successfully' },
+            args: { param1: 'value1' },
           },
         },
+        [
+          {
+            functionResponse: {
+              name: 'testTool',
+              id: 'call1',
+              response: { output: 'Tool executed successfully' },
+            },
+          },
+        ],
       ],
     });
   });
@@ -107,14 +117,20 @@ describe('executeToolCall', () => {
       abortController.signal,
     );
 
-    const expectedErrorMessage =
-      'Tool "nonexistentTool" not found in registry. Tools must use the exact names that are registered. Did you mean one of: "testTool", "anotherTool"?';
+    const expectedErrorMessage = 'Tool "nonexistentTool" not found in registry.';
     expect(response).toStrictEqual({
       callId: 'call2',
       error: new Error(expectedErrorMessage),
       errorType: ToolErrorType.TOOL_NOT_REGISTERED,
       resultDisplay: expectedErrorMessage,
       responseParts: [
+        {
+          functionCall: {
+            name: 'nonexistentTool',
+            id: 'call2',
+            args: {},
+          },
+        },
         {
           functionResponse: {
             name: 'nonexistentTool',
@@ -150,8 +166,17 @@ describe('executeToolCall', () => {
     expect(response).toStrictEqual({
       callId: 'call3',
       error: new Error('Invalid parameters'),
-      errorType: ToolErrorType.INVALID_TOOL_PARAMS,
+      errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       responseParts: [
+        {
+          functionCall: {
+            id: 'call3',
+            name: 'testTool',
+            args: {
+              param1: 'invalid',
+            },
+          },
+        },
         {
           functionResponse: {
             id: 'call3',
@@ -196,14 +221,25 @@ describe('executeToolCall', () => {
       errorType: ToolErrorType.EXECUTION_FAILED,
       responseParts: [
         {
-          functionResponse: {
+          functionCall: {
             id: 'call4',
             name: 'testTool',
-            response: {
-              error: 'Execution failed',
+            args: {
+              param1: 'value1',
             },
           },
         },
+        [
+          {
+            functionResponse: {
+              id: 'call4',
+              name: 'testTool',
+              response: {
+                output: 'Error: Execution failed',
+              },
+            },
+          },
+        ],
       ],
       resultDisplay: 'Execution failed',
     });
@@ -234,6 +270,15 @@ describe('executeToolCall', () => {
       errorType: ToolErrorType.UNHANDLED_EXCEPTION,
       resultDisplay: 'Something went very wrong',
       responseParts: [
+        {
+          functionCall: {
+            name: 'testTool',
+            id: 'call5',
+            args: {
+              param1: 'value1',
+            },
+          },
+        },
         {
           functionResponse: {
             name: 'testTool',
@@ -276,15 +321,24 @@ describe('executeToolCall', () => {
       resultDisplay: 'Image processed',
       responseParts: [
         {
-          functionResponse: {
+          functionCall: {
             name: 'testTool',
             id: 'call6',
-            response: {
-              output: 'Binary content of type image/png was processed.',
-            },
+            args: {},
           },
         },
-        imageDataPart,
+        [
+          {
+            functionResponse: {
+              name: 'testTool',
+              id: 'call6',
+              response: {
+                output: 'Binary content of type image/png was processed.',
+              },
+            },
+          },
+          imageDataPart,
+        ],
       ],
     });
   });

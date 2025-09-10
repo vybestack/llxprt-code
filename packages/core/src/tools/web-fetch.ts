@@ -20,6 +20,7 @@ import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import type { GenerateContentResponse, UrlMetadata } from '@google/genai';
 
 const URL_FETCH_TIMEOUT_MS = 10000;
 const MAX_CONTENT_LENGTH = 100000;
@@ -229,9 +230,10 @@ class WebFetchToolInvocation extends BaseToolInvocation<
         JSON.stringify(response, null, 2),
       );
 
-      let responseText = getResponseText(response) || '';
-      const urlContextMeta = response.candidates?.[0]?.urlContextMetadata;
-      const groundingMetadata = response.candidates?.[0]?.groundingMetadata;
+      let responseText = getResponseText(response as GenerateContentResponse) || '';
+      const typedResponse = response as GenerateContentResponse;
+      const urlContextMeta = typedResponse.candidates?.[0]?.urlContextMetadata;
+      const groundingMetadata = typedResponse.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;
@@ -247,7 +249,7 @@ class WebFetchToolInvocation extends BaseToolInvocation<
         urlContextMeta.urlMetadata.length > 0
       ) {
         const allStatuses = urlContextMeta.urlMetadata.map(
-          (m) => m.urlRetrievalStatus,
+          (m: UrlMetadata) => m.urlRetrievalStatus,
         );
         if (allStatuses.every((s) => s !== 'URL_RETRIEVAL_STATUS_SUCCESS')) {
           processingError = true;

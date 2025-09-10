@@ -18,7 +18,6 @@ import * as fs from 'node:fs';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   detectIde,
   DetectedIde,
@@ -42,14 +41,12 @@ vi.mock('node:fs', async (importOriginal) => {
 vi.mock('./process-utils.js');
 vi.mock('@modelcontextprotocol/sdk/client/index.js');
 vi.mock('@modelcontextprotocol/sdk/client/streamableHttp.js');
-vi.mock('@modelcontextprotocol/sdk/client/stdio.js');
 vi.mock('./detect-ide.js');
 vi.mock('node:os');
 
 describe('IdeClient', () => {
   let mockClient: Mocked<Client>;
   let mockHttpTransport: Mocked<StreamableHTTPClientTransport>;
-  let mockStdioTransport: Mocked<StdioClientTransport>;
 
   beforeEach(async () => {
     // Reset singleton instance for test isolation
@@ -57,10 +54,10 @@ describe('IdeClient', () => {
       undefined;
 
     // Mock environment variables
-    process.env['GEMINI_CLI_IDE_WORKSPACE_PATH'] = '/test/workspace';
-    delete process.env['GEMINI_CLI_IDE_SERVER_PORT'];
-    delete process.env['GEMINI_CLI_IDE_SERVER_STDIO_COMMAND'];
-    delete process.env['GEMINI_CLI_IDE_SERVER_STDIO_ARGS'];
+    process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = '/test/workspace';
+    delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
+    delete process.env['LLXPRT_CODE_IDE_SERVER_STDIO_COMMAND'];
+    delete process.env['LLXPRT_CODE_IDE_SERVER_STDIO_ARGS'];
 
     // Mock dependencies
     vi.spyOn(process, 'cwd').mockReturnValue('/test/workspace/sub-dir');
@@ -84,13 +81,9 @@ describe('IdeClient', () => {
     mockHttpTransport = {
       close: vi.fn(),
     } as unknown as Mocked<StreamableHTTPClientTransport>;
-    mockStdioTransport = {
-      close: vi.fn(),
-    } as unknown as Mocked<StdioClientTransport>;
 
     vi.mocked(Client).mockReturnValue(mockClient);
     vi.mocked(StreamableHTTPClientTransport).mockReturnValue(mockHttpTransport);
-    vi.mocked(StdioClientTransport).mockReturnValue(mockStdioTransport);
 
     await IdeClient.getInstance();
   });
@@ -121,45 +114,12 @@ describe('IdeClient', () => {
       );
     });
 
-    it('should connect using stdio when stdio config is provided in file', async () => {
-      const config = { stdio: { command: 'test-cmd', args: ['--foo'] } };
-      vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
-
-      const ideClient = await IdeClient.getInstance();
-      await ideClient.connect();
-
-      expect(StdioClientTransport).toHaveBeenCalledWith({
-        command: 'test-cmd',
-        args: ['--foo'],
-      });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
-      expect(ideClient.getConnectionStatus().status).toBe(
-        IDEConnectionStatus.Connected,
-      );
-    });
-
-    it('should prioritize port over stdio when both are in config file', async () => {
-      const config = {
-        port: '8080',
-        stdio: { command: 'test-cmd', args: ['--foo'] },
-      };
-      vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
-
-      const ideClient = await IdeClient.getInstance();
-      await ideClient.connect();
-
-      expect(StreamableHTTPClientTransport).toHaveBeenCalled();
-      expect(StdioClientTransport).not.toHaveBeenCalled();
-      expect(ideClient.getConnectionStatus().status).toBe(
-        IDEConnectionStatus.Connected,
-      );
-    });
 
     it('should connect using HTTP when port is provided in environment variables', async () => {
       vi.mocked(fs.promises.readFile).mockRejectedValue(
         new Error('File not found'),
       );
-      process.env['GEMINI_CLI_IDE_SERVER_PORT'] = '9090';
+      process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
 
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();
@@ -174,30 +134,10 @@ describe('IdeClient', () => {
       );
     });
 
-    it('should connect using stdio when stdio config is in environment variables', async () => {
-      vi.mocked(fs.promises.readFile).mockRejectedValue(
-        new Error('File not found'),
-      );
-      process.env['GEMINI_CLI_IDE_SERVER_STDIO_COMMAND'] = 'env-cmd';
-      process.env['GEMINI_CLI_IDE_SERVER_STDIO_ARGS'] = '["--bar"]';
-
-      const ideClient = await IdeClient.getInstance();
-      await ideClient.connect();
-
-      expect(StdioClientTransport).toHaveBeenCalledWith({
-        command: 'env-cmd',
-        args: ['--bar'],
-      });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport);
-      expect(ideClient.getConnectionStatus().status).toBe(
-        IDEConnectionStatus.Connected,
-      );
-    });
-
     it('should prioritize file config over environment variables', async () => {
       const config = { port: '8080' };
       vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify(config));
-      process.env['GEMINI_CLI_IDE_SERVER_PORT'] = '9090';
+      process.env['LLXPRT_CODE_IDE_SERVER_PORT'] = '9090';
 
       const ideClient = await IdeClient.getInstance();
       await ideClient.connect();
@@ -220,7 +160,6 @@ describe('IdeClient', () => {
       await ideClient.connect();
 
       expect(StreamableHTTPClientTransport).not.toHaveBeenCalled();
-      expect(StdioClientTransport).not.toHaveBeenCalled();
       expect(ideClient.getConnectionStatus().status).toBe(
         IDEConnectionStatus.Disconnected,
       );
