@@ -85,7 +85,7 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import {
-  SlashCommandStatus,
+  // SlashCommandStatus,
   ToolConfirmationOutcome,
   type Config,
   type IdeClient,

@@ -249,7 +249,6 @@ export function useCommandCompletion(
       completionMode,
       completionStart,
       completionEnd,
-      slashCompletionResults,
     ],
   );
 

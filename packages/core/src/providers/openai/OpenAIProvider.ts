@@ -281,6 +281,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Clear the cached OpenAI client
    * Should be called when authentication state changes (e.g., after logout)
    */
+  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   public clearClientCache(): void {
     this._cachedClient = undefined;
     this._cachedClientKey = undefined;

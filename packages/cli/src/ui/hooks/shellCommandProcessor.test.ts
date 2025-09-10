@@ -14,6 +14,7 @@ import {
   afterEach,
   type Mock,
 } from 'vitest';
+import os from 'os';
 
 const mockIsBinary = vi.hoisted(() => vi.fn());
 const mockShellExecutionService = vi.hoisted(() => vi.fn());
@@ -51,7 +52,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
+// import * as path from 'path';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
 
@@ -316,17 +317,17 @@ describe('useShellCommandProcessor', () => {
     });
   });
 
-  it('should not wrap the command on Windows', async () => {
-    vi.mocked(os.platform).mockClear();
-    vi.mocked(os.platform).mockReturnValue('win32');
+  it('should wrap the command on non-Windows systems to capture working directory', async () => {
+    // Default mock platform is 'linux', which should trigger command wrapping
     const { result } = renderProcessorHook();
 
     act(() => {
       result.current.handleShellCommand('dir', new AbortController().signal);
     });
 
+    // On non-Windows systems, command should be wrapped to capture working directory
     expect(mockShellExecutionService).toHaveBeenCalledWith(
-      'dir',
+      expect.stringContaining('{ dir; }; __code=$?; pwd >'),
       '/test/dir',
       expect.any(Function),
       expect.any(Object),

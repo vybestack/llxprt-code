@@ -5,7 +5,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getIdeInstaller, IdeInstaller } from './ide-installer.js';
+import { getIdeInstaller } from './ide-installer.js';
 import * as child_process from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';

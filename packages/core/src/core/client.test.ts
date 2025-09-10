@@ -2321,7 +2321,7 @@ describe('Gemini Client (client.ts)', () => {
     it('should update model in config and reinitialize chat', async () => {
       // Arrange
       const mockSetModel = vi.fn();
-      const mockConfig = {
+      const _mockConfig = {
         getModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
         setModel: mockSetModel,
         getProjectRoot: vi.fn().mockReturnValue('/test'),
@@ -2374,12 +2374,12 @@ describe('Gemini Client (client.ts)', () => {
 
     it('should use current model from config for content generation', async () => {
       const initialModel = client['config'].getModel();
-      const contents = [{ role: 'user', parts: [{ text: 'test' }] }];
+      const _contents = [{ role: 'user', parts: [{ text: 'test' }] }];
       const currentModel = initialModel + '-changed';
 
       vi.spyOn(client['config'], 'getModel').mockReturnValueOnce(currentModel);
 
-      const mockGenerator: Partial<ContentGenerator> = {
+      const _mockGenerator: Partial<ContentGenerator> = {
         countTokens: vi.fn().mockResolvedValue({ totalTokens: 1 }),
         generateContent: mockGenerateContentFn,
       };
@@ -2469,8 +2469,8 @@ describe('Gemini Client (client.ts)', () => {
 
   describe('handleFlashFallback', () => {
     it('should use current model from config when checking for fallback', async () => {
-      const initialModel = client['config'].getModel();
-      const fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
+      const _initialModel = client['config'].getModel();
+      const _fallbackModel = DEFAULT_GEMINI_FLASH_MODEL;
 
       // Act
       // const models = await client.listAvailableModels();

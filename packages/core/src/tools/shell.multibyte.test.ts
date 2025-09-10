@@ -28,7 +28,7 @@ vi.mock('crypto');
 
 import { ShellTool } from './shell.js';
 import type { Config } from '../config/config.js';
-import * as os from 'os';
+// import * as os from 'os';
 import * as crypto from 'crypto';
 
 // helper to create a deferred

@@ -420,7 +420,7 @@ export function toOutputString(extension: Extension): string {
 
 export async function updateExtension(
   extensionName: string,
-  cwd: string = process.cwd(),
+  _cwd: string = process.cwd(),
 ): Promise<ExtensionUpdateInfo | undefined> {
   const installedExtensions = loadUserExtensions();
   const extension = installedExtensions.find(

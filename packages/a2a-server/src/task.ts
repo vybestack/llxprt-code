@@ -116,14 +116,14 @@ export class Task {
     const servers = Object.keys(mcpServers).map((serverName) => ({
       name: serverName,
       status: serverStatuses.get(serverName) || MCPServerStatus.DISCONNECTED,
-      tools: toolRegistry.getToolsByServer(serverName).map((tool: any) => ({
+      tools: toolRegistry.getToolsByServer(serverName).map((tool) => ({
         name: tool.name,
         description: tool.description,
         parameterSchema: tool.schema.parameters,
       })),
     }));
 
-    const availableTools = toolRegistry.getAllTools().map((tool: any) => ({
+    const availableTools = toolRegistry.getAllTools().map((tool) => ({
       name: tool.name,
       description: tool.description,
       parameterSchema: tool.schema.parameters,
@@ -487,7 +487,7 @@ export class Task {
         old_string === '' && currentContent === '',
       );
     } catch (err) {
-      if (!isNodeError(err) || (err as any).code !== 'ENOENT') throw err;
+      if (!isNodeError(err) || err.code !== 'ENOENT') throw err;
       return '';
     }
   }

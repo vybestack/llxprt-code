@@ -104,7 +104,7 @@ describe('Settings Loading and Merging', () => {
     (mockFsExistsSync as Mock).mockReturnValue(false);
     (fs.readFileSync as Mock).mockReturnValue('{}'); // Return valid empty JSON
     (mockFsMkdirSync as Mock).mockImplementation(
-      (dir: string, options?: unknown) => {
+      (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
         if (!dir || typeof dir !== 'string') {
           throw new Error('Invalid directory path');
@@ -1702,10 +1702,10 @@ describe('Settings Loading and Merging', () => {
       const parseError = new SyntaxError(
         'Unexpected token } in JSON at position 42',
       );
-      let parseCallCount = 0;
+      let _parseCallCount = 0;
       const originalParse = JSON.parse;
       vi.spyOn(JSON, 'parse').mockImplementation((text: string) => {
-        parseCallCount++;
+        _parseCallCount++;
         // Only throw on the specific malformed JSON content
         if (text === malformedJson) {
           throw parseError;

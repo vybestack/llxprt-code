@@ -61,8 +61,8 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
         trustLevel === TrustLevel.TRUST_PARENT;
       setIsTrusted(newIsTrusted);
 
-      // Update config's trust state - method not available
-      // TODO: Implement trust folder setting
+      // Update config's trust state
+      config.setIsTrustedFolder(newIsTrusted);
 
       const needsRestart = wasTrusted !== newIsTrusted;
       if (needsRestart) {
@@ -72,7 +72,7 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
         setIsFolderTrustDialogOpen(false);
       }
     },
-    [config, isTrusted],
+    [isTrusted],
   );
 
   return {

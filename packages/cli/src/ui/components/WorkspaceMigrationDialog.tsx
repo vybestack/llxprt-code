@@ -11,7 +11,7 @@ import {
 } from '../../config/extension.js';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { Colors } from '../colors.js';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 export function WorkspaceMigrationDialog(props: {
   workspaceExtensions: Extension[];
@@ -22,12 +22,20 @@ export function WorkspaceMigrationDialog(props: {
   const [migrationComplete, setMigrationComplete] = useState(false);
   const [failedExtensions, setFailedExtensions] = useState<string[]>([]);
   onOpen();
-  const onMigrate = async () => {
+  const onMigrate = useCallback(async () => {
     const failed =
       await performWorkspaceExtensionMigration(workspaceExtensions);
     setFailedExtensions(failed);
     setMigrationComplete(true);
-  };
+  }, [workspaceExtensions]);
+
+  const handleSelect = useCallback((value: string) => {
+    if (value === 'migrate') {
+      onMigrate();
+    } else {
+      onClose();
+    }
+  }, [onMigrate, onClose]);
 
   useInput((input) => {
     if (migrationComplete && input === 'q') {
@@ -94,13 +102,7 @@ export function WorkspaceMigrationDialog(props: {
             { label: 'Install all', value: 'migrate' },
             { label: 'Skip', value: 'skip' },
           ]}
-          onSelect={(value: string) => {
-            if (value === 'migrate') {
-              onMigrate();
-            } else {
-              onClose();
-            }
-          }}
+          onSelect={handleSelect}
         />
       </Box>
     </Box>

@@ -72,7 +72,7 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     super(params);
   }
 
-  private async executeFallback(signal: AbortSignal): Promise<ToolResult> {
+  private async executeFallback(_signal: AbortSignal): Promise<ToolResult> {
     const urls = extractUrls(this.params.prompt);
     // For now, we only support one URL for fallback
     let url = urls[0];

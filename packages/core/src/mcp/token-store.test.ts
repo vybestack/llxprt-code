@@ -51,14 +51,17 @@ class TestTokenStore extends BaseTokenStore {
   }
 
   // Expose protected methods for testing
+  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   public testValidateToken(token: MCPOAuthToken): void {
     this.validateToken(token);
   }
 
+  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   public testValidateServerName(serverName: string): void {
     this.validateServerName(serverName);
   }
 
+  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   public testCreateCredentials(
     serverName: string,
     token: MCPOAuthToken,

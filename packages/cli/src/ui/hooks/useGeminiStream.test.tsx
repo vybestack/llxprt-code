@@ -1819,7 +1819,7 @@ describe('useGeminiStream', () => {
       expect.any(String), // Argument 3: The prompt_id string
     );
   });
-  describe('Thought Reset', () => {
+  describe('Thought Reset After Prompt', () => {
     it('should reset thought to null when starting a new prompt', async () => {
       mockSendMessageStream.mockReturnValue(
         (async function* () {
@@ -1999,7 +1999,7 @@ describe('useGeminiStream', () => {
     });
   });
 
-  it('should process @include commands, adding user turn after processing to prevent race conditions', async () => {
+  it('should process @include commands with proper user turn handling', async () => {
     const rawQuery = '@include file.txt Summarize this.';
     const processedQueryParts = [
       { text: 'Summarize this with content from @file.txt' },

@@ -294,7 +294,7 @@ Line 8`;
         });
       });
 
-      it('should return success result for a text file', async () => {
+      it('should return success result for a text file in validate mode', async () => {
         const filePath = path.join(tempRootDir, 'textfile.txt');
         const fileContent = 'This is a test file.';
         await fsp.writeFile(filePath, fileContent, 'utf-8');
@@ -310,7 +310,7 @@ Line 8`;
         });
       });
 
-      it('should return success result for an image file', async () => {
+      it('should return success result for an image file in validate mode', async () => {
         // A minimal 1x1 transparent PNG file.
         const pngContent = Buffer.from([
           137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
@@ -337,7 +337,7 @@ Line 8`;
         });
       });
 
-      it('should treat a non-image file with image extension as an image', async () => {
+      it('should treat a non-image file with image extension as an image in validate mode', async () => {
         const filePath = path.join(tempRootDir, 'fake-image.png');
         const fileContent = 'This is not a real png.';
         await fsp.writeFile(filePath, fileContent, 'utf-8');

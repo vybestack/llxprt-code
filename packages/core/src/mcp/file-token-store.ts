@@ -64,7 +64,7 @@ export class FileTokenStore extends BaseTokenStore {
           tokenMap.set(credential.serverName, credential);
         } else {
           console.warn(
-            `Skipping invalid credential entry for server: ${(credential as any)?.serverName || 'unknown'}`,
+            `Skipping invalid credential entry for server: ${(credential as { serverName?: string })?.serverName || 'unknown'}`,
           );
         }
       }

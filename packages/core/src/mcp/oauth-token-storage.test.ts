@@ -81,7 +81,7 @@ describe('MCPOAuthTokenStorage', () => {
     expiresAt: Date.now() + 3600000, // 1 hour from now
   };
 
-  const mockCredentials: MCPOAuthCredentials = {
+  const _mockCredentials: MCPOAuthCredentials = {
     serverName: 'test-server',
     token: mockToken,
     clientId: 'test-client-id',

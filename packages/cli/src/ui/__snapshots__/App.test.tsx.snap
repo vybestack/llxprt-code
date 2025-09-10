@@ -1,7 +1,30 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`App UI > should render correctly with the prompt input box 1`] = `"[?1004l"`;
+exports[`App UI > should render correctly with the prompt input box 1`] = `
+"
 
-exports[`App UI > should render the initial UI correctly 1`] = `"[?1004l"`;
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                 │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                       Context: 0.0k/1049k
+/test/dir  [no sandbox (see /docs)]                                             gemini-pro"
+`;
 
-exports[`App UI > when in a narrow terminal > should render with a column layout 1`] = `"[?1004l"`;
+exports[`App UI > should render the initial UI correctly 1`] = `
+"
+ The first rule of Fight Club is: you do not talk about Fight Club. (esc to cancel, 0s)
+
+
+                                                                       Context: 0.0k/1049k
+/test/dir  [no sandbox (see /docs)]                                             gemini-pro"
+`;
+
+exports[`App UI > when in a narrow terminal > should render with a column layout 1`] = `
+"
+
+╭────────────────────────────────────────────────────────────────────────────────────────╮
+│ >   Type your message or @path/to/file                                                 │
+╰────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                           Ctx: 0.0k/1049k
+/test/dir                                               | ✖ 5 errors (ctrl+o for details)"
+`;

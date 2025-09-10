@@ -29,10 +29,7 @@ exports[`<ToolGroupMessage /> > Confirmation Handling > shows confirmation dialo
  ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
 
-exports[`<ToolGroupMessage /> > Golden Snapshots > renders empty tool calls array 1`] = `
-" ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
- ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
-`;
+exports[`<ToolGroupMessage /> > Golden Snapshots > renders empty tool calls array 1`] = `""`;
 
 exports[`<ToolGroupMessage /> > Golden Snapshots > renders mixed tool calls including shell command 1`] = `
 " ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

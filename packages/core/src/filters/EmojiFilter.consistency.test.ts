@@ -9,7 +9,7 @@
  * These tests ensure that emojis are consistently filtered across all contexts
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
@@ -368,6 +368,8 @@ describe('EmojiFilter - Consistency Tests for llxprt Emoji-Free Policy', () => {
             expect(result.blocked).toBe(true);
             expect(result.filtered).toBeNull();
             break;
+          default:
+            throw new Error(`Unknown mode: ${mode}`);
         }
       });
     });

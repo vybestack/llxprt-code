@@ -12,23 +12,92 @@ import { useCommandCompletion } from './useCommandCompletion.js';
 import { CommandContext } from '../commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
-import { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Suggestion } from '../components/SuggestionsDisplay.js';
 import { UseAtCompletionProps, useAtCompletion } from './useAtCompletion.js';
 import {
   UseSlashCompletionProps,
   useSlashCompletion,
 } from './useSlashCompletion.js';
+import { useCompletion } from './useCompletion.js';
 
 vi.mock('./useAtCompletion', () => ({
   useAtCompletion: vi.fn(),
 }));
 
-vi.mock('./useSlashCompletion', () => ({
-  useSlashCompletion: vi.fn(() => ({
-    completionStart: 0,
-    completionEnd: 0,
+vi.mock('./useSlashCompletion');
+
+vi.mock('./useCompletion', () => ({
+  useCompletion: vi.fn(() => {
+    const [suggestions, setSuggestions] = useState([]);
+    const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+    const [visibleStartIndex, setVisibleStartIndex] = useState(0);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+    const [isPerfectMatch, setIsPerfectMatch] = useState(false);
+
+    const resetCompletionState = useCallback(() => {
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+      setVisibleStartIndex(0);
+      setShowSuggestions(false);
+      setIsLoadingSuggestions(false);
+      setIsPerfectMatch(false);
+    }, []);
+
+    const navigateUp = useCallback(() => {
+      if (suggestions.length === 0) return;
+      setActiveSuggestionIndex(prev => prev <= 0 ? suggestions.length - 1 : prev - 1);
+    }, [suggestions.length]);
+
+    const navigateDown = useCallback(() => {
+      if (suggestions.length === 0) return;
+      setActiveSuggestionIndex(prev => prev >= suggestions.length - 1 ? 0 : prev + 1);
+    }, [suggestions.length]);
+
+    // Auto-select first suggestion when suggestions change
+    useEffect(() => {
+      setActiveSuggestionIndex(suggestions.length > 0 ? 0 : -1);
+      setShowSuggestions(suggestions.length > 0);
+    }, [suggestions]);
+
+    return {
+      suggestions,
+      activeSuggestionIndex,
+      visibleStartIndex,
+      showSuggestions,
+      isLoadingSuggestions,
+      isPerfectMatch,
+      setSuggestions,
+      setShowSuggestions,
+      setActiveSuggestionIndex,
+      setIsLoadingSuggestions,
+      setIsPerfectMatch,
+      setVisibleStartIndex,
+      resetCompletionState,
+      navigateUp,
+      navigateDown,
+    };
+  }),
+}));
+
+vi.mock('./usePromptCompletion', () => ({
+  usePromptCompletion: vi.fn(() => ({
+    suggestions: [],
+    activeSuggestionIndex: -1,
+    visibleStartIndex: 0,
+    showSuggestions: false,
+    isLoadingSuggestions: false,
+    setSuggestions: vi.fn(),
+    setActiveSuggestionIndex: vi.fn(),
+    setShowSuggestions: vi.fn(),
+    resetCompletionState: vi.fn(),
+    navigateUp: vi.fn(),
+    navigateDown: vi.fn(),
+    handleAutocomplete: vi.fn(),
+    setVisibleStartIndex: vi.fn(),
   })),
+  PROMPT_COMPLETION_MIN_LENGTH: 30,
 }));
 
 // Helper to set up mocks in a consistent way for both child hooks
@@ -37,13 +106,11 @@ const setupMocks = ({
   slashSuggestions = [],
   isLoading = false,
   isPerfectMatch = false,
-  slashCompletionRange = { completionStart: 0, completionEnd: 0 },
 }: {
   atSuggestions?: Suggestion[];
   slashSuggestions?: Suggestion[];
   isLoading?: boolean;
   isPerfectMatch?: boolean;
-  slashCompletionRange?: { completionStart: number; completionEnd: number };
 }) => {
   // Mock for @-completions
   (useAtCompletion as vi.Mock).mockImplementation(
@@ -61,31 +128,65 @@ const setupMocks = ({
     },
   );
 
-  // Mock for /-completions
-  (useSlashCompletion as vi.Mock).mockImplementation(
-    ({
-      enabled,
-      setSuggestions,
-      setIsLoadingSuggestions,
-      setIsPerfectMatch,
-    }: UseSlashCompletionProps) => {
-      useEffect(() => {
-        if (enabled) {
-          setIsLoadingSuggestions(isLoading);
-          setSuggestions(slashSuggestions);
-          setIsPerfectMatch(isPerfectMatch);
-        }
-      }, [enabled, setSuggestions, setIsLoadingSuggestions, setIsPerfectMatch]);
-      // The hook returns a range, which we can mock simply
-      return slashCompletionRange;
-    },
-  );
+  // Mock for /-completions with proper state management
+  (useSlashCompletion as vi.Mock).mockImplementation((buffer) => {
+    const [suggestions, setSuggestions] = useState<Suggestion[]>(slashSuggestions);
+    const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(slashSuggestions.length > 0 ? 0 : -1);
+    const [visibleStartIndex, setVisibleStartIndex] = useState<number>(0);
+    const [showSuggestions, setShowSuggestions] = useState<boolean>(slashSuggestions.length > 0);
+    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState<boolean>(isLoading);
+    const [isPerfectMatchState, setIsPerfectMatch] = useState<boolean>(isPerfectMatch);
+
+    const resetCompletionState = useCallback(() => {
+      setSuggestions([]);
+      setActiveSuggestionIndex(-1);
+      setVisibleStartIndex(0);
+      setShowSuggestions(false);
+      setIsLoadingSuggestions(false);
+      setIsPerfectMatch(false);
+    }, []);
+
+    const navigateUp = useCallback(() => {
+      if (suggestions.length === 0) return;
+      setActiveSuggestionIndex(prev => prev <= 0 ? suggestions.length - 1 : prev - 1);
+    }, [suggestions.length]);
+
+    const navigateDown = useCallback(() => {
+      if (suggestions.length === 0) return;
+      setActiveSuggestionIndex(prev => prev >= suggestions.length - 1 ? 0 : prev + 1);
+    }, [suggestions.length]);
+
+    const handleAutocomplete = useCallback((indexToUse: number) => {
+      if (indexToUse < 0 || indexToUse >= suggestions.length) {
+        return;
+      }
+      const suggestion = suggestions[indexToUse].value;
+      // For slash commands, replace the entire line
+      buffer.setText(`/${suggestion} `);
+    }, [suggestions, buffer]);
+
+    return {
+      suggestions,
+      activeSuggestionIndex,
+      visibleStartIndex,
+      showSuggestions,
+      isLoadingSuggestions,
+      isPerfectMatch: isPerfectMatchState,
+      setActiveSuggestionIndex,
+      setShowSuggestions,
+      resetCompletionState,
+      navigateUp,
+      navigateDown,
+      handleAutocomplete,
+    };
+  });
 };
 
 describe('useCommandCompletion', () => {
   const mockCommandContext = {} as CommandContext;
   const mockConfig = {
     getEnablePromptCompletion: () => false,
+    getGeminiClient: vi.fn(),
   } as Config;
   const testDirs: string[] = [];
   const testRootDir = '/';
@@ -424,7 +525,6 @@ describe('useCommandCompletion', () => {
     it('should complete a partial command', async () => {
       setupMocks({
         slashSuggestions: [{ label: 'memory', value: 'memory' }],
-        slashCompletionRange: { completionStart: 1, completionEnd: 4 },
       });
 
       const { result } = renderHook(() => {
