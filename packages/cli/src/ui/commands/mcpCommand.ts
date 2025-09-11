@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -67,6 +67,9 @@ const getMcpStatus = async (
       content: `No MCP servers configured. Please view MCP documentation in your browser: ${docsUrl} or use the cli /docs command`,
     };
   }
+
+  // At this point, we have a tool registry and some servers
+  // Continue with the rest of the function
 
   // Check if any servers are still connecting
   const connectingServers = serverNames.filter(
@@ -506,7 +509,7 @@ const refreshCommand: SlashCommand = {
       Date.now(),
     );
 
-    await toolRegistry.restartMcpServers();
+    await toolRegistry.discoverAllTools();
 
     // Update the client with the new tools
     const geminiClient = config.getGeminiClient();

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -27,8 +27,9 @@ const { mockProcessExit } = vi.hoisted(() => ({
 vi.mock('node:process', () => {
   const mockProcess = {
     exit: mockProcessExit,
-    platform: 'test-platform',
-  };
+    platform: 'sunos',
+    cwd: vi.fn(() => '/fake/dir'),
+  } as unknown as NodeJS.Process;
   return {
     ...mockProcess,
     default: mockProcess,
@@ -83,6 +84,12 @@ import { MessageType } from '../types.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
+import {
+  // SlashCommandStatus,
+  ToolConfirmationOutcome,
+  type Config,
+  type IdeClient,
+} from '@vybestack/llxprt-code-core/index.js';
 
 const createTestCommand = (
   overrides: Partial<SlashCommand>,
@@ -103,14 +110,19 @@ describe('useSlashCommandProcessor', () => {
   const mockSetQuittingMessages = vi.fn();
 
   const mockConfig = {
-    getProjectRoot: vi.fn(() => '/mock/cwd'),
-    getSessionId: vi.fn(() => 'test-session'),
-    getGeminiClient: vi.fn(() => ({
-      setHistory: vi.fn().mockResolvedValue(undefined),
-    })),
-    getExtensions: vi.fn(() => []),
-    getIdeMode: vi.fn(() => false),
-    getIdeClient: vi.fn(() => undefined),
+    getIdeClient: vi.fn().mockReturnValue({
+      addStatusChangeListener: vi.fn(),
+      removeStatusChangeListener: vi.fn(),
+    } as unknown as IdeClient),
+    getProjectRoot: vi.fn().mockReturnValue('/test/project'),
+    getSessionId: vi.fn().mockReturnValue('test-session-id'),
+    getDebugMode: vi.fn().mockReturnValue(false),
+    getTargetDir: vi.fn().mockReturnValue('/test/project'),
+    getUserMemory: vi.fn().mockReturnValue(''),
+    setUserMemory: vi.fn(),
+    getApprovalMode: vi.fn().mockReturnValue('default'),
+    setApprovalMode: vi.fn(),
+    getGeminiClient: vi.fn().mockReturnValue(undefined),
   } as unknown as Config;
 
   const mockSettings = {} as LoadedSettings;

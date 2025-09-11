@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * OAuth Code Input Dialog Component
  *
  * Allows users to paste authorization code from browser

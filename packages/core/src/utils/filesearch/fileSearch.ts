@@ -10,6 +10,7 @@ import { Ignore, loadIgnoreRules } from './ignore.js';
 import { ResultCache } from './result-cache.js';
 import { crawl } from './crawler.js';
 import { AsyncFzf, FzfResultItem } from 'fzf';
+import { unescapePath } from '../paths.js';
 
 export interface FileSearchOptions {
   projectRoot: string;
@@ -19,6 +20,7 @@ export interface FileSearchOptions {
   cache: boolean;
   cacheTtl: number;
   enableRecursiveFileSearch: boolean;
+  disableFuzzySearch: boolean;
   maxDepth?: number;
 }
 
@@ -97,6 +99,7 @@ class RecursiveFileSearch implements FileSearch {
 
   async initialize(): Promise<void> {
     this.ignore = loadIgnoreRules(this.options);
+
     this.allFiles = await crawl({
       crawlDirectory: this.options.projectRoot,
       cwd: this.options.projectRoot,
@@ -112,11 +115,15 @@ class RecursiveFileSearch implements FileSearch {
     pattern: string,
     options: SearchOptions = {},
   ): Promise<string[]> {
-    if (!this.resultCache || !this.fzf || !this.ignore) {
+    if (
+      !this.resultCache ||
+      (!this.fzf && !this.options.disableFuzzySearch) ||
+      !this.ignore
+    ) {
       throw new Error('Engine not initialized. Call initialize() first.');
     }
 
-    pattern = pattern || '*';
+    pattern = unescapePath(pattern) || '*';
 
     let filteredCandidates;
     const { files: candidates, isExactMatch } =
@@ -127,7 +134,7 @@ class RecursiveFileSearch implements FileSearch {
       filteredCandidates = candidates;
     } else {
       let shouldCache = true;
-      if (pattern.includes('*')) {
+      if (pattern.includes('*') || !this.fzf) {
         filteredCandidates = await filter(candidates, pattern, options.signal);
       } else {
         filteredCandidates = await this.fzf
@@ -171,12 +178,14 @@ class RecursiveFileSearch implements FileSearch {
 
   private buildResultCache(): void {
     this.resultCache = new ResultCache(this.allFiles);
-    // The v1 algorithm is much faster since it only looks at the first
-    // occurence of the pattern. We use it for search spaces that have >20k
-    // files, because the v2 algorithm is just too slow in those cases.
-    this.fzf = new AsyncFzf(this.allFiles, {
-      fuzzy: this.allFiles.length > 20000 ? 'v1' : 'v2',
-    });
+    if (!this.options.disableFuzzySearch) {
+      // The v1 algorithm is much faster since it only looks at the first
+      // occurence of the pattern. We use it for search spaces that have >20k
+      // files, because the v2 algorithm is just too slow in those cases.
+      this.fzf = new AsyncFzf(this.allFiles, {
+        fuzzy: this.allFiles.length > 20000 ? 'v1' : 'v2',
+      });
+    }
   }
 }
 

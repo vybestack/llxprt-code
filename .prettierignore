@@ -1,6 +1,6 @@
-
 # Dependencies
 node_modules/
+bower_components
 
 # Build outputs
 dist/
@@ -8,10 +8,15 @@ build/
 bundle/
 coverage/
 .integration-tests/
+**/bundle
+**/coverage
+**/dist
+**/generated
 
 # IDE
 .vscode/
 .idea/
+*.iml
 
 # Project planning documents
 project-plans/
@@ -20,8 +25,22 @@ project-plans/
 *.log
 *.tmp
 .DS_Store
+Thumbs.db
 
 # Generated files
 package-lock.json
 tsconfig.tsbuildinfo
+*.tsbuildinfo
+*.vsix
 research/
+
+# Git
+**/.git
+
+# Config files
+.docker
+.env
+.llxprt/
+eslint.config.js
+gha-creds-*.json
+junit.xml

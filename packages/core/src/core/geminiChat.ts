@@ -69,17 +69,6 @@ function createUserContentWithFunctionResponseFix(
   // Handle array of parts or nested function response arrays
   const parts: Part[] = [];
 
-  if (process.env.DEBUG) {
-    console.log(
-      '[DEBUG] createUserContentWithFunctionResponseFix - input message:',
-      JSON.stringify(message, null, 2),
-    );
-    console.log(
-      '[DEBUG] createUserContentWithFunctionResponseFix - input type check - isArray:',
-      Array.isArray(message),
-    );
-  }
-
   // If the message is an array, process each element
   if (Array.isArray(message)) {
     // First check if this is an array of functionResponse Parts
@@ -91,12 +80,6 @@ function createUserContentWithFunctionResponseFix(
     if (allFunctionResponses) {
       // This is already a properly formatted array of function response Parts
       // Just use them directly without any wrapping
-      if (process.env.DEBUG) {
-        console.log(
-          '[DEBUG] createUserContentWithFunctionResponseFix - array of functionResponse Parts, using directly:',
-          JSON.stringify(message, null, 2),
-        );
-      }
       // Cast is safe here because we've checked all items are objects with functionResponse
       parts.push(...(message as Part[]));
     } else {
@@ -124,17 +107,6 @@ function createUserContentWithFunctionResponseFix(
     role: 'user' as const,
     parts,
   };
-
-  if (process.env.DEBUG) {
-    console.log(
-      '[DEBUG] createUserContentWithFunctionResponseFix - result parts count:',
-      parts.length,
-    );
-    console.log(
-      '[DEBUG] createUserContentWithFunctionResponseFix - result:',
-      JSON.stringify(result, null, 2),
-    );
-  }
 
   return result;
 }
@@ -418,7 +390,7 @@ export class GeminiChat {
           return null; // Model was switched but don't continue with current prompt
         }
       } catch (error) {
-        console.warn('Flash fallback handler failed:', error);
+        this.logger.warn(() => 'Flash fallback handler failed:', { error });
       }
     }
 
@@ -534,6 +506,33 @@ export class GeminiChat {
 
         // Get tools in the format the provider expects
         const tools = this.generationConfig.tools;
+
+        // Critical debug for intermittent "Tool not present" errors
+        if (tools && Array.isArray(tools)) {
+          const totalFunctionDeclarations = tools.reduce((sum, group) => {
+            // Check if it's a Tool (not CallableTool) and has functionDeclarations
+            if (
+              group &&
+              'functionDeclarations' in group &&
+              Array.isArray(group.functionDeclarations)
+            ) {
+              return sum + group.functionDeclarations.length;
+            }
+            return sum;
+          }, 0);
+
+          if (totalFunctionDeclarations === 0) {
+            this.logger.warn(
+              () =>
+                `[geminiChat] WARNING: Tools array exists but has 0 function declarations!`,
+              {
+                tools,
+                modelToUse,
+                provider: provider.name,
+              },
+            );
+          }
+        }
 
         // Debug log what tools we're passing to the provider
         this.logger.debug(

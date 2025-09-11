@@ -29,6 +29,7 @@ import {
   FileOperation,
 } from '../telemetry/metrics.js';
 import { stat } from 'fs/promises';
+import { ToolErrorType } from './tool-error.js';
 
 // Simple token estimation - roughly 4 characters per token
 function estimateTokens(text: string): number {
@@ -83,51 +84,18 @@ export interface ReadManyFilesParams {
 }
 
 /**
- * Default exclusion patterns for commonly ignored directories and binary file types.
- * These are compatible with glob ignore patterns.
+ * Creates the default exclusion patterns including dynamic patterns.
+ * This combines the shared patterns with dynamic patterns like LLXPRT.md.
  * TODO(adh): Consider making this configurable or extendable through a command line argument.
- * TODO(adh): Look into sharing this list with the glob tool.
  */
-const DEFAULT_EXCLUDES: string[] = [
-  '**/node_modules/**',
-  '**/.git/**',
-  '**/.vscode/**',
-  '**/.idea/**',
-  '**/dist/**',
-  '**/build/**',
-  '**/coverage/**',
-  '**/__pycache__/**',
-  '**/*.pyc',
-  '**/*.pyo',
-  '**/*.bin',
-  '**/*.exe',
-  '**/*.dll',
-  '**/*.so',
-  '**/*.dylib',
-  '**/*.class',
-  '**/*.jar',
-  '**/*.war',
-  '**/*.zip',
-  '**/*.tar',
-  '**/*.gz',
-  '**/*.bz2',
-  '**/*.rar',
-  '**/*.7z',
-  '**/*.doc',
-  '**/*.docx',
-  '**/*.xls',
-  '**/*.xlsx',
-  '**/*.ppt',
-  '**/*.pptx',
-  '**/*.odt',
-  '**/*.ods',
-  '**/*.odp',
-  '**/*.DS_Store',
-  '**/.env',
-  `**/${getCurrentLlxprtMdFilename()}`,
-];
+function getDefaultExcludes(config?: Config): string[] {
+  const baseExcludes =
+    config?.getFileExclusions().getReadManyFilesExcludes() ?? [];
+  return [...baseExcludes, `**/${getCurrentLlxprtMdFilename()}`];
+}
 
 const DEFAULT_OUTPUT_SEPARATOR_FORMAT = '--- {filePath} ---';
+const DEFAULT_OUTPUT_TERMINATOR = '\n--- End of content ---';
 
 // Default limits for ReadManyFiles
 const DEFAULT_MAX_FILE_COUNT = 50;
@@ -164,7 +132,11 @@ ${this.config.getTargetDir()}
     const paramUseDefaultExcludes = this.params.useDefaultExcludes !== false;
     const finalExclusionPatternsForDescription: string[] =
       paramUseDefaultExcludes
-        ? [...DEFAULT_EXCLUDES, ...paramExcludes, ...this.llxprtIgnorePatterns]
+        ? [
+            ...getDefaultExcludes(this.config),
+            ...paramExcludes,
+            ...this.llxprtIgnorePatterns,
+          ]
         : [...paramExcludes, ...this.llxprtIgnorePatterns];
 
     let excludeDesc = `Excluding: ${
@@ -222,17 +194,14 @@ ${finalExclusionPatternsForDescription
     const contentParts: PartListUnion = [];
 
     const effectiveExcludes = useDefaultExcludes
-      ? [...DEFAULT_EXCLUDES, ...exclude, ...this.llxprtIgnorePatterns]
+      ? [
+          ...getDefaultExcludes(this.config),
+          ...exclude,
+          ...this.llxprtIgnorePatterns,
+        ]
       : [...exclude, ...this.llxprtIgnorePatterns];
 
     const searchPatterns = [...inputPatterns, ...include];
-    if (searchPatterns.length === 0) {
-      return {
-        llmContent: 'No search paths or include patterns provided.',
-        returnDisplay: `## Information\n\nNo search paths or include patterns were specified. Nothing to read or concatenate.`,
-      };
-    }
-
     try {
       const allEntries = new Set<string>();
       const workspaceDirs = this.config.getWorkspaceContext().getDirectories();
@@ -346,9 +315,14 @@ ${finalExclusionPatternsForDescription
         });
       }
     } catch (error) {
+      const errorMessage = `Error during file search: ${getErrorMessage(error)}`;
       return {
-        llmContent: `Error during file search: ${getErrorMessage(error)}`,
+        llmContent: errorMessage,
         returnDisplay: `## File Search Error\n\nAn error occurred while searching for files:\n\`\`\`\n${getErrorMessage(error)}\n\`\`\``,
+        error: {
+          message: errorMessage,
+          type: ToolErrorType.READ_MANY_FILES_SEARCH_ERROR,
+        },
       };
     }
 
@@ -597,7 +571,9 @@ ${finalExclusionPatternsForDescription
       displayMessage += `No files were read and concatenated based on the criteria.\n`;
     }
 
-    if (contentParts.length === 0) {
+    if (contentParts.length > 0) {
+      contentParts.push(DEFAULT_OUTPUT_TERMINATOR);
+    } else {
       contentParts.push(
         'No files matching the criteria were found or all were skipped.',
       );
@@ -699,7 +675,7 @@ This tool is useful when you need to understand or analyze a collection of files
 - Gathering context from multiple configuration files.
 - When the user asks to "read all files in X directory" or "show me the content of all Y files".
 
-Use this tool when the user's query implies needing the content of several files simultaneously for context, analysis, or summarization. For text files, it uses default UTF-8 encoding and a '--- {filePath} ---' separator between file contents. Ensure paths are relative to the target directory. Glob patterns like 'src/**/*.js' are supported. Avoid using for single files if a more specific single-file reading tool is available, unless the user specifically requests to process a list containing just one file via this tool. Other binary files (not explicitly requested as image/PDF) are generally skipped. Default excludes apply to common non-text files (except for explicitly requested images/PDFs) and large dependency directories unless 'useDefaultExcludes' is false.
+Use this tool when the user's query implies needing the content of several files simultaneously for context, analysis, or summarization. For text files, it uses default UTF-8 encoding and a '--- {filePath} ---' separator between file contents. The tool inserts a '--- End of content ---' after the last file. Ensure paths are relative to the target directory. Glob patterns like 'src/**/*.js' are supported. Avoid using for single files if a more specific single-file reading tool is available, unless the user specifically requests to process a list containing just one file via this tool. Other binary files (not explicitly requested as image/PDF) are generally skipped. Default excludes apply to common non-text files (except for explicitly requested images/PDFs) and large dependency directories unless 'useDefaultExcludes' is false.
 
 IMPORTANT LIMITS:
 - Maximum files: 50 (default, configurable via 'tool-output-max-items' setting)

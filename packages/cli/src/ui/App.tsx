@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,14 +14,20 @@ import React, {
 } from 'react';
 import {
   Box,
-  DOMElement,
+  type DOMElement,
   measureElement,
   Static,
   Text,
   useStdin,
   useStdout,
 } from 'ink';
-import { StreamingState, type HistoryItem, MessageType } from './types.js';
+import {
+  StreamingState,
+  type HistoryItem,
+  MessageType,
+  ToolCallStatus,
+  type HistoryItemWithoutId,
+} from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
@@ -110,6 +116,8 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
+import { TodoProvider } from './contexts/TodoProvider.js';
+import { ToolCallProvider } from './contexts/ToolCallProvider.js';
 import { OverflowProvider } from './contexts/OverflowContext.js';
 import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
@@ -130,6 +138,8 @@ import { ToolsDialog } from './components/ToolsDialog.js';
 // Todo UI imports
 import { TodoPanel } from './components/TodoPanel.js';
 import { useTodoContext } from './contexts/TodoContext.js';
+import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
+import { WorkspaceMigrationDialog } from './components/WorkspaceMigrationDialog.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -140,8 +150,16 @@ interface AppProps {
   version: string;
 }
 
-import { TodoProvider } from './contexts/TodoProvider.js';
-import { ToolCallProvider } from './contexts/ToolCallProvider.js';
+function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
+  return pendingHistoryItems.some((item) => {
+    if (item && item.type === 'tool_group') {
+      return item.tools.some(
+        (tool) => ToolCallStatus.Executing === tool.status,
+      );
+    }
+    return false;
+  });
+}
 
 export const AppWrapper = (props: AppProps) => {
   const kittyProtocolStatus = useKittyKeyboardProtocol();
@@ -149,6 +167,7 @@ export const AppWrapper = (props: AppProps) => {
     <KeypressProvider
       kittyProtocolEnabled={kittyProtocolStatus.enabled}
       config={props.config}
+      debugKeystrokeLogging={props.settings.merged.debugKeystrokeLogging}
     >
       <SessionStatsProvider>
         <VimModeProvider settings={props.settings}>
@@ -330,6 +349,12 @@ const App = (props: AppInternalProps) => {
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
+  const {
+    showWorkspaceMigrationDialog,
+    workspaceExtensions,
+    onWorkspaceMigrationDialogOpen,
+    onWorkspaceMigrationDialogClose,
+  } = useWorkspaceMigration(settings);
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
@@ -425,10 +450,8 @@ const App = (props: AppInternalProps) => {
   const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
     useSettingsCommand();
 
-  const { isFolderTrustDialogOpen, handleFolderTrustSelect } = useFolderTrust(
-    settings,
-    config,
-  );
+  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
+    useFolderTrust(settings, config);
 
   const {
     isAuthDialogOpen,
@@ -774,16 +797,17 @@ You can switch authentication methods by typing /auth or switch to a different m
     appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
   }, [setAuthError, appDispatch]);
 
-  const onOAuthCodeNeeded = useCallback(
-    (provider: string) => {
-      // Store provider for the dialog
-      (global as unknown as { __oauth_provider: string }).__oauth_provider =
-        provider;
-      // Open the OAuth code input dialog
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
-    },
-    [appDispatch],
-  );
+  // Commented out unused onOAuthCodeNeeded
+  // const onOAuthCodeNeeded = useCallback(
+  //   (provider: string) => {
+  //     // Store provider for the dialog
+  //     (global as unknown as { __oauth_provider: string }).__oauth_provider =
+  //       provider;
+  //     // Open the OAuth code input dialog
+  //     appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
+  //   },
+  //   [appDispatch],
+  // );
 
   const handleAuthTimeout = useCallback(() => {
     setAuthError('Authentication timed out. Please try again.');
@@ -890,7 +914,6 @@ You can switch authentication methods by typing /auth or switch to a different m
     config.getGeminiClient(),
     history,
     addItem,
-    setShowHelp,
     config,
     setDebugMessage,
     handleSlashCommand,
@@ -902,10 +925,34 @@ You can switch authentication methods by typing /auth or switch to a different m
     setModelSwitchedFromQuotaError,
     refreshStatic,
     handleUserCancel,
-    onOAuthCodeNeeded,
   );
 
-  // Input handling
+  const pendingHistoryItems = useMemo(
+    () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
+    [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
+  );
+
+  // Message queue functionality removed - not implemented
+
+  // Update the cancel handler with message queue support
+  const cancelHandlerRef = useRef<(() => void) | null>(null);
+  cancelHandlerRef.current = useCallback(() => {
+    if (isToolExecuting(pendingHistoryItems)) {
+      buffer.setText(''); // Just clear the prompt
+      return;
+    }
+
+    const lastUserMessage = userMessages.at(-1);
+    const textToSet = lastUserMessage || '';
+
+    // Queue functionality removed - no queued messages to append
+
+    if (textToSet) {
+      buffer.setText(textToSet);
+    }
+  }, [buffer, userMessages, pendingHistoryItems]);
+
+  // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
@@ -950,13 +997,11 @@ You can switch authentication methods by typing /auth or switch to a different m
     [handleSlashCommand, settings],
   );
 
-  const { handleInput: vimHandleInput } = useVim(buffer, handleUserInputSubmit);
-  const pendingHistoryItems = [...pendingSlashCommandHistoryItems];
-  pendingHistoryItems.push(...pendingGeminiHistoryItems);
+  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
 
   const { elapsedTime, currentLoadingPhrase } =
     useLoadingIndicator(streamingState);
-  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config });
+  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
   const handleExit = useCallback(
     (
@@ -987,6 +1032,11 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const handleGlobalKeypress = useCallback(
     (key: Key) => {
+      // Debug log keystrokes if enabled
+      if (settings.merged.debugKeystrokeLogging) {
+        console.log('[DEBUG] Keystroke:', JSON.stringify(key));
+      }
+
       let enteringConstrainHeightMode = false;
       if (!constrainHeight) {
         enteringConstrainHeightMode = true;
@@ -1050,6 +1100,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       handleSlashCommand,
       isAuthenticating,
       cancelOngoingRequest,
+      settings.merged.debugKeystrokeLogging,
     ],
   );
 
@@ -1063,7 +1114,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     }
   }, [config, config.getLlxprtMdFileCount]);
 
-  const logger = useLogger();
+  const logger = useLogger(config.storage);
 
   useEffect(() => {
     const fetchUserMessages = async () => {
@@ -1266,14 +1317,16 @@ You can switch authentication methods by typing /auth or switch to a different m
           key={staticKey}
           items={[
             <Box flexDirection="column" key="header">
-              {!settings.merged.hideBanner && (
+              {!(settings.merged.hideBanner || config.getScreenReader()) && (
                 <Header
                   terminalWidth={terminalWidth}
                   version={version}
                   nightly={nightly}
                 />
               )}
-              {!settings.merged.hideTips && <Tips config={config} />}
+              {!(settings.merged.hideTips || config.getScreenReader()) && (
+                <Tips config={config} />
+              )}
             </Box>,
             ...history.map((h) => (
               <HistoryItemDisplay
@@ -1334,13 +1387,22 @@ You can switch authentication methods by typing /auth or switch to a different m
           {/* TodoPanel outside the scrollable area */}
           <TodoPanel width={inputWidth} />
 
-          {shouldShowIdePrompt && currentIDE ? (
+          {showWorkspaceMigrationDialog ? (
+            <WorkspaceMigrationDialog
+              workspaceExtensions={workspaceExtensions}
+              onOpen={onWorkspaceMigrationDialogOpen}
+              onClose={onWorkspaceMigrationDialogClose}
+            />
+          ) : shouldShowIdePrompt && currentIDE ? (
             <IdeIntegrationNudge
               ide={currentIDE}
               onComplete={handleIdePromptComplete}
             />
           ) : isFolderTrustDialogOpen ? (
-            <FolderTrustDialog onSelect={handleFolderTrustSelect} />
+            <FolderTrustDialog
+              onSelect={handleFolderTrustSelect}
+              isRestarting={isRestarting}
+            />
           ) : shellConfirmationRequest ? (
             <ShellConfirmationDialog request={shellConfirmationRequest} />
           ) : confirmationRequest ? (
@@ -1477,18 +1539,19 @@ You can switch authentication methods by typing /auth or switch to a different m
               <LoadingIndicator
                 thought={
                   streamingState === StreamingState.WaitingForConfirmation ||
-                  config.getAccessibility()?.disableLoadingPhrases
+                  config.getAccessibility()?.disableLoadingPhrases ||
+                  config.getScreenReader()
                     ? undefined
                     : thought
                 }
                 currentLoadingPhrase={
-                  config.getAccessibility()?.disableLoadingPhrases
+                  config.getAccessibility()?.disableLoadingPhrases ||
+                  config.getScreenReader()
                     ? undefined
                     : currentLoadingPhrase
                 }
                 elapsedTime={elapsedTime}
               />
-
               <Box
                 marginTop={1}
                 display="flex"

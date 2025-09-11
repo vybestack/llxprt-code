@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Copyright 2025 Vybestack LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");

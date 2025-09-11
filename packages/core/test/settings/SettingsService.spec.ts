@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Comprehensive behavioral tests for SettingsService (In-Memory Remediated Implementation)
  * Tests ACTUAL BEHAVIOR with real data flows based on specification requirements
  *

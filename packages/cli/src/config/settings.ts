@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,17 +11,20 @@ import * as dotenv from 'dotenv';
 import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
   getErrorMessage,
+  Storage,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
+import { isWorkspaceTrusted } from './trustedFolders.js';
 import { Settings, MemoryImportFormat } from './settingsSchema.js';
 
 export type { Settings, MemoryImportFormat };
 
 export const SETTINGS_DIRECTORY_NAME = '.llxprt';
-export const USER_SETTINGS_DIR = path.join(homedir(), SETTINGS_DIRECTORY_NAME);
-export const USER_SETTINGS_PATH = path.join(USER_SETTINGS_DIR, 'settings.json');
+
+export const USER_SETTINGS_PATH = Storage.getGlobalSettingsPath();
+export const USER_SETTINGS_DIR = path.dirname(USER_SETTINGS_PATH);
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
 export function getSystemSettingsPath(): string {
@@ -37,8 +40,14 @@ export function getSystemSettingsPath(): string {
   }
 }
 
-export function getWorkspaceSettingsPath(workspaceDir: string): string {
-  return path.join(workspaceDir, SETTINGS_DIRECTORY_NAME, 'settings.json');
+export function getSystemDefaultsPath(): string {
+  if (process.env['LLXPRT_CODE_SYSTEM_DEFAULTS_PATH']) {
+    return process.env['LLXPRT_CODE_SYSTEM_DEFAULTS_PATH'];
+  }
+  return path.join(
+    path.dirname(getSystemSettingsPath()),
+    'system-defaults.json',
+  );
 }
 
 export type { DnsResolutionOrder } from './settingsSchema.js';
@@ -47,6 +56,7 @@ export enum SettingScope {
   User = 'User',
   Workspace = 'Workspace',
   System = 'System',
+  SystemDefaults = 'SystemDefaults',
 }
 
 export interface CheckpointingSettings {
@@ -59,6 +69,7 @@ export interface SummarizeToolOutputSettings {
 
 export interface AccessibilitySettings {
   disableLoadingPhrases?: boolean;
+  screenReader?: boolean;
 }
 
 export interface SettingsError {
@@ -73,36 +84,76 @@ export interface SettingsFile {
 
 function mergeSettings(
   system: Settings,
+  systemDefaults: Settings,
   user: Settings,
   workspace: Settings,
+  isTrusted: boolean,
 ): Settings {
+  const safeWorkspace = isTrusted ? workspace : ({} as Settings);
+
   // folderTrust is not supported at workspace level.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { folderTrust, ...workspaceWithoutFolderTrust } = workspace;
+  const { folderTrust, ...safeWorkspaceWithoutFolderTrust } = safeWorkspace;
 
+  // Settings are merged with the following precedence (last one wins for
+  // single values):
+  // 1. System Defaults
+  // 2. User Settings
+  // 3. Workspace Settings
+  // 4. System Settings (as overrides)
+  //
+  // For properties that are arrays (e.g., includeDirectories), the arrays
+  // are concatenated. For objects (e.g., customThemes), they are merged.
   return {
+    ...systemDefaults,
     ...user,
-    ...workspaceWithoutFolderTrust,
+    ...safeWorkspaceWithoutFolderTrust,
     ...system,
     customThemes: {
+      ...(systemDefaults.customThemes || {}),
       ...(user.customThemes || {}),
-      ...(workspace.customThemes || {}),
+      ...(safeWorkspace.customThemes || {}),
       ...(system.customThemes || {}),
     },
     mcpServers: {
+      ...(systemDefaults.mcpServers || {}),
       ...(user.mcpServers || {}),
-      ...(workspace.mcpServers || {}),
+      ...(safeWorkspace.mcpServers || {}),
       ...(system.mcpServers || {}),
     },
     includeDirectories: [
-      ...(system.includeDirectories || []),
+      ...(systemDefaults.includeDirectories || []),
       ...(user.includeDirectories || []),
-      ...(workspace.includeDirectories || []),
+      ...(safeWorkspace.includeDirectories || []),
+      ...(system.includeDirectories || []),
     ],
     chatCompression: {
-      ...(system.chatCompression || {}),
+      ...(systemDefaults.chatCompression || {}),
       ...(user.chatCompression || {}),
-      ...(workspace.chatCompression || {}),
+      ...(safeWorkspace.chatCompression || {}),
+      ...(system.chatCompression || {}),
+    },
+    extensions: {
+      ...(systemDefaults.extensions || {}),
+      ...(user.extensions || {}),
+      ...(safeWorkspace.extensions || {}),
+      ...(system.extensions || {}),
+      disabled: [
+        ...new Set([
+          ...(systemDefaults.extensions?.disabled || []),
+          ...(user.extensions?.disabled || []),
+          ...(safeWorkspace.extensions?.disabled || []),
+          ...(system.extensions?.disabled || []),
+        ]),
+      ],
+      workspacesWithMigrationNudge: [
+        ...new Set([
+          ...(systemDefaults.extensions?.workspacesWithMigrationNudge || []),
+          ...(user.extensions?.workspacesWithMigrationNudge || []),
+          ...(safeWorkspace.extensions?.workspacesWithMigrationNudge || []),
+          ...(system.extensions?.workspacesWithMigrationNudge || []),
+        ]),
+      ],
     },
   };
 }
@@ -110,21 +161,27 @@ function mergeSettings(
 export class LoadedSettings {
   constructor(
     system: SettingsFile,
+    systemDefaults: SettingsFile,
     user: SettingsFile,
     workspace: SettingsFile,
     errors: SettingsError[],
+    isTrusted: boolean,
   ) {
     this.system = system;
+    this.systemDefaults = systemDefaults;
     this.user = user;
     this.workspace = workspace;
     this.errors = errors;
+    this.isTrusted = isTrusted;
     this._merged = this.computeMergedSettings();
   }
 
   readonly system: SettingsFile;
+  readonly systemDefaults: SettingsFile;
   readonly user: SettingsFile;
   readonly workspace: SettingsFile;
   readonly errors: SettingsError[];
+  readonly isTrusted: boolean;
 
   private _merged: Settings;
 
@@ -135,8 +192,10 @@ export class LoadedSettings {
   private computeMergedSettings(): Settings {
     return mergeSettings(
       this.system.settings,
+      this.systemDefaults.settings,
       this.user.settings,
       this.workspace.settings,
+      this.isTrusted,
     );
   }
 
@@ -148,6 +207,8 @@ export class LoadedSettings {
         return this.workspace;
       case SettingScope.System:
         return this.system;
+      case SettingScope.SystemDefaults:
+        return this.systemDefaults;
       default:
         throw new Error(`Invalid scope: ${scope}`);
     }
@@ -307,7 +368,9 @@ export function loadEnvironment(settings?: Settings): void {
   // If no settings provided, try to load workspace settings for exclusions
   let resolvedSettings = settings;
   if (!resolvedSettings) {
-    const workspaceSettingsPath = getWorkspaceSettingsPath(process.cwd());
+    const workspaceSettingsPath = new Storage(
+      process.cwd(),
+    ).getWorkspaceSettingsPath();
     try {
       if (fs.existsSync(workspaceSettingsPath)) {
         const workspaceContent = fs.readFileSync(
@@ -360,10 +423,12 @@ export function loadEnvironment(settings?: Settings): void {
  */
 export function loadSettings(workspaceDir: string): LoadedSettings {
   let systemSettings: Settings = {};
+  let systemDefaultSettings: Settings = {};
   let userSettings: Settings = {};
   let workspaceSettings: Settings = {};
   const settingsErrors: SettingsError[] = [];
   const systemSettingsPath = getSystemSettingsPath();
+  const systemDefaultsPath = getSystemDefaultsPath();
 
   // Resolve paths to their canonical representation to handle symlinks
   const resolvedWorkspaceDir = path.resolve(workspaceDir);
@@ -380,7 +445,9 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
   // We expect homedir to always exist and be resolvable.
   const realHomeDir = fs.realpathSync(resolvedHomeDir);
 
-  const workspaceSettingsPath = getWorkspaceSettingsPath(workspaceDir);
+  const workspaceSettingsPath = new Storage(
+    workspaceDir,
+  ).getWorkspaceSettingsPath();
 
   // Load system settings
   try {
@@ -392,6 +459,25 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
     settingsErrors.push({
       message: getErrorMessage(error),
       path: systemSettingsPath,
+    });
+  }
+
+  // Load system defaults
+  try {
+    if (fs.existsSync(systemDefaultsPath)) {
+      const systemDefaultsContent = fs.readFileSync(
+        systemDefaultsPath,
+        'utf-8',
+      );
+      const parsedSystemDefaults = JSON.parse(
+        stripJsonComments(systemDefaultsContent),
+      ) as Settings;
+      systemDefaultSettings = resolveEnvVarsInObject(parsedSystemDefaults);
+    }
+  } catch (error: unknown) {
+    settingsErrors.push({
+      message: getErrorMessage(error),
+      path: systemDefaultsPath,
     });
   }
 
@@ -439,11 +525,15 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
     }
   }
 
+  const isTrusted = isWorkspaceTrusted() ?? true;
+
   // Create a temporary merged settings object to pass to loadEnvironment.
   const tempMergedSettings = mergeSettings(
     systemSettings,
+    systemDefaultSettings,
     userSettings,
     workspaceSettings,
+    isTrusted,
   );
 
   // loadEnviroment depends on settings so we have to create a temp version of
@@ -462,6 +552,10 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
       settings: systemSettings,
     },
     {
+      path: systemDefaultsPath,
+      settings: systemDefaultSettings,
+    },
+    {
       path: USER_SETTINGS_PATH,
       settings: userSettings,
     },
@@ -470,6 +564,7 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
       settings: workspaceSettings,
     },
     settingsErrors,
+    isTrusted,
   );
 
   // Validate chatCompression settings

@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React from 'react';
 import { Text, Box } from 'ink';
-import { Colors } from '../colors.js';
+import { theme } from '../colors.js';
 import { RenderInline, getPlainTextLength } from './InlineMarkdownRenderer.js';
 
 interface TableRendererProps {
@@ -89,7 +89,7 @@ export const TableRenderer: React.FC<TableRendererProps> = ({
     return (
       <Text>
         {isHeader ? (
-          <Text bold color={Colors.AccentCyan}>
+          <Text bold color={theme.text.accent}>
             <RenderInline text={cellContent} />
           </Text>
         ) : (
@@ -112,7 +112,7 @@ export const TableRenderer: React.FC<TableRendererProps> = ({
     const borderParts = adjustedWidths.map((w) => char.horizontal.repeat(w));
     const border = char.left + borderParts.join(char.middle) + char.right;
 
-    return <Text>{border}</Text>;
+    return <Text color={theme.border.default}>{border}</Text>;
   };
 
   // Helper function to render a table row
@@ -124,14 +124,21 @@ export const TableRenderer: React.FC<TableRendererProps> = ({
 
     return (
       <Text>
-        │{' '}
+        <Text color={theme.border.default}>│</Text>{' '}
         {renderedCells.map((cell, index) => (
           <React.Fragment key={index}>
             {cell}
-            {index < renderedCells.length - 1 ? ' │ ' : ''}
+            {index < renderedCells.length - 1 ? (
+              <>
+                {' '}
+                <Text color={theme.border.default}>│</Text>{' '}
+              </>
+            ) : (
+              ''
+            )}
           </React.Fragment>
         ))}{' '}
-        │
+        <Text color={theme.border.default}>│</Text>
       </Text>
     );
   };

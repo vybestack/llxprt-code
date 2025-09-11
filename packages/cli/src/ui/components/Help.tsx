@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -149,7 +149,7 @@ export const Help: React.FC<Help> = ({ commands }) => (
       <Text bold color={Colors.AccentPurple}>
         Esc
       </Text>{' '}
-      - Cancel operation
+      - Cancel operation / Clear input (double press)
     </Text>
     <Text color={Colors.Foreground}>
       <Text bold color={Colors.AccentPurple}>

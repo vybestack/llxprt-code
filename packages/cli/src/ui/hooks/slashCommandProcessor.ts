@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,6 +15,7 @@ import {
   logSlashCommand,
   SlashCommandEvent,
   ToolConfirmationOutcome,
+  Storage,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
@@ -87,11 +88,14 @@ export const useSlashCommandProcessor = (
     if (!config?.getProjectRoot()) {
       return;
     }
-    return new GitService(config.getProjectRoot());
+    return new GitService(config.getProjectRoot(), config.storage);
   }, [config]);
 
   const logger = useMemo(() => {
-    const l = new Logger(config?.getSessionId() || '');
+    const l = new Logger(
+      config?.getSessionId() || '',
+      config?.storage ?? new Storage(process.cwd()),
+    );
     // The logger's initialize is async, but we can create the instance
     // synchronously. Commands that use it will await its initialization.
     return l;
@@ -249,7 +253,10 @@ export const useSlashCommandProcessor = (
         loaders,
         controller.signal,
       );
-      setCommands(commandService.getCommands());
+      // Only update commands if not aborted
+      if (!controller.signal.aborted) {
+        setCommands(commandService.getCommands());
+      }
     };
 
     load();

@@ -219,8 +219,16 @@ Please analyze the conversation history to determine the possibility that the co
       /(^|\n)\s*[*-+]\s/.test(content) || /(^|\n)\s*\d+\.\s/.test(content);
     const hasHeading = /(^|\n)#+\s/.test(content);
     const hasBlockquote = /(^|\n)>\s/.test(content);
+    const isDivider = /^[+-_=*\u2500-\u257F]+$/.test(content);
 
-    if (numFences || hasTable || hasListItem || hasHeading || hasBlockquote) {
+    if (
+      numFences ||
+      hasTable ||
+      hasListItem ||
+      hasHeading ||
+      hasBlockquote ||
+      isDivider
+    ) {
       // Reset tracking when different content elements are detected to avoid analyzing content
       // that spans across different element boundaries.
       this.resetContentTracking();
@@ -229,7 +237,7 @@ Please analyze the conversation history to determine the possibility that the co
     const wasInCodeBlock = this.inCodeBlock;
     this.inCodeBlock =
       numFences % 2 === 0 ? this.inCodeBlock : !this.inCodeBlock;
-    if (wasInCodeBlock || this.inCodeBlock) {
+    if (wasInCodeBlock || this.inCodeBlock || isDivider) {
       return false;
     }
 

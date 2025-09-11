@@ -37,8 +37,8 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
             type: Type.STRING,
             description:
               'Explanation of why the task needs to be paused (e.g., missing file, configuration error, blocked dependency)',
-            minLength: '1',
-            maxLength: '500',
+            minLength: 1,
+            maxLength: 500,
           },
         },
         required: ['reason'],
@@ -136,7 +136,6 @@ export class TodoPause extends BaseTool<TodoPauseParams, ToolResult> {
     return {
       llmContent: llmMessage,
       returnDisplay: userMessage,
-      summary: `AI paused: ${reason.length > 50 ? reason.substring(0, 47) + '...' : reason}`,
     };
   }
 }

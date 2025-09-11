@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { vi } from 'vitest';
 import { CommandContext } from '../ui/commands/types.js';
 import { LoadedSettings } from '../config/settings.js';
-import { GitService } from '@vybestack/llxprt-code-core';
+import { GitService, Config } from '@vybestack/llxprt-code-core';
 import { SessionStatsState } from '../ui/contexts/SessionContext.js';
 
 // A utility type to make all properties of an object, and its nested objects, partial.
@@ -34,7 +34,9 @@ export const createMockCommandContext = (
       args: '',
     },
     services: {
-      config: null,
+      config: {
+        getEphemeralSetting: vi.fn(),
+      } as unknown as Config,
       settings: { merged: {} } as LoadedSettings,
       git: undefined as GitService | undefined,
       logger: {

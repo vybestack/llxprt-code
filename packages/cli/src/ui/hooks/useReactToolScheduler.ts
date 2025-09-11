@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -106,8 +106,8 @@ export function useReactToolScheduler(
   );
 
   const allToolCallsCompleteHandler: AllToolCallsCompleteHandler = useCallback(
-    (completedToolCalls) => {
-      onComplete(completedToolCalls);
+    async (completedToolCalls) => {
+      await onComplete(completedToolCalls);
     },
     [onComplete],
   );
@@ -138,7 +138,6 @@ export function useReactToolScheduler(
   const scheduler = useMemo(
     () =>
       new CoreToolScheduler({
-        toolRegistry: config.getToolRegistry(),
         outputUpdateHandler,
         onAllToolCallsComplete: allToolCallsCompleteHandler,
         onToolCallsUpdate: toolCallsUpdateHandler,

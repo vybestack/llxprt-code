@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /* ACP defines a schema for a simple (experimental) JSON-RPC protocol that allows GUI applications to interact with agents. */
 
 import { z } from 'zod';
+import { EOL } from 'os';
 import * as schema from './schema.js';
 export * from './schema.js';
 
@@ -172,7 +173,7 @@ class Connection {
     const decoder = new TextDecoder();
     for await (const chunk of output) {
       content += decoder.decode(chunk, { stream: true });
-      const lines = content.split('\n');
+      const lines = content.split(EOL);
       content = lines.pop() || '';
 
       for (const line of lines) {

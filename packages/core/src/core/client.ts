@@ -17,9 +17,11 @@ import {
   getEnvironmentContext,
 } from '../utils/environmentContext.js';
 import { Turn, ServerGeminiStreamEvent, GeminiEventType } from './turn.js';
+import type { ChatCompressionInfo } from './turn.js';
+import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPromptAsync } from './prompts.js';
+import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
@@ -36,10 +38,16 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
+import { tokenLimit } from './tokenLimits.js';
+import {
+  COMPRESSION_TOKEN_THRESHOLD,
+  COMPRESSION_PRESERVE_THRESHOLD,
+} from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, IdeContext, File } from '../ide/ideContext.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { isFunctionResponse } from '../utils/messageInspectors.js';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -99,6 +107,7 @@ export class GeminiClient {
   private chat?: GeminiChat;
   private contentGenerator?: ContentGenerator;
   private embeddingModel: string;
+  private logger: DebugLogger;
   private generateContentConfig: GenerateContentConfig = {
     temperature: 0,
     topP: 1,
@@ -117,11 +126,18 @@ export class GeminiClient {
   private lastSentIdeContext: IdeContext | undefined;
   private forceFullIdeContext = true;
 
-  constructor(private config: Config) {
+  /**
+   * At any point in this conversation, was compression triggered without
+   * being forced and did it fail?
+   */
+  private hasFailedCompressionAttempt = false;
+
+  constructor(private readonly config: Config) {
     if (config.getProxy()) {
       setGlobalDispatcher(new ProxyAgent(config.getProxy() as string));
     }
 
+    this.logger = new DebugLogger('llxprt:core:client');
     this.embeddingModel = config.getEmbeddingModel();
     this.loopDetector = new LoopDetectionService(config);
     this.lastPromptId = this.config.getSessionId();
@@ -290,6 +306,22 @@ export class GeminiClient {
   async setTools(): Promise<void> {
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
+
+    // Debug log for intermittent tool issues
+    const logger = new DebugLogger('llxprt:client:setTools');
+    logger.debug(
+      () => `setTools called, declarations count: ${toolDeclarations.length}`,
+    );
+
+    if (toolDeclarations.length === 0) {
+      logger.warn(
+        () => `WARNING: setTools called but toolDeclarations is empty!`,
+        {
+          stackTrace: new Error().stack,
+        },
+      );
+    }
+
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
     // Ensure chat is initialized before setting tools
     if (!this.hasChatInitialized()) {
@@ -332,10 +364,10 @@ export class GeminiClient {
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
     this.forceFullIdeContext = true;
+    this.hasFailedCompressionAttempt = false;
 
     // Ensure content generator is initialized before creating chat
     await this.lazyInitialize();
-
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
@@ -381,6 +413,7 @@ export class GeminiClient {
         ? {
             ...this.generateContentConfig,
             thinkingConfig: {
+              thinkingBudget: -1,
               includeThoughts: true,
             },
           }
@@ -456,7 +489,9 @@ export class GeminiClient {
       ];
 
       if (this.config.getDebugMode()) {
-        console.log(contextParts.join('\n'));
+        this.logger.debug(() => 'IDE Context:', {
+          context: contextParts.join('\n'),
+        });
       }
       return {
         contextParts,
@@ -566,7 +601,9 @@ export class GeminiClient {
       ];
 
       if (this.config.getDebugMode()) {
-        console.log(contextParts.join('\n'));
+        this.logger.debug(() => 'IDE Context:', {
+          context: contextParts.join('\n'),
+        });
       }
       return {
         contextParts,
@@ -638,6 +675,12 @@ export class GeminiClient {
 
     // Track the original model from the first call to detect model switching
     const initialModel = originalModel || this.config.getModel();
+
+    const compressed = await this.tryCompressChat(prompt_id);
+
+    if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
+      yield { type: GeminiEventType.ChatCompressed, value: compressed };
+    }
 
     // Prevent context updates from being sent while a tool call is
     // waiting for a response. The Gemini API requires that a functionResponse
@@ -725,6 +768,9 @@ export class GeminiClient {
         return turn;
       }
       yield event;
+      if (event.type === GeminiEventType.Error) {
+        return turn;
+      }
     }
     if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
       // Check if model was switched during the call (likely due to quota error)
@@ -820,8 +866,9 @@ export class GeminiClient {
             ),
           )
         ) {
-          console.warn(
-            `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
+          this.logger.warn(
+            () =>
+              `[generateJson] Gemini returned plain text "${cleanedText}" instead of JSON for next speaker check. Converting to valid response.`,
           );
           return {
             reasoning: 'Gemini returned plain text response',
@@ -977,43 +1024,150 @@ export class GeminiClient {
    */
   async tryCompressChat(
     prompt_id: string,
-    _force: boolean = false,
-  ): Promise<{ originalTokenCount: number; newTokenCount: number } | null> {
+    force: boolean = false,
+  ): Promise<ChatCompressionInfo> {
     await this.lazyInitialize();
 
     if (!this.hasChatInitialized()) {
-      return null;
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus: CompressionStatus.NOOP,
+      };
     }
 
-    const chat = this.getChat();
-    const historyService = chat.getHistoryService();
+    const curatedHistory = this.getChat().getHistory(true);
 
-    // Get current token count
-    const originalTokenCount = historyService.getTotalTokens();
-
-    if (originalTokenCount === 0) {
-      return null;
+    // Regardless of `force`, don't do anything if the history is empty.
+    if (
+      curatedHistory.length === 0 ||
+      (this.hasFailedCompressionAttempt && !force)
+    ) {
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus: CompressionStatus.NOOP,
+      };
     }
 
-    // Perform compression
-    try {
-      await chat.performCompression(prompt_id);
+    // Note: chat variable used later in method
 
-      // Get new token count after compression
-      const newTokenCount = historyService.getTotalTokens();
+    const model = this.config.getModel();
+    const { totalTokens: originalTokenCount } =
+      await this.getContentGenerator().countTokens({
+        model,
+        contents: curatedHistory,
+      });
+    if (originalTokenCount === undefined) {
+      console.warn(`Could not determine token count for model ${model}.`);
+      this.hasFailedCompressionAttempt = !force && true;
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
+      };
+    }
 
-      // Check if compression actually happened
-      if (newTokenCount < originalTokenCount) {
+    const contextPercentageThreshold =
+      this.config.getChatCompression()?.contextPercentageThreshold;
+
+    // Don't compress if not forced and we are under the limit.
+    if (!force) {
+      const threshold =
+        contextPercentageThreshold ?? COMPRESSION_TOKEN_THRESHOLD;
+      if (originalTokenCount < threshold * tokenLimit(model)) {
         return {
           originalTokenCount,
-          newTokenCount,
+          newTokenCount: originalTokenCount,
+          compressionStatus: CompressionStatus.NOOP,
         };
       }
-    } catch (error) {
-      console.error('Compression failed:', error);
     }
 
-    return null;
+    let compressBeforeIndex = findIndexAfterFraction(
+      curatedHistory,
+      1 - COMPRESSION_PRESERVE_THRESHOLD,
+    );
+    // Find the first user message after the index. This is the start of the next turn.
+    while (
+      compressBeforeIndex < curatedHistory.length &&
+      (curatedHistory[compressBeforeIndex]?.role === 'model' ||
+        isFunctionResponse(curatedHistory[compressBeforeIndex]))
+    ) {
+      compressBeforeIndex++;
+    }
+
+    const historyToCompress = curatedHistory.slice(0, compressBeforeIndex);
+    const historyToKeep = curatedHistory.slice(compressBeforeIndex);
+
+    this.getChat().setHistory(historyToCompress);
+
+    const { text: summary } = await this.getChat().sendMessage(
+      {
+        message: {
+          text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+        },
+        config: {
+          systemInstruction: { text: getCompressionPrompt() },
+          maxOutputTokens: originalTokenCount,
+        },
+      },
+      prompt_id,
+    );
+    const compressedChat = await this.startChat([
+      {
+        role: 'user',
+        parts: [{ text: summary }],
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Got it. Thanks for the additional context!' }],
+      },
+      ...historyToKeep,
+    ]);
+    this.forceFullIdeContext = true;
+
+    const { totalTokens: newTokenCount } =
+      await this.getContentGenerator().countTokens({
+        // model might change after calling `sendMessage`, so we get the newest value from config
+        model: this.config.getModel(),
+        contents: compressedChat.getHistory(),
+      });
+    if (newTokenCount === undefined) {
+      console.warn('Could not determine compressed history token count.');
+      this.hasFailedCompressionAttempt = !force && true;
+      return {
+        originalTokenCount,
+        newTokenCount: originalTokenCount,
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
+      };
+    }
+
+    // TODO: Add proper telemetry logging once available
+    console.debug(
+      `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
+    );
+
+    if (newTokenCount > originalTokenCount) {
+      this.getChat().setHistory(curatedHistory);
+      this.hasFailedCompressionAttempt = !force && true;
+      return {
+        originalTokenCount,
+        newTokenCount,
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
+      };
+    } else {
+      this.chat = compressedChat; // Chat compression successful, set new state.
+    }
+
+    return {
+      originalTokenCount,
+      newTokenCount,
+      compressionStatus: CompressionStatus.COMPRESSED,
+    };
   }
 
   /**
@@ -1057,7 +1211,7 @@ export class GeminiClient {
           return null; // Model was switched but don't continue with current prompt
         }
       } catch (error) {
-        console.warn('Flash fallback handler failed:', error);
+        this.logger.warn(() => 'Flash fallback handler failed:', { error });
       }
     }
 

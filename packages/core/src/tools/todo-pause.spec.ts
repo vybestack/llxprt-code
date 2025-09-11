@@ -102,7 +102,7 @@ describe('TodoPause - Behavioral Tests', () => {
 
       expect(result.llmContent).toContain('Database connection failed');
       expect(result.returnDisplay).toContain('Database connection failed');
-      expect(result.summary).toContain('paused');
+      expect(result.llmContent).toContain('paused');
     });
 
     /**
@@ -183,8 +183,8 @@ describe('TodoPause - Behavioral Tests', () => {
       const result = await tool.execute(params, abortSignal);
 
       // The result should indicate a pause/break state
-      expect(result.summary).toBeDefined();
-      expect(result.summary?.toLowerCase()).toMatch(/pause|break|stop/);
+      expect(result.llmContent).toBeDefined();
+      expect(result.llmContent.toLowerCase()).toMatch(/pause|break|stop/);
     });
   });
 

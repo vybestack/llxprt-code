@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { toolformatCommand } from './toolformatCommand.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';

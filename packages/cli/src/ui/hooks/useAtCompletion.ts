@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -172,6 +172,8 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
           cacheTtl: 30, // 30 seconds
           enableRecursiveFileSearch:
             config?.getEnableRecursiveFileSearch() ?? true,
+          disableFuzzySearch:
+            config?.getFileFilteringDisableFuzzySearch() ?? false,
         });
         await searcher.initialize();
         fileSearch.current = searcher;

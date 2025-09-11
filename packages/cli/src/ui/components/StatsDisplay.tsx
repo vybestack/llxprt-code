@@ -1,14 +1,13 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React from 'react';
 import { Box, Text } from 'ink';
 import Gradient from 'ink-gradient';
-import { Colors } from '../colors.js';
-import { themeManager } from '../themes/theme-manager.js';
+import { theme } from '../semantic-colors.js';
 import { formatDuration } from '../utils/formatters.js';
 import { useSessionStats, ModelMetrics } from '../contexts/SessionContext.js';
 import {
@@ -30,9 +29,10 @@ const StatRow: React.FC<StatRowProps> = ({ title, children }) => (
   <Box>
     {/* Fixed width for the label creates a clean "gutter" for alignment */}
     <Box width={28}>
-      <Text color={Colors.Foreground}>{title}</Text>
+      <Text color={theme.text.link}>{title}</Text>
     </Box>
-    {children}
+    {/* FIX: Wrap children in a Box that can grow to fill remaining space */}
+    <Box flexGrow={1}>{children}</Box>
   </Box>
 );
 
@@ -46,9 +46,10 @@ const SubStatRow: React.FC<SubStatRowProps> = ({ title, children }) => (
   <Box paddingLeft={2}>
     {/* Adjust width for the "» " prefix */}
     <Box width={26}>
-      <Text color={Colors.Foreground}>» {title}</Text>
+      <Text color={theme.text.secondary}>» {title}</Text>
     </Box>
-    {children}
+    {/* FIX: Apply the same flexGrow fix here */}
+    <Box flexGrow={1}>{children}</Box>
   </Box>
 );
 
@@ -60,7 +61,7 @@ interface SectionProps {
 
 const Section: React.FC<SectionProps> = ({ title, children }) => (
   <Box flexDirection="column" width="100%" marginBottom={1}>
-    <Text bold color={Colors.Foreground}>
+    <Text bold color={theme.text.accent}>
       {title}
     </Text>
     {children}
@@ -82,24 +83,16 @@ const ModelUsageTable: React.FC<{
       {/* Header */}
       <Box>
         <Box width={nameWidth}>
-          <Text bold color={Colors.Foreground}>
-            Model Usage
-          </Text>
+          <Text bold>Model Usage</Text>
         </Box>
         <Box width={requestsWidth} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>
-            Reqs
-          </Text>
+          <Text bold>Reqs</Text>
         </Box>
         <Box width={inputTokensWidth} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>
-            Input Tokens
-          </Text>
+          <Text bold>Input Tokens</Text>
         </Box>
         <Box width={outputTokensWidth} justifyContent="flex-end">
-          <Text bold color={Colors.Foreground}>
-            Output Tokens
-          </Text>
+          <Text bold>Output Tokens</Text>
         </Box>
       </Box>
       {/* Divider */}
@@ -109,7 +102,6 @@ const ModelUsageTable: React.FC<{
         borderTop={false}
         borderLeft={false}
         borderRight={false}
-        borderColor={Colors.Comment}
         width={nameWidth + requestsWidth + inputTokensWidth + outputTokensWidth}
       ></Box>
 
@@ -117,20 +109,20 @@ const ModelUsageTable: React.FC<{
       {Object.entries(models).map(([name, modelMetrics]) => (
         <Box key={name}>
           <Box width={nameWidth}>
-            <Text color={Colors.Foreground}>{name.replace('-001', '')}</Text>
+            <Text color={theme.text.primary}>{name.replace('-001', '')}</Text>
           </Box>
           <Box width={requestsWidth} justifyContent="flex-end">
-            <Text color={Colors.Foreground}>
+            <Text color={theme.text.primary}>
               {modelMetrics.api.totalRequests}
             </Text>
           </Box>
           <Box width={inputTokensWidth} justifyContent="flex-end">
-            <Text color={Colors.Foreground}>
+            <Text color={theme.status.warning}>
               {modelMetrics.tokens.prompt.toLocaleString()}
             </Text>
           </Box>
           <Box width={outputTokensWidth} justifyContent="flex-end">
-            <Text color={Colors.Foreground}>
+            <Text color={theme.status.warning}>
               {modelMetrics.tokens.candidates.toLocaleString()}
             </Text>
           </Box>
@@ -138,13 +130,13 @@ const ModelUsageTable: React.FC<{
       ))}
       {cacheEfficiency > 0 && (
         <Box flexDirection="column" marginTop={1}>
-          <Text color={Colors.Foreground}>
-            <Text color={Colors.AccentGreen}>Savings Highlight:</Text>{' '}
+          <Text>
+            <Text color={theme.status.success}>Savings Highlight:</Text>{' '}
             {totalCachedTokens.toLocaleString()} ({cacheEfficiency.toFixed(1)}
             %) of input tokens were served from the cache, reducing costs.
           </Text>
           <Box height={1} />
-          <Text color={Colors.Comment}>
+          <Text color={theme.text.secondary}>
             » Tip: For a full token breakdown, run `/stats model`.
           </Text>
         </Box>
@@ -181,7 +173,6 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
     agreementThresholds,
   );
 
-  const theme = themeManager.getSemanticColors();
   const renderTitle = () => {
     if (title) {
       return theme.ui.gradient && theme.ui.gradient.length > 0 ? (
@@ -204,7 +195,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   return (
     <Box
       borderStyle="round"
-      borderColor={Colors.Comment}
+      borderColor={theme.border.default}
       flexDirection="column"
       paddingY={1}
       paddingX={2}
@@ -213,48 +204,41 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       <Box height={1} />
 
       {(tools.totalCalls > 0 ||
+        computed.totalDecisions > 0 ||
         (files &&
           (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0))) && (
         <Section title="Interaction Summary">
           <StatRow title="Session ID:">
-            <Text color={Colors.Foreground}>{stats.sessionId}</Text>
+            <Text color={theme.text.primary}>{stats.sessionId}</Text>
           </StatRow>
-          {tools.totalCalls > 0 && (
-            <>
-              <StatRow title="Tool Calls:">
-                <Text color={Colors.Foreground}>
-                  {tools.totalCalls} ({' '}
-                  <Text color={Colors.AccentGreen}>
-                    ✔ {tools.totalSuccess}
-                  </Text>{' '}
-                  <Text color={Colors.AccentRed}>✖ {tools.totalFail}</Text> )
+          <StatRow title="Tool Calls:">
+            <Text color={theme.text.primary}>
+              {tools.totalCalls} ({' '}
+              <Text color={theme.status.success}>✓ {tools.totalSuccess}</Text>{' '}
+              <Text color={theme.status.error}>x {tools.totalFail}</Text> )
+            </Text>
+          </StatRow>
+          <StatRow title="Success Rate:">
+            <Text color={successColor}>{computed.successRate.toFixed(1)}%</Text>
+          </StatRow>
+          {computed.totalDecisions > 0 && (
+            <StatRow title="User Agreement:">
+              <Text color={agreementColor}>
+                {computed.agreementRate.toFixed(1)}%{' '}
+                <Text color={theme.text.secondary}>
+                  ({computed.totalDecisions} reviewed)
                 </Text>
-              </StatRow>
-              <StatRow title="Success Rate:">
-                <Text color={successColor}>
-                  {computed.successRate.toFixed(1)}%
-                </Text>
-              </StatRow>
-              {computed.totalDecisions > 0 && (
-                <StatRow title="User Agreement:">
-                  <Text color={agreementColor}>
-                    {computed.agreementRate.toFixed(1)}%{' '}
-                    <Text color={Colors.Comment}>
-                      ({computed.totalDecisions} reviewed)
-                    </Text>
-                  </Text>
-                </StatRow>
-              )}
-            </>
+              </Text>
+            </StatRow>
           )}
           {files &&
             (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0) && (
               <StatRow title="Code Changes:">
                 <Text>
-                  <Text color={Colors.AccentGreen}>
+                  <Text color={theme.status.success}>
                     +{files.totalLinesAdded}
                   </Text>{' '}
-                  <Text color={Colors.AccentRed}>
+                  <Text color={theme.status.error}>
                     -{files.totalLinesRemoved}
                   </Text>
                 </Text>
@@ -265,25 +249,25 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
 
       <Section title="Performance">
         <StatRow title="Wall Time:">
-          <Text color={Colors.Foreground}>{duration}</Text>
+          <Text color={theme.text.primary}>{duration}</Text>
         </StatRow>
         <StatRow title="Agent Active:">
-          <Text color={Colors.Foreground}>
+          <Text color={theme.text.primary}>
             {formatDuration(computed.agentActiveTime)}
           </Text>
         </StatRow>
         <SubStatRow title="API Time:">
-          <Text color={Colors.Foreground}>
+          <Text color={theme.text.primary}>
             {formatDuration(computed.totalApiTime)}{' '}
-            <Text color={Colors.Comment}>
+            <Text color={theme.text.secondary}>
               ({computed.apiTimePercent.toFixed(1)}%)
             </Text>
           </Text>
         </SubStatRow>
         <SubStatRow title="Tool Time:">
-          <Text color={Colors.Foreground}>
+          <Text color={theme.text.primary}>
             {formatDuration(computed.totalToolTime)}{' '}
-            <Text color={Colors.Comment}>
+            <Text color={theme.text.secondary}>
               ({computed.toolTimePercent.toFixed(1)}%)
             </Text>
           </Text>

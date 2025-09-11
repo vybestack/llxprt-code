@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -224,6 +224,8 @@ export class AuthCommandExecutor {
           };
         }
         // If logout succeeded for unauthenticated user, they had stale tokens
+        // Clear provider cache if it's a Qwen provider
+        this.clearProviderCache(provider);
         return {
           type: 'message',
           messageType: 'info',
@@ -232,6 +234,8 @@ export class AuthCommandExecutor {
       } else {
         // User is authenticated, perform logout
         await this.oauthManager.logout(provider);
+        // Clear provider cache if it's a Qwen provider
+        this.clearProviderCache(provider);
       }
 
       // Lines 51-55: Return success message
@@ -249,6 +253,35 @@ export class AuthCommandExecutor {
         messageType: 'error',
         content: `Failed to logout from ${provider}: ${errorMessage}`,
       };
+    }
+  }
+
+  /**
+   * Clear the cached client for a provider after logout
+   * This ensures the provider doesn't use stale credentials
+   */
+  private clearProviderCache(provider: string): void {
+    try {
+      // Get the provider manager
+      const providerManager = getProviderManager();
+      if (!providerManager) return;
+
+      // Get the provider instance
+      const providerInstance = providerManager.getProviderByName(provider);
+      if (!providerInstance) return;
+
+      // If it's an OpenAI provider (which Qwen uses), clear its cache
+      if (
+        'clearClientCache' in providerInstance &&
+        typeof providerInstance.clearClientCache === 'function'
+      ) {
+        (
+          providerInstance as { clearClientCache: () => void }
+        ).clearClientCache();
+      }
+    } catch (error) {
+      // Failing to clear cache is not critical, just log it
+      console.debug(`Failed to clear provider cache for ${provider}:`, error);
     }
   }
 

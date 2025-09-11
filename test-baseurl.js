@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { OpenAIProvider } from './packages/core/dist/providers/openai/OpenAIProvider.js';
 import { AnthropicProvider } from './packages/core/dist/providers/anthropic/AnthropicProvider.js';
 import { GeminiProvider } from './packages/core/dist/providers/gemini/GeminiProvider.js';

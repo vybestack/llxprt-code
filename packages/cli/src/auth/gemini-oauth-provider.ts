@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Gemini OAuth Provider Implementation
  *
  * Bridges to the existing Google OAuth infrastructure in oauth2.ts

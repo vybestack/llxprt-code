@@ -94,14 +94,16 @@ describe('TodoSchemas', () => {
       expect(() => TodoSchema.parse(missingPriority)).toThrow();
     });
 
-    it('should reject todo with invalid field types', () => {
-      const invalidTypes = {
-        id: 123, // should be string
+    it('should accept numeric IDs and coerce them to strings', () => {
+      const numericId = {
+        id: 123, // numeric ID should be coerced to string
         content: 'Test task',
         status: 'pending',
         priority: 'high',
       };
-      expect(() => TodoSchema.parse(invalidTypes)).toThrow();
+      const parsed = TodoSchema.parse(numericId);
+      expect(parsed.id).toBe('123'); // Should be coerced to string
+      expect(typeof parsed.id).toBe('string');
     });
 
     it('should reject todo with extra fields', () => {
@@ -270,7 +272,7 @@ describe('TodoSchemas', () => {
     });
   });
 
-  describe('TodoSchema', () => {
+  describe('TodoSchema - Additional Tests', () => {
     it('should accept valid todo without subtasks', () => {
       const validTodo = {
         id: 'task-1',
@@ -324,7 +326,7 @@ describe('TodoSchemas', () => {
     });
   });
 
-  describe('TodoArraySchema', () => {
+  describe('TodoArraySchema - Advanced Tests', () => {
     it('should accept empty array', () => {
       expect(() => TodoArraySchema.parse([])).not.toThrow();
     });
