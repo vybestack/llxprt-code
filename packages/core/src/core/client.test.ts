@@ -83,9 +83,6 @@ vi.mock('../services/todo-reminder-service.js', () => ({
     getComplexTaskSuggestion: vi.fn(),
   })),
 }));
-vi.mock('../utils/nextSpeakerChecker.js', () => ({
-  checkNextSpeaker: vi.fn(),
-}));
 vi.mock('./turn', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./turn.js')>();
   // Define a mock class that has the same shape as the real Turn
