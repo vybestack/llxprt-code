@@ -39,7 +39,9 @@ export class UserAccountManager {
       }
       const { active, old } = parsed as Partial<UserAccounts>;
       const isValid =
-        (active === undefined || active === null || typeof active === 'string') &&
+        (active === undefined ||
+          active === null ||
+          typeof active === 'string') &&
         (old === undefined ||
           (Array.isArray(old) && old.every((i) => typeof i === 'string')));
 

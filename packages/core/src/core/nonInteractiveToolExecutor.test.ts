@@ -117,7 +117,8 @@ describe('executeToolCall', () => {
       abortController.signal,
     );
 
-    const expectedErrorMessage = 'Tool "nonexistentTool" not found in registry.';
+    const expectedErrorMessage =
+      'Tool "nonexistentTool" not found in registry.';
     expect(response).toStrictEqual({
       callId: 'call2',
       error: new Error(expectedErrorMessage),

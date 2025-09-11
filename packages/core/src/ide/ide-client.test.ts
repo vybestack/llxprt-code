@@ -114,7 +114,6 @@ describe('IdeClient', () => {
       );
     });
 
-
     it('should connect using HTTP when port is provided in environment variables', async () => {
       vi.mocked(fs.promises.readFile).mockRejectedValue(
         new Error('File not found'),

@@ -811,13 +811,15 @@ export class AnthropicProvider extends BaseProvider {
       });
     }
 
-    // Detect the tool format to use
+    // Detect if we need qwen-style parameter processing (for GLM-4.5, qwen models)
+    // but ALWAYS use anthropic format for the tool structure sent to the API
     const detectedFormat = this.detectToolFormat();
+    const needsQwenParameterProcessing = detectedFormat === 'qwen';
 
-    // Convert Gemini format tools to the detected format
+    // Convert Gemini format tools to anthropic format (always for Anthropic API)
     const anthropicTools = this.toolFormatter.convertGeminiToFormat(
       tools,
-      detectedFormat,
+      'anthropic', // Always use anthropic format for the API structure
     ) as
       | Array<{
           name: string;
@@ -931,21 +933,19 @@ export class AnthropicProvider extends BaseProvider {
             currentToolCall.input += chunk.delta.partial_json;
 
             // Check for double-escaping patterns
-            const detectedFormat = this.detectToolFormat();
             logDoubleEscapingInChunk(
               chunk.delta.partial_json,
               currentToolCall.name,
-              detectedFormat,
+              needsQwenParameterProcessing ? 'qwen' : 'anthropic',
             );
           }
         } else if (chunk.type === 'content_block_stop') {
           if (currentToolCall) {
             // Process tool parameters with double-escape handling
-            const detectedFormat = this.detectToolFormat();
             const processedParameters = processToolParameters(
               currentToolCall.input,
               currentToolCall.name,
-              detectedFormat,
+              needsQwenParameterProcessing ? 'qwen' : 'anthropic',
             );
 
             yield {
@@ -984,8 +984,6 @@ export class AnthropicProvider extends BaseProvider {
       const blocks: ContentBlock[] = [];
 
       // Process content blocks
-      const detectedFormat = this.detectToolFormat();
-
       for (const contentBlock of message.content) {
         if (contentBlock.type === 'text') {
           blocks.push({ type: 'text', text: contentBlock.text } as TextBlock);
@@ -994,7 +992,7 @@ export class AnthropicProvider extends BaseProvider {
           const processedParameters = processToolParameters(
             JSON.stringify(contentBlock.input),
             contentBlock.name,
-            detectedFormat,
+            needsQwenParameterProcessing ? 'qwen' : 'anthropic',
           );
 
           blocks.push({

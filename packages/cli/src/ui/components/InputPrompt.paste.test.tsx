@@ -34,7 +34,8 @@ vi.mock('string-width', () => ({
 
 // Mock the clipboard module
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
+  const actual =
+    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
   return {
     ...actual,
     unescapePath: (path: string) => path,

@@ -167,7 +167,8 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     const isPrivate = isPrivateIp(url);
 
     if (isPrivate) {
-      const errorMessage = 'Private/local URLs cannot be processed with AI analysis. Processing content directly.';
+      const errorMessage =
+        'Private/local URLs cannot be processed with AI analysis. Processing content directly.';
       const result = await this.executeFallback(signal);
       // Add the private URL message to the result
       return {
@@ -177,10 +178,12 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     }
 
     // Get provider manager
-    const providerManager = this.config.getContentGeneratorConfig()?.providerManager;
+    const providerManager =
+      this.config.getContentGeneratorConfig()?.providerManager;
     if (!providerManager) {
       return {
-        llmContent: 'Web fetch requires a provider. Please use --provider gemini with authentication.',
+        llmContent:
+          'Web fetch requires a provider. Please use --provider gemini with authentication.',
         returnDisplay: 'Web fetch requires a provider.',
         error: {
           message: 'No provider manager available',
@@ -193,7 +196,8 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     const serverToolsProvider = providerManager.getServerToolsProvider();
     if (!serverToolsProvider) {
       return {
-        llmContent: 'Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.',
+        llmContent:
+          'Web fetch requires Gemini provider to be configured. Please ensure Gemini is available with authentication.',
         returnDisplay: 'Web fetch requires Gemini provider.',
         error: {
           message: 'No server tools provider available',
@@ -206,7 +210,8 @@ class WebFetchToolInvocation extends BaseToolInvocation<
     const supportedTools = serverToolsProvider.getServerTools();
     if (!supportedTools.includes('web_fetch')) {
       return {
-        llmContent: 'Web fetch is not available. The server tools provider does not support web fetch.',
+        llmContent:
+          'Web fetch is not available. The server tools provider does not support web fetch.',
         returnDisplay: 'Web fetch not available.',
         error: {
           message: 'Server tools provider does not support web_fetch',
@@ -230,10 +235,12 @@ class WebFetchToolInvocation extends BaseToolInvocation<
         JSON.stringify(response, null, 2),
       );
 
-      let responseText = getResponseText(response as GenerateContentResponse) || '';
+      let responseText =
+        getResponseText(response as GenerateContentResponse) || '';
       const typedResponse = response as GenerateContentResponse;
       const urlContextMeta = typedResponse.candidates?.[0]?.urlContextMetadata;
-      const groundingMetadata = typedResponse.candidates?.[0]?.groundingMetadata;
+      const groundingMetadata =
+        typedResponse.candidates?.[0]?.groundingMetadata;
       const sources = groundingMetadata?.groundingChunks as
         | GroundingChunkItem[]
         | undefined;

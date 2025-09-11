@@ -275,7 +275,9 @@ export class AuthCommandExecutor {
         'clearClientCache' in providerInstance &&
         typeof providerInstance.clearClientCache === 'function'
       ) {
-        (providerInstance as { clearClientCache: () => void }).clearClientCache();
+        (
+          providerInstance as { clearClientCache: () => void }
+        ).clearClientCache();
       }
     } catch (error) {
       // Failing to clear cache is not critical, just log it

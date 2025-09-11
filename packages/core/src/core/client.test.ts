@@ -323,7 +323,7 @@ describe('Gemini Client (client.ts)', () => {
 
     // Add missing methods to the client instance for tests
     client.getHistory = vi.fn().mockReturnValue([]);
-    
+
     // Mock the chat object to prevent getHistoryService errors
     const mockChat = {
       addHistory: vi.fn(),
@@ -597,8 +597,10 @@ describe('Gemini Client (client.ts)', () => {
     it('should create a new chat session, clearing the old history', async () => {
       // Setup: Mock getHistory to track history state
       let historyState: Content[] = [];
-      vi.mocked(client.getHistory).mockImplementation(() => Promise.resolve([...historyState]));
-      
+      vi.mocked(client.getHistory).mockImplementation(() =>
+        Promise.resolve([...historyState]),
+      );
+
       // Mock addHistory to update the state
       const mockChat = client['chat'] as GeminiChat;
       mockChat.addHistory.mockImplementation((content: Content) => {
@@ -627,7 +629,9 @@ describe('Gemini Client (client.ts)', () => {
             historyState.push(content);
             return Promise.resolve();
           }),
-          getHistory: vi.fn().mockImplementation(() => Promise.resolve([...historyState])),
+          getHistory: vi
+            .fn()
+            .mockImplementation(() => Promise.resolve([...historyState])),
           getHistoryService: vi.fn().mockReturnValue({
             clear: vi.fn(),
             findUnmatchedToolCalls: vi.fn().mockReturnValue([]),

@@ -187,10 +187,7 @@ export async function startInteractiveUI(
 
   const instance = render(
     <React.StrictMode>
-      <ErrorBoundary
-         
-        onError={handleError}
-      >
+      <ErrorBoundary onError={handleError}>
         <SettingsContext.Provider value={settings}>
           <AppWrapper
             config={config}

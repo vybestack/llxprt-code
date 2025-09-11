@@ -15,7 +15,7 @@ import {
   MockInstance,
 } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useGeminiStream , mergePartListUnions } from './useGeminiStream.js';
+import { useGeminiStream, mergePartListUnions } from './useGeminiStream.js';
 import { useKeypress } from './useKeypress.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import {

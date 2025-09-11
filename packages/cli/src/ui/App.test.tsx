@@ -24,7 +24,12 @@ import { LoadedSettings, SettingsFile, Settings } from '../config/settings.js';
 import process from 'node:process';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
-import { StreamingState, ConsoleMessageItem, MessageType, HistoryItem } from './types.js';
+import {
+  StreamingState,
+  ConsoleMessageItem,
+  MessageType,
+  HistoryItem,
+} from './types.js';
 import { Tips } from './components/Tips.js';
 import { checkForUpdates, UpdateObject } from './utils/updateCheck.js';
 import { EventEmitter } from 'events';
@@ -294,12 +299,10 @@ vi.mock('../hooks/useTerminalSize.js', () => ({
 }));
 
 const mockedCheckForUpdates = vi.mocked(checkForUpdates);
-const { 
+const {
   isGitRepository: mockedIsGitRepository,
-  getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames
-} = vi.mocked(
-  await import('@vybestack/llxprt-code-core'),
-);
+  getAllLlxprtMdFilenames: mockedGetAllLlxprtMdFilenames,
+} = vi.mocked(await import('@vybestack/llxprt-code-core'));
 
 vi.mock('node:child_process');
 
@@ -354,10 +357,10 @@ describe('App UI', () => {
     // Reset mock history state
     mockHistoryState = [];
     mockAddItem.mockClear();
-    
+
     // Reset core function mocks to default values
     mockedGetAllLlxprtMdFilenames.mockReturnValue(['GEMINI.md']);
-    
+
     vi.spyOn(useTerminalSize, 'useTerminalSize').mockReturnValue({
       columns: 120,
       rows: 24,
@@ -1060,7 +1063,9 @@ describe('App UI', () => {
       );
       currentUnmount = unmount;
 
-      expect(lastFrame()).toContain('INFO: Theme configuration unavailable due to NO_COLOR env variable.');
+      expect(lastFrame()).toContain(
+        'INFO: Theme configuration unavailable due to NO_COLOR env variable.',
+      );
       expect(lastFrame()).not.toContain('Select Theme');
     });
   });

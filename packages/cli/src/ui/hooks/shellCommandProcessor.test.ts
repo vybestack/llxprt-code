@@ -148,7 +148,9 @@ describe('useShellCommandProcessor', () => {
       ],
     });
     expect(mockShellExecutionService).toHaveBeenCalledWith(
-      expect.stringMatching(/^{ ls -l; }; __code=\$\?; pwd > ".*shell_pwd_abcdef\.tmp"; exit \$__code$/),
+      expect.stringMatching(
+        /^{ ls -l; }; __code=\$\?; pwd > ".*shell_pwd_abcdef\.tmp"; exit \$__code$/,
+      ),
       '/test/dir',
       expect.any(Function),
       expect.any(Object),
@@ -438,7 +440,9 @@ describe('useShellCommandProcessor', () => {
       text: 'An unexpected error occurred: Synchronous spawn error',
     });
     // Verify that the temporary file was cleaned up
-    expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/));
+    expect(vi.mocked(fs.unlinkSync)).toHaveBeenCalledWith(
+      expect.stringMatching(/.*shell_pwd_abcdef\.tmp$/),
+    );
   });
 
   describe('Directory Change Warning', () => {

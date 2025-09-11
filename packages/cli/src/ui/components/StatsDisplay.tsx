@@ -203,9 +203,10 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       {renderTitle()}
       <Box height={1} />
 
-      {(tools.totalCalls > 0 || 
-        computed.totalDecisions > 0 || 
-        (files && (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0))) && (
+      {(tools.totalCalls > 0 ||
+        computed.totalDecisions > 0 ||
+        (files &&
+          (files.totalLinesAdded > 0 || files.totalLinesRemoved > 0))) && (
         <Section title="Interaction Summary">
           <StatRow title="Session ID:">
             <Text color={theme.text.primary}>{stats.sessionId}</Text>

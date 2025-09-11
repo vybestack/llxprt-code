@@ -47,12 +47,16 @@ vi.mock('./useCompletion', () => ({
 
     const navigateUp = useCallback(() => {
       if (suggestions.length === 0) return;
-      setActiveSuggestionIndex(prev => prev <= 0 ? suggestions.length - 1 : prev - 1);
+      setActiveSuggestionIndex((prev) =>
+        prev <= 0 ? suggestions.length - 1 : prev - 1,
+      );
     }, [suggestions.length]);
 
     const navigateDown = useCallback(() => {
       if (suggestions.length === 0) return;
-      setActiveSuggestionIndex(prev => prev >= suggestions.length - 1 ? 0 : prev + 1);
+      setActiveSuggestionIndex((prev) =>
+        prev >= suggestions.length - 1 ? 0 : prev + 1,
+      );
     }, [suggestions.length]);
 
     // Auto-select first suggestion when suggestions change
@@ -130,12 +134,19 @@ const setupMocks = ({
 
   // Mock for /-completions with proper state management
   (useSlashCompletion as vi.Mock).mockImplementation((buffer) => {
-    const [suggestions, setSuggestions] = useState<Suggestion[]>(slashSuggestions);
-    const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(slashSuggestions.length > 0 ? 0 : -1);
+    const [suggestions, setSuggestions] =
+      useState<Suggestion[]>(slashSuggestions);
+    const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(
+      slashSuggestions.length > 0 ? 0 : -1,
+    );
     const [visibleStartIndex, setVisibleStartIndex] = useState<number>(0);
-    const [showSuggestions, setShowSuggestions] = useState<boolean>(slashSuggestions.length > 0);
-    const [isLoadingSuggestions, setIsLoadingSuggestions] = useState<boolean>(isLoading);
-    const [isPerfectMatchState, setIsPerfectMatch] = useState<boolean>(isPerfectMatch);
+    const [showSuggestions, setShowSuggestions] = useState<boolean>(
+      slashSuggestions.length > 0,
+    );
+    const [isLoadingSuggestions, setIsLoadingSuggestions] =
+      useState<boolean>(isLoading);
+    const [isPerfectMatchState, setIsPerfectMatch] =
+      useState<boolean>(isPerfectMatch);
 
     const resetCompletionState = useCallback(() => {
       setSuggestions([]);
@@ -148,22 +159,29 @@ const setupMocks = ({
 
     const navigateUp = useCallback(() => {
       if (suggestions.length === 0) return;
-      setActiveSuggestionIndex(prev => prev <= 0 ? suggestions.length - 1 : prev - 1);
+      setActiveSuggestionIndex((prev) =>
+        prev <= 0 ? suggestions.length - 1 : prev - 1,
+      );
     }, [suggestions.length]);
 
     const navigateDown = useCallback(() => {
       if (suggestions.length === 0) return;
-      setActiveSuggestionIndex(prev => prev >= suggestions.length - 1 ? 0 : prev + 1);
+      setActiveSuggestionIndex((prev) =>
+        prev >= suggestions.length - 1 ? 0 : prev + 1,
+      );
     }, [suggestions.length]);
 
-    const handleAutocomplete = useCallback((indexToUse: number) => {
-      if (indexToUse < 0 || indexToUse >= suggestions.length) {
-        return;
-      }
-      const suggestion = suggestions[indexToUse].value;
-      // For slash commands, replace the entire line
-      buffer.setText(`/${suggestion} `);
-    }, [suggestions, buffer]);
+    const handleAutocomplete = useCallback(
+      (indexToUse: number) => {
+        if (indexToUse < 0 || indexToUse >= suggestions.length) {
+          return;
+        }
+        const suggestion = suggestions[indexToUse].value;
+        // For slash commands, replace the entire line
+        buffer.setText(`/${suggestion} `);
+      },
+      [suggestions, buffer],
+    );
 
     return {
       suggestions,

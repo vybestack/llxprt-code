@@ -14,7 +14,10 @@ import {
   type MockedFunction,
 } from 'vitest';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
-import { ToolCallConfirmationDetails, Config } from '@vybestack/llxprt-code-core';
+import {
+  ToolCallConfirmationDetails,
+  Config,
+} from '@vybestack/llxprt-code-core';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { KeypressProvider } from '../../contexts/KeypressContext.js';
 
@@ -22,7 +25,7 @@ vi.mock('../../hooks/useTerminalSize.js');
 
 describe('ToolConfirmationMessage Responsive Behavior', () => {
   let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
-  
+
   const mockConfig = {
     isTrustedFolder: () => true,
     getIdeMode: () => false,

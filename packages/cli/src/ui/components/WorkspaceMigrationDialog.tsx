@@ -29,13 +29,16 @@ export function WorkspaceMigrationDialog(props: {
     setMigrationComplete(true);
   }, [workspaceExtensions]);
 
-  const handleSelect = useCallback((value: string) => {
-    if (value === 'migrate') {
-      onMigrate();
-    } else {
-      onClose();
-    }
-  }, [onMigrate, onClose]);
+  const handleSelect = useCallback(
+    (value: string) => {
+      if (value === 'migrate') {
+        onMigrate();
+      } else {
+        onClose();
+      }
+    },
+    [onMigrate, onClose],
+  );
 
   useInput((input) => {
     if (migrationComplete && input === 'q') {
