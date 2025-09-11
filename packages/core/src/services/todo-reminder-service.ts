@@ -97,7 +97,8 @@ export class TodoReminderService {
    * Format message as system reminder
    */
   private formatSystemReminder(message: string): string {
-    return `<system-reminder>\n${message}\n</system-reminder>`;
+    // Return plain text instead of XML tags to avoid breaking OpenAI API
+    return `\n\n---\nSystem Note: ${message}\n---`;
   }
 
   /**

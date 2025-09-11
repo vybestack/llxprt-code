@@ -157,6 +157,11 @@ export class DebugLogger {
     }
   }
 
+  warn(messageOrFn: string | (() => string), ...args: unknown[]): void {
+    // Use error level for warnings for now
+    this.error(messageOrFn, ...args);
+  }
+
   error(messageOrFn: string | (() => string), ...args: unknown[]): void {
     // Lines 66-70
     if (!this._enabled) {

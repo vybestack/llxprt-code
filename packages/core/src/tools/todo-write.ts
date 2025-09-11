@@ -41,7 +41,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
                 content: {
                   type: Type.STRING,
                   description: 'Description of the todo item',
-                  minLength: '1',
+                  minLength: 1,
                 },
                 status: {
                   type: Type.STRING,
@@ -65,7 +65,7 @@ export class TodoWrite extends BaseTool<TodoWriteParams, ToolResult> {
                       content: {
                         type: Type.STRING,
                         description: 'Description of the subtask',
-                        minLength: '1',
+                        minLength: 1,
                       },
                       toolCalls: {
                         type: Type.ARRAY,

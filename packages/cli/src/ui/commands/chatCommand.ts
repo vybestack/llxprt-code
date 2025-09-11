@@ -15,7 +15,11 @@ import {
   CommandKind,
   SlashCommandActionReturn,
 } from './types.js';
-import { decodeTagName } from '@vybestack/llxprt-code-core';
+import {
+  decodeTagName,
+  EmojiFilter,
+  type EmojiFilterMode,
+} from '@vybestack/llxprt-code-core';
 import path from 'path';
 import { HistoryItemWithoutId, MessageType } from '../types.js';
 import { Part } from '@google/genai';
@@ -182,9 +186,20 @@ const resumeCommand: SlashCommand = {
       };
     }
 
-    const { logger } = context.services;
+    const { logger, config } = context.services;
     await logger.initialize();
-    const checkpoint = await logger.loadCheckpoint(tag);
+
+    // Get emoji filter mode from settings
+    const emojiFilterMode =
+      (config?.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+
+    // Create emoji filter if not in 'allowed' mode
+    const emojiFilter =
+      emojiFilterMode !== 'allowed'
+        ? new EmojiFilter({ mode: emojiFilterMode })
+        : undefined;
+
+    const checkpoint = await logger.loadCheckpoint(tag, emojiFilter);
     const conversation = checkpoint.history;
 
     if (conversation.length === 0) {

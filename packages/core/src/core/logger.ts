@@ -6,8 +6,9 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { Content } from '@google/genai';
-import { ensureLlxprtDirExists } from '../utils/paths.js';
+import { Content, Part } from '@google/genai';
+import { getProjectTempDir, ensureLlxprtDirExists } from '../utils/paths.js';
+import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { Storage } from '../config/storage.js';
 
 const LOG_FILE_NAME = 'logs.json';
@@ -335,7 +336,10 @@ export class Logger {
     }
   }
 
-  async loadCheckpoint(tag: string): Promise<{
+  async loadCheckpoint(
+    tag: string,
+    emojiFilter?: EmojiFilter,
+  ): Promise<{
     history: Content[];
     context?: object;
   }> {
@@ -349,11 +353,30 @@ export class Logger {
     const path = await this._getCheckpointPath(tag);
     try {
       const fileContent = await fs.readFile(path, 'utf-8');
-      const parsedContent = JSON.parse(fileContent);
+      let parsedContent = JSON.parse(fileContent);
       if (Array.isArray(parsedContent)) {
         // Backwards compatibility for old format
-        return { history: parsedContent as Content[] };
+        parsedContent = { history: parsedContent as Content[] };
       }
+
+      // Apply emoji filtering if provided
+      if (emojiFilter) {
+        const filteredHistory = parsedContent.history.map((item: Content) => {
+          const filteredItem = { ...item };
+          if (Array.isArray(filteredItem.parts)) {
+            filteredItem.parts = filteredItem.parts.map((part: Part) => {
+              if (part.text) {
+                const filterResult = emojiFilter.filterText(part.text);
+                return { ...part, text: filterResult.filtered as string };
+              }
+              return part;
+            });
+          }
+          return filteredItem;
+        });
+        parsedContent.history = filteredHistory;
+      }
+
       return parsedContent as { history: Content[]; context?: object };
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;

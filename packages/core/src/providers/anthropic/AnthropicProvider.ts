@@ -510,6 +510,26 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
+   * Set tool format override for this provider
+   * @param format The format to use, or null to clear override
+   */
+  override setToolFormatOverride(format: string | null): void {
+    const settingsService = getSettingsService();
+    if (format === null) {
+      settingsService.setProviderSetting(this.name, 'toolFormat', 'auto');
+      this.logger.debug(() => `Tool format override cleared for ${this.name}`);
+    } else {
+      settingsService.setProviderSetting(this.name, 'toolFormat', format);
+      this.logger.debug(
+        () => `Tool format override set to '${format}' for ${this.name}`,
+      );
+    }
+
+    // Clear cached auth key to ensure new format takes effect
+    this._cachedAuthKey = undefined;
+  }
+
+  /**
    * Normalize tool IDs from various formats to Anthropic format
    * Handles IDs from OpenAI (call_xxx), Anthropic (toolu_xxx), and history (hist_tool_xxx)
    */
@@ -791,8 +811,24 @@ export class AnthropicProvider extends BaseProvider {
       });
     }
 
-    // Convert Gemini format tools directly to Anthropic format using the new method
-    const anthropicTools = this.toolFormatter.convertGeminiToAnthropic(tools);
+    // Detect the tool format to use
+    const detectedFormat = this.detectToolFormat();
+
+    // Convert Gemini format tools to the detected format
+    const anthropicTools = this.toolFormatter.convertGeminiToFormat(
+      tools,
+      detectedFormat,
+    ) as
+      | Array<{
+          name: string;
+          description: string;
+          input_schema: {
+            type: 'object';
+            properties?: Record<string, unknown>;
+            required?: string[];
+          };
+        }>
+      | undefined;
 
     // Ensure authentication
     await this.updateClientWithResolvedAuth();
