@@ -17,12 +17,22 @@ vi.mock('../config/config.js');
 describe('WebSearchTool', () => {
   const abortSignal = new AbortController().signal;
   let mockGeminiClient: GeminiClient;
+  let mockInvokeServerTool: Mock;
   let tool: WebSearchTool;
 
   beforeEach(() => {
+    mockInvokeServerTool = vi.fn();
     const mockConfigInstance = {
       getGeminiClient: () => mockGeminiClient,
       getProxy: () => undefined,
+      getContentGeneratorConfig: () => ({
+        providerManager: {
+          getServerToolsProvider: () => ({
+            invokeServerTool: mockInvokeServerTool,
+            getServerTools: () => ['web_search'],
+          }),
+        },
+      }),
     } as unknown as Config;
     mockGeminiClient = new GeminiClient(mockConfigInstance);
     tool = new WebSearchTool(mockConfigInstance);
@@ -68,11 +78,10 @@ describe('WebSearchTool', () => {
   describe('execute', () => {
     it('should return search results for a successful query', async () => {
       const params: WebSearchToolParams = { query: 'successful query' };
-      (mockGeminiClient.generateContent as Mock).mockResolvedValue({
+      mockInvokeServerTool.mockResolvedValue({
         candidates: [
           {
             content: {
-              role: 'model',
               parts: [{ text: 'Here are your results.' }],
             },
           },
@@ -93,11 +102,10 @@ describe('WebSearchTool', () => {
 
     it('should handle no search results found', async () => {
       const params: WebSearchToolParams = { query: 'no results query' };
-      (mockGeminiClient.generateContent as Mock).mockResolvedValue({
+      mockInvokeServerTool.mockResolvedValue({
         candidates: [
           {
             content: {
-              role: 'model',
               parts: [{ text: '' }],
             },
           },
@@ -116,7 +124,7 @@ describe('WebSearchTool', () => {
     it('should return a WEB_SEARCH_FAILED error on failure', async () => {
       const params: WebSearchToolParams = { query: 'error query' };
       const testError = new Error('API Failure');
-      (mockGeminiClient.generateContent as Mock).mockRejectedValue(testError);
+      mockInvokeServerTool.mockRejectedValue(testError);
 
       const invocation = tool.build(params);
       const result = await invocation.execute(abortSignal);
@@ -129,11 +137,10 @@ describe('WebSearchTool', () => {
 
     it('should correctly format results with sources and citations', async () => {
       const params: WebSearchToolParams = { query: 'grounding query' };
-      (mockGeminiClient.generateContent as Mock).mockResolvedValue({
+      mockInvokeServerTool.mockResolvedValue({
         candidates: [
           {
             content: {
-              role: 'model',
               parts: [{ text: 'This is a test response.' }],
             },
             groundingMetadata: {
@@ -176,11 +183,10 @@ Sources:
 
     it('should insert markers at correct byte positions for multibyte text', async () => {
       const params: WebSearchToolParams = { query: 'multibyte query' };
-      (mockGeminiClient.generateContent as Mock).mockResolvedValue({
+      mockInvokeServerTool.mockResolvedValue({
         candidates: [
           {
             content: {
-              role: 'model',
               parts: [{ text: 'こんにちは! Gemini CLI✨️' }],
             },
             groundingMetadata: {
