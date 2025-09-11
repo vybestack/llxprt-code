@@ -1290,6 +1290,10 @@ describe('InputPrompt', () => {
         <InputPrompt {...props} />,
       );
 
+      // Clear initial calls from mounting
+      await wait();
+      onEscapePromptChange.mockClear();
+
       stdin.write('\x1B');
       await wait();
 

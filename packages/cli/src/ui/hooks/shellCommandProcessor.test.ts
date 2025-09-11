@@ -27,15 +27,11 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 vi.mock('fs');
-vi.mock('os', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('os')>();
-  return {
-    ...actual,
-    platform: vi.fn(() => 'linux'),
-    tmpdir: vi.fn(() => '/tmp'),
-    homedir: vi.fn(() => '/home/testuser'),
-  };
-});
+vi.mock('os', () => ({
+  platform: vi.fn(() => 'linux'),
+  tmpdir: vi.fn(() => '/tmp'),
+  homedir: vi.fn(() => '/home/testuser'),
+}));
 vi.mock('crypto');
 vi.mock('../utils/textUtils.js');
 
@@ -50,7 +46,7 @@ import {
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
-import * as os from 'os';
+import os from 'os';
 // import * as path from 'path';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
@@ -88,15 +84,17 @@ describe('useShellCommandProcessor', () => {
     mockIsBinary.mockReturnValue(false);
     vi.mocked(fs.existsSync).mockReturnValue(false);
 
-    mockShellExecutionService.mockImplementation((_cmd, _cwd, callback) => {
-      mockShellOutputCallback = callback;
-      return {
-        pid: 12345,
-        result: new Promise((resolve) => {
-          resolveExecutionPromise = resolve;
-        }),
-      };
-    });
+    mockShellExecutionService.mockImplementation(
+      (_cmd, _cwd, callback, _signal, _usePty) => {
+        mockShellOutputCallback = callback;
+        return {
+          pid: 12345,
+          result: new Promise((resolve) => {
+            resolveExecutionPromise = resolve;
+          }),
+        };
+      },
+    );
   });
 
   const renderProcessorHook = () =>
