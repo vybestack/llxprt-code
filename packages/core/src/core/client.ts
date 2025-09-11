@@ -1083,8 +1083,6 @@ export class GeminiClient {
           compressionStatus: CompressionStatus.NOOP,
         };
       }
-    } catch (error) {
-      this.logger.error(() => 'Compression failed:', { error });
     }
 
     let compressBeforeIndex = findIndexAfterFraction(

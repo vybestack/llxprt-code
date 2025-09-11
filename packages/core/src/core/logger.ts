@@ -7,7 +7,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { Content, Part } from '@google/genai';
-import { getProjectTempDir, ensureLlxprtDirExists } from '../utils/paths.js';
+import { ensureLlxprtDirExists } from '../utils/paths.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
 import { Storage } from '../config/storage.js';
 

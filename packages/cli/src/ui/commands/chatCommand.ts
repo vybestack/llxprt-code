@@ -199,8 +199,25 @@ const resumeCommand: SlashCommand = {
         ? new EmojiFilter({ mode: emojiFilterMode })
         : undefined;
 
-    const checkpoint = await logger.loadCheckpoint(tag, emojiFilter);
-    const conversation = checkpoint.history;
+    const checkpoint = await logger.loadCheckpoint(tag);
+    let conversation = checkpoint.history;
+
+    // Apply emoji filtering if needed
+    if (emojiFilter) {
+      conversation = conversation.map((item) => {
+        const filteredItem = { ...item };
+        if (Array.isArray(filteredItem.parts)) {
+          filteredItem.parts = filteredItem.parts.map((part: Part) => {
+            if (part.text) {
+              const filterResult = emojiFilter.filterText(part.text);
+              return { ...part, text: filterResult.filtered as string };
+            }
+            return part;
+          });
+        }
+        return filteredItem;
+      });
+    }
 
     if (conversation.length === 0) {
       return {
