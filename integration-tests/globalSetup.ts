@@ -19,7 +19,10 @@ import {
   DEFAULT_CONTEXT_FILENAME,
 } from '../packages/core/src/tools/memoryTool.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// Handle both ESM and potential Vite test environment issues
+const __dirname = import.meta.url
+  ? dirname(fileURLToPath(import.meta.url))
+  : process.cwd();
 const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown

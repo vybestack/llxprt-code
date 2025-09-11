@@ -9,6 +9,7 @@ import { BaseToolInvocation, ToolResult } from './tools.js';
 import { getErrorMessage } from '../utils/errors.js';
 import { Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
+import { ToolErrorType } from './tool-error.js';
 
 export interface GroundingChunkWeb {
   uri?: string;
@@ -161,14 +162,24 @@ export class WebSearchToolInvocation extends BaseToolInvocation<
         });
 
         if (groundingSupports && groundingSupports.length > 0) {
+          // Convert byte indices to character indices
+          const textBuffer = Buffer.from(modifiedResponseText, 'utf-8');
           const insertions: Array<{ index: number; marker: string }> = [];
+
           groundingSupports.forEach((support: GroundingSupportItem) => {
             if (support.segment && support.groundingChunkIndices) {
               const citationMarker = support.groundingChunkIndices
                 .map((chunkIndex: number) => `[${chunkIndex + 1}]`)
                 .join('');
+
+              // Convert byte index to character index
+              const byteIndex = support.segment.endIndex;
+              const charIndex = textBuffer
+                .subarray(0, byteIndex)
+                .toString('utf-8').length;
+
               insertions.push({
-                index: support.segment.endIndex,
+                index: charIndex,
                 marker: citationMarker,
               });
             }
@@ -203,6 +214,10 @@ export class WebSearchToolInvocation extends BaseToolInvocation<
       return {
         llmContent: `Error: ${errorMessage}`,
         returnDisplay: `Error performing web search.`,
+        error: {
+          type: ToolErrorType.WEB_SEARCH_FAILED,
+          message: `Web search failed: ${getErrorMessage(error)}`,
+        },
       };
     }
   }

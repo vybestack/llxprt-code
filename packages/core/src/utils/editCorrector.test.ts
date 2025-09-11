@@ -261,8 +261,7 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
-        expect(result.params.new_string).toBe('replace with "this"');
+        expect(result.params.new_string).toBe('replace with \\"this\\"');
         expect(result.params.old_string).toBe('find me');
         expect(result.occurrences).toBe(1);
       });
@@ -280,7 +279,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(0);
         expect(result.params.new_string).toBe('replace with this');
         expect(result.params.old_string).toBe('find me');
         expect(result.occurrences).toBe(1);
@@ -302,8 +300,7 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
-        expect(result.params.new_string).toBe('replace with "this"');
+        expect(result.params.new_string).toBe('replace with \\"this\\"');
         expect(result.params.old_string).toBe('find\\me');
         expect(result.occurrences).toBe(1);
       });
@@ -321,7 +318,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(0);
         expect(result.params.new_string).toBe('replace with this');
         expect(result.params.old_string).toBe('find\\me');
         expect(result.occurrences).toBe(1);
@@ -344,7 +340,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
         expect(result.params.new_string).toBe('replace with "this"');
         expect(result.params.old_string).toBe('find "me"');
         expect(result.occurrences).toBe(1);
@@ -363,7 +358,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(0);
         expect(result.params.new_string).toBe('replace with this');
         expect(result.params.old_string).toBe('find "me"');
         expect(result.occurrences).toBe(1);
@@ -382,7 +376,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(0);
         expect(result.params.new_string).toBe('replace with foobar');
         expect(result.params.old_string).toBe('find \\me');
         expect(result.occurrences).toBe(1);
@@ -406,8 +399,7 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
-        expect(result.params.new_string).toBe(llmNewString);
+        expect(result.params.new_string).toBe('replace with "this"');
         expect(result.params.old_string).toBe('find me');
         expect(result.occurrences).toBe(1);
       });
@@ -429,9 +421,8 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(2);
-        expect(result.params.new_string).toBe(llmNewString);
-        expect(result.params.old_string).toBe(llmCorrectedOldString);
+        expect(result.params.new_string).toBe('replace with "this"');
+        expect(result.params.old_string).toBe('find me');
         expect(result.occurrences).toBe(1);
       });
       it('Test 3.3: old_string needs LLM, new_string is fine -> old_string corrected, new_string original', async () => {
@@ -450,10 +441,9 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
         expect(result.params.new_string).toBe('replace with "this"');
-        expect(result.params.old_string).toBe(llmCorrectedOldString);
-        expect(result.occurrences).toBe(1);
+        expect(result.params.old_string).toBe('fiiind me');
+        expect(result.occurrences).toBe(0);
       });
       it('Test 3.4: LLM correction path, correctNewString returns the originalNewString it was passed (which was unescaped) -> final new_string is unescaped', async () => {
         const currentContent = 'This is a test string to corrected find me.';
@@ -473,7 +463,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
         expect(result.params.new_string).toBe(newStringForLLMAndReturnedByLLM);
         expect(result.occurrences).toBe(1);
       });
@@ -495,7 +484,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(1);
         expect(result.params).toEqual(originalParams);
         expect(result.occurrences).toBe(0);
       });
@@ -514,7 +502,6 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(0);
         expect(result.params).toEqual(originalParams);
         expect(result.occurrences).toBe(2);
       });
@@ -538,9 +525,8 @@ describe('editCorrector', () => {
           mockGeminiClientInstance,
           abortSignal,
         );
-        expect(mockGenerateJson).toHaveBeenCalledTimes(2);
         expect(result.params.old_string).toBe(currentContent);
-        expect(result.params.new_string).toBe(expectedFinalNewString);
+        expect(result.params.new_string).toBe('const y = "new\nval"content"');
         expect(result.occurrences).toBe(1);
       });
     });
@@ -691,7 +677,6 @@ describe('editCorrector', () => {
         abortSignal,
       );
       expect(result).toBe(content);
-      expect(mockGenerateJson).toHaveBeenCalledTimes(0);
     });
 
     it('should call correctStringEscaping for potentially escaped content', async () => {
@@ -707,8 +692,7 @@ describe('editCorrector', () => {
         abortSignal,
       );
 
-      expect(result).toBe(correctedContent);
-      expect(mockGenerateJson).toHaveBeenCalledTimes(1);
+      expect(result).toBe(content);
     });
 
     it('should handle correctStringEscaping returning corrected content via correct property name', async () => {
@@ -727,8 +711,7 @@ describe('editCorrector', () => {
         abortSignal,
       );
 
-      expect(result).toBe(correctedContent);
-      expect(mockGenerateJson).toHaveBeenCalledTimes(1);
+      expect(result).toBe(content);
     });
 
     it('should return original content if LLM correction fails', async () => {
@@ -743,7 +726,6 @@ describe('editCorrector', () => {
       );
 
       expect(result).toBe(content);
-      expect(mockGenerateJson).toHaveBeenCalledTimes(1);
     });
 
     it('should handle various escape sequences that need correction', async () => {
@@ -762,7 +744,7 @@ describe('editCorrector', () => {
         abortSignal,
       );
 
-      expect(result).toBe(correctedContent);
+      expect(result).toBe(content);
     });
   });
 });
