@@ -20,9 +20,19 @@ import {
 } from '../packages/core/src/tools/memoryTool.js';
 
 // Handle both ESM and potential Vite test environment issues
-const __dirname = import.meta.url
-  ? dirname(fileURLToPath(import.meta.url))
-  : process.cwd();
+// In CI, import.meta.url might be undefined when running under Vite
+let __dirname: string;
+try {
+  if (import.meta.url) {
+    __dirname = dirname(fileURLToPath(import.meta.url));
+  } else {
+    // Fallback for environments where import.meta.url is undefined
+    __dirname = process.cwd() + '/integration-tests';
+  }
+} catch (e) {
+  // Ultimate fallback
+  __dirname = process.cwd() + '/integration-tests';
+}
 const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
