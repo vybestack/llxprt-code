@@ -162,6 +162,14 @@ export interface UIState {
 
   // Available terminal height for content (after footer measurement)
   availableTerminalHeight: number;
+
+  // Shell integration
+  activePtyId: number | undefined;
+  shellFocused: boolean;
+
+  // Hybrid compatibility
+  messageQueue: string[];
+  userMessages: string[];
 }
 
 const UIStateContext = createContext<UIState | undefined>(undefined);

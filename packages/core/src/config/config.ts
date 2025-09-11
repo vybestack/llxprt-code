@@ -87,6 +87,7 @@ export type { MCPOAuthConfig, AnyToolInvocation };
 import type { AnyToolInvocation } from '../tools/tools.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
 import { Storage } from './storage.js';
+import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 import { FileExclusions } from '../utils/ignorePatterns.js';
 import type { EventEmitter } from 'node:events';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
@@ -295,6 +296,10 @@ export interface ConfigParameters {
   useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
   skipNextSpeakerCheck?: boolean;
+  shellExecutionConfig?: ShellExecutionConfig;
+  truncateToolOutputThreshold?: number;
+  truncateToolOutputLines?: number;
+  enableToolOutputTruncation?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
   eventEmitter?: EventEmitter;
@@ -417,7 +422,11 @@ export class Config {
   private readonly useRipgrep: boolean;
   private readonly shouldUseNodePtyShell: boolean;
   private readonly skipNextSpeakerCheck: boolean;
+  private shellExecutionConfig: ShellExecutionConfig;
   private readonly extensionManagement: boolean;
+  private readonly truncateToolOutputThreshold: number;
+  private readonly truncateToolOutputLines: number;
+  private readonly enableToolOutputTruncation: boolean;
   private readonly enablePromptCompletion: boolean = false;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
@@ -550,6 +559,17 @@ export class Config {
     this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
     this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
+    this.shellExecutionConfig = {
+      terminalWidth: params.shellExecutionConfig?.terminalWidth ?? 80,
+      terminalHeight: params.shellExecutionConfig?.terminalHeight ?? 24,
+      showColor: params.shellExecutionConfig?.showColor ?? false,
+      pager: params.shellExecutionConfig?.pager ?? 'cat',
+    };
+    this.truncateToolOutputThreshold =
+      params.truncateToolOutputThreshold ?? 10000; // Default value
+    this.truncateToolOutputLines = params.truncateToolOutputLines ?? 100; // Default value
+    this.enableToolOutputTruncation =
+      params.enableToolOutputTruncation ?? false;
     this.useSmartEdit = params.useSmartEdit ?? false;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);
@@ -1455,6 +1475,20 @@ export class Config {
     return this.skipNextSpeakerCheck;
   }
 
+  getShellExecutionConfig(): ShellExecutionConfig {
+    return this.shellExecutionConfig;
+  }
+
+  setShellExecutionConfig(config: ShellExecutionConfig): void {
+    this.shellExecutionConfig = {
+      terminalWidth:
+        config.terminalWidth ?? this.shellExecutionConfig.terminalWidth,
+      terminalHeight:
+        config.terminalHeight ?? this.shellExecutionConfig.terminalHeight,
+      showColor: config.showColor ?? this.shellExecutionConfig.showColor,
+      pager: config.pager ?? this.shellExecutionConfig.pager,
+    };
+  }
   getScreenReader(): boolean {
     return this.accessibility.screenReader ?? false;
   }

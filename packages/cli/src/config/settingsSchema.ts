@@ -613,6 +613,46 @@ export const SETTINGS_SCHEMA = {
           'Sandbox execution environment (can be a boolean or a path string).',
         showInDialog: false,
       },
+      usePty: {
+        type: 'boolean',
+        label: 'Use node-pty for Shell Execution',
+        category: 'Tools',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Use node-pty for shell command execution. Fallback to child_process still applies.',
+        showInDialog: true,
+      },
+      shell: {
+        type: 'object',
+        label: 'Shell',
+        category: 'Tools',
+        requiresRestart: false,
+        default: {},
+        description: 'Settings for shell execution.',
+        showInDialog: false,
+        properties: {
+          pager: {
+            type: 'string',
+            label: 'Pager',
+            category: 'Tools',
+            requiresRestart: false,
+            default: 'cat' as string | undefined,
+            description:
+              'The pager command to use for shell output. Defaults to `cat`.',
+            showInDialog: false,
+          },
+          showColor: {
+            type: 'boolean',
+            label: 'Show Color',
+            category: 'Tools',
+            requiresRestart: false,
+            default: false,
+            description: 'Show color in shell output.',
+            showInDialog: true,
+          },
+        },
+      },
       autoAccept: {
         type: 'boolean',
         label: 'Auto Accept',
@@ -1132,10 +1172,10 @@ export const SETTINGS_SCHEMA = {
 
 type InferSettings<T extends SettingsSchema> = {
   -readonly [K in keyof T]?: T[K] extends { properties: SettingsSchema }
-    ? InferSettings<T[K]['properties']>
-    : T[K]['default'] extends boolean
-      ? boolean
-      : T[K]['default'];
+  ? InferSettings<T[K]['properties']>
+  : T[K]['default'] extends boolean
+  ? boolean
+  : T[K]['default'];
 };
 
 export type Settings = InferSettings<typeof SETTINGS_SCHEMA>;

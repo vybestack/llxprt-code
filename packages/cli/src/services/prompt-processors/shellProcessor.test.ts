@@ -64,6 +64,7 @@ describe('ShellProcessor', () => {
       getTargetDir: vi.fn().mockReturnValue('/test/dir'),
       getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
       getShouldUseNodePtyShell: vi.fn().mockReturnValue(false),
+      getShellExecutionConfig: vi.fn().mockReturnValue({}),
     };
 
     context = createMockCommandContext({
@@ -136,6 +137,7 @@ describe('ShellProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.any(Object),
     );
     expect(result).toBe('The current status is: On branch main');
   });
@@ -201,6 +203,7 @@ describe('ShellProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.any(Object),
     );
     expect(result).toBe('Do something dangerous: deleted');
   });
@@ -379,6 +382,7 @@ describe('ShellProcessor', () => {
       expect.any(Function),
       expect.any(Object),
       false,
+      expect.any(Object),
     );
   });
 
@@ -589,6 +593,7 @@ describe('ShellProcessor', () => {
         expect.any(Function),
         expect.any(Object),
         false,
+        expect.any(Object),
       );
 
       expect(result).toBe('Command: match found');
@@ -611,6 +616,7 @@ describe('ShellProcessor', () => {
         expect.any(Function),
         expect.any(Object),
         false,
+        expect.any(Object),
       );
 
       expect(result).toBe(`User "(${rawArgs})" requested search: results`);
@@ -675,6 +681,7 @@ describe('ShellProcessor', () => {
         expect.any(Function),
         expect.any(Object),
         false,
+        expect.any(Object),
       );
     });
 
@@ -703,6 +710,7 @@ describe('ShellProcessor', () => {
         expect.any(Function),
         expect.any(Object),
         false,
+        expect.any(Object),
       );
     });
   });

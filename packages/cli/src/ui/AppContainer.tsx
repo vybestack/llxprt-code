@@ -24,6 +24,24 @@ import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
+import {
+  type EditorType,
+  type Config,
+  IdeClient,
+  ideContext,
+  type IdeContext,
+  getErrorMessage,
+  getAllLlxprtMdFilenames,
+  isEditorAvailable,
+  type IModel,
+  getSettingsService,
+  DebugLogger,
+  uiTelemetryService,
+} from '@vybestack/llxprt-code-core';
+import { validateAuthMethod } from '../config/auth.js';
+import { loadHierarchicalLlxprtMemory } from '../config/config.js';
+import process from 'node:process';
+import { useHistory } from './hooks/useHistoryManager.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
@@ -33,7 +51,6 @@ import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
 import { useConsoleMessages } from './hooks/useConsoleMessages.js';
 import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
-import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import {
   DEFAULT_HISTORY_MAX_BYTES,
   DEFAULT_HISTORY_MAX_ITEMS,
@@ -41,31 +58,14 @@ import {
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { ConsolePatcher } from './utils/ConsolePatcher.js';
 import { registerCleanup } from '../utils/cleanup.js';
-import { useHistory } from './hooks/useHistoryManager.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
-import { useKittyKeyboardProtocol } from './hooks/useKittyKeyboardProtocol.js';
 import { calculateMainAreaWidth } from './utils/ui-sizing.js';
 import {
   useTodoPausePreserver,
   TodoPausePreserver,
 } from './hooks/useTodoPausePreserver.js';
-import process from 'node:process';
-import {
-  getErrorMessage,
-  type Config,
-  getAllLlxprtMdFilenames,
-  isEditorAvailable,
-  EditorType,
-  type IdeContext,
-  ideContext,
-  type IModel,
-  getSettingsService,
-  DebugLogger,
-  uiTelemetryService,
-} from '@vybestack/llxprt-code-core';
 import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
 import { useLogger } from './hooks/useLogger.js';
 import { useSessionStats } from './contexts/SessionContext.js';
 import { useGitBranchName } from './hooks/useGitBranchName.js';
@@ -77,7 +77,11 @@ import { useVim } from './hooks/vim.js';
 import { useKeypress, Key } from './hooks/useKeypress.js';
 import { keyMatchers, Command } from './keyMatchers.js';
 import * as fs from 'fs';
-import { type AppState, type AppAction } from './reducers/appReducer.js';
+import {
+
+  type AppState,
+  type AppAction,
+} from './reducers/appReducer.js';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
@@ -106,8 +110,12 @@ import {
 } from './contexts/UIActionsContext.js';
 import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
 
+
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 const debug = new DebugLogger('llxprt:ui:appcontainer');
+
+const SHELL_WIDTH_FRACTION = 0.89;
+const SHELL_HEIGHT_PADDING = 10;
 
 interface AppContainerProps {
   config: Config;
@@ -139,6 +147,9 @@ export const AppContainer = (props: AppContainerProps) => {
     appState,
     appDispatch,
   } = props;
+
+  const [shellFocused] = useState(false);
+  const [shellModeActive, setShellModeActive] = useState(false);
   const runtime = useRuntimeApi();
   const isFocused = useFocus();
   const { isNarrow } = useResponsive();
@@ -168,6 +179,9 @@ export const AppContainer = (props: AppContainerProps) => {
     todoPauseController.registerTodoPause();
   }, [todoPauseController]);
 
+  const logger = useLogger(config.storage);
+  const inputHistoryStore = useInputHistoryStore();
+
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
   useEffect(() => {
@@ -175,7 +189,35 @@ export const AppContainer = (props: AppContainerProps) => {
     if (ideClient) {
       registerCleanup(() => ideClient.disconnect());
     }
-  }, [config]);
+    inputHistoryStore.initializeFromLogger(logger);
+  }, [logger, inputHistoryStore, config]);
+
+  // Terminal and layout hooks
+  const { columns: terminalWidth, rows: terminalHeight } = useTerminalSize();
+  const { stdin, setRawMode } = useStdin();
+
+
+  // Additional hooks moved from App.tsx
+  const { stats: sessionStats } = useSessionStats();
+  const branchName = useGitBranchName(config.getTargetDir());
+
+  // Layout measurements
+  const mainControlsRef = useRef<DOMElement>(null);
+  const staticExtraHeight = 3;
+
+  useEffect(() => {
+    if (config.setShellExecutionConfig) {
+      config.setShellExecutionConfig({
+        terminalWidth: Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+        terminalHeight: Math.max(
+          Math.floor(terminalHeight - SHELL_HEIGHT_PADDING), // Use terminalHeight directly or availableTerminalHeight? Report said availableTerminalHeight.
+          1,
+        ),
+        // pager: settings.merged.tools?.shell?.pager,
+        // showColor: settings.merged.tools?.shell?.showColor,
+      });
+    }
+  }, [terminalWidth, terminalHeight, config]);
 
   const shouldShowIdePrompt =
     currentIDE &&
@@ -237,7 +279,7 @@ export const AppContainer = (props: AppContainerProps) => {
     registerCleanup(consolePatcher.cleanup);
   }, [handleNewMessage, config]);
 
-  const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
+  const { updateHistoryTokenCount } = useSessionStats();
   const historyTokenCleanupRef = useRef<(() => void) | null>(null);
   const lastHistoryServiceRef = useRef<unknown>(null);
   const lastPublishedHistoryTokensRef = useRef<number | null>(null);
@@ -358,7 +400,7 @@ export const AppContainer = (props: AppContainerProps) => {
     isWorkspaceTrusted(settings.merged),
   );
   const [currentModel, setCurrentModel] = useState(config.getModel());
-  const [shellModeActive, setShellModeActive] = useState(false);
+
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
@@ -762,8 +804,7 @@ export const AppContainer = (props: AppContainerProps) => {
   }, [runtime]);
 
   // Terminal and UI setup
-  const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
-  const { stdin, setRawMode } = useStdin();
+  // Terminal and UI setup
   const isInitialMount = useRef(true);
 
   const widthFraction = 0.9;
@@ -867,7 +908,7 @@ export const AppContainer = (props: AppContainerProps) => {
   });
 
   // Independent input history management (unaffected by /clear)
-  const inputHistoryStore = useInputHistoryStore();
+
 
   const handleUserCancel = useCallback(() => {
     const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
@@ -1124,12 +1165,10 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [config, config.getLlxprtMdFileCount]);
 
-  const logger = useLogger(config.storage);
+
 
   // Initialize independent input history from logger
-  useEffect(() => {
-    inputHistoryStore.initializeFromLogger(logger);
-  }, [logger, inputHistoryStore]);
+
 
   const isInputActive =
     (streamingState === StreamingState.Idle ||
@@ -1153,7 +1192,7 @@ export const AppContainer = (props: AppContainerProps) => {
     [confirmationRequest],
   );
 
-  const mainControlsRef = useRef<DOMElement>(null);
+
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
 
@@ -1164,7 +1203,7 @@ export const AppContainer = (props: AppContainerProps) => {
     }
   }, [terminalHeight, consoleMessages, showErrorDetails]);
 
-  const staticExtraHeight = /* margins and padding */ 3;
+
   const availableTerminalHeight = useMemo(
     () => terminalHeight - footerHeight - staticExtraHeight,
     [terminalHeight, footerHeight],
@@ -1232,7 +1271,7 @@ export const AppContainer = (props: AppContainerProps) => {
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, config]);
 
-  const branchName = useGitBranchName(config.getTargetDir());
+
 
   const contextFileNames = useMemo(() => {
     const fromSettings = settings.merged.contextFileName;
@@ -1277,6 +1316,9 @@ export const AppContainer = (props: AppContainerProps) => {
   ]);
 
   const mainAreaWidth = calculateMainAreaWidth(terminalWidth, settings);
+
+
+
 
   // Detect PowerShell for file reference syntax tip
   const isPowerShell =
@@ -1372,7 +1414,8 @@ export const AppContainer = (props: AppContainerProps) => {
     tokenMetrics,
     historyTokenCount: sessionStats.historyTokenCount,
 
-    // Error states
+
+
     initError,
     authError,
     themeError,
@@ -1401,6 +1444,12 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Input history
     inputHistory: inputHistoryStore.inputHistory,
+    userMessages: inputHistoryStore.inputHistory, // Alias for hybrid compatibility
+    messageQueue: [], // Empty for now, hybrid compatibility
+
+    // Shell integration
+    activePtyId: undefined,
+    shellFocused,
 
     // Static key for refreshing
     staticKey,
