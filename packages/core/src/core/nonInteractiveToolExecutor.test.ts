@@ -84,15 +84,13 @@ describe('executeToolCall', () => {
             args: { param1: 'value1' },
           },
         },
-        [
-          {
-            functionResponse: {
-              name: 'testTool',
-              id: 'call1',
-              response: { output: 'Tool executed successfully' },
-            },
+        {
+          functionResponse: {
+            name: 'testTool',
+            id: 'call1',
+            response: { output: 'Tool executed successfully' },
           },
-        ],
+        },
       ],
     });
   });
@@ -230,17 +228,15 @@ describe('executeToolCall', () => {
             },
           },
         },
-        [
-          {
-            functionResponse: {
-              id: 'call4',
-              name: 'testTool',
-              response: {
-                output: 'Error: Execution failed',
-              },
+        {
+          functionResponse: {
+            id: 'call4',
+            name: 'testTool',
+            response: {
+              output: 'Error: Execution failed',
             },
           },
-        ],
+        },
       ],
       resultDisplay: 'Execution failed',
     });
@@ -328,18 +324,16 @@ describe('executeToolCall', () => {
             args: {},
           },
         },
-        [
-          {
-            functionResponse: {
-              name: 'testTool',
-              id: 'call6',
-              response: {
-                output: 'Binary content of type image/png was processed.',
-              },
+        {
+          functionResponse: {
+            name: 'testTool',
+            id: 'call6',
+            response: {
+              output: 'Binary content of type image/png was processed.',
             },
           },
-          imageDataPart,
-        ],
+        },
+        imageDataPart,
       ],
     });
   });

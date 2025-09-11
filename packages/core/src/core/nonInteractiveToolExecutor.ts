@@ -353,8 +353,8 @@ export async function executeToolCall(
           args: toolCallRequest.args,
         },
       },
-      // Then, the tool response
-      finalResponse,
+      // Then, spread the tool response(s) since convertToFunctionResponse returns Part[]
+      ...finalResponse,
     ] as Part[];
 
     logger.debug(

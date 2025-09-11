@@ -751,6 +751,7 @@ class Session {
         toolResult.llmContent,
       );
 
+      // Return atomic pairing of function call and response
       return [
         {
           functionCall: {
@@ -759,9 +760,8 @@ class Session {
             args,
           },
         },
-        ...(Array.isArray(functionResponseParts)
-          ? functionResponseParts
-          : [functionResponseParts]),
+        // Spread the response parts since convertToFunctionResponse returns Part[]
+        ...functionResponseParts,
       ];
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));

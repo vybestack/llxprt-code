@@ -163,6 +163,17 @@ export function convertToFunctionResponse(
   }
 
   if (Array.isArray(contentToProcess)) {
+    // Check if any part already has a function response to avoid duplicates
+    const hasFunctionResponse = contentToProcess.some(
+      (part) => typeof part === 'object' && part.functionResponse,
+    );
+
+    if (hasFunctionResponse) {
+      // Already has function response(s), return as-is without creating duplicates
+      return toParts(contentToProcess);
+    }
+
+    // No existing function response, create one
     const functionResponse = createFunctionResponsePart(
       callId,
       toolName,
@@ -229,6 +240,15 @@ const createErrorResponse = (
   callId: request.callId,
   error,
   responseParts: [
+    // First, the tool call
+    {
+      functionCall: {
+        id: request.callId,
+        name: request.name,
+        args: request.args,
+      },
+    },
+    // Then, the error response
     {
       functionResponse: {
         id: request.callId,
@@ -399,6 +419,15 @@ export class CoreToolScheduler {
             response: {
               callId: currentCall.request.callId,
               responseParts: [
+                // First, the tool call
+                {
+                  functionCall: {
+                    id: currentCall.request.callId,
+                    name: currentCall.request.name,
+                    args: currentCall.request.args,
+                  },
+                },
+                // Then, the cancellation response
                 {
                   functionResponse: {
                     id: currentCall.request.callId,
@@ -908,9 +937,23 @@ export class CoreToolScheduler {
                 callId,
                 toolResult.llmContent,
               );
+              // Return BOTH the tool call and response as an array
+              // This ensures they're always paired and added to history atomically
+              const responseParts = [
+                // First, the tool call
+                {
+                  functionCall: {
+                    id: callId,
+                    name: toolName,
+                    args: scheduledCall.request.args,
+                  },
+                },
+                // Then, spread the response(s) since convertToFunctionResponse returns Part[]
+                ...response,
+              ] as Part[];
               const successResponse: ToolCallResponseInfo = {
                 callId,
-                responseParts: response,
+                responseParts,
                 resultDisplay: toolResult.returnDisplay,
                 error: undefined,
                 errorType: undefined,
