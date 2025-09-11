@@ -51,7 +51,7 @@ import {
   type ShellOutputEvent,
 } from '@vybestack/llxprt-code-core';
 import * as fs from 'fs';
-import os from 'os';
+// import os from 'os'; // Not needed - mocked above
 // import * as path from 'path';
 import * as crypto from 'crypto';
 import { ToolCallStatus } from '../types.js';
