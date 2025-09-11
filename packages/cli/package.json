@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.2.4",
+  "version": "0.2.4-nightly.250911.a02d82b8",
   "description": "LLxprt Code",
   "repository": {
     "type": "git",
@@ -33,7 +33,7 @@
     "dist"
   ],
   "config": {
-    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.16"
+    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.2.4-nightly.250911.a02d82b8"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
