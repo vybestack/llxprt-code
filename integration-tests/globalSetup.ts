@@ -9,30 +9,29 @@ if (process.env.NO_COLOR !== undefined) {
   delete process.env.NO_COLOR;
 }
 
-import { mkdir, readdir, rm, readFile, writeFile, unlink } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import * as os from 'os';
+import {
+  mkdir,
+  readdir,
+  rm,
+  readFile,
+  writeFile,
+  unlink,
+} from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import {
   GEMINI_CONFIG_DIR,
   DEFAULT_CONTEXT_FILENAME,
 } from '../packages/core/src/tools/memoryTool.js';
 
-// Handle both ESM and potential Vite test environment issues
-// In CI, import.meta.url might be undefined when running under Vite
-let __dirname: string;
-try {
-  if (import.meta.url) {
-    __dirname = dirname(fileURLToPath(import.meta.url));
-  } else {
-    // Fallback for environments where import.meta.url is undefined
-    __dirname = process.cwd() + '/integration-tests';
-  }
-} catch (e) {
-  // Ultimate fallback
-  __dirname = process.cwd() + '/integration-tests';
-}
+// Handle the case where import.meta.url might be undefined in CI
+const __dirname = import.meta?.url
+  ? dirname(fileURLToPath(import.meta.url))
+  : path.resolve(process.cwd(), 'integration-tests');
+
 const rootDir = join(__dirname, '..');
 const integrationTestsDir = join(rootDir, '.integration-tests');
 let runDir = ''; // Make runDir accessible in teardown
