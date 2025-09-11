@@ -1267,9 +1267,7 @@ describe('App UI', () => {
       currentUnmount = unmount;
 
       expect(lastFrame()).toBeTruthy();
-      expect(lastFrame()).toContain(
-        'Type your message, @path/to/file or +path/to/file',
-      );
+      expect(lastFrame()).toContain('Type your message or @path/to/file');
     });
   });
 

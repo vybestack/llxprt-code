@@ -27,11 +27,16 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 vi.mock('fs');
-vi.mock('os', () => ({
-  platform: vi.fn(() => 'linux'),
-  tmpdir: vi.fn(() => '/tmp'),
-  homedir: vi.fn(() => '/home/testuser'),
-}));
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return {
+    ...actual,
+    default: actual,
+    platform: vi.fn(() => 'linux'),
+    tmpdir: vi.fn(() => '/tmp'),
+    homedir: vi.fn(() => '/home/testuser'),
+  };
+});
 vi.mock('crypto');
 vi.mock('../utils/textUtils.js');
 
@@ -75,9 +80,8 @@ describe('useShellCommandProcessor', () => {
     } as Config;
     mockGeminiClient = { addHistory: vi.fn() } as unknown as GeminiClient;
 
-    vi.mocked(os.platform).mockReturnValue('linux');
-    vi.mocked(os.tmpdir).mockReturnValue('/tmp');
-    vi.mocked(os.homedir).mockReturnValue('/home/testuser');
+    // os functions are already mocked in the vi.mock call above
+    // No need to re-mock them here
     (vi.mocked(crypto.randomBytes) as Mock).mockReturnValue(
       Buffer.from('abcdef', 'hex'),
     );
