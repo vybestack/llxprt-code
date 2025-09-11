@@ -27,14 +27,18 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   };
 });
 vi.mock('fs');
+// Mock os to always return 'linux' for consistent testing across platforms
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('os')>();
-  return {
+  const mockedOs = {
     ...actual,
-    default: actual,
     platform: vi.fn(() => 'linux'),
     tmpdir: vi.fn(() => '/tmp'),
     homedir: vi.fn(() => '/home/testuser'),
+  };
+  return {
+    ...mockedOs,
+    default: mockedOs,
   };
 });
 vi.mock('crypto');
