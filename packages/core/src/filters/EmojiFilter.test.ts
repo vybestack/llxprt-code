@@ -1000,6 +1000,51 @@ function validate(input) {
       expect(result.emojiDetected).toBe(true);
       expect(result.blocked).toBe(false);
     });
+
+    it('should convert emoji numbers to regular numbers', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      const input = 'Step 1️⃣: Initialize, Step 2️⃣: Build, Step 3️⃣: Deploy';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe(
+        'Step 1: Initialize, Step 2: Build, Step 3: Deploy',
+      );
+      expect(result.emojiDetected).toBe(true);
+      expect(result.blocked).toBe(false);
+      expect(result.systemFeedback).toBeUndefined(); // No feedback in auto mode
+    });
+
+    it('should convert all emoji numbers 0-9', () => {
+      const filter = new EmojiFilter({ mode: 'auto' });
+      const input = '0️⃣1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣8️⃣9️⃣';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe('0123456789');
+      expect(result.emojiDetected).toBe(true);
+      expect(result.blocked).toBe(false);
+    });
+
+    it('should handle emoji numbers in numbered lists', () => {
+      const filter = new EmojiFilter({ mode: 'warn' });
+      const input = '1️⃣ First item\n2️⃣ Second item\n3️⃣ Third item';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe('1 First item\n2 Second item\n3 Third item');
+      expect(result.emojiDetected).toBe(true);
+      expect(result.blocked).toBe(false);
+      expect(result.systemFeedback).toBe(
+        'Emojis were detected and removed. Please avoid using emojis.',
+      );
+    });
+
+    it('should handle emoji numbers mixed with other emojis', () => {
+      const filter = new EmojiFilter({ mode: 'warn' });
+      const input =
+        '1️⃣ ✅ Task completed\n2️⃣ ⚠️ Task in progress\n3️⃣ 🎉 Task celebrated';
+      const result = filter.filterText(input);
+      expect(result.filtered).toBe(
+        '1 [OK] Task completed\n2 WARNING: Task in progress\n3  Task celebrated',
+      );
+      expect(result.emojiDetected).toBe(true);
+      expect(result.blocked).toBe(false);
+    });
   });
 
   // Property-based tests converted to regular tests for now

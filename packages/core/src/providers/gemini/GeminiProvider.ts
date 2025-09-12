@@ -971,6 +971,9 @@ export class GeminiProvider extends BaseProvider {
       // OAuth mode
       const configForOAuth = this.globalConfig || {
         getProxy: () => undefined,
+        isBrowserLaunchSuppressed: () => false,
+        getNoBrowser: () => false,
+        getUserMemory: () => '',
       };
 
       const contentGenerator = await createCodeAssistContentGenerator(

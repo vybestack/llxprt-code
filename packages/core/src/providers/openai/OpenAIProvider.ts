@@ -279,6 +279,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Set the model to use for this provider
+   * This updates the model in ephemeral settings so it's immediately available
+   */
+  override setModel(modelId: string): void {
+    const settingsService = getSettingsService();
+    settingsService.set('model', modelId);
+    this.logger.debug(() => `Model set to: ${modelId}`);
+  }
+
+  /**
+   * Get the currently selected model
+   */
+  override getCurrentModel(): string {
+    return this.getModel();
+  }
+
+  /**
    * Clear the cached OpenAI client
    * Should be called when authentication state changes (e.g., after logout)
    */
