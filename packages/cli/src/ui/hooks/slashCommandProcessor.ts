@@ -44,7 +44,6 @@ export const useSlashCommandProcessor = (
   clearItems: UseHistoryManagerReturn['clearItems'],
   loadHistory: UseHistoryManagerReturn['loadHistory'],
   refreshStatic: () => void,
-  setShowHelp: React.Dispatch<React.SetStateAction<boolean>>,
   onDebugMessage: (message: string) => void,
   openThemeDialog: () => void,
   openAuthDialog: () => void,
@@ -398,9 +397,14 @@ export const useSlashCommandProcessor = (
                   return { type: 'handled' };
                 case 'dialog':
                   switch (result.dialog) {
-                    case 'help':
-                      setShowHelp(true);
+                    case 'help': {
+                      const helpItem: HistoryItemWithoutId = {
+                        type: 'help',
+                        timestamp: new Date(),
+                      };
+                      addItem(helpItem, Date.now());
                       return { type: 'handled' };
+                    }
                     case 'auth':
                       openAuthDialog();
                       return { type: 'handled' };
@@ -596,7 +600,6 @@ export const useSlashCommandProcessor = (
     [
       config,
       addItem,
-      setShowHelp,
       openAuthDialog,
       commands,
       commandContext,

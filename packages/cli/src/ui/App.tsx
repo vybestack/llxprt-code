@@ -53,7 +53,6 @@ import { FolderTrustDialog } from './components/FolderTrustDialog.js';
 import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js';
 import { RadioButtonSelect } from './components/shared/RadioButtonSelect.js';
 import { Colors } from './colors.js';
-import { Help } from './components/Help.js';
 import { loadHierarchicalLlxprtMemory } from '../config/config.js';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import { Tips } from './components/Tips.js';
@@ -319,7 +318,6 @@ const App = (props: AppInternalProps) => {
 
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
   const [debugMessage, setDebugMessage] = useState<string>('');
-  const [showHelp, setShowHelp] = useState<boolean>(false);
   const [_themeError, _setThemeError] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [_editorError, _setEditorError] = useState<string | null>(null);
@@ -840,7 +838,6 @@ You can switch authentication methods by typing /auth or switch to a different m
     clearItems,
     loadHistory,
     refreshStatic,
-    setShowHelp,
     setDebugMessage,
     openThemeDialog,
     openAuthDialog,
@@ -1276,6 +1273,7 @@ You can switch authentication methods by typing /auth or switch to a different m
             item={item}
             isPending={false}
             config={config}
+            slashCommands={slashCommands}
           />
         ))}
       </Box>
@@ -1336,6 +1334,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                 item={h}
                 isPending={false}
                 config={config}
+                slashCommands={slashCommands}
               />
             )),
           ]}
@@ -1357,13 +1356,12 @@ You can switch authentication methods by typing /auth or switch to a different m
                 isPending={true}
                 config={config}
                 isFocused={!isEditorDialogOpen}
+                slashCommands={slashCommands}
               />
             ))}
             <ShowMoreLines constrainHeight={constrainHeight} />
           </Box>
         </OverflowProvider>
-
-        {showHelp && <Help commands={slashCommands} />}
 
         <Box flexDirection="column" ref={mainControlsRef}>
           {/* Move UpdateNotification to render update notification above input area */}
