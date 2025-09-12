@@ -37,6 +37,7 @@ import { getErrorMessage } from '../utils/errors.js';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Unsubscribe, WorkspaceContext } from '../utils/workspaceContext.js';
+import { DebugLogger } from '../debug/index.js';
 
 export const MCP_DEFAULT_TIMEOUT_MSEC = 10 * 60 * 1000; // default to 10 minutes
 
@@ -630,23 +631,40 @@ export async function discoverTools(
   mcpServerConfig: MCPServerConfig,
   mcpClient: Client,
 ): Promise<DiscoveredMCPTool[]> {
+  const debug = new DebugLogger('llxprt:mcp:discovery');
+
   try {
+    debug.log(`Starting tool discovery for server: ${mcpServerName}`);
     const mcpCallableTool = mcpToTool(mcpClient);
+    debug.log(`Created mcpCallableTool for ${mcpServerName}`);
+
     const tool = await mcpCallableTool.tool();
+    debug.log(`Tool response for ${mcpServerName}:`, tool);
 
     if (!Array.isArray(tool.functionDeclarations)) {
       // This is a valid case for a prompt-only server
+      debug.log(
+        `No functionDeclarations array for ${mcpServerName}, returning empty array`,
+      );
       return [];
     }
+
+    debug.log(
+      `Found ${tool.functionDeclarations.length} tools for ${mcpServerName}`,
+    );
 
     const discoveredTools: DiscoveredMCPTool[] = [];
     for (const funcDecl of tool.functionDeclarations) {
       try {
+        debug.log(`Processing tool: ${funcDecl.name}`);
+
         if (!isEnabled(funcDecl, mcpServerName, mcpServerConfig)) {
+          debug.log(`Tool ${funcDecl.name} is disabled by configuration`);
           continue;
         }
 
         if (!hasValidTypes(funcDecl.parametersJsonSchema)) {
+          debug.log(`Tool ${funcDecl.name} has invalid parameter schema`);
           console.warn(
             `Skipping tool '${funcDecl.name}' from MCP server '${mcpServerName}' ` +
               `because it has missing types in its parameter schema. Please file an ` +
@@ -655,6 +673,7 @@ export async function discoverTools(
           continue;
         }
 
+        debug.log(`Adding tool ${funcDecl.name} to discovered tools`);
         discoveredTools.push(
           new DiscoveredMCPTool(
             mcpCallableTool,
@@ -674,6 +693,9 @@ export async function discoverTools(
         );
       }
     }
+    debug.log(
+      `Returning ${discoveredTools.length} discovered tools for ${mcpServerName}`,
+    );
     return discoveredTools;
   } catch (error) {
     if (

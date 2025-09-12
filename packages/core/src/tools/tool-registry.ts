@@ -267,12 +267,14 @@ export class ToolRegistry {
       }
     }
 
+    // Temporarily swap tools to newTools so MCP tools get registered to the right map
+    this.tools = newTools;
+
     // Discover MCP tools into newTools
     await this.mcpClientManager.discoverAllMcpTools();
 
-    // Only NOW do we atomically swap the reference
-    // This ensures getFunctionDeclarations() never sees a partial tool map
-    this.tools = newTools;
+    // The tools are now already in the right place (this.tools === newTools)
+    // No need to swap again
 
     // At this point, the update is truly atomic from the perspective of getFunctionDeclarations()
   }
@@ -542,9 +544,10 @@ export class ToolRegistry {
    * Returns an array of all registered and discovered tool instances.
    */
   getAllTools(): AnyDeclarativeTool[] {
-    return Array.from(this.tools.values()).sort((a, b) =>
+    const tools = Array.from(this.tools.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
+    return tools;
   }
 
   /**

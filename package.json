@@ -65,6 +65,7 @@
     "LICENSE"
   ],
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
     "@types/debug": "^4.1.12",
     "@types/marked": "^5.0.2",
     "@types/mime-types": "^3.0.1",
