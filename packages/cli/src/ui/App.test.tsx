@@ -320,6 +320,11 @@ describe('App UI', () => {
   let mockVersion: string;
   let currentUnmount: (() => void) | undefined;
 
+  // Helper to detect if we're in a PowerShell environment
+  const isPowerShell = () =>
+    process.env.PSModulePath !== undefined ||
+    process.env.PSVERSION !== undefined;
+
   const createMockSettings = (
     settings: {
       system?: Partial<Settings>;
@@ -1099,7 +1104,21 @@ describe('App UI', () => {
       />,
     );
     currentUnmount = unmount;
-    expect(lastFrame()).toMatchSnapshot();
+
+    // Check for the correct placeholder based on environment
+    const frame = lastFrame();
+    expect(frame).toContain('Context: 0.0k/1049k');
+    expect(frame).toContain('/test/dir');
+    expect(frame).toContain('gemini-pro');
+
+    // Check for platform-specific placeholder
+    if (isPowerShell()) {
+      expect(frame).toContain(
+        'Type your message, @path/to/file or +path/to/file',
+      );
+    } else {
+      expect(frame).toContain('Type your message or @path/to/file');
+    }
   });
 
   describe('with initial prompt from --prompt-interactive', () => {
@@ -1239,7 +1258,20 @@ describe('App UI', () => {
         />,
       );
       currentUnmount = unmount;
-      expect(lastFrame()).toMatchSnapshot();
+
+      // Check for the correct layout and placeholder based on environment
+      const frame = lastFrame();
+      expect(frame).toContain('Ctx: 0.0k/1049k'); // Narrow terminal shows abbreviated context
+      expect(frame).toContain('/test/dir');
+
+      // Check for platform-specific placeholder
+      if (isPowerShell()) {
+        expect(frame).toContain(
+          'Type your message, @path/to/file or +path/to/file',
+        );
+      } else {
+        expect(frame).toContain('Type your message or @path/to/file');
+      }
     });
   });
 
@@ -1267,7 +1299,10 @@ describe('App UI', () => {
       currentUnmount = unmount;
 
       expect(lastFrame()).toBeTruthy();
-      expect(lastFrame()).toContain('Type your message or @path/to/file');
+      const expectedPlaceholder = isPowerShell()
+        ? 'Type your message, @path/to/file or +path/to/file'
+        : 'Type your message or @path/to/file';
+      expect(lastFrame()).toContain(expectedPlaceholder);
     });
   });
 
