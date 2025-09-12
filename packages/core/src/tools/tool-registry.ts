@@ -507,10 +507,16 @@ export class ToolRegistry {
     const disabledTools =
       (ephemeralSettings['disabled-tools'] as string[]) || [];
 
+    // Also get globally excluded tools from configuration
+    const excludedTools = this.config.getExcludeTools() || [];
+
     const declarations: FunctionDeclaration[] = [];
     this.tools.forEach((tool) => {
-      // Skip disabled tools
-      if (!disabledTools.includes(tool.name)) {
+      // Skip disabled tools and excluded tools
+      if (
+        !disabledTools.includes(tool.name) &&
+        !excludedTools.includes(tool.name)
+      ) {
         declarations.push(tool.schema);
       }
     });
@@ -558,8 +564,15 @@ export class ToolRegistry {
     const disabledTools =
       (ephemeralSettings['disabled-tools'] as string[]) || [];
 
+    // Also get globally excluded tools from configuration
+    const excludedTools = this.config.getExcludeTools() || [];
+
     return Array.from(this.tools.values())
-      .filter((tool) => !disabledTools.includes(tool.name))
+      .filter(
+        (tool) =>
+          !disabledTools.includes(tool.name) &&
+          !excludedTools.includes(tool.name),
+      )
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 

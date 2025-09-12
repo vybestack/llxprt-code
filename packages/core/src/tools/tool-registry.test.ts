@@ -507,6 +507,65 @@ describe('ToolRegistry', () => {
       const allTools = toolRegistry.getAllTools();
       expect(allTools).toHaveLength(2);
     });
+
+    it('should filter out excluded tools from configuration in getFunctionDeclarations', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+      vi.spyOn(config, 'getExcludeTools').mockReturnValue([
+        'todo_write',
+        'todo_read',
+      ]);
+
+      const tool1 = new MockTool('todo_write', 'Todo Write');
+      const tool2 = new MockTool('todo_read', 'Todo Read');
+      const tool3 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0].name).toBe('another-tool');
+    });
+
+    it('should filter out both disabled and excluded tools in getFunctionDeclarations', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+        'disabled-tools': ['test-tool'],
+      });
+      vi.spyOn(config, 'getExcludeTools').mockReturnValue(['todo_write']);
+
+      const tool1 = new MockTool('test-tool', 'Test Tool');
+      const tool2 = new MockTool('todo_write', 'Todo Write');
+      const tool3 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0].name).toBe('another-tool');
+    });
+
+    it('should filter out excluded tools in getEnabledTools', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+      vi.spyOn(config, 'getExcludeTools').mockReturnValue([
+        'todo_write',
+        'todo_read',
+      ]);
+
+      const tool1 = new MockTool('todo_write', 'Todo Write');
+      const tool2 = new MockTool('todo_read', 'Todo Read');
+      const tool3 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const enabledTools = toolRegistry.getEnabledTools();
+      expect(enabledTools).toHaveLength(1);
+      expect(enabledTools[0].name).toBe('another-tool');
+    });
   });
 
   describe('DiscoveredToolInvocation', () => {
