@@ -23,6 +23,10 @@ describe.skipIf(skipTests)('OpenAIProvider Integration Tests', () => {
       return;
     }
     provider = new OpenAIProvider(OPENAI_API_KEY, OPENAI_BASE_URL);
+    // Set model from environment if available
+    if (process.env.LLXPRT_DEFAULT_MODEL) {
+      provider.setModel(process.env.LLXPRT_DEFAULT_MODEL);
+    }
   });
 
   it('should fetch real models from OpenAI API', async () => {
