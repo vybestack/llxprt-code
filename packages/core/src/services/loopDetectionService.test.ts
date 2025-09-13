@@ -642,11 +642,11 @@ describe('LoopDetectionService Max Turns Detection', () => {
   it('should detect max turns exceeded when limit is reached', async () => {
     // Set max turns to 50 for testing
     mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(50);
-    
+
     // Advance to just before the limit
     await advanceTurns(49);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
-    
+
     // One more turn should trigger the limit
     const result = await service.turnStarted(abortController.signal);
     expect(result).toBe(true);
@@ -662,7 +662,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
   it('should not trigger max turns when set to -1 (unlimited)', async () => {
     // Set max turns to -1 for unlimited
     mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(-1);
-    
+
     // Advance many turns
     await advanceTurns(200);
     const result = await service.turnStarted(abortController.signal);
@@ -673,11 +673,11 @@ describe('LoopDetectionService Max Turns Detection', () => {
   it('should use default value of 100 when setting is undefined', async () => {
     // Return undefined to test default
     mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(undefined);
-    
+
     // Advance to just before default limit
     await advanceTurns(99);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
-    
+
     // One more turn should trigger the default limit
     const result = await service.turnStarted(abortController.signal);
     expect(result).toBe(true);
@@ -693,17 +693,17 @@ describe('LoopDetectionService Max Turns Detection', () => {
   it('should reset turn count when reset() is called', async () => {
     // Set max turns to 10 for testing
     mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(10);
-    
+
     // Advance 8 turns
     await advanceTurns(8);
-    
+
     // Reset the service
     service.reset('new-prompt');
-    
+
     // Should be able to advance 9 more turns without triggering
     await advanceTurns(9);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
-    
+
     // One more should trigger
     const result = await service.turnStarted(abortController.signal);
     expect(result).toBe(true);
@@ -712,7 +712,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
   it('should not interfere with other loop detection mechanisms', async () => {
     // Set high max turns so it doesn't trigger
     mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(1000);
-    
+
     // Trigger a tool call loop instead
     const toolCall = { name: 'test_tool', args: { param: 'value' } };
     for (let i = 0; i < 10; i++) {
@@ -721,7 +721,7 @@ describe('LoopDetectionService Max Turns Detection', () => {
         value: toolCall,
       });
     }
-    
+
     expect(loggers.logLoopDetected).toHaveBeenCalledWith(
       mockConfig,
       expect.objectContaining({
