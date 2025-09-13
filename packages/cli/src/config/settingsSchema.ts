@@ -142,6 +142,16 @@ export const SETTINGS_SCHEMA = {
       'Maximum number of user/model/tool turns to keep in a session. -1 means unlimited.',
     showInDialog: true,
   },
+  maxTurnsPerPrompt: {
+    type: 'number',
+    label: 'Max Turns Per Prompt',
+    category: 'General',
+    requiresRestart: false,
+    default: 100,
+    description:
+      'Maximum number of turns allowed per prompt before stopping to prevent loops. Set to -1 for unlimited.',
+    showInDialog: true,
+  },
   memoryImportFormat: {
     type: 'string',
     label: 'Memory Import Format',
