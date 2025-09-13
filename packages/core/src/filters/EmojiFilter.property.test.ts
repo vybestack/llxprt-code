@@ -10,13 +10,13 @@
  */
 
 import { describe, expect } from 'vitest';
-// it is imported from @fast-check/vitest as itProp
-import { itProp, fc } from '@fast-check/vitest';
+import { it } from '@fast-check/vitest';
+import { fc } from 'fast-check';
 import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter Property-Based Tests', () => {
   describe('Unicode Input Handling Properties', () => {
-    itProp(
+    it.prop(
       'should never crash on arbitrary Unicode strings in any mode',
       [
         fc.string({ minLength: 0, maxLength: 100 }),
@@ -43,7 +43,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle any combination of ASCII and Unicode characters',
       [
         fc.string({ minLength: 0, maxLength: 50 }),
@@ -61,7 +61,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should preserve ASCII characters in all modes',
       [
         fc.string({ minLength: 0, maxLength: 100 }).filter((s) =>
@@ -85,7 +85,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle empty and whitespace-only strings correctly',
       [
         fc
@@ -111,7 +111,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('Mode Consistency Properties', () => {
-    itProp(
+    it.prop(
       'allowed mode should never modify input or detect emojis',
       [fc.string({ minLength: 0, maxLength: 100 })],
       (text: string) => {
@@ -127,7 +127,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'auto mode should never provide system feedback',
       [fc.string({ minLength: 0, maxLength: 100 })],
       (text: string) => {
@@ -140,7 +140,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'warn mode should never block content',
       [fc.string({ minLength: 0, maxLength: 100 })],
       (text: string) => {
@@ -160,7 +160,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'error mode should block when emojis detected',
       [
         fc
@@ -184,7 +184,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('Stream Chunk Boundary Properties', () => {
-    itProp(
+    it.prop(
       'should handle arbitrary chunk boundaries without losing content',
       [
         fc.string().filter((s) => s.length > 0),
@@ -225,7 +225,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should never lose characters when streaming with arbitrary boundaries',
       [
         fc
@@ -272,7 +272,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should maintain consistent emoji detection across chunk boundaries',
       [
         fc.constantFrom('[OK] test', 'test WARNING:', ' middle '),
@@ -311,7 +311,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('Object Filtering Properties', () => {
-    itProp(
+    it.prop(
       'should handle deeply nested objects without stack overflow',
       [
         fc.integer({ min: 1, max: 10 }),
@@ -335,7 +335,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should preserve object structure while filtering string values',
       [
         fc.record({
@@ -371,7 +371,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle arrays of mixed types correctly',
       [
         fc.array(
@@ -409,7 +409,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle null and undefined values in objects',
       [
         fc.record({
@@ -442,7 +442,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('Filtering Invariants', () => {
-    itProp(
+    it.prop(
       'filtered output length should never exceed input plus conversion overhead',
       [
         fc.string({ minLength: 0, maxLength: 100 }),
@@ -460,7 +460,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should maintain idempotency - filtering twice should give same result',
       [
         fc.string({ minLength: 0, maxLength: 100 }),
@@ -483,7 +483,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should never produce invalid strings',
       [
         fc.string({ minLength: 0, maxLength: 100 }),
@@ -508,7 +508,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should preserve word boundaries when removing decorative emojis',
       [
         fc.array(fc.constantFrom('word', 'test', 'hello'), {
@@ -544,7 +544,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('File Content Specific Properties', () => {
-    itProp(
+    it.prop(
       'should handle any file content without corrupting code structure',
       [
         fc.oneof(
@@ -573,7 +573,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should maintain line structure in multiline content',
       [
         fc.array(fc.string(), { minLength: 2, maxLength: 10 }),
@@ -596,7 +596,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('Buffer Management Properties', () => {
-    itProp(
+    it.prop(
       'should handle flush operations consistently',
       [
         fc.string(),
@@ -618,7 +618,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle empty stream chunks gracefully',
       [
         fc.array(fc.constant(''), { minLength: 1, maxLength: 10 }),
@@ -642,7 +642,7 @@ describe('EmojiFilter Property-Based Tests', () => {
   });
 
   describe('Edge Case Properties', () => {
-    itProp(
+    it.prop(
       'should handle malformed objects gracefully',
       [
         fc.anything().filter(
@@ -668,7 +668,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle very long strings without performance degradation',
       [
         fc
@@ -692,7 +692,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle rapid consecutive filtering operations',
       [
         fc.array(fc.string({ maxLength: 100 }), {
@@ -717,7 +717,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle valid complex nested objects consistently',
       [
         fc.record({
@@ -758,7 +758,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle stream operations with mixed content types',
       [
         fc.array(
@@ -799,7 +799,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should maintain filter state isolation between instances',
       [
         fc.string({ maxLength: 100 }),
@@ -831,7 +831,7 @@ describe('EmojiFilter Property-Based Tests', () => {
       },
     );
 
-    itProp(
+    it.prop(
       'should handle mixed mode operations consistently',
       [fc.string({ maxLength: 100 })],
       (text: string) => {

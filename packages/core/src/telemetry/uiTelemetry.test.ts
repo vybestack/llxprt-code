@@ -116,6 +116,18 @@ describe('UiTelemetryService', () => {
         totalLinesAdded: 0,
         totalLinesRemoved: 0,
       },
+      tokenTracking: {
+        tokensPerMinute: 0,
+        throttleWaitTimeMs: 0,
+        sessionTokenUsage: {
+          input: 0,
+          output: 0,
+          cache: 0,
+          tool: 0,
+          thought: 0,
+          total: 0,
+        },
+      },
     });
     expect(service.getLastPromptTokenCount()).toBe(0);
   });
