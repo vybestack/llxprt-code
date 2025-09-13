@@ -687,6 +687,10 @@ const App = (props: AppInternalProps) => {
         const metrics = providerManager.getProviderMetrics?.();
         const usage = providerManager.getSessionTokenUsage?.();
 
+        if (config.getDebugMode()) {
+          console.debug(`[TokenTracking] UI Poll - TPM: ${metrics?.tokensPerMinute || 0}, Throttle: ${metrics?.throttleWaitTimeMs || 0}, Session Total: ${usage?.total || 0}`);
+        }
+
         setTokenMetrics({
           tokensPerMinute: metrics?.tokensPerMinute || 0,
           throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,

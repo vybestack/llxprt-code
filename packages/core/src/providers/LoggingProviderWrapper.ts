@@ -652,10 +652,13 @@ export class LoggingProviderWrapper implements IProvider {
     const providerManager = this.config.getProviderManager();
     if (providerManager) {
       try {
+        console.debug(`[TokenTracking] Accumulating ${usage.input + usage.output + usage.cache + usage.tool + usage.thought} tokens for provider ${this.wrapped.name}`);
         providerManager.accumulateSessionTokens(this.wrapped.name, usage);
       } catch (error) {
         console.warn('Failed to accumulate session tokens:', error);
       }
+    } else {
+      console.warn(`[TokenTracking] No provider manager found in config - tokens not accumulated for ${this.wrapped.name}`);
     }
   }
 
