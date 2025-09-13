@@ -724,7 +724,7 @@ describe('HistoryService - Behavioral Tests', () => {
         ).toBeUndefined();
       });
 
-      it('should NOT generate IDs internally in ContentConverters', () => {
+      it('should NOT expose generateHistoryId function in ContentConverters', () => {
         // FAILING TEST: ContentConverters should not have generateHistoryId function
         // Check that the internal function is not accessible (it exists but is private)
         expect(

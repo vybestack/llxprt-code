@@ -8,44 +8,12 @@ import { createHash } from 'crypto';
 import { GeminiEventType, ServerGeminiStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
-import { Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
-import { PromptService } from '../prompt-config/prompt-service.js';
-import { Content, Part } from '@google/genai';
-import path from 'node:path';
-import os from 'node:os';
+import { Config } from '../config/config.js';
 
 const TOOL_CALL_LOOP_THRESHOLD = 10;
 const CONTENT_LOOP_THRESHOLD = 15;
 const CONTENT_CHUNK_SIZE = 50;
 const MAX_HISTORY_LENGTH = 1000;
-
-/**
- * The number of recent conversation turns to include in the history when asking the LLM to check for a loop.
- */
-const LLM_LOOP_CHECK_HISTORY_COUNT = 20;
-
-/**
- * The number of turns that must pass in a single prompt before the LLM-based loop check is activated.
- */
-const LLM_CHECK_AFTER_TURNS = 40;
-
-/**
- * The default interval, in number of turns, at which the LLM-based loop check is performed.
- * This value is adjusted dynamically based on the LLM's confidence.
- */
-const DEFAULT_LLM_CHECK_INTERVAL = 3;
-
-/**
- * The minimum interval for LLM-based loop checks.
- * This is used when the confidence of a loop is high, to check more frequently.
- */
-const MIN_LLM_CHECK_INTERVAL = 5;
-
-/**
- * The maximum interval for LLM-based loop checks.
- * This is used when the confidence of a loop is low, to check less frequently.
- */
-const MAX_LLM_CHECK_INTERVAL = 15;
 
 /**
  * Service for detecting and preventing infinite loops in AI responses.
@@ -54,7 +22,6 @@ const MAX_LLM_CHECK_INTERVAL = 15;
 export class LoopDetectionService {
   private readonly config: Config;
   private promptId = '';
-  private promptService: PromptService | null = null;
 
   // Tool call tracking
   private lastToolCallKey: string | null = null;
@@ -67,58 +34,11 @@ export class LoopDetectionService {
   private loopDetected = false;
   private inCodeBlock = false;
 
-  // LLM loop track tracking
+  // Turn tracking for potential future rule-based checks
   private turnsInCurrentPrompt = 0;
-  private llmCheckInterval = DEFAULT_LLM_CHECK_INTERVAL;
-  private lastCheckTurn = 0;
 
   constructor(config: Config) {
     this.config = config;
-  }
-
-  /**
-   * Get the loop detection prompt from the prompt service
-   */
-  private async getLoopDetectionPrompt(): Promise<string> {
-    if (!this.promptService) {
-      const baseDir =
-        process.env.LLXPRT_PROMPTS_DIR ||
-        path.join(os.homedir(), '.llxprt', 'prompts');
-      this.promptService = new PromptService({
-        baseDir,
-        debugMode: process.env.DEBUG === 'true',
-      });
-      await this.promptService.initialize();
-    }
-
-    try {
-      return await this.promptService.loadPrompt('services/loop-detection.md');
-    } catch (error) {
-      // Fall back to default if file loading fails
-      console.warn(
-        'Failed to load loop detection prompt from file, using fallback:',
-        error,
-      );
-      return this.getFallbackLoopDetectionPrompt();
-    }
-  }
-
-  /**
-   * Fallback prompt if the prompt service is not available
-   */
-  private getFallbackLoopDetectionPrompt(): string {
-    return `You are a sophisticated AI diagnostic agent specializing in identifying when a conversational AI is stuck in an unproductive state. Your task is to analyze the provided conversation history and determine if the assistant has ceased to make meaningful progress.
-
-An unproductive state is characterized by one or more of the following patterns over the last 5 or more assistant turns:
-
-Repetitive Actions: The assistant repeats the same tool calls or conversational responses a decent number of times. This includes simple loops (e.g., tool_A, tool_A, tool_A) and alternating patterns (e.g., tool_A, tool_B, tool_A, tool_B, ...).
-
-Cognitive Loop: The assistant seems unable to determine the next logical step. It might express confusion, repeatedly ask the same questions, or generate responses that don't logically follow from the previous turns, indicating it's stuck and not advancing the task.
-
-Crucially, differentiate between a true unproductive state and legitimate, incremental progress.
-For example, a series of 'tool_A' or 'tool_B' tool calls that make small, distinct changes to the same file (like adding docstrings to functions one by one) is considered forward progress and is NOT a loop. A loop would be repeatedly replacing the same text with the same content, or cycling between a small set of files with no net change.
-
-Please analyze the conversation history to determine the possibility that the conversation is stuck in a repetitive, non-productive state.`;
   }
 
   private getToolCallKey(toolCall: { name: string; args: object }): string {
@@ -156,22 +76,27 @@ Please analyze the conversation history to determine the possibility that the co
   /**
    * Signals the start of a new turn in the conversation.
    *
-   * This method increments the turn counter and, if specific conditions are met,
-   * triggers an LLM-based check to detect potential conversation loops. The check
-   * is performed periodically based on the `llmCheckInterval`.
+   * This method increments the turn counter and checks if the maximum
+   * number of turns per prompt has been exceeded.
    *
-   * @param signal - An AbortSignal to allow for cancellation of the asynchronous LLM check.
-   * @returns A promise that resolves to `true` if a loop is detected, and `false` otherwise.
+   * @param _signal - An AbortSignal (currently unused)
+   * @returns true if max turns exceeded, false otherwise
    */
-  async turnStarted(signal: AbortSignal) {
+  async turnStarted(_signal: AbortSignal) {
     this.turnsInCurrentPrompt++;
 
+    // Check if max turns per prompt is configured and exceeded
+    const maxTurnsPerPrompt =
+      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as number) ?? 100;
     if (
-      this.turnsInCurrentPrompt >= LLM_CHECK_AFTER_TURNS &&
-      this.turnsInCurrentPrompt - this.lastCheckTurn >= this.llmCheckInterval
+      maxTurnsPerPrompt > 0 &&
+      this.turnsInCurrentPrompt >= maxTurnsPerPrompt
     ) {
-      this.lastCheckTurn = this.turnsInCurrentPrompt;
-      return await this.checkForLoopWithLLM(signal);
+      logLoopDetected(
+        this.config,
+        new LoopDetectedEvent(LoopType.MAX_TURNS_EXCEEDED, this.promptId),
+      );
+      return true;
     }
 
     return false;
@@ -219,8 +144,16 @@ Please analyze the conversation history to determine the possibility that the co
       /(^|\n)\s*[*-+]\s/.test(content) || /(^|\n)\s*\d+\.\s/.test(content);
     const hasHeading = /(^|\n)#+\s/.test(content);
     const hasBlockquote = /(^|\n)>\s/.test(content);
+    const isDivider = /^[+-_=*\u2500-\u257F]+$/.test(content);
 
-    if (numFences || hasTable || hasListItem || hasHeading || hasBlockquote) {
+    if (
+      numFences ||
+      hasTable ||
+      hasListItem ||
+      hasHeading ||
+      hasBlockquote ||
+      isDivider
+    ) {
       // Reset tracking when different content elements are detected to avoid analyzing content
       // that spans across different element boundaries.
       this.resetContentTracking();
@@ -229,7 +162,7 @@ Please analyze the conversation history to determine the possibility that the co
     const wasInCodeBlock = this.inCodeBlock;
     this.inCodeBlock =
       numFences % 2 === 0 ? this.inCodeBlock : !this.inCodeBlock;
-    if (wasInCodeBlock || this.inCodeBlock) {
+    if (wasInCodeBlock || this.inCodeBlock || isDivider) {
       return false;
     }
 
@@ -369,173 +302,13 @@ Please analyze the conversation history to determine the possibility that the co
   }
 
   /**
-   * Sanitizes conversation history before sending to loop detection LLM.
-   * Removes or fixes invalid tool calls and responses that could cause API errors.
-   */
-  private sanitizeHistoryForLoopDetection(history: Content[]): Content[] {
-    return history
-      .map((message) => {
-        // Type guard to check if message has expected structure
-        if (!message || typeof message !== 'object') {
-          return message;
-        }
-
-        const msg = message as Content;
-
-        // Check if this is a message with parts
-        if (!msg.role || !Array.isArray(msg.parts)) {
-          return message;
-        }
-
-        // Create a sanitized copy of the message
-        const sanitizedParts: Part[] = [];
-
-        for (const part of msg.parts) {
-          if (!part || typeof part !== 'object') {
-            sanitizedParts.push(part);
-            continue;
-          }
-
-          const p = part as Record<string, unknown>;
-
-          // Handle functionCall parts
-          if (p.functionCall && typeof p.functionCall === 'object') {
-            const fc = p.functionCall as Record<string, unknown>;
-
-            // If the function call has validation errors or malformed args,
-            // replace with a simplified version
-            if (fc.name === 'todo_write' && fc.args) {
-              const args = fc.args as Record<string, unknown>;
-
-              // Check if todos is a string that should be an array
-              if (typeof args.todos === 'string') {
-                try {
-                  // Try to parse the stringified JSON
-                  const parsed = JSON.parse(args.todos as string);
-                  // Return a fixed version
-                  sanitizedParts.push({
-                    functionCall: {
-                      name: fc.name as string,
-                      args: { todos: parsed },
-                      id: (fc.id as string) || 'sanitized',
-                    },
-                  } as Part);
-                } catch {
-                  // If parsing fails, replace with placeholder
-                  sanitizedParts.push({
-                    text: '[Invalid tool call removed for loop detection]',
-                  } as Part);
-                }
-                continue;
-              }
-            }
-          }
-
-          // Handle functionResponse parts with errors
-          if (p.functionResponse && typeof p.functionResponse === 'object') {
-            const fr = p.functionResponse as Record<string, unknown>;
-
-            // If there's an error in the response, simplify it
-            if (fr.response && typeof fr.response === 'object') {
-              const resp = fr.response as Record<string, unknown>;
-              if (resp.error) {
-                sanitizedParts.push({
-                  functionResponse: {
-                    id: (fr.id as string) || 'sanitized',
-                    name: (fr.name as string) || 'unknown',
-                    response: {
-                      error: 'Tool validation failed',
-                    },
-                  },
-                } as Part);
-                continue;
-              }
-            }
-          }
-
-          // Return the part as-is if no issues detected
-          sanitizedParts.push(part as Part);
-        }
-
-        const sanitizedMessage: Content = {
-          role: msg.role,
-          parts: sanitizedParts,
-        };
-
-        return sanitizedMessage;
-      })
-      .filter(Boolean); // Remove any null/undefined messages
-  }
-
-  private async checkForLoopWithLLM(signal: AbortSignal) {
-    const fullHistory = await this.config.getGeminiClient().getHistory();
-    const recentHistory = fullHistory.slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
-
-    // Sanitize the history to remove invalid tool responses that can cause 400 errors
-    const sanitizedHistory =
-      this.sanitizeHistoryForLoopDetection(recentHistory);
-
-    const prompt = await this.getLoopDetectionPrompt();
-    const contents = [
-      ...sanitizedHistory,
-      { role: 'user', parts: [{ text: prompt }] },
-    ];
-    const schema: Record<string, unknown> = {
-      type: 'object',
-      properties: {
-        reasoning: {
-          type: 'string',
-          description:
-            'Your reasoning on if the conversation is looping without forward progress.',
-        },
-        confidence: {
-          type: 'number',
-          description:
-            'A number between 0.0 and 1.0 representing your confidence that the conversation is in an unproductive state.',
-        },
-      },
-      required: ['reasoning', 'confidence'],
-    };
-    let result;
-    try {
-      result = await this.config
-        .getGeminiClient()
-        .generateJson(contents, schema, signal, DEFAULT_GEMINI_FLASH_MODEL);
-    } catch (e) {
-      // Do nothing, treat it as a non-loop.
-      this.config.getDebugMode() ? console.error(e) : console.debug(e);
-      return false;
-    }
-
-    if (typeof result.confidence === 'number') {
-      if (result.confidence > 0.9) {
-        if (typeof result.reasoning === 'string' && result.reasoning) {
-          console.warn(result.reasoning);
-        }
-        logLoopDetected(
-          this.config,
-          new LoopDetectedEvent(LoopType.LLM_DETECTED_LOOP, this.promptId),
-        );
-        return true;
-      } else {
-        this.llmCheckInterval = Math.round(
-          MIN_LLM_CHECK_INTERVAL +
-            (MAX_LLM_CHECK_INTERVAL - MIN_LLM_CHECK_INTERVAL) *
-              (1 - result.confidence),
-        );
-      }
-    }
-    return false;
-  }
-
-  /**
    * Resets all loop detection state.
    */
   reset(promptId: string): void {
     this.promptId = promptId;
     this.resetToolCallCount();
     this.resetContentTracking();
-    this.resetLlmCheckTracking();
+    this.resetTurnTracking();
     this.loopDetected = false;
   }
 
@@ -552,9 +325,7 @@ Please analyze the conversation history to determine the possibility that the co
     this.lastContentIndex = 0;
   }
 
-  private resetLlmCheckTracking(): void {
+  private resetTurnTracking(): void {
     this.turnsInCurrentPrompt = 0;
-    this.llmCheckInterval = DEFAULT_LLM_CHECK_INTERVAL;
-    this.lastCheckTurn = 0;
   }
 }

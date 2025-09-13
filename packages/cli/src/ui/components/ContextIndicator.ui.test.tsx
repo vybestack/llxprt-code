@@ -1,3 +1,9 @@
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi, beforeEach, MockedFunction } from 'vitest';
 import { Footer } from './Footer.js';

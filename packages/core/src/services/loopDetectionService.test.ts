@@ -6,7 +6,6 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Config } from '../config/config.js';
-import { GeminiClient } from '../core/client.js';
 import {
   GeminiEventType,
   ServerGeminiContentEvent,
@@ -558,6 +557,30 @@ describe('LoopDetectionService', () => {
     });
   });
 
+  describe('Divider Content Detection', () => {
+    it('should not detect a loop for repeating divider-like content', () => {
+      service.reset('');
+      const dividerContent = '-'.repeat(CONTENT_CHUNK_SIZE);
+      let isLoop = false;
+      for (let i = 0; i < CONTENT_LOOP_THRESHOLD + 5; i++) {
+        isLoop = service.addAndCheck(createContentEvent(dividerContent));
+        expect(isLoop).toBe(false);
+      }
+      expect(loggers.logLoopDetected).not.toHaveBeenCalled();
+    });
+
+    it('should not detect a loop for repeating complex box-drawing dividers', () => {
+      service.reset('');
+      const dividerContent = '╭─'.repeat(CONTENT_CHUNK_SIZE / 2);
+      let isLoop = false;
+      for (let i = 0; i < CONTENT_LOOP_THRESHOLD + 5; i++) {
+        isLoop = service.addAndCheck(createContentEvent(dividerContent));
+        expect(isLoop).toBe(false);
+      }
+      expect(loggers.logLoopDetected).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Reset Functionality', () => {
     it('tool call should reset content count', () => {
       const contentEvent = createContentEvent('Some content.');
@@ -588,25 +611,20 @@ describe('LoopDetectionService', () => {
   });
 });
 
-describe('LoopDetectionService LLM Checks', () => {
+describe('LoopDetectionService Max Turns Detection', () => {
   let service: LoopDetectionService;
   let mockConfig: Config;
-  let mockGeminiClient: GeminiClient;
   let abortController: AbortController;
 
   beforeEach(() => {
-    mockGeminiClient = {
-      getHistory: vi.fn().mockReturnValue([]),
-      generateJson: vi.fn(),
-    } as unknown as GeminiClient;
-
     mockConfig = {
-      getGeminiClient: () => mockGeminiClient,
+      getEphemeralSetting: vi.fn().mockReturnValue(100), // Default max turns
       getDebugMode: () => false,
       getTelemetryEnabled: () => true,
     } as unknown as Config;
 
     service = new LoopDetectionService(mockConfig);
+    service.reset('test-prompt');
     abortController = new AbortController();
     vi.clearAllMocks();
   });
@@ -621,78 +639,95 @@ describe('LoopDetectionService LLM Checks', () => {
     }
   };
 
-  it('should not trigger LLM check before LLM_CHECK_AFTER_TURNS', async () => {
-    await advanceTurns(39);
-    expect(mockGeminiClient.generateJson).not.toHaveBeenCalled();
-  });
+  it('should detect max turns exceeded when limit is reached', async () => {
+    // Set max turns to 50 for testing
+    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(50);
 
-  it('should trigger LLM check on the 40th turn', async () => {
-    mockGeminiClient.generateJson = vi
-      .fn()
-      .mockResolvedValue({ confidence: 0.1 });
-    await advanceTurns(40);
-    expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
-  });
+    // Advance to just before the limit
+    await advanceTurns(49);
+    expect(loggers.logLoopDetected).not.toHaveBeenCalled();
 
-  it('should detect a cognitive loop when confidence is high', async () => {
-    // First check at turn 30
-    mockGeminiClient.generateJson = vi
-      .fn()
-      .mockResolvedValue({ confidence: 0.85, reasoning: 'Repetitive actions' });
-    await advanceTurns(40);
-    expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
-
-    // The confidence of 0.85 will result in a low interval.
-    // The interval will be: 5 + (15 - 5) * (1 - 0.85) = 5 + 10 * 0.15 = 6.5 -> rounded to 7
-    await advanceTurns(6); // advance to turn 36
-
-    mockGeminiClient.generateJson = vi
-      .fn()
-      .mockResolvedValue({ confidence: 0.95, reasoning: 'Repetitive actions' });
-    const finalResult = await service.turnStarted(abortController.signal); // This is turn 37
-
-    expect(finalResult).toBe(true);
+    // One more turn should trigger the limit
+    const result = await service.turnStarted(abortController.signal);
+    expect(result).toBe(true);
     expect(loggers.logLoopDetected).toHaveBeenCalledWith(
       mockConfig,
       expect.objectContaining({
         'event.name': 'loop_detected',
-        loop_type: LoopType.LLM_DETECTED_LOOP,
+        loop_type: LoopType.MAX_TURNS_EXCEEDED,
       }),
     );
   });
 
-  it('should not detect a loop when confidence is low', async () => {
-    mockGeminiClient.generateJson = vi
-      .fn()
-      .mockResolvedValue({ confidence: 0.5, reasoning: 'Looks okay' });
-    await advanceTurns(40);
+  it('should not trigger max turns when set to -1 (unlimited)', async () => {
+    // Set max turns to -1 for unlimited
+    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(-1);
+
+    // Advance many turns
+    await advanceTurns(200);
     const result = await service.turnStarted(abortController.signal);
     expect(result).toBe(false);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
   });
 
-  it('should adjust the check interval based on confidence', async () => {
-    // Confidence is 0.0, so interval should be MAX_LLM_CHECK_INTERVAL (15)
-    mockGeminiClient.generateJson = vi
-      .fn()
-      .mockResolvedValue({ confidence: 0.0 });
-    await advanceTurns(40); // First check at turn 40
-    expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
+  it('should use default value of 100 when setting is undefined', async () => {
+    // Return undefined to test default
+    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(undefined);
 
-    await advanceTurns(14); // Advance to turn 54
-    expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(1);
+    // Advance to just before default limit
+    await advanceTurns(99);
+    expect(loggers.logLoopDetected).not.toHaveBeenCalled();
 
-    await service.turnStarted(abortController.signal); // Turn 55
-    expect(mockGeminiClient.generateJson).toHaveBeenCalledTimes(2);
+    // One more turn should trigger the default limit
+    const result = await service.turnStarted(abortController.signal);
+    expect(result).toBe(true);
+    expect(loggers.logLoopDetected).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({
+        'event.name': 'loop_detected',
+        loop_type: LoopType.MAX_TURNS_EXCEEDED,
+      }),
+    );
   });
 
-  it('should handle errors from generateJson gracefully', async () => {
-    mockGeminiClient.generateJson = vi
-      .fn()
-      .mockRejectedValue(new Error('API error'));
-    await advanceTurns(40);
-    const result = await service.turnStarted(abortController.signal);
-    expect(result).toBe(false);
+  it('should reset turn count when reset() is called', async () => {
+    // Set max turns to 10 for testing
+    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(10);
+
+    // Advance 8 turns
+    await advanceTurns(8);
+
+    // Reset the service
+    service.reset('new-prompt');
+
+    // Should be able to advance 9 more turns without triggering
+    await advanceTurns(9);
     expect(loggers.logLoopDetected).not.toHaveBeenCalled();
+
+    // One more should trigger
+    const result = await service.turnStarted(abortController.signal);
+    expect(result).toBe(true);
+  });
+
+  it('should not interfere with other loop detection mechanisms', async () => {
+    // Set high max turns so it doesn't trigger
+    mockConfig.getEphemeralSetting = vi.fn().mockReturnValue(1000);
+
+    // Trigger a tool call loop instead
+    const toolCall = { name: 'test_tool', args: { param: 'value' } };
+    for (let i = 0; i < 10; i++) {
+      service.addAndCheck({
+        type: GeminiEventType.ToolCallRequest,
+        value: toolCall,
+      });
+    }
+
+    expect(loggers.logLoopDetected).toHaveBeenCalledWith(
+      mockConfig,
+      expect.objectContaining({
+        'event.name': 'loop_detected',
+        loop_type: LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
+      }),
+    );
   });
 });

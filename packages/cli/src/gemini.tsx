@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -31,6 +31,7 @@ import {
   AuthType,
   getOauthClient,
   setGitStatsService,
+  FatalConfigError,
   // IDE connection logging removed - telemetry disabled in llxprt
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
@@ -143,6 +144,77 @@ ${reason.stack}`
   });
 }
 
+function handleError(error: Error, errorInfo: ErrorInfo) {
+  // Log to console for debugging
+  console.error('Application Error:', error);
+  console.error('Component Stack:', errorInfo.componentStack);
+
+  // Special handling for maximum update depth errors
+  if (error.message.includes('Maximum update depth exceeded')) {
+    console.error('\nCRITICAL: RENDER LOOP DETECTED!');
+    console.error('This is likely caused by:');
+    console.error('- State updates during render');
+    console.error('- Incorrect useEffect dependencies');
+    console.error('- Non-memoized props causing re-renders');
+    console.error('\nCheck recent changes to React components and hooks.');
+  }
+}
+
+export async function startInteractiveUI(
+  config: Config,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  workspaceRoot: string,
+) {
+  const version = await getCliVersion();
+  // Detect and enable Kitty keyboard protocol once at startup
+  await detectAndEnableKittyProtocol();
+  setWindowTitle(basename(workspaceRoot), settings);
+
+  // Initialize authentication before rendering to ensure geminiClient is available
+  if (settings.merged.selectedAuthType) {
+    try {
+      const err = validateAuthMethod(settings.merged.selectedAuthType);
+      if (err) {
+        console.error('Error validating authentication method:', err);
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error('Error authenticating:', err);
+      process.exit(1);
+    }
+  }
+
+  const instance = render(
+    <React.StrictMode>
+      <ErrorBoundary onError={handleError}>
+        <SettingsContext.Provider value={settings}>
+          <AppWrapper
+            config={config}
+            settings={settings}
+            startupWarnings={startupWarnings}
+            version={version}
+          />
+        </SettingsContext.Provider>
+      </ErrorBoundary>
+    </React.StrictMode>,
+    { exitOnCtrlC: false },
+  );
+
+  checkForUpdates()
+    .then((info) => {
+      handleAutoUpdate(info, settings, config.getProjectRoot());
+    })
+    .catch((err) => {
+      // Silently ignore update check errors.
+      if (config.getDebugMode()) {
+        console.error('Update check failed:', err);
+      }
+    });
+
+  registerCleanup(() => instance.unmount());
+}
+
 export async function main() {
   setupUnhandledRejectionHandler();
 
@@ -153,16 +225,16 @@ export async function main() {
   }
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
-  const argv = await parseArguments();
+  const argv = await parseArguments(settings.merged);
 
   await cleanupCheckpoints();
   if (settings.errors.length > 0) {
-    for (const error of settings.errors) {
-      const errorMessage = `Error in ${error.path}: ${error.message}`;
-      console.error(chalk.red(errorMessage));
-      console.error(`Please fix ${error.path} and try again.`);
-    }
-    process.exit(1);
+    const errorMessages = settings.errors.map(
+      (error) => `Error in ${error.path}: ${error.message}`,
+    );
+    throw new FatalConfigError(
+      `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
+    );
   }
 
   // If we're in ACP mode, redirect console output IMMEDIATELY
@@ -172,7 +244,6 @@ export async function main() {
     console.info = console.error;
     console.debug = console.error;
   }
-
   const extensions = loadExtensions(workspaceRoot);
   const config = await loadCliConfig(
     settings.merged,
@@ -241,6 +312,14 @@ export async function main() {
         AuthType.USE_NONE,
       );
     }
+  }
+  // Empty key causes issues with the GoogleGenAI package.
+  if (process.env['GEMINI_API_KEY']?.trim() === '') {
+    delete process.env['GEMINI_API_KEY'];
+  }
+
+  if (process.env['GOOGLE_API_KEY']?.trim() === '') {
+    delete process.env['GOOGLE_API_KEY'];
   }
 
   setMaxSizedBoxDebugging(config.getDebugMode());
@@ -548,7 +627,37 @@ export async function main() {
           process.exit(1);
         }
       }
-      await start_sandbox(sandboxConfig, memoryArgs, config);
+      let stdinData = '';
+      if (!process.stdin.isTTY) {
+        stdinData = await readStdin();
+      }
+
+      // This function is a copy of the one from sandbox.ts
+      // It is moved here to decouple sandbox.ts from the CLI's argument structure.
+      const injectStdinIntoArgs = (
+        args: string[],
+        stdinData?: string,
+      ): string[] => {
+        const finalArgs = [...args];
+        if (stdinData) {
+          const promptIndex = finalArgs.findIndex(
+            (arg) => arg === '--prompt' || arg === '-p',
+          );
+          if (promptIndex > -1 && finalArgs.length > promptIndex + 1) {
+            // If there's a prompt argument, prepend stdin to it
+            finalArgs[promptIndex + 1] =
+              `${stdinData}\n\n${finalArgs[promptIndex + 1]}`;
+          } else {
+            // If there's no prompt argument, add stdin as the prompt
+            finalArgs.push('--prompt', stdinData);
+          }
+        }
+        return finalArgs;
+      };
+
+      const sandboxArgs = injectStdinIntoArgs(process.argv, stdinData);
+
+      await start_sandbox(sandboxConfig, memoryArgs, config, sandboxArgs);
       process.exit(0);
     } else {
       // Not in a sandbox and not entering one, so relaunch with additional
@@ -599,74 +708,9 @@ export async function main() {
   // Check if a provider is already active on startup
   providerManager.getActiveProvider();
 
-  function handleError(error: Error, errorInfo: ErrorInfo) {
-    // Log to console for debugging
-    console.error('Application Error:', error);
-    console.error('Component Stack:', errorInfo.componentStack);
-
-    // Special handling for maximum update depth errors
-    if (error.message.includes('Maximum update depth exceeded')) {
-      console.error('\nCRITICAL: RENDER LOOP DETECTED!');
-      console.error('This is likely caused by:');
-      console.error('- State updates during render');
-      console.error('- Incorrect useEffect dependencies');
-      console.error('- Non-memoized props causing re-renders');
-      console.error('\nCheck recent changes to React components and hooks.');
-    }
-  }
-
   // Render UI, passing necessary config values. Check that there is no command line question.
   if (config.isInteractive()) {
-    const version = await getCliVersion();
-    // Detect and enable Kitty keyboard protocol once at startup
-    await detectAndEnableKittyProtocol();
-    setWindowTitle(basename(workspaceRoot), settings);
-
-    // Initialize authentication before rendering to ensure geminiClient is available
-    if (settings.merged.selectedAuthType) {
-      try {
-        const err = validateAuthMethod(settings.merged.selectedAuthType);
-        if (err) {
-          console.error('Error validating authentication method:', err);
-          process.exit(1);
-        }
-      } catch (err) {
-        console.error('Error authenticating:', err);
-        process.exit(1);
-      }
-    }
-
-    const instance = render(
-      <React.StrictMode>
-        <ErrorBoundary
-          // eslint-disable-next-line react/jsx-no-bind
-          onError={handleError}
-        >
-          <SettingsContext.Provider value={settings}>
-            <AppWrapper
-              config={config}
-              settings={settings}
-              startupWarnings={startupWarnings}
-              version={version}
-            />
-          </SettingsContext.Provider>
-        </ErrorBoundary>
-      </React.StrictMode>,
-      { exitOnCtrlC: false },
-    );
-
-    checkForUpdates()
-      .then((info) => {
-        handleAutoUpdate(info, settings, config.getProjectRoot());
-      })
-      .catch((err) => {
-        // Silently ignore update check errors.
-        if (config.getDebugMode()) {
-          console.error('Update check failed:', err);
-        }
-      });
-
-    registerCleanup(() => instance.unmount());
+    await startInteractiveUI(config, settings, startupWarnings, workspaceRoot);
     return;
   }
   // If not a TTY, read from stdin
@@ -678,7 +722,9 @@ export async function main() {
     }
   }
   if (!input) {
-    console.error('No input provided via stdin.');
+    console.error(
+      `No input provided via stdin. Input can be provided by piping data into gemini or using the --prompt option.`,
+    );
     process.exit(1);
   }
 

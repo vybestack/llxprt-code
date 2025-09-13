@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,15 +20,18 @@ import { StatsDisplay } from './StatsDisplay.js';
 import { ModelStatsDisplay } from './ModelStatsDisplay.js';
 import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
+import { Help } from './Help.js';
 import { Config } from '@vybestack/llxprt-code-core';
+import { SlashCommand } from '../commands/types.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
   availableTerminalHeight?: number;
   terminalWidth: number;
   isPending: boolean;
-  config?: Config;
+  config: Config;
   isFocused?: boolean;
+  slashCommands?: readonly SlashCommand[]; // For help display
 }
 
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
@@ -38,6 +41,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   isPending,
   config,
   isFocused = true,
+  slashCommands = [],
 }) => (
   <Box flexDirection="column" key={item.id}>
     {/* Render standard message types */}
@@ -73,6 +77,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         ideClient={item.ideClient}
       />
     )}
+    {item.type === 'help' && <Help commands={slashCommands} />}
     {item.type === 'stats' && <StatsDisplay duration={item.duration} />}
     {item.type === 'model_stats' && <ModelStatsDisplay />}
     {item.type === 'tool_stats' && <ToolStatsDisplay />}

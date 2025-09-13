@@ -21,9 +21,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-core/src/settings/S
  */
 async function getSettingsServiceForProvider(): Promise<SettingsService> {
   try {
-    const { getSettingsService } = await import(
-      '@vybestack/llxprt-code-core/src/settings/settingsServiceInstance.js'
-    );
+    const { getSettingsService } = await import('@vybestack/llxprt-code-core');
 
     return getSettingsService();
   } catch (error) {

@@ -12,7 +12,7 @@ import {
   ToolErrorType,
   ToolResult,
 } from '../index.js';
-import { PartListUnion } from '@google/genai';
+import { Part } from '@google/genai';
 import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
 import { Config } from '../config/config.js';
 import { convertToFunctionResponse } from './coreToolScheduler.js';
@@ -353,9 +353,9 @@ export async function executeToolCall(
           args: toolCallRequest.args,
         },
       },
-      // Then, the tool response
-      finalResponse,
-    ] as PartListUnion;
+      // Then, spread the tool response(s) since convertToFunctionResponse returns Part[]
+      ...finalResponse,
+    ] as Part[];
 
     logger.debug(
       () =>

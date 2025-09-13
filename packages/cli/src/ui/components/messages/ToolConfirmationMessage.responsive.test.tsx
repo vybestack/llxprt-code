@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,7 +14,10 @@ import {
   type MockedFunction,
 } from 'vitest';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
-import { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-core';
+import {
+  ToolCallConfirmationDetails,
+  Config,
+} from '@vybestack/llxprt-code-core';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { KeypressProvider } from '../../contexts/KeypressContext.js';
 
@@ -22,6 +25,11 @@ vi.mock('../../hooks/useTerminalSize.js');
 
 describe('ToolConfirmationMessage Responsive Behavior', () => {
   let mockUseTerminalSize: MockedFunction<typeof useTerminalSize>;
+
+  const mockConfig = {
+    isTrustedFolder: () => true,
+    getIdeMode: () => false,
+  } as unknown as Config;
 
   // Helper function for waiting between input events
   const wait = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -65,6 +73,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -87,6 +96,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockInfoDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -110,6 +120,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -136,6 +147,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -158,6 +170,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockInfoDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -181,6 +194,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={false}
         />,
@@ -205,6 +219,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={100}
           isFocused={true}
         />,
@@ -226,6 +241,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={180}
           isFocused={true}
         />,
@@ -255,6 +271,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={simpleDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -271,6 +288,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
       const { lastFrame, stdin, rerender } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={mockExecuteDetails}
+          config={mockConfig}
           terminalWidth={60}
           isFocused={true}
         />,
@@ -284,6 +302,7 @@ describe('ToolConfirmationMessage Responsive Behavior', () => {
         <KeypressProvider kittyProtocolEnabled={true}>
           <ToolConfirmationMessage
             confirmationDetails={mockExecuteDetails}
+            config={mockConfig}
             terminalWidth={60}
             isFocused={true}
           />

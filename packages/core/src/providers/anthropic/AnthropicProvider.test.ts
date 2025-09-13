@@ -61,6 +61,47 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       }
       return tools;
     }),
+    convertGeminiToFormat: vi.fn((geminiTools, format = 'openai') => {
+      if (!geminiTools || !Array.isArray(geminiTools)) return undefined;
+
+      if (format === 'anthropic') {
+        const tools = [];
+        for (const group of geminiTools) {
+          if (group.functionDeclarations) {
+            for (const func of group.functionDeclarations) {
+              tools.push({
+                name: func.name,
+                description: func.description || '',
+                input_schema: {
+                  type: 'object',
+                  properties: func.parameters?.properties || {},
+                  required: func.parameters?.required || [],
+                },
+              });
+            }
+          }
+        }
+        return tools;
+      }
+
+      // For other formats (openai, etc.), return OpenAI format
+      const tools = [];
+      for (const group of geminiTools) {
+        if (group.functionDeclarations) {
+          for (const func of group.functionDeclarations) {
+            tools.push({
+              type: 'function',
+              function: {
+                name: func.name,
+                description: func.description || '',
+                parameters: func.parameters || {},
+              },
+            });
+          }
+        }
+      }
+      return tools;
+    }),
   })),
 }));
 
@@ -510,28 +551,29 @@ describe('AnthropicProvider', () => {
         chunks.push(chunk);
       }
 
-      // Verify ToolFormatter was used with the new convertGeminiToAnthropic method
+      // Verify ToolFormatter was used with the new convertGeminiToFormat method
       const ToolFormatterMock = vi.mocked(
         (await import('../../tools/ToolFormatter.js')).ToolFormatter,
       );
       const toolFormatterInstance = ToolFormatterMock.mock.results[0].value;
 
-      expect(
-        toolFormatterInstance.convertGeminiToAnthropic,
-      ).toHaveBeenCalledWith([
-        {
-          functionDeclarations: [
-            {
-              name: 'test_tool',
-              description: 'A test tool',
-              parameters: {
-                type: 'object',
-                properties: { foo: { type: 'string' } },
+      expect(toolFormatterInstance.convertGeminiToFormat).toHaveBeenCalledWith(
+        [
+          {
+            functionDeclarations: [
+              {
+                name: 'test_tool',
+                description: 'A test tool',
+                parameters: {
+                  type: 'object',
+                  properties: { foo: { type: 'string' } },
+                },
               },
-            },
-          ],
-        },
-      ]);
+            ],
+          },
+        ],
+        'anthropic', // The detected format for AnthropicProvider
+      );
     });
 
     it('should retry on rate limit errors', { timeout: 10000 }, async () => {

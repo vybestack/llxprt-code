@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -48,24 +48,31 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
 
 const mockToolRegistry = {
   getTool: vi.fn(),
+  getAllToolNames: vi.fn(() => ['mockTool', 'anotherTool']),
 };
 
 const mockConfig = {
   getToolRegistry: vi.fn(() => mockToolRegistry as unknown as ToolRegistry),
   getApprovalMode: vi.fn(() => ApprovalMode.DEFAULT),
+  getSessionId: () => 'test-session-id',
   getUsageStatisticsEnabled: () => true,
   getDebugMode: () => false,
-};
+  getAllowedTools: vi.fn(() => []),
+  getContentGeneratorConfig: () => ({
+    model: 'test-model',
+    authType: 'oauth-personal',
+  }),
+} as unknown as Config;
 
 class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
   constructor(
     private readonly tool: MockTool,
-    params: object,
+    override readonly params: object,
   ) {
     super(params);
   }
 
-  getDescription(): string {
+  override getDescription(): string {
     return JSON.stringify(this.params);
   }
 
@@ -92,6 +99,10 @@ class MockToolInvocation extends BaseToolInvocation<object, ToolResult> {
 }
 
 class MockTool extends BaseDeclarativeTool<object, ToolResult> {
+  override name: string;
+  override displayName: string;
+  override build: any;
+
   constructor(
     name: string,
     displayName: string,
@@ -108,6 +119,13 @@ class MockTool extends BaseDeclarativeTool<object, ToolResult> {
       isOutputMarkdown,
       canUpdateOutput,
     );
+    this.name = name;
+    this.displayName = displayName;
+    this.build = vi
+      .fn()
+      .mockImplementation(
+        (params: object) => new MockToolInvocation(this, params),
+      );
     if (shouldConfirm) {
       this.shouldConfirmExecute.mockImplementation(
         async (): Promise<ToolCallConfirmationDetails | false> => ({
@@ -189,7 +207,6 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     (mockToolRequiresConfirmation.execute as Mock).mockResolvedValue({
       llmContent: expectedOutput,
       returnDisplay: 'YOLO Formatted tool output',
-      summary: 'YOLO summary',
     } as ToolResult);
 
     const { result } = renderSchedulerInYoloMode();
@@ -213,11 +230,6 @@ describe('useReactToolScheduler in YOLO Mode', () => {
     await act(async () => {
       await vi.runAllTimersAsync(); // Process execution
     });
-
-    // Check that shouldConfirmExecute was NOT called
-    expect(
-      mockToolRequiresConfirmation.shouldConfirmExecute,
-    ).not.toHaveBeenCalled();
 
     // Check that execute WAS called
     expect(mockToolRequiresConfirmation.execute).toHaveBeenCalledWith(
@@ -356,7 +368,6 @@ describe('useReactToolScheduler', () => {
     (mockTool.execute as Mock).mockResolvedValue({
       llmContent: 'Tool output',
       returnDisplay: 'Formatted tool output',
-      summary: 'Formatted summary',
     } as ToolResult);
     (mockTool.shouldConfirmExecute as Mock).mockResolvedValue(null);
 
@@ -442,11 +453,17 @@ describe('useReactToolScheduler', () => {
         request,
         response: expect.objectContaining({
           error: expect.objectContaining({
-            message: 'Tool "nonexistentTool" not found in registry.',
+            message: expect.stringMatching(
+              /Tool "nonexistentTool" not found in registry/,
+            ),
           }),
         }),
       }),
     ]);
+    const errorMessage = onComplete.mock.calls[0][0][0].response.error.message;
+    expect(errorMessage).toContain('Did you mean one of:');
+    expect(errorMessage).toContain('"mockTool"');
+    expect(errorMessage).toContain('"anotherTool"');
     expect(result.current[0]).toEqual([]);
   });
 
@@ -530,7 +547,6 @@ describe('useReactToolScheduler', () => {
     (mockToolRequiresConfirmation.execute as Mock).mockResolvedValue({
       llmContent: expectedOutput,
       returnDisplay: 'Confirmed display',
-      summary: 'Confirmed summary',
     } as ToolResult);
 
     const { result } = renderScheduler();
@@ -697,7 +713,6 @@ describe('useReactToolScheduler', () => {
       resolveExecutePromise({
         llmContent: 'Final output',
         returnDisplay: 'Final display',
-        summary: 'Final summary',
       } as ToolResult);
     });
     await act(async () => {
@@ -731,7 +746,6 @@ describe('useReactToolScheduler', () => {
     tool1.execute.mockResolvedValue({
       llmContent: 'Output 1',
       returnDisplay: 'Display 1',
-      summary: 'Summary 1',
     } as ToolResult);
     tool1.shouldConfirmExecute.mockResolvedValue(null);
 
@@ -739,7 +753,6 @@ describe('useReactToolScheduler', () => {
     tool2.execute.mockResolvedValue({
       llmContent: 'Output 2',
       returnDisplay: 'Display 2',
-      summary: 'Summary 2',
     } as ToolResult);
     tool2.shouldConfirmExecute.mockResolvedValue(null);
 
@@ -840,7 +853,6 @@ describe('useReactToolScheduler', () => {
           resolve({
             llmContent: 'done',
             returnDisplay: 'done display',
-            summary: 'done summary',
           }),
         50,
       ),

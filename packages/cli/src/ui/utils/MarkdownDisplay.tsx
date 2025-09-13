@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React from 'react';
 import { Text, Box } from 'ink';
-import { Colors } from '../colors.js';
+import { EOL } from 'os';
+import { Colors, theme } from '../colors.js';
 import { colorizeCode } from './CodeColorizer.js';
 import { TableRenderer } from './TableRenderer.js';
 import { RenderInline } from './InlineMarkdownRenderer.js';
@@ -34,7 +35,7 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
 }) => {
   if (!text) return <></>;
 
-  const lines = text.split('\n');
+  const lines = text.split(EOL);
   const headerRegex = /^ *(#{1,4}) +(.*)/;
   const codeFenceRegex = /^ *(`{3,}|~{3,}) *(\w*?) *$/;
   const ulItemRegex = /^([ \t]*)([-*+]) +(.*)/;
@@ -171,36 +172,32 @@ const MarkdownDisplayInternal: React.FC<MarkdownDisplayProps> = ({
       const headerText = headerMatch[2];
       let headerNode: React.ReactNode = null;
 
-      // Apply theme colors with fallback to named colors
-      const h1Color = Colors.AccentCyan || 'cyan';
-      const h2Color = Colors.AccentBlue || 'blue';
-      const h4Color = Colors.Gray || 'gray';
-
+      // Use semantic theme colors for headers
       switch (level) {
         case 1:
           headerNode = (
-            <Text bold color={h1Color}>
+            <Text bold color={theme.text.accent}>
               <RenderInline text={headerText} />
             </Text>
           );
           break;
         case 2:
           headerNode = (
-            <Text bold color={h2Color}>
+            <Text bold color={theme.text.link}>
               <RenderInline text={headerText} />
             </Text>
           );
           break;
         case 3:
           headerNode = (
-            <Text bold>
+            <Text bold color={theme.status.success}>
               <RenderInline text={headerText} />
             </Text>
           );
           break;
         case 4:
           headerNode = (
-            <Text italic color={h4Color}>
+            <Text italic color={theme.text.secondary}>
               <RenderInline text={headerText} />
             </Text>
           );

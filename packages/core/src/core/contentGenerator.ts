@@ -19,6 +19,7 @@ import type { IProviderManager as ProviderManager } from '../providers/IProvider
 import { ProviderContentGenerator } from '../providers/ProviderContentGenerator.js';
 import { UserTierId } from '../code_assist/types.js';
 import { GoogleGenAIWrapper } from './googleGenAIWrapper.js';
+import { InstallationManager } from '../utils/installationManager.js';
 
 /**
  * Interface abstracting the core functionalities for generating content and counting tokens.
@@ -140,6 +141,16 @@ export async function createContentGenerator(
     config.authType === AuthType.USE_GEMINI ||
     config.authType === AuthType.USE_VERTEX_AI
   ) {
+    let headers: Record<string, string> = {};
+    if (gcConfig?.getUsageStatisticsEnabled()) {
+      const installationManager = new InstallationManager();
+      const installationId = installationManager.getInstallationId();
+      headers = {
+        ...headers,
+        'x-gemini-api-privileged-user-id': `${installationId}`,
+      };
+    }
+    const httpOptions = { headers };
     return new GoogleGenAIWrapper(config, httpOptions);
   }
 

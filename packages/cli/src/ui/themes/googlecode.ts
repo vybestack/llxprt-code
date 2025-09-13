@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { lightTheme, Theme, type ColorsTheme } from './theme.js';
+import { type ColorsTheme, Theme, lightTheme } from './theme.js';
 
 const googleCodeColors: ColorsTheme = {
   type: 'light',

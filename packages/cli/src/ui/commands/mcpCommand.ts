@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -92,10 +92,10 @@ const getMcpStatus = async (
 
   const allTools = toolRegistry.getAllTools();
   for (const serverName of serverNames) {
-    const serverTools = allTools.filter(
-      (tool: AnyDeclarativeTool) =>
-        tool instanceof DiscoveredMCPTool && tool.serverName === serverName,
-    ) as DiscoveredMCPTool[];
+    const serverTools = allTools.filter((tool: AnyDeclarativeTool) => {
+      const isMcpTool = tool instanceof DiscoveredMCPTool;
+      return isMcpTool && (tool as DiscoveredMCPTool).serverName === serverName;
+    }) as DiscoveredMCPTool[];
     const promptRegistry = await config.getPromptRegistry();
     const serverPrompts = promptRegistry.getPromptsByServer(serverName) || [];
 

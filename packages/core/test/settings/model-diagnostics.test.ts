@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Test for model diagnostics synchronization issue
  * Reproduces the bug where /diagnostics shows wrong model after /model command
  */

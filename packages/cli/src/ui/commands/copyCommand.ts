@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -65,7 +65,7 @@ export const copyCommand: SlashCommand = {
         return {
           type: 'message',
           messageType: 'error',
-          content: 'Failed to copy to the clipboard.',
+          content: `Failed to copy to the clipboard. ${message}`,
         };
       }
     } else {

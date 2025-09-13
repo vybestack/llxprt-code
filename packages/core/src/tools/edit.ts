@@ -284,13 +284,24 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       };
     }
 
-    const newContent = applyReplacement(
-      currentContent,
-      finalOldString,
-      finalNewString,
-      isNewFile,
-      expectedReplacements,
-    );
+    const newContent = !error
+      ? applyReplacement(
+          currentContent,
+          finalOldString,
+          finalNewString,
+          isNewFile,
+          expectedReplacements,
+        )
+      : (currentContent ?? '');
+
+    if (!error && fileExists && currentContent === newContent) {
+      error = {
+        display:
+          'No changes to apply. The new content is identical to the current content.',
+        raw: `No changes to apply. The new content is identical to the current content in file: ${filteredParams.file_path}`,
+        type: ToolErrorType.EDIT_NO_CHANGE,
+      };
+    }
 
     return {
       currentContent,

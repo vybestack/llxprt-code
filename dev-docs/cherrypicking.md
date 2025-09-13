@@ -66,6 +66,7 @@ git cherry-pick <commit-hash>
 - **CLI argument removals** - Preserve backward compatibility unless there's a strong reason
 - **ClearcutLogger (Google telemetry) commits** - All ClearcutLogger functionality has been completely removed from llxprt to prevent data collection
 - Gemini-specific release commits
+- **Emoji-related commits** - LLxprt is emoji-free by design. Skip any commits that add, fix, or modify emoji handling (e.g., `a64394a4f`, `348fa6c7c`)
 
 #### Features Reimplemented (Don't Cherry-pick):
 

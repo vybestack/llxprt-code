@@ -10,8 +10,8 @@ import * as path from 'path';
 import { homedir } from 'os';
 import { bfsFileSearch } from './bfsFileSearch.js';
 import {
-  LLXPRT_CONFIG_DIR,
-  getAllLlxprtMdFilenames,
+  LLXPRT_CONFIG_DIR as GEMINI_CONFIG_DIR,
+  getAllLlxprtMdFilenames as getAllGeminiMdFilenames,
 } from '../tools/memoryTool.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { processImports } from './memoryImportProcessor.js';
@@ -24,11 +24,8 @@ import {
 // TODO: Integrate with a more robust server-side logger if available/appropriate.
 const logger = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  debug: (...args: any[]) => {
-    if (process.env.DEBUG) {
-      console.debug('[DEBUG] [MemoryDiscovery]', ...args);
-    }
-  },
+  debug: (...args: any[]) =>
+    console.debug('[DEBUG] [MemoryDiscovery]', ...args),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   warn: (...args: any[]) => console.warn('[WARN] [MemoryDiscovery]', ...args),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,8 +57,9 @@ async function findProjectRoot(startDir: string): Promise<string | null> {
         (error as { code: string }).code === 'ENOENT';
 
       // Only log unexpected errors in non-test environments
-      // process.env.NODE_ENV === 'test' or VITEST are common test indicators
-      const isTestEnv = process.env.NODE_ENV === 'test' || process.env.VITEST;
+      // process.env['NODE_ENV'] === 'test' or VITEST are common test indicators
+      const isTestEnv =
+        process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
 
       if (!isENOENT && !isTestEnv) {
         if (typeof error === 'object' && error !== null && 'code' in error) {
@@ -98,19 +96,41 @@ async function getGeminiMdFilePathsInternal(
     ...includeDirectoriesToReadGemini,
     currentWorkingDirectory,
   ]);
-  const paths = [];
-  for (const dir of dirs) {
-    const pathsByDir = await getGeminiMdFilePathsInternalForEachDir(
-      dir,
-      userHomePath,
-      debugMode,
-      fileService,
-      extensionContextFilePaths,
-      fileFilteringOptions,
-      maxDirs,
+
+  // Process directories in parallel with concurrency limit to prevent EMFILE errors
+  const CONCURRENT_LIMIT = 10;
+  const dirsArray = Array.from(dirs);
+  const pathsArrays: string[][] = [];
+
+  for (let i = 0; i < dirsArray.length; i += CONCURRENT_LIMIT) {
+    const batch = dirsArray.slice(i, i + CONCURRENT_LIMIT);
+    const batchPromises = batch.map((dir) =>
+      getGeminiMdFilePathsInternalForEachDir(
+        dir,
+        userHomePath,
+        debugMode,
+        fileService,
+        extensionContextFilePaths,
+        fileFilteringOptions,
+        maxDirs,
+      ),
     );
-    paths.push(...pathsByDir);
+
+    const batchResults = await Promise.allSettled(batchPromises);
+
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        pathsArrays.push(result.value);
+      } else {
+        const error = result.reason;
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`Error discovering files in directory: ${message}`);
+        // Continue processing other directories
+      }
+    }
   }
+
+  const paths = pathsArrays.flat();
   return Array.from(new Set<string>(paths));
 }
 
@@ -124,13 +144,13 @@ async function getGeminiMdFilePathsInternalForEachDir(
   maxDirs: number,
 ): Promise<string[]> {
   const allPaths = new Set<string>();
-  const geminiMdFilenames = getAllLlxprtMdFilenames();
+  const geminiMdFilenames = getAllGeminiMdFilenames();
 
   for (const geminiMdFilename of geminiMdFilenames) {
     const resolvedHome = path.resolve(userHomePath);
     const globalMemoryPath = path.join(
       resolvedHome,
-      LLXPRT_CONFIG_DIR,
+      GEMINI_CONFIG_DIR,
       geminiMdFilename,
     );
 
@@ -166,21 +186,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
         : path.dirname(resolvedHome);
 
       while (currentDir && currentDir !== path.dirname(currentDir)) {
-        // Loop until filesystem root or currentDir is empty
-        if (debugMode) {
-          logger.debug(
-            `Checking for ${geminiMdFilename} in (upward scan): ${currentDir}`,
-          );
-        }
-
-        // Skip the global .llxprt directory itself during upward scan from CWD,
-        // as global is handled separately and explicitly first.
-        if (currentDir === path.join(resolvedHome, LLXPRT_CONFIG_DIR)) {
-          if (debugMode) {
-            logger.debug(
-              `Upward scan reached global config dir path, stopping upward search here: ${currentDir}`,
-            );
-          }
+        if (currentDir === path.join(resolvedHome, GEMINI_CONFIG_DIR)) {
           break;
         }
 
@@ -230,7 +236,7 @@ async function getGeminiMdFilePathsInternalForEachDir(
 
   if (debugMode)
     logger.debug(
-      `Final ordered ${getAllLlxprtMdFilenames()} paths to read: ${JSON.stringify(
+      `Final ordered ${getAllGeminiMdFilenames()} paths to read: ${JSON.stringify(
         finalPaths,
       )}`,
     );
@@ -242,38 +248,63 @@ async function readGeminiMdFiles(
   debugMode: boolean,
   importFormat: 'flat' | 'tree' = 'tree',
 ): Promise<GeminiFileContent[]> {
+  // Process files in parallel with concurrency limit to prevent EMFILE errors
+  const CONCURRENT_LIMIT = 20; // Higher limit for file reads as they're typically faster
   const results: GeminiFileContent[] = [];
-  for (const filePath of filePaths) {
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
 
-      // Process imports in the content
-      const processedResult = await processImports(
-        content,
-        path.dirname(filePath),
-        debugMode,
-        undefined,
-        undefined,
-        importFormat,
-      );
+  for (let i = 0; i < filePaths.length; i += CONCURRENT_LIMIT) {
+    const batch = filePaths.slice(i, i + CONCURRENT_LIMIT);
+    const batchPromises = batch.map(
+      async (filePath): Promise<GeminiFileContent> => {
+        try {
+          const content = await fs.readFile(filePath, 'utf-8');
 
-      results.push({ filePath, content: processedResult.content });
-      if (debugMode)
-        logger.debug(
-          `Successfully read and processed imports: ${filePath} (Length: ${processedResult.content.length})`,
-        );
-    } catch (error: unknown) {
-      const isTestEnv = process.env.NODE_ENV === 'test' || process.env.VITEST;
-      if (!isTestEnv) {
+          // Process imports in the content
+          const processedResult = await processImports(
+            content,
+            path.dirname(filePath),
+            debugMode,
+            undefined,
+            undefined,
+            importFormat,
+          );
+          if (debugMode)
+            logger.debug(
+              `Successfully read and processed imports: ${filePath} (Length: ${processedResult.content.length})`,
+            );
+
+          return { filePath, content: processedResult.content };
+        } catch (error: unknown) {
+          const isTestEnv =
+            process.env['NODE_ENV'] === 'test' || process.env['VITEST'];
+          if (!isTestEnv) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            logger.warn(
+              `Warning: Could not read ${getAllGeminiMdFilenames()} file at ${filePath}. Error: ${message}`,
+            );
+          }
+          if (debugMode) logger.debug(`Failed to read: ${filePath}`);
+          return { filePath, content: null }; // Still include it with null content
+        }
+      },
+    );
+
+    const batchResults = await Promise.allSettled(batchPromises);
+
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value);
+      } else {
+        // This case shouldn't happen since we catch all errors above,
+        // but handle it for completeness
+        const error = result.reason;
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn(
-          `Warning: Could not read ${getAllLlxprtMdFilenames()} file at ${filePath}. Error: ${message}`,
-        );
+        logger.error(`Unexpected error processing file: ${message}`);
       }
-      results.push({ filePath, content: null }); // Still include it with null content
-      if (debugMode) logger.debug(`Failed to read: ${filePath}`);
     }
   }
+
   return results;
 }
 
@@ -299,7 +330,7 @@ function concatenateInstructions(
 }
 
 /**
- * Loads hierarchical LLXPRT.md files and concatenates their content.
+ * Loads hierarchical GEMINI.md files and concatenates their content.
  * This function is intended for use by the server.
  */
 export async function loadServerHierarchicalMemory(
@@ -332,7 +363,7 @@ export async function loadServerHierarchicalMemory(
   );
   if (filePaths.length === 0) {
     if (debugMode)
-      logger.debug('No LLXPRT.md files found in hierarchy of the workspace.');
+      logger.debug('No GEMINI.md files found in hierarchy of the workspace.');
     return { memoryContent: '', fileCount: 0 };
   }
   const contentsWithPaths = await readGeminiMdFiles(

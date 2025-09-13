@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,11 +10,11 @@ import {
   DetectedIde,
   IDEConnectionStatus,
   getIdeInfo,
-  ideContext,
-  IdeClient,
   getIdeInstaller,
-  LLXPRT_CODE_COMPANION_EXTENSION_NAME,
+  IdeClient,
   type File,
+  ideContext,
+  LLXPRT_CODE_COMPANION_EXTENSION_NAME,
 } from '@vybestack/llxprt-code-core';
 import {
   CommandContext,

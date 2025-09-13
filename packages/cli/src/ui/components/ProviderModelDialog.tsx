@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -122,6 +122,9 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
   };
 
   useInput((input, key) => {
+    // Guard against undefined input to prevent Ink library errors
+    if (!key) return;
+
     if (key.escape) {
       if (isSearching && searchTerm.length > 0) {
         setSearchTerm('');
@@ -139,7 +142,7 @@ export const ProviderModelDialog: React.FC<ProviderModelDialogProps> = ({
         setIsSearching(false);
       } else if (key.backspace || key.delete) {
         setSearchTerm((prev) => prev.slice(0, -1));
-      } else if (input && !key.ctrl && !key.meta) {
+      } else if (input && typeof input === 'string' && !key.ctrl && !key.meta) {
         setSearchTerm((prev) => prev + input);
       }
     } else {

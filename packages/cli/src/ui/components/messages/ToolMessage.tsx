@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -129,7 +129,7 @@ const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({
       />
     )}
     {status === ToolCallStatus.Success && (
-      <Text color={Colors.AccentGreen}>✔</Text>
+      <Text color={Colors.AccentGreen}>✓</Text>
     )}
     {status === ToolCallStatus.Confirming && (
       <Text color={Colors.AccentYellow}>?</Text>

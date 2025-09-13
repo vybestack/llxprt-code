@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,10 +12,13 @@ import {
   isTelemetrySdkInitialized,
   GeminiEventType,
   parseAndFormatApiError,
+  FatalInputError,
+  FatalTurnLimitedError,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
+import { handleAtCommand } from './ui/hooks/atCommandProcessor.js';
 
 export async function runNonInteractive(
   config: Config,
@@ -40,11 +43,28 @@ export async function runNonInteractive(
     const geminiClient = config.getGeminiClient();
 
     const abortController = new AbortController();
-    // Add context about current working directory
-    const contextMessage = `The current working directory is: ${process.cwd()}`;
+
+    const { processedQuery, shouldProceed } = await handleAtCommand({
+      query: input,
+      config,
+      addItem: (_item, _timestamp) => 0,
+      onDebugMessage: () => {},
+      messageId: Date.now(),
+      signal: abortController.signal,
+    });
+
+    if (!shouldProceed || !processedQuery) {
+      // An error occurred during @include processing (e.g., file not found).
+      // The error message is already logged by handleAtCommand.
+      throw new FatalInputError(
+        'Exiting due to an error processing the @ command.',
+      );
+    }
+
     let currentMessages: Content[] = [
-      { role: 'user', parts: [{ text: `${contextMessage}\n\n${input}` }] },
+      { role: 'user', parts: processedQuery as Part[] },
     ];
+
     let turnCount = 0;
     while (true) {
       turnCount++;
@@ -52,10 +72,9 @@ export async function runNonInteractive(
         config.getMaxSessionTurns() >= 0 &&
         turnCount > config.getMaxSessionTurns()
       ) {
-        console.error(
-          '\n Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
+        throw new FatalTurnLimitedError(
+          'Reached max session turns for this session. Increase the number of turns by specifying maxSessionTurns in settings.json.',
         );
-        return;
       }
       const functionCalls: FunctionCall[] = [];
 
@@ -109,41 +128,13 @@ export async function runNonInteractive(
             );
           }
 
-          // Emit resultDisplay to stdout exactly as produced when available (string only)
-          if (typeof toolResponse.resultDisplay === 'string') {
-            process.stdout.write(toolResponse.resultDisplay);
-          }
-
           if (toolResponse.responseParts) {
-            // Handle responseParts as PartListUnion (can be Part, Part[], or string)
-            const parts = toolResponse.responseParts;
-
-            if (Array.isArray(parts)) {
-              // Handle each part in the array
-              for (let i = 0; i < parts.length; i++) {
-                const part = parts[i];
-                if (typeof part === 'string') {
-                  toolResponseParts.push({ text: part });
-                } else {
-                  toolResponseParts.push(part as Part);
-                }
-              }
-            } else if (typeof parts === 'string') {
-              toolResponseParts.push({ text: parts });
-            } else {
-              toolResponseParts.push(parts as Part);
-            }
+            toolResponseParts.push(...toolResponse.responseParts);
           }
         }
-
-        // Don't wrap in Content structure - send parts directly like interactive mode
         currentMessages = [{ role: 'user', parts: toolResponseParts }];
       } else {
         process.stdout.write('\n'); // Ensure a final newline
-        // Ensure telemetry is flushed before exiting
-        if (isTelemetrySdkInitialized()) {
-          await shutdownTelemetry(config);
-        }
         return;
       }
     }
@@ -154,7 +145,7 @@ export async function runNonInteractive(
         config.getContentGeneratorConfig()?.authType,
       ),
     );
-    process.exit(1);
+    throw error;
   } finally {
     consolePatcher.cleanup();
     if (isTelemetrySdkInitialized()) {
