@@ -78,18 +78,16 @@ import {
   ConfirmShellCommandsActionReturn,
   SlashCommand,
 } from '../commands/types.js';
-import { Config, ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import { MessageType } from '../types.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import {
-  // SlashCommandStatus,
   ToolConfirmationOutcome,
   type Config,
   type IdeClient,
-} from '@vybestack/llxprt-code-core/index.js';
+} from '@vybestack/llxprt-code-core';
 
 const createTestCommand = (
   overrides: Partial<SlashCommand>,
@@ -105,7 +103,6 @@ describe('useSlashCommandProcessor', () => {
   const mockAddItem = vi.fn();
   const mockClearItems = vi.fn();
   const mockLoadHistory = vi.fn();
-  const mockSetShowHelp = vi.fn();
   const mockOpenAuthDialog = vi.fn();
   const mockSetQuittingMessages = vi.fn();
 
@@ -153,7 +150,6 @@ describe('useSlashCommandProcessor', () => {
         mockClearItems,
         mockLoadHistory,
         vi.fn(), // refreshStatic
-        mockSetShowHelp,
         vi.fn(), // onDebugMessage
         vi.fn(), // openThemeDialog
         mockOpenAuthDialog,
@@ -168,6 +164,7 @@ describe('useSlashCommandProcessor', () => {
         vi.fn(), // openSettingsDialog
         vi.fn(), // toggleVimEnabled
         setIsProcessing,
+        vi.fn(), // setLlxprtMdFileCount
       ),
     );
 
@@ -372,7 +369,15 @@ describe('useSlashCommandProcessor', () => {
         await result.current.handleSlashCommand('/helpcmd');
       });
 
-      expect(mockSetShowHelp).toHaveBeenCalledWith(true);
+      // Should add help item (user input + help dialog)
+      expect(mockAddItem).toHaveBeenCalledTimes(2);
+      expect(mockAddItem).toHaveBeenCalledWith(
+        {
+          type: 'help',
+          timestamp: expect.any(Date),
+        },
+        expect.any(Number),
+      );
     });
 
     it('should handle "load_history" action', async () => {
@@ -876,7 +881,6 @@ describe('useSlashCommandProcessor', () => {
           mockClearItems,
           mockLoadHistory,
           vi.fn(), // refreshStatic
-          mockSetShowHelp,
           vi.fn(), // onDebugMessage
           vi.fn(), // openThemeDialog
           mockOpenAuthDialog,
@@ -884,12 +888,14 @@ describe('useSlashCommandProcessor', () => {
           vi.fn(), // openProviderDialog
           vi.fn(), // openProviderModelDialog
           vi.fn(), // openLoadProfileDialog
+          vi.fn(), // openToolsDialog
           vi.fn(), // toggleCorgiMode
           mockSetQuittingMessages,
           vi.fn(), // openPrivacyNotice
           vi.fn(), // openSettingsDialog
           vi.fn().mockResolvedValue(false), // toggleVimEnabled
           vi.fn(), // setIsProcessing
+          vi.fn(), // setLlxprtMdFileCount
         ),
       );
 
