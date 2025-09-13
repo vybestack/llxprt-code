@@ -21,6 +21,7 @@ import {
   ToolErrorType,
   AnyDeclarativeTool,
   AnyToolInvocation,
+  ContextAwareTool,
 } from '../index.js';
 import { Part, PartListUnion } from '@google/genai';
 import { getResponseTextFromParts } from '../utils/generateContentResponseUtilities.js';
@@ -482,6 +483,15 @@ export class CoreToolScheduler {
         return call;
       }
 
+      // Set context for ContextAwareTool instances
+      if ('context' in call.tool) {
+        const contextAwareTool = call.tool as ContextAwareTool;
+        contextAwareTool.context = {
+          sessionId: this.config.getSessionId(),
+          interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
+        };
+      }
+
       const invocationOrError = this.buildInvocation(
         call.tool,
         args as Record<string, unknown>,
@@ -630,6 +640,15 @@ export class CoreToolScheduler {
                 ToolErrorType.TOOL_NOT_REGISTERED,
               ),
               durationMs: 0,
+            };
+          }
+
+          // Set context for ContextAwareTool instances
+          if ('context' in toolInstance) {
+            const contextAwareTool = toolInstance as ContextAwareTool;
+            contextAwareTool.context = {
+              sessionId: this.config.getSessionId(),
+              interactiveMode: true, // We're in interactive mode when using CoreToolScheduler
             };
           }
 
