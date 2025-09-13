@@ -31,6 +31,8 @@ export interface SessionStatsState {
   lastPromptTokenCount: number;
   historyTokenCount: number;
   promptCount: number;
+  tokensPerMinute?: number;
+  throttleWaitTimeMs?: number;
 }
 
 export interface ComputedSessionStats {

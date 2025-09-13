@@ -187,6 +187,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const baseOptions = {
       apiKey: resolvedKey || '',
       baseURL,
+      // CRITICAL: Disable OpenAI SDK's built-in retries so our retry logic can handle them
+      // This allows us to track throttle wait times properly
+      maxRetries: 0,
     };
 
     // Add socket configuration if available
@@ -663,6 +666,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const initialDelayMs =
       (ephemeralSettings['retrywait'] as number | undefined) ?? 4000; // Default for OpenAI
 
+    // Get stream options from ephemeral settings (default: include usage for token tracking)
+    const streamOptions = (ephemeralSettings['stream-options'] as
+      | { include_usage?: boolean }
+      | undefined) || { include_usage: true };
+
+    // Add stream options to request if streaming is enabled
+    if (streamingEnabled && streamOptions) {
+      Object.assign(requestBody, { stream_options: streamOptions });
+    }
+
     // Log the exact tools being sent for debugging
     if (this.logger.enabled && 'tools' in requestBody) {
       this.logger.debug(
@@ -679,6 +692,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     // Wrap the API call with retry logic using centralized retry utility
     let response;
+
+    // Debug log throttle tracker status
+    this.logger.debug(() => `Retry configuration:`, {
+      hasThrottleTracker: !!this.throttleTracker,
+      throttleTrackerType: typeof this.throttleTracker,
+      maxRetries,
+      initialDelayMs,
+    });
+
     try {
       response = await retryWithBackoff(
         () =>
@@ -686,8 +708,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         {
           maxAttempts: maxRetries,
           initialDelayMs,
-          maxDelayMs: 30000, // 30 seconds
           shouldRetry: this.shouldRetryResponse.bind(this),
+          trackThrottleWaitTime: this.throttleTracker,
         },
       );
     } catch (error) {
@@ -739,11 +761,23 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Buffer text for Qwen format providers to avoid stanza formatting
       const shouldBufferText = detectedFormat === 'qwen';
 
+      // Track token usage from streaming chunks
+      let streamingUsage: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      } | null = null;
+
       try {
         // Handle streaming response
         for await (const chunk of response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>) {
           if (abortSignal?.aborted) {
             break;
+          }
+
+          // Extract usage information if present (typically in final chunk)
+          if (chunk.usage) {
+            streamingUsage = chunk.usage;
           }
 
           const choice = chunk.choices?.[0];
@@ -943,11 +977,45 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         }
 
         if (blocks.length > 0) {
-          yield {
+          const toolCallsContent: IContent = {
             speaker: 'ai',
             blocks,
-          } as IContent;
+          };
+
+          // Add usage metadata if we captured it from streaming
+          if (streamingUsage) {
+            toolCallsContent.metadata = {
+              usage: {
+                promptTokens: streamingUsage.prompt_tokens || 0,
+                completionTokens: streamingUsage.completion_tokens || 0,
+                totalTokens:
+                  streamingUsage.total_tokens ||
+                  (streamingUsage.prompt_tokens || 0) +
+                    (streamingUsage.completion_tokens || 0),
+              },
+            };
+          }
+
+          yield toolCallsContent;
         }
+      }
+
+      // If we have usage information but no tool calls, emit a metadata-only response
+      if (streamingUsage && accumulatedToolCalls.length === 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: streamingUsage.prompt_tokens || 0,
+              completionTokens: streamingUsage.completion_tokens || 0,
+              totalTokens:
+                streamingUsage.total_tokens ||
+                (streamingUsage.prompt_tokens || 0) +
+                  (streamingUsage.completion_tokens || 0),
+            },
+          },
+        } as IContent;
       }
     } else {
       // Handle non-streaming response
@@ -1020,9 +1088,41 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
       // Emit the complete response as a single IContent
       if (blocks.length > 0) {
-        yield {
+        const responseContent: IContent = {
           speaker: 'ai',
           blocks,
+        };
+
+        // Add usage metadata from non-streaming response
+        if (completion.usage) {
+          responseContent.metadata = {
+            usage: {
+              promptTokens: completion.usage.prompt_tokens || 0,
+              completionTokens: completion.usage.completion_tokens || 0,
+              totalTokens:
+                completion.usage.total_tokens ||
+                (completion.usage.prompt_tokens || 0) +
+                  (completion.usage.completion_tokens || 0),
+            },
+          };
+        }
+
+        yield responseContent;
+      } else if (completion.usage) {
+        // Emit metadata-only response if no content blocks but have usage info
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: completion.usage.prompt_tokens || 0,
+              completionTokens: completion.usage.completion_tokens || 0,
+              totalTokens:
+                completion.usage.total_tokens ||
+                (completion.usage.prompt_tokens || 0) +
+                  (completion.usage.completion_tokens || 0),
+            },
+          },
         } as IContent;
       }
     }
@@ -1145,15 +1245,46 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return false;
     }
 
+    // Check OpenAI SDK v5 error structure
+    let status: number | undefined;
+
+    // OpenAI SDK v5 error structure
+    if (error && typeof error === 'object' && 'status' in error) {
+      status = (error as { status?: number }).status;
+    }
+
+    // Also check error.response?.status for axios-style errors
+    if (!status && error && typeof error === 'object' && 'response' in error) {
+      const response = (error as { response?: { status?: number } }).response;
+      if (response && typeof response === 'object' && 'status' in response) {
+        status = response.status;
+      }
+    }
+
+    // Also check error message for 429
+    if (!status && error instanceof Error) {
+      if (error.message.includes('429')) {
+        status = 429;
+      }
+    }
+
+    // Log what we're seeing
+    this.logger.debug(() => `shouldRetryResponse checking error:`, {
+      hasError: !!error,
+      errorType: error?.constructor?.name,
+      status,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorKeys: error && typeof error === 'object' ? Object.keys(error) : [],
+    });
+
     // Retry on 429 rate limit errors or 5xx server errors
     const shouldRetry = Boolean(
-      error &&
-        typeof error === 'object' &&
-        'status' in error &&
-        ((error as { status?: number }).status === 429 ||
-          (((error as { status?: number }).status as number) >= 500 &&
-            ((error as { status?: number }).status as number) < 600)),
+      status === 429 || (status && status >= 500 && status < 600),
     );
+
+    if (shouldRetry) {
+      this.logger.debug(() => `Will retry request due to status ${status}`);
+    }
 
     return shouldRetry;
   }

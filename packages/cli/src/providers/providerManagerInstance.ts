@@ -117,6 +117,8 @@ export function getProviderManager(
     // Set config BEFORE registering providers so logging wrapper works
     if (config) {
       providerManagerInstance.setConfig(config);
+      // CRITICAL: Set provider manager on config so LoggingProviderWrapper can accumulate tokens!
+      config.setProviderManager(providerManagerInstance);
     }
 
     // Always register GeminiProvider with OAuth manager

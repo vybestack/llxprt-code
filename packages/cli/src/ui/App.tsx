@@ -77,6 +77,10 @@ import {
   ideContext,
   type IModel,
   getSettingsService,
+  DebugLogger,
+  isProQuotaExceededError,
+  isGenericQuotaExceededError,
+  UserTierId,
 } from '@vybestack/llxprt-code-core';
 import {
   IdeIntegrationNudge,
@@ -108,11 +112,6 @@ import {
 } from './reducers/appReducer.js';
 import { AppDispatchProvider } from './contexts/AppDispatchContext.js';
 import { UpdateNotification } from './components/UpdateNotification.js';
-import {
-  isProQuotaExceededError,
-  isGenericQuotaExceededError,
-  UserTierId,
-} from '@vybestack/llxprt-code-core';
 import { UpdateObject } from './utils/updateCheck.js';
 import ansiEscapes from 'ansi-escapes';
 import { TodoProvider } from './contexts/TodoProvider.js';
@@ -251,6 +250,10 @@ const App = (props: AppInternalProps) => {
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const historyTokenCleanupRef = useRef<(() => void) | null>(null);
   const lastHistoryServiceRef = useRef<unknown>(null);
+  const tokenLogger = useMemo(
+    () => new DebugLogger('llxprt:ui:tokentracking'),
+    [],
+  );
 
   // Set up history token count listener
   useEffect(() => {
@@ -266,11 +269,25 @@ const App = (props: AppInternalProps) => {
       if (geminiClient?.hasChatInitialized?.()) {
         const historyService = geminiClient.getHistoryService?.();
 
+        if (!historyService && lastHistoryServiceRef.current === null) {
+          tokenLogger.debug(() => 'No history service available yet');
+        } else if (historyService) {
+          // Always get the current token count even if not a new instance
+          const currentTokens = historyService.getTotalTokens();
+          if (currentTokens > 0) {
+            updateHistoryTokenCount(currentTokens);
+          }
+        }
+
         // Check if we have a new history service instance (happens after compression)
         if (
           historyService &&
           historyService !== lastHistoryServiceRef.current
         ) {
+          tokenLogger.debug(
+            () => 'Found new history service, setting up listener',
+          );
+
           // Clean up old listener if it exists
           if (historyTokenCleanupRef.current) {
             historyTokenCleanupRef.current();
@@ -281,6 +298,10 @@ const App = (props: AppInternalProps) => {
           lastHistoryServiceRef.current = historyService;
 
           const handleTokensUpdated = (event: { totalTokens: number }) => {
+            tokenLogger.debug(
+              () =>
+                `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
+            );
             updateHistoryTokenCount(event.totalTokens);
           };
 
@@ -288,6 +309,7 @@ const App = (props: AppInternalProps) => {
 
           // Initialize with current token count
           const currentTokens = historyService.getTotalTokens();
+          tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
           updateHistoryTokenCount(currentTokens);
 
           // Store cleanup function for later
@@ -308,7 +330,7 @@ const App = (props: AppInternalProps) => {
       }
       lastHistoryServiceRef.current = null;
     };
-  }, [config, updateHistoryTokenCount]);
+  }, [config, updateHistoryTokenCount, tokenLogger]);
   const [staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
   const [staticKey, setStaticKey] = useState(0);
   const refreshStatic = useCallback(() => {
@@ -322,6 +344,13 @@ const App = (props: AppInternalProps) => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [_editorError, _setEditorError] = useState<string | null>(null);
   const [footerHeight, setFooterHeight] = useState<number>(0);
+
+  // Token metrics state for live updates
+  const [tokenMetrics, setTokenMetrics] = useState({
+    tokensPerMinute: 0,
+    throttleWaitTimeMs: 0,
+    sessionTokenTotal: 0,
+  });
   const [_corgiMode, setCorgiMode] = useState(false);
   const [currentModel, setCurrentModel] = useState(config.getModel());
   const [shellModeActive, setShellModeActive] = useState(false);
@@ -671,6 +700,31 @@ const App = (props: AppInternalProps) => {
   }, [config, addItem, settings.merged]);
 
   // Removed - consolidated into single useEffect above
+
+  // Poll for token metrics updates
+  useEffect(() => {
+    const updateTokenMetrics = () => {
+      const providerManager = getProviderManager();
+      if (providerManager) {
+        const metrics = providerManager.getProviderMetrics?.();
+        const usage = providerManager.getSessionTokenUsage?.();
+
+        setTokenMetrics({
+          tokensPerMinute: metrics?.tokensPerMinute || 0,
+          throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
+          sessionTokenTotal: usage?.total || 0,
+        });
+      }
+    };
+
+    // Update immediately
+    updateTokenMetrics();
+
+    // Poll every second to show live updates
+    const interval = setInterval(updateTokenMetrics, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Set up Flash fallback handler
   useEffect(() => {
@@ -1686,6 +1740,9 @@ You can switch authentication methods by typing /auth or switch to a different m
                   | undefined
               }
               isTrustedFolder={config.isTrustedFolder()}
+              tokensPerMinute={tokenMetrics.tokensPerMinute}
+              throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
+              sessionTokenTotal={tokenMetrics.sessionTokenTotal}
             />
           )}
         </Box>

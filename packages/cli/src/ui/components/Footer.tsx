@@ -2,6 +2,9 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P06
+ * @plan PLAN-20250909-TOKTRACK.P16
+ * @requirement REQ-INT-001.1
  */
 
 import React, { useEffect, useState } from 'react';
@@ -35,6 +38,10 @@ interface FooterProps {
   vimMode?: string;
   contextLimit?: number;
   isTrustedFolder?: boolean;
+  // Token tracking metrics
+  tokensPerMinute?: number;
+  throttleWaitTimeMs?: number;
+  sessionTokenTotal?: number;
 }
 
 // Responsive Memory Usage Display
@@ -165,6 +172,9 @@ export const Footer: React.FC<FooterProps> = ({
   vimMode,
   contextLimit,
   isTrustedFolder,
+  tokensPerMinute,
+  throttleWaitTimeMs,
+  sessionTokenTotal,
 }) => {
   const { breakpoint } = useResponsive();
 
@@ -229,7 +239,7 @@ export const Footer: React.FC<FooterProps> = ({
           )}
         </Box>
 
-        {/* Right: Memory | Context | Time */}
+        {/* Right: Memory | Context | TPM | Wait Time | Time */}
         <Box flexDirection="row" alignItems="center">
           {showMemoryUsage && (
             <>
@@ -249,6 +259,31 @@ export const Footer: React.FC<FooterProps> = ({
             detailed={isDetailed}
           />
 
+          {/* Token tracking metrics */}
+          {tokensPerMinute !== undefined && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <Text color={SemanticColors.text.accent}>
+                {tokensPerMinute < 1000
+                  ? `TPM: ${tokensPerMinute.toFixed(2)}`
+                  : `TPM: ${(tokensPerMinute / 1000).toFixed(2)}k`}
+              </Text>
+            </>
+          )}
+
+          {throttleWaitTimeMs !== undefined && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <Text color={SemanticColors.status.warning}>
+                {throttleWaitTimeMs < 1000
+                  ? `Wait: ${throttleWaitTimeMs}ms`
+                  : throttleWaitTimeMs < 60000
+                    ? `Wait: ${(throttleWaitTimeMs / 1000).toFixed(1)}s`
+                    : `Wait: ${(throttleWaitTimeMs / 60000).toFixed(1)}m`}
+              </Text>
+            </>
+          )}
+
           {/* Show timestamp only at wide width */}
           {showTimestamp && (
             <>
@@ -259,7 +294,7 @@ export const Footer: React.FC<FooterProps> = ({
         </Box>
       </Box>
 
-      {/* Second Line: Path (left) | Model (right) */}
+      {/* Second Line: Path (left) | Model | Session Tokens (right) */}
       <Box justifyContent="space-between" width="100%" alignItems="center">
         {/* Left: Path and Sandbox Info */}
         <Box flexDirection="row" alignItems="center">
@@ -301,7 +336,7 @@ export const Footer: React.FC<FooterProps> = ({
           )}
         </Box>
 
-        {/* Right: Model and other status */}
+        {/* Right: Model, Session Tokens and other status */}
         <Box flexDirection="row" alignItems="center">
           {/* Show model name */}
           {showModelName && (
@@ -335,6 +370,16 @@ export const Footer: React.FC<FooterProps> = ({
               }
               return null;
             })()}
+
+          {/* Show session token total */}
+          {sessionTokenTotal !== undefined && (
+            <>
+              <Text color={SemanticColors.text.secondary}> | </Text>
+              <Text color={SemanticColors.text.accent}>
+                Tokens: {sessionTokenTotal.toLocaleString()}
+              </Text>
+            </>
+          )}
 
           {/* Show error count */}
           {!showErrorDetails && errorCount > 0 && (

@@ -17,6 +17,12 @@ exports[`<SessionSummaryDisplay /> > renders the summary display with a title 1`
 │    » API Time:               50.2s (100.0%)                                                      │
 │    » Tool Time:              0s (0.0%)                                                           │
 │                                                                                                  │
+│  Token Tracking                                                                                  │
+│  Tokens Per Minute:          0                                                                   │
+│  Throttle Wait Time:         0ms                                                                 │
+│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
+│                           Total: 0                                                               │
+│                                                                                                  │
 │                                                                                                  │
 │  Model Usage                  Reqs   Input Tokens  Output Tokens                                 │
 │  ───────────────────────────────────────────────────────────────                                 │

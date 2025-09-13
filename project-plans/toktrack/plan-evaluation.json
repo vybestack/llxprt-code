@@ -1,0 +1,48 @@
+{
+  "compliant": true,
+  "has_integration_plan": true,
+  "builds_in_isolation": false,
+  "violations": [],
+  "specific_files_to_modify": [
+    "packages/core/src/providers/types.ts",
+    "packages/core/src/providers/logging/ProviderPerformanceTracker.ts",
+    "packages/core/src/providers/ProviderManager.ts",
+    "packages/core/src/providers/LoggingProviderWrapper.ts",
+    "packages/core/src/telemetry/loggers.ts",
+    "packages/core/src/telemetry/uiTelemetry.ts",
+    "packages/core/src/utils/retry.ts",
+    "packages/cli/src/ui/components/Footer.tsx",
+    "packages/cli/src/ui/components/StatsDisplay.tsx",
+    "packages/cli/src/ui/commands/diagnosticsCommand.ts",
+    "packages/core/src/providers/gemini/GeminiProvider.ts",
+    "packages/core/src/providers/openai/OpenAIProvider.ts",
+    "packages/core/src/providers/anthropic/AnthropicProvider.ts"
+  ],
+  "user_access_points": [
+    "CLI Footer display - real-time TPM and throttle metrics",
+    "StatsDisplay component - detailed session token breakdown",
+    "Diagnostics command output - comprehensive token tracking data"
+  ],
+  "old_code_to_remove": [
+    "tokensPerSecond field (deprecated, replaced with tokensPerMinute)"
+  ],
+  "pseudocode_used": true,
+  "pseudocode_line_references": true,
+  "reverse_testing_found": false,
+  "mutation_testing": true,
+  "mutation_testing_score": 80,
+  "property_testing": true,
+  "property_testing_coverage": 77,
+  "integration_phases": [
+    "6a-integration-stub",
+    "7-integration-tdd",
+    "7a-integration-tdd-verification",
+    "8a-integration-impl-verification",
+    "9-integration-impl",
+    "9a-migration-verification",
+    "10-deprecation",
+    "10a-deprecation-verification"
+  ],
+  "evaluation_date": "2025-01-10",
+  "verdict": "APPROVED"
+}

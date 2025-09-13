@@ -29,6 +29,7 @@ import type {
   ContentBlock,
   ToolCallBlock,
   ToolResponseBlock,
+  UsageStats,
 } from '../services/history/IContent.js';
 import type { IProvider } from '../providers/IProvider.js';
 // import { estimateTokens } from '../utils/toolOutputLimiter.js'; // Unused after retry stream refactor
@@ -1299,10 +1300,17 @@ export class GeminiChat {
     let hasReceivedAnyChunk = false;
     let invalidChunkCount = 0;
     let totalChunkCount = 0;
+    let streamingUsageMetadata: UsageStats | null = null;
 
     for await (const chunk of streamResponse) {
       hasReceivedAnyChunk = true;
       totalChunkCount++;
+
+      // Capture usage metadata from IContent chunks (from providers that yield IContent)
+      const chunkWithMetadata = chunk as { metadata?: { usage?: UsageStats } };
+      if (chunkWithMetadata?.metadata?.usage) {
+        streamingUsageMetadata = chunkWithMetadata.metadata.usage;
+      }
 
       if (isValidResponse(chunk)) {
         const content = chunk.candidates?.[0]?.content;
@@ -1357,13 +1365,19 @@ export class GeminiChat {
     const modelOutput: Content[] = [
       { role: 'model', parts: modelResponseParts },
     ];
-    this.recordHistory(userInput, modelOutput);
+    this.recordHistory(
+      userInput,
+      modelOutput,
+      undefined,
+      streamingUsageMetadata,
+    );
   }
 
   private recordHistory(
     userInput: Content | Content[],
     modelOutput: Content[],
     automaticFunctionCallingHistory?: Content[],
+    usageMetadata?: UsageStats | null,
   ) {
     const newHistoryEntries: IContent[] = [];
 
@@ -1452,10 +1466,17 @@ export class GeminiChat {
       if (!hasToolCalls) {
         // Only add non-tool-call responses to history immediately
         // Tool calls will be added when the executor returns with the response
-        this.historyService.add(
-          ContentConverters.toIContent(content),
-          currentModel,
-        );
+        const iContent = ContentConverters.toIContent(content);
+
+        // Add usage metadata if available from streaming
+        if (usageMetadata) {
+          iContent.metadata = {
+            ...iContent.metadata,
+            usage: usageMetadata,
+          };
+        }
+
+        this.historyService.add(iContent, currentModel);
       }
       // Tool calls are NOT added here - they'll come back from the executor
       // along with their responses and be added together

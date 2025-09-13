@@ -105,6 +105,12 @@ class GlobToolInvocation extends BaseToolInvocation<
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
     try {
+      // Get ephemeral settings for output limits
+      const ephemeralSettings = this.config.getEphemeralSettings();
+      const maxItems =
+        (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
+        50;
+
       const workspaceContext = this.config.getWorkspaceContext();
       const workspaceDirectories = workspaceContext.getDirectories();
 
@@ -218,10 +224,20 @@ class GlobToolInvocation extends BaseToolInvocation<
       const sortedAbsolutePaths = sortedEntries.map((entry) =>
         entry.fullpath(),
       );
-      const fileListDescription = sortedAbsolutePaths.join('\n');
-      const fileCount = sortedAbsolutePaths.length;
 
-      let resultMessage = `Found ${fileCount} file(s) matching "${this.params.pattern}"`;
+      const totalFileCount = sortedAbsolutePaths.length;
+      let fileListToShow = sortedAbsolutePaths;
+      let truncatedMessage = '';
+
+      // Apply max items limit
+      if (totalFileCount > maxItems) {
+        fileListToShow = sortedAbsolutePaths.slice(0, maxItems);
+        truncatedMessage = `\n\n**Note: Output limited to ${maxItems} files out of ${totalFileCount} total matches. Use more specific patterns or adjust 'tool-output-max-items' setting to see more.**`;
+      }
+
+      const fileListDescription = fileListToShow.join('\n');
+
+      let resultMessage = `Found ${totalFileCount} file(s) matching "${this.params.pattern}"`;
       if (searchDirectories.length === 1) {
         resultMessage += ` within ${searchDirectories[0]}`;
       } else {
@@ -230,11 +246,16 @@ class GlobToolInvocation extends BaseToolInvocation<
       if (gitIgnoredCount > 0) {
         resultMessage += ` (${gitIgnoredCount} additional files were git-ignored)`;
       }
-      resultMessage += `, sorted by modification time (newest first):\n${fileListDescription}`;
+
+      if (totalFileCount > 0) {
+        resultMessage += `, sorted by modification time (newest first):\n${fileListDescription}`;
+      }
+
+      resultMessage += truncatedMessage;
 
       return {
         llmContent: resultMessage,
-        returnDisplay: `Found ${fileCount} matching file(s)`,
+        returnDisplay: `Found ${totalFileCount} matching file(s)`,
       };
     } catch (error) {
       const errorMessage =

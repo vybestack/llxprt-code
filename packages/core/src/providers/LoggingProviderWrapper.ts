@@ -2,20 +2,24 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P08
  */
 
 import { IProvider, IModel, ITool } from './IProvider.js';
-import { IContent } from '../services/history/IContent.js';
+import { IContent, UsageStats } from '../services/history/IContent.js';
 import { Config, RedactionConfig } from '../config/config.js';
 import {
   logConversationRequest,
   logConversationResponse,
+  logTokenUsage,
 } from '../telemetry/loggers.js';
 import {
   ConversationRequestEvent,
   ConversationResponseEvent,
+  TokenUsageEvent,
 } from '../telemetry/types.js';
 import { getConversationFileWriter } from '../storage/ConversationFileWriter.js';
+import { ProviderPerformanceTracker } from './logging/ProviderPerformanceTracker.js';
 
 export interface ConversationDataRedactor {
   redactMessage(content: IContent, provider: string): IContent;
@@ -168,6 +172,7 @@ class ConfigBasedRedactor implements ConversationDataRedactor {
 }
 
 /**
+ * @plan PLAN-20250909-TOKTRACK.P05
  * A minimal logging wrapper that acts as a transparent passthrough to the wrapped provider.
  * Only intercepts generateChatCompletion to log conversations while forwarding all other
  * methods directly to the wrapped provider without modification.
@@ -176,6 +181,7 @@ export class LoggingProviderWrapper implements IProvider {
   private conversationId: string;
   private turnNumber: number = 0;
   private redactor: ConversationDataRedactor;
+  private performanceTracker: ProviderPerformanceTracker;
 
   constructor(
     private readonly wrapped: IProvider,
@@ -185,6 +191,20 @@ export class LoggingProviderWrapper implements IProvider {
     this.conversationId = this.generateConversationId();
     this.redactor =
       redactor || new ConfigBasedRedactor(config.getRedactionConfig());
+    this.performanceTracker = new ProviderPerformanceTracker(wrapped.name);
+
+    // Set throttle tracker callback on the wrapped provider if it supports it
+    if (
+      'setThrottleTracker' in wrapped &&
+      typeof wrapped.setThrottleTracker === 'function'
+    ) {
+      const provider = wrapped as IProvider & {
+        setThrottleTracker: (tracker: (waitTimeMs: number) => void) => void;
+      };
+      provider.setThrottleTracker((waitTimeMs: number) => {
+        this.performanceTracker.trackThrottleWaitTime(waitTimeMs);
+      });
+    }
   }
 
   /**
@@ -240,7 +260,7 @@ export class LoggingProviderWrapper implements IProvider {
       return;
     }
 
-    // Log the response stream
+    // Log the response stream (which also processes metrics)
     yield* this.logResponseStream(stream, promptId);
   }
 
@@ -299,6 +319,7 @@ export class LoggingProviderWrapper implements IProvider {
     const startTime = performance.now();
     let responseContent = '';
     let responseComplete = false;
+    let latestTokenUsage: UsageStats | undefined;
 
     try {
       for await (const chunk of stream) {
@@ -308,18 +329,40 @@ export class LoggingProviderWrapper implements IProvider {
           responseContent += content;
         }
 
+        // Extract token usage from IContent metadata
+        if (chunk && typeof chunk === 'object') {
+          const content = chunk as IContent;
+          if (content.metadata?.usage) {
+            latestTokenUsage = content.metadata.usage;
+          }
+        }
+
         yield chunk;
       }
       responseComplete = true;
     } catch (error) {
       const errorTime = performance.now();
-      await this.logResponse('', promptId, errorTime - startTime, false, error);
+      await this.logResponse(
+        '',
+        promptId,
+        errorTime - startTime,
+        false,
+        error,
+        latestTokenUsage,
+      );
       throw error;
     }
 
     if (responseComplete) {
       const totalTime = performance.now() - startTime;
-      await this.logResponse(responseContent, promptId, totalTime, true);
+      await this.logResponse(
+        responseContent,
+        promptId,
+        totalTime,
+        true,
+        undefined,
+        latestTokenUsage,
+      );
     }
   }
 
@@ -351,11 +394,47 @@ export class LoggingProviderWrapper implements IProvider {
     duration: number,
     success: boolean,
     error?: unknown,
+    tokenUsage?: UsageStats,
   ): Promise<void> {
     try {
       const redactedContent = this.redactor.redactResponseContent(
         content,
         this.wrapped.name,
+      );
+
+      // Extract token counts from the response or use provided tokenUsage
+      const tokenCounts = tokenUsage
+        ? this.extractTokenCountsFromTokenUsage(tokenUsage)
+        : this.extractTokenCountsFromResponse(content);
+
+      // Accumulate token usage for session tracking
+      this.accumulateTokenUsage(tokenCounts);
+
+      // Record performance metrics (TPM tracks output tokens only)
+      const outputTokens = tokenCounts.output_token_count;
+      this.performanceTracker.recordCompletion(duration, null, outputTokens, 0);
+
+      // Calculate total for telemetry event
+      const totalTokens =
+        tokenCounts.input_token_count +
+        tokenCounts.output_token_count +
+        tokenCounts.cached_content_token_count +
+        tokenCounts.thoughts_token_count +
+        tokenCounts.tool_token_count;
+
+      // Log token usage to telemetry
+      logTokenUsage(
+        this.config,
+        new TokenUsageEvent(
+          this.wrapped.name,
+          this.conversationId,
+          tokenCounts.input_token_count,
+          tokenCounts.output_token_count,
+          tokenCounts.cached_content_token_count,
+          tokenCounts.tool_token_count,
+          tokenCounts.thoughts_token_count,
+          totalTokens,
+        ),
       );
 
       const event = new ConversationResponseEvent(
@@ -394,6 +473,140 @@ export class LoggingProviderWrapper implements IProvider {
 
   private generatePromptId(): string {
     return `prompt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Extract token counts from tokenUsage metadata
+   */
+  private extractTokenCountsFromTokenUsage(tokenUsage: UsageStats): {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+  } {
+    return {
+      input_token_count: Number(tokenUsage.promptTokens) || 0,
+      output_token_count: Number(tokenUsage.completionTokens) || 0,
+      cached_content_token_count: 0, // Not available in basic UsageStats
+      thoughts_token_count: 0, // Not available in basic UsageStats
+      tool_token_count: 0, // Not available in basic UsageStats
+    };
+  }
+
+  /**
+   * Extract token counts from response object or headers
+   */
+  extractTokenCountsFromResponse(response: unknown): {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+  } {
+    // Initialize token counts as zeros
+    let input_token_count = 0;
+    let output_token_count = 0;
+    let cached_content_token_count = 0;
+    let thoughts_token_count = 0;
+    let tool_token_count = 0;
+
+    try {
+      // Check if response is a string and try to parse it as JSON
+      if (typeof response === 'string') {
+        const parsed = JSON.parse(response);
+        // Extract token usage from response object
+        if (parsed.usage) {
+          input_token_count = Number(parsed.usage.prompt_tokens) || 0;
+          output_token_count = Number(parsed.usage.completion_tokens) || 0;
+          cached_content_token_count =
+            Number(parsed.usage.cached_content_tokens) || 0;
+          thoughts_token_count = Number(parsed.usage.thoughts_tokens) || 0;
+          tool_token_count = Number(parsed.usage.tool_tokens) || 0;
+        }
+      } else if (response && typeof response === 'object') {
+        // Extract token usage from response object
+        const obj = response as Record<string, unknown>;
+        if (obj.usage && typeof obj.usage === 'object') {
+          const usage = obj.usage as Record<string, unknown>;
+          input_token_count = Number(usage.prompt_tokens) || 0;
+          output_token_count = Number(usage.completion_tokens) || 0;
+          cached_content_token_count = Number(usage.cached_content_tokens) || 0;
+          thoughts_token_count = Number(usage.thoughts_tokens) || 0;
+          tool_token_count = Number(usage.tool_tokens) || 0;
+        }
+
+        // Check for anthropic-style headers
+        if (obj.headers && typeof obj.headers === 'object') {
+          const headers = obj.headers as Record<string, string>;
+          if (headers['anthropic-input-tokens']) {
+            const parsedValue = parseInt(headers['anthropic-input-tokens'], 10);
+            input_token_count =
+              !isNaN(parsedValue) && parsedValue >= 0
+                ? parsedValue
+                : input_token_count;
+          }
+          if (headers['anthropic-output-tokens']) {
+            const parsedValue = parseInt(
+              headers['anthropic-output-tokens'],
+              10,
+            );
+            output_token_count =
+              !isNaN(parsedValue) && parsedValue >= 0
+                ? parsedValue
+                : output_token_count;
+          }
+        }
+      }
+
+      // Ensure we return valid numbers, not NaN or negative values
+      return {
+        input_token_count: Math.max(0, input_token_count),
+        output_token_count: Math.max(0, output_token_count),
+        cached_content_token_count: Math.max(0, cached_content_token_count),
+        thoughts_token_count: Math.max(0, thoughts_token_count),
+        tool_token_count: Math.max(0, tool_token_count),
+      };
+    } catch (_error) {
+      // Return zero counts if extraction fails
+      return {
+        input_token_count: 0,
+        output_token_count: 0,
+        cached_content_token_count: 0,
+        thoughts_token_count: 0,
+        tool_token_count: 0,
+      };
+    }
+  }
+
+  /**
+   * Accumulate token usage for session tracking
+   */
+  private accumulateTokenUsage(tokenCounts: {
+    input_token_count: number;
+    output_token_count: number;
+    cached_content_token_count: number;
+    thoughts_token_count: number;
+    tool_token_count: number;
+  }): void {
+    // Map token counts to expected format
+    const usage = {
+      input: tokenCounts.input_token_count || 0,
+      output: tokenCounts.output_token_count || 0,
+      cache: tokenCounts.cached_content_token_count || 0,
+      thought: tokenCounts.thoughts_token_count || 0,
+      tool: tokenCounts.tool_token_count || 0,
+    };
+
+    // Call accumulateSessionTokens if providerManager is available
+    const providerManager = this.config.getProviderManager();
+    if (providerManager) {
+      try {
+        providerManager.accumulateSessionTokens(this.wrapped.name, usage);
+      } catch (error) {
+        console.warn('Failed to accumulate session tokens:', error);
+      }
+    }
   }
 
   private async logToolCall(
@@ -519,5 +732,13 @@ export class LoggingProviderWrapper implements IProvider {
 
   getModelParams?(): Record<string, unknown> | undefined {
     return this.wrapped.getModelParams?.();
+  }
+
+  /**
+   * Get the latest performance metrics from the tracker
+   * @plan PLAN-20250909-TOKTRACK
+   */
+  getPerformanceMetrics() {
+    return this.performanceTracker.getLatestMetrics();
   }
 }

@@ -67,6 +67,19 @@ export interface SessionMetrics {
     totalLinesAdded: number;
     totalLinesRemoved: number;
   };
+  // Token tracking metrics
+  tokenTracking: {
+    tokensPerMinute: number;
+    throttleWaitTimeMs: number;
+    sessionTokenUsage: {
+      input: number;
+      output: number;
+      cache: number;
+      tool: number;
+      thought: number;
+      total: number;
+    };
+  };
 }
 
 const createInitialModelMetrics = (): ModelMetrics => ({
@@ -103,6 +116,19 @@ const createInitialMetrics = (): SessionMetrics => ({
   files: {
     totalLinesAdded: 0,
     totalLinesRemoved: 0,
+  },
+  // Initialize token tracking metrics
+  tokenTracking: {
+    tokensPerMinute: 0,
+    throttleWaitTimeMs: 0,
+    sessionTokenUsage: {
+      input: 0,
+      output: 0,
+      cache: 0,
+      tool: 0,
+      thought: 0,
+      total: 0,
+    },
   },
 });
 
@@ -142,6 +168,26 @@ export class UiTelemetryService extends EventEmitter {
 
   resetLastPromptTokenCount(): void {
     this.#lastPromptTokenCount = 0;
+    this.emit('update', {
+      metrics: this.#metrics,
+      lastPromptTokenCount: this.#lastPromptTokenCount,
+    });
+  }
+
+  // Set token tracking metrics
+  setTokenTrackingMetrics(metrics: {
+    tokensPerMinute: number;
+    throttleWaitTimeMs: number;
+    sessionTokenUsage: {
+      input: number;
+      output: number;
+      cache: number;
+      tool: number;
+      thought: number;
+      total: number;
+    };
+  }) {
+    this.#metrics.tokenTracking = { ...metrics };
     this.emit('update', {
       metrics: this.#metrics,
       lastPromptTokenCount: this.#lastPromptTokenCount,

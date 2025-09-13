@@ -222,3 +222,6 @@ export type { LogEntry as DebugLogEntry } from './debug/index.js';
 
 // Export Storage
 export { Storage } from './config/storage.js';
+
+// Export models
+export * from './config/models.js';

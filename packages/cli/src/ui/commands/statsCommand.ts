@@ -2,6 +2,7 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P06
  */
 
 import { MessageType, HistoryItemStats } from '../types.js';

@@ -35,6 +35,8 @@ import {
   ProviderSwitchEvent,
   ProviderCapabilityEvent,
   KittySequenceOverflowEvent,
+  TokenUsageEvent,
+  PerformanceMetricsEvent,
 } from './types.js';
 import {
   recordApiErrorMetrics,
@@ -483,6 +485,51 @@ export function logKittySequenceOverflow(
   const logger = logs.getLogger(SERVICE_NAME);
   const logRecord: LogRecord = {
     body: `Kitty sequence overflow. Length: ${event.sequence_length}.`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+/**
+ * Logs token usage per conversation turn.
+ * @param config The configuration object.
+ * @param event The TokenUsageEvent to log.
+ */
+export function logTokenUsage(config: Config, event: TokenUsageEvent): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    ...event,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Token usage. Provider: ${event.provider}, ConversationId: ${event.conversationId}, Input: ${event.input}, Output: ${event.output}, Cache: ${event.cache}, Tool: ${event.tool}, Thought: ${event.thought}, Total: ${event.total}.`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+/**
+ * Logs performance metrics such as tokens per minute.
+ * @param config The configuration object.
+ * @param event The PerformanceMetricsEvent to log.
+ */
+export function logPerformanceMetrics(
+  config: Config,
+  event: PerformanceMetricsEvent,
+): void {
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    ...event,
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Performance metrics. Provider: ${event.provider}, TokensPerMinute: ${event.tokensPerMinute}, ThrottleWaitTimeMs: ${event.throttleWaitTimeMs}, TotalRequests: ${event.totalRequests}, ErrorRate: ${event.errorRate}.`,
     attributes,
   };
   logger.emit(logRecord);
