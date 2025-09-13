@@ -81,6 +81,7 @@ import {
   isProQuotaExceededError,
   isGenericQuotaExceededError,
   UserTierId,
+  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import {
   IdeIntegrationNudge,
@@ -709,11 +710,29 @@ const App = (props: AppInternalProps) => {
         const metrics = providerManager.getProviderMetrics?.();
         const usage = providerManager.getSessionTokenUsage?.();
 
-        setTokenMetrics({
+        const newMetrics = {
           tokensPerMinute: metrics?.tokensPerMinute || 0,
           throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
           sessionTokenTotal: usage?.total || 0,
-        });
+        };
+
+        setTokenMetrics(newMetrics);
+
+        // Also update the telemetry service for other components
+        if (usage) {
+          uiTelemetryService.setTokenTrackingMetrics({
+            tokensPerMinute: metrics?.tokensPerMinute || 0,
+            throttleWaitTimeMs: metrics?.throttleWaitTimeMs || 0,
+            sessionTokenUsage: {
+              input: usage.input || 0,
+              output: usage.output || 0,
+              cache: usage.cache || 0,
+              tool: usage.tool || 0,
+              thought: usage.thought || 0,
+              total: usage.total || 0,
+            },
+          });
+        }
       }
     };
 
