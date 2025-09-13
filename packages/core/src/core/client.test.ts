@@ -302,6 +302,7 @@ describe('Gemini Client (client.ts)', () => {
       }),
       getChatCompression: vi.fn().mockReturnValue(undefined),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
+      getEphemeralSetting: vi.fn().mockReturnValue(undefined),
     };
     MockedConfig.mockImplementation(
       () => mockConfigObject as unknown as Config,
