@@ -254,10 +254,9 @@ export class LoggingProviderWrapper implements IProvider {
     // Get stream from wrapped provider
     const stream = this.wrapped.generateChatCompletion(content, tools);
 
-    // Always process stream to extract token metrics
-    // If logging not enabled, process for metrics only
+    // If logging not enabled, just pass through
     if (!this.config.getConversationLoggingEnabled()) {
-      yield* this.processStreamForMetrics(stream);
+      yield* stream;
       return;
     }
 
@@ -310,55 +309,6 @@ export class LoggingProviderWrapper implements IProvider {
     } catch (error) {
       // Log error but don't fail the request
       console.warn('Failed to log conversation request:', error);
-    }
-  }
-
-  /**
-   * Process stream to extract token metrics without logging
-   * @plan PLAN-20250909-TOKTRACK
-   */
-  private async *processStreamForMetrics(
-    stream: AsyncIterableIterator<IContent>,
-  ): AsyncIterableIterator<IContent> {
-    const startTime = performance.now();
-    let latestTokenUsage: UsageStats | undefined;
-
-    try {
-      for await (const chunk of stream) {
-        // Extract token usage from IContent metadata
-        if (chunk && typeof chunk === 'object') {
-          const content = chunk as IContent;
-          if (content.metadata?.usage) {
-            latestTokenUsage = content.metadata.usage;
-          }
-        }
-
-        yield chunk;
-      }
-
-      // Process metrics if we have token usage
-      if (latestTokenUsage) {
-        const duration = performance.now() - startTime;
-        const tokenCounts =
-          this.extractTokenCountsFromTokenUsage(latestTokenUsage);
-
-        // Accumulate token usage for session tracking
-        this.accumulateTokenUsage(tokenCounts);
-
-        // Record performance metrics (TPM tracks output tokens only)
-        const outputTokens = tokenCounts.output_token_count;
-        this.performanceTracker.recordCompletion(
-          duration,
-          null,
-          outputTokens,
-          0,
-        );
-      }
-    } catch (error) {
-      // Record error in performance tracker
-      const duration = performance.now() - startTime;
-      this.performanceTracker.recordError(duration, String(error));
-      throw error;
     }
   }
 
