@@ -45,6 +45,16 @@ import { getSettingsService } from '../../settings/settingsServiceInstance.js';
  */
 type GeminiAuthMode = 'oauth' | 'gemini-api-key' | 'vertex-ai' | 'none';
 
+interface GeminiUsageMetadata {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+}
+
+interface GeminiResponseWithUsage {
+  usageMetadata?: GeminiUsageMetadata;
+}
+
 export class GeminiProvider extends BaseProvider {
   private logger: DebugLogger;
   private authMode: GeminiAuthMode = 'none';
@@ -1050,12 +1060,31 @@ export class GeminiProvider extends BaseProvider {
               (part as { functionCall: FunctionCall }).functionCall,
           ) || [];
 
+      // Extract usage metadata from response
+      const usageMetadata = (response as GeminiResponseWithUsage).usageMetadata;
+
       // Yield text if present
       if (text) {
-        yield {
+        const textContent: IContent = {
           speaker: 'ai',
           blocks: [{ type: 'text', text }],
-        } as IContent;
+        };
+
+        // Add usage metadata if present
+        if (usageMetadata) {
+          textContent.metadata = {
+            usage: {
+              promptTokens: usageMetadata.promptTokenCount || 0,
+              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              totalTokens:
+                usageMetadata.totalTokenCount ||
+                (usageMetadata.promptTokenCount || 0) +
+                  (usageMetadata.candidatesTokenCount || 0),
+            },
+          };
+        }
+
+        yield textContent;
       }
 
       // Yield tool calls if present
@@ -1071,9 +1100,43 @@ export class GeminiProvider extends BaseProvider {
           }),
         );
 
-        yield {
+        const toolCallContent: IContent = {
           speaker: 'ai',
           blocks,
+        };
+
+        // Add usage metadata if present
+        if (usageMetadata) {
+          toolCallContent.metadata = {
+            usage: {
+              promptTokens: usageMetadata.promptTokenCount || 0,
+              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              totalTokens:
+                usageMetadata.totalTokenCount ||
+                (usageMetadata.promptTokenCount || 0) +
+                  (usageMetadata.candidatesTokenCount || 0),
+            },
+          };
+        }
+
+        yield toolCallContent;
+      }
+
+      // If we have usage metadata but no content blocks, emit a metadata-only response
+      if (usageMetadata && !text && functionCalls.length === 0) {
+        yield {
+          speaker: 'ai',
+          blocks: [],
+          metadata: {
+            usage: {
+              promptTokens: usageMetadata.promptTokenCount || 0,
+              completionTokens: usageMetadata.candidatesTokenCount || 0,
+              totalTokens:
+                usageMetadata.totalTokenCount ||
+                (usageMetadata.promptTokenCount || 0) +
+                  (usageMetadata.candidatesTokenCount || 0),
+            },
+          },
         } as IContent;
       }
     }

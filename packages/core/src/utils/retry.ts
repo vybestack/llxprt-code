@@ -2,6 +2,7 @@
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P08
  */
 
 import { AuthType } from '../core/contentGenerator.js';
@@ -9,6 +10,7 @@ import {
   isProQuotaExceededError,
   isGenericQuotaExceededError,
 } from './quotaErrorDetection.js';
+import { DebugLogger } from '../debug/index.js';
 
 export interface HttpError extends Error {
   status?: number;
@@ -24,6 +26,7 @@ export interface RetryOptions {
     error?: unknown,
   ) => Promise<string | boolean | null>;
   authType?: string;
+  trackThrottleWaitTime?: (waitTimeMs: number) => void;
 }
 
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -86,6 +89,7 @@ export async function retryWithBackoff<T>(
     ...options,
   };
 
+  const logger = new DebugLogger('llxprt:retry');
   let attempt = 0;
   let currentDelay = initialDelayMs;
   let consecutive429Count = 0;
@@ -119,7 +123,9 @@ export async function retryWithBackoff<T>(
           }
         } catch (fallbackError) {
           // If fallback fails, continue with original error
-          console.warn('Fallback to Flash model failed:', fallbackError);
+          logger.debug(
+            () => `Fallback to Flash model failed: ${fallbackError}`,
+          );
         }
       }
 
@@ -146,7 +152,9 @@ export async function retryWithBackoff<T>(
           }
         } catch (fallbackError) {
           // If fallback fails, continue with original error
-          console.warn('Fallback to Flash model failed:', fallbackError);
+          logger.debug(
+            () => `Fallback to Flash model failed: ${fallbackError}`,
+          );
         }
       }
 
@@ -178,7 +186,9 @@ export async function retryWithBackoff<T>(
           }
         } catch (fallbackError) {
           // If fallback fails, continue with original error
-          console.warn('Fallback to Flash model failed:', fallbackError);
+          logger.debug(
+            () => `Fallback to Flash model failed: ${fallbackError}`,
+          );
         }
       }
 
@@ -192,11 +202,19 @@ export async function retryWithBackoff<T>(
 
       if (delayDurationMs > 0) {
         // Respect Retry-After header if present and parsed
-        console.warn(
-          `Attempt ${attempt} failed with status ${delayErrorStatus ?? 'unknown'}. Retrying after explicit delay of ${delayDurationMs}ms...`,
-          error,
+        logger.debug(
+          () =>
+            `Attempt ${attempt} failed with status ${delayErrorStatus ?? 'unknown'}. Retrying after explicit delay of ${delayDurationMs}ms... Error: ${error}`,
         );
         await delay(delayDurationMs);
+        // Track throttling wait time when explicitly delaying
+        if (options?.trackThrottleWaitTime) {
+          logger.debug(
+            () =>
+              `Tracking throttle wait time from Retry-After header: ${delayDurationMs}ms`,
+          );
+          options.trackThrottleWaitTime(delayDurationMs);
+        }
         // Reset currentDelay for next potential non-429 error, or if Retry-After is not present next time
         currentDelay = initialDelayMs;
       } else {
@@ -206,6 +224,14 @@ export async function retryWithBackoff<T>(
         const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
         const delayWithJitter = Math.max(0, currentDelay + jitter);
         await delay(delayWithJitter);
+        // Track throttling wait time for exponential backoff
+        if (options?.trackThrottleWaitTime) {
+          logger.debug(
+            () =>
+              `Tracking throttle wait time from exponential backoff: ${delayWithJitter}ms`,
+          );
+          options.trackThrottleWaitTime(delayWithJitter);
+        }
         currentDelay = Math.min(maxDelayMs, currentDelay * 2);
       }
     }
@@ -309,31 +335,34 @@ function logRetryAttempt(
   error: unknown,
   errorStatus?: number,
 ): void {
+  const logger = new DebugLogger('llxprt:retry');
   let message = `Attempt ${attempt} failed. Retrying with backoff...`;
   if (errorStatus) {
     message = `Attempt ${attempt} failed with status ${errorStatus}. Retrying with backoff...`;
   }
 
   if (errorStatus === 429) {
-    console.warn(message, error);
+    logger.debug(() => `${message} Error: ${error}`);
   } else if (errorStatus && errorStatus >= 500 && errorStatus < 600) {
-    console.error(message, error);
+    logger.error(() => `${message} Error: ${error}`);
   } else if (error instanceof Error) {
     // Fallback for errors that might not have a status but have a message
     if (error.message.includes('429')) {
-      console.warn(
-        `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff...`,
-        error,
+      logger.debug(
+        () =>
+          `Attempt ${attempt} failed with 429 error (no Retry-After header). Retrying with backoff... Error: ${error}`,
       );
     } else if (error.message.match(/5\d{2}/)) {
-      console.error(
-        `Attempt ${attempt} failed with 5xx error. Retrying with backoff...`,
-        error,
+      logger.error(
+        () =>
+          `Attempt ${attempt} failed with 5xx error. Retrying with backoff... Error: ${error}`,
       );
     } else {
-      console.warn(message, error); // Default to warn for other errors
+      logger.debug(() => `${message} Error: ${error}`); // Default to debug for other errors
     }
   } else {
-    console.warn(message, error); // Default to warn if error type is unknown
+    logger.debug(() => `${message} Error: ${error}`); // Default to debug if error type is unknown
   }
 }
+
+// @plan marker: PLAN-20250909-TOKTRACK.P05

@@ -11,6 +11,7 @@
 import { IProvider } from './IProvider.js';
 import { IModel } from './IModel.js';
 import { IContent } from '../services/history/IContent.js';
+import { DebugLogger } from '../debug/index.js';
 import {
   AuthPrecedenceResolver,
   AuthPrecedenceConfig,
@@ -49,6 +50,9 @@ export abstract class BaseProvider implements IProvider {
   private authCacheTimestamp?: number;
   private readonly AUTH_CACHE_DURATION = 60000; // 1 minute in milliseconds
 
+  // Callback for tracking throttle wait times (set by LoggingProviderWrapper)
+  protected throttleTracker?: (waitTimeMs: number) => void;
+
   constructor(
     config: BaseProviderConfig,
     providerConfig?: IProviderConfig,
@@ -79,6 +83,16 @@ export abstract class BaseProvider implements IProvider {
       precedenceConfig,
       config.oauthManager,
     );
+  }
+
+  /**
+   * Set throttle tracking callback (used by LoggingProviderWrapper)
+   */
+  setThrottleTracker(tracker: (waitTimeMs: number) => void): void {
+    this.throttleTracker = tracker;
+    // Debug logging to verify tracker is being set
+    const logger = new DebugLogger('llxprt:provider:base');
+    logger.debug(() => `Throttle tracker set for provider`);
   }
 
   /**

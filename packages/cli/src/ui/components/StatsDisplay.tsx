@@ -2,6 +2,9 @@
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P06
+ * @plan PLAN-20250909-TOKTRACK.P16
+ * @requirement REQ-INT-001.2
  */
 
 import React from 'react';
@@ -10,6 +13,10 @@ import Gradient from 'ink-gradient';
 import { Colors } from '../colors.js';
 import { themeManager } from '../themes/theme-manager.js';
 import { formatDuration } from '../utils/formatters.js';
+import {
+  formatTokensPerMinute,
+  formatThrottleTime,
+} from '../utils/tokenFormatters.js';
 import { useSessionStats, ModelMetrics } from '../contexts/SessionContext.js';
 import {
   getStatusColor,
@@ -19,6 +26,7 @@ import {
   USER_AGREEMENT_RATE_MEDIUM,
 } from '../utils/displayUtils.js';
 import { computeSessionStats } from '../utils/computeStats.js';
+import { getProviderManager } from '../../providers/providerManagerInstance.js';
 
 // A more flexible and powerful StatRow component
 interface StatRowProps {
@@ -167,6 +175,21 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
   const { models, tools, files } = metrics;
   const computed = computeSessionStats(metrics);
 
+  // Get token tracking metrics from provider manager
+  const providerManager = getProviderManager();
+  const providerMetrics = providerManager?.getProviderMetrics?.() || {
+    tokensPerMinute: 0,
+    throttleWaitTimeMs: 0,
+  };
+  const sessionUsage = providerManager?.getSessionTokenUsage?.() || {
+    input: 0,
+    output: 0,
+    cache: 0,
+    tool: 0,
+    thought: 0,
+    total: 0,
+  };
+
   const successThresholds = {
     green: TOOL_SUCCESS_RATE_HIGH,
     yellow: TOOL_SUCCESS_RATE_MEDIUM,
@@ -224,10 +247,8 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
               <StatRow title="Tool Calls:">
                 <Text color={Colors.Foreground}>
                   {tools.totalCalls} ({' '}
-                  <Text color={Colors.AccentGreen}>
-                    ✔ {tools.totalSuccess}
-                  </Text>{' '}
-                  <Text color={Colors.AccentRed}>✖ {tools.totalFail}</Text> )
+                  <Text color={Colors.AccentGreen}>{tools.totalSuccess}</Text>{' '}
+                  <Text color={Colors.AccentRed}> {tools.totalFail}</Text> )
                 </Text>
               </StatRow>
               <StatRow title="Success Rate:">
@@ -290,6 +311,25 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
         </SubStatRow>
       </Section>
 
+      {/* Token Tracking Section */}
+      <Section title="Token Tracking">
+        <StatRow title="Tokens Per Minute:">
+          <Text color={Colors.Foreground}>
+            {formatTokensPerMinute(providerMetrics.tokensPerMinute || 0)}
+          </Text>
+        </StatRow>
+        <StatRow title="Throttle Wait Time:">
+          <Text color={Colors.Foreground}>
+            {formatThrottleTime(providerMetrics.throttleWaitTimeMs || 0)}
+          </Text>
+        </StatRow>
+        <SubStatRow title="Session Token Usage:">
+          <Text color={Colors.Foreground}>
+            {`Session Tokens - Input: ${sessionUsage.input.toLocaleString()}, Output: ${sessionUsage.output.toLocaleString()}, Cache: ${sessionUsage.cache.toLocaleString()}, Tool: ${sessionUsage.tool.toLocaleString()}, Thought: ${sessionUsage.thought.toLocaleString()}, Total: ${sessionUsage.total.toLocaleString()}`}
+          </Text>
+        </SubStatRow>
+      </Section>
+
       {Object.keys(models).length > 0 && (
         <ModelUsageTable
           models={models}
@@ -300,3 +340,7 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
     </Box>
   );
 };
+
+/**
+ * @plan PLAN-20250909-TOKTRACK.P05
+ */

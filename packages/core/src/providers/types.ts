@@ -2,6 +2,7 @@
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P04
  */
 
 // Re-export the unified interfaces with backward compatible names
@@ -49,6 +50,9 @@ export interface ToolCall {
   id: string;
 }
 
+/**
+ * @plan PLAN-20250909-TOKTRACK.P08
+ */
 export interface ProviderPerformanceMetrics {
   providerName: string;
   totalRequests: number;
@@ -56,9 +60,19 @@ export interface ProviderPerformanceMetrics {
   averageLatency: number;
   timeToFirstToken: number | null;
   tokensPerSecond: number;
+  tokensPerMinute: number;
+  throttleWaitTimeMs: number;
   chunksReceived: number;
   errorRate: number;
   errors: Array<{ timestamp: number; duration: number; error: string }>;
+  sessionTokenUsage: {
+    input: number;
+    output: number;
+    cache: number;
+    tool: number;
+    thought: number;
+    total: number;
+  };
 }
 
 export interface ProviderComparison {

@@ -2,18 +2,25 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P06a
+ * @plan PLAN-20250909-TOKTRACK.P08
  */
 
 import type { ProviderPerformanceMetrics } from '../types.js';
+import { DebugLogger } from '../../debug/index.js';
 
 /**
  * Performance tracking utility for provider operations
  */
 export class ProviderPerformanceTracker {
   private metrics: ProviderPerformanceMetrics;
+  private tokenTimestamps: Array<{ timestamp: number; tokenCount: number }>;
+  private logger: DebugLogger;
 
   constructor(private providerName: string) {
     this.metrics = this.initializeMetrics();
+    this.tokenTimestamps = [];
+    this.logger = new DebugLogger('llxprt:performance:tracker');
   }
 
   private initializeMetrics(): ProviderPerformanceMetrics {
@@ -24,9 +31,19 @@ export class ProviderPerformanceTracker {
       averageLatency: 0,
       timeToFirstToken: null,
       tokensPerSecond: 0,
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
       chunksReceived: 0,
       errorRate: 0,
       errors: [],
+      sessionTokenUsage: {
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
+      },
     };
   }
 
@@ -63,6 +80,10 @@ export class ProviderPerformanceTracker {
     }
 
     this.metrics.chunksReceived = chunkCount;
+
+    // Track token timestamps for calculating TPM
+    this.tokenTimestamps.push({ timestamp: Date.now(), tokenCount });
+    this.calculateTokensPerMinute();
   }
 
   /**
@@ -81,6 +102,17 @@ export class ProviderPerformanceTracker {
   }
 
   /**
+   * Track throttle wait time from 429 retries
+   */
+  trackThrottleWaitTime(waitTimeMs: number): void {
+    this.metrics.throttleWaitTimeMs += waitTimeMs;
+    this.logger.debug(
+      () =>
+        `Tracked ${waitTimeMs}ms throttle wait. Total: ${this.metrics.throttleWaitTimeMs}ms for ${this.providerName}`,
+    );
+  }
+
+  /**
    * Get current performance metrics
    */
   getLatestMetrics(): ProviderPerformanceMetrics {
@@ -92,14 +124,73 @@ export class ProviderPerformanceTracker {
    */
   reset(): void {
     this.metrics = this.initializeMetrics();
+    this.tokenTimestamps = [];
   }
 
   /**
-   * Estimate token count from text content (rough approximation)
+   * Calculate tokens per minute based on recent token usage
    */
-  estimateTokenCount(text: string): number {
-    // Rough token estimation (actual tokenization would be provider-specific)
-    return Math.ceil(text.length / 4); // Approximate tokens per character
+  private calculateTokensPerMinute(): void {
+    const now = Date.now();
+    // Filter to keep only entries within last 60 seconds
+    this.tokenTimestamps = this.tokenTimestamps.filter(
+      (entry) => now - entry.timestamp <= 60000,
+    );
+
+    // Sum token counts from filtered entries
+    const totalRecentTokens = this.tokenTimestamps.reduce(
+      (sum, entry) => sum + entry.tokenCount,
+      0,
+    );
+
+    // Calculate actual time span in minutes
+    let timeSpanInMinutes = 1; // Default to 1 minute
+    if (this.tokenTimestamps.length > 1) {
+      const timestamps = this.tokenTimestamps
+        .map((entry) => entry.timestamp)
+        .sort((a, b) => a - b);
+      const oldestTimestamp = timestamps[0];
+      const newestTimestamp = timestamps[timestamps.length - 1];
+      timeSpanInMinutes = (newestTimestamp - oldestTimestamp) / 60000;
+
+      // When timeSpanInMinutes is 0 (because all timestamps are identical),
+      // but we have multiple token counts, calculate rate as if tokens were
+      // processed over a minimal time period to show activity
+      if (timeSpanInMinutes <= 0) {
+        // For identical timestamps with multiple entries, assume minimum processing time
+        // This represents the theoretical maximum rate for the tokens processed
+        timeSpanInMinutes = 0.001; // 60ms minimum observable time unit
+      }
+    } else if (this.tokenTimestamps.length === 0) {
+      // Handle case when there are no timestamp entries
+      this.metrics.tokensPerMinute = 0;
+      return;
+    } else if (this.tokenTimestamps.length === 1) {
+      // For a single token record, use a minimum time span to ensure non-zero TPM
+      timeSpanInMinutes = 0.001; // 60ms minimum observable time unit
+    }
+
+    // Update metrics with calculated tokens per minute as a rate
+    // Ensure that we never divide by zero or get NaN
+    if (
+      timeSpanInMinutes > 0 &&
+      !isNaN(totalRecentTokens) &&
+      isFinite(totalRecentTokens / timeSpanInMinutes)
+    ) {
+      this.metrics.tokensPerMinute = totalRecentTokens / timeSpanInMinutes;
+    } else {
+      this.metrics.tokensPerMinute = 0;
+    }
+  }
+
+  /**
+   * Add throttle wait time to metrics
+   */
+  addThrottleWaitTime(waitTimeMs: number): void {
+    // Only add positive wait times
+    if (waitTimeMs > 0) {
+      this.metrics.throttleWaitTimeMs += waitTimeMs;
+    }
   }
 
   /**

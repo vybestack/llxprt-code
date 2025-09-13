@@ -66,4 +66,35 @@ export interface IProviderManager {
    * Set the server tools provider
    */
   setServerToolsProvider(provider: IProvider | null): void;
+
+  /**
+   * Accumulate token usage for a session
+   */
+  accumulateSessionTokens(
+    providerName: string,
+    usage: {
+      input: number;
+      output: number;
+      cache: number;
+      tool: number;
+      thought: number;
+    },
+  ): void;
+
+  /**
+   * Get token usage for the current session
+   */
+  getSessionTokenUsage(): {
+    input: number;
+    output: number;
+    cache: number;
+    tool: number;
+    thought: number;
+    total: number;
+  };
+
+  /**
+   * Reset token usage for the current session
+   */
+  resetSessionTokenUsage(): void;
 }

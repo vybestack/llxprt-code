@@ -2,6 +2,7 @@
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P08
  */
 
 import { GenerateContentResponseUsageMetadata } from '@google/genai';
@@ -449,6 +450,9 @@ export class ProviderSwitchEvent {
   }
 }
 
+/**
+ * @plan PLAN-20250909-TOKTRACK.P10
+ */
 export class EnhancedConversationResponseEvent extends ConversationResponseEvent {
   provider_context: ProviderContext;
   performance_metrics: ProviderPerformanceMetrics;
@@ -496,9 +500,19 @@ export class EnhancedConversationResponseEvent extends ConversationResponseEvent
       averageLatency: 0,
       timeToFirstToken: null,
       tokensPerSecond: 0,
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
       chunksReceived: 0,
       errorRate: 0,
       errors: [],
+      sessionTokenUsage: {
+        input: 0,
+        output: 0,
+        cache: 0,
+        tool: 0,
+        thought: 0,
+        total: 0,
+      },
     };
   }
 
@@ -554,6 +568,69 @@ export class KittySequenceOverflowEvent {
   }
 }
 
+// TokenUsageEvent for tracking token usage
+export class TokenUsageEvent {
+  'event.name': 'token_usage';
+  'event.timestamp': string;
+  provider: string;
+  conversationId: string;
+  input: number;
+  output: number;
+  cache: number;
+  tool: number;
+  thought: number;
+  total: number;
+
+  constructor(
+    provider: string,
+    conversationId: string,
+    input: number,
+    output: number,
+    cache: number,
+    tool: number,
+    thought: number,
+    total: number,
+  ) {
+    this['event.name'] = 'token_usage';
+    this['event.timestamp'] = new Date().toISOString();
+    this.provider = provider;
+    this.conversationId = conversationId;
+    this.input = input;
+    this.output = output;
+    this.cache = cache;
+    this.tool = tool;
+    this.thought = thought;
+    this.total = total;
+  }
+}
+
+// PerformanceMetricsEvent for tracking performance metrics
+export class PerformanceMetricsEvent {
+  'event.name': 'performance_metrics';
+  'event.timestamp': string;
+  provider: string;
+  tokensPerMinute: number;
+  throttleWaitTimeMs: number;
+  totalRequests: number;
+  errorRate: number;
+
+  constructor(
+    provider: string,
+    tokensPerMinute: number,
+    throttleWaitTimeMs: number,
+    totalRequests: number,
+    errorRate: number,
+  ) {
+    this['event.name'] = 'performance_metrics';
+    this['event.timestamp'] = new Date().toISOString();
+    this.provider = provider;
+    this.tokensPerMinute = tokensPerMinute;
+    this.throttleWaitTimeMs = throttleWaitTimeMs;
+    this.totalRequests = totalRequests;
+    this.errorRate = errorRate;
+  }
+}
+
 export type TelemetryEvent =
   | StartSessionEvent
   | EndSessionEvent
@@ -572,4 +649,6 @@ export type TelemetryEvent =
   | EnhancedConversationResponseEvent
   | ProviderSwitchEvent
   | ProviderCapabilityEvent
-  | KittySequenceOverflowEvent;
+  | KittySequenceOverflowEvent
+  | TokenUsageEvent
+  | PerformanceMetricsEvent;

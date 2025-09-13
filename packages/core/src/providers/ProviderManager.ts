@@ -2,6 +2,7 @@
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
+ * @plan PLAN-20250909-TOKTRACK.P08
  */
 
 import { IProvider } from './IProvider.js';
@@ -29,7 +30,21 @@ export class ProviderManager implements IProviderManager {
   private serverToolsProvider: IProvider | null;
   private config?: Config;
   private providerCapabilities: Map<string, ProviderCapabilities> = new Map();
-  private currentConversationId?: string;
+  private sessionTokenUsage: {
+    input: number;
+    output: number;
+    cache: number;
+    tool: number;
+    thought: number;
+    total: number;
+  } = {
+    input: 0,
+    output: 0,
+    cache: 0,
+    tool: 0,
+    thought: 0,
+    total: 0,
+  };
 
   constructor() {
     this.providers = new Map<string, IProvider>();
@@ -50,9 +65,7 @@ export class ProviderManager implements IProviderManager {
   }
 
   private updateProviderWrapping(): void {
-    // Re-wrap all providers based on current logging state
-    const loggingEnabled =
-      this.config?.getConversationLoggingEnabled() ?? false;
+    // Re-wrap all providers (ALWAYS wrap for token tracking)
     const providers = new Map(this.providers);
 
     for (const [name, provider] of providers) {
@@ -62,10 +75,10 @@ export class ProviderManager implements IProviderManager {
         baseProvider = provider.wrappedProvider as IProvider;
       }
 
-      // Re-wrap based on current logging state
+      // ALWAYS wrap with LoggingProviderWrapper for token tracking
       let finalProvider = baseProvider;
-      if (loggingEnabled) {
-        finalProvider = new LoggingProviderWrapper(baseProvider, this.config!);
+      if (this.config) {
+        finalProvider = new LoggingProviderWrapper(baseProvider, this.config);
       }
 
       this.providers.set(name, finalProvider);
@@ -78,9 +91,10 @@ export class ProviderManager implements IProviderManager {
   }
 
   registerProvider(provider: IProvider): void {
-    // Wrap provider with logging if conversation logging is enabled
+    // ALWAYS wrap provider to enable token tracking
+    // (LoggingProviderWrapper handles both token tracking AND conversation logging)
     let finalProvider = provider;
-    if (this.config?.getConversationLoggingEnabled()) {
+    if (this.config) {
       finalProvider = new LoggingProviderWrapper(provider, this.config);
     }
 
@@ -395,17 +409,99 @@ export class ProviderManager implements IProviderManager {
     return score / totalChecks;
   }
 
-  // Public API methods for provider capabilities
+  /**
+   * Accumulate token usage for the current session
+   */
+  accumulateSessionTokens(
+    providerName: string,
+    usage: {
+      input: number;
+      output: number;
+      cache: number;
+      tool: number;
+      thought: number;
+    },
+  ): void {
+    // Only accumulate non-negative values
+    this.sessionTokenUsage.input += Math.max(0, usage.input || 0);
+    this.sessionTokenUsage.output += Math.max(0, usage.output || 0);
+    this.sessionTokenUsage.cache += Math.max(0, usage.cache || 0);
+    this.sessionTokenUsage.tool += Math.max(0, usage.tool || 0);
+    this.sessionTokenUsage.thought += Math.max(0, usage.thought || 0);
+    this.sessionTokenUsage.total +=
+      Math.max(0, usage.input || 0) +
+      Math.max(0, usage.output || 0) +
+      Math.max(0, usage.cache || 0) +
+      Math.max(0, usage.tool || 0) +
+      Math.max(0, usage.thought || 0);
+  }
 
-  getCurrentConversationId(): string {
-    if (!this.currentConversationId) {
-      this.currentConversationId = this.generateConversationId();
+  /**
+   * Reset session token usage counters
+   */
+  resetSessionTokenUsage(): void {
+    this.sessionTokenUsage = {
+      input: 0,
+      output: 0,
+      cache: 0,
+      tool: 0,
+      thought: 0,
+      total: 0,
+    };
+  }
+
+  /**
+   * Get current session token usage
+   */
+  getSessionTokenUsage(): {
+    input: number;
+    output: number;
+    cache: number;
+    tool: number;
+    thought: number;
+    total: number;
+  } {
+    // Validate and replace any NaN or undefined values with 0
+    return {
+      input: this.sessionTokenUsage.input || 0,
+      output: this.sessionTokenUsage.output || 0,
+      cache: this.sessionTokenUsage.cache || 0,
+      tool: this.sessionTokenUsage.tool || 0,
+      thought: this.sessionTokenUsage.thought || 0,
+      total: this.sessionTokenUsage.total || 0,
+    };
+  }
+
+  /**
+   * Get performance metrics for the active provider
+   * @plan PLAN-20250909-TOKTRACK
+   */
+  getProviderMetrics(providerName?: string) {
+    const name = providerName || this.getActiveProvider()?.name;
+    if (!name) return null;
+
+    const provider = this.providers.get(name);
+    if (!provider) return null;
+
+    // Check if provider has getPerformanceMetrics method (LoggingProviderWrapper)
+    if (
+      'getPerformanceMetrics' in provider &&
+      typeof provider.getPerformanceMetrics === 'function'
+    ) {
+      return provider.getPerformanceMetrics();
     }
-    return this.currentConversationId;
+
+    // Return default metrics if provider doesn't support performance tracking
+    return {
+      tokensPerMinute: 0,
+      throttleWaitTimeMs: 0,
+      totalTokens: 0,
+      totalRequests: 0,
+    };
   }
 
   resetConversationContext(): void {
-    this.currentConversationId = this.generateConversationId();
+    // Conversation ID is now managed by the logging system
   }
 
   getProviderCapabilities(
