@@ -239,12 +239,16 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
               <StatRow title="Tool Calls:">
                 <Text color={theme.text.primary}>
                   {tools.totalCalls} ({' '}
-                  <Text color={theme.status.success}>✓ {tools.totalSuccess}</Text>{' '}
+                  <Text color={theme.status.success}>
+                    ✓ {tools.totalSuccess}
+                  </Text>{' '}
                   <Text color={theme.status.error}>x {tools.totalFail}</Text> )
                 </Text>
               </StatRow>
               <StatRow title="Success Rate:">
-                <Text color={successColor}>{computed.successRate.toFixed(1)}%</Text>
+                <Text color={successColor}>
+                  {computed.successRate.toFixed(1)}%
+                </Text>
               </StatRow>
             </>
           )}
@@ -304,17 +308,17 @@ export const StatsDisplay: React.FC<StatsDisplayProps> = ({
       {/* Token Tracking Section */}
       <Section title="Token Tracking">
         <StatRow title="Tokens Per Minute:">
-          <Text color={Colors.Foreground}>
+          <Text color={theme.text.primary}>
             {formatTokensPerMinute(providerMetrics.tokensPerMinute || 0)}
           </Text>
         </StatRow>
         <StatRow title="Throttle Wait Time:">
-          <Text color={Colors.Foreground}>
+          <Text color={theme.text.primary}>
             {formatThrottleTime(providerMetrics.throttleWaitTimeMs || 0)}
           </Text>
         </StatRow>
         <SubStatRow title="Session Token Usage:">
-          <Text color={Colors.Foreground}>
+          <Text color={theme.text.primary}>
             {`Session Tokens - Input: ${sessionUsage.input.toLocaleString()}, Output: ${sessionUsage.output.toLocaleString()}, Cache: ${sessionUsage.cache.toLocaleString()}, Tool: ${sessionUsage.tool.toLocaleString()}, Thought: ${sessionUsage.thought.toLocaleString()}, Total: ${sessionUsage.total.toLocaleString()}`}
           </Text>
         </SubStatRow>
