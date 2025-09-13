@@ -683,7 +683,6 @@ const App = (props: AppInternalProps) => {
   // Poll for token metrics updates
   useEffect(() => {
     const updateTokenMetrics = () => {
-      const providerManager = getProviderManager();
       if (providerManager) {
         const metrics = providerManager.getProviderMetrics?.();
         const usage = providerManager.getSessionTokenUsage?.();
@@ -703,7 +702,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [providerManager]);
 
   // Set up Flash fallback handler
   useEffect(() => {
