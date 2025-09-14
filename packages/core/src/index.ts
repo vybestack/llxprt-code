@@ -50,9 +50,11 @@ export * from './utils/textUtils.js';
 export * from './utils/formatters.js';
 export * from './utils/sanitization.js';
 export * from './utils/unicodeUtils.js';
+export * from './utils/generateContentResponseUtilities.js';
 export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
+export * from './utils/ignorePatterns.js';
 
 // Export auth system
 export * from './auth/token-store.js';
@@ -95,6 +97,7 @@ export * from './prompt-config/types.js';
 export * from './tools/read-file.js';
 export * from './tools/ls.js';
 export * from './tools/grep.js';
+export * from './tools/ripGrep.js';
 export * from './tools/glob.js';
 export * from './tools/edit.js';
 export * from './tools/write-file.js';
@@ -119,6 +122,12 @@ export {
   MCPOAuthCredentials,
   MCPOAuthTokenStorage,
 } from './mcp/oauth-token-storage.js';
+export {
+  BaseTokenStore,
+  MCPOAuthToken as MCPOAuthTokenInterface,
+  MCPOAuthCredentials as MCPOAuthCredentialsInterface,
+} from './mcp/token-store.js';
+export { FileTokenStore } from './mcp/file-token-store.js';
 export type { MCPOAuthConfig } from './mcp/oauth-provider.js';
 export type {
   OAuthAuthorizationServerMetadata,
@@ -210,3 +219,6 @@ export {
 } from './debug/index.js';
 export type { DebugSettings, DebugOutputConfig } from './debug/index.js';
 export type { LogEntry as DebugLogEntry } from './debug/index.js';
+
+// Export Storage
+export { Storage } from './config/storage.js';

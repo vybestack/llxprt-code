@@ -7,6 +7,8 @@ exports[`<SessionSummaryDisplay /> > renders the summary display with a title 1`
 │                                                                                                  │
 │  Interaction Summary                                                                             │
 │  Session ID:                                                                                     │
+│  Tool Calls:                 0 ( ✓ 0 x 0 )                                                       │
+│  Success Rate:               0.0%                                                                │
 │  Code Changes:               +42 -15                                                             │
 │                                                                                                  │
 │  Performance                                                                                     │

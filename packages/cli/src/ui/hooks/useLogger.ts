@@ -1,20 +1,20 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { useState, useEffect } from 'react';
-import { sessionId, Logger } from '@vybestack/llxprt-code-core';
+import { sessionId, Logger, Storage } from '@vybestack/llxprt-code-core';
 
 /**
  * Hook to manage the logger instance.
  */
-export const useLogger = () => {
+export const useLogger = (storage: Storage) => {
   const [logger, setLogger] = useState<Logger | null>(null);
 
   useEffect(() => {
-    const newLogger = new Logger(sessionId);
+    const newLogger = new Logger(sessionId, storage);
     /**
      * Start async initialization, no need to await. Using await slows down the
      * time from launch to see the gemini-cli prompt and it's better to not save
@@ -26,7 +26,7 @@ export const useLogger = () => {
         setLogger(newLogger);
       })
       .catch(() => {});
-  }, []);
+  }, [storage]);
 
   return logger;
 };

@@ -265,14 +265,58 @@ export class ContentConverters {
               matchedByPosition: !!matched,
             },
           );
+          // Safely handle the response field which might not be a valid Record
+          let result: Record<string, unknown> = {};
+          try {
+            if (part.functionResponse.response) {
+              if (
+                typeof part.functionResponse.response === 'object' &&
+                part.functionResponse.response !== null
+              ) {
+                // If it's already an object, use it directly
+                result = part.functionResponse.response as Record<
+                  string,
+                  unknown
+                >;
+              } else if (typeof part.functionResponse.response === 'string') {
+                // If it's a string, try to parse as JSON, otherwise wrap it
+                try {
+                  const parsed = JSON.parse(part.functionResponse.response);
+                  result =
+                    typeof parsed === 'object' && parsed !== null
+                      ? parsed
+                      : { output: part.functionResponse.response };
+                } catch {
+                  // Not valid JSON, wrap the string
+                  result = { output: part.functionResponse.response };
+                }
+              } else {
+                // For other types, stringify and wrap
+                result = { output: String(part.functionResponse.response) };
+              }
+            }
+          } catch (error) {
+            this.logger.warn(
+              () =>
+                `Failed to process functionResponse.response for ${callId}: ${error}`,
+              {
+                originalResponse: part.functionResponse.response,
+                error,
+              },
+            );
+            result = {
+              error: 'Failed to process tool response',
+              output: String(part.functionResponse.response || ''),
+            };
+          }
+
           blocks.push({
             type: 'tool_response',
             callId,
             toolName: (matched?.toolName ||
               part.functionResponse.name ||
               '') as string,
-            result:
-              (part.functionResponse.response as Record<string, unknown>) || {},
+            result,
           });
         } else if ('inlineData' in part && part.inlineData) {
           // Handle inline data (media)

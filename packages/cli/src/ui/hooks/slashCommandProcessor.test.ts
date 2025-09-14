@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -27,8 +27,9 @@ const { mockProcessExit } = vi.hoisted(() => ({
 vi.mock('node:process', () => {
   const mockProcess = {
     exit: mockProcessExit,
-    platform: 'test-platform',
-  };
+    platform: 'sunos',
+    cwd: vi.fn(() => '/fake/dir'),
+  } as unknown as NodeJS.Process;
   return {
     ...mockProcess,
     default: mockProcess,
@@ -77,12 +78,16 @@ import {
   ConfirmShellCommandsActionReturn,
   SlashCommand,
 } from '../commands/types.js';
-import { Config, ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { LoadedSettings } from '../../config/settings.js';
 import { MessageType } from '../types.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
+import {
+  ToolConfirmationOutcome,
+  type Config,
+  type IdeClient,
+} from '@vybestack/llxprt-code-core';
 
 const createTestCommand = (
   overrides: Partial<SlashCommand>,
@@ -98,19 +103,23 @@ describe('useSlashCommandProcessor', () => {
   const mockAddItem = vi.fn();
   const mockClearItems = vi.fn();
   const mockLoadHistory = vi.fn();
-  const mockSetShowHelp = vi.fn();
   const mockOpenAuthDialog = vi.fn();
   const mockSetQuittingMessages = vi.fn();
 
   const mockConfig = {
-    getProjectRoot: vi.fn(() => '/mock/cwd'),
-    getSessionId: vi.fn(() => 'test-session'),
-    getGeminiClient: vi.fn(() => ({
-      setHistory: vi.fn().mockResolvedValue(undefined),
-    })),
-    getExtensions: vi.fn(() => []),
-    getIdeMode: vi.fn(() => false),
-    getIdeClient: vi.fn(() => undefined),
+    getIdeClient: vi.fn().mockReturnValue({
+      addStatusChangeListener: vi.fn(),
+      removeStatusChangeListener: vi.fn(),
+    } as unknown as IdeClient),
+    getProjectRoot: vi.fn().mockReturnValue('/test/project'),
+    getSessionId: vi.fn().mockReturnValue('test-session-id'),
+    getDebugMode: vi.fn().mockReturnValue(false),
+    getTargetDir: vi.fn().mockReturnValue('/test/project'),
+    getUserMemory: vi.fn().mockReturnValue(''),
+    setUserMemory: vi.fn(),
+    getApprovalMode: vi.fn().mockReturnValue('default'),
+    setApprovalMode: vi.fn(),
+    getGeminiClient: vi.fn().mockReturnValue(undefined),
   } as unknown as Config;
 
   const mockSettings = {} as LoadedSettings;
@@ -141,7 +150,6 @@ describe('useSlashCommandProcessor', () => {
         mockClearItems,
         mockLoadHistory,
         vi.fn(), // refreshStatic
-        mockSetShowHelp,
         vi.fn(), // onDebugMessage
         vi.fn(), // openThemeDialog
         mockOpenAuthDialog,
@@ -156,6 +164,7 @@ describe('useSlashCommandProcessor', () => {
         vi.fn(), // openSettingsDialog
         vi.fn(), // toggleVimEnabled
         setIsProcessing,
+        vi.fn(), // setLlxprtMdFileCount
       ),
     );
 
@@ -360,7 +369,15 @@ describe('useSlashCommandProcessor', () => {
         await result.current.handleSlashCommand('/helpcmd');
       });
 
-      expect(mockSetShowHelp).toHaveBeenCalledWith(true);
+      // Should add help item (user input + help dialog)
+      expect(mockAddItem).toHaveBeenCalledTimes(2);
+      expect(mockAddItem).toHaveBeenCalledWith(
+        {
+          type: 'help',
+          timestamp: expect.any(Date),
+        },
+        expect.any(Number),
+      );
     });
 
     it('should handle "load_history" action', async () => {
@@ -864,7 +881,6 @@ describe('useSlashCommandProcessor', () => {
           mockClearItems,
           mockLoadHistory,
           vi.fn(), // refreshStatic
-          mockSetShowHelp,
           vi.fn(), // onDebugMessage
           vi.fn(), // openThemeDialog
           mockOpenAuthDialog,
@@ -872,12 +888,14 @@ describe('useSlashCommandProcessor', () => {
           vi.fn(), // openProviderDialog
           vi.fn(), // openProviderModelDialog
           vi.fn(), // openLoadProfileDialog
+          vi.fn(), // openToolsDialog
           vi.fn(), // toggleCorgiMode
           mockSetQuittingMessages,
           vi.fn(), // openPrivacyNotice
           vi.fn(), // openSettingsDialog
           vi.fn().mockResolvedValue(false), // toggleVimEnabled
           vi.fn(), // setIsProcessing
+          vi.fn(), // setLlxprtMdFileCount
         ),
       );
 

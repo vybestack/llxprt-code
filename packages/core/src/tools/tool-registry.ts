@@ -5,7 +5,13 @@
  */
 
 import { FunctionDeclaration } from '@google/genai';
-import { AnyDeclarativeTool, Kind, ToolResult, BaseTool } from './tools.js';
+import {
+  AnyDeclarativeTool,
+  Kind,
+  ToolResult,
+  BaseTool,
+  BaseToolInvocation,
+} from './tools.js';
 import { ToolContext } from './tool-context.js';
 import { Config } from '../config/config.js';
 import { spawn } from 'node:child_process';
@@ -14,6 +20,8 @@ import { connectAndDiscover } from './mcp-client.js';
 import { McpClientManager } from './mcp-client-manager.js';
 import { DiscoveredMCPTool } from './mcp-tool.js';
 import { parse } from 'shell-quote';
+import { ToolErrorType } from './tool-error.js';
+import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
 
 type ToolParams = Record<string, unknown>;
@@ -54,7 +62,15 @@ Signal: Signal number or \`(none)\` if no signal was received.
     );
   }
 
-  async execute(params: ToolParams): Promise<ToolResult> {
+  override build(params: ToolParams): DiscoveredToolInvocation {
+    return new DiscoveredToolInvocation(this, params);
+  }
+
+  async execute(
+    params: ToolParams,
+    _signal: AbortSignal,
+    _updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
     const callCommand = this.config.getToolCallCommand()!;
     const child = spawn(callCommand, [this.name]);
     child.stdin.write(JSON.stringify(params));
@@ -117,6 +133,10 @@ Signal: Signal number or \`(none)\` if no signal was received.
       return {
         llmContent,
         returnDisplay: llmContent,
+        error: {
+          message: llmContent,
+          type: ToolErrorType.DISCOVERED_TOOL_EXECUTION_ERROR,
+        },
       };
     }
 
@@ -124,6 +144,29 @@ Signal: Signal number or \`(none)\` if no signal was received.
       llmContent: stdout,
       returnDisplay: stdout,
     };
+  }
+}
+
+class DiscoveredToolInvocation extends BaseToolInvocation<
+  ToolParams,
+  ToolResult
+> {
+  constructor(
+    private readonly tool: DiscoveredTool,
+    params: ToolParams,
+  ) {
+    super(params);
+  }
+
+  getDescription(): string {
+    return safeJsonStringify(this.params);
+  }
+
+  async execute(
+    signal: AbortSignal,
+    updateOutput?: (output: string) => void,
+  ): Promise<ToolResult> {
+    return this.tool.execute(this.params, signal, updateOutput);
   }
 }
 
@@ -224,12 +267,14 @@ export class ToolRegistry {
       }
     }
 
+    // Temporarily swap tools to newTools so MCP tools get registered to the right map
+    this.tools = newTools;
+
     // Discover MCP tools into newTools
     await this.mcpClientManager.discoverAllMcpTools();
 
-    // Only NOW do we atomically swap the reference
-    // This ensures getFunctionDeclarations() never sees a partial tool map
-    this.tools = newTools;
+    // The tools are now already in the right place (this.tools === newTools)
+    // No need to swap again
 
     // At this point, the update is truly atomic from the perspective of getFunctionDeclarations()
   }
@@ -462,10 +507,16 @@ export class ToolRegistry {
     const disabledTools =
       (ephemeralSettings['disabled-tools'] as string[]) || [];
 
+    // Also get globally excluded tools from configuration
+    const excludedTools = this.config.getExcludeTools() || [];
+
     const declarations: FunctionDeclaration[] = [];
     this.tools.forEach((tool) => {
-      // Skip disabled tools
-      if (!disabledTools.includes(tool.name)) {
+      // Skip disabled tools and excluded tools
+      if (
+        !disabledTools.includes(tool.name) &&
+        !excludedTools.includes(tool.name)
+      ) {
         declarations.push(tool.schema);
       }
     });
@@ -489,12 +540,20 @@ export class ToolRegistry {
   }
 
   /**
+   * Returns an array of all registered and discovered tool names.
+   */
+  getAllToolNames(): string[] {
+    return Array.from(this.tools.keys());
+  }
+
+  /**
    * Returns an array of all registered and discovered tool instances.
    */
   getAllTools(): AnyDeclarativeTool[] {
-    return Array.from(this.tools.values()).sort((a, b) =>
+    const tools = Array.from(this.tools.values()).sort((a, b) =>
       a.displayName.localeCompare(b.displayName),
     );
+    return tools;
   }
 
   /**
@@ -505,8 +564,15 @@ export class ToolRegistry {
     const disabledTools =
       (ephemeralSettings['disabled-tools'] as string[]) || [];
 
+    // Also get globally excluded tools from configuration
+    const excludedTools = this.config.getExcludeTools() || [];
+
     return Array.from(this.tools.values())
-      .filter((tool) => !disabledTools.includes(tool.name))
+      .filter(
+        (tool) =>
+          !disabledTools.includes(tool.name) &&
+          !excludedTools.includes(tool.name),
+      )
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 

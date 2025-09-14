@@ -12,12 +12,14 @@ interface LoadProfileDialogProps {
   profiles: string[];
   onSelect: (profileName: string) => void;
   onClose: () => void;
+  isLoading?: boolean;
 }
 
 export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
   profiles,
   onSelect,
   onClose,
+  isLoading = false,
 }) => {
   const [index, setIndex] = useState(0);
 
@@ -62,6 +64,19 @@ export const LoadProfileDialog: React.FC<LoadProfileDialogProps> = ({
       if (i < profiles.length) rowItems.push(renderItem(profiles[i], i));
     }
     grid.push(<Box key={r}>{rowItems}</Box>);
+  }
+
+  if (isLoading) {
+    return (
+      <Box
+        borderStyle="round"
+        borderColor={Colors.Gray}
+        flexDirection="column"
+        padding={1}
+      >
+        <Text color={Colors.Foreground}>Loading profiles...</Text>
+      </Box>
+    );
   }
 
   if (profiles.length === 0) {

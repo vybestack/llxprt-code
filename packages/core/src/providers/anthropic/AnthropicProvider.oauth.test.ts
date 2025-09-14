@@ -45,6 +45,47 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
       }
       return tools;
     }),
+    convertGeminiToFormat: vi.fn((geminiTools, format = 'openai') => {
+      if (!geminiTools || !Array.isArray(geminiTools)) return undefined;
+
+      if (format === 'anthropic') {
+        const tools = [];
+        for (const group of geminiTools) {
+          if (group.functionDeclarations) {
+            for (const func of group.functionDeclarations) {
+              tools.push({
+                name: func.name,
+                description: func.description || '',
+                input_schema: {
+                  type: 'object',
+                  properties: func.parameters?.properties || {},
+                  required: func.parameters?.required || [],
+                },
+              });
+            }
+          }
+        }
+        return tools;
+      }
+
+      // For other formats (openai, etc.), return OpenAI format
+      const tools = [];
+      for (const group of geminiTools) {
+        if (group.functionDeclarations) {
+          for (const func of group.functionDeclarations) {
+            tools.push({
+              type: 'function',
+              function: {
+                name: func.name,
+                description: func.description || '',
+                parameters: func.parameters || {},
+              },
+            });
+          }
+        }
+      }
+      return tools;
+    }),
   })),
 }));
 
@@ -291,7 +332,7 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       expect(mockOAuthManager.getToken).toHaveBeenCalledWith('anthropic');
     });
 
-    it('should throw error when getting models fails due to no authentication', async () => {
+    it('should return empty array when no authentication is available', async () => {
       // Mock OAuth manager returning null
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 

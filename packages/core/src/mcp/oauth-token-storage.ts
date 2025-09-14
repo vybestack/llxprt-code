@@ -4,57 +4,41 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
-import { getErrorMessage } from '../utils/errors.js';
+import { FileTokenStore } from './file-token-store.js';
+import {
+  BaseTokenStore,
+  MCPOAuthToken,
+  MCPOAuthCredentials,
+} from './token-store.js';
 
-/**
- * Interface for MCP OAuth tokens.
- */
-export interface MCPOAuthToken {
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt?: number;
-  tokenType: string;
-  scope?: string;
-}
-
-/**
- * Interface for stored MCP OAuth credentials.
- */
-export interface MCPOAuthCredentials {
-  serverName: string;
-  token: MCPOAuthToken;
-  clientId?: string;
-  tokenUrl?: string;
-  mcpServerUrl?: string;
-  updatedAt: number;
-}
+// Re-export types for backward compatibility
+export type { MCPOAuthToken, MCPOAuthCredentials };
 
 /**
  * Class for managing MCP OAuth token storage and retrieval.
+ * This class provides backward compatibility with the existing API while
+ * delegating to the new BaseTokenStore architecture.
  */
 export class MCPOAuthTokenStorage {
-  private static readonly TOKEN_FILE = 'mcp-oauth-tokens.json';
-  private static readonly CONFIG_DIR = '.gemini';
+  private static tokenStore: BaseTokenStore = new FileTokenStore();
 
   /**
-   * Get the path to the token storage file.
+   * Set a custom token store implementation.
+   * This allows for dependency injection and testing with mock implementations.
    *
-   * @returns The full path to the token storage file
+   * @param store The token store to use
    */
-  private static getTokenFilePath(): string {
-    const homeDir = os.homedir();
-    return path.join(homeDir, this.CONFIG_DIR, this.TOKEN_FILE);
+  static setTokenStore(store: BaseTokenStore): void {
+    this.tokenStore = store;
   }
 
   /**
-   * Ensure the config directory exists.
+   * Get the current token store implementation.
+   *
+   * @returns The current token store
    */
-  private static async ensureConfigDir(): Promise<void> {
-    const configDir = path.dirname(this.getTokenFilePath());
-    await fs.mkdir(configDir, { recursive: true });
+  static getTokenStore(): BaseTokenStore {
+    return this.tokenStore;
   }
 
   /**
@@ -63,26 +47,7 @@ export class MCPOAuthTokenStorage {
    * @returns A map of server names to credentials
    */
   static async loadTokens(): Promise<Map<string, MCPOAuthCredentials>> {
-    const tokenMap = new Map<string, MCPOAuthCredentials>();
-
-    try {
-      const tokenFile = this.getTokenFilePath();
-      const data = await fs.readFile(tokenFile, 'utf-8');
-      const tokens = JSON.parse(data) as MCPOAuthCredentials[];
-
-      for (const credential of tokens) {
-        tokenMap.set(credential.serverName, credential);
-      }
-    } catch (error) {
-      // File doesn't exist or is invalid, return empty map
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(
-          `Failed to load MCP OAuth tokens: ${getErrorMessage(error)}`,
-        );
-      }
-    }
-
-    return tokenMap;
+    return this.tokenStore.loadTokens();
   }
 
   /**
@@ -101,36 +66,13 @@ export class MCPOAuthTokenStorage {
     tokenUrl?: string,
     mcpServerUrl?: string,
   ): Promise<void> {
-    await this.ensureConfigDir();
-
-    const tokens = await this.loadTokens();
-
-    const credential: MCPOAuthCredentials = {
+    return this.tokenStore.saveToken(
       serverName,
       token,
       clientId,
       tokenUrl,
       mcpServerUrl,
-      updatedAt: Date.now(),
-    };
-
-    tokens.set(serverName, credential);
-
-    const tokenArray = Array.from(tokens.values());
-    const tokenFile = this.getTokenFilePath();
-
-    try {
-      await fs.writeFile(
-        tokenFile,
-        JSON.stringify(tokenArray, null, 2),
-        { mode: 0o600 }, // Restrict file permissions
-      );
-    } catch (error) {
-      console.error(
-        `Failed to save MCP OAuth token: ${getErrorMessage(error)}`,
-      );
-      throw error;
-    }
+    );
   }
 
   /**
@@ -142,8 +84,7 @@ export class MCPOAuthTokenStorage {
   static async getToken(
     serverName: string,
   ): Promise<MCPOAuthCredentials | null> {
-    const tokens = await this.loadTokens();
-    return tokens.get(serverName) || null;
+    return this.tokenStore.getToken(serverName);
   }
 
   /**
@@ -152,27 +93,7 @@ export class MCPOAuthTokenStorage {
    * @param serverName The name of the MCP server
    */
   static async removeToken(serverName: string): Promise<void> {
-    const tokens = await this.loadTokens();
-
-    if (tokens.delete(serverName)) {
-      const tokenArray = Array.from(tokens.values());
-      const tokenFile = this.getTokenFilePath();
-
-      try {
-        if (tokenArray.length === 0) {
-          // Remove file if no tokens left
-          await fs.unlink(tokenFile);
-        } else {
-          await fs.writeFile(tokenFile, JSON.stringify(tokenArray, null, 2), {
-            mode: 0o600,
-          });
-        }
-      } catch (error) {
-        console.error(
-          `Failed to remove MCP OAuth token: ${getErrorMessage(error)}`,
-        );
-      }
-    }
+    return this.tokenStore.removeToken(serverName);
   }
 
   /**
@@ -182,28 +103,13 @@ export class MCPOAuthTokenStorage {
    * @returns True if the token is expired
    */
   static isTokenExpired(token: MCPOAuthToken): boolean {
-    if (!token.expiresAt) {
-      return false; // No expiry, assume valid
-    }
-
-    // Add a 5-minute buffer to account for clock skew
-    const bufferMs = 5 * 60 * 1000;
-    return Date.now() + bufferMs >= token.expiresAt;
+    return BaseTokenStore.isTokenExpired(token);
   }
 
   /**
    * Clear all stored MCP OAuth tokens.
    */
   static async clearAllTokens(): Promise<void> {
-    try {
-      const tokenFile = this.getTokenFilePath();
-      await fs.unlink(tokenFile);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error(
-          `Failed to clear MCP OAuth tokens: ${getErrorMessage(error)}`,
-        );
-      }
-    }
+    return this.tokenStore.clearAllTokens();
   }
 }

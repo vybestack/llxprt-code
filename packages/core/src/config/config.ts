@@ -16,7 +16,9 @@ import { ToolRegistry } from '../tools/tool-registry.js';
 import { LSTool } from '../tools/ls.js';
 import { ReadFileTool } from '../tools/read-file.js';
 import { GrepTool } from '../tools/grep.js';
+import { RipGrepTool } from '../tools/ripGrep.js';
 import { GlobTool } from '../tools/glob.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { WriteFileTool } from '../tools/write-file.js';
@@ -34,7 +36,7 @@ import { TodoPause } from '../tools/todo-pause.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
-import { getProjectTempDir } from '../utils/paths.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import {
   // TELEMETRY: Re-enabled for local file logging only
@@ -62,8 +64,11 @@ import {
 } from '../services/fileSystemService.js';
 
 // Re-export OAuth config type
-export type { MCPOAuthConfig };
+export type { MCPOAuthConfig, AnyToolInvocation };
+import type { AnyToolInvocation } from '../tools/tools.js';
 import { WorkspaceContext } from '../utils/workspaceContext.js';
+import { Storage } from './storage.js';
+import { FileExclusions } from '../utils/ignorePatterns.js';
 
 // Import privacy-related types
 export interface RedactionConfig {
@@ -89,6 +94,7 @@ export enum ApprovalMode {
 
 export interface AccessibilitySettings {
   disableLoadingPhrases?: boolean;
+  screenReader?: boolean;
 }
 
 export interface BugCommandSettings {
@@ -218,6 +224,7 @@ export interface ConfigParameters {
   question?: string;
   fullContext?: boolean;
   coreTools?: string[];
+  allowedTools?: string[];
   excludeTools?: string[];
   toolDiscoveryCommand?: string;
   toolCallCommand?: string;
@@ -237,6 +244,7 @@ export interface ConfigParameters {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
     enableRecursiveFileSearch?: boolean;
+    disableFuzzySearch?: boolean;
   };
   checkpointing?: boolean;
   proxy?: string;
@@ -266,7 +274,11 @@ export interface ConfigParameters {
   interactive?: boolean;
   shellReplacement?: boolean;
   trustedFolder?: boolean;
+  useRipgrep?: boolean;
   shouldUseNodePtyShell?: boolean;
+  skipNextSpeakerCheck?: boolean;
+  extensionManagement?: boolean;
+  enablePromptCompletion?: boolean;
 }
 
 export class Config {
@@ -285,6 +297,7 @@ export class Config {
   private readonly question: string | undefined;
   private readonly fullContext: boolean;
   private readonly coreTools: string[] | undefined;
+  private readonly allowedTools: string[] | undefined;
   private readonly excludeTools: string[] | undefined;
   private readonly toolDiscoveryCommand: string | undefined;
   private readonly toolCallCommand: string | undefined;
@@ -302,6 +315,7 @@ export class Config {
     respectGitIgnore: boolean;
     respectLlxprtIgnore: boolean;
     enableRecursiveFileSearch: boolean;
+    disableFuzzySearch: boolean;
   };
   private alwaysAllowedCommands: Set<string> = new Set();
   private fileDiscoveryService: FileDiscoveryService | null = null;
@@ -317,7 +331,7 @@ export class Config {
   private readonly folderTrustFeature: boolean;
   private readonly folderTrust: boolean;
   private ideMode: boolean;
-  private ideClient?: IdeClient;
+  private ideClient!: IdeClient;
   private inFallbackMode = false;
   private _modelSwitchedDuringSession: boolean = false;
   private readonly maxSessionTurns: number;
@@ -349,9 +363,15 @@ export class Config {
   private readonly chatCompression: ChatCompressionSettings | undefined;
   private readonly interactive: boolean;
   private readonly trustedFolder: boolean | undefined;
+  private readonly useRipgrep: boolean;
   private readonly shouldUseNodePtyShell: boolean;
+  private readonly skipNextSpeakerCheck: boolean;
+  private readonly extensionManagement: boolean;
+  private readonly enablePromptCompletion: boolean = false;
   private initialized: boolean = false;
   private readonly shellReplacement: boolean = false;
+  readonly storage: Storage;
+  private readonly fileExclusions: FileExclusions;
 
   constructor(params: ConfigParameters) {
     this.sessionId = params.sessionId;
@@ -368,6 +388,7 @@ export class Config {
     this.question = params.question;
     this.fullContext = params.fullContext ?? false;
     this.coreTools = params.coreTools;
+    this.allowedTools = params.allowedTools;
     this.excludeTools = params.excludeTools;
     this.toolDiscoveryCommand = params.toolDiscoveryCommand;
     this.toolCallCommand = params.toolCallCommand;
@@ -399,6 +420,7 @@ export class Config {
       respectLlxprtIgnore: params.fileFiltering?.respectLlxprtIgnore ?? true,
       enableRecursiveFileSearch:
         params.fileFiltering?.enableRecursiveFileSearch ?? true,
+      disableFuzzySearch: params.fileFiltering?.disableFuzzySearch ?? false,
     };
     this.checkpointing = params.checkpointing ?? false;
     this.proxy = params.proxy;
@@ -422,7 +444,6 @@ export class Config {
     this.folderTrustFeature = params.folderTrustFeature ?? false;
     this.folderTrust = params.folderTrust ?? false;
     this.ideMode = params.ideMode ?? false;
-    this.ideClient = params.ideClient || IdeClient.getInstance();
     this.complexityAnalyzerSettings = params.complexityAnalyzer ?? {
       complexityThreshold: 0.6,
       minTasksForSuggestion: 3,
@@ -434,7 +455,13 @@ export class Config {
     this.interactive = params.interactive ?? false;
     this.shellReplacement = params.shellReplacement ?? false;
     this.trustedFolder = params.trustedFolder;
+    this.useRipgrep = params.useRipgrep ?? false;
     this.shouldUseNodePtyShell = params.shouldUseNodePtyShell ?? false;
+    this.skipNextSpeakerCheck = params.skipNextSpeakerCheck ?? false;
+    this.extensionManagement = params.extensionManagement ?? false;
+    this.storage = new Storage(this.targetDir);
+    this.enablePromptCompletion = params.enablePromptCompletion ?? false;
+    this.fileExclusions = new FileExclusions(this);
 
     if (params.contextFileName) {
       setLlxprtMdFilename(params.contextFileName);
@@ -467,6 +494,7 @@ export class Config {
       throw Error('Config was already initialized');
     }
     this.initialized = true;
+    this.ideClient = await IdeClient.getInstance();
     // Initialize centralized FileDiscoveryService
     this.getFileService();
     if (this.getCheckpointingEnabled()) {
@@ -484,10 +512,20 @@ export class Config {
   }
 
   async refreshAuth(authMethod: AuthType) {
-    // Save the current conversation history before creating a new client
+    const logger = new DebugLogger('llxprt:config:refreshAuth');
+
+    // Save the current conversation history AND HistoryService before creating a new client
     let existingHistory: Content[] = [];
+    let existingHistoryService: HistoryService | null = null;
+
     if (this.geminiClient && this.geminiClient.isInitialized()) {
       existingHistory = await this.geminiClient.getHistory();
+      existingHistoryService = this.geminiClient.getHistoryService();
+      logger.debug('Retrieved existing state', {
+        historyLength: existingHistory.length,
+        hasHistoryService: !!existingHistoryService,
+        authMethod,
+      });
     }
 
     // Create new content generator config
@@ -501,26 +539,77 @@ export class Config {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
 
-    // Create and initialize new client in local variable first
+    // Create new client in local variable first
     const newGeminiClient = new GeminiClient(this);
-    await newGeminiClient.initialize(newContentGeneratorConfig);
 
-    // Vertex and Genai have incompatible encryption and sending history with
-    // throughtSignature from Genai to Vertex will fail, we need to strip them
-    const fromGenaiToVertex =
-      this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
-      authMethod === AuthType.LOGIN_WITH_GOOGLE;
+    // CRITICAL: Store both the history AND the HistoryService instance
+    // This preserves both the API conversation context and the UI's conversation display
+    if (existingHistoryService) {
+      logger.debug('Storing existing HistoryService for reuse', {
+        historyLength: existingHistory.length,
+      });
+      newGeminiClient.storeHistoryServiceForReuse(existingHistoryService);
+    }
+
+    if (existingHistory.length > 0) {
+      // Vertex and Genai have incompatible encryption and sending history with
+      // throughtSignature from Genai to Vertex will fail, we need to strip them
+      const fromGenaiToVertex =
+        this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
+        authMethod === AuthType.LOGIN_WITH_GOOGLE;
+
+      logger.debug('Storing history for later use', {
+        historyLength: existingHistory.length,
+        fromGenaiToVertex,
+        willStripThoughts: fromGenaiToVertex,
+      });
+
+      // Use storeHistoryForLaterUse to ensure history is preserved through initialization
+      const historyToStore = fromGenaiToVertex
+        ? existingHistory.map((content) => {
+            const newContent = { ...content };
+            if (newContent.parts) {
+              newContent.parts = newContent.parts.map((part) => {
+                if (
+                  part &&
+                  typeof part === 'object' &&
+                  'thoughtSignature' in part
+                ) {
+                  const newPart = { ...part };
+                  delete (newPart as { thoughtSignature?: string })
+                    .thoughtSignature;
+                  return newPart;
+                }
+                return part;
+              });
+            }
+            return newContent;
+          })
+        : existingHistory;
+
+      newGeminiClient.storeHistoryForLaterUse(historyToStore);
+      logger.debug('History stored in new client', {
+        storedHistoryLength: historyToStore.length,
+      });
+    }
+
+    // Now initialize with the new config
+    await newGeminiClient.initialize(newContentGeneratorConfig);
+    logger.debug('New client initialized');
 
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
     this.geminiClient = newGeminiClient;
 
-    // Restore the conversation history to the new client
-    if (existingHistory.length > 0) {
-      this.geminiClient.setHistory(existingHistory, {
-        stripThoughts: fromGenaiToVertex,
-      });
-    }
+    // Verify history was preserved
+    const newHistory = await this.geminiClient.getHistory();
+    const newHistoryService = this.geminiClient.getHistoryService();
+    logger.debug('State verification after refreshAuth', {
+      originalHistoryLength: existingHistory.length,
+      newHistoryLength: newHistory.length,
+      historyPreserved: newHistory.length > 0,
+      historyServicePreserved: existingHistoryService === newHistoryService,
+    });
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;
@@ -658,6 +747,10 @@ export class Config {
     return this.coreTools;
   }
 
+  getAllowedTools(): string[] | undefined {
+    return this.allowedTools;
+  }
+
   getExcludeTools(): string[] | undefined {
     return this.excludeTools;
   }
@@ -699,6 +792,11 @@ export class Config {
   }
 
   setApprovalMode(mode: ApprovalMode): void {
+    if (this.isTrustedFolder() === false && mode !== ApprovalMode.DEFAULT) {
+      throw new Error(
+        'Cannot enable privileged approval modes in an untrusted folder.',
+      );
+    }
     this.approvalMode = mode;
   }
 
@@ -844,11 +942,15 @@ export class Config {
   }
 
   getProjectTempDir(): string {
-    return getProjectTempDir(this.getProjectRoot());
+    return this.storage.getProjectTempDir();
   }
 
   getEnableRecursiveFileSearch(): boolean {
     return this.fileFiltering.enableRecursiveFileSearch;
+  }
+
+  getFileFilteringDisableFuzzySearch(): boolean {
+    return this.fileFiltering.disableFuzzySearch;
   }
 
   getFileFilteringRespectGitIgnore(): boolean {
@@ -863,6 +965,21 @@ export class Config {
       respectGitIgnore: this.fileFiltering.respectGitIgnore,
       respectLlxprtIgnore: this.fileFiltering.respectLlxprtIgnore,
     };
+  }
+
+  /**
+   * Gets custom file exclusion patterns from configuration.
+   * TODO: This is a placeholder implementation. In the future, this could
+   * read from settings files, CLI arguments, or environment variables.
+   */
+  getCustomExcludes(): string[] {
+    // Placeholder implementation - returns empty array for now
+    // Future implementation could read from:
+    // - User settings file
+    // - Project-specific configuration
+    // - Environment variables
+    // - CLI arguments
+    return [];
   }
 
   getCheckpointingEnabled(): boolean {
@@ -902,6 +1019,10 @@ export class Config {
 
   getListExtensions(): boolean {
     return this.listExtensions;
+  }
+
+  getExtensionManagement(): boolean {
+    return this.extensionManagement;
   }
 
   getExtensions(): GeminiCLIExtension[] {
@@ -1039,13 +1160,29 @@ export class Config {
     return this.shellReplacement;
   }
 
+  getUseRipgrep(): boolean {
+    return this.useRipgrep;
+  }
+
   getShouldUseNodePtyShell(): boolean {
     return this.shouldUseNodePtyShell;
   }
 
+  getSkipNextSpeakerCheck(): boolean {
+    return this.skipNextSpeakerCheck;
+  }
+
+  getScreenReader(): boolean {
+    return this.accessibility.screenReader ?? false;
+  }
+
+  getEnablePromptCompletion(): boolean {
+    return this.enablePromptCompletion;
+  }
+
   async getGitService(): Promise<GitService> {
     if (!this.gitService) {
-      this.gitService = new GitService(this.targetDir);
+      this.gitService = new GitService(this.targetDir, this.storage);
       await this.gitService.initialize();
     }
     return this.gitService;
@@ -1056,6 +1193,10 @@ export class Config {
    */
   getSettingsService(): SettingsService {
     return this.settingsService;
+  }
+
+  getFileExclusions(): FileExclusions {
+    return this.fileExclusions;
   }
 
   async refreshMemory(): Promise<{ memoryContent: string; fileCount: number }> {
@@ -1084,12 +1225,10 @@ export class Config {
       const className = ToolClass.name;
       const toolName = ToolClass.Name || className;
       const coreTools = this.getCoreTools();
-      const excludeTools = this.getExcludeTools();
+      const excludeTools = this.getExcludeTools() || [];
 
-      let isEnabled = false;
-      if (coreTools === undefined) {
-        isEnabled = true;
-      } else {
+      let isEnabled = true; // Enabled by default if coreTools is not set.
+      if (coreTools) {
         isEnabled = coreTools.some(
           (tool) =>
             tool === className ||
@@ -1099,10 +1238,11 @@ export class Config {
         );
       }
 
-      if (
-        excludeTools?.includes(className) ||
-        excludeTools?.includes(toolName)
-      ) {
+      const isExcluded = excludeTools.some(
+        (tool) => tool === className || tool === toolName,
+      );
+
+      if (isExcluded) {
         isEnabled = false;
       }
 
@@ -1113,7 +1253,13 @@ export class Config {
 
     registerCoreTool(LSTool, this);
     registerCoreTool(ReadFileTool, this);
-    registerCoreTool(GrepTool, this);
+
+    if (this.getUseRipgrep()) {
+      registerCoreTool(RipGrepTool, this);
+    } else {
+      registerCoreTool(GrepTool, this);
+    }
+
     registerCoreTool(GlobTool, this);
     registerCoreTool(EditTool, this);
     registerCoreTool(WriteFileTool, this);

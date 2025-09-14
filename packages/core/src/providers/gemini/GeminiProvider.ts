@@ -160,7 +160,7 @@ export class GeminiProvider extends BaseProvider {
         } else {
           // OAuth is disabled and no other auth method available
           throw new AuthenticationRequiredError(
-            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled',
+            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
             'none',
             ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
           );
@@ -206,7 +206,7 @@ export class GeminiProvider extends BaseProvider {
         } else {
           // OAuth is disabled and no other auth method available
           throw new AuthenticationRequiredError(
-            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled',
+            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
             'none',
             ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
           );
@@ -981,6 +981,9 @@ export class GeminiProvider extends BaseProvider {
       // OAuth mode
       const configForOAuth = this.globalConfig || {
         getProxy: () => undefined,
+        isBrowserLaunchSuppressed: () => false,
+        getNoBrowser: () => false,
+        getUserMemory: () => '',
       };
 
       const contentGenerator = await createCodeAssistContentGenerator(
@@ -998,9 +1001,25 @@ export class GeminiProvider extends BaseProvider {
         this.currentModel,
       );
 
+      // For OAuth/CodeAssist mode, inject system prompt as first user message
+      // This ensures the CodeAssist endpoint receives the full context
+      // Similar to how AnthropicProvider handles OAuth mode
+      const contentsWithSystemPrompt = [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `<system>\n${systemInstruction}\n</system>\n\nUser provided conversation begins here:`,
+            },
+          ],
+        },
+        ...contents,
+      ];
+
       const request = {
         model: this.currentModel,
-        contents,
+        contents: contentsWithSystemPrompt,
+        // Still pass systemInstruction for SDK compatibility
         systemInstruction,
         config: {
           tools: geminiTools,

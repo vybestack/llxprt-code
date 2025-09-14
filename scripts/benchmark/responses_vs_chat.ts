@@ -1,6 +1,12 @@
 #!/usr/bin/env tsx
 
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Benchmark script to compare performance between Responses API and Chat Completions API
  *
  * Usage:

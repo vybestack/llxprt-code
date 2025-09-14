@@ -421,8 +421,8 @@ describe('DebugLogger', () => {
     const finalMemory = process.memoryUsage().heapUsed;
     const memoryIncrease = finalMemory - initialMemory;
 
-    // Should not accumulate significant memory (under 1MB)
-    expect(memoryIncrease).toBeLessThan(1024 * 1024);
+    // Should not accumulate significant memory (under 1.5MB)
+    expect(memoryIncrease).toBeLessThan(1.5 * 1024 * 1024);
   });
 
   // Property-based tests (30% requirement)

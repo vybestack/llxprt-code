@@ -272,7 +272,7 @@ describe('TodoSchemas', () => {
     });
   });
 
-  describe('TodoSchema', () => {
+  describe('TodoSchema - Additional Tests', () => {
     it('should accept valid todo without subtasks', () => {
       const validTodo = {
         id: 'task-1',
@@ -326,7 +326,7 @@ describe('TodoSchemas', () => {
     });
   });
 
-  describe('TodoArraySchema', () => {
+  describe('TodoArraySchema - Advanced Tests', () => {
     it('should accept empty array', () => {
       expect(() => TodoArraySchema.parse([])).not.toThrow();
     });

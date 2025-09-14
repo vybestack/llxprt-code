@@ -17,9 +17,11 @@ import {
   getEnvironmentContext,
 } from '../utils/environmentContext.js';
 import { Turn, ServerGeminiStreamEvent, GeminiEventType } from './turn.js';
+import type { ChatCompressionInfo } from './turn.js';
+import { CompressionStatus } from './turn.js';
 import { Config } from '../config/config.js';
 import { UserTierId } from '../code_assist/types.js';
-import { getCoreSystemPromptAsync } from './prompts.js';
+import { getCoreSystemPromptAsync, getCompressionPrompt } from './prompts.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { reportError } from '../utils/errorReporting.js';
 import { GeminiChat } from './geminiChat.js';
@@ -36,10 +38,16 @@ import {
 } from './contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
+import { tokenLimit } from './tokenLimits.js';
+import {
+  COMPRESSION_TOKEN_THRESHOLD,
+  COMPRESSION_PRESERVE_THRESHOLD,
+} from './compression-config.js';
 import { LoopDetectionService } from '../services/loopDetectionService.js';
 import { ideContext, IdeContext, File } from '../ide/ideContext.js';
 import { ComplexityAnalyzer } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { isFunctionResponse } from '../utils/messageInspectors.js';
 
 function isThinkingSupported(model: string) {
   if (model.startsWith('gemini-2.5')) return true;
@@ -108,6 +116,7 @@ export class GeminiClient {
   private readonly MAX_TURNS = 100;
   private _pendingConfig?: ContentGeneratorConfig;
   private _previousHistory?: Content[];
+  private _storedHistoryService?: HistoryService;
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
@@ -118,7 +127,13 @@ export class GeminiClient {
   private lastSentIdeContext: IdeContext | undefined;
   private forceFullIdeContext = true;
 
-  constructor(private config: Config) {
+  /**
+   * At any point in this conversation, was compression triggered without
+   * being forced and did it fail?
+   */
+  private hasFailedCompressionAttempt = false;
+
+  constructor(private readonly config: Config) {
     if (config.getProxy()) {
       setGlobalDispatcher(new ProxyAgent(config.getProxy() as string));
     }
@@ -141,8 +156,9 @@ export class GeminiClient {
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
-    // Preserve chat history before resetting
-    const previousHistory = this.chat?.getHistory();
+    // Preserve chat history before resetting, but only if we don't already have stored history
+    // (e.g., from storeHistoryForLaterUse called before initialize)
+    const previousHistory = this._previousHistory || this.chat?.getHistory();
 
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
@@ -302,7 +318,21 @@ export class GeminiClient {
    * The history will be restored when lazyInitialize() is called.
    */
   storeHistoryForLaterUse(history: Content[]): void {
+    this.logger.debug('Storing history for later use', {
+      historyLength: history.length,
+    });
     this._previousHistory = history;
+  }
+
+  /**
+   * Store HistoryService instance for reuse after refreshAuth.
+   * This preserves the UI's conversation display across provider switches.
+   */
+  storeHistoryServiceForReuse(historyService: HistoryService): void {
+    this.logger.debug('Storing HistoryService for reuse', {
+      hasHistoryService: !!historyService,
+    });
+    this._storedHistoryService = historyService;
   }
 
   async setTools(): Promise<void> {
@@ -366,16 +396,29 @@ export class GeminiClient {
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {
     this.forceFullIdeContext = true;
+    this.hasFailedCompressionAttempt = false;
 
     // Ensure content generator is initialized before creating chat
     await this.lazyInitialize();
-
     const envParts = await getEnvironmentContext(this.config);
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
-    // Create HistoryService and add initial history
-    const historyService = new HistoryService();
+
+    // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
+    // This is essential for maintaining conversation history across provider switches
+    let historyService: HistoryService;
+    if (this._storedHistoryService) {
+      this.logger.debug(
+        'Reusing stored HistoryService to preserve UI conversation',
+      );
+      historyService = this._storedHistoryService;
+      // Clear the stored reference after using it
+      this._storedHistoryService = undefined;
+    } else {
+      // Create new HistoryService only if we don't have a stored one
+      historyService = new HistoryService();
+    }
 
     // Add extraHistory if provided
     if (extraHistory && extraHistory.length > 0) {
@@ -415,6 +458,7 @@ export class GeminiClient {
         ? {
             ...this.generateContentConfig,
             thinkingConfig: {
+              thinkingBudget: -1,
               includeThoughts: true,
             },
           }
@@ -640,9 +684,18 @@ export class GeminiClient {
     if (!this.chat) {
       // If we have previous history, restore it when creating the chat
       if (this._previousHistory && this._previousHistory.length > 0) {
+        this.logger.debug(
+          'Restoring previous history during prompt generation',
+          {
+            historyLength: this._previousHistory.length,
+          },
+        );
         // Extract the conversation history after the initial environment setup
         const conversationHistory = this._previousHistory.slice(2);
         this.chat = await this.startChat(conversationHistory);
+        this.logger.debug('Chat started with restored history', {
+          conversationHistoryLength: conversationHistory.length,
+        });
       } else {
         this.chat = await this.startChat();
       }
@@ -676,6 +729,12 @@ export class GeminiClient {
 
     // Track the original model from the first call to detect model switching
     const initialModel = originalModel || this.config.getModel();
+
+    const compressed = await this.tryCompressChat(prompt_id);
+
+    if (compressed.compressionStatus === CompressionStatus.COMPRESSED) {
+      yield { type: GeminiEventType.ChatCompressed, value: compressed };
+    }
 
     // Prevent context updates from being sent while a tool call is
     // waiting for a response. The Gemini API requires that a functionResponse
@@ -763,6 +822,9 @@ export class GeminiClient {
         return turn;
       }
       yield event;
+      if (event.type === GeminiEventType.Error) {
+        return turn;
+      }
     }
     if (!turn.pendingToolCalls.length && signal && !signal.aborted) {
       // Check if model was switched during the call (likely due to quota error)
@@ -1016,43 +1078,154 @@ export class GeminiClient {
    */
   async tryCompressChat(
     prompt_id: string,
-    _force: boolean = false,
-  ): Promise<{ originalTokenCount: number; newTokenCount: number } | null> {
+    force: boolean = false,
+  ): Promise<ChatCompressionInfo> {
     await this.lazyInitialize();
 
     if (!this.hasChatInitialized()) {
-      return null;
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus: CompressionStatus.NOOP,
+      };
     }
 
-    const chat = this.getChat();
-    const historyService = chat.getHistoryService();
+    const curatedHistory = this.getChat().getHistory(true);
 
-    // Get current token count
-    const originalTokenCount = historyService.getTotalTokens();
-
-    if (originalTokenCount === 0) {
-      return null;
+    // Regardless of `force`, don't do anything if the history is empty.
+    if (
+      curatedHistory.length === 0 ||
+      (this.hasFailedCompressionAttempt && !force)
+    ) {
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus: CompressionStatus.NOOP,
+      };
     }
 
-    // Perform compression
-    try {
-      await chat.performCompression(prompt_id);
+    // Note: chat variable used later in method
 
-      // Get new token count after compression
-      const newTokenCount = historyService.getTotalTokens();
+    const model = this.config.getModel();
+    const { totalTokens: originalTokenCount } =
+      await this.getContentGenerator().countTokens({
+        model,
+        contents: curatedHistory,
+      });
+    if (originalTokenCount === undefined) {
+      console.warn(`Could not determine token count for model ${model}.`);
+      this.hasFailedCompressionAttempt = !force && true;
+      return {
+        originalTokenCount: 0,
+        newTokenCount: 0,
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
+      };
+    }
 
-      // Check if compression actually happened
-      if (newTokenCount < originalTokenCount) {
+    const contextPercentageThreshold =
+      this.config.getChatCompression()?.contextPercentageThreshold;
+
+    // Don't compress if not forced and we are under the limit.
+    if (!force) {
+      const threshold =
+        contextPercentageThreshold ?? COMPRESSION_TOKEN_THRESHOLD;
+      if (originalTokenCount < threshold * tokenLimit(model)) {
         return {
           originalTokenCount,
-          newTokenCount,
+          newTokenCount: originalTokenCount,
+          compressionStatus: CompressionStatus.NOOP,
         };
       }
-    } catch (error) {
-      this.logger.error(() => 'Compression failed:', { error });
     }
 
-    return null;
+    let compressBeforeIndex = findIndexAfterFraction(
+      curatedHistory,
+      1 - COMPRESSION_PRESERVE_THRESHOLD,
+    );
+    // Find the first user message after the index. This is the start of the next turn.
+    while (
+      compressBeforeIndex < curatedHistory.length &&
+      (curatedHistory[compressBeforeIndex]?.role === 'model' ||
+        isFunctionResponse(curatedHistory[compressBeforeIndex]))
+    ) {
+      compressBeforeIndex++;
+    }
+
+    const historyToCompress = curatedHistory.slice(0, compressBeforeIndex);
+    const historyToKeep = curatedHistory.slice(compressBeforeIndex);
+
+    this.getChat().setHistory(historyToCompress);
+
+    const { text: summary } = await this.getChat().sendMessage(
+      {
+        message: {
+          text: 'First, reason in your scratchpad. Then, generate the <state_snapshot>.',
+        },
+        config: {
+          systemInstruction: { text: getCompressionPrompt() },
+          maxOutputTokens: originalTokenCount,
+        },
+      },
+      prompt_id,
+    );
+
+    // For compression, we don't want to preserve the HistoryService
+    // because we're creating a new compressed conversation state
+    // The UI should reflect that compression happened
+    const compressedChat = await this.startChat([
+      {
+        role: 'user',
+        parts: [{ text: summary }],
+      },
+      {
+        role: 'model',
+        parts: [{ text: 'Got it. Thanks for the additional context!' }],
+      },
+      ...historyToKeep,
+    ]);
+    this.forceFullIdeContext = true;
+
+    const { totalTokens: newTokenCount } =
+      await this.getContentGenerator().countTokens({
+        // model might change after calling `sendMessage`, so we get the newest value from config
+        model: this.config.getModel(),
+        contents: compressedChat.getHistory(),
+      });
+    if (newTokenCount === undefined) {
+      console.warn('Could not determine compressed history token count.');
+      this.hasFailedCompressionAttempt = !force && true;
+      return {
+        originalTokenCount,
+        newTokenCount: originalTokenCount,
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
+      };
+    }
+
+    // TODO: Add proper telemetry logging once available
+    console.debug(
+      `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
+    );
+
+    if (newTokenCount > originalTokenCount) {
+      this.getChat().setHistory(curatedHistory);
+      this.hasFailedCompressionAttempt = !force && true;
+      return {
+        originalTokenCount,
+        newTokenCount,
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
+      };
+    } else {
+      this.chat = compressedChat; // Chat compression successful, set new state.
+    }
+
+    return {
+      originalTokenCount,
+      newTokenCount,
+      compressionStatus: CompressionStatus.COMPRESSED,
+    };
   }
 
   /**

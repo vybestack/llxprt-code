@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,6 +15,7 @@ import {
   logSlashCommand,
   SlashCommandEvent,
   ToolConfirmationOutcome,
+  Storage,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
@@ -43,7 +44,6 @@ export const useSlashCommandProcessor = (
   clearItems: UseHistoryManagerReturn['clearItems'],
   loadHistory: UseHistoryManagerReturn['loadHistory'],
   refreshStatic: () => void,
-  setShowHelp: React.Dispatch<React.SetStateAction<boolean>>,
   onDebugMessage: (message: string) => void,
   openThemeDialog: () => void,
   openAuthDialog: () => void,
@@ -87,11 +87,14 @@ export const useSlashCommandProcessor = (
     if (!config?.getProjectRoot()) {
       return;
     }
-    return new GitService(config.getProjectRoot());
+    return new GitService(config.getProjectRoot(), config.storage);
   }, [config]);
 
   const logger = useMemo(() => {
-    const l = new Logger(config?.getSessionId() || '');
+    const l = new Logger(
+      config?.getSessionId() || '',
+      config?.storage ?? new Storage(process.cwd()),
+    );
     // The logger's initialize is async, but we can create the instance
     // synchronously. Commands that use it will await its initialization.
     return l;
@@ -249,7 +252,10 @@ export const useSlashCommandProcessor = (
         loaders,
         controller.signal,
       );
-      setCommands(commandService.getCommands());
+      // Only update commands if not aborted
+      if (!controller.signal.aborted) {
+        setCommands(commandService.getCommands());
+      }
     };
 
     load();
@@ -391,9 +397,14 @@ export const useSlashCommandProcessor = (
                   return { type: 'handled' };
                 case 'dialog':
                   switch (result.dialog) {
-                    case 'help':
-                      setShowHelp(true);
+                    case 'help': {
+                      const helpItem: HistoryItemWithoutId = {
+                        type: 'help',
+                        timestamp: new Date(),
+                      };
+                      addItem(helpItem, Date.now());
                       return { type: 'handled' };
+                    }
                     case 'auth':
                       openAuthDialog();
                       return { type: 'handled' };
@@ -447,7 +458,9 @@ export const useSlashCommandProcessor = (
                     }
                   }
                 case 'load_history': {
-                  // Always load the UI history first
+                  // Only clear UI history when loading a saved chat checkpoint (e.g., /chat resume)
+                  // Do NOT clear when switching providers or loading profiles - they preserve conversation
+                  // The load_history action is only returned by /chat resume command
                   fullCommandContext.ui.clear();
                   result.history.forEach((item, index) => {
                     fullCommandContext.ui.addItem(item, index);
@@ -589,7 +602,6 @@ export const useSlashCommandProcessor = (
     [
       config,
       addItem,
-      setShowHelp,
       openAuthDialog,
       commands,
       commandContext,

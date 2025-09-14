@@ -40,19 +40,30 @@ export const useLoadProfileDialog = ({
   const appDispatch = useAppDispatch();
   const showDialog = appState.openDialogs.loadProfile;
   const [profiles, setProfiles] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   const openDialog = useCallback(async () => {
+    // Clear old profiles and set loading state
+    setProfiles([]);
+    setIsLoading(true);
+
+    // Open dialog immediately to show loading state
+    appDispatch({ type: 'OPEN_DIALOG', payload: 'loadProfile' });
+
     try {
       const profileManager = new ProfileManager();
       const availableProfiles = await profileManager.listProfiles();
       setProfiles(availableProfiles);
-      appDispatch({ type: 'OPEN_DIALOG', payload: 'loadProfile' });
     } catch (e) {
       addMessage({
         type: MessageType.ERROR,
         content: `Failed to load profiles: ${e instanceof Error ? e.message : String(e)}`,
         timestamp: new Date(),
       });
+      // Close dialog on error
+      appDispatch({ type: 'CLOSE_DIALOG', payload: 'loadProfile' });
+    } finally {
+      setIsLoading(false);
     }
   }, [addMessage, appDispatch]);
 
@@ -180,5 +191,6 @@ export const useLoadProfileDialog = ({
     closeDialog,
     profiles,
     handleSelect,
+    isLoading,
   };
 };

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,6 +17,7 @@ import {
   FileDiscoveryService,
   DEFAULT_FILE_FILTERING_OPTIONS,
   SHELL_SPECIAL_CHARS,
+  DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { Suggestion } from '../components/SuggestionsDisplay.js';
 import { CommandContext, SlashCommand } from '../commands/types.js';
@@ -43,6 +44,8 @@ export interface UseSlashCompletionReturn {
   handleAutocomplete: (indexToUse: number) => void;
 }
 
+const debugLogger = new DebugLogger('llxprt:ui:slash-completion');
+
 export function useSlashCompletion(
   buffer: TextBuffer,
   dirs: readonly string[],
@@ -52,6 +55,10 @@ export function useSlashCompletion(
   reverseSearchActive: boolean = false,
   config?: Config,
 ): UseSlashCompletionReturn {
+  debugLogger.debug(
+    () =>
+      `useSlashCompletion called - buffer: "${buffer.lines[0] || ''}", commands: ${slashCommands.length}`,
+  );
   const {
     suggestions,
     activeSuggestionIndex,
@@ -81,8 +88,13 @@ export function useSlashCompletion(
   // Check if cursor is after @ or / without unescaped spaces
   const commandIndex = useMemo(() => {
     const currentLine = buffer.lines[cursorRow] || '';
+    debugLogger.debug(
+      () => `Checking commandIndex - Row: ${cursorRow}, Line: "${currentLine}"`,
+    );
     if (cursorRow === 0 && isSlashCommand(currentLine.trim())) {
-      return currentLine.indexOf('/');
+      const index = currentLine.indexOf('/');
+      debugLogger.debug(() => `Slash command detected at index ${index}`);
+      return index;
     }
 
     // For other completions like '@', we search backwards from the cursor.
@@ -110,7 +122,12 @@ export function useSlashCompletion(
   }, [cursorRow, cursorCol, buffer.lines]);
 
   useEffect(() => {
+    debugLogger.debug(
+      () =>
+        `useEffect triggered - commandIndex: ${commandIndex}, reverseSearchActive: ${reverseSearchActive}`,
+    );
     if (commandIndex === -1 || reverseSearchActive) {
+      debugLogger.debug(() => 'Resetting completion state');
       setTimeout(resetCompletionState, 0);
       return;
     }
@@ -228,10 +245,21 @@ export function useSlashCompletion(
       // Provide Suggestions based on the now-corrected context
       if (isArgumentCompletion) {
         const fetchAndSetSuggestions = async () => {
-          setIsLoadingSuggestions(true);
           const argString = rawParts.slice(depth).join(' ');
-          const results =
-            (await leafCommand!.completion!(commandContext, argString)) || [];
+
+          // Check if the completion returns a promise
+          const completionResult = leafCommand!.completion!(
+            commandContext,
+            argString,
+          );
+          const isAsync = completionResult instanceof Promise;
+
+          // Only show loading state for async completions
+          if (isAsync) {
+            setIsLoadingSuggestions(true);
+          }
+
+          const results = (await completionResult) || [];
           const finalSuggestions = results.map((s) => ({ label: s, value: s }));
           setSuggestions(finalSuggestions);
           setShowSuggestions(finalSuggestions.length > 0);
@@ -244,12 +272,23 @@ export function useSlashCompletion(
 
       // Command/Sub-command Completion
       const commandsToSearch = currentLevel || [];
+      debugLogger.debug(
+        () =>
+          `Commands to search: ${commandsToSearch.length}, Partial: "${partial}"`,
+      );
+      debugLogger.debug(
+        () => `currentLevel: ${currentLevel ? 'exists' : 'null/undefined'}`,
+      );
+      debugLogger.debug(() => `slashCommands at root: ${slashCommands.length}`);
       if (commandsToSearch.length > 0) {
         let potentialSuggestions = commandsToSearch.filter(
           (cmd) =>
             cmd.description &&
             (cmd.name.startsWith(partial) ||
               cmd.altNames?.some((alt) => alt.startsWith(partial))),
+        );
+        debugLogger.debug(
+          () => `Found ${potentialSuggestions.length} potential suggestions`,
         );
 
         // If a user's input is an exact match and it is a leaf command,
@@ -430,7 +469,11 @@ export function useSlashCompletion(
     };
 
     const fetchSuggestions = async () => {
-      setIsLoadingSuggestions(true);
+      // Only show loading state if we're doing file system operations
+      // which are actually async and might take time
+      if (commandIndex >= 0 && currentLine[commandIndex] === '@') {
+        setIsLoadingSuggestions(true);
+      }
       let fetchedSuggestions: Suggestion[] = [];
 
       const fileDiscoveryService = config ? config.getFileService() : null;

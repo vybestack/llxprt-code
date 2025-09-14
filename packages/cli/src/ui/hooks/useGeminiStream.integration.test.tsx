@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -387,7 +387,6 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
           props.client,
           props.history,
           props.addItem,
-          props.setShowHelp,
           props.config,
           props.onDebugMessage,
           props.handleSlashCommand,
@@ -396,7 +395,6 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
           () => {},
           () => Promise.resolve(),
           false,
-          () => {},
           () => {},
           () => {},
           () => {},

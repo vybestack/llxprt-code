@@ -206,26 +206,64 @@ jobs:
           echo "Getting commits from $LAST_STABLE_TAG to HEAD"
           git log --pretty=format:"- %s (%h)" "$LAST_STABLE_TAG"..HEAD > commits.txt
 
-          # Generate release notes with LLxprt or fall back to basic format
-          echo "Attempting to generate release notes with LLxprt Code..."
+          # Start building the release notes with static header and installation
+          echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
+          echo "" >> release-notes.md
 
-          # Create the prompt in a variable
-          PROMPT="Generate professional release notes for LLxprt Code version ${{ steps.version.outputs.RELEASE_TAG }} and write them to a file called 'generated-notes.md'.
+          # Static installation instructions - always the same format
+          echo "### Installation" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "Install or upgrade LLxprt Code using npm:" >> release-notes.md
+          echo "" >> release-notes.md
+          echo '```bash' >> release-notes.md
+          echo "npm install -g @vybestack/llxprt-code" >> release-notes.md
+          echo '```' >> release-notes.md
+          echo "" >> release-notes.md
+          echo "Or use directly with npx:" >> release-notes.md
+          echo "" >> release-notes.md
+          echo '```bash' >> release-notes.md
+          echo "npx @vybestack/llxprt-code" >> release-notes.md
+          echo '```' >> release-notes.md
+          echo "" >> release-notes.md
 
-          Format the output as follows:
-          1. Start with 'Release ${{ steps.version.outputs.RELEASE_TAG }}'
-          2. Add a note about alpha/beta/gamma naming (if applicable): 'Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance.'
-          3. Include 'Installation & Upgrade' section with npm commands including the version tag
-          4. Add 'Major Features' section summarizing the most important changes
-          5. Add 'Changes' section with the detailed commit list
-          6. NO EMOJIS anywhere
+          # Generate feature summary with LLxprt or fall back to basic format
+          echo "Attempting to generate feature summary with LLxprt Code..."
+
+          # Create a focused prompt for feature extraction only
+          PROMPT="Analyze the following git commits and identify ONLY the user-facing features and bug fixes worth highlighting.
+
+          Write your analysis to a file called 'features.md' with ONLY a '### What's New' section containing a bulleted list of the most important user-facing changes.
 
           Here are the commits since $LAST_STABLE_TAG:
           $(cat commits.txt)
 
-          IMPORTANT: Use the write_file tool to save the release notes to 'generated-notes.md'. The file_path should be 'generated-notes.md' and content should be the formatted release notes. Do not output them to stdout."
+          RULES:
+          1. ONLY include features that directly affect users:
+             - New AI provider support or model support
+             - New command-line flags or options
+             - Performance improvements users will notice
+             - Bug fixes for user-facing issues
+             - New tools or tool improvements
+             - UI/UX improvements
+             - New capabilities or features
 
-          # Try LLxprt generation using configured provider
+          2. EXCLUDE these entirely:
+             - Test file changes
+             - Internal refactoring
+             - Build system changes
+             - CI/CD updates
+             - Dependency updates (unless they add new features)
+             - Documentation updates (unless for new features)
+             - Development tooling changes
+             - Any bugs that were both introduced AND fixed in this same release
+
+          3. Write concise, clear bullet points that explain the benefit to users
+          4. NO EMOJIS
+          5. If there are no user-facing changes, write 'No major user-facing changes in this release.'
+
+          Use the write_file tool to save ONLY the feature list to 'features.md'."
+
+          # Try LLxprt generation for features
           set +e
           npx @vybestack/llxprt-code@latest \
             --provider ${{ vars.LLXPRT_DEFAULT_PROVIDER }} \
@@ -237,38 +275,19 @@ jobs:
           LLXPRT_EXIT=$?
           set -e
 
-          # Check if generation succeeded
-          if [ $LLXPRT_EXIT -eq 0 ] && [ -s generated-notes.md ]; then
-            echo "Using LLxprt-generated release notes"
-            cp generated-notes.md release-notes.md
+          # Add features section if generation succeeded
+          if [ $LLXPRT_EXIT -eq 0 ] && [ -s features.md ]; then
+            echo "Adding LLxprt-generated feature summary"
+            cat features.md >> release-notes.md
+            echo "" >> release-notes.md
           else
-            echo "Falling back to basic release notes"
-            # Write basic release notes
-            echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
-            echo "" >> release-notes.md
-
-            # Add note for pre-release versions
-            if [[ "${{ steps.version.outputs.RELEASE_TAG }}" =~ - ]]; then
-              echo "Note in LLxprt alpha/beta/gamma do not denote maturity, it is that we like to have our releases match the upstream gemini-cli project but sometimes we have major features or fixes we need to get into the hands of hungry users in advance." >> release-notes.md
-              echo "" >> release-notes.md
-            fi
-
-            echo "### Installation & Upgrade" >> release-notes.md
-            echo "" >> release-notes.md
-            echo "#### Install" >> release-notes.md
-            echo '```bash' >> release-notes.md
-            echo "npm install -g @vybestack/llxprt-code@${{ steps.version.outputs.RELEASE_VERSION }}" >> release-notes.md
-            echo '```' >> release-notes.md
-            echo "" >> release-notes.md
-            echo "#### Upgrade" >> release-notes.md
-            echo '```bash' >> release-notes.md
-            echo "npm update -g @vybestack/llxprt-code@${{ steps.version.outputs.RELEASE_VERSION }}" >> release-notes.md
-            echo '```' >> release-notes.md
-            echo "" >> release-notes.md
-            echo "### Changes" >> release-notes.md
-            echo "" >> release-notes.md
-            cat commits.txt >> release-notes.md
+            echo "Skipping feature summary (LLxprt generation failed)"
           fi
+
+          # Always add the full commit list
+          echo "### All Changes" >> release-notes.md
+          echo "" >> release-notes.md
+          cat commits.txt >> release-notes.md
 
           # Add comparison link if we have a real previous tag
           if [[ "$LAST_STABLE_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then

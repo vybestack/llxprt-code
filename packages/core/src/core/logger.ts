@@ -7,8 +7,9 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { Content, Part } from '@google/genai';
-import { getProjectTempDir, ensureLlxprtDirExists } from '../utils/paths.js';
+import { ensureLlxprtDirExists } from '../utils/paths.js';
 import { EmojiFilter } from '../filters/EmojiFilter.js';
+import { Storage } from '../config/storage.js';
 
 const LOG_FILE_NAME = 'logs.json';
 
@@ -68,7 +69,10 @@ export class Logger {
   private initialized = false;
   private logs: LogEntry[] = []; // In-memory cache, ideally reflects the last known state of the file
 
-  constructor(sessionId: string) {
+  constructor(
+    sessionId: string,
+    private readonly storage: Storage,
+  ) {
     this.sessionId = sessionId;
   }
 
@@ -132,7 +136,7 @@ export class Logger {
     }
 
     ensureLlxprtDirExists();
-    this.llxprtDir = getProjectTempDir(process.cwd());
+    this.llxprtDir = this.storage.getProjectTempDir();
     this.logFilePath = path.join(this.llxprtDir, LOG_FILE_NAME);
 
     try {

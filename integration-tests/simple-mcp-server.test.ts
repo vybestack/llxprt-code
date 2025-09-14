@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2024 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,7 @@ describe.skipIf(skipMcpTests)('simple-mcp-server', () => {
   const serverScript = `#!/usr/bin/env node
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2024 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 

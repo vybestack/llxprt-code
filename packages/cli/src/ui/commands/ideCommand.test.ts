@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,6 +18,8 @@ import { type CommandContext } from './types.js';
 import { type Config, DetectedIde } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
+vi.mock('child_process');
+vi.mock('glob');
 vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
   const actual = await importOriginal();
   return {

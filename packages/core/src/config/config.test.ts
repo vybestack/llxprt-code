@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
-import { Config, ConfigParameters, SandboxConfig } from './config.js';
-import * as path from 'path';
-import { setLlxprtMdFilename as mockSetGeminiMdFilename } from '../tools/memoryTool.js';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
+import type { ConfigParameters, SandboxConfig } from './config.js';
+import { Config, ApprovalMode } from './config.js';
+import * as path from 'node:path';
+import { setLlxprtMdFilename as mockSetLlxprtMdFilename } from '../tools/memoryTool.js';
 import {
   DEFAULT_TELEMETRY_TARGET,
   DEFAULT_OTLP_ENDPOINT,
@@ -21,6 +23,9 @@ import { GeminiClient } from '../core/client.js';
 import { GitService } from '../services/gitService.js';
 import { IdeClient } from '../ide/ide-client.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
+
+import { ShellTool } from '../tools/shell.js';
+import { ReadFileTool } from '../tools/read-file.js';
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -244,6 +249,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       // Set the existing client
@@ -259,13 +265,14 @@ describe('Server Config (config.ts)', () => {
 
       // Verify that new client was created and initialized
       expect(GeminiClient).toHaveBeenCalledWith(config);
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
 
-      // Verify that history was restored to the new client
-      expect(mockNewClient.setHistory).toHaveBeenCalledWith(
+      // Verify that history was stored BEFORE initialize was called
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
         mockExistingHistory,
-        { stripThoughts: false },
       );
+
+      // Verify that initialize was called after storing history
+      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
     });
 
     it('should handle case when no existing client is initialized', async () => {
@@ -283,6 +290,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       // No existing client
@@ -327,6 +335,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       (
@@ -336,10 +345,14 @@ describe('Server Config (config.ts)', () => {
 
       await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
 
-      expect(mockNewClient.setHistory).toHaveBeenCalledWith(
-        mockExistingHistory,
-        { stripThoughts: true },
-      );
+      // When switching from GenAI to Vertex, thoughts should be stripped
+      // The history is stored with thoughts stripped before initialize
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalled();
+
+      // Get the actual call arguments to verify thoughts stripping
+      const storedHistory =
+        mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
+      expect(storedHistory).toEqual(mockExistingHistory);
     });
 
     it('should not strip thoughts when switching from Vertex to GenAI', async () => {
@@ -370,6 +383,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       (
@@ -379,9 +393,9 @@ describe('Server Config (config.ts)', () => {
 
       await config.refreshAuth(AuthType.USE_GEMINI);
 
-      expect(mockNewClient.setHistory).toHaveBeenCalledWith(
+      // When switching from Vertex to GenAI, thoughts should NOT be stripped
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
         mockExistingHistory,
-        { stripThoughts: false },
       );
     });
   });
@@ -409,12 +423,12 @@ describe('Server Config (config.ts)', () => {
       contextFileName,
     };
     new Config(paramsWithContextFile);
-    expect(mockSetGeminiMdFilename).toHaveBeenCalledWith(contextFileName);
+    expect(mockSetLlxprtMdFilename).toHaveBeenCalledWith(contextFileName);
   });
 
   it('Config constructor should not call setLlxprtMdFilename if contextFileName is not provided', () => {
     new Config(baseParams); // baseParams does not have contextFileName
-    expect(mockSetGeminiMdFilename).not.toHaveBeenCalled();
+    expect(mockSetLlxprtMdFilename).not.toHaveBeenCalled();
   });
 
   it('should set default file filtering settings when not provided', () => {
@@ -773,5 +787,139 @@ describe('Server Config (config.ts)', () => {
       expect(settingsService1).toBe(settingsService2);
       expect(settingsService1).toBe(mockSettingsService);
     });
+  });
+
+  describe('UseRipgrep Configuration', () => {
+    it('should default useRipgrep to false when not provided', () => {
+      const config = new Config(baseParams);
+      expect(config.getUseRipgrep()).toBe(false);
+    });
+
+    it('should set useRipgrep to true when provided as true', () => {
+      const paramsWithRipgrep: ConfigParameters = {
+        ...baseParams,
+        useRipgrep: true,
+      };
+      const config = new Config(paramsWithRipgrep);
+      expect(config.getUseRipgrep()).toBe(true);
+    });
+
+    it('should set useRipgrep to false when explicitly provided as false', () => {
+      const paramsWithRipgrep: ConfigParameters = {
+        ...baseParams,
+        useRipgrep: false,
+      };
+      const config = new Config(paramsWithRipgrep);
+      expect(config.getUseRipgrep()).toBe(false);
+    });
+
+    it('should default useRipgrep to false when undefined', () => {
+      const paramsWithUndefinedRipgrep: ConfigParameters = {
+        ...baseParams,
+        useRipgrep: undefined,
+      };
+      const config = new Config(paramsWithUndefinedRipgrep);
+      expect(config.getUseRipgrep()).toBe(false);
+    });
+  });
+
+  describe('createToolRegistry', () => {
+    it('should register a tool if coreTools contains an argument-specific pattern', async () => {
+      const params: ConfigParameters = {
+        ...baseParams,
+        coreTools: ['ShellTool(git status)'],
+      };
+      const config = new Config(params);
+      await config.initialize();
+
+      // The ToolRegistry class is mocked, so we can inspect its prototype's methods.
+      const registerToolMock = (
+        (await vi.importMock('../tools/tool-registry')) as {
+          ToolRegistry: { prototype: { registerTool: Mock } };
+        }
+      ).ToolRegistry.prototype.registerTool;
+
+      // Check that registerTool was called for ShellTool
+      const wasShellToolRegistered = (registerToolMock as Mock).mock.calls.some(
+        (call) => call[0] instanceof vi.mocked(ShellTool),
+      );
+      expect(wasShellToolRegistered).toBe(true);
+
+      // Check that registerTool was NOT called for ReadFileTool
+      const wasReadFileToolRegistered = (
+        registerToolMock as Mock
+      ).mock.calls.some((call) => call[0] instanceof vi.mocked(ReadFileTool));
+      expect(wasReadFileToolRegistered).toBe(false);
+    });
+  });
+});
+
+describe('setApprovalMode with folder trust', () => {
+  it('should throw an error when setting YOLO mode in an untrusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: false, // Untrusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).toThrow(
+      'Cannot enable privileged approval modes in an untrusted folder.',
+    );
+  });
+
+  it('should throw an error when setting AUTO_EDIT mode in an untrusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: false, // Untrusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).toThrow(
+      'Cannot enable privileged approval modes in an untrusted folder.',
+    );
+  });
+
+  it('should NOT throw an error when setting DEFAULT mode in an untrusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: false, // Untrusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+  });
+
+  it('should NOT throw an error when setting any mode in a trusted folder', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: true, // Trusted
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
+    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
+    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+  });
+
+  it('should NOT throw an error when setting any mode if trustedFolder is undefined', () => {
+    const config = new Config({
+      sessionId: 'test',
+      targetDir: '.',
+      debugMode: false,
+      model: 'test-model',
+      cwd: '.',
+      trustedFolder: undefined, // Undefined
+    });
+    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
+    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
+    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
   });
 });

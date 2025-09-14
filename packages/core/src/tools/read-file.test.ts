@@ -15,6 +15,7 @@ import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { ToolInvocation, ToolResult } from './tools.js';
+import { ToolErrorType } from './tool-error.js';
 
 describe('ReadFileTool', () => {
   let tempRootDir: string;
@@ -293,7 +294,7 @@ Line 8`;
         });
       });
 
-      it('should return success result for a text file', async () => {
+      it('should return success result for a text file in validate mode', async () => {
         const filePath = path.join(tempRootDir, 'textfile.txt');
         const fileContent = 'This is a test file.';
         await fsp.writeFile(filePath, fileContent, 'utf-8');
@@ -309,7 +310,7 @@ Line 8`;
         });
       });
 
-      it('should return success result for an image file', async () => {
+      it('should return success result for an image file in validate mode', async () => {
         // A minimal 1x1 transparent PNG file.
         const pngContent = Buffer.from([
           137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0,
@@ -336,7 +337,7 @@ Line 8`;
         });
       });
 
-      it('should treat a non-image file with image extension as an image', async () => {
+      it('should treat a non-image file with image extension as an image in validate mode', async () => {
         const filePath = path.join(tempRootDir, 'fake-image.png');
         const fileContent = 'This is not a real png.';
         await fsp.writeFile(filePath, fileContent, 'utf-8');
@@ -392,6 +393,207 @@ Line 8`;
           'Read lines 6-8 of 20 from paginated.txt',
         );
       });
+    });
+
+    it('should return error if path is a directory', async () => {
+      const dirPath = path.join(tempRootDir, 'directory');
+      await fsp.mkdir(dirPath);
+      const params: ReadFileToolParams = { absolute_path: dirPath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result).toEqual({
+        llmContent:
+          'Could not read file because the provided path is a directory, not a file.',
+        returnDisplay: 'Path is a directory.',
+        error: {
+          message: `Path is a directory, not a file: ${dirPath}`,
+          type: ToolErrorType.TARGET_IS_DIRECTORY,
+        },
+      });
+    });
+
+    it('should return error for a file that is too large', async () => {
+      const filePath = path.join(tempRootDir, 'largefile.txt');
+      // 21MB of content exceeds 20MB limit
+      const largeContent = 'x'.repeat(21 * 1024 * 1024);
+      await fsp.writeFile(filePath, largeContent, 'utf-8');
+      const params: ReadFileToolParams = { absolute_path: filePath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result).toHaveProperty('error');
+      expect(result.error?.type).toBe(ToolErrorType.FILE_TOO_LARGE);
+      expect(result.error?.message).toContain(
+        'File size exceeds the 20MB limit',
+      );
+    });
+
+    it('should handle text file with lines exceeding maximum length', async () => {
+      const filePath = path.join(tempRootDir, 'longlines.txt');
+      const longLine = 'a'.repeat(2500); // Exceeds MAX_LINE_LENGTH_TEXT_FILE (2000)
+      const fileContent = `Short line\n${longLine}\nAnother short line`;
+      await fsp.writeFile(filePath, fileContent, 'utf-8');
+      const params: ReadFileToolParams = { absolute_path: filePath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toContain(
+        'IMPORTANT: The file content has been truncated',
+      );
+      expect(result.llmContent).toContain('--- FILE CONTENT (truncated) ---');
+      expect(result.returnDisplay).toContain('some lines were shortened');
+    });
+
+    it('should handle image file and return appropriate content', async () => {
+      const imagePath = path.join(tempRootDir, 'image.png');
+      // Minimal PNG header
+      const pngHeader = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      await fsp.writeFile(imagePath, pngHeader);
+      const params: ReadFileToolParams = { absolute_path: imagePath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toEqual({
+        inlineData: {
+          data: pngHeader.toString('base64'),
+          mimeType: 'image/png',
+        },
+      });
+      expect(result.returnDisplay).toBe('Read image file: image.png');
+    });
+
+    it('should handle PDF file and return appropriate content', async () => {
+      const pdfPath = path.join(tempRootDir, 'document.pdf');
+      // Minimal PDF header
+      const pdfHeader = Buffer.from('%PDF-1.4');
+      await fsp.writeFile(pdfPath, pdfHeader);
+      const params: ReadFileToolParams = { absolute_path: pdfPath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toEqual({
+        inlineData: {
+          data: pdfHeader.toString('base64'),
+          mimeType: 'application/pdf',
+        },
+      });
+      expect(result.returnDisplay).toBe('Read pdf file: document.pdf');
+    });
+
+    it('should handle binary file and skip content', async () => {
+      const binPath = path.join(tempRootDir, 'binary.bin');
+      // Binary data with null bytes
+      const binaryData = Buffer.from([0x00, 0xff, 0x00, 0xff]);
+      await fsp.writeFile(binPath, binaryData);
+      const params: ReadFileToolParams = { absolute_path: binPath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toBe(
+        'Cannot display content of binary file: binary.bin',
+      );
+      expect(result.returnDisplay).toBe('Skipped binary file: binary.bin');
+    });
+
+    it('should handle SVG file as text', async () => {
+      const svgPath = path.join(tempRootDir, 'image.svg');
+      const svgContent = '<svg><circle cx="50" cy="50" r="40"/></svg>';
+      await fsp.writeFile(svgPath, svgContent, 'utf-8');
+      const params: ReadFileToolParams = { absolute_path: svgPath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toBe(svgContent);
+      expect(result.returnDisplay).toBe('Read SVG as text: image.svg');
+    });
+
+    it('should handle large SVG file', async () => {
+      const svgPath = path.join(tempRootDir, 'large.svg');
+      // Create SVG content larger than 1MB
+      const largeContent = '<svg>' + 'x'.repeat(1024 * 1024 + 1) + '</svg>';
+      await fsp.writeFile(svgPath, largeContent, 'utf-8');
+      const params: ReadFileToolParams = { absolute_path: svgPath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toBe(
+        'Cannot display content of SVG file larger than 1MB: large.svg',
+      );
+      expect(result.returnDisplay).toBe(
+        'Skipped large SVG file (>1MB): large.svg',
+      );
+    });
+
+    it('should handle empty file', async () => {
+      const emptyPath = path.join(tempRootDir, 'empty.txt');
+      await fsp.writeFile(emptyPath, '', 'utf-8');
+      const params: ReadFileToolParams = { absolute_path: emptyPath };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toBe('');
+      expect(result.returnDisplay).toBe('');
+    });
+
+    it('should support offset and limit for text files', async () => {
+      const filePath = path.join(tempRootDir, 'paginated.txt');
+      const lines = Array.from({ length: 20 }, (_, i) => `Line ${i + 1}`);
+      const fileContent = lines.join('\n');
+      await fsp.writeFile(filePath, fileContent, 'utf-8');
+
+      const params: ReadFileToolParams = {
+        absolute_path: filePath,
+        offset: 5, // Start from line 6
+        limit: 3,
+      };
+      const invocation = tool.build(params) as ToolInvocation<
+        ReadFileToolParams,
+        ToolResult
+      >;
+
+      const result = await invocation.execute(abortSignal);
+      expect(result.llmContent).toContain(
+        'IMPORTANT: The file content has been truncated',
+      );
+      expect(result.llmContent).toContain(
+        'Status: Showing lines 6-8 of 20 total lines',
+      );
+      expect(result.llmContent).toContain('Line 6');
+      expect(result.llmContent).toContain('Line 7');
+      expect(result.llmContent).toContain('Line 8');
+      expect(result.returnDisplay).toBe(
+        'Read lines 6-8 of 20 from paginated.txt',
+      );
     });
 
     describe('with .llxprtignore for ignored directory', () => {

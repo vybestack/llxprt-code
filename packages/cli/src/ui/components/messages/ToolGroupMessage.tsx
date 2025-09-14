@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,7 +19,7 @@ interface ToolGroupMessageProps {
   toolCalls: IndividualToolCallDisplay[];
   availableTerminalHeight?: number;
   terminalWidth: number;
-  config?: Config;
+  config: Config;
   isFocused?: boolean;
 }
 
@@ -114,6 +114,7 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       marginLeft={1}
       borderDimColor={hasPending}
       borderColor={borderColor}
+      gap={1}
     >
       {filteredToolCalls.map((tool) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;

@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * @plan PLAN-20250823-AUTHFIXES.P05
  * Qwen OAuth Provider Implementation
  */

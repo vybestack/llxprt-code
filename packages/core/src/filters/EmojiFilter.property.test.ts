@@ -1,4 +1,10 @@
 /**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Property-based tests for EmojiFilter using fast-check
  * These tests verify invariants that must ALWAYS hold regardless of input
  */
@@ -13,12 +19,11 @@ const itProp = (
   fn: (...args: unknown[]) => void | Promise<void>,
   options?: fc.Parameters<unknown>,
 ) => {
-  it(name, () =>
+  it(`${name}`, async () =>
     fc.assert(
       fc.asyncProperty(...arbitraries, fn),
       options ?? { numRuns: 100 },
-    ),
-  );
+    ));
 };
 import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
 

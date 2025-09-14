@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import { MockTool } from '../test-utils/tools.js';
 
 import { McpClientManager } from './mcp-client-manager.js';
+import { ToolErrorType } from './tool-error.js';
 
 vi.mock('node:fs');
 
@@ -179,6 +180,24 @@ describe('ToolRegistry', () => {
     });
   });
 
+  describe('getAllToolNames', () => {
+    it('should return all registered tool names', () => {
+      // Register tools with displayNames in non-alphabetical order
+      const toolC = new MockTool('c-tool', 'Tool C');
+      const toolA = new MockTool('a-tool', 'Tool A');
+      const toolB = new MockTool('b-tool', 'Tool B');
+
+      toolRegistry.registerTool(toolC);
+      toolRegistry.registerTool(toolA);
+      toolRegistry.registerTool(toolB);
+
+      const toolNames = toolRegistry.getAllToolNames();
+
+      // Assert that the returned array contains all tool names
+      expect(toolNames).toEqual(['c-tool', 'a-tool', 'b-tool']);
+    });
+  });
+
   describe('getToolsByServer', () => {
     it('should return an empty array if no tools match the server name', () => {
       toolRegistry.registerTool(new MockTool());
@@ -312,6 +331,81 @@ describe('ToolRegistry', () => {
       });
     });
 
+    it('should return a DISCOVERED_TOOL_EXECUTION_ERROR on tool failure', async () => {
+      const discoveryCommand = 'my-discovery-command';
+      mockConfigGetToolDiscoveryCommand.mockReturnValue(discoveryCommand);
+      vi.spyOn(config, 'getToolCallCommand').mockReturnValue('my-call-command');
+
+      const toolDeclaration: FunctionDeclaration = {
+        name: 'failing-tool',
+        description: 'A tool that fails',
+        parametersJsonSchema: {
+          type: 'object',
+          properties: {},
+        },
+      };
+
+      const mockSpawn = vi.mocked(spawn);
+      // --- Discovery Mock ---
+      const discoveryProcess = {
+        stdout: { on: vi.fn(), removeListener: vi.fn() },
+        stderr: { on: vi.fn(), removeListener: vi.fn() },
+        on: vi.fn(),
+      };
+      mockSpawn.mockReturnValueOnce(discoveryProcess as any);
+
+      discoveryProcess.stdout.on.mockImplementation((event, callback) => {
+        if (event === 'data') {
+          callback(
+            Buffer.from(
+              JSON.stringify([{ functionDeclarations: [toolDeclaration] }]),
+            ),
+          );
+        }
+      });
+      discoveryProcess.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          callback(0);
+        }
+      });
+
+      await toolRegistry.discoverAllTools();
+      const discoveredTool = toolRegistry.getTool('failing-tool');
+      expect(discoveredTool).toBeDefined();
+
+      // --- Execution Mock ---
+      const executionProcess = {
+        stdout: { on: vi.fn(), removeListener: vi.fn() },
+        stderr: { on: vi.fn(), removeListener: vi.fn() },
+        stdin: { write: vi.fn(), end: vi.fn() },
+        on: vi.fn(),
+        connected: true,
+        disconnect: vi.fn(),
+        removeListener: vi.fn(),
+      };
+      mockSpawn.mockReturnValueOnce(executionProcess as any);
+
+      executionProcess.stderr.on.mockImplementation((event, callback) => {
+        if (event === 'data') {
+          callback(Buffer.from('Something went wrong'));
+        }
+      });
+      executionProcess.on.mockImplementation((event, callback) => {
+        if (event === 'close') {
+          callback(1); // Non-zero exit code
+        }
+      });
+
+      const invocation = (discoveredTool as DiscoveredTool).build({});
+      const result = await invocation.execute(new AbortController().signal);
+
+      expect(result.error?.type).toBe(
+        ToolErrorType.DISCOVERED_TOOL_EXECUTION_ERROR,
+      );
+      expect(result.llmContent).toContain('Stderr: Something went wrong');
+      expect(result.llmContent).toContain('Exit Code: 1');
+    });
+
     it('should discover tools using MCP servers defined in getMcpServers', async () => {
       const discoverSpy = vi.spyOn(
         McpClientManager.prototype,
@@ -412,6 +506,75 @@ describe('ToolRegistry', () => {
 
       const allTools = toolRegistry.getAllTools();
       expect(allTools).toHaveLength(2);
+    });
+
+    it('should filter out excluded tools from configuration in getFunctionDeclarations', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+      vi.spyOn(config, 'getExcludeTools').mockReturnValue([
+        'todo_write',
+        'todo_read',
+      ]);
+
+      const tool1 = new MockTool('todo_write', 'Todo Write');
+      const tool2 = new MockTool('todo_read', 'Todo Read');
+      const tool3 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0].name).toBe('another-tool');
+    });
+
+    it('should filter out both disabled and excluded tools in getFunctionDeclarations', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({
+        'disabled-tools': ['test-tool'],
+      });
+      vi.spyOn(config, 'getExcludeTools').mockReturnValue(['todo_write']);
+
+      const tool1 = new MockTool('test-tool', 'Test Tool');
+      const tool2 = new MockTool('todo_write', 'Todo Write');
+      const tool3 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const declarations = toolRegistry.getFunctionDeclarations();
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0].name).toBe('another-tool');
+    });
+
+    it('should filter out excluded tools in getEnabledTools', () => {
+      vi.spyOn(config, 'getEphemeralSettings').mockReturnValue({});
+      vi.spyOn(config, 'getExcludeTools').mockReturnValue([
+        'todo_write',
+        'todo_read',
+      ]);
+
+      const tool1 = new MockTool('todo_write', 'Todo Write');
+      const tool2 = new MockTool('todo_read', 'Todo Read');
+      const tool3 = new MockTool('another-tool', 'Another Tool');
+
+      toolRegistry.registerTool(tool1);
+      toolRegistry.registerTool(tool2);
+      toolRegistry.registerTool(tool3);
+
+      const enabledTools = toolRegistry.getEnabledTools();
+      expect(enabledTools).toHaveLength(1);
+      expect(enabledTools[0].name).toBe('another-tool');
+    });
+  });
+
+  describe('DiscoveredToolInvocation', () => {
+    it('should return the stringified params from getDescription', () => {
+      const tool = new DiscoveredTool(config, 'test-tool', 'A test tool', {});
+      const params = { param: 'testValue' };
+      const invocation = tool.build(params);
+      const description = invocation.getDescription();
+      expect(description).toBe(JSON.stringify(params));
     });
   });
 });

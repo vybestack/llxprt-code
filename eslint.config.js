@@ -10,6 +10,7 @@ import reactPlugin from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import prettierConfig from 'eslint-config-prettier';
 import importPlugin from 'eslint-plugin-import';
+import vitest from '@vitest/eslint-plugin';
 import globals from 'globals';
 import licenseHeader from 'eslint-plugin-license-header';
 import reactRenderSafety from './eslint-rules/react-render-safety.js';
@@ -32,11 +33,7 @@ export default tseslint.config(
       'node_modules/*',
       '.integration-tests/**',
       'eslint.config.js',
-      'packages/cli/dist/**',
-      'packages/core/dist/**',
-      'packages/server/dist/**',
-      'packages/a2a-server/dist/**',
-      'packages/vscode-ide-companion/dist/**',
+      'packages/**/dist/**',
       'bundle/**',
       'packages/cli/src/test-*.ts',
       'packages/cli/src/test-*.tsx',
@@ -213,6 +210,18 @@ export default tseslint.config(
       ],
     },
   },
+  // Vitest test configuration
+  {
+    files: ['packages/*/src/**/*.test.{ts,tsx}'],
+    plugins: {
+      vitest,
+    },
+    rules: {
+      ...vitest.configs.recommended.rules,
+      'vitest/expect-expect': 'off',
+      'vitest/no-commented-out-tests': 'off',
+    },
+  },
   // Settings for eslint-rules directory
   {
     files: ['./eslint-rules/**/*.js'],
@@ -319,6 +328,16 @@ export default tseslint.config(
       // Custom rules
       // 'custom/react-render-safety': 'error', // TODO: Fix for ESLint 9 API
       'custom/no-inline-deps': 'warn', // Set to warn initially, can be changed to error later
+    },
+  },
+  // License header configuration
+  {
+    files: ['./**/*.{tsx,ts,js}'],
+    plugins: {
+      'license-header': licenseHeader,
+    },
+    rules: {
+      'license-header/header': 'off',
     },
   },
 );

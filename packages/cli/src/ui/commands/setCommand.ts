@@ -388,6 +388,9 @@ const ephemeralSettingHelp: Record<string, string> = {
     'Maximum number of retry attempts for API calls (default: varies by provider)',
   retrywait:
     'Initial delay in milliseconds between retry attempts (default: varies by provider)',
+  // Loop prevention settings
+  maxTurnsPerPrompt:
+    'Maximum number of turns allowed per prompt before stopping (default: 100, -1 for unlimited)',
 };
 
 export const setCommand: SlashCommand = {
@@ -520,6 +523,22 @@ export const setCommand: SlashCommand = {
           type: 'message',
           messageType: 'error',
           content: `${key} must be a positive integer`,
+        };
+      }
+    }
+
+    // Validate maxTurnsPerPrompt
+    if (key === 'maxTurnsPerPrompt') {
+      const numValue = parsedValue as number;
+      if (
+        typeof numValue !== 'number' ||
+        !Number.isInteger(numValue) ||
+        (numValue !== -1 && numValue <= 0)
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `${key} must be a positive integer or -1 for unlimited`,
         };
       }
     }

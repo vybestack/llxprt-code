@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,6 +11,7 @@ import yargs from 'yargs/yargs';
 import { hideBin } from 'yargs/helpers';
 import process from 'node:process';
 import { mcpCommand } from '../commands/mcp.js';
+import { extensionsCommand } from '../commands/extensions.js';
 import {
   Config,
   loadServerHierarchicalMemory,
@@ -55,9 +56,7 @@ export interface CliArgs {
   prompt: string | undefined;
   promptInteractive: string | undefined;
   allFiles: boolean | undefined;
-  all_files: boolean | undefined;
   showMemoryUsage: boolean | undefined;
-  show_memory_usage: boolean | undefined;
   yolo: boolean | undefined;
   approvalMode: string | undefined;
   telemetry: boolean | undefined;
@@ -67,6 +66,7 @@ export interface CliArgs {
   telemetryLogPrompts: boolean | undefined;
   telemetryOutfile: string | undefined;
   allowedMcpServerNames: string[] | undefined;
+  allowedTools: string[] | undefined;
   experimentalAcp: boolean | undefined;
   extensions: string[] | undefined;
   listExtensions: boolean | undefined;
@@ -79,10 +79,12 @@ export interface CliArgs {
   profileLoad: string | undefined;
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
+  screenReader: boolean | undefined;
 }
 
-export async function parseArguments(): Promise<CliArgs> {
+export async function parseArguments(settings: Settings): Promise<CliArgs> {
   const yargsInstance = yargs(hideBin(process.argv))
+    .locale('en')
     .scriptName('llxprt')
     .usage(
       '$0 [options]',
@@ -128,29 +130,11 @@ export async function parseArguments(): Promise<CliArgs> {
           description: 'Include ALL files in context?',
           default: false,
         })
-        .option('all_files', {
-          type: 'boolean',
-          description: 'Include ALL files in context?',
-          default: false,
-        })
-        .deprecateOption(
-          'all_files',
-          'Use --all-files instead. We will be removing --all_files in the coming weeks.',
-        )
         .option('show-memory-usage', {
           type: 'boolean',
           description: 'Show memory usage in status bar',
           default: false,
         })
-        .option('show_memory_usage', {
-          type: 'boolean',
-          description: 'Show memory usage in status bar',
-          default: false,
-        })
-        .deprecateOption(
-          'show_memory_usage',
-          'Use --show-memory-usage instead. We will be removing --show_memory_usage in the coming weeks.',
-        )
         .option('yolo', {
           alias: 'y',
           type: 'boolean',
@@ -204,6 +188,11 @@ export async function parseArguments(): Promise<CliArgs> {
           string: true,
           description: 'Allowed MCP server names',
         })
+        .option('allowed-tools', {
+          type: 'array',
+          string: true,
+          description: 'Tools that are allowed to run without confirmation',
+        })
         .option('extensions', {
           alias: 'e',
           type: 'array',
@@ -229,6 +218,11 @@ export async function parseArguments(): Promise<CliArgs> {
           coerce: (dirs: string[]) =>
             // Handle comma-separated values
             dirs.flatMap((dir) => dir.split(',').map((d) => d.trim())),
+        })
+        .option('screen-reader', {
+          type: 'boolean',
+          description: 'Enable screen reader mode for accessibility.',
+          default: false,
         })
         .check((argv) => {
           if (argv.prompt && argv.promptInteractive) {
@@ -343,7 +337,13 @@ export async function parseArguments(): Promise<CliArgs> {
       default: false,
     })
     // Register MCP subcommands
-    .command(mcpCommand)
+    .command(mcpCommand);
+
+  if (settings?.extensionManagement ?? false) {
+    yargsInstance.command(extensionsCommand);
+  }
+
+  yargsInstance
     .version(await getCliVersion()) // This will enable the --version flag based on package.json
     .alias('v', 'version')
     .help()
@@ -380,13 +380,12 @@ export async function parseArguments(): Promise<CliArgs> {
     prompt: result.prompt as string | undefined,
     promptInteractive: result.promptInteractive as string | undefined,
     allFiles: result.allFiles as boolean | undefined,
-    all_files: result.all_files as boolean | undefined,
     showMemoryUsage: result.showMemoryUsage as boolean | undefined,
-    show_memory_usage: result.show_memory_usage as boolean | undefined,
     yolo: result.yolo as boolean | undefined,
     approvalMode: result.approvalMode as string | undefined,
     telemetry: result.telemetry as boolean | undefined,
     checkpointing: result.checkpointing as boolean | undefined,
+    screenReader: result.screenReader as boolean | undefined,
     telemetryTarget: result.telemetryTarget as string | undefined,
     telemetryOtlpEndpoint: result.telemetryOtlpEndpoint as string | undefined,
     telemetryLogPrompts: result.telemetryLogPrompts as boolean | undefined,
@@ -405,6 +404,7 @@ export async function parseArguments(): Promise<CliArgs> {
     loadMemoryFromIncludeDirectories:
       result.loadMemoryFromIncludeDirectories as boolean | undefined,
     ideMode: result.ideMode as string | undefined,
+    allowedTools: result.allowedTools as string[] | undefined,
   };
 
   return cliArgs;
@@ -559,7 +559,7 @@ export async function loadCliConfig(
 
   // ideModeFeature flag removed - now using ideMode directly
 
-  const ideClient = IdeClient.getInstance();
+  const ideClient = await IdeClient.getInstance();
 
   const folderTrustFeature = settings.folderTrustFeature ?? false;
   const folderTrustSetting = settings.folderTrust ?? true;
@@ -642,6 +642,14 @@ export async function loadCliConfig(
     // Fallback to legacy --yolo flag behavior
     approvalMode =
       argv.yolo || false ? ApprovalMode.YOLO : ApprovalMode.DEFAULT;
+  }
+
+  // Force approval mode to default if the folder is not trusted.
+  if (!trustedFolder && approvalMode !== ApprovalMode.DEFAULT) {
+    logger.log(
+      `Approval mode overridden to "default" because the current folder is not trusted.`,
+    );
+    approvalMode = ApprovalMode.DEFAULT;
   }
 
   const interactive =
@@ -736,6 +744,10 @@ export async function loadCliConfig(
     // For other providers, let them use their own default models (empty string means use provider default)
     (finalProvider === 'gemini' ? DEFAULT_GEMINI_MODEL : '');
 
+  // The screen reader argument takes precedence over the accessibility setting.
+  const screenReader =
+    argv.screenReader ?? effectiveSettings.accessibility?.screenReader ?? false;
+
   const config = new Config({
     sessionId,
     embeddingModel: DEFAULT_GEMINI_EMBEDDING_MODEL,
@@ -748,8 +760,9 @@ export async function loadCliConfig(
       false,
     debugMode,
     question,
-    fullContext: argv.allFiles || argv.all_files || false,
+    fullContext: argv.allFiles || false,
     coreTools: effectiveSettings.coreTools || undefined,
+    allowedTools: argv.allowedTools || settings.allowedTools || undefined,
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
     toolCallCommand: effectiveSettings.toolCallCommand,
@@ -759,11 +772,11 @@ export async function loadCliConfig(
     llxprtMdFileCount: fileCount,
     approvalMode,
     showMemoryUsage:
-      argv.showMemoryUsage ||
-      argv.show_memory_usage ||
-      effectiveSettings.showMemoryUsage ||
-      false,
-    accessibility: effectiveSettings.accessibility,
+      argv.showMemoryUsage || effectiveSettings.showMemoryUsage || false,
+    accessibility: {
+      ...effectiveSettings.accessibility,
+      screenReader,
+    },
     telemetry: {
       enabled: argv.telemetry ?? effectiveSettings.telemetry?.enabled,
       target: (argv.telemetryTarget ??
@@ -790,6 +803,7 @@ export async function loadCliConfig(
       respectLlxprtIgnore: effectiveSettings.fileFiltering?.respectLlxprtIgnore,
       enableRecursiveFileSearch:
         effectiveSettings.fileFiltering?.enableRecursiveFileSearch,
+      disableFuzzySearch: effectiveSettings.fileFiltering?.disableFuzzySearch,
     },
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
@@ -824,7 +838,9 @@ export async function loadCliConfig(
     folderTrust,
     trustedFolder,
     shellReplacement: effectiveSettings.shellReplacement,
+    useRipgrep: effectiveSettings.useRipgrep,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
+    enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
   });
 
   const enhancedConfig = config;

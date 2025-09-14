@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Google LLC
+ * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,6 +24,7 @@ const useSessionStatsMock = vi.mocked(SessionContext.useSessionStats);
 const renderWithMockedStats = (metrics: SessionMetrics) => {
   useSessionStatsMock.mockReturnValue({
     stats: {
+      sessionId: 'test-session-id',
       sessionStartTime: new Date(),
       metrics,
       lastPromptTokenCount: 0,
@@ -377,6 +378,7 @@ describe('<StatsDisplay />', () => {
     it('renders the custom title when a title prop is provided', () => {
       useSessionStatsMock.mockReturnValue({
         stats: {
+          sessionId: 'test-session-id',
           sessionStartTime: new Date(),
           metrics: zeroMetrics,
           lastPromptTokenCount: 0,
