@@ -11,7 +11,7 @@
 
 import { describe, expect } from 'vitest';
 import { it } from '@fast-check/vitest';
-import { fc } from 'fast-check';
+import * as fc from 'fast-check';
 import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter Property-Based Tests', () => {

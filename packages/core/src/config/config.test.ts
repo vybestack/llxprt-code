@@ -82,6 +82,7 @@ vi.mock('../core/client.js', () => ({
     initialize: vi.fn().mockResolvedValue(undefined),
     isInitialized: vi.fn().mockReturnValue(false),
     getHistory: vi.fn().mockReturnValue([]),
+    getHistoryService: vi.fn().mockReturnValue(null),
     setHistory: vi.fn(),
   })),
 }));
@@ -242,11 +243,13 @@ describe('Server Config (config.ts)', () => {
       const mockExistingClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue(mockExistingHistory),
+        getHistoryService: vi.fn().mockReturnValue(null),
       };
 
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
         storeHistoryForLaterUse: vi.fn(),
@@ -288,6 +291,7 @@ describe('Server Config (config.ts)', () => {
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
         storeHistoryForLaterUse: vi.fn(),
@@ -329,10 +333,12 @@ describe('Server Config (config.ts)', () => {
       const mockExistingClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue(mockExistingHistory),
+        getHistoryService: vi.fn().mockReturnValue(null),
       };
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
         storeHistoryForLaterUse: vi.fn(),
@@ -377,10 +383,12 @@ describe('Server Config (config.ts)', () => {
       const mockExistingClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue(mockExistingHistory),
+        getHistoryService: vi.fn().mockReturnValue(null),
       };
       const mockNewClient = {
         isInitialized: vi.fn().mockReturnValue(true),
         getHistory: vi.fn().mockReturnValue([]),
+        getHistoryService: vi.fn().mockReturnValue(null),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
         storeHistoryForLaterUse: vi.fn(),

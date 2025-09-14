@@ -1670,7 +1670,7 @@ describe('App UI', () => {
       const output = lastFrame();
 
       expect(output).toBeDefined();
-      expect(mockSettings.merged.debugKeystrokeLogging).toBeUndefined();
+      expect(mockSettings.merged.debugKeystrokeLogging).toBe(false);
     });
   });
 

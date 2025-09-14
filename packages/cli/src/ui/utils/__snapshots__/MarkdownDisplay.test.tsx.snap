@@ -8,7 +8,7 @@ Here is a paragraph.
  - List item 1
  - List item 2
 
- 1 some code
+ some code
 
 Another paragraph.
 "
@@ -21,7 +21,7 @@ exports[`<MarkdownDisplay /> > handles a table at the end of the input 1`] = `
 | 1 | 2 |"
 `;
 
-exports[`<MarkdownDisplay /> > handles unclosed (pending) code blocks 1`] = `" 1 let y = 2;"`;
+exports[`<MarkdownDisplay /> > handles unclosed (pending) code blocks 1`] = `" let y = 2;"`;
 
 exports[`<MarkdownDisplay /> > hides line numbers in code blocks when showLineNumbers is false 1`] = `" const x = 1;"`;
 
@@ -32,11 +32,11 @@ Paragraph 2."
 `;
 
 exports[`<MarkdownDisplay /> > renders a fenced code block with a language 1`] = `
-" 1 const x = 1;
- 2 console.log(x);"
+" const x = 1;
+ console.log(x);"
 `;
 
-exports[`<MarkdownDisplay /> > renders a fenced code block without a language 1`] = `" 1 plain text"`;
+exports[`<MarkdownDisplay /> > renders a fenced code block without a language 1`] = `" plain text"`;
 
 exports[`<MarkdownDisplay /> > renders a simple paragraph 1`] = `"Hello, world."`;
 
@@ -90,4 +90,4 @@ exports[`<MarkdownDisplay /> > renders unordered lists with different markers 1`
 "
 `;
 
-exports[`<MarkdownDisplay /> > shows line numbers in code blocks by default 1`] = `" 1 const x = 1;"`;
+exports[`<MarkdownDisplay /> > shows line numbers in code blocks by default 1`] = `" const x = 1;"`;

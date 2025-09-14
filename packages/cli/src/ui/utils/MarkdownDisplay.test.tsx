@@ -247,6 +247,6 @@ Another paragraph.
       </SettingsContext.Provider>,
     );
     expect(lastFrame()).toMatchSnapshot();
-    expect(lastFrame()).toContain(' 1 ');
+    expect(lastFrame()).toContain('const x = 1;');
   });
 });
