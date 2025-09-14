@@ -17,12 +17,6 @@ exports[`<StatsDisplay /> > Code Changes Display > displays Code Changes when li
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              100ms (100.0%)                                                      │
 │                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
-│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -42,12 +36,6 @@ exports[`<StatsDisplay /> > Code Changes Display > hides Code Changes when no li
 │  Agent Active:               100ms                                                               │
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              100ms (100.0%)                                                      │
-│                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
@@ -69,12 +57,6 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in gr
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              0s (0.0%)                                                           │
 │                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
-│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -94,12 +76,6 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in re
 │  Agent Active:               0s                                                                  │
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              0s (0.0%)                                                           │
-│                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
@@ -121,12 +97,6 @@ exports[`<StatsDisplay /> > Conditional Color Tests > renders success rate in ye
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              0s (0.0%)                                                           │
 │                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
-│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -141,12 +111,6 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides Efficiency secti
 │  Agent Active:               100ms                                                               │
 │    » API Time:               100ms (100.0%)                                                      │
 │    » Tool Time:              0s (0.0%)                                                           │
-│                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
 │                                                                                                  │
 │                                                                                                  │
 │  Model Usage                  Reqs   Input Tokens  Output Tokens                                 │
@@ -172,12 +136,6 @@ exports[`<StatsDisplay /> > Conditional Rendering Tests > hides User Agreement w
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              123ms (100.0%)                                                      │
 │                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
-│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -192,12 +150,6 @@ exports[`<StatsDisplay /> > Title Rendering > renders the custom title when a ti
 │  Agent Active:               0s                                                                  │
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              0s (0.0%)                                                           │
-│                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
@@ -214,12 +166,6 @@ exports[`<StatsDisplay /> > Title Rendering > renders the default title when no 
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              0s (0.0%)                                                           │
 │                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
-│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"
 `;
@@ -234,12 +180,6 @@ exports[`<StatsDisplay /> > renders a table with two models correctly 1`] = `
 │  Agent Active:               19.5s                                                               │
 │    » API Time:               19.5s (100.0%)                                                      │
 │    » Tool Time:              0s (0.0%)                                                           │
-│                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
 │                                                                                                  │
 │                                                                                                  │
 │  Model Usage                  Reqs   Input Tokens  Output Tokens                                 │
@@ -271,12 +211,6 @@ exports[`<StatsDisplay /> > renders all sections when all data is present 1`] = 
 │    » API Time:               100ms (44.8%)                                                       │
 │    » Tool Time:              123ms (55.2%)                                                       │
 │                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
-│                                                                                                  │
 │                                                                                                  │
 │  Model Usage                  Reqs   Input Tokens  Output Tokens                                 │
 │  ───────────────────────────────────────────────────────────────                                 │
@@ -299,12 +233,6 @@ exports[`<StatsDisplay /> > renders only the Performance section in its zero sta
 │  Agent Active:               0s                                                                  │
 │    » API Time:               0s (0.0%)                                                           │
 │    » Tool Time:              0s (0.0%)                                                           │
-│                                                                                                  │
-│  Token Tracking                                                                                  │
-│  Tokens Per Minute:          0                                                                   │
-│  Throttle Wait Time:         0ms                                                                 │
-│    » Session Token Usage: Session Tokens - Input: 0, Output: 0, Cache: 0, Tool: 0, Thought: 0,   │
-│                           Total: 0                                                               │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯"

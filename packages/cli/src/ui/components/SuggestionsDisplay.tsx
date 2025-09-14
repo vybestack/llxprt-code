@@ -33,16 +33,9 @@ export function SuggestionsDisplay({
   scrollOffset,
   userInput,
 }: SuggestionsDisplayProps) {
-  if (isLoading) {
-    return (
-      <Box paddingX={1} width={width}>
-        <Text color={Colors.Gray}>Loading suggestions...</Text>
-      </Box>
-    );
-  }
-
-  if (suggestions.length === 0) {
-    return null; // Don't render anything if there are no suggestions
+  // If we're not showing suggestions at all, return null
+  if (!isLoading && suggestions.length === 0) {
+    return null;
   }
 
   // Calculate the visible slice based on scrollOffset
@@ -68,60 +61,102 @@ export function SuggestionsDisplay({
     );
   }
 
+  // Calculate how many lines we need to reserve
+  const hasScrollUp = scrollOffset > 0;
+  const hasScrollDown = endIndex < suggestions.length;
+  const hasCounter = suggestions.length > MAX_SUGGESTIONS_TO_SHOW;
+
+  // Reserve consistent height
+  const actualSuggestionLines = isLoading ? 1 : visibleSuggestions.length;
+  const linesToFill = MAX_SUGGESTIONS_TO_SHOW - actualSuggestionLines;
+
   return (
-    <Box flexDirection="column" paddingX={1} width={width}>
-      {scrollOffset > 0 && <Text color={Colors.Foreground}>▲</Text>}
+    <Box
+      flexDirection="column"
+      paddingX={1}
+      width={width}
+      minHeight={MAX_SUGGESTIONS_TO_SHOW + 2}
+    >
+      {/* Scroll up indicator or placeholder */}
+      {hasScrollUp ? <Text color={Colors.Foreground}>▲</Text> : <Text> </Text>}
 
-      {visibleSuggestions.map((suggestion, index) => {
-        const originalIndex = startIndex + index;
-        const isActive = originalIndex === activeIndex;
-        const textColor = isActive ? '#00ff00' : Colors.Foreground;
-        const labelElement = (
-          <PrepareLabel
-            label={suggestion.label}
-            matchedIndex={suggestion.matchedIndex}
-            userInput={userInput}
-            textColor={textColor}
-          />
-        );
+      {/* Main content */}
+      {isLoading ? (
+        <>
+          <Text color={Colors.Gray}>Loading suggestions...</Text>
+          {/* Fill remaining space */}
+          {Array.from({ length: MAX_SUGGESTIONS_TO_SHOW - 1 }).map((_, i) => (
+            <Text key={`fill-loading-${i}`}> </Text>
+          ))}
+        </>
+      ) : (
+        <>
+          {/* Render visible suggestions */}
+          {visibleSuggestions.map((suggestion, index) => {
+            const originalIndex = startIndex + index;
+            const isActive = originalIndex === activeIndex;
+            const textColor = isActive ? '#00ff00' : Colors.Foreground;
+            const labelElement = (
+              <PrepareLabel
+                label={suggestion.label}
+                matchedIndex={suggestion.matchedIndex}
+                userInput={userInput}
+                textColor={textColor}
+              />
+            );
 
-        return (
-          <Box key={`${suggestion.value}-${originalIndex}`} width={width}>
-            <Box flexDirection="row">
-              {isSlashCommandMode ? (
-                <>
-                  <Box width={commandNameWidth} flexShrink={0}>
-                    {labelElement}
-                  </Box>
-                  {suggestion.description ? (
-                    <Box flexGrow={1} marginLeft={1}>
-                      <Text color={textColor} wrap="wrap">
-                        {suggestion.description}
-                      </Text>
-                    </Box>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  {labelElement}
-                  {suggestion.description ? (
-                    <Box flexGrow={1} marginLeft={1}>
-                      <Text color={textColor} wrap="wrap">
-                        {suggestion.description}
-                      </Text>
-                    </Box>
-                  ) : null}
-                </>
-              )}
-            </Box>
-          </Box>
-        );
-      })}
-      {endIndex < suggestions.length && <Text color={Colors.Gray}>▼</Text>}
-      {suggestions.length > MAX_SUGGESTIONS_TO_SHOW && (
-        <Text color={Colors.Gray}>
-          ({activeIndex + 1}/{suggestions.length})
-        </Text>
+            return (
+              <Box key={`${suggestion.value}-${originalIndex}`} width={width}>
+                <Box flexDirection="row">
+                  {isSlashCommandMode ? (
+                    <>
+                      <Box width={commandNameWidth} flexShrink={0}>
+                        {labelElement}
+                      </Box>
+                      {suggestion.description ? (
+                        <Box flexGrow={1} marginLeft={1}>
+                          <Text color={textColor} wrap="wrap">
+                            {suggestion.description}
+                          </Text>
+                        </Box>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      {labelElement}
+                      {suggestion.description ? (
+                        <Box flexGrow={1} marginLeft={1}>
+                          <Text color={textColor} wrap="wrap">
+                            {suggestion.description}
+                          </Text>
+                        </Box>
+                      ) : null}
+                    </>
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
+
+          {/* Fill remaining space to maintain consistent height */}
+          {Array.from({ length: linesToFill }).map((_, i) => (
+            <Text key={`fill-${i}`}> </Text>
+          ))}
+        </>
+      )}
+
+      {/* Scroll down indicator or counter */}
+      {hasScrollDown || hasCounter ? (
+        <Box flexDirection="row" justifyContent="space-between">
+          <Text color={Colors.Gray}>{hasScrollDown ? '▼' : ' '}</Text>
+          {hasCounter && (
+            <Text color={Colors.Gray}>
+              ({activeIndex + 1}/{suggestions.length})
+            </Text>
+          )}
+        </Box>
+      ) : (
+        <Text> </Text>
       )}
     </Box>
   );

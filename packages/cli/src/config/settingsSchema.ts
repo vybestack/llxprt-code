@@ -332,7 +332,7 @@ export const SETTINGS_SCHEMA = {
     label: 'Selected Auth Type',
     category: 'Advanced',
     requiresRestart: true,
-    default: undefined as AuthType | undefined,
+    default: 'provider' as AuthType,
     description: 'The currently selected authentication type.',
     showInDialog: false,
   },

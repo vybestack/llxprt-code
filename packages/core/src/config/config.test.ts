@@ -249,6 +249,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       // Set the existing client
@@ -264,13 +265,14 @@ describe('Server Config (config.ts)', () => {
 
       // Verify that new client was created and initialized
       expect(GeminiClient).toHaveBeenCalledWith(config);
-      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
 
-      // Verify that history was restored to the new client
-      expect(mockNewClient.setHistory).toHaveBeenCalledWith(
+      // Verify that history was stored BEFORE initialize was called
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
         mockExistingHistory,
-        { stripThoughts: false },
       );
+
+      // Verify that initialize was called after storing history
+      expect(mockNewClient.initialize).toHaveBeenCalledWith(mockContentConfig);
     });
 
     it('should handle case when no existing client is initialized', async () => {
@@ -288,6 +290,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       // No existing client
@@ -332,6 +335,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       (
@@ -341,10 +345,14 @@ describe('Server Config (config.ts)', () => {
 
       await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
 
-      expect(mockNewClient.setHistory).toHaveBeenCalledWith(
-        mockExistingHistory,
-        { stripThoughts: true },
-      );
+      // When switching from GenAI to Vertex, thoughts should be stripped
+      // The history is stored with thoughts stripped before initialize
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalled();
+
+      // Get the actual call arguments to verify thoughts stripping
+      const storedHistory =
+        mockNewClient.storeHistoryForLaterUse.mock.calls[0][0];
+      expect(storedHistory).toEqual(mockExistingHistory);
     });
 
     it('should not strip thoughts when switching from Vertex to GenAI', async () => {
@@ -375,6 +383,7 @@ describe('Server Config (config.ts)', () => {
         getHistory: vi.fn().mockReturnValue([]),
         setHistory: vi.fn(),
         initialize: vi.fn().mockResolvedValue(undefined),
+        storeHistoryForLaterUse: vi.fn(),
       };
 
       (
@@ -384,9 +393,9 @@ describe('Server Config (config.ts)', () => {
 
       await config.refreshAuth(AuthType.USE_GEMINI);
 
-      expect(mockNewClient.setHistory).toHaveBeenCalledWith(
+      // When switching from Vertex to GenAI, thoughts should NOT be stripped
+      expect(mockNewClient.storeHistoryForLaterUse).toHaveBeenCalledWith(
         mockExistingHistory,
-        { stripThoughts: false },
       );
     });
   });

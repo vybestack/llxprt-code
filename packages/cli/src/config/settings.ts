@@ -17,7 +17,11 @@ import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
-import { Settings, MemoryImportFormat } from './settingsSchema.js';
+import {
+  Settings,
+  MemoryImportFormat,
+  SETTINGS_SCHEMA,
+} from './settingsSchema.js';
 
 export type { Settings, MemoryImportFormat };
 
@@ -82,6 +86,22 @@ export interface SettingsFile {
   path: string;
 }
 
+/**
+ * Get default values from the settings schema
+ */
+function getSchemaDefaults(): Partial<Settings> {
+  const defaults: Partial<Settings> = {};
+
+  // Extract defaults from the schema
+  for (const [key, schemaEntry] of Object.entries(SETTINGS_SCHEMA)) {
+    if ('default' in schemaEntry && schemaEntry.default !== undefined) {
+      (defaults as Record<string, unknown>)[key] = schemaEntry.default;
+    }
+  }
+
+  return defaults;
+}
+
 function mergeSettings(
   system: Settings,
   systemDefaults: Settings,
@@ -95,16 +115,21 @@ function mergeSettings(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { folderTrust, ...safeWorkspaceWithoutFolderTrust } = safeWorkspace;
 
+  // Get defaults from schema
+  const schemaDefaults = getSchemaDefaults();
+
   // Settings are merged with the following precedence (last one wins for
   // single values):
-  // 1. System Defaults
-  // 2. User Settings
-  // 3. Workspace Settings
-  // 4. System Settings (as overrides)
+  // 1. Schema Defaults (from settingsSchema.ts)
+  // 2. System Defaults
+  // 3. User Settings
+  // 4. Workspace Settings
+  // 5. System Settings (as overrides)
   //
   // For properties that are arrays (e.g., includeDirectories), the arrays
   // are concatenated. For objects (e.g., customThemes), they are merged.
   return {
+    ...schemaDefaults,
     ...systemDefaults,
     ...user,
     ...safeWorkspaceWithoutFolderTrust,

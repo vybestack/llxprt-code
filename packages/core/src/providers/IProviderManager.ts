@@ -94,6 +94,14 @@ export interface IProviderManager {
   };
 
   /**
+   * Get provider performance metrics
+   */
+  getProviderMetrics(providerName?: string): {
+    tokensPerMinute: number;
+    throttleWaitTimeMs: number;
+  } | null;
+
+  /**
    * Reset token usage for the current session
    */
   resetSessionTokenUsage(): void;

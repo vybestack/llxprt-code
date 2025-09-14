@@ -18,6 +18,7 @@ import { ReadFileTool } from '../tools/read-file.js';
 import { GrepTool } from '../tools/grep.js';
 import { RipGrepTool } from '../tools/ripGrep.js';
 import { GlobTool } from '../tools/glob.js';
+import { DebugLogger } from '../debug/DebugLogger.js';
 import { EditTool } from '../tools/edit.js';
 import { ShellTool } from '../tools/shell.js';
 import { WriteFileTool } from '../tools/write-file.js';
@@ -35,6 +36,7 @@ import { TodoPause } from '../tools/todo-pause.js';
 import { GeminiClient } from '../core/client.js';
 import { FileDiscoveryService } from '../services/fileDiscoveryService.js';
 import { GitService } from '../services/gitService.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import { loadServerHierarchicalMemory } from '../utils/memoryDiscovery.js';
 import {
   // TELEMETRY: Re-enabled for local file logging only
@@ -510,10 +512,20 @@ export class Config {
   }
 
   async refreshAuth(authMethod: AuthType) {
-    // Save the current conversation history before creating a new client
+    const logger = new DebugLogger('llxprt:config:refreshAuth');
+
+    // Save the current conversation history AND HistoryService before creating a new client
     let existingHistory: Content[] = [];
+    let existingHistoryService: HistoryService | null = null;
+
     if (this.geminiClient && this.geminiClient.isInitialized()) {
       existingHistory = await this.geminiClient.getHistory();
+      existingHistoryService = this.geminiClient.getHistoryService();
+      logger.debug('Retrieved existing state', {
+        historyLength: existingHistory.length,
+        hasHistoryService: !!existingHistoryService,
+        authMethod,
+      });
     }
 
     // Create new content generator config
@@ -527,26 +539,77 @@ export class Config {
       newContentGeneratorConfig.providerManager = this.providerManager;
     }
 
-    // Create and initialize new client in local variable first
+    // Create new client in local variable first
     const newGeminiClient = new GeminiClient(this);
-    await newGeminiClient.initialize(newContentGeneratorConfig);
 
-    // Vertex and Genai have incompatible encryption and sending history with
-    // throughtSignature from Genai to Vertex will fail, we need to strip them
-    const fromGenaiToVertex =
-      this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
-      authMethod === AuthType.LOGIN_WITH_GOOGLE;
+    // CRITICAL: Store both the history AND the HistoryService instance
+    // This preserves both the API conversation context and the UI's conversation display
+    if (existingHistoryService) {
+      logger.debug('Storing existing HistoryService for reuse', {
+        historyLength: existingHistory.length,
+      });
+      newGeminiClient.storeHistoryServiceForReuse(existingHistoryService);
+    }
+
+    if (existingHistory.length > 0) {
+      // Vertex and Genai have incompatible encryption and sending history with
+      // throughtSignature from Genai to Vertex will fail, we need to strip them
+      const fromGenaiToVertex =
+        this.contentGeneratorConfig?.authType === AuthType.USE_GEMINI &&
+        authMethod === AuthType.LOGIN_WITH_GOOGLE;
+
+      logger.debug('Storing history for later use', {
+        historyLength: existingHistory.length,
+        fromGenaiToVertex,
+        willStripThoughts: fromGenaiToVertex,
+      });
+
+      // Use storeHistoryForLaterUse to ensure history is preserved through initialization
+      const historyToStore = fromGenaiToVertex
+        ? existingHistory.map((content) => {
+            const newContent = { ...content };
+            if (newContent.parts) {
+              newContent.parts = newContent.parts.map((part) => {
+                if (
+                  part &&
+                  typeof part === 'object' &&
+                  'thoughtSignature' in part
+                ) {
+                  const newPart = { ...part };
+                  delete (newPart as { thoughtSignature?: string })
+                    .thoughtSignature;
+                  return newPart;
+                }
+                return part;
+              });
+            }
+            return newContent;
+          })
+        : existingHistory;
+
+      newGeminiClient.storeHistoryForLaterUse(historyToStore);
+      logger.debug('History stored in new client', {
+        storedHistoryLength: historyToStore.length,
+      });
+    }
+
+    // Now initialize with the new config
+    await newGeminiClient.initialize(newContentGeneratorConfig);
+    logger.debug('New client initialized');
 
     // Only assign to instance properties after successful initialization
     this.contentGeneratorConfig = newContentGeneratorConfig;
     this.geminiClient = newGeminiClient;
 
-    // Restore the conversation history to the new client
-    if (existingHistory.length > 0) {
-      this.geminiClient.setHistory(existingHistory, {
-        stripThoughts: fromGenaiToVertex,
-      });
-    }
+    // Verify history was preserved
+    const newHistory = await this.geminiClient.getHistory();
+    const newHistoryService = this.geminiClient.getHistoryService();
+    logger.debug('State verification after refreshAuth', {
+      originalHistoryLength: existingHistory.length,
+      newHistoryLength: newHistory.length,
+      historyPreserved: newHistory.length > 0,
+      historyServicePreserved: existingHistoryService === newHistoryService,
+    });
 
     // Reset the session flag since we're explicitly changing auth and using default model
     this.inFallbackMode = false;

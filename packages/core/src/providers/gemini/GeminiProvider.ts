@@ -160,7 +160,7 @@ export class GeminiProvider extends BaseProvider {
         } else {
           // OAuth is disabled and no other auth method available
           throw new AuthenticationRequiredError(
-            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled',
+            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
             'none',
             ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
           );
@@ -206,7 +206,7 @@ export class GeminiProvider extends BaseProvider {
         } else {
           // OAuth is disabled and no other auth method available
           throw new AuthenticationRequiredError(
-            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled',
+            'Web search requires Gemini authentication, but no API key is set and OAuth is disabled. Hint: call /auth gemini enable',
             'none',
             ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
           );

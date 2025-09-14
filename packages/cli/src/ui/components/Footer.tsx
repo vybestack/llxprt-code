@@ -7,6 +7,7 @@
  * @requirement REQ-INT-001.1
  */
 
+/* eslint-disable react/prop-types */
 import React, { useEffect, useState } from 'react';
 import { Box, Text } from 'ink';
 import { Colors, SemanticColors } from '../colors.js';
@@ -44,11 +45,11 @@ interface FooterProps {
   sessionTokenTotal?: number;
 }
 
-// Responsive Memory Usage Display
-const ResponsiveMemoryDisplay: React.FC<{
+// Responsive Memory Usage Display - Memoized to prevent re-renders
+const ResponsiveMemoryDisplay = React.memo<{
   compact: boolean;
   detailed: boolean;
-}> = ({ compact, detailed }) => {
+}>(({ compact, detailed }) => {
   // Initialize with immediate value to avoid empty render in tests
   const initialUsage = process.memoryUsage().rss;
   const initialPercentage = Math.round(
@@ -101,16 +102,17 @@ const ResponsiveMemoryDisplay: React.FC<{
   }, [compact, detailed]);
 
   return <Text color={memoryUsageColor}>{memoryUsage}</Text>;
-};
+});
+ResponsiveMemoryDisplay.displayName = 'ResponsiveMemoryDisplay';
 
-// Responsive Context Usage Display
-const ResponsiveContextDisplay: React.FC<{
+// Responsive Context Usage Display - Memoized to prevent re-renders
+const ResponsiveContextDisplay = React.memo<{
   historyTokenCount: number;
   model: string;
   contextLimit?: number;
   compact: boolean;
   detailed: boolean;
-}> = ({ historyTokenCount, model, contextLimit, compact, detailed }) => {
+}>(({ historyTokenCount, model, contextLimit, compact, detailed }) => {
   const limit = tokenLimit(model, contextLimit);
   const percentage = historyTokenCount / limit;
   const remainingPercentage = (1 - percentage) * 100;
@@ -135,10 +137,71 @@ const ResponsiveContextDisplay: React.FC<{
   }
 
   return <Text color={color}>{displayText}</Text>;
-};
+});
+ResponsiveContextDisplay.displayName = 'ResponsiveContextDisplay';
 
-// Responsive Timestamp Display
-const ResponsiveTimestamp: React.FC = () => {
+// Debounced TPM Display - Updates less frequently to reduce flicker
+const DebouncedTPMDisplay = React.memo<{ tokensPerMinute?: number }>(
+  ({ tokensPerMinute }) => {
+    const [displayTPM, setDisplayTPM] = useState<number | undefined>(
+      tokensPerMinute,
+    );
+
+    useEffect(() => {
+      // Debounce TPM updates to reduce flicker
+      const timeoutId = setTimeout(() => {
+        setDisplayTPM(tokensPerMinute);
+      }, 500); // 500ms debounce
+
+      return () => clearTimeout(timeoutId);
+    }, [tokensPerMinute]);
+
+    if (displayTPM === undefined) return null;
+
+    return (
+      <Text color={SemanticColors.text.accent}>
+        {displayTPM < 1000
+          ? `TPM: ${displayTPM.toFixed(2)}`
+          : `TPM: ${(displayTPM / 1000).toFixed(2)}k`}
+      </Text>
+    );
+  },
+);
+DebouncedTPMDisplay.displayName = 'DebouncedTPMDisplay';
+
+// Debounced Wait Time Display
+const DebouncedWaitDisplay = React.memo<{ throttleWaitTimeMs?: number }>(
+  ({ throttleWaitTimeMs }) => {
+    const [displayWait, setDisplayWait] = useState<number | undefined>(
+      throttleWaitTimeMs,
+    );
+
+    useEffect(() => {
+      // Debounce wait time updates
+      const timeoutId = setTimeout(() => {
+        setDisplayWait(throttleWaitTimeMs);
+      }, 300); // 300ms debounce
+
+      return () => clearTimeout(timeoutId);
+    }, [throttleWaitTimeMs]);
+
+    if (displayWait === undefined) return null;
+
+    return (
+      <Text color={SemanticColors.status.warning}>
+        {displayWait < 1000
+          ? `Wait: ${displayWait}ms`
+          : displayWait < 60000
+            ? `Wait: ${(displayWait / 1000).toFixed(1)}s`
+            : `Wait: ${(displayWait / 60000).toFixed(1)}m`}
+      </Text>
+    );
+  },
+);
+DebouncedWaitDisplay.displayName = 'DebouncedWaitDisplay';
+
+// Responsive Timestamp Display - Isolated component for clock updates
+const ResponsiveTimestamp = React.memo(() => {
   // Initialize with immediate value to avoid empty render in tests
   const initialTime = new Date().toTimeString().slice(0, 8); // HH:MM:SS
   const [time, setTime] = useState<string>(initialTime);
@@ -155,241 +218,256 @@ const ResponsiveTimestamp: React.FC = () => {
   }, []);
 
   return <Text color={SemanticColors.text.secondary}>{time}</Text>;
-};
+});
+ResponsiveTimestamp.displayName = 'ResponsiveTimestamp';
 
-export const Footer: React.FC<FooterProps> = ({
-  model,
-  targetDir,
-  branchName,
-  debugMode,
-  debugMessage,
-  errorCount,
-  showErrorDetails,
-  showMemoryUsage,
-  historyTokenCount,
-  isPaidMode,
-  nightly,
-  vimMode,
-  contextLimit,
-  isTrustedFolder,
-  tokensPerMinute,
-  throttleWaitTimeMs,
-  sessionTokenTotal,
-}) => {
-  const { breakpoint } = useResponsive();
+export const Footer = React.memo<FooterProps>(
+  ({
+    model,
+    targetDir,
+    branchName,
+    debugMode,
+    debugMessage,
+    errorCount,
+    showErrorDetails,
+    showMemoryUsage,
+    historyTokenCount,
+    isPaidMode,
+    nightly,
+    vimMode,
+    contextLimit,
+    isTrustedFolder,
+    tokensPerMinute,
+    throttleWaitTimeMs,
+    sessionTokenTotal,
+  }) => {
+    const { breakpoint } = useResponsive();
 
-  // Define what to show at each breakpoint
-  const showTimestamp = breakpoint === 'WIDE';
-  const showModelName = breakpoint !== 'NARROW';
-  const isCompact = breakpoint === 'NARROW';
-  const isDetailed = breakpoint === 'WIDE';
+    // Define what to show at each breakpoint
+    const showTimestamp = breakpoint === 'WIDE';
+    const showModelName = breakpoint !== 'NARROW';
+    const isCompact = breakpoint === 'NARROW';
+    const isDetailed = breakpoint === 'WIDE';
 
-  // Calculate max length for branch truncation based on breakpoint
-  let maxBranchLength: number;
-  if (isCompact) {
-    maxBranchLength = 15;
-  } else if (breakpoint === 'STANDARD') {
-    maxBranchLength = 35;
-  } else {
-    maxBranchLength = 100; // Don't truncate at wide width
-  }
+    // Calculate max length for branch truncation based on breakpoint
+    let maxBranchLength: number;
+    if (isCompact) {
+      maxBranchLength = 15;
+    } else if (breakpoint === 'STANDARD') {
+      maxBranchLength = 35;
+    } else {
+      maxBranchLength = 100; // Don't truncate at wide width
+    }
 
-  return (
-    <Box flexDirection="column" width="100%">
-      {/* First Line: Branch (left) | Memory | Context | Time (right) */}
-      <Box justifyContent="space-between" width="100%" alignItems="center">
-        {/* Left: Branch Display */}
-        <Box flexDirection="row" alignItems="center">
-          {branchName && (
-            <>
-              {nightly ? (
-                <Gradient colors={Colors.GradientColors}>
-                  <Text>
+    return (
+      <Box flexDirection="column" width="100%">
+        {/* First Line: Branch (left) | Memory | Context | Time (right) */}
+        <Box justifyContent="space-between" width="100%" alignItems="center">
+          {/* Left: Branch Display */}
+          <Box flexDirection="row" alignItems="center">
+            {branchName && (
+              <>
+                {nightly ? (
+                  <Gradient colors={Colors.GradientColors}>
+                    <Text>
+                      (
+                      {branchName.length > maxBranchLength
+                        ? truncateMiddle(branchName, maxBranchLength)
+                        : branchName}
+                      *)
+                    </Text>
+                  </Gradient>
+                ) : (
+                  <Text color={SemanticColors.text.accent}>
                     (
                     {branchName.length > maxBranchLength
                       ? truncateMiddle(branchName, maxBranchLength)
                       : branchName}
                     *)
                   </Text>
-                </Gradient>
-              ) : (
-                <Text color={SemanticColors.text.accent}>
-                  (
-                  {branchName.length > maxBranchLength
-                    ? truncateMiddle(branchName, maxBranchLength)
-                    : branchName}
-                  *)
+                )}
+              </>
+            )}
+            {isTrustedFolder === false && (
+              <Text color={SemanticColors.status.warning}> (untrusted)</Text>
+            )}
+            {debugMode && (
+              <>
+                <DebugProfiler />
+                <Text color={SemanticColors.status.error}>
+                  {' ' + (debugMessage || '--debug')}
                 </Text>
-              )}
-            </>
-          )}
-          {isTrustedFolder === false && (
-            <Text color={SemanticColors.status.warning}> (untrusted)</Text>
-          )}
-          {debugMode && (
-            <>
-              <DebugProfiler />
-              <Text color={SemanticColors.status.error}>
-                {' ' + (debugMessage || '--debug')}
-              </Text>
-            </>
-          )}
-          {vimMode && (
-            <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
-          )}
+              </>
+            )}
+            {vimMode && (
+              <Text color={SemanticColors.text.secondary}>[{vimMode}] </Text>
+            )}
+          </Box>
+
+          {/* Right: Memory | Context | TPM | Wait Time | Time */}
+          <Box flexDirection="row" alignItems="center">
+            {showMemoryUsage && (
+              <>
+                <ResponsiveMemoryDisplay
+                  compact={isCompact}
+                  detailed={isDetailed}
+                />
+                <Text color={SemanticColors.text.secondary}> | </Text>
+              </>
+            )}
+
+            <ResponsiveContextDisplay
+              historyTokenCount={historyTokenCount}
+              model={model}
+              contextLimit={contextLimit}
+              compact={isCompact}
+              detailed={isDetailed}
+            />
+
+            {/* Token tracking metrics - Debounced */}
+            {tokensPerMinute !== undefined && (
+              <>
+                <Text color={SemanticColors.text.secondary}> | </Text>
+                <DebouncedTPMDisplay tokensPerMinute={tokensPerMinute} />
+              </>
+            )}
+
+            {throttleWaitTimeMs !== undefined && (
+              <>
+                <Text color={SemanticColors.text.secondary}> | </Text>
+                <DebouncedWaitDisplay throttleWaitTimeMs={throttleWaitTimeMs} />
+              </>
+            )}
+
+            {/* Show timestamp only at wide width */}
+            {showTimestamp && (
+              <>
+                <Text color={SemanticColors.text.secondary}> | </Text>
+                <ResponsiveTimestamp />
+              </>
+            )}
+          </Box>
         </Box>
 
-        {/* Right: Memory | Context | TPM | Wait Time | Time */}
-        <Box flexDirection="row" alignItems="center">
-          {showMemoryUsage && (
-            <>
-              <ResponsiveMemoryDisplay
-                compact={isCompact}
-                detailed={isDetailed}
-              />
-              <Text color={SemanticColors.text.secondary}> | </Text>
-            </>
-          )}
-
-          <ResponsiveContextDisplay
-            historyTokenCount={historyTokenCount}
-            model={model}
-            contextLimit={contextLimit}
-            compact={isCompact}
-            detailed={isDetailed}
-          />
-
-          {/* Token tracking metrics */}
-          {tokensPerMinute !== undefined && (
-            <>
-              <Text color={SemanticColors.text.secondary}> | </Text>
-              <Text color={SemanticColors.text.accent}>
-                {tokensPerMinute < 1000
-                  ? `TPM: ${tokensPerMinute.toFixed(2)}`
-                  : `TPM: ${(tokensPerMinute / 1000).toFixed(2)}k`}
-              </Text>
-            </>
-          )}
-
-          {throttleWaitTimeMs !== undefined && (
-            <>
-              <Text color={SemanticColors.text.secondary}> | </Text>
-              <Text color={SemanticColors.status.warning}>
-                {throttleWaitTimeMs < 1000
-                  ? `Wait: ${throttleWaitTimeMs}ms`
-                  : throttleWaitTimeMs < 60000
-                    ? `Wait: ${(throttleWaitTimeMs / 1000).toFixed(1)}s`
-                    : `Wait: ${(throttleWaitTimeMs / 60000).toFixed(1)}m`}
-              </Text>
-            </>
-          )}
-
-          {/* Show timestamp only at wide width */}
-          {showTimestamp && (
-            <>
-              <Text color={SemanticColors.text.secondary}> | </Text>
-              <ResponsiveTimestamp />
-            </>
-          )}
-        </Box>
-      </Box>
-
-      {/* Second Line: Path (left) | Model | Session Tokens (right) */}
-      <Box justifyContent="space-between" width="100%" alignItems="center">
-        {/* Left: Path and Sandbox Info */}
-        <Box flexDirection="row" alignItems="center">
-          {nightly ? (
-            <Gradient colors={Colors.GradientColors}>
-              <Text>
+        {/* Second Line: Path (left) | Model | Session Tokens (right) */}
+        <Box justifyContent="space-between" width="100%" alignItems="center">
+          {/* Left: Path and Sandbox Info */}
+          <Box flexDirection="row" alignItems="center">
+            {nightly ? (
+              <Gradient colors={Colors.GradientColors}>
+                <Text>
+                  {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
+                </Text>
+              </Gradient>
+            ) : (
+              <Text color={SemanticColors.text.secondary}>
                 {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
               </Text>
-            </Gradient>
-          ) : (
-            <Text color={SemanticColors.text.secondary}>
-              {shortenPath(tildeifyPath(targetDir), isCompact ? 30 : 70)}
-            </Text>
-          )}
+            )}
 
-          {/* Sandbox info (only show at standard+ widths) */}
-          {!isCompact && (
-            <Box marginLeft={2}>
-              {process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec' ? (
-                <Text color={SemanticColors.status.success}>
-                  [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
-                </Text>
-              ) : process.env.SANDBOX === 'sandbox-exec' ? (
-                <Text color={SemanticColors.status.warning}>
-                  [macOS Seatbelt{' '}
-                  <Text color={SemanticColors.text.secondary}>
-                    ({process.env.SEATBELT_PROFILE})
+            {/* Sandbox info (only show at standard+ widths) */}
+            {!isCompact && (
+              <Box marginLeft={2}>
+                {process.env.SANDBOX &&
+                process.env.SANDBOX !== 'sandbox-exec' ? (
+                  <Text color={SemanticColors.status.success}>
+                    [{process.env.SANDBOX.replace(/^gemini-(?:cli-)?/, '')}]
                   </Text>
-                  ]
-                </Text>
-              ) : (
-                <Text color={SemanticColors.status.error}>
-                  [no sandbox{' '}
-                  <Text color={SemanticColors.text.secondary}>(see /docs)</Text>
-                  ]
-                </Text>
-              )}
-            </Box>
-          )}
-        </Box>
-
-        {/* Right: Model, Session Tokens and other status */}
-        <Box flexDirection="row" alignItems="center">
-          {/* Show model name */}
-          {showModelName && (
-            <Text color={SemanticColors.text.accent}>{model}</Text>
-          )}
-
-          {/* Show paid/free mode for Gemini provider */}
-          {isPaidMode !== undefined &&
-            (() => {
-              const providerManager = getProviderManager();
-              const activeProvider = providerManager?.getActiveProvider?.();
-              const isGeminiProvider = activeProvider?.name === 'gemini';
-
-              if (isGeminiProvider) {
-                return (
-                  <>
-                    {showModelName && (
-                      <Text color={SemanticColors.text.secondary}> | </Text>
-                    )}
-                    <Text
-                      color={
-                        isPaidMode
-                          ? SemanticColors.status.warning
-                          : SemanticColors.status.success
-                      }
-                    >
-                      {isPaidMode ? 'paid mode' : 'free mode'}
+                ) : process.env.SANDBOX === 'sandbox-exec' ? (
+                  <Text color={SemanticColors.status.warning}>
+                    [macOS Seatbelt{' '}
+                    <Text color={SemanticColors.text.secondary}>
+                      ({process.env.SEATBELT_PROFILE})
                     </Text>
-                  </>
-                );
-              }
-              return null;
-            })()}
+                    ]
+                  </Text>
+                ) : (
+                  <Text color={SemanticColors.status.error}>
+                    [no sandbox{' '}
+                    <Text color={SemanticColors.text.secondary}>
+                      (see /docs)
+                    </Text>
+                    ]
+                  </Text>
+                )}
+              </Box>
+            )}
+          </Box>
 
-          {/* Show session token total */}
-          {sessionTokenTotal !== undefined && (
-            <>
-              <Text color={SemanticColors.text.secondary}> | </Text>
-              <Text color={SemanticColors.text.accent}>
-                Tokens: {sessionTokenTotal.toLocaleString()}
-              </Text>
-            </>
-          )}
+          {/* Right: Model, Session Tokens and other status */}
+          <Box flexDirection="row" alignItems="center">
+            {/* Show model name */}
+            {showModelName && (
+              <Text color={SemanticColors.text.accent}>{model}</Text>
+            )}
 
-          {/* Show error count */}
-          {!showErrorDetails && errorCount > 0 && (
-            <>
-              <Text color={SemanticColors.text.secondary}> | </Text>
-              <ConsoleSummaryDisplay errorCount={errorCount} />
-            </>
-          )}
+            {/* Show paid/free mode for Gemini provider */}
+            {isPaidMode !== undefined &&
+              (() => {
+                const providerManager = getProviderManager();
+                const activeProvider = providerManager?.getActiveProvider?.();
+                const isGeminiProvider = activeProvider?.name === 'gemini';
+
+                if (isGeminiProvider) {
+                  return (
+                    <>
+                      {showModelName && (
+                        <Text color={SemanticColors.text.secondary}> | </Text>
+                      )}
+                      <Text
+                        color={
+                          isPaidMode
+                            ? SemanticColors.status.warning
+                            : SemanticColors.status.success
+                        }
+                      >
+                        {isPaidMode ? 'paid mode' : 'free mode'}
+                      </Text>
+                    </>
+                  );
+                }
+                return null;
+              })()}
+
+            {/* Show session token total */}
+            {sessionTokenTotal !== undefined && (
+              <>
+                <Text color={SemanticColors.text.secondary}> | </Text>
+                <Text color={SemanticColors.text.accent}>
+                  Tokens: {sessionTokenTotal.toLocaleString()}
+                </Text>
+              </>
+            )}
+
+            {/* Show error count */}
+            {!showErrorDetails && errorCount > 0 && (
+              <>
+                <Text color={SemanticColors.text.secondary}> | </Text>
+                <ConsoleSummaryDisplay errorCount={errorCount} />
+              </>
+            )}
+          </Box>
         </Box>
       </Box>
-    </Box>
-  );
-};
+    );
+  },
+  (prevProps, nextProps) =>
+    // Custom comparison function - ignore rapidly changing values
+    // Only re-render if important props change
+    prevProps.model === nextProps.model &&
+    prevProps.targetDir === nextProps.targetDir &&
+    prevProps.branchName === nextProps.branchName &&
+    prevProps.debugMode === nextProps.debugMode &&
+    prevProps.debugMessage === nextProps.debugMessage &&
+    prevProps.errorCount === nextProps.errorCount &&
+    prevProps.showErrorDetails === nextProps.showErrorDetails &&
+    prevProps.showMemoryUsage === nextProps.showMemoryUsage &&
+    prevProps.historyTokenCount === nextProps.historyTokenCount &&
+    prevProps.isPaidMode === nextProps.isPaidMode &&
+    prevProps.nightly === nextProps.nightly &&
+    prevProps.vimMode === nextProps.vimMode &&
+    prevProps.contextLimit === nextProps.contextLimit &&
+    prevProps.isTrustedFolder === nextProps.isTrustedFolder,
+  // Ignore rapidly changing values - TPM, wait time, and session tokens
+);
+Footer.displayName = 'Footer';

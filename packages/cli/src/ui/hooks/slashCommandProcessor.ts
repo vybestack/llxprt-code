@@ -458,7 +458,9 @@ export const useSlashCommandProcessor = (
                     }
                   }
                 case 'load_history': {
-                  // Always load the UI history first
+                  // Only clear UI history when loading a saved chat checkpoint (e.g., /chat resume)
+                  // Do NOT clear when switching providers or loading profiles - they preserve conversation
+                  // The load_history action is only returned by /chat resume command
                   fullCommandContext.ui.clear();
                   result.history.forEach((item, index) => {
                     fullCommandContext.ui.addItem(item, index);

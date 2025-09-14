@@ -336,8 +336,9 @@ describe.skipIf(skipInCI)('AnthropicProvider OAuth Integration', () => {
       // Mock OAuth manager returning null
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(null);
 
-      const models = await provider.getModels();
-      expect(models).toEqual([]);
+      await expect(provider.getModels()).rejects.toThrow(
+        /No authentication available for Anthropic API calls/,
+      );
     });
   });
 

@@ -116,6 +116,7 @@ export class GeminiClient {
   private readonly MAX_TURNS = 100;
   private _pendingConfig?: ContentGeneratorConfig;
   private _previousHistory?: Content[];
+  private _storedHistoryService?: HistoryService;
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
@@ -155,8 +156,9 @@ export class GeminiClient {
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
-    // Preserve chat history before resetting
-    const previousHistory = this.chat?.getHistory();
+    // Preserve chat history before resetting, but only if we don't already have stored history
+    // (e.g., from storeHistoryForLaterUse called before initialize)
+    const previousHistory = this._previousHistory || this.chat?.getHistory();
 
     // Reset the client to force reinitialization with new auth
     this.contentGenerator = undefined;
@@ -226,14 +228,30 @@ export class GeminiClient {
    * @returns The HistoryService instance, or null if chat is not initialized
    */
   getHistoryService(): HistoryService | null {
+    const logger = new DebugLogger('llxprt:core:client');
+    logger.debug(
+      () =>
+        `getHistoryService called, chat initialized: ${this.hasChatInitialized()}`,
+    );
     if (!this.hasChatInitialized()) {
+      logger.debug(() => 'Returning null - chat not initialized');
       return null;
     }
-    return this.getChat().getHistoryService();
+    const historyService = this.getChat().getHistoryService();
+    logger.debug(
+      () => `Returning history service: ${historyService ? 'exists' : 'null'}`,
+    );
+    return historyService;
   }
 
   hasChatInitialized(): boolean {
-    return this.chat !== undefined;
+    const logger = new DebugLogger('llxprt:core:client');
+    const result = this.chat !== undefined;
+    logger.debug(
+      () =>
+        `hasChatInitialized called, result: ${result}, chat is: ${this.chat ? 'defined' : 'undefined'}`,
+    );
+    return result;
   }
 
   isInitialized(): boolean {
@@ -300,7 +318,21 @@ export class GeminiClient {
    * The history will be restored when lazyInitialize() is called.
    */
   storeHistoryForLaterUse(history: Content[]): void {
+    this.logger.debug('Storing history for later use', {
+      historyLength: history.length,
+    });
     this._previousHistory = history;
+  }
+
+  /**
+   * Store HistoryService instance for reuse after refreshAuth.
+   * This preserves the UI's conversation display across provider switches.
+   */
+  storeHistoryServiceForReuse(historyService: HistoryService): void {
+    this.logger.debug('Storing HistoryService for reuse', {
+      hasHistoryService: !!historyService,
+    });
+    this._storedHistoryService = historyService;
   }
 
   async setTools(): Promise<void> {
@@ -372,8 +404,21 @@ export class GeminiClient {
     const toolRegistry = this.config.getToolRegistry();
     const toolDeclarations = toolRegistry.getFunctionDeclarations();
     const tools: Tool[] = [{ functionDeclarations: toolDeclarations }];
-    // Create HistoryService and add initial history
-    const historyService = new HistoryService();
+
+    // CRITICAL: Reuse stored HistoryService if available to preserve UI conversation display
+    // This is essential for maintaining conversation history across provider switches
+    let historyService: HistoryService;
+    if (this._storedHistoryService) {
+      this.logger.debug(
+        'Reusing stored HistoryService to preserve UI conversation',
+      );
+      historyService = this._storedHistoryService;
+      // Clear the stored reference after using it
+      this._storedHistoryService = undefined;
+    } else {
+      // Create new HistoryService only if we don't have a stored one
+      historyService = new HistoryService();
+    }
 
     // Add extraHistory if provided
     if (extraHistory && extraHistory.length > 0) {
@@ -639,9 +684,18 @@ export class GeminiClient {
     if (!this.chat) {
       // If we have previous history, restore it when creating the chat
       if (this._previousHistory && this._previousHistory.length > 0) {
+        this.logger.debug(
+          'Restoring previous history during prompt generation',
+          {
+            historyLength: this._previousHistory.length,
+          },
+        );
         // Extract the conversation history after the initial environment setup
         const conversationHistory = this._previousHistory.slice(2);
         this.chat = await this.startChat(conversationHistory);
+        this.logger.debug('Chat started with restored history', {
+          conversationHistoryLength: conversationHistory.length,
+        });
       } else {
         this.chat = await this.startChat();
       }
@@ -1115,6 +1169,10 @@ export class GeminiClient {
       },
       prompt_id,
     );
+
+    // For compression, we don't want to preserve the HistoryService
+    // because we're creating a new compressed conversation state
+    // The UI should reflect that compression happened
     const compressedChat = await this.startChat([
       {
         role: 'user',
