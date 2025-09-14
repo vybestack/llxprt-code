@@ -82,6 +82,9 @@ export function useSlashCompletion(
   const completionStart = useRef(-1);
   const completionEnd = useRef(-1);
 
+  // Track the previous input to avoid unnecessary re-computations
+  const previousInput = useRef<string>('');
+
   const cursorRow = buffer.cursor[0];
   const cursorCol = buffer.cursor[1];
 
@@ -121,6 +124,17 @@ export function useSlashCompletion(
     return -1;
   }, [cursorRow, cursorCol, buffer.lines]);
 
+  // Memoize the current input to avoid re-processing on unrelated re-renders
+  const memoizedInput = useMemo(() => {
+    if (commandIndex === -1) return null;
+    const currentLine = buffer.lines[cursorRow] || '';
+    return {
+      line: currentLine,
+      commandIndex,
+      cursorCol,
+    };
+  }, [buffer.lines, cursorRow, commandIndex, cursorCol]);
+
   useEffect(() => {
     debugLogger.debug(
       () =>
@@ -128,11 +142,26 @@ export function useSlashCompletion(
     );
     if (commandIndex === -1 || reverseSearchActive) {
       debugLogger.debug(() => 'Resetting completion state');
-      setTimeout(resetCompletionState, 0);
+      // Only reset if we actually had suggestions before
+      if (previousInput.current !== '') {
+        resetCompletionState();
+        previousInput.current = '';
+      }
       return;
     }
 
-    const currentLine = buffer.lines[cursorRow] || '';
+    if (!memoizedInput) return;
+
+    const currentLine = memoizedInput.line;
+
+    // Check if the input actually changed
+    const currentInputKey = `${currentLine}:${commandIndex}:${cursorCol}`;
+    if (previousInput.current === currentInputKey) {
+      debugLogger.debug(() => 'Input unchanged, skipping re-computation');
+      return;
+    }
+    previousInput.current = currentInputKey;
+
     const codePoints = toCodePoints(currentLine);
 
     if (codePoints[commandIndex] === '/') {
@@ -326,11 +355,14 @@ export function useSlashCompletion(
       }
 
       // If we fall through, no suggestions are available.
-      resetCompletionState();
+      // Don't reset everything - just set empty suggestions
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setActiveSuggestionIndex(-1);
       return;
     }
 
-    // Handle At Command Completion
+    // Handle At Command Completion - this needs async file operations
     completionEnd.current = codePoints.length;
     for (let i = cursorCol; i < codePoints.length; i++) {
       if (codePoints[i] === ' ') {
@@ -479,12 +511,15 @@ export function useSlashCompletion(
     };
 
     const fetchSuggestions = async () => {
-      // Only show loading state if we're doing file system operations
-      // which are actually async and might take time
-      if (commandIndex >= 0 && currentLine[commandIndex] === '@') {
-        setIsLoadingSuggestions(true);
-      }
       let fetchedSuggestions: Suggestion[] = [];
+
+      // We'll only set loading state if the operation actually takes time
+      let loadingTimer: NodeJS.Timeout | null = null;
+
+      // Set loading state after a delay to avoid flicker for fast operations
+      loadingTimer = setTimeout(() => {
+        setIsLoadingSuggestions(true);
+      }, 200); // Only show loading if operation takes more than 200ms
 
       const fileDiscoveryService = config ? config.getFileService() : null;
       const enableRecursiveSearch =
@@ -626,34 +661,55 @@ export function useSlashCompletion(
             `Error fetching completion suggestions for ${partialPath}: ${getErrorMessage(error)}`,
           );
           if (isMounted) {
-            resetCompletionState();
+            // Don't reset everything on error - just clear suggestions
+            setSuggestions([]);
+            setShowSuggestions(false);
+            setActiveSuggestionIndex(-1);
           }
         }
       }
+
+      // Clear the loading timer if it hasn't fired yet
+      if (loadingTimer) {
+        clearTimeout(loadingTimer);
+      }
+
       if (isMounted) {
         setIsLoadingSuggestions(false);
       }
     };
 
-    const debounceTimeout = setTimeout(fetchSuggestions, 100);
+    // Only schedule async file operations for @ commands
+    // Slash commands are handled synchronously above and return early
+    let debounceTimeout: NodeJS.Timeout | undefined;
+    if (codePoints[commandIndex] === '@') {
+      // File operations are expensive and benefit from debouncing
+      debounceTimeout = setTimeout(fetchSuggestions, 100);
+    }
 
     return () => {
       isMounted = false;
-      clearTimeout(debounceTimeout);
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
     };
   }, [
-    buffer.text,
-    cursorRow,
+    // Only re-run when the actual input changes
+    memoizedInput,
+    memoizedInput?.line,
+    memoizedInput?.commandIndex,
+    memoizedInput?.cursorCol,
+    commandIndex,
     cursorCol,
-    buffer.lines,
+    reverseSearchActive,
+    // These are needed for the computation
     dirs,
     cwd,
-    commandIndex,
-    resetCompletionState,
     slashCommands,
     commandContext,
     config,
-    reverseSearchActive,
+    // These are the setters - they're stable references
+    resetCompletionState,
     setSuggestions,
     setShowSuggestions,
     setActiveSuggestionIndex,
