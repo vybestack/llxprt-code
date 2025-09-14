@@ -244,29 +244,39 @@ export function useSlashCompletion(
 
       // Provide Suggestions based on the now-corrected context
       if (isArgumentCompletion) {
-        const fetchAndSetSuggestions = async () => {
-          const argString = rawParts.slice(depth).join(' ');
+        const argString = rawParts.slice(depth).join(' ');
 
-          // Check if the completion returns a promise
-          const completionResult = leafCommand!.completion!(
-            commandContext,
-            argString,
-          );
-          const isAsync = completionResult instanceof Promise;
+        // Call completion function directly to check if it's async
+        const completionResult = leafCommand!.completion!(
+          commandContext,
+          argString,
+        );
 
-          // Only show loading state for async completions
-          if (isAsync) {
-            setIsLoadingSuggestions(true);
-          }
-
-          const results = (await completionResult) || [];
-          const finalSuggestions = results.map((s) => ({ label: s, value: s }));
+        if (completionResult instanceof Promise) {
+          // Only for async completions, show loading and handle asynchronously
+          setIsLoadingSuggestions(true);
+          completionResult.then((results) => {
+            const finalSuggestions = (results || []).map((s) => ({
+              label: s,
+              value: s,
+            }));
+            setSuggestions(finalSuggestions);
+            setShowSuggestions(finalSuggestions.length > 0);
+            setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
+            setIsLoadingSuggestions(false);
+          });
+        } else {
+          // For synchronous completions, update immediately without loading state
+          const results = completionResult as string[] | undefined;
+          const finalSuggestions = (results || []).map((s) => ({
+            label: s,
+            value: s,
+          }));
           setSuggestions(finalSuggestions);
           setShowSuggestions(finalSuggestions.length > 0);
           setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-          setIsLoadingSuggestions(false);
-        };
-        fetchAndSetSuggestions();
+          // Don't touch loading state for synchronous completions
+        }
         return;
       }
 
@@ -311,7 +321,7 @@ export function useSlashCompletion(
         setSuggestions(finalSuggestions);
         setShowSuggestions(finalSuggestions.length > 0);
         setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-        setIsLoadingSuggestions(false);
+        // Don't set loading state - we never showed loading for command completions
         return;
       }
 
