@@ -6,7 +6,7 @@
 REPORT_NAME="$1"
 PROMPT="$2"
 
-if [ -z "$REPORT_NAME" ] || [ -z "$PROMPT" ]; then
+if [[ -z "${REPORT_NAME}" ]] || [[ -z "${PROMPT}" ]]; then
     echo "Usage: $0 <reportname> <prompt>"
     echo "Example: $0 toktrack-report 'Write a report about token tracking'"
     exit 1
@@ -20,33 +20,33 @@ mkdir -p ./tmp
 
 # Capture start time
 START_TIME=$(date +%s)
-echo "Start time: $(date)" > ./tmp/worker-${REPORT_NAME}-start.txt
+date > "./tmp/worker-${REPORT_NAME}-start.txt" || true
 
 # Launch worker in background and redirect output
-llxprt --yolo --profile-load cerebrasqwen3 --prompt "$FULL_PROMPT" > "./tmp/worker-${REPORT_NAME}.log" 2>&1 &
+llxprt --yolo --profile-load cerebrasqwen3 --prompt "${FULL_PROMPT}" > "./tmp/worker-${REPORT_NAME}.log" 2>&1 &
 PID=$!
 
-echo "Worker PID: $PID"
+echo "Worker PID: ${PID}"
 
 # Wait for completion with 30s check intervals, up to 15 minutes
 MAX_WAIT=900  # 15 minutes in seconds
 ELAPSED=0
 CHECK_INTERVAL=30
 
-while kill -0 $PID 2>/dev/null && [ $ELAPSED -lt $MAX_WAIT ]; do
-    echo "Process $PID is still running. Waiting..."
-    sleep $CHECK_INTERVAL
+while kill -0 "${PID}" 2>/dev/null && [[ "${ELAPSED}" -lt "${MAX_WAIT}" ]]; do
+    echo "Process ${PID} is still running. Waiting..."
+    sleep "${CHECK_INTERVAL}"
     ELAPSED=$((ELAPSED + CHECK_INTERVAL))
 done
 
-if kill -0 $PID 2>/dev/null; then
+if kill -0 "${PID}" 2>/dev/null; then
     echo "Maximum wait time reached. Killing process."
-    kill $PID 2>/dev/null
-    wait $PID 2>/dev/null
+    kill "${PID}" 2>/dev/null
+    wait "${PID}" 2>/dev/null
     echo "worker was terminated"
 else
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
     MINUTES=$((DURATION / 60))
-    echo "worker finished in $MINUTES minutes"
+    echo "worker finished in ${MINUTES} minutes"
 fi
