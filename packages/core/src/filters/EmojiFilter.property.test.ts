@@ -3,9 +3,23 @@
  * These tests verify invariants that must ALWAYS hold regardless of input
  */
 
-import { describe, expect } from 'vitest';
-// it is imported from @fast-check/vitest as itProp
-import { itProp, fc } from '@fast-check/vitest';
+import { describe, expect, it } from 'vitest';
+import { fc } from 'fast-check';
+
+// Define itProp as a wrapper around Vitest's it
+const itProp = (
+  name: string,
+  arbitraries: Array<fc.Arbitrary<unknown>>,
+  fn: (...args: unknown[]) => void | Promise<void>,
+  options?: fc.Parameters<unknown>,
+) => {
+  it(name, () =>
+    fc.assert(
+      fc.asyncProperty(...arbitraries, fn),
+      options ?? { numRuns: 100 },
+    ),
+  );
+};
 import { EmojiFilter, FilterConfiguration } from './EmojiFilter';
 
 describe('EmojiFilter Property-Based Tests', () => {

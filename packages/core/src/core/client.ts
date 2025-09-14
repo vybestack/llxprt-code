@@ -212,14 +212,30 @@ export class GeminiClient {
    * @returns The HistoryService instance, or null if chat is not initialized
    */
   getHistoryService(): HistoryService | null {
+    const logger = new DebugLogger('llxprt:core:client');
+    logger.debug(
+      () =>
+        `getHistoryService called, chat initialized: ${this.hasChatInitialized()}`,
+    );
     if (!this.hasChatInitialized()) {
+      logger.debug(() => 'Returning null - chat not initialized');
       return null;
     }
-    return this.getChat().getHistoryService();
+    const historyService = this.getChat().getHistoryService();
+    logger.debug(
+      () => `Returning history service: ${historyService ? 'exists' : 'null'}`,
+    );
+    return historyService;
   }
 
   hasChatInitialized(): boolean {
-    return this.chat !== undefined;
+    const logger = new DebugLogger('llxprt:core:client');
+    const result = this.chat !== undefined;
+    logger.debug(
+      () =>
+        `hasChatInitialized called, result: ${result}, chat is: ${this.chat ? 'defined' : 'undefined'}`,
+    );
+    return result;
   }
 
   isInitialized(): boolean {

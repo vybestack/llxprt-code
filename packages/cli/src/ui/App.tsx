@@ -239,36 +239,51 @@ const App = (props: AppInternalProps) => {
 
   // Set up history token count listener
   useEffect(() => {
+    tokenLogger.debug(() => 'Starting history token count listener');
     let intervalCleared = false;
 
     // Poll continuously to detect when the history service changes (e.g., after compression)
-    const checkInterval = setInterval(() => {
+    const checkInterval = setInterval(async () => {
       if (intervalCleared) return;
 
+      tokenLogger.debug(() => 'Polling tick');
       const geminiClient = config.getGeminiClient();
+      tokenLogger.debug(
+        () => `Polling - geminiClient exists: ${!!geminiClient}`,
+      );
 
-      // Check if chat is initialized first
-      if (geminiClient?.hasChatInitialized?.()) {
-        const historyService = geminiClient.getHistoryService?.();
+      // Try to get history service
+      if (geminiClient) {
+        const hasChatInit = geminiClient.hasChatInitialized
+          ? geminiClient.hasChatInitialized()
+          : false;
+        tokenLogger.debug(() => `Polling - chat initialized: ${hasChatInit}`);
+
+        const historyService = geminiClient.getHistoryService
+          ? geminiClient.getHistoryService()
+          : null;
 
         if (!historyService && lastHistoryServiceRef.current === null) {
           tokenLogger.debug(() => 'No history service available yet');
+          // For fresh sessions with no history, 0 is correct
+          updateHistoryTokenCount(0);
         } else if (historyService) {
-          // Always get the current token count even if not a new instance
+          // Always sync the current token count on every poll
+          // This ensures we catch any tokens that were added before listener registration
           const currentTokens = historyService.getTotalTokens();
-          if (currentTokens > 0) {
-            updateHistoryTokenCount(currentTokens);
-          }
+          tokenLogger.debug(
+            () => `History service exists, total tokens: ${currentTokens}`,
+          );
+          // Update regardless of value to ensure UI stays in sync
+          updateHistoryTokenCount(currentTokens);
         }
 
-        // Check if we have a new history service instance (happens after compression)
+        // Register listener if we have a history service and haven't registered yet
         if (
           historyService &&
           historyService !== lastHistoryServiceRef.current
         ) {
-          tokenLogger.debug(
-            () => 'Found new history service, setting up listener',
-          );
+          tokenLogger.debug(() => 'Found history service, setting up listener');
 
           // Clean up old listener if it exists
           if (historyTokenCleanupRef.current) {
@@ -291,7 +306,9 @@ const App = (props: AppInternalProps) => {
 
           // Initialize with current token count
           const currentTokens = historyService.getTotalTokens();
-          tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
+          tokenLogger.debug(
+            () => `Initial token count from listener setup: ${currentTokens}`,
+          );
           updateHistoryTokenCount(currentTokens);
 
           // Store cleanup function for later
@@ -688,7 +705,11 @@ const App = (props: AppInternalProps) => {
         const usage = providerManager.getSessionTokenUsage?.();
 
         if (config.getDebugMode()) {
-          console.debug(`[TokenTracking] UI Poll - TPM: ${metrics?.tokensPerMinute || 0}, Throttle: ${metrics?.throttleWaitTimeMs || 0}, Session Total: ${usage?.total || 0}`);
+          const tpmLogger = new DebugLogger('llxprt:ui:tpm');
+          tpmLogger.debug(
+            () =>
+              `UI Poll - TPM: ${metrics?.tokensPerMinute || 0}, Throttle: ${metrics?.throttleWaitTimeMs || 0}, Session Total: ${usage?.total || 0}`,
+          );
         }
 
         setTokenMetrics({
@@ -706,7 +727,7 @@ const App = (props: AppInternalProps) => {
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, [providerManager]);
+  }, [providerManager, config]);
 
   // Set up Flash fallback handler
   useEffect(() => {

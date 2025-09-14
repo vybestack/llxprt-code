@@ -35,6 +35,7 @@ export default tseslint.config(
       'packages/cli/dist/**',
       'packages/core/dist/**',
       'packages/server/dist/**',
+      'packages/a2a-server/dist/**',
       'packages/vscode-ide-companion/dist/**',
       'bundle/**',
       'packages/cli/src/test-*.ts',
