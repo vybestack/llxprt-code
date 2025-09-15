@@ -26,6 +26,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { Credentials } from 'google-auth-library';
+import { HistoryItemWithoutId } from '../ui/types.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -44,12 +45,23 @@ export class GeminiOAuthProvider implements OAuthProvider {
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
+  private addItem?: (
+    itemData: Omit<HistoryItemWithoutId, 'id'>,
+    baseTimestamp: number,
+  ) => number;
 
-  constructor(tokenStore?: TokenStore) {
+  constructor(
+    tokenStore?: TokenStore,
+    addItem?: (
+      itemData: Omit<HistoryItemWithoutId, 'id'>,
+      baseTimestamp: number,
+    ) => number,
+  ) {
     this.tokenStore = tokenStore;
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:gemini');
+    this.addItem = addItem;
 
     if (!tokenStore) {
       console.warn(
@@ -59,6 +71,18 @@ export class GeminiOAuthProvider implements OAuthProvider {
     }
 
     // DO NOT call initializeToken() - lazy initialization pattern
+  }
+
+  /**
+   * Set the addItem callback for displaying messages in the UI
+   */
+  setAddItem(
+    addItem: (
+      itemData: Omit<HistoryItemWithoutId, 'id'>,
+      baseTimestamp: number,
+    ) => number,
+  ): void {
+    this.addItem = addItem;
   }
 
   /**
@@ -166,15 +190,33 @@ export class GeminiOAuthProvider implements OAuthProvider {
               );
 
               // Show fallback instructions to user
-              console.log('\n' + '─'.repeat(60));
-              console.log('Browser authentication was cancelled.');
-              console.log('Fallback options:');
-              console.log('1. Use API key: /keyfile <path-to-your-gemini-key>');
-              console.log(
-                '2. Set environment: export GEMINI_API_KEY=<your-key>',
-              );
-              console.log('3. Try OAuth again: /auth gemini enable');
-              console.log('─'.repeat(60));
+              const fallbackMessage = `Browser authentication was cancelled.
+Fallback options:
+1. Use API key: /keyfile <path-to-your-gemini-key>
+2. Set environment: export GEMINI_API_KEY=<your-key>
+3. Try OAuth again: /auth gemini enable`;
+
+              if (this.addItem) {
+                this.addItem(
+                  {
+                    type: 'info',
+                    text: fallbackMessage,
+                  },
+                  Date.now(),
+                );
+              } else {
+                console.log('\n' + '─'.repeat(60));
+                console.log('Browser authentication was cancelled.');
+                console.log('Fallback options:');
+                console.log(
+                  '1. Use API key: /keyfile <path-to-your-gemini-key>',
+                );
+                console.log(
+                  '2. Set environment: export GEMINI_API_KEY=<your-key>',
+                );
+                console.log('3. Try OAuth again: /auth gemini enable');
+                console.log('─'.repeat(60));
+              }
 
               // Throw a user-friendly error that doesn't hang the system
               throw OAuthErrorFactory.authenticationRequired(this.name, {
@@ -196,6 +238,19 @@ export class GeminiOAuthProvider implements OAuthProvider {
             try {
               await this.tokenStore.saveToken('gemini', token);
               this.currentToken = token;
+
+              // Display success message
+              if (this.addItem) {
+                this.addItem(
+                  {
+                    type: 'info',
+                    text: 'Successfully authenticated with Google Gemini!',
+                  },
+                  Date.now(),
+                );
+              } else {
+                console.log('Successfully authenticated with Google Gemini!');
+              }
             } catch (saveError) {
               throw OAuthErrorFactory.storageError(
                 this.name,

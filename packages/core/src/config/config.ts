@@ -1103,6 +1103,36 @@ export class Config {
   setEphemeralSetting(key: string, value: unknown): void {
     // Line 90: Direct delegation, no local storage
     this.settingsService.set(key, value);
+
+    // Clear provider caches when auth settings or base-url change
+    // This fixes the issue where cached auth tokens persist after clearing auth settings
+    if (key === 'auth-key' || key === 'auth-keyfile' || key === 'base-url') {
+      if (this.providerManager) {
+        const activeProvider = this.providerManager.getActiveProvider();
+        if (activeProvider) {
+          // Clear cached OpenAI client if provider has this method
+          if (
+            'clearClientCache' in activeProvider &&
+            typeof activeProvider.clearClientCache === 'function'
+          ) {
+            const providerWithClearCache = activeProvider as {
+              clearClientCache: () => void;
+            };
+            providerWithClearCache.clearClientCache();
+          }
+          // Clear cached auth token if provider has this method
+          if (
+            'clearAuthCache' in activeProvider &&
+            typeof activeProvider.clearAuthCache === 'function'
+          ) {
+            const providerWithClearAuth = activeProvider as {
+              clearAuthCache: () => void;
+            };
+            providerWithClearAuth.clearAuthCache();
+          }
+        }
+      }
+    }
     // NO async operations
     // NO queue processing
   }

@@ -61,6 +61,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       apiKey && apiKey.trim() !== '' ? apiKey : undefined;
 
     // Detect if this is a Qwen endpoint
+    // CRITICAL FIX: For now, only use base URL check in constructor since `this.name` isn't available yet
+    // The name-based check will be handled in the supportsOAuth() method after construction
     const isQwenEndpoint = !!(
       baseURL &&
       (baseURL.includes('dashscope.aliyuncs.com') ||
@@ -216,9 +218,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * Qwen endpoints support OAuth, standard OpenAI does not
    */
   protected supportsOAuth(): boolean {
-    const baseURL = this.getBaseURL();
+    // CRITICAL FIX: Check provider name first for cases where base URL is changed by profiles
+    // This handles the cerebrasqwen3 profile case where base-url is changed to cerebras.ai
+    // but the provider name is still 'qwen' due to Object.defineProperty override
+    if (this.name === 'qwen') {
+      return true;
+    }
 
-    // Check if this is a Qwen endpoint that supports OAuth
+    // Fallback to base URL check for direct instantiation
+    const baseURL = this.getBaseURL();
     if (
       baseURL &&
       (baseURL.includes('dashscope.aliyuncs.com') ||
@@ -306,6 +314,70 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   public clearClientCache(): void {
     this._cachedClient = undefined;
     this._cachedClientKey = undefined;
+  }
+
+  /**
+   * Override getAuthToken for qwen provider to skip SettingsService auth checks
+   * This ensures qwen always uses OAuth even when other profiles set auth-key/auth-keyfile
+   */
+  protected override async getAuthToken(): Promise<string> {
+    // If this is the qwen provider and we have forceQwenOAuth, skip SettingsService checks
+    const config = this.providerConfig as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    if (this.name === 'qwen' && config?.forceQwenOAuth) {
+      // Check cache first (short-lived cache to avoid repeated OAuth calls)
+      if (
+        this.cachedAuthToken &&
+        this.authCacheTimestamp &&
+        Date.now() - this.authCacheTimestamp < this.AUTH_CACHE_DURATION
+      ) {
+        return this.cachedAuthToken;
+      }
+
+      // Clear stale cache
+      this.cachedAuthToken = undefined;
+      this.authCacheTimestamp = undefined;
+
+      // For qwen, skip directly to OAuth without checking SettingsService
+      if (
+        this.baseProviderConfig.oauthManager &&
+        this.baseProviderConfig.oauthProvider
+      ) {
+        try {
+          const token = await this.baseProviderConfig.oauthManager.getToken(
+            this.baseProviderConfig.oauthProvider,
+          );
+          if (token) {
+            // Cache the token briefly
+            this.cachedAuthToken = token;
+            this.authCacheTimestamp = Date.now();
+            return token;
+          }
+        } catch (error) {
+          if (process.env.DEBUG) {
+            console.warn(`[qwen] OAuth authentication failed:`, error);
+          }
+        }
+      }
+
+      // No OAuth available, return empty string
+      return '';
+    }
+
+    // For non-qwen providers, use the normal auth precedence chain
+    return super.getAuthToken();
+  }
+
+  /**
+   * Clear all provider state (for provider switching)
+   * Clears both OpenAI client cache and auth token cache
+   */
+  override clearState(): void {
+    // Clear OpenAI client cache
+    this.clearClientCache();
+    // Clear auth token cache from BaseProvider
+    this.clearAuthCache();
   }
 
   override getServerTools(): string[] {

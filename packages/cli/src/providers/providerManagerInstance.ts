@@ -78,13 +78,13 @@ export function getProviderManager(
 ): ProviderManager {
   // If we have an existing instance and addItem is provided, update the OAuth providers
   if (providerManagerInstance && addItem && oauthManagerInstance) {
-    // Access the private providers array - this is a necessary workaround
+    // Access the private providers Map - this is a necessary workaround
     // since OAuthManager doesn't expose a public method to access providers
-    const providers = (
-      oauthManagerInstance as unknown as { providers?: unknown[] }
+    const providersMap = (
+      oauthManagerInstance as unknown as { providers?: Map<string, unknown> }
     ).providers;
-    if (providers && Array.isArray(providers)) {
-      for (const provider of providers) {
+    if (providersMap && providersMap instanceof Map) {
+      for (const provider of providersMap.values()) {
         const p = provider as {
           name?: string;
           setAddItem?: (callback: typeof addItem) => void;
@@ -93,6 +93,9 @@ export function getProviderManager(
           p.setAddItem(addItem);
         }
         if (p.name === 'qwen' && p.setAddItem) {
+          p.setAddItem(addItem);
+        }
+        if (p.name === 'gemini' && p.setAddItem) {
           p.setAddItem(addItem);
         }
       }

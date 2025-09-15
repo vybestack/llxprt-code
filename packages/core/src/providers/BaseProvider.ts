@@ -46,9 +46,9 @@ export abstract class BaseProvider implements IProvider {
   protected baseProviderConfig: BaseProviderConfig;
   protected providerConfig?: IProviderConfig;
   protected globalConfig?: Config;
-  private cachedAuthToken?: string;
-  private authCacheTimestamp?: number;
-  private readonly AUTH_CACHE_DURATION = 60000; // 1 minute in milliseconds
+  protected cachedAuthToken?: string;
+  protected authCacheTimestamp?: number;
+  protected readonly AUTH_CACHE_DURATION = 60000; // 1 minute in milliseconds
 
   // Callback for tracking throttle wait times (set by LoggingProviderWrapper)
   protected throttleTracker?: (waitTimeMs: number) => void;

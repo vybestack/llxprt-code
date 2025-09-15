@@ -497,6 +497,44 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
     });
 
     /**
+     * @requirement REQ-004.1
+     * @scenario Qwen provider with name override and changed base URL
+     * @given Provider instance with name overridden to 'qwen' but base URL changed to cerebras
+     * @when Validating OAuth compatibility
+     * @then Should use name-based detection for OAuth support (fixes cerebrasqwen3 profile issue)
+     */
+    it('should support OAuth for qwen provider even with non-qwen base URL', async () => {
+      // Given: Provider with non-qwen base URL (like cerebrasqwen3 profile)
+      const cerebrasBaseUrl = 'https://api.cerebras.ai/v1';
+      const oauthToken = 'qwen-oauth-token-123';
+      vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
+
+      // Create provider with cerebras base URL
+      const provider = new OpenAIProvider(
+        '',
+        cerebrasBaseUrl,
+        TEST_PROVIDER_CONFIG,
+        mockOAuthManager,
+      );
+
+      // Override the name to 'qwen' (simulating providerManagerInstance.ts behavior)
+      Object.defineProperty(provider, 'name', {
+        value: 'qwen',
+        writable: false,
+        enumerable: true,
+        configurable: true,
+      });
+
+      // When: Checking OAuth support with name-based detection
+      // This simulates the cerebrasqwen3 profile scenario where base-url is changed
+      const isAuthenticated = await provider.isAuthenticated();
+
+      // Then: Should support OAuth based on provider name, not base URL
+      expect(isAuthenticated).toBe(true);
+      expect(mockOAuthManager.getToken).toHaveBeenCalledWith('qwen');
+    });
+
+    /**
      * @requirement REQ-006.1
      * @scenario Backward compatibility with API keys
      * @given Existing API key setup
