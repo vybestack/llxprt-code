@@ -19,6 +19,7 @@ import {
   ContentValidation,
   ToolCallBlock,
   ToolResponseBlock,
+  TextBlock,
 } from './IContent.js';
 import { EventEmitter } from 'events';
 import { ITokenizer } from '../../providers/tokenizers/ITokenizer.js';
@@ -252,16 +253,32 @@ export class HistoryService
           }
           break;
         case 'tool_response':
-          try {
-            blockText = JSON.stringify(block.result || block.error || '');
-          } catch (error) {
-            // Handle circular references or other JSON.stringify errors
-            this.logger.debug(
-              'Error stringifying tool_response result/error, using fallback:',
-              error,
-            );
-            // Fallback to just the tool name for token estimation
-            blockText = `tool_response: ${block.toolName || 'unknown'}`;
+          // Check if result is already a string (common for tool responses)
+          if (typeof block.result === 'string') {
+            blockText = block.result;
+          } else if (block.error) {
+            blockText =
+              typeof block.error === 'string'
+                ? block.error
+                : JSON.stringify(block.error);
+          } else {
+            // Try to stringify the result
+            try {
+              blockText = JSON.stringify(block.result || '');
+            } catch (error) {
+              // Handle circular references or other JSON.stringify errors
+              this.logger.debug(
+                'Error stringifying tool_response result, using string conversion:',
+                error,
+              );
+              // Try to convert to string as fallback
+              try {
+                blockText = String(block.result);
+              } catch {
+                // Ultimate fallback
+                blockText = `[tool_response: ${block.toolName || 'unknown'} - content too large or complex to stringify]`;
+              }
+            }
           }
           break;
         case 'thinking':
@@ -381,43 +398,87 @@ export class HistoryService
     // Build the curated list without modifying history
     const curated: IContent[] = [];
     let excludedCount = 0;
+    let aiMessagesAnalyzed = 0;
+    let aiMessagesIncluded = 0;
 
     for (const content of this.history) {
       if (content.speaker === 'human' || content.speaker === 'tool') {
         // Always include user and tool messages
         curated.push(content);
       } else if (content.speaker === 'ai') {
+        aiMessagesAnalyzed++;
         // Only include AI messages if they have valid content
-        if (ContentValidation.hasContent(content)) {
-          curated.push(content);
-        } else {
-          excludedCount++;
-          this.logger.debug('Excluding AI content without valid content:', {
+        const hasValidContent = ContentValidation.hasContent(content);
+
+        // Only do expensive debug logging if debug is enabled
+        if (this.logger.enabled) {
+          this.logger.debug('Analyzing AI message:', {
+            messageIndex: aiMessagesAnalyzed,
+            hasValidContent,
+            blockCount: content.blocks?.length || 0,
             blocks: content.blocks?.map((b) => ({
               type: b.type,
-              hasContent:
-                b.type === 'text' ? !!(b as { text?: string }).text : true,
+              textLength:
+                b.type === 'text' ? (b as TextBlock).text?.length : null,
+              textPreview:
+                b.type === 'text'
+                  ? (b as TextBlock).text?.substring(0, 50)
+                  : null,
+              isEmpty:
+                b.type === 'text' ? !(b as TextBlock).text?.trim() : false,
             })),
+            metadata: {
+              hasUsage: !!content.metadata?.usage,
+              tokens: content.metadata?.usage?.totalTokens,
+            },
           });
+        }
+
+        if (hasValidContent) {
+          curated.push(content);
+          aiMessagesIncluded++;
+        } else {
+          excludedCount++;
+          if (this.logger.enabled) {
+            this.logger.debug('EXCLUDED AI message - no valid content');
+          }
         }
       }
     }
 
-    this.logger.debug('Curated history summary:', {
-      totalHistory: this.history.length,
-      curatedCount: curated.length,
-      excludedAiCount: excludedCount,
-      toolCallsInCurated: curated.reduce(
-        (acc, c) => acc + c.blocks.filter((b) => b.type === 'tool_call').length,
-        0,
-      ),
-      toolResponsesInCurated: curated.reduce(
-        (acc, c) =>
-          acc + c.blocks.filter((b) => b.type === 'tool_response').length,
-        0,
-      ),
-      isCompressing: this.isCompressing,
-    });
+    // Only log summary if debug is enabled
+    if (this.logger.enabled) {
+      this.logger.debug('=== CURATED HISTORY SUMMARY ===', {
+        totalHistory: this.history.length,
+        curatedCount: curated.length,
+        breakdown: {
+          aiMessages: {
+            total: aiMessagesAnalyzed,
+            included: aiMessagesIncluded,
+            excluded: excludedCount,
+            exclusionRate:
+              aiMessagesAnalyzed > 0
+                ? `${((excludedCount / aiMessagesAnalyzed) * 100).toFixed(1)}%`
+                : '0%',
+          },
+          humanMessages: curated.filter((c) => c.speaker === 'human').length,
+          toolMessages: curated.filter((c) => c.speaker === 'tool').length,
+        },
+        toolActivity: {
+          toolCallsInCurated: curated.reduce(
+            (acc, c) =>
+              acc + c.blocks.filter((b) => b.type === 'tool_call').length,
+            0,
+          ),
+          toolResponsesInCurated: curated.reduce(
+            (acc, c) =>
+              acc + c.blocks.filter((b) => b.type === 'tool_response').length,
+            0,
+          ),
+        },
+        isCompressing: this.isCompressing,
+      });
+    }
 
     return curated;
   }

@@ -1107,11 +1107,11 @@ export class GeminiClient {
     // Note: chat variable used later in method
 
     const model = this.config.getModel();
-    const { totalTokens: originalTokenCount } =
-      await this.getContentGenerator().countTokens({
-        model,
-        contents: curatedHistory,
-      });
+    // Get the ACTUAL token count from the history service, not the curated subset
+    const historyService = this.getChat().getHistoryService();
+    const originalTokenCount = historyService
+      ? historyService.getTotalTokens()
+      : 0;
     if (originalTokenCount === undefined) {
       console.warn(`Could not determine token count for model ${model}.`);
       this.hasFailedCompressionAttempt = !force && true;
@@ -1186,13 +1186,12 @@ export class GeminiClient {
     ]);
     this.forceFullIdeContext = true;
 
-    const { totalTokens: newTokenCount } =
-      await this.getContentGenerator().countTokens({
-        // model might change after calling `sendMessage`, so we get the newest value from config
-        model: this.config.getModel(),
-        contents: compressedChat.getHistory(),
-      });
-    if (newTokenCount === undefined) {
+    // Use HistoryService's token count for consistency with the UI display
+    const compressedHistoryService = compressedChat.getHistoryService();
+    const newTokenCount = compressedHistoryService
+      ? compressedHistoryService.getTotalTokens()
+      : 0;
+    if (newTokenCount === undefined || newTokenCount === 0) {
       console.warn('Could not determine compressed history token count.');
       this.hasFailedCompressionAttempt = !force && true;
       return {
@@ -1219,21 +1218,19 @@ export class GeminiClient {
       };
     } else {
       this.chat = compressedChat; // Chat compression successful, set new state.
-    }
 
-    // Emit token update event for the new compressed chat
-    // This ensures the UI updates with the new token count
-    if (
-      compressedChat &&
-      typeof compressedChat.getHistoryService === 'function'
-    ) {
-      const historyService = compressedChat.getHistoryService();
-      if (historyService) {
-        historyService.emit('tokensUpdated', {
-          totalTokens: newTokenCount,
-          addedTokens: newTokenCount - originalTokenCount,
-          tokenLimit: tokenLimit(this.config.getModel()),
-        });
+      // Emit token update event for the new compressed chat
+      // This ensures the UI updates with the new token count
+      // Only emit if compression was successful
+      if (typeof compressedChat.getHistoryService === 'function') {
+        const historyService = compressedChat.getHistoryService();
+        if (historyService) {
+          historyService.emit('tokensUpdated', {
+            totalTokens: newTokenCount,
+            addedTokens: newTokenCount - originalTokenCount,
+            tokenLimit: tokenLimit(this.config.getModel()),
+          });
+        }
       }
     }
 

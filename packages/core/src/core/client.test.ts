@@ -660,6 +660,7 @@ describe('Gemini Client (client.ts)', () => {
     const mockCountTokens = vi.fn();
     const mockSendMessage = vi.fn();
     const mockGetHistory = vi.fn();
+    const mockGetTotalTokens = vi.fn();
 
     beforeEach(() => {
       vi.mock('./tokenLimits', () => ({
@@ -675,7 +676,27 @@ describe('Gemini Client (client.ts)', () => {
         addHistory: vi.fn(),
         setHistory: vi.fn(),
         sendMessage: mockSendMessage,
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: mockGetTotalTokens,
+          emit: vi.fn(),
+        }),
       } as unknown as GeminiChat;
+
+      // Mock startChat to return a chat with getHistoryService that returns newTokenCount
+      client['startChat'] = vi.fn().mockImplementation(() =>
+        Promise.resolve({
+          getHistory: vi.fn().mockReturnValue([]),
+          setHistory: vi.fn(),
+          sendMessage: vi.fn(),
+          getHistoryService: vi.fn().mockReturnValue({
+            getTotalTokens: vi.fn().mockReturnValue(100), // New compressed token count
+            emit: vi.fn(),
+          }),
+        }),
+      );
+
+      // Default to returning 1000 tokens unless overridden in specific tests
+      mockGetTotalTokens.mockReturnValue(1000);
     });
 
     function setup({
@@ -684,10 +705,17 @@ describe('Gemini Client (client.ts)', () => {
         { role: 'model', parts: [{ text: 'Long response' }] },
       ] as Content[],
     } = {}) {
+      // Create a mock HistoryService
+      const mockHistoryService = {
+        getTotalTokens: vi.fn().mockReturnValue(1000),
+        emit: vi.fn(),
+      };
+
       const mockChat: Partial<GeminiChat> = {
         getHistory: vi.fn().mockReturnValue(chatHistory),
         setHistory: vi.fn(),
         sendMessage: vi.fn().mockResolvedValue({ text: 'Summary' }),
+        getHistoryService: vi.fn().mockReturnValue(mockHistoryService),
       };
       const mockCountTokens = vi
         .fn()
@@ -702,7 +730,7 @@ describe('Gemini Client (client.ts)', () => {
       client['contentGenerator'] = mockGenerator as ContentGenerator;
       client['startChat'] = vi.fn().mockResolvedValue({ ...mockChat });
 
-      return { client, mockChat, mockGenerator };
+      return { client, mockChat, mockGenerator, mockHistoryService };
     }
 
     describe('when compression inflates the token count', () => {
@@ -789,14 +817,16 @@ describe('Gemini Client (client.ts)', () => {
         totalTokens: 999,
       });
 
+      // Set the mock to return 999 tokens
+      mockGetTotalTokens.mockReturnValue(999);
+
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
 
       // Mock the summary response from the chat
       mockSendMessage.mockResolvedValue({
-        role: 'model',
-        parts: [{ text: 'This is a summary.' }],
+        text: 'This is a summary.',
       });
 
       await client.tryCompressChat('prompt-id-2', true);
@@ -821,6 +851,9 @@ describe('Gemini Client (client.ts)', () => {
       mockCountTokens.mockResolvedValue({
         totalTokens: MOCKED_TOKEN_LIMIT * 0.699, // TOKEN_THRESHOLD_FOR_SUMMARIZATION = 0.7
       });
+
+      // Set the mock to return 699 tokens (below threshold)
+      mockGetTotalTokens.mockReturnValue(699);
 
       const initialChat = client.getChat();
       const result = await client.tryCompressChat('prompt-id-2');
@@ -859,10 +892,12 @@ describe('Gemini Client (client.ts)', () => {
         .mockResolvedValueOnce({ totalTokens: originalTokenCount }) // First call for the check
         .mockResolvedValueOnce({ totalTokens: newTokenCount }); // Second call for the new history
 
+      // Set the mock to return 500 tokens initially
+      mockGetTotalTokens.mockReturnValue(originalTokenCount);
+
       // Mock the summary response from the chat
       mockSendMessage.mockResolvedValue({
-        role: 'model',
-        parts: [{ text: 'This is a summary.' }],
+        text: 'This is a summary.',
       });
 
       const initialChat = client.getChat();
@@ -960,10 +995,12 @@ describe('Gemini Client (client.ts)', () => {
         .mockResolvedValueOnce({ totalTokens: originalTokenCount })
         .mockResolvedValueOnce({ totalTokens: newTokenCount });
 
+      // Set the mock to return 10 tokens initially
+      mockGetTotalTokens.mockReturnValue(originalTokenCount);
+
       // Mock the summary response from the chat
       mockSendMessage.mockResolvedValue({
-        role: 'model',
-        parts: [{ text: 'This is a summary.' }],
+        text: 'This is a summary.',
       });
 
       const initialChat = client.getChat();
@@ -1002,6 +1039,10 @@ describe('Gemini Client (client.ts)', () => {
         getHistory: vi.fn().mockReturnValue(mockChatHistory),
         setHistory: vi.fn(),
         sendMessage: mockSendMessage,
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: vi.fn().mockReturnValue(100000),
+          emit: vi.fn(),
+        }),
       };
 
       const mockGenerator: Partial<ContentGenerator> = {
@@ -1017,7 +1058,13 @@ describe('Gemini Client (client.ts)', () => {
 
       client['chat'] = mockChat as GeminiChat;
       client['contentGenerator'] = mockGenerator as ContentGenerator;
-      client['startChat'] = vi.fn().mockResolvedValue(mockChat);
+      client['startChat'] = vi.fn().mockResolvedValue({
+        ...mockChat,
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: vi.fn().mockReturnValue(5000),
+          emit: vi.fn(),
+        }),
+      });
 
       const result = await client.tryCompressChat('prompt-id-4', true);
 
