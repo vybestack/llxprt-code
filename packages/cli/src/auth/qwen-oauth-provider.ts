@@ -44,7 +44,7 @@ export class QwenOAuthProvider implements OAuthProvider {
   private initializationError?: Error;
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
-  private readonly addItem?: (
+  private addItem?: (
     itemData: Omit<HistoryItemWithoutId, 'id'>,
     baseTimestamp: number,
   ) => number;
@@ -93,6 +93,18 @@ export class QwenOAuthProvider implements OAuthProvider {
     this.deviceFlow = new QwenDeviceFlow(config);
 
     // DO NOT call initializeToken() - lazy initialization pattern
+  }
+
+  /**
+   * Set the addItem callback for displaying messages in the UI
+   */
+  setAddItem(
+    addItem: (
+      itemData: Omit<HistoryItemWithoutId, 'id'>,
+      baseTimestamp: number,
+    ) => number,
+  ): void {
+    this.addItem = addItem;
   }
 
   /**

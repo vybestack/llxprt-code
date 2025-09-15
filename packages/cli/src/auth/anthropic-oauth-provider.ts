@@ -83,6 +83,18 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   }
 
   /**
+   * Set the addItem callback for displaying messages in the UI
+   */
+  setAddItem(
+    addItem: (
+      itemData: Omit<HistoryItemWithoutId, 'id'>,
+      baseTimestamp: number,
+    ) => number,
+  ): void {
+    this.addItem = addItem;
+  }
+
+  /**
    * Wait for authorization code from UI dialog
    */
   waitForAuthCode(): Promise<string> {
@@ -202,6 +214,18 @@ export class AnthropicOAuthProvider implements OAuthProvider {
             // If browser fails to open, just show the URL - this is not critical
             console.log('Failed to open browser automatically.');
             this.logger.debug(() => `Browser launch error: ${error}`);
+
+            // Add OAuth URL to history so user can copy it from the UI
+            if (this.addItem) {
+              this.addItem(
+                {
+                  type: 'info',
+                  text: `Please visit the following URL to authorize with Anthropic Claude:
+${authUrl}`,
+                },
+                Date.now(),
+              );
+            }
           }
         } else {
           // In non-interactive environments, just show the URL

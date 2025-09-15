@@ -26,6 +26,7 @@ import { MultiProviderTokenStore } from '../auth/types.js';
 import { GeminiOAuthProvider } from '../auth/gemini-oauth-provider.js';
 import { QwenOAuthProvider } from '../auth/qwen-oauth-provider.js';
 import { AnthropicOAuthProvider } from '../auth/anthropic-oauth-provider.js';
+import { HistoryItemWithoutId } from '../ui/types.js';
 
 /**
  * Sanitizes API keys to remove problematic characters that cause ByteString errors.
@@ -70,7 +71,34 @@ export function getProviderManager(
   config?: Config,
   allowBrowserEnvironment = false,
   settings?: LoadedSettings,
+  addItem?: (
+    itemData: Omit<HistoryItemWithoutId, 'id'>,
+    baseTimestamp: number,
+  ) => number,
 ): ProviderManager {
+  // If we have an existing instance and addItem is provided, update the OAuth providers
+  if (providerManagerInstance && addItem && oauthManagerInstance) {
+    // Access the private providers array - this is a necessary workaround
+    // since OAuthManager doesn't expose a public method to access providers
+    const providers = (
+      oauthManagerInstance as unknown as { providers?: unknown[] }
+    ).providers;
+    if (providers && Array.isArray(providers)) {
+      for (const provider of providers) {
+        const p = provider as {
+          name?: string;
+          setAddItem?: (callback: typeof addItem) => void;
+        };
+        if (p.name === 'anthropic' && p.setAddItem) {
+          p.setAddItem(addItem);
+        }
+        if (p.name === 'qwen' && p.setAddItem) {
+          p.setAddItem(addItem);
+        }
+      }
+    }
+  }
+
   if (!providerManagerInstance) {
     providerManagerInstance = new ProviderManager();
     const fs = getFileSystem();
@@ -110,9 +138,13 @@ export function getProviderManager(
     oauthManagerInstance = oauthManager;
 
     // Register OAuth providers with TokenStore for persistence
-    oauthManager.registerProvider(new GeminiOAuthProvider(tokenStore));
-    oauthManager.registerProvider(new QwenOAuthProvider(tokenStore));
-    oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+    const geminiOAuthProvider = new GeminiOAuthProvider(tokenStore);
+    const qwenOAuthProvider = new QwenOAuthProvider(tokenStore);
+    const anthropicOAuthProvider = new AnthropicOAuthProvider(tokenStore);
+
+    oauthManager.registerProvider(geminiOAuthProvider);
+    oauthManager.registerProvider(qwenOAuthProvider);
+    oauthManager.registerProvider(anthropicOAuthProvider);
 
     // Set config BEFORE registering providers so logging wrapper works
     if (config) {
