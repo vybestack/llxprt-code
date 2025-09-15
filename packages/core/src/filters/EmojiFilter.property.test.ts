@@ -710,8 +710,9 @@ describe('EmojiFilter Property-Based Tests', () => {
         fc.property(
           fc.anything().filter(
             (obj) =>
-              // Filter out functions and symbols that can't be JSON serialized
+              // Filter out functions, symbols, and undefined that can't be JSON serialized
               obj !== null &&
+              obj !== undefined &&
               typeof obj !== 'function' &&
               typeof obj !== 'symbol',
           ),
