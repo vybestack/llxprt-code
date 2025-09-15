@@ -1221,6 +1221,22 @@ export class GeminiClient {
       this.chat = compressedChat; // Chat compression successful, set new state.
     }
 
+    // Emit token update event for the new compressed chat
+    // This ensures the UI updates with the new token count
+    if (
+      compressedChat &&
+      typeof compressedChat.getHistoryService === 'function'
+    ) {
+      const historyService = compressedChat.getHistoryService();
+      if (historyService) {
+        historyService.emit('tokensUpdated', {
+          totalTokens: newTokenCount,
+          addedTokens: newTokenCount - originalTokenCount,
+          tokenLimit: tokenLimit(this.config.getModel()),
+        });
+      }
+    }
+
     return {
       originalTokenCount,
       newTokenCount,
