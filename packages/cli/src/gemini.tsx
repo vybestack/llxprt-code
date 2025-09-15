@@ -371,6 +371,32 @@ export async function main() {
     metadata: { source: 'cli-bootstrap', stage: 'post-config' },
   });
 
+  // Check for invalid input combinations early to prevent crashes
+  if (argv.promptInteractive && !process.stdin.isTTY) {
+    console.error(
+      'Error: The --prompt-interactive flag cannot be used when input is piped from stdin.',
+    );
+    process.exit(1);
+  }
+
+  const wasRaw = process.stdin.isRaw;
+  let kittyProtocolDetectionComplete: Promise<boolean> | undefined;
+  if (config.isInteractive() && !wasRaw && process.stdin.isTTY) {
+    // Set this as early as possible to avoid spurious characters from
+    // input showing up in the output.
+    process.stdin.setRawMode(true);
+
+    // This cleanup isn't strictly needed but may help in certain situations.
+    process.on('SIGTERM', () => {
+      process.stdin.setRawMode(wasRaw);
+    });
+    process.on('SIGINT', () => {
+      process.stdin.setRawMode(wasRaw);
+    });
+
+    // Detect and enable Kitty keyboard protocol once at startup.
+    kittyProtocolDetectionComplete = detectAndEnableKittyProtocol();
+  }
   if (argv.sessionSummary) {
     registerCleanup(() => {
       const metrics = uiTelemetryService.getMetrics();
@@ -438,13 +464,6 @@ export async function main() {
   dns.setDefaultResultOrder(
     validateDnsResolutionOrder(settings.merged.dnsResolutionOrder),
   );
-
-  if (argv.promptInteractive && !process.stdin.isTTY) {
-    console.error(
-      'Error: The --prompt-interactive flag is not supported when piping input from stdin.',
-    );
-    process.exit(1);
-  }
 
   if (config.getListExtensions()) {
     for (const _extension of extensions) {
