@@ -317,6 +317,35 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
+   * Override isAuthenticated for qwen provider to check OAuth directly
+   */
+  override async isAuthenticated(): Promise<boolean> {
+    const config = this.providerConfig as IProviderConfig & {
+      forceQwenOAuth?: boolean;
+    };
+    if (this.name === 'qwen' && config?.forceQwenOAuth) {
+      // For qwen with forceQwenOAuth, check OAuth directly
+      if (this.baseProviderConfig.oauthManager) {
+        try {
+          const oauthProviderName =
+            this.baseProviderConfig.oauthProvider || 'qwen';
+          const token =
+            await this.baseProviderConfig.oauthManager.getToken(
+              oauthProviderName,
+            );
+          return token !== null;
+        } catch {
+          return false;
+        }
+      }
+      return false;
+    }
+
+    // For non-qwen providers, use the normal check
+    return super.isAuthenticated();
+  }
+
+  /**
    * Override getAuthToken for qwen provider to skip SettingsService auth checks
    * This ensures qwen always uses OAuth even when other profiles set auth-key/auth-keyfile
    */
@@ -340,14 +369,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       this.authCacheTimestamp = undefined;
 
       // For qwen, skip directly to OAuth without checking SettingsService
-      if (
-        this.baseProviderConfig.oauthManager &&
-        this.baseProviderConfig.oauthProvider
-      ) {
+      // Use 'qwen' as the provider name even if baseProviderConfig.oauthProvider is not set
+      const oauthProviderName = this.baseProviderConfig.oauthProvider || 'qwen';
+      if (this.baseProviderConfig.oauthManager) {
         try {
-          const token = await this.baseProviderConfig.oauthManager.getToken(
-            this.baseProviderConfig.oauthProvider,
-          );
+          const token =
+            await this.baseProviderConfig.oauthManager.getToken(
+              oauthProviderName,
+            );
           if (token) {
             // Cache the token briefly
             this.cachedAuthToken = token;

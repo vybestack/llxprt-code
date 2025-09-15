@@ -509,11 +509,11 @@ describe.skipIf(skipInCI)('OpenAI Provider OAuth Integration', () => {
       const oauthToken = 'qwen-oauth-token-123';
       vi.mocked(mockOAuthManager.getToken).mockResolvedValue(oauthToken);
 
-      // Create provider with cerebras base URL
+      // Create provider with cerebras base URL and forceQwenOAuth flag
       const provider = new OpenAIProvider(
         '',
         cerebrasBaseUrl,
-        TEST_PROVIDER_CONFIG,
+        { ...TEST_PROVIDER_CONFIG, forceQwenOAuth: true },
         mockOAuthManager,
       );
 
