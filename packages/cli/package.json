@@ -33,7 +33,7 @@
     "dist"
   ],
   "config": {
-    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.16"
+    "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.3.4"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
