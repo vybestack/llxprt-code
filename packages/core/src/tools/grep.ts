@@ -23,6 +23,10 @@ import { isGitRepository } from '../utils/gitUtils.js';
 import { Config } from '../config/config.js';
 import { FileExclusions } from '../utils/ignorePatterns.js';
 import { ToolErrorType } from './tool-error.js';
+import {
+  limitOutputTokens,
+  formatLimitedOutput,
+} from '../utils/toolOutputLimiter.js';
 
 // --- Interfaces ---
 
@@ -44,6 +48,21 @@ export interface GrepToolParams {
    * File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")
    */
   include?: string;
+
+  /**
+   * Maximum number of total matches to return (optional)
+   */
+  max_results?: number;
+
+  /**
+   * Maximum number of files to include in results (optional)
+   */
+  max_files?: number;
+
+  /**
+   * Maximum number of matches per file to return (optional)
+   */
+  max_per_file?: number;
 }
 
 /**
@@ -116,6 +135,15 @@ class GrepToolInvocation extends BaseToolInvocation<
       const searchDirAbs = this.resolveAndValidatePath(this.params.path);
       const searchDirDisplay = this.params.path || '.';
 
+      // Get limits from parameters or ephemeral settings
+      const ephemeralSettings = this.config.getEphemeralSettings();
+      const maxResults =
+        this.params.max_results ??
+        (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
+        1000; // Higher default for grep than glob
+      const maxFiles = this.params.max_files ?? 100;
+      const maxPerFile = this.params.max_per_file ?? 50;
+
       // Determine which directories to search
       let searchDirectories: readonly string[];
       if (searchDirAbs === null) {
@@ -128,23 +156,46 @@ class GrepToolInvocation extends BaseToolInvocation<
 
       // Collect matches from all search directories
       let allMatches: GrepMatch[] = [];
+      let totalMatchesFound = 0;
+      const filesWithMatches = new Set<string>();
+      let wasLimited = false;
+
       for (const searchDir of searchDirectories) {
+        if (allMatches.length >= maxResults) {
+          wasLimited = true;
+          break;
+        }
+
         const matches = await this.performGrepSearch({
           pattern: this.params.pattern,
           path: searchDir,
           include: this.params.include,
           signal,
+          maxResults: maxResults - allMatches.length,
+          maxFiles: maxFiles - filesWithMatches.size,
+          maxPerFile,
         });
+
+        // Track if we hit limits
+        if (matches.wasLimited) {
+          wasLimited = true;
+        }
 
         // Add directory prefix if searching multiple directories
         if (searchDirectories.length > 1) {
           const dirName = path.basename(searchDir);
-          matches.forEach((match) => {
+          matches.results.forEach((match) => {
             match.filePath = path.join(dirName, match.filePath);
           });
         }
 
-        allMatches = allMatches.concat(matches);
+        // Track files and total matches
+        matches.results.forEach((match) => {
+          filesWithMatches.add(match.filePath);
+        });
+        totalMatchesFound += matches.totalFound ?? matches.results.length;
+
+        allMatches = allMatches.concat(matches.results);
       }
 
       let searchLocationDescription: string;
@@ -163,26 +214,49 @@ class GrepToolInvocation extends BaseToolInvocation<
         return { llmContent: noMatchMsg, returnDisplay: `No matches found` };
       }
 
-      // Group matches by file
-      const matchesByFile = allMatches.reduce(
+      // Apply max_files limit if needed
+      let limitedMatches = allMatches;
+      let limitMessage = '';
+
+      if (filesWithMatches.size > maxFiles) {
+        const filesToKeep = Array.from(filesWithMatches).slice(0, maxFiles);
+        limitedMatches = allMatches.filter((match) =>
+          filesToKeep.includes(match.filePath),
+        );
+        limitMessage = `\n\n**Note: Results limited to ${maxFiles} files out of ${filesWithMatches.size} files with matches.**`;
+        wasLimited = true;
+      }
+
+      // Apply max_per_file limit if needed
+      const matchesByFile = limitedMatches.reduce(
         (acc, match) => {
           const fileKey = match.filePath;
           if (!acc[fileKey]) {
             acc[fileKey] = [];
           }
-          acc[fileKey].push(match);
+          if (acc[fileKey].length < maxPerFile) {
+            acc[fileKey].push(match);
+          }
           acc[fileKey].sort((a, b) => a.lineNumber - b.lineNumber);
           return acc;
         },
         {} as Record<string, GrepMatch[]>,
       );
 
-      const matchCount = allMatches.length;
-      const matchTerm = matchCount === 1 ? 'match' : 'matches';
+      // Count actual matches shown
+      const matchCount = Object.values(matchesByFile).reduce(
+        (sum, matches) => sum + matches.length,
+        0,
+      );
 
-      let llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:
----
-`;
+      // Build output content
+      let llmContent = '';
+      if (wasLimited || totalMatchesFound > matchCount) {
+        llmContent = `Found ${totalMatchesFound} total matches, showing ${matchCount} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:\n---\n`;
+      } else {
+        const matchTerm = matchCount === 1 ? 'match' : 'matches';
+        llmContent = `Found ${matchCount} ${matchTerm} for pattern "${this.params.pattern}" ${searchLocationDescription}${this.params.include ? ` (filter: "${this.params.include}")` : ''}:\n---\n`;
+      }
 
       for (const filePath in matchesByFile) {
         llmContent += `File: ${filePath}\n`;
@@ -193,9 +267,33 @@ class GrepToolInvocation extends BaseToolInvocation<
         llmContent += '---\n';
       }
 
+      if (limitMessage) {
+        llmContent += limitMessage;
+      }
+
+      // Apply token limiting as final safety check
+      const limited = limitOutputTokens(
+        llmContent.trim(),
+        this.config,
+        'SearchText',
+      );
+
+      if (limited.wasTruncated) {
+        const formatted = formatLimitedOutput(limited);
+        return {
+          llmContent: formatted.llmContent,
+          returnDisplay: formatted.returnDisplay,
+        };
+      }
+
+      const displayCount =
+        wasLimited || totalMatchesFound > matchCount
+          ? `Found ${totalMatchesFound} matches (showing ${matchCount})`
+          : `Found ${matchCount} ${matchCount === 1 ? 'match' : 'matches'}`;
+
       return {
         llmContent: llmContent.trim(),
-        returnDisplay: `Found ${matchCount} ${matchTerm}`,
+        returnDisplay: displayCount,
       };
     } catch (error) {
       console.error(`Error during GrepLogic execution: ${error}`);
@@ -232,6 +330,57 @@ class GrepToolInvocation extends BaseToolInvocation<
         resolve(false);
       }
     });
+  }
+
+  /**
+   * Apply limits to search results
+   */
+  private applyLimits(
+    matches: GrepMatch[],
+    maxResults: number,
+    maxFiles: number,
+    maxPerFile: number,
+  ): { results: GrepMatch[]; wasLimited?: boolean; totalFound?: number } {
+    const filesWithMatches = new Map<string, GrepMatch[]>();
+    const totalFound = matches.length;
+
+    // Group by file and apply per-file limits
+    for (const match of matches) {
+      if (!filesWithMatches.has(match.filePath)) {
+        filesWithMatches.set(match.filePath, []);
+      }
+      const fileMatches = filesWithMatches.get(match.filePath)!;
+      if (fileMatches.length < maxPerFile) {
+        fileMatches.push(match);
+      }
+    }
+
+    // Apply file limit
+    const limitedFiles = Array.from(filesWithMatches.entries()).slice(
+      0,
+      maxFiles,
+    );
+
+    // Flatten and apply total results limit
+    const results: GrepMatch[] = [];
+    for (const [, fileMatches] of limitedFiles) {
+      for (const match of fileMatches) {
+        if (results.length >= maxResults) {
+          break;
+        }
+        results.push(match);
+      }
+      if (results.length >= maxResults) {
+        break;
+      }
+    }
+
+    return {
+      results,
+      wasLimited:
+        results.length < totalFound || filesWithMatches.size > maxFiles,
+      totalFound: totalFound > results.length ? totalFound : undefined,
+    };
   }
 
   /**
@@ -323,15 +472,29 @@ class GrepToolInvocation extends BaseToolInvocation<
   /**
    * Performs the actual search using the prioritized strategies.
    * @param options Search options including pattern, absolute path, and include glob.
-   * @returns A promise resolving to an array of match objects.
+   * @returns A promise resolving to search results with limit information.
    */
   private async performGrepSearch(options: {
     pattern: string;
     path: string; // Expects absolute path
     include?: string;
     signal: AbortSignal;
-  }): Promise<GrepMatch[]> {
-    const { pattern, path: absolutePath, include } = options;
+    maxResults?: number;
+    maxFiles?: number;
+    maxPerFile?: number;
+  }): Promise<{
+    results: GrepMatch[];
+    wasLimited?: boolean;
+    totalFound?: number;
+  }> {
+    const {
+      pattern,
+      path: absolutePath,
+      include,
+      maxResults = 1000,
+      maxFiles = 100,
+      maxPerFile = 50,
+    } = options;
     let strategyUsed = 'none';
 
     try {
@@ -379,7 +542,8 @@ class GrepToolInvocation extends BaseToolInvocation<
                 );
             });
           });
-          return this.parseGrepOutput(output, absolutePath);
+          const matches = this.parseGrepOutput(output, absolutePath);
+          return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
         } catch (gitError: unknown) {
           console.debug(
             `GrepLogic: git grep failed: ${getErrorMessage(
@@ -481,7 +645,8 @@ class GrepToolInvocation extends BaseToolInvocation<
             child.on('error', onError);
             child.on('close', onClose);
           });
-          return this.parseGrepOutput(output, absolutePath);
+          const matches = this.parseGrepOutput(output, absolutePath);
+          return this.applyLimits(matches, maxResults, maxFiles, maxPerFile);
         } catch (grepError: unknown) {
           console.debug(
             `GrepLogic: System grep failed: ${getErrorMessage(
@@ -510,21 +675,46 @@ class GrepToolInvocation extends BaseToolInvocation<
 
       const regex = new RegExp(pattern, 'i');
       const allMatches: GrepMatch[] = [];
+      const filesWithMatches = new Set<string>();
+      let totalFound = 0;
 
       for await (const filePath of filesStream) {
+        // Check if we've hit file limit
+        if (
+          filesWithMatches.size >= maxFiles &&
+          !filesWithMatches.has(filePath as string)
+        ) {
+          continue;
+        }
+
+        // Check if we've hit total results limit
+        if (allMatches.length >= maxResults) {
+          break;
+        }
+
         const fileAbsolutePath = filePath as string;
         try {
           const content = await fsPromises.readFile(fileAbsolutePath, 'utf8');
           const lines = content.split(/\r?\n/);
+          let matchesInFile = 0;
+
           lines.forEach((line, index) => {
             if (regex.test(line)) {
-              allMatches.push({
-                filePath:
-                  path.relative(absolutePath, fileAbsolutePath) ||
-                  path.basename(fileAbsolutePath),
-                lineNumber: index + 1,
-                line,
-              });
+              totalFound++;
+              if (
+                matchesInFile < maxPerFile &&
+                allMatches.length < maxResults
+              ) {
+                allMatches.push({
+                  filePath:
+                    path.relative(absolutePath, fileAbsolutePath) ||
+                    path.basename(fileAbsolutePath),
+                  lineNumber: index + 1,
+                  line,
+                });
+                matchesInFile++;
+                filesWithMatches.add(fileAbsolutePath);
+              }
             }
           });
         } catch (readError: unknown) {
@@ -539,7 +729,11 @@ class GrepToolInvocation extends BaseToolInvocation<
         }
       }
 
-      return allMatches;
+      return {
+        results: allMatches,
+        wasLimited: totalFound > allMatches.length,
+        totalFound: totalFound > allMatches.length ? totalFound : undefined,
+      };
     } catch (error: unknown) {
       console.error(
         `GrepLogic: Error in performGrepSearch (Strategy: ${strategyUsed}): ${getErrorMessage(
@@ -581,6 +775,21 @@ export class GrepTool extends BaseDeclarativeTool<GrepToolParams, ToolResult> {
             description:
               "Optional: A glob pattern to filter which files are searched (e.g., '*.js', '*.{ts,tsx}', 'src/**'). If omitted, searches all files (respecting potential global ignores).",
             type: 'string',
+          },
+          max_results: {
+            description:
+              'Optional: Maximum number of total matches to return. Defaults to tool-output-max-items setting or 1000.',
+            type: 'number',
+          },
+          max_files: {
+            description:
+              'Optional: Maximum number of files to include in results. Defaults to 100.',
+            type: 'number',
+          },
+          max_per_file: {
+            description:
+              'Optional: Maximum number of matches per file to return. Defaults to 50.',
+            type: 'number',
           },
         },
         required: ['pattern'],

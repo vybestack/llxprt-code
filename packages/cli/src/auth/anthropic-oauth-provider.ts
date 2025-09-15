@@ -21,6 +21,7 @@ import {
   RetryHandler,
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
+import { HistoryItemWithoutId } from '../ui/types.js';
 
 enum InitializationState {
   NotStarted = 'not-started',
@@ -41,6 +42,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private errorHandler: GracefulErrorHandler;
   private retryHandler: RetryHandler;
   private logger: DebugLogger;
+  private addItem?: (
+    itemData: Omit<HistoryItemWithoutId, 'id'>,
+    baseTimestamp: number,
+  ) => number;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -49,11 +54,18 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    *
    * Constructor completes synchronously - no async calls
    */
-  constructor(private _tokenStore?: TokenStore) {
+  constructor(
+    private _tokenStore?: TokenStore,
+    addItem?: (
+      itemData: Omit<HistoryItemWithoutId, 'id'>,
+      baseTimestamp: number,
+    ) => number,
+  ) {
     this.deviceFlow = new AnthropicDeviceFlow();
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:anthropic');
+    this.addItem = addItem;
 
     /**
      * @plan PLAN-20250823-AUTHFIXES.P16
@@ -169,8 +181,20 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         // Try to open browser if appropriate
         if (shouldLaunchBrowser()) {
           console.log('Opening browser for authentication...');
-          console.log('If the browser does not open, please visit:');
-          console.log(authUrl);
+
+          // Add OAuth URL to history so user can copy it from the UI
+          if (this.addItem) {
+            this.addItem(
+              {
+                type: 'info',
+                text: `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`,
+              },
+              Date.now(),
+            );
+          } else {
+            console.log('Visit the following URL to authorize:');
+            console.log(authUrl);
+          }
 
           try {
             await openBrowserSecurely(authUrl);
@@ -181,8 +205,18 @@ export class AnthropicOAuthProvider implements OAuthProvider {
           }
         } else {
           // In non-interactive environments, just show the URL
-          console.log('Visit this URL to authorize:');
-          console.log(authUrl);
+          if (this.addItem) {
+            this.addItem(
+              {
+                type: 'info',
+                text: `Please visit the following URL to authorize with Anthropic Claude:\n${authUrl}`,
+              },
+              Date.now(),
+            );
+          } else {
+            console.log('Visit the following URL to authorize:');
+            console.log(authUrl);
+          }
         }
 
         console.log('─'.repeat(40));

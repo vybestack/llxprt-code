@@ -74,6 +74,14 @@ export function applyReplacement(
     return currentContent;
   }
 
+  // Prevent infinite loop: empty oldString with multiple replacements is invalid
+  if (oldString === '' && expectedReplacements > 1) {
+    // This would cause an infinite loop as indexOf("", n) always returns n
+    throw new Error(
+      'Cannot perform multiple replacements with empty old_string',
+    );
+  }
+
   // Use a more precise replacement that only replaces the expected number of occurrences
   if (expectedReplacements === 1) {
     // For single replacement, use replace() instead of replaceAll()
@@ -246,7 +254,14 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
       finalNewString = correctedEdit.params.new_string;
       occurrences = correctedEdit.occurrences;
 
-      if (filteredParams.old_string === '') {
+      if (filteredParams.old_string === '' && expectedReplacements > 1) {
+        // Error: Invalid combination that would cause infinite loop
+        error = {
+          display: `Failed to edit. Cannot perform multiple replacements with empty old_string.`,
+          raw: `Invalid parameters: empty old_string with expected_replacements=${expectedReplacements} would cause infinite loop`,
+          type: ToolErrorType.INVALID_TOOL_PARAMS,
+        };
+      } else if (filteredParams.old_string === '') {
         // Error: Trying to create a file that already exists
         error = {
           display: `Failed to edit. Attempted to create a file that already exists.`,
@@ -646,6 +661,12 @@ Expectation for required parameters:
     if (!workspaceContext.isPathWithinWorkspace(params.file_path)) {
       const directories = workspaceContext.getDirectories();
       return `File path must be within one of the workspace directories: ${directories.join(', ')}`;
+    }
+
+    // Validate that empty old_string with multiple replacements is not allowed
+    const expectedReplacements = params.expected_replacements ?? 1;
+    if (params.old_string === '' && expectedReplacements > 1) {
+      return `Cannot perform multiple replacements with empty old_string (would cause infinite loop)`;
     }
 
     return null;

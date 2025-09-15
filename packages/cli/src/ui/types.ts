@@ -81,6 +81,12 @@ export type HistoryItemGeminiContent = HistoryItemBase & {
   model?: string;
 };
 
+export type HistoryItemOAuthURL = HistoryItemBase & {
+  type: 'oauth_url';
+  text: string;
+  url: string;
+};
+
 export type HistoryItemInfo = HistoryItemBase & {
   type: 'info';
   text: string;
@@ -166,7 +172,8 @@ export type HistoryItemWithoutId =
   | HistoryItemModelStats
   | HistoryItemToolStats
   | HistoryItemQuit
-  | HistoryItemCompression;
+  | HistoryItemCompression
+  | HistoryItemOAuthURL;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
 
