@@ -9,7 +9,7 @@ Slash commands provide meta-level control over the CLI itself.
 ### Built-in Commands
 
 - **`/bug`**
-  - **Description:** File an issue about Gemini CLI. By default, the issue is filed within the GitHub repository for Gemini CLI. The string you enter after `/bug` will become the headline for the bug being filed. The default `/bug` behavior can be modified using the `bugCommand` setting in your `.gemini/settings.json` files.
+  - **Description:** File an issue about LLXprt CLI. By default, the issue is filed within the GitHub repository for LLXprt CLI. The string you enter after `/bug` will become the headline for the bug being filed. The default `/bug` behavior can be modified using the `bugCommand` setting in your `.llxprt/settings.json` files.
 
 - **`/chat`**
   - **Description:** Save and resume conversation history for branching conversation state interactively, or resuming a previous state from a later session.
@@ -18,8 +18,8 @@ Slash commands provide meta-level control over the CLI itself.
       - **Description:** Saves the current conversation history. You must add a `<tag>` for identifying the conversation state.
       - **Usage:** `/chat save <tag>`
       - **Details on Checkpoint Location:** The default locations for saved chat checkpoints are:
-        - Linux/macOS: `~/.gemini/tmp/<project_hash>/`
-        - Windows: `C:\Users\<YourUsername>\.gemini\tmp\<project_hash>\`
+        - Linux/macOS: `~/.llxprt/tmp/<project_hash>/`
+        - Windows: `C:\Users\<YourUsername>\.llxprt\tmp\<project_hash>`
         - When you run `/chat list`, the CLI only scans these specific directories to find available checkpoints.
         - **Note:** These checkpoints are for manually saving and resuming conversation states. For automatic checkpoints created before file modifications, see the [Checkpointing documentation](../checkpointing.md).
     - **`resume`**
@@ -92,8 +92,8 @@ Slash commands provide meta-level control over the CLI itself.
   - **Note:** Only available if the CLI is invoked with the `--checkpointing` option or configured via [settings](./configuration.md). See [Checkpointing documentation](../checkpointing.md) for more details.
 
 - **`/settings`**
-  - **Description:** Open the settings editor to view and modify Gemini CLI settings.
-  - **Details:** This command provides a user-friendly interface for changing settings that control the behavior and appearance of Gemini CLI. It is equivalent to manually editing the `.gemini/settings.json` file, but with validation and guidance to prevent errors.
+  - **Description:** Open the settings editor to view and modify LLXprt CLI settings.
+  - **Details:** This command provides a user-friendly interface for changing settings that control the behavior and appearance of LLXprt CLI. It is equivalent to manually editing the `.llxprt/settings.json` file, but with validation and guidance to prevent errors.
   - **Usage:** Simply run `/settings` and the editor will open. You can then browse or search for specific settings, view their current values, and modify them as desired. Changes to some settings are applied immediately, while others require a restart.
 
 - **`/stats`**
@@ -131,7 +131,7 @@ Slash commands provide meta-level control over the CLI itself.
     - **Editing commands:** Delete with `x`, change with `c`, insert with `i`, `a`, `o`, `O`; complex operations like `dd`, `cc`, `dw`, `cw`
     - **Count support:** Prefix commands with numbers (e.g., `3h`, `5w`, `10G`)
     - **Repeat last command:** Use `.` to repeat the last editing operation
-    - **Persistent setting:** Vim mode preference is saved to `~/.gemini/settings.json` and restored between sessions
+    - **Persistent setting:** Vim mode preference is saved to `~/.llxprt/settings.json` and restored between sessions
   - **Status indicator:** When enabled, shows `[NORMAL]` or `[INSERT]` in the footer
 
 - **`/init`**
@@ -147,8 +147,8 @@ Custom commands allow you to save and reuse your favorite or most frequently use
 
 Gemini CLI discovers commands from two locations, loaded in a specific order:
 
-1.  **User Commands (Global):** Located in `~/.gemini/commands/`. These commands are available in any project you are working on.
-2.  **Project Commands (Local):** Located in `<your-project-root>/.gemini/commands/`. These commands are specific to the current project and can be checked into version control to be shared with your team.
+1.  **User Commands (Global):** Located in `~/.llxprt/commands/`. These commands are available in any project you are working on.
+2.  **Project Commands (Local):** Located in `<your-project-root>/.llxprt/commands/`. These commands are specific to the current project and can be checked into version control to be shared with your team.
 
 If a command in the project directory has the same name as a command in the user directory, the **project command will always be used.** This allows projects to override global commands with project-specific versions.
 
@@ -156,8 +156,8 @@ If a command in the project directory has the same name as a command in the user
 
 The name of a command is determined by its file path relative to its `commands` directory. Subdirectories are used to create namespaced commands, with the path separator (`/` or `\`) being converted to a colon (`:`).
 
-- A file at `~/.gemini/commands/test.toml` becomes the command `/test`.
-- A file at `<project>/.gemini/commands/git/commit.toml` becomes the namespaced command `/git:commit`.
+- A file at `~/.llxprt/commands/test.toml` becomes the command `/test`.
+- A file at `<project>/.llxprt/commands/git/commit.toml` becomes the namespaced command `/git:commit`.
 
 #### TOML File Format (v1)
 
@@ -310,8 +310,8 @@ Let's create a global command that asks the model to refactor a piece of code.
 First, ensure the user commands directory exists, then create a `refactor` subdirectory for organization and the final TOML file.
 
 ```bash
-mkdir -p ~/.gemini/commands/refactor
-touch ~/.gemini/commands/refactor/pure.toml
+mkdir -p ~/.llxprt/commands/refactor
+touch ~/.llxprt/commands/refactor/pure.toml
 ```
 
 **2. Add the content to the file:**
@@ -319,7 +319,7 @@ touch ~/.gemini/commands/refactor/pure.toml
 Open `~/.gemini/commands/refactor/pure.toml` in your editor and add the following content. We are including the optional `description` for best practice.
 
 ```toml
-# In: ~/.gemini/commands/refactor/pure.toml
+# In: ~/.llxprt/commands/refactor/pure.toml
 # This command will be invoked via: /refactor:pure
 
 description = "Asks the model to refactor the current context into a pure function."
