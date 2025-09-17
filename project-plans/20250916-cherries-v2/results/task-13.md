@@ -56,7 +56,10 @@ Date:   Fri Aug 29 14:12:36 2025 -0400
 ## Test Results
 - Command: `npm run test`
 - Result: **PASS** - All tests passing (cli: 152 files, core: 172 files, a2a-server: 4 files, vscode: 3 files)
-- Note: Fixed missing fileCount destructuring in a2a-server config introduced by cherry-pick
+- Additional fixes needed after cherry-pick:
+  - Fixed missing fileCount destructuring in a2a-server config
+  - Added missing folderTrust parameter in multiple locations
+  - Fixed SessionController tests to include getFolderTrust mock
 
 ## Lint Results
 - Command: `npm run lint:ci`
@@ -131,4 +134,9 @@ Date:   Fri Aug 29 14:12:36 2025 -0400
 - Multi-provider architecture remains intact - no provider-specific code was introduced
 - Settings remain in llxprt's flat structure rather than nested structure
 
-**Follow-ups:** None identified - the feature is fully integrated with llxprt's architecture
+**Additional commits to fix integration issues:**
+- `29b3a04bf` - fix: add missing fileCount destructuring in a2a-server config
+- `40c5e4608` - fix: add missing folderTrust parameter in SessionController and Config.refreshMemory
+- `345fc7127` - fix: add missing getFolderTrust mock in SessionController tests
+
+**Follow-ups:** None - all integration issues resolved and tests passing
