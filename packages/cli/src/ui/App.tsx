@@ -391,9 +391,6 @@ const App = (props: AppInternalProps) => {
   const [proQuotaDialogResolver, setProQuotaDialogResolver] = useState<
     ((value: boolean) => void) | null
   >(null);
-  const [proQuotaDialogResolver, setProQuotaDialogResolver] = useState<
-    ((value: boolean) => void) | null
-  >(null);
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
