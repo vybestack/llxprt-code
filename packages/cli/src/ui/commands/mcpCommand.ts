@@ -24,6 +24,7 @@ import {
   AnyDeclarativeTool,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
+import { appEvents, AppEvent } from '../../utils/events.js';
 
 const COLOR_GREEN = '\u001b[32m';
 const COLOR_YELLOW = '\u001b[33m';
@@ -410,6 +411,12 @@ const authCommand: SlashCommand = {
     // Always attempt OAuth authentication, even if not explicitly configured
     // The authentication process will discover OAuth requirements automatically
 
+    const displayListener = (message: string) => {
+      context.ui.addItem({ type: 'info', text: message }, Date.now());
+    };
+
+    appEvents.on(AppEvent.OauthDisplayMessage, displayListener);
+
     try {
       context.ui.addItem(
         {
@@ -427,12 +434,12 @@ const authCommand: SlashCommand = {
         oauthConfig = { enabled: false };
       }
 
-      // Pass the MCP server URL for OAuth discovery
       const mcpServerUrl = server.httpUrl || server.url;
       await MCPOAuthProvider.authenticate(
         serverName,
         oauthConfig,
         mcpServerUrl,
+        appEvents,
       );
 
       context.ui.addItem(
@@ -475,6 +482,8 @@ const authCommand: SlashCommand = {
         messageType: 'error',
         content: `Failed to authenticate with MCP server '${serverName}': ${getErrorMessage(error)}`,
       };
+    } finally {
+      appEvents.removeListener(AppEvent.OauthDisplayMessage, displayListener);
     }
   },
 };
