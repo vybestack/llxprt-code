@@ -21,11 +21,26 @@ Record verification artifacts here after completing the tasks specified in the p
   - Flat settings structure maintained vs nested
   - Working tree clean and ready for Tasks 09-16
 
-## Checkpoint B (after Task 16)
-- [ ] `git status`
-- [ ] `npm run test`
-- [ ] Summary of results
-- [ ] Notes / follow-ups
+## Checkpoint B (after Task 16) - COMPLETED ✅
+- [x] `git status`: **Clean working tree** on branch 20250916-gmerge
+- [x] `npm run test`: **PASSED** - 3086 tests passed, 56 skipped across all packages
+- [x] Summary of results:
+  - Tasks 09-16 completed successfully
+  - 14 additional commits cherry-picked (1 skipped)
+  - All quality gates passed for each task
+  - Key features integrated:
+    - Session summary flag
+    - Extension update --all flag
+    - Environment variable resolution in extensions
+    - Folder trust for LLXPRT.md reading
+    - Smart Edit Tool
+    - Input history preservation
+    - Mock tool consolidation
+- [x] Notes / follow-ups:
+  - Successfully preserved llxprt customizations throughout
+  - Smart Edit Tool fully integrated with llxprt configuration
+  - Folder trust properly restricts untrusted workspaces
+  - Working tree clean and ready for Tasks 17-24
 
 ## Checkpoint C (after Task 24)
 - [ ] `git status`
