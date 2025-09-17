@@ -436,7 +436,7 @@ async function loadExtensionConfig(
 
 export async function uninstallExtension(
   extensionName: string,
-  cwd: string = process.cwd(),
+  _cwd: string = process.cwd(),
 ): Promise<void> {
   const installedExtensions = loadUserExtensions();
   if (

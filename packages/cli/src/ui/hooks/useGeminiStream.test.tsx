@@ -308,7 +308,7 @@ describe('useGeminiStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig),
     } as unknown as Config;
-    
+
     mockSettings = {
       merged: {
         ui: {
@@ -316,7 +316,7 @@ describe('useGeminiStream', () => {
         },
       },
     } as LoadedSettings;
-    
+
     mockOnDebugMessage = vi.fn();
     mockHandleSlashCommand = vi.fn().mockResolvedValue(false);
 

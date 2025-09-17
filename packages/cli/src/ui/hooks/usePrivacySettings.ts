@@ -16,12 +16,12 @@ import {
 // TODO: Remove when getCodeAssistServer is exported from core
 function getCodeAssistServer(config: Config): CodeAssistServer | undefined {
   const contentGenerator = config.getGeminiClient().getContentGenerator();
-  
+
   // Check if it's a CodeAssistServer
   if (contentGenerator && 'projectId' in contentGenerator) {
     return contentGenerator as CodeAssistServer;
   }
-  
+
   return undefined;
 }
 

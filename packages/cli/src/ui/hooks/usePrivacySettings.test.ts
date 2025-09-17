@@ -44,7 +44,7 @@ describe('usePrivacySettings', () => {
         currentTier: { id: UserTierId.STANDARD },
       } as LoadCodeAssistResponse),
     } as unknown as CodeAssistServer;
-    
+
     const testConfig = {
       getGeminiClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
@@ -69,7 +69,7 @@ describe('usePrivacySettings', () => {
         currentTier: { id: UserTierId.FREE },
       } as LoadCodeAssistResponse),
     } as unknown as CodeAssistServer;
-    
+
     const testConfig = {
       getGeminiClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
@@ -100,7 +100,7 @@ describe('usePrivacySettings', () => {
         currentTier: { id: UserTierId.FREE },
       } as LoadCodeAssistResponse),
     } as unknown as CodeAssistServer;
-    
+
     const testConfig = {
       getGeminiClient: vi.fn().mockReturnValue({
         getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
