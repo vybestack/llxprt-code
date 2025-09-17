@@ -18,6 +18,7 @@ import { recursivelyHydrateStrings } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
+import type { LoadExtensionContext } from './extensions/variableSchema.js';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 
@@ -162,7 +163,7 @@ export function loadExtensionsFromDir(dir: string): Extension[] {
   for (const subdir of fs.readdirSync(extensionsDir)) {
     const extensionDir = path.join(extensionsDir, subdir);
 
-    const extension = loadExtension(extensionDir);
+    const extension = loadExtension({ extensionDir, workspaceDir: dir });
     if (extension != null) {
       extensions.push(extension);
     }
@@ -170,7 +171,8 @@ export function loadExtensionsFromDir(dir: string): Extension[] {
   return extensions;
 }
 
-export function loadExtension(extensionDir: string): Extension | null {
+export function loadExtension(context: LoadExtensionContext): Extension | null {
+  const { extensionDir, workspaceDir } = context;
   if (!fs.statSync(extensionDir).isDirectory()) {
     console.error(
       `Warning: unexpected file ${extensionDir} in extensions directory.`,
@@ -200,6 +202,7 @@ export function loadExtension(extensionDir: string): Extension | null {
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
     let config = recursivelyHydrateStrings(JSON.parse(configContent), {
       extensionPath: extensionDir,
+      workspacePath: workspaceDir,
       '/': path.sep,
       pathSeparator: path.sep,
     }) as unknown as ExtensionConfig;
@@ -372,7 +375,10 @@ export async function installExtension(
   }
 
   try {
-    const newExtensionConfig = await loadExtensionConfig(localSourcePath);
+    const newExtensionConfig = await loadExtensionConfig({
+      extensionDir: localSourcePath,
+      workspaceDir: cwd,
+    });
     if (!newExtensionConfig) {
       throw new Error(
         `Invalid extension at ${installMetadata.source}. Please make sure it has a valid llxprt-extension.json file.`,
@@ -414,8 +420,9 @@ export async function installExtension(
 }
 
 async function loadExtensionConfig(
-  extensionDir: string,
+  context: LoadExtensionContext,
 ): Promise<ExtensionConfig | null> {
+  const { extensionDir, workspaceDir } = context;
   const configFilePath = path.join(extensionDir, EXTENSIONS_CONFIG_FILENAME);
   if (!fs.existsSync(configFilePath)) {
     return null;
@@ -424,6 +431,7 @@ async function loadExtensionConfig(
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
     const config = recursivelyHydrateStrings(JSON.parse(configContent), {
       extensionPath: extensionDir,
+      workspacePath: workspaceDir,
       '/': path.sep,
       pathSeparator: path.sep,
     }) as unknown as ExtensionConfig;
@@ -519,9 +527,10 @@ export async function updateExtension(
     await installExtension(extension.installMetadata, cwd);
 
     const updatedExtensionStorage = new ExtensionStorage(extension.config.name);
-    const updatedExtension = loadExtension(
-      updatedExtensionStorage.getExtensionDir(),
-    );
+    const updatedExtension = loadExtension({
+      extensionDir: updatedExtensionStorage.getExtensionDir(),
+      workspaceDir: cwd,
+    });
     if (!updatedExtension) {
       throw new Error('Updated extension not found after installation.');
     }
