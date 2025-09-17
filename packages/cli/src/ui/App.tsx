@@ -69,6 +69,7 @@ import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
 import { useHistory } from './hooks/useHistoryManager.js';
 import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
+import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
 import {
   useTodoPausePreserver,
   TodoPausePreserver,
@@ -246,6 +247,7 @@ const App = (props: AppInternalProps) => {
   );
   const { history, addItem, clearItems, loadHistory } =
     useHistory(historyLimits);
+  useMemoryMonitor({ addItem });
   const { updateTodos } = useTodoContext();
   const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
   const registerTodoPause = useCallback(() => {

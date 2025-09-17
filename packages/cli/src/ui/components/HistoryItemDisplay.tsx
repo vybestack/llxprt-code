@@ -15,6 +15,7 @@ import { OAuthUrlMessage } from './messages/OAuthUrlMessage.js';
 import { ToolGroupMessage } from './messages/ToolGroupMessage.js';
 import { GeminiMessageContent } from './messages/GeminiMessageContent.js';
 import { CompressionMessage } from './messages/CompressionMessage.js';
+import { WarningMessage } from './messages/WarningMessage.js';
 import { Box } from 'ink';
 import { AboutBox } from './AboutBox.js';
 import { StatsDisplay } from './StatsDisplay.js';
@@ -68,6 +69,7 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       />
     )}
     {item.type === 'info' && <InfoMessage text={item.text} />}
+    {item.type === 'warning' && <WarningMessage text={item.text} />}
     {item.type === 'error' && <ErrorMessage text={item.text} />}
     {item.type === 'oauth_url' && (
       <OAuthUrlMessage text={item.text} url={item.url} />
