@@ -27,10 +27,7 @@ import {
   AnyToolInvocation,
   MockTool,
 } from '@vybestack/llxprt-code-core';
-import type {
-  HistoryItemWithoutId,
-  HistoryItemToolGroup,
-} from '../types.js';
+import type { HistoryItemWithoutId, HistoryItemToolGroup } from '../types.js';
 import { ToolCallStatus } from '../types.js';
 
 // Mocks
@@ -38,6 +35,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
+    MockTool: actual.MockTool, // Explicitly export MockTool
     ToolRegistry: vi.fn(),
     Config: vi.fn(),
   };

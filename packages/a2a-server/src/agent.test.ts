@@ -4,11 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  ToolCallConfirmationDetails,
+} from '@vybestack/llxprt-code-core';
 import {
   GeminiEventType,
   ApprovalMode,
-  type ToolCallConfirmationDetails,
+  MockTool,
 } from '@vybestack/llxprt-code-core';
 import type {
   TaskStatusUpdateEvent,
@@ -34,7 +37,6 @@ import {
   createStreamMessageRequest,
   createMockConfig,
 } from './testing_utils.js';
-import { MockTool } from '@vybestack/llxprt-code-core';
 
 const mockToolConfirmationFn = async () =>
   ({}) as unknown as ToolCallConfirmationDetails;
@@ -85,6 +87,7 @@ vi.mock('@vybestack/llxprt-code-core', async () => {
   const actual = await vi.importActual('@vybestack/llxprt-code-core');
   return {
     ...actual,
+    MockTool: actual.MockTool, // Explicitly export MockTool
     GeminiClient: vi.fn().mockImplementation(() => ({
       sendMessageStream: sendMessageStreamSpy,
       getUserTier: vi.fn().mockReturnValue('free'),
