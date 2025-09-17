@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { FileTokenStorage } from './file-token-storage.js';
-import type { MCPMCPOAuthCredentials } from '../token-store.js';
+import type { MCPOAuthCredentials } from '../token-store.js';
 
 vi.mock('node:fs', () => ({
   promises: {

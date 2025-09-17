@@ -86,7 +86,6 @@ export class FileTokenStore extends BaseTokenStore {
   /**
    * Encrypt token payload with AES-256-GCM.
    */
-  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   private encrypt(payload: string): string {
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-gcm', this.encryptionKey, iv);
@@ -102,7 +101,6 @@ export class FileTokenStore extends BaseTokenStore {
   /**
    * Decrypt stored payload. Falls back to plaintext for backward compatibility.
    */
-  // eslint-disable-next-line @typescript-eslint/explicit-member-accessibility
   private decrypt(payload: string): string {
     const trimmed = payload.trim();
     const encryptedPattern = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i;

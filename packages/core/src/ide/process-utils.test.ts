@@ -41,9 +41,12 @@ describe('getIdeProcessInfo', () => {
       (os.platform as Mock).mockReturnValue('linux');
       // process (1000) -> shell (800) -> IDE (700)
       mockedExec
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // pid 1000 -> ppid 800 (shell)
-        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }) // pid 800 -> ppid 700 (IDE)
-        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }); // get command for pid 700
+        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000 (find shell)
+        .mockResolvedValueOnce({ stdout: '/bin/bash' }) // ps -o command= -p 1000 (find shell)
+        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }) // ps -o ppid=,command= -p 800 (get grandparent)
+        .mockResolvedValueOnce({ stdout: '/usr/lib/vscode/code' }) // ps -o command= -p 800 (get grandparent)
+        .mockResolvedValueOnce({ stdout: '700 /usr/lib/vscode/code' }) // ps -o ppid=,command= -p 700 (final command lookup)
+        .mockResolvedValueOnce({ stdout: '/usr/lib/vscode/code' }); // ps -o command= -p 700 (final command lookup)
 
       const result = await getIdeProcessInfo();
 
@@ -53,9 +56,11 @@ describe('getIdeProcessInfo', () => {
     it('should return parent process info if grandparent lookup fails', async () => {
       (os.platform as Mock).mockReturnValue('linux');
       mockedExec
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // pid 1000 -> ppid 800 (shell)
-        .mockRejectedValueOnce(new Error('ps failed')) // lookup for ppid of 800 fails
-        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }); // get command for pid 800
+        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 1000
+        .mockResolvedValueOnce({ stdout: '/bin/bash' }) // ps -o command= -p 1000
+        .mockRejectedValueOnce(new Error('ps failed')) // ps -o ppid=,command= -p 800 fails
+        .mockResolvedValueOnce({ stdout: '800 /bin/bash' }) // ps -o ppid=,command= -p 800 (final call)
+        .mockResolvedValueOnce({ stdout: '/bin/bash' }); // ps -o command= -p 800 (final call)
 
       const result = await getIdeProcessInfo();
       expect(result).toEqual({ pid: 800, command: '/bin/bash' });

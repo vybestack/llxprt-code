@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BaseTokenStorage } from './base-token-storage.js';
-import type { MCPMCPOAuthCredentials, MCPMCPOAuthToken } from '../token-store.js';
+import type { MCPOAuthCredentials } from '../token-store.js';
 
 class TestTokenStorage extends BaseTokenStorage {
   private storage = new Map<string, MCPOAuthCredentials>();

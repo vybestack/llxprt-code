@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
-import type { MCPOAuthCredentials } from './types.js';
+import type { MCPOAuthCredentials } from '../token-store.js';
 
 export class FileTokenStorage extends BaseTokenStorage {
   private readonly tokenFilePath: string;
@@ -17,14 +17,14 @@ export class FileTokenStorage extends BaseTokenStorage {
 
   constructor(serviceName: string) {
     super(serviceName);
-    const configDir = path.join(os.homedir(), '.gemini');
+    const configDir = path.join(os.homedir(), '.llxprt');
     this.tokenFilePath = path.join(configDir, 'mcp-oauth-tokens-v2.json');
     this.encryptionKey = this.deriveEncryptionKey();
   }
 
   private deriveEncryptionKey(): Buffer {
-    const salt = `${os.hostname()}-${os.userInfo().username}-gemini-cli`;
-    return crypto.scryptSync('gemini-cli-oauth', salt, 32);
+    const salt = `${os.hostname()}-${os.userInfo().username}-llxprt-cli`;
+    return crypto.scryptSync('llxprt-cli-oauth', salt, 32);
   }
 
   private encrypt(text: string): string {
@@ -67,11 +67,11 @@ export class FileTokenStorage extends BaseTokenStorage {
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   }
 
-  private async loadTokens(): Promise<Map<string, MCPMCPOAuthCredentials>> {
+  private async loadTokens(): Promise<Map<string, MCPOAuthCredentials>> {
     try {
       const data = await fs.readFile(this.tokenFilePath, 'utf-8');
       const decrypted = this.decrypt(data);
-      const tokens = JSON.parse(decrypted) as Record<string, MCPMCPOAuthCredentials>;
+      const tokens = JSON.parse(decrypted) as Record<string, MCPOAuthCredentials>;
       return new Map(Object.entries(tokens));
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException & { message?: string };
@@ -91,7 +91,7 @@ export class FileTokenStorage extends BaseTokenStorage {
   }
 
   private async saveTokens(
-    tokens: Map<string, MCPMCPOAuthCredentials>,
+    tokens: Map<string, MCPOAuthCredentials>,
   ): Promise<void> {
     await this.ensureDirectoryExists();
 

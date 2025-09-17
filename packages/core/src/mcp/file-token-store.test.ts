@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
+import * as crypto from 'node:crypto';
 import { FileTokenStore } from './file-token-store.js';
 import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 
@@ -21,17 +22,63 @@ vi.mock('node:fs', () => ({
   },
 }));
 
+// Mock Storage module
+vi.mock('../config/storage.js', () => ({
+  Storage: {
+    getMcpOAuthTokensPath: vi.fn().mockReturnValue('/test/path/tokens.json'),
+  },
+}));
+
+// Mock OS methods that might be causing issues
+vi.mock('node:os', () => ({
+  hostname: vi.fn().mockReturnValue('test-hostname'),
+  userInfo: vi.fn().mockReturnValue({ username: 'test-user' }),
+}));
+
 const TEST_ENCRYPTION_KEY = Buffer.alloc(32, 1);
 const DEFAULT_OPTIONS = {
   encryptionKey: TEST_ENCRYPTION_KEY,
   serviceName: 'test-service',
 };
 
-const getCryptoHelpers = (store: FileTokenStore) =>
-  store as unknown as {
-    encrypt(payload: string): string;
-    decrypt(payload: string): string;
+const getCryptoHelpers = (_store: FileTokenStore) => {
+  // Create proper encryption/decryption methods using the test key
+  const encrypt = (payload: string): string => {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', TEST_ENCRYPTION_KEY, iv);
+
+    let encrypted = cipher.update(payload, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    return [iv.toString('hex'), authTag.toString('hex'), encrypted].join(':');
   };
+
+  const decrypt = (payload: string): string => {
+    const trimmed = payload.trim();
+    const encryptedPattern = /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i;
+
+    if (!encryptedPattern.test(trimmed)) {
+      return payload;
+    }
+
+    const [ivHex, authTagHex, encryptedHex] = trimmed.split(':');
+
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', TEST_ENCRYPTION_KEY, iv);
+
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  };
+
+  return { encrypt, decrypt };
+};
 
 describe('FileTokenStore', () => {
   const mockToken: MCPOAuthToken = {
