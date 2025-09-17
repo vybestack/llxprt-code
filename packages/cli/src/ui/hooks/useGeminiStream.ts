@@ -26,10 +26,12 @@ import {
   UserPromptEvent,
   DEFAULT_GEMINI_FLASH_MODEL,
   parseAndFormatApiError,
-  getCodeAssistServer,
-  UserTierId,
+  // TODO: Re-enable when ServerGeminiCitationEvent is added to core
+  // getCodeAssistServer,
+  // UserTierId,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
+import { LoadedSettings } from '../../config/settings.js';
 import {
   StreamingState,
   HistoryItem,
@@ -85,14 +87,15 @@ enum StreamProcessingStatus {
   Error,
 }
 
-function showCitations(settings: LoadedSettings, config: Config): boolean {
-  const enabled = settings?.merged?.ui?.showCitations;
-  if (enabled !== undefined) {
-    return enabled;
-  }
-  const server = getCodeAssistServer(config);
-  return (server && server.userTier !== UserTierId.FREE) ?? false;
-}
+// TODO: Enable when ServerGeminiCitationEvent is added to core
+// function showCitations(settings: LoadedSettings, config: Config): boolean {
+//   const enabled = settings?.merged?.ui?.showCitations;
+//   if (enabled !== undefined) {
+//     return enabled;
+//   }
+//   const server = getCodeAssistServer(config);
+//   return (server && server.userTier !== UserTierId.FREE) ?? false;
+// }
 
 /**
  * Manages the Gemini stream, including user input, command processing,
@@ -103,6 +106,7 @@ export const useGeminiStream = (
   history: HistoryItem[],
   addItem: UseHistoryManagerReturn['addItem'],
   config: Config,
+  settings: LoadedSettings,
   onDebugMessage: (message: string) => void,
   handleSlashCommand: (
     cmd: PartListUnion,
@@ -490,20 +494,21 @@ export const useGeminiStream = (
     [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought],
   );
 
-  const handleCitationEvent = useCallback(
-    (text: string, userMessageTimestamp: number) => {
-      if (!showCitations(settings, config)) {
-        return;
-      }
+  // TODO: Wire up when ServerGeminiCitationEvent is added to core
+  // const handleCitationEvent = useCallback(
+  //   (text: string, userMessageTimestamp: number) => {
+  //     if (!showCitations(settings, config)) {
+  //       return;
+  //     }
 
-      if (pendingHistoryItemRef.current) {
-        addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-        setPendingHistoryItem(null);
-      }
-      addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
-    },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config],
-  );
+  //     if (pendingHistoryItemRef.current) {
+  //       addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+  //       setPendingHistoryItem(null);
+  //     }
+  //     addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
+  //   },
+  //   [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config],
+  // );
 
   const handleFinishedEvent = useCallback(
     (event: ServerGeminiFinishedEvent, userMessageTimestamp: number) => {

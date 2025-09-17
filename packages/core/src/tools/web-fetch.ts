@@ -15,7 +15,7 @@ import {
 } from './tools.js';
 import { ToolErrorType } from './tool-error.js';
 import { getErrorMessage } from '../utils/errors.js';
-import { ApprovalMode, Config, DEFAULT_GEMINI_FLASH_MODEL } from '../config/config.js';
+import { ApprovalMode, Config } from '../config/config.js';
 import { getResponseText } from '../utils/generateContentResponseUtilities.js';
 import { fetchWithTimeout, isPrivateIp } from '../utils/fetch.js';
 import { convert } from 'html-to-text';

@@ -888,14 +888,8 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
-<<<<<<< HEAD
     ideClient,
     chatCompression: settings.chatCompression,
-    folderTrustFeature,
-=======
-    chatCompression: settings.model?.chatCompression,
-    folderTrust,
->>>>>>> 93820f833 (Fix(cli) - Remove Foldertrust Feature Flag (#7420))
     interactive,
     folderTrust,
     trustedFolder,

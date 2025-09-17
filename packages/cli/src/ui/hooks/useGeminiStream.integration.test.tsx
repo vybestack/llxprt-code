@@ -388,6 +388,7 @@ describe('Todo Continuation Integration - useGeminiStream', () => {
           props.history,
           props.addItem,
           props.config,
+          props.loadedSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
           props.shellModeActive,

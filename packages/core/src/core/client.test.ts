@@ -2181,7 +2181,7 @@ describe('Gemini Client (client.ts)', () => {
 
     it('should use current model from config for content generation', async () => {
       const initialModel = client['config'].getModel();
-      const _contents = [{ role: 'user', parts: [{ text: 'test' }] }];
+      const contents = [{ role: 'user', parts: [{ text: 'test' }] }];
       const currentModel = initialModel + '-changed';
 
       vi.spyOn(client['config'], 'getModel').mockReturnValueOnce(currentModel);
@@ -2200,7 +2200,7 @@ describe('Gemini Client (client.ts)', () => {
         embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockContentGenerator as ContentGenerator;
-      
+
       await client.generateContent(
         contents,
         {},

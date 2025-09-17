@@ -9,8 +9,21 @@ import {
   type Config,
   type CodeAssistServer,
   UserTierId,
-  getCodeAssistServer,
+  // TODO: Re-enable when getCodeAssistServer is exported from core
+  // getCodeAssistServer,
 } from '@vybestack/llxprt-code-core';
+
+// TODO: Remove when getCodeAssistServer is exported from core
+function getCodeAssistServer(config: Config): CodeAssistServer | undefined {
+  const contentGenerator = config.getGeminiClient().getContentGenerator();
+  
+  // Check if it's a CodeAssistServer
+  if (contentGenerator && 'projectId' in contentGenerator) {
+    return contentGenerator as CodeAssistServer;
+  }
+  
+  return undefined;
+}
 
 export interface PrivacyState {
   isLoading: boolean;

@@ -1042,6 +1042,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     history,
     addItem,
     config,
+    settings,
     setDebugMessage,
     handleSlashCommand,
     shellModeActive,

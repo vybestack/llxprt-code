@@ -11,30 +11,23 @@ import type {
   CodeAssistServer,
   LoadCodeAssistResponse,
 } from '@vybestack/llxprt-code-core';
-import { UserTierId, getCodeAssistServer } from '@vybestack/llxprt-code-core';
+import { UserTierId } from '@vybestack/llxprt-code-core';
 import { usePrivacySettings } from './usePrivacySettings.js';
 
-// Mock the dependencies
-vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@vybestack/llxprt-code-core')>();
-  return {
-    ...actual,
-    getCodeAssistServer: vi.fn(),
-  };
-});
-
 describe('usePrivacySettings', () => {
-  const mockConfig = {} as unknown as Config;
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should throw error when content generator is not a CodeAssistServer', async () => {
-    vi.mocked(getCodeAssistServer).mockReturnValue(undefined);
+    // Mock config to return undefined content generator
+    const testConfig = {
+      getGeminiClient: vi.fn().mockReturnValue({
+        getContentGenerator: vi.fn().mockReturnValue(undefined),
+      }),
+    } as unknown as Config;
 
-    const { result } = renderHook(() => usePrivacySettings(mockConfig));
+    const { result } = renderHook(() => usePrivacySettings(testConfig));
 
     await waitFor(() => {
       expect(result.current.privacyState.isLoading).toBe(false);
@@ -45,15 +38,20 @@ describe('usePrivacySettings', () => {
 
   it('should handle paid tier users correctly', async () => {
     // Mock paid tier response
-    vi.mocked(getCodeAssistServer).mockReturnValue({
+    const mockCodeAssistServer = {
       projectId: 'test-project-id',
-      loadCodeAssist: () =>
-        ({
-          currentTier: { id: UserTierId.STANDARD },
-        }) as unknown as LoadCodeAssistResponse,
-    } as unknown as CodeAssistServer);
+      loadCodeAssist: vi.fn().mockResolvedValue({
+        currentTier: { id: UserTierId.STANDARD },
+      } as LoadCodeAssistResponse),
+    } as unknown as CodeAssistServer;
+    
+    const testConfig = {
+      getGeminiClient: vi.fn().mockReturnValue({
+        getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
+      }),
+    } as unknown as Config;
 
-    const { result } = renderHook(() => usePrivacySettings(mockConfig));
+    const { result } = renderHook(() => usePrivacySettings(testConfig));
 
     await waitFor(() => {
       expect(result.current.privacyState.isLoading).toBe(false);
@@ -65,14 +63,20 @@ describe('usePrivacySettings', () => {
   });
 
   it('should throw error when CodeAssistServer has no projectId', async () => {
-    vi.mocked(getCodeAssistServer).mockReturnValue({
-      loadCodeAssist: () =>
-        ({
-          currentTier: { id: UserTierId.FREE },
-        }) as unknown as LoadCodeAssistResponse,
-    } as unknown as CodeAssistServer);
+    const mockCodeAssistServer = {
+      projectId: undefined, // Explicitly set projectId to undefined
+      loadCodeAssist: vi.fn().mockResolvedValue({
+        currentTier: { id: UserTierId.FREE },
+      } as LoadCodeAssistResponse),
+    } as unknown as CodeAssistServer;
+    
+    const testConfig = {
+      getGeminiClient: vi.fn().mockReturnValue({
+        getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
+      }),
+    } as unknown as Config;
 
-    const { result } = renderHook(() => usePrivacySettings(mockConfig));
+    const { result } = renderHook(() => usePrivacySettings(testConfig));
 
     await waitFor(() => {
       expect(result.current.privacyState.isLoading).toBe(false);
@@ -92,14 +96,18 @@ describe('usePrivacySettings', () => {
       setCodeAssistGlobalUserSetting: vi.fn().mockResolvedValue({
         freeTierDataCollectionOptin: false,
       }),
-      loadCodeAssist: () =>
-        ({
-          currentTier: { id: UserTierId.FREE },
-        }) as unknown as LoadCodeAssistResponse,
+      loadCodeAssist: vi.fn().mockResolvedValue({
+        currentTier: { id: UserTierId.FREE },
+      } as LoadCodeAssistResponse),
     } as unknown as CodeAssistServer;
-    vi.mocked(getCodeAssistServer).mockReturnValue(mockCodeAssistServer);
+    
+    const testConfig = {
+      getGeminiClient: vi.fn().mockReturnValue({
+        getContentGenerator: vi.fn().mockReturnValue(mockCodeAssistServer),
+      }),
+    } as unknown as Config;
 
-    const { result } = renderHook(() => usePrivacySettings(mockConfig));
+    const { result } = renderHook(() => usePrivacySettings(testConfig));
 
     // Wait for initial load
     await waitFor(() => {

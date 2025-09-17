@@ -889,10 +889,7 @@ export class GeminiClient {
       const prefix = '```json';
       const suffix = '```';
       if (text.startsWith(prefix) && text.endsWith(suffix)) {
-        logMalformedJsonResponse(
-          this.config,
-          new MalformedJsonResponseEvent(modelToUse),
-        );
+        // Note: upstream added logMalformedJsonResponse here but our telemetry doesn't have it
         text = text
           .substring(prefix.length, text.length - suffix.length)
           .trim();

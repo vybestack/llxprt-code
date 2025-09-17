@@ -242,7 +242,6 @@ describe('mergePartListUnions', () => {
 describe('useGeminiStream', () => {
   let mockAddItem: Mock;
   let mockConfig: Config;
-  let mockSettings: LoadedSettings;
   let mockOnDebugMessage: Mock;
   let mockHandleSlashCommand: Mock;
   let mockScheduleToolCalls: Mock;
@@ -309,7 +308,7 @@ describe('useGeminiStream', () => {
         .mockReturnValue(contentGeneratorConfig),
     } as unknown as Config;
     
-    mockSettings = {
+    const mockSettings = {
       merged: {
         ui: {
           showCitations: false,
@@ -556,7 +555,6 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
-        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -636,7 +634,6 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
-        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -745,7 +742,6 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
-        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -855,7 +851,6 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
-        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -985,7 +980,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1261,7 +1255,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1315,7 +1308,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           testConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1366,7 +1358,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1415,7 +1406,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1465,7 +1455,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1555,7 +1544,6 @@ describe('useGeminiStream', () => {
             [],
             mockAddItem,
             mockConfig,
-            mockSettings,
             mockOnDebugMessage,
             mockHandleSlashCommand,
             false,
@@ -1612,7 +1600,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1691,7 +1678,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1746,7 +1732,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1806,7 +1791,6 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
-        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false, // shellModeActive
@@ -1870,7 +1854,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1940,7 +1923,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1991,7 +1973,6 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
-          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -2048,7 +2029,6 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
-        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
