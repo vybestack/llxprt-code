@@ -9,10 +9,13 @@ export type HighlightToken = {
   type: 'default' | 'command' | 'file';
 };
 
-const HIGHLIGHT_REGEX = /(\/[a-zA-Z0-9_-]+|@[a-zA-Z0-9_./-]+)/g;
+import { cpLen, cpSlice } from './textUtils.js';
+
+const HIGHLIGHT_REGEX = /(^\/[a-zA-Z0-9_-]+|@(?:\\ |[a-zA-Z0-9_./-])+)/g;
 
 export function parseInputForHighlighting(
   text: string,
+  lineIndex: number = 0,
 ): readonly HighlightToken[] {
   if (!text) {
     return [{ text: '', type: 'default' }];
@@ -36,10 +39,17 @@ export function parseInputForHighlighting(
 
     // Add the matched token
     const type = fullMatch.startsWith('/') ? 'command' : 'file';
-    tokens.push({
-      text: fullMatch,
-      type,
-    });
+    if (type === 'command' && lineIndex !== 0) {
+      tokens.push({
+        text: fullMatch,
+        type: 'default',
+      });
+    } else {
+      tokens.push({
+        text: fullMatch,
+        type,
+      });
+    }
 
     lastIndex = matchIndex + fullMatch.length;
   }
@@ -53,4 +63,40 @@ export function parseInputForHighlighting(
   }
 
   return tokens;
+}
+
+export function buildSegmentsForVisualSlice(
+  tokens: readonly HighlightToken[],
+  sliceStart: number,
+  sliceEnd: number,
+): readonly HighlightToken[] {
+  if (sliceStart >= sliceEnd) return [];
+
+  const segments: HighlightToken[] = [];
+  let tokenCpStart = 0;
+
+  for (const token of tokens) {
+    const tokenLen = cpLen(token.text);
+    const tokenStart = tokenCpStart;
+    const tokenEnd = tokenStart + tokenLen;
+
+    const overlapStart = Math.max(tokenStart, sliceStart);
+    const overlapEnd = Math.min(tokenEnd, sliceEnd);
+    if (overlapStart < overlapEnd) {
+      const sliceStartInToken = overlapStart - tokenStart;
+      const sliceEndInToken = overlapEnd - tokenStart;
+      const rawSlice = cpSlice(token.text, sliceStartInToken, sliceEndInToken);
+
+      const last = segments[segments.length - 1];
+      if (last && last.type === token.type) {
+        last.text += rawSlice;
+      } else {
+        segments.push({ type: token.type, text: rawSlice });
+      }
+    }
+
+    tokenCpStart += tokenLen;
+  }
+
+  return segments;
 }
