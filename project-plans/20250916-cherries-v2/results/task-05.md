@@ -34,23 +34,23 @@ See local commits for full diffs (too large to include here)
 
 ## Test Results
 - Command: `npm run test`
-- **Not run yet** - Will be executed by quality gate
+- **PASSED** - 5211 tests passed, 75 skipped, 0 failures
 
 ## Lint Results
 - Command: `npm run lint:ci`
-- **Not run yet** - Will be executed by quality gate
+- **PASSED** - Clean with no warnings (including property shorthand fix in useFolderTrust.ts)
 
 ## Typecheck Results
 - Command: `npm run typecheck`
-- **Not run yet** - Will be executed by quality gate
+- **PASSED** - All packages compile successfully
 
 ## Build Results
 - Command: `npm run build`
-- **Not run yet** - Will be executed by quality gate
+- **PASSED** - All packages built successfully
 
 ## Format Check
 - Command: `npm run format:check`
-- **Not run yet** - Will be executed by quality gate
+- **PASSED** - All files properly formatted
 
 ## Lines of Code Analysis
 - Upstream: 5 commits attempted
