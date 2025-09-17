@@ -30,6 +30,7 @@ vi.mock('./settings.js', async (importActual) => {
 // Mock trustedFolders
 vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn(),
+  isFolderTrustEnabled: vi.fn(),
 }));
 
 // NOW import everything else, including the (now effectively re-exported) settings.js
@@ -46,7 +47,7 @@ import {
 } from 'vitest';
 import * as fs from 'fs'; // fs will be mocked separately
 import stripJsonComments from 'strip-json-comments'; // Will be mocked separately
-import { isWorkspaceTrusted } from './trustedFolders.js';
+import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
@@ -56,7 +57,6 @@ import {
   getSystemDefaultsPath,
   SETTINGS_DIRECTORY_NAME, // This is from the original module, but used by the mock.
   SettingScope,
-  migrateSettingsToV1,
   type Settings,
   loadEnvironment,
 } from './settings';
@@ -117,6 +117,7 @@ describe('Settings Loading and Merging', () => {
       },
     );
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -1928,11 +1929,14 @@ describe('Settings Loading and Merging', () => {
 
     it('should NOT merge workspace settings when workspace is not trusted', () => {
       vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+      vi.mocked(isFolderTrustEnabled).mockReturnValue(true); // Enable the feature for this test
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         theme: 'dark',
         sandbox: false,
         contextFileName: 'USER.md',
+        folderTrustFeature: true, // Enable the feature
+        folderTrust: true, // Enable the setting
       };
       const workspaceSettingsContent = {
         sandbox: true,
@@ -2252,28 +2256,22 @@ describe('Settings Loading and Merging', () => {
 
   describe('loadEnvironment', () => {
     function setup({
-      isFolderTrustEnabled = true,
+      isFolderTrustEnabled: folderTrustEnabledValue = true,
       isWorkspaceTrustedValue = true,
     }) {
       delete process.env['TESTTEST']; // reset
       const geminiEnvPath = path.resolve(path.join(LLXPRT_DIR, '.env'));
 
       vi.mocked(isWorkspaceTrusted).mockReturnValue(isWorkspaceTrustedValue);
+      vi.mocked(isFolderTrustEnabled).mockReturnValue(folderTrustEnabledValue);
       (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
         [USER_SETTINGS_PATH, geminiEnvPath].includes(p.toString()),
       );
       const userSettingsContent: Settings = {
-        ui: {
-          theme: 'dark',
-        },
-        security: {
-          folderTrust: {
-            enabled: isFolderTrustEnabled,
-          },
-        },
-        context: {
-          fileName: 'USER_CONTEXT.md',
-        },
+        theme: 'dark',
+        folderTrustFeature: true, // Enable the feature for these tests
+        folderTrust: folderTrustEnabledValue,
+        contextFileName: 'USER_CONTEXT.md',
       };
       (fs.readFileSync as Mock).mockImplementation(
         (p: fs.PathOrFileDescriptor) => {

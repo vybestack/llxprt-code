@@ -16,7 +16,7 @@ import {
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
-import { isWorkspaceTrusted } from './trustedFolders.js';
+import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import {
   Settings,
   MemoryImportFormat,
@@ -385,8 +385,13 @@ export function setUpCloudShellEnvironment(envFilePath: string | null): void {
 export function loadEnvironment(settings: Settings): void {
   const envFilePath = findEnvFile(process.cwd());
 
-  if (!isWorkspaceTrusted(settings)) {
-    return;
+  // Check if folder trust feature is enabled, and if so, check if workspace is trusted
+  if (isFolderTrustEnabled(settings)) {
+    const trusted = isWorkspaceTrusted();
+    if (trusted !== true) {
+      // If not explicitly trusted (false or undefined), don't load environment
+      return;
+    }
   }
 
   // Cloud Shell environment variable handling
@@ -532,7 +537,20 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
     }
   }
 
-  const isTrusted = isWorkspaceTrusted() ?? true;
+  // Check if folder trust feature is enabled in any of the loaded settings
+  // before calling isWorkspaceTrusted() to avoid requiring Settings type
+  const folderTrustFeature = 
+    systemSettings.folderTrustFeature ?? 
+    userSettings.folderTrustFeature ?? 
+    false; // default to false per schema
+  
+  const folderTrustEnabled = 
+    systemSettings.folderTrust ?? 
+    userSettings.folderTrust ?? 
+    true; // default to true per schema logic
+
+  const shouldCheckFolderTrust = folderTrustFeature && folderTrustEnabled;
+  const isTrusted = shouldCheckFolderTrust ? (isWorkspaceTrusted() ?? true) : true;
 
   // Create a temporary merged settings object to pass to loadEnvironment.
   const tempMergedSettings = mergeSettings(
