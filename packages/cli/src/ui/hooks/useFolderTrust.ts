@@ -27,8 +27,8 @@ export const useFolderTrust = (settings: LoadedSettings, config: Config) => {
   const { folderTrust, folderTrustFeature } = settings.merged;
   useEffect(() => {
     const trusted = isWorkspaceTrusted({
-      folderTrust: folderTrust,
-      folderTrustFeature: folderTrustFeature,
+      folderTrust,
+      folderTrustFeature,
     } as Settings);
     setIsTrusted(trusted);
     if (trusted === undefined) {
