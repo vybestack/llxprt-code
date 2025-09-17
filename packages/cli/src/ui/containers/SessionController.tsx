@@ -250,6 +250,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
         config.getFileService(),
         loadSettings(process.cwd()).merged, // Get merged settings object
         config.getExtensionContextFilePaths(),
+        config.getFolderTrust(),
       );
       config.setUserMemory(memoryContent);
       config.setLlxprtMdFileCount(fileCount);

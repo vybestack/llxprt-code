@@ -1256,6 +1256,7 @@ export class Config {
       this.getDebugMode(),
       this.getFileService(),
       this.getExtensionContextFilePaths(),
+      this.getFolderTrust(),
     );
 
     this.setUserMemory(memoryContent);
