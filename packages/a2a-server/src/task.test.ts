@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { Task } from './task.js';
-import type { Config, ToolCallRequestInfo } from '@google/gemini-cli-core';
+import type { Config, ToolCallRequestInfo } from '@vybestack/llxprt-code-core';
 import { createMockConfig } from './testing_utils.js';
 import type { ExecutionEventBus } from '@a2a-js/sdk/server';
 

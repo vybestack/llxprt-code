@@ -33,6 +33,7 @@ import {
   getOauthClient,
   setGitStatsService,
   FatalConfigError,
+  uiTelemetryService,
   // IDE connection logging removed - telemetry disabled in llxprt
 } from '@vybestack/llxprt-code-core';
 import { themeManager } from './ui/themes/theme-manager.js';
@@ -47,7 +48,6 @@ import {
   runExitCleanup,
 } from './utils/cleanup.js';
 import { getCliVersion } from './utils/version.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 import { getProviderManager } from './providers/providerManagerInstance.js';

@@ -9,8 +9,8 @@ import type {
   TaskStatusUpdateEvent,
   SendStreamingMessageSuccessResponse,
 } from '@a2a-js/sdk';
-import { ApprovalMode } from '@google/gemini-cli-core';
 import {
+  ApprovalMode,
   BaseDeclarativeTool,
   BaseToolInvocation,
   Kind,
@@ -44,6 +44,7 @@ export function createMockConfig(
     getContentGeneratorConfig: vi.fn().mockReturnValue({ model: 'gemini-pro' }),
     getModel: vi.fn().mockReturnValue('gemini-pro'),
     getUsageStatisticsEnabled: vi.fn().mockReturnValue(false),
+    getComplexityAnalyzerSettings: vi.fn().mockReturnValue({}),
     setFlashFallbackHandler: vi.fn(),
     initialize: vi.fn().mockResolvedValue(undefined),
     getProxy: vi.fn().mockReturnValue(undefined),

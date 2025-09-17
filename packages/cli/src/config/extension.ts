@@ -457,7 +457,7 @@ export async function updateExtension(
   const tempDir = await ExtensionStorage.createTmpDir();
   try {
     await copyExtension(extension.path, tempDir);
-    await uninstallExtension(extension.config.name, cwd);
+    await uninstallExtension(extension.config.name);
     await installExtension(extension.installMetadata, cwd);
 
     const updatedExtension = loadExtension(extension.path);
