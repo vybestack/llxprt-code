@@ -1122,6 +1122,30 @@ You can switch authentication methods by typing /auth or switch to a different m
     useLoadingIndicator(streamingState);
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
+  const handleProQuotaChoice = useCallback(
+    (choice: 'auth' | 'continue') => {
+      setIsProQuotaDialogOpen(false);
+      if (!proQuotaDialogResolver) return;
+
+      const resolveValue = choice !== 'auth';
+      proQuotaDialogResolver(resolveValue);
+      setProQuotaDialogResolver(null);
+
+      if (choice === 'auth') {
+        openAuthDialog();
+      } else {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Switched to fallback model. Tip: Press Ctrl+P to recall your previous prompt and submit it again if you wish.',
+          },
+          Date.now(),
+        );
+      }
+    },
+    [proQuotaDialogResolver, openAuthDialog, addItem],
+  );
+
   const handleExit = useCallback(
     (
       pressedOnce: boolean,
@@ -1526,26 +1550,7 @@ You can switch authentication methods by typing /auth or switch to a different m
             <ProQuotaDialog
               currentModel={config.getModel()}
               fallbackModel={DEFAULT_GEMINI_FLASH_MODEL}
-              onChoice={(choice) => {
-                setIsProQuotaDialogOpen(false);
-                if (!proQuotaDialogResolver) return;
-
-                const resolveValue = choice !== 'auth';
-                proQuotaDialogResolver(resolveValue);
-                setProQuotaDialogResolver(null);
-
-                if (choice === 'auth') {
-                  openAuthDialog();
-                } else {
-                  addItem(
-                    {
-                      type: MessageType.INFO,
-                      text: 'Switched to fallback model. Tip: Press Ctrl+P to recall your previous prompt and submit it again if you wish.',
-                    },
-                    Date.now(),
-                  );
-                }
-              }}
+              onChoice={handleProQuotaChoice}
             />
           ) : isFolderTrustDialogOpen ? (
             <FolderTrustDialog

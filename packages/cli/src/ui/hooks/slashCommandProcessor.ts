@@ -469,7 +469,9 @@ export const useSlashCommandProcessor = (
                   // Set the client history - it will be stored for later use if not initialized
                   const client = config?.getGeminiClient();
                   if (client) {
-                    await client.setHistory(result.clientHistory, { stripThoughts: true });
+                    await client.setHistory(result.clientHistory, {
+                      stripThoughts: true,
+                    });
                   }
 
                   return { type: 'handled' };

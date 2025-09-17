@@ -13,7 +13,9 @@ export abstract class BaseTokenStorage {
     this.serviceName = serviceName;
   }
 
-  abstract getCredentials(serverName: string): Promise<MCPOAuthCredentials | null>;
+  abstract getCredentials(
+    serverName: string,
+  ): Promise<MCPOAuthCredentials | null>;
   abstract setCredentials(credentials: MCPOAuthCredentials): Promise<void>;
   abstract deleteCredentials(serverName: string): Promise<void>;
   abstract listServers(): Promise<string[]>;

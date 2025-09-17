@@ -1,0 +1,16 @@
+
+> @vybestack/llxprt-code@0.3.4 lint:ci
+> eslint . --ext .ts,.tsx --max-warnings 0 && eslint integration-tests --max-warnings 0
+
+
+/Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/cli/src/ui/App.tsx
+  1529:15  warning  JSX props should not use arrow functions  react/jsx-no-bind
+
+/Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/cli/src/ui/components/ProQuotaDialog.test.tsx
+  27:9  warning  JSX props should not use arrow functions  react/jsx-no-bind
+
+/Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/cli/src/ui/components/ProQuotaDialog.tsx
+  47:11  warning  JSX props should not use arrow functions  react/jsx-no-bind
+
+✖ 3 problems (0 errors, 3 warnings)
+

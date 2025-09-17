@@ -107,7 +107,9 @@ vi.mock('../../tools/ToolFormatter.js', () => ({
 
 // Mock the prompts module
 vi.mock('../../core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(async () => 'You are Claude Code, Anthropic\'s official CLI for Claude.'),
+  getCoreSystemPromptAsync: vi.fn(
+    async () => "You are Claude Code, Anthropic's official CLI for Claude.",
+  ),
 }));
 
 // Mock the retry utility

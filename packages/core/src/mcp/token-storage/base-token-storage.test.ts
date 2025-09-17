@@ -11,7 +11,9 @@ import type { MCPOAuthCredentials } from '../token-store.js';
 class TestTokenStorage extends BaseTokenStorage {
   private storage = new Map<string, MCPOAuthCredentials>();
 
-  async getCredentials(serverName: string): Promise<MCPOAuthCredentials | null> {
+  async getCredentials(
+    serverName: string,
+  ): Promise<MCPOAuthCredentials | null> {
     return this.storage.get(serverName) || null;
   }
 

@@ -71,7 +71,10 @@ export class FileTokenStorage extends BaseTokenStorage {
     try {
       const data = await fs.readFile(this.tokenFilePath, 'utf-8');
       const decrypted = this.decrypt(data);
-      const tokens = JSON.parse(decrypted) as Record<string, MCPOAuthCredentials>;
+      const tokens = JSON.parse(decrypted) as Record<
+        string,
+        MCPOAuthCredentials
+      >;
       return new Map(Object.entries(tokens));
     } catch (error: unknown) {
       const err = error as NodeJS.ErrnoException & { message?: string };
@@ -102,7 +105,9 @@ export class FileTokenStorage extends BaseTokenStorage {
     await fs.writeFile(this.tokenFilePath, encrypted, { mode: 0o600 });
   }
 
-  async getCredentials(serverName: string): Promise<MCPOAuthCredentials | null> {
+  async getCredentials(
+    serverName: string,
+  ): Promise<MCPOAuthCredentials | null> {
     const tokens = await this.loadTokens();
     const credentials = tokens.get(serverName);
 

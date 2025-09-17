@@ -539,18 +539,18 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
 
   // Check if folder trust feature is enabled in any of the loaded settings
   // before calling isWorkspaceTrusted() to avoid requiring Settings type
-  const folderTrustFeature = 
-    systemSettings.folderTrustFeature ?? 
-    userSettings.folderTrustFeature ?? 
+  const folderTrustFeature =
+    systemSettings.folderTrustFeature ??
+    userSettings.folderTrustFeature ??
     false; // default to false per schema
-  
-  const folderTrustEnabled = 
-    systemSettings.folderTrust ?? 
-    userSettings.folderTrust ?? 
-    true; // default to true per schema logic
+
+  const folderTrustEnabled =
+    systemSettings.folderTrust ?? userSettings.folderTrust ?? true; // default to true per schema logic
 
   const shouldCheckFolderTrust = folderTrustFeature && folderTrustEnabled;
-  const isTrusted = shouldCheckFolderTrust ? (isWorkspaceTrusted() ?? true) : true;
+  const isTrusted = shouldCheckFolderTrust
+    ? (isWorkspaceTrusted() ?? true)
+    : true;
 
   // Create a temporary merged settings object to pass to loadEnvironment.
   const tempMergedSettings = mergeSettings(

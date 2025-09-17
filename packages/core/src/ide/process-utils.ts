@@ -50,7 +50,9 @@ async function getProcessInfo(pid: number): Promise<{
           CommandLine?: string;
         };
         const parentPid =
-          typeof parsed.ParentProcessId === 'number' ? parsed.ParentProcessId : 0;
+          typeof parsed.ParentProcessId === 'number'
+            ? parsed.ParentProcessId
+            : 0;
         return {
           parentPid,
           name: parsed.Name ?? '',

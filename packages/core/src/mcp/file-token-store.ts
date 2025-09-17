@@ -143,7 +143,9 @@ export class FileTokenStore extends BaseTokenStore {
     }
   }
 
-  private async writeTokenPayload(tokens: MCPOAuthCredentials[]): Promise<void> {
+  private async writeTokenPayload(
+    tokens: MCPOAuthCredentials[],
+  ): Promise<void> {
     await this.ensureConfigDir();
 
     const payload = JSON.stringify(tokens, null, 2);
