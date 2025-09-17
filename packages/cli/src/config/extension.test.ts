@@ -25,6 +25,7 @@ import {
 import {
   type GeminiCLIExtension,
   type MCPServerConfig,
+  LLXPRT_DIR,
 } from '@vybestack/llxprt-code-core';
 import { execSync } from 'child_process';
 import { SettingScope, loadSettings } from './settings.js';
@@ -289,11 +290,7 @@ describe('installExtension', () => {
       path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-<<<<<<< HEAD
-    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
-=======
-    userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
->>>>>>> 2fc857092 (fix(trust): Refuse to load extensions from untrusted workspaces (#7342))
+    userExtensionsDir = path.join(tempHomeDir, LLXPRT_DIR, 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -394,11 +391,7 @@ describe('uninstallExtension', () => {
       path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-<<<<<<< HEAD
-    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
-=======
-    userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
->>>>>>> 2fc857092 (fix(trust): Refuse to load extensions from untrusted workspaces (#7342))
+    userExtensionsDir = path.join(tempHomeDir, LLXPRT_DIR, 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -504,7 +497,7 @@ describe('performWorkspaceExtensionMigration', () => {
 
       const userExtensionsDir = path.join(
         tempHomeDir,
-        GEMINI_DIR,
+        LLXPRT_DIR,
         'extensions',
       );
 
@@ -546,11 +539,7 @@ describe('performWorkspaceExtensionMigration', () => {
 
     expect(failed).toEqual([]);
 
-<<<<<<< HEAD
-    const userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
-=======
-    const userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
->>>>>>> 2fc857092 (fix(trust): Refuse to load extensions from untrusted workspaces (#7342))
+    const userExtensionsDir = path.join(tempHomeDir, LLXPRT_DIR, 'extensions');
     const userExt1Path = path.join(userExtensionsDir, 'ext1');
     const extensions = loadExtensions(tempWorkspaceDir);
 
@@ -619,11 +608,7 @@ describe('updateExtension', () => {
       path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
-<<<<<<< HEAD
-    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
-=======
-    userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
->>>>>>> 2fc857092 (fix(trust): Refuse to load extensions from untrusted workspaces (#7342))
+    userExtensionsDir = path.join(tempHomeDir, LLXPRT_DIR, 'extensions');
     // Clean up before each test
     fs.rmSync(userExtensionsDir, { recursive: true, force: true });
     fs.mkdirSync(userExtensionsDir, { recursive: true });
@@ -753,11 +738,7 @@ describe('enableExtension', () => {
     tempHomeDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'llxprt-cli-test-home-'),
     );
-<<<<<<< HEAD
-    userExtensionsDir = path.join(tempHomeDir, '.llxprt', 'extensions');
-=======
-    userExtensionsDir = path.join(tempHomeDir, GEMINI_DIR, 'extensions');
->>>>>>> 2fc857092 (fix(trust): Refuse to load extensions from untrusted workspaces (#7342))
+    userExtensionsDir = path.join(tempHomeDir, LLXPRT_DIR, 'extensions');
     vi.mocked(os.homedir).mockReturnValue(tempHomeDir);
     vi.spyOn(process, 'cwd').mockReturnValue(tempWorkspaceDir);
   });
