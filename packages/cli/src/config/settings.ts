@@ -24,7 +24,6 @@ import {
   SETTINGS_SCHEMA,
 } from './settingsSchema.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
-import { mergeWith } from 'lodash-es';
 
 export type { Settings, MemoryImportFormat };
 
