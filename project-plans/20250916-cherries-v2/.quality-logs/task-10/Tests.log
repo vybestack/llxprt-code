@@ -1,0 +1,385 @@
+
+> @vybestack/llxprt-code@0.3.4 test
+> npm run test --workspaces --if-present
+
+
+> @vybestack/llxprt-code-a2a-server@0.3.4 test
+> vitest run
+
+
+ RUN  v3.2.4 /Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/a2a-server
+
+ ✓ src/gcs.test.ts (10 tests) 8ms
+stdout | src/task.test.ts > Task > scheduleToolCalls should not modify the input requests array
+[INFO] 2025-09-17 17:07:25.150 PM -- [Task] Scheduling batch of 1 tool calls.
+[INFO] 2025-09-17 17:07:25.151 PM -- [Task] Scheduler tool calls updated:
+{
+  "0": "1 (error)"
+}
+[INFO] 2025-09-17 17:07:25.152 PM -- [Task] All tool calls completed by scheduler (batch):
+{
+  "0": "1"
+}
+
+stdout | src/task.test.ts > Task > scheduleToolCalls should not modify the input requests array
+[INFO] 2025-09-17 17:07:25.152 PM -- [Task] Scheduler tool calls updated:
+
+ ✓ src/task.test.ts (1 test) 4ms
+ ✓ src/agent.test.ts (5 tests) 54ms
+ ✓ src/endpoints.test.ts (5 tests) 156ms
+
+ Test Files  4 passed (4)
+      Tests  21 passed (21)
+   Start at  17:07:23
+   Duration  1.85s (transform 744ms, setup 0ms, collect 5.80s, tests 221ms, environment 0ms, prepare 230ms)
+
+JUNIT report written to /Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/a2a-server/junit.xml
+
+> @vybestack/llxprt-code@0.3.4 test
+> vitest run
+
+
+ RUN  v3.2.4 /Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/cli
+      Coverage enabled with v8
+
+ ✓ src/ui/hooks/useShellHistory.test.ts (7 tests) 557ms
+ ✓ src/integration-tests/test-utils.test.ts (14 tests) 973ms
+   ✓ Test Utilities > waitForFile > should wait for file to be created  307ms
+   ✓ Test Utilities > waitForFile > should timeout if file is not created  511ms
+ ✓ src/ui/components/MemoryUsageDisplay.semantic.test.tsx (5 tests) 647ms
+ ✓ src/ui/components/AuthDialog.test.tsx (10 tests) 432ms
+ ✓ test/ui/commands/authCommand-logout.test.ts (21 tests) 883ms
+   ✓ AuthCommand - Logout Property-Based Tests > should handle concurrent logout commands safely (with seed=-1481484098)  553ms
+ ✓ src/ui/hooks/useGeminiStream.test.tsx (36 tests) 401ms
+ ✓ src/ui/hooks/useAtCompletion.test.ts (13 tests) 1032ms
+ ✓ src/ui/components/messages/ToolConfirmationMessage.responsive.test.tsx (10 tests) 432ms
+[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h ✓ src/ui/hooks/usePrivacySettings.test.ts (6 tests) 294ms
+[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h ✓ src/ui/hooks/slashCommandProcessor.test.ts (31 tests) 1861ms
+[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l[?2004h[?2004l ✓ src/ui/App.test.tsx (49 tests) 1311ms
+ ✓ src/ui/components/shared/RadioButtonSelect.test.tsx (13 tests) 294ms
+ ✓ src/ui/components/messages/DiffRenderer.test.tsx (14 tests | 3 skipped) 206ms
+ ✓ src/ui/hooks/atCommandProcessor.test.ts (40 tests) 599ms
+ ✓ src/ui/hooks/vim.test.ts (87 tests) 210ms
+ ✓ src/ui/components/InputPrompt.paste.test.tsx (3 tests | 1 skipped) 246ms
+ ✓ src/ui/components/SettingsDialog.test.tsx (39 tests) 3305ms
+   ✓ SettingsDialog > String Settings Editing > should allow editing and committing a string setting  571ms
+ ✓ src/ui/hooks/useSlashCompletion.test.ts (47 tests) 3275ms
+ ✓ src/config/extension.test.ts (30 tests) 149ms
+ ✓ src/ui/utils/clipboardUtils.test.ts (6 tests) 638ms
+   ✓ clipboardUtils > clipboardHasImage > should return boolean on macOS  612ms
+ ✓ src/ui/commands/ideCommand.test.ts (9 tests) 5037ms
+   ✓ ideCommand > install subcommand > should install the extension  5025ms
+ ✓ src/ui/hooks/useGitBranchName.test.ts (7 tests) 57ms
+ ✓ src/ui/components/ProviderModelDialog.test.tsx (7 tests) 165ms
+ ✓ src/ui/components/ProviderModelDialog.responsive.test.tsx (11 tests) 298ms
+ ✓ src/services/FileCommandLoader.test.ts (35 tests) 214ms
+ ✓ src/ui/components/FolderTrustDialog.test.tsx (6 tests) 220ms
+ ✓ src/ui/utils/MarkdownDisplay.test.tsx (16 tests) 372ms
+ ✓ src/ui/containers/SessionController.test.tsx (15 tests) 464ms
+ ✓ src/ui/components/StatsDisplay.test.tsx (12 tests) 267ms
+ ❯ src/ui/components/InputPrompt.test.tsx (63 tests | 1 failed | 1 skipped) 7222ms
+   ✓ InputPrompt > should call shellHistory.getPreviousCommand on up arrow in shell mode 135ms
+   ✓ InputPrompt > should call shellHistory.getNextCommand on down arrow in shell mode 109ms
+   ✓ InputPrompt > should set the buffer text when a shell history command is retrieved 109ms
+   ✓ InputPrompt > should call shellHistory.addCommandToHistory on submit in shell mode 109ms
+   ✓ InputPrompt > should NOT call shell history methods when not in shell mode 211ms
+   ✓ InputPrompt > should call completion.navigateUp for both up arrow and Ctrl+P when suggestions are showing 165ms
+   ✓ InputPrompt > should call completion.navigateDown for both down arrow and Ctrl+N when suggestions are showing 160ms
+   ✓ InputPrompt > should NOT call completion navigation when suggestions are not showing 265ms
+   ✓ InputPrompt > clipboard image paste > should handle Ctrl+V when clipboard has an image 109ms
+   ✓ InputPrompt > clipboard image paste > should not insert anything when clipboard has no image 109ms
+   ✓ InputPrompt > clipboard image paste > should handle image save failure gracefully 112ms
+   ✓ InputPrompt > clipboard image paste > should insert image path at cursor position with proper spacing 109ms
+   ✓ InputPrompt > clipboard image paste > should handle errors during clipboard operations 109ms
+   ✓ InputPrompt > should complete a partial parent command 111ms
+   ✓ InputPrompt > should append a sub-command when the parent command is already complete 111ms
+   ✓ InputPrompt > should handle the "backspace" edge case correctly 114ms
+   ✓ InputPrompt > should complete a partial argument for a command 110ms
+   ✓ InputPrompt > should autocomplete on Enter when suggestions are active, without submitting 117ms
+   ✓ InputPrompt > should complete a command based on its altNames 113ms
+   ✓ InputPrompt > should not submit on Enter when the buffer is empty or only contains whitespace 109ms
+   ✓ InputPrompt > should submit directly on Enter when isPerfectMatch is true 112ms
+   ✓ InputPrompt > should submit directly on Enter when a complete leaf command is typed 108ms
+   ✓ InputPrompt > should autocomplete an @-path on Enter without submitting 119ms
+   ✓ InputPrompt > should add a newline on enter when the line ends with a backslash 109ms
+   ✓ InputPrompt > should clear the buffer on Ctrl+C if it has text 111ms
+   ✓ InputPrompt > should NOT clear the buffer on Ctrl+C if it is empty 109ms
+   ✓ InputPrompt > cursor-based completion trigger > should trigger completion when cursor is after @ without spaces 62ms
+   ✓ InputPrompt > cursor-based completion trigger > should trigger completion when cursor is after / without spaces 60ms
+   ✓ InputPrompt > cursor-based completion trigger > should NOT trigger completion when cursor is after space following @ 62ms
+   ✓ InputPrompt > cursor-based completion trigger > should NOT trigger completion when cursor is after space following / 58ms
+   ✓ InputPrompt > cursor-based completion trigger > should NOT trigger completion when cursor is not after @ or / 58ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle multiline text correctly 61ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle single line slash command correctly 61ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle Unicode characters (emojis) correctly in paths 63ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle Unicode characters with spaces after them 60ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle escaped spaces in paths correctly 62ms
+   ✓ InputPrompt > cursor-based completion trigger > should NOT trigger completion after unescaped space following escaped space 61ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle multiple escaped spaces in paths 221ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle escaped spaces in slash commands 175ms
+   ✓ InputPrompt > cursor-based completion trigger > should handle Unicode characters with escaped spaces 79ms
+   ✓ InputPrompt > vim mode > should not call buffer.handleInput when vim mode is enabled and vim handles the input 179ms
+   ✓ InputPrompt > vim mode > should call buffer.handleInput when vim mode is enabled but vim does not handle the input 122ms
+   ✓ InputPrompt > vim mode > should call handleInput when vim mode is disabled 115ms
+   ↓ InputPrompt > unfocused paste > should handle bracketed paste when not focused
+   ✓ InputPrompt > unfocused paste > should ignore regular keypresses when not focused 122ms
+   ✓ InputPrompt > multiline paste > should handle multiline paste 'with \n newlines' 129ms
+   ✓ InputPrompt > multiline paste > should handle multiline paste 'with extra slashes before \n newlines' 109ms
+   ✓ InputPrompt > multiline paste > should handle multiline paste 'with \r\n newlines' 115ms
+   ✓ InputPrompt > enhanced input UX - double ESC clear functionality > should clear buffer on second ESC press 171ms
+   ✓ InputPrompt > enhanced input UX - double ESC clear functionality > should reset escape state on any non-ESC key 169ms
+   ✓ InputPrompt > enhanced input UX - double ESC clear functionality > should handle ESC in shell mode by disabling shell mode 114ms
+   ✓ InputPrompt > enhanced input UX - double ESC clear functionality > should handle ESC when completion suggestions are showing 120ms
+   ✓ InputPrompt > enhanced input UX - double ESC clear functionality > should not call onEscapePromptChange when not provided 126ms
+   ✓ InputPrompt > enhanced input UX - double ESC clear functionality > should not interfere with existing keyboard shortcuts 168ms
+   × InputPrompt > reverse search > invokes reverse search on Ctrl+R 193ms
+     → expected '╭────────────────────────────────────…' to contain 'echo hello'
+   ✓ InputPrompt > reverse search > resets reverse search state on Escape 163ms
+   ✓ InputPrompt > reverse search > completes the highlighted entry on Tab and exits reverse-search 123ms
+   ✓ InputPrompt > reverse search > submits the highlighted entry on Enter and exits reverse-search 116ms
+   ✓ InputPrompt > reverse search > text and cursor position should be restored after reverse search 109ms
+   ✓ InputPrompt > newline insertion > should insert a newline on Alt+Enter (Option+Enter) 66ms
+   ✓ InputPrompt > newline insertion > should submit on regular Enter without modifiers 59ms
+   ✓ InputPrompt > Ctrl+E keyboard shortcut > should move cursor to end of current line in multiline input 112ms
+   ✓ InputPrompt > Ctrl+E keyboard shortcut > should move cursor to end of current line for single line input 113ms
+ ✓ src/ui/components/ProviderDialog.responsive.test.tsx (8 tests) 135ms
+ ✓ src/storage/ConversationStorage.test.ts (11 tests) 109ms
+ ✓ src/ui/components/TodoPanel.responsive.test.tsx (7 tests) 81ms
+ ✓ src/ui/components/messages/ToolGroupMessage.test.tsx (14 tests) 139ms
+ ✓ src/ui/components/Footer.responsive.test.tsx (22 tests) 223ms
+ ✓ src/ui/components/shared/text-buffer.test.ts (103 tests) 217ms
+ ✓ src/ui/hooks/useCommandCompletion.test.ts (17 tests) 191ms
+ ✓ src/ui/components/TodoPanel.semantic.test.tsx (6 tests) 174ms
+ ✓ src/ui/components/ModelStatsDisplay.test.tsx (6 tests) 182ms
+ ✓ src/ui/utils/commandUtils.test.ts (26 tests) 86ms
+ ✓ src/ui/commands/setupGithubCommand.test.ts (10 tests | 2 skipped) 33ms
+ ✓ src/ui/commands/restoreCommand.test.ts (13 tests) 98ms
+ ✓ src/ui/components/shared/MaxSizedBox.test.tsx (21 tests) 198ms
+ ✓ src/ui/commands/mcpCommand.test.ts (35 tests) 149ms
+ ✓ src/ui/components/Footer.test.tsx (11 tests) 245ms
+ ✓ src/ui/components/messages/ToolConfirmationMessage.test.tsx (10 tests) 265ms
+ ✓ src/ui/components/__tests__/LayoutManager.test.tsx (5 tests) 63ms
+ ✓ src/ui/components/LoadingIndicator.test.tsx (11 tests) 88ms
+ ✓ src/ui/components/ToolStatsDisplay.test.tsx (5 tests) 171ms
+ ✓ src/ui/hooks/useAutoAcceptIndicator.test.ts (11 tests) 38ms
+ ✓ src/ui/components/ShellConfirmationDialog.test.tsx (4 tests) 67ms
+ ✓ src/ui/components/HistoryItemDisplay.test.tsx (7 tests) 74ms
+ ❯ src/ui/hooks/useToolScheduler.test.ts (21 tests | 1 failed | 4 skipped) 1193ms
+   ✓ useReactToolScheduler in YOLO Mode > should skip confirmation and execute tool directly when yoloMode is true 50ms
+   ✓ useReactToolScheduler > initial state should be empty 2ms
+   ✓ useReactToolScheduler > should schedule and execute a tool call successfully 5ms
+   ✓ useReactToolScheduler > should handle tool not found 3ms
+   ✓ useReactToolScheduler > should handle error during shouldConfirmExecute 4ms
+   × useReactToolScheduler > should handle error during execute 1123ms
+     → Aborting after running 10000 timers, assuming an infinite loop!
+   ↓ useReactToolScheduler > should handle tool requiring confirmation - approved
+   ↓ useReactToolScheduler > should handle tool requiring confirmation - cancelled by user
+   ↓ useReactToolScheduler > should handle live output updates
+   ✓ useReactToolScheduler > should schedule and execute multiple tool calls 4ms
+   ↓ useReactToolScheduler > should throw error if scheduling while already running
+   ✓ mapToDisplay > should map ToolCall with status 'validating' (validating) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'awaiting_approval' (awaiting_approval) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'scheduled' (scheduled) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'executing' (executing no live output) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'executing' (executing with live output) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'success' (success) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'error' (error tool not found) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'error' (error tool execution failed) correctly 0ms
+   ✓ mapToDisplay > should map ToolCall with status 'cancelled' (cancelled) correctly 0ms
+   ✓ mapToDisplay > should map an array of ToolCalls correctly 0ms
+ ✓ src/ui/components/SessionSummaryDisplay.test.tsx (1 test) 48ms
+ ✓ src/ui/components/messages/ToolMessage.test.tsx (11 tests) 48ms
+ ✓ src/ui/commands/initCommand.test.ts (3 tests) 29ms
+ ✓ src/ui/components/ProQuotaDialog.test.tsx (3 tests) 27ms
+ ✓ src/ui/hooks/shellCommandProcessor.test.ts (12 tests) 36ms
+ ✓ src/ui/themes/semantic-tokens.test.ts (13 tests) 15ms
+ ✓ src/ui/hooks/useResponsive.test.ts (8 tests) 16ms
+ ✓ src/ui/contexts/KeypressContext.test.tsx (17 tests) 32ms
+ ✓ src/ui/hooks/useTodoContinuation.spec.ts (18 tests) 25ms
+ ✓ src/test-utils/responsive-testing.test.tsx (7 tests) 23ms
+ ✓ src/config/settingsSchema.test.ts (14 tests) 25ms
+ ✓ src/ui/utils/updateCheck.test.ts (12 tests) 46ms
+ ✓ src/ui/components/ContextUsageDisplay.semantic.test.tsx (7 tests) 38ms
+ ✓ src/ui/components/ContextIndicator.ui.test.tsx (6 tests) 57ms
+ ✓ src/ui/hooks/useKeypress.test.tsx (3 tests) 51ms
+ ✓ src/ui/hooks/useReverseSearchCompletion.test.tsx (10 tests) 51ms
+ ✓ src/ui/hooks/useKeypress.test.ts (18 tests) 53ms
+ ✓ src/ui/contexts/SessionContext.test.tsx (3 tests) 41ms
+ ✓ src/ui/commands/setCommand.test.ts (37 tests) 18ms
+ ✓ src/utils/userStartupWarnings.test.ts (5 tests) 69ms
+ ✓ src/ui/themes/theme-manager.test.ts (18 tests) 23ms
+ ✓ src/ui/hooks/useInputHistory.test.ts (11 tests) 40ms
+ ✓ src/config/settings.test.ts (57 tests) 34ms
+ ✓ src/ui/hooks/useHistoryManager.test.ts (8 tests) 22ms
+ ✓ src/ui/hooks/useStableCallback.test.ts (5 tests) 12ms
+ ✓ src/commands/mcp/add.test.ts (5 tests) 22ms
+ ✓ src/ui/hooks/useEditorSettings.test.tsx (10 tests) 22ms
+ ✓ src/ui/hooks/useFocus.test.ts (5 tests) 27ms
+ ✓ src/ui/commands/copyCommand.test.ts (11 tests) 8ms
+ ✓ src/commands/mcp/remove.test.ts (2 tests) 14ms
+ ✓ src/services/prompt-processors/shellProcessor.test.ts (37 tests) 24ms
+ ✓ src/providers/logging/git-stats.test.ts (21 tests) 16ms
+ ✓ src/ui/hooks/useFolderTrust.test.ts (10 tests) 24ms
+ ✓ src/ui/commands/profileCommand.test.ts (13 tests) 36ms
+ ✓ src/ui/utils/responsive.test.ts (21 tests) 6ms
+ ✓ src/ui/commands/chatCommand.test.ts (17 tests) 13ms
+ ✓ src/utils/installationInfo.test.ts (16 tests) 15ms
+ ✓ src/ui/components/shared/vim-buffer-actions.test.ts (74 tests) 11ms
+ ✓ src/auth/oauth-manager.spec.ts (21 tests) 11ms
+ ✓ src/utils/settingsUtils.test.ts (68 tests) 10ms
+ ✓ src/utils/gitUtils.test.ts (12 tests) 13ms
+ ✓ src/services/prompt-processors/argumentProcessor.test.ts (2 tests) 4ms
+ ✓ src/utils/handleAutoUpdate.test.ts (10 tests) 11ms
+ ✓ src/commands/extensions/install.test.ts (2 tests) 9ms
+ ✓ src/providers/providerManagerInstance.test.ts (5 tests) 9ms
+ ✓ src/services/CommandService.test.ts (11 tests) 7ms
+ ✓ src/services/todo-continuation/todoContinuationService.spec.ts (33 tests) 5ms
+ ✓ src/ui/commands/authCommand.test.ts (21 tests) 5ms
+]2;LLxprt - root]2;LLxprt - root ✓ src/commands/extensions/uninstall.test.ts (1 test) 10ms
+ ✓ src/gemini.test.tsx (8 tests) 15ms
+ ✓ src/ui/commands/memoryCommand.test.ts (8 tests) 6ms
+ ✓ src/ui/reducers/appReducer.test.ts (36 tests) 5ms
+ ✓ src/validateNonInterActiveAuth.test.ts (9 tests) 11ms
+ ✓ src/ui/commands/toolformatCommand.test.ts (9 tests) 7ms
+ ✓ src/nonInteractiveCli.test.ts (7 tests) 9ms
+ ✓ src/ui/commands/toolsCommand.test.ts (8 tests) 7ms
+ ✓ src/utils/readStdin.test.ts (4 tests) 16ms
+ ✓ src/providers/logging/LoggingProviderWrapper.test.ts (7 tests) 6ms
+ ✓ src/ui/commands/keyCommand.test.ts (6 tests) 6ms
+ ✓ src/ui/commands/statsCommand.test.ts (3 tests) 5ms
+ ✓ src/ui/keyMatchers.test.ts (32 tests) 4ms
+ ✓ src/utils/privacy/ConversationDataRedactor.test.ts (10 tests) 6ms
+ ✓ src/ui/themes/color-utils.test.ts (16 tests) 4ms
+ ✓ src/ui/commands/aboutCommand.test.ts (5 tests) 6ms
+ ✓ src/ui/commands/settingsCommand.test.ts (2 tests) 3ms
+ ✓ src/ui/commands/directoryCommand.test.tsx (7 tests) 14ms
+ ✓ src/ui/utils/secureInputHandler.test.ts (25 tests) 5ms
+ ✓ src/commands/mcp/list.test.ts (4 tests) 8ms
+ ✓ src/ui/commands/extensionsCommand.test.ts (2 tests) 4ms
+ ✓ src/ui/commands/docsCommand.test.ts (3 tests) 4ms
+ ✓ src/ui/commands/editorCommand.test.ts (2 tests) 6ms
+ ✓ src/providers/provider-gemini-switching.test.ts (3 tests) 7ms
+ ✓ src/ui/commands/compressCommand.test.ts (5 tests) 6ms
+ ✓ src/ui/commands/helpCommand.test.ts (2 tests) 3ms
+ ✓ src/commands/mcp.test.ts (3 tests) 7ms
+ ✓ src/utils/ConversationContext.test.ts (6 tests) 4ms
+ ✓ src/ui/themes/theme.test.ts (11 tests) 3ms
+ ✓ src/config/trustedFolders.test.ts (13 tests) 5ms
+ ✓ src/config/keyBindings.test.ts (3 tests) 3ms
+ ✓ src/ui/commands/bugCommand.test.ts (2 tests) 4ms
+ ✓ src/config/logging/loggingConfig.test.ts (14 tests) 15ms
+ ✓ src/test-utils/mockCommandContext.test.ts (3 tests) 3ms
+ ✓ src/ui/utils/computeStats.test.ts (12 tests) 3ms
+ ✓ src/ui/commands/themeCommand.test.ts (2 tests) 3ms
+ ✓ src/config/auth.test.ts (8 tests) 5ms
+ ✓ src/ui/themes/semantic-resolver.test.ts (6 tests) 2ms
+ ✓ src/ui/commands/terminalSetupCommand.test.ts (5 tests) 3ms
+ ✓ src/ui/utils/formatters.test.ts (14 tests) 3ms
+ ✓ src/ui/commands/clearCommand.test.ts (2 tests) 7ms
+ ✓ src/ui/utils/markdownUtilities.test.ts (7 tests) 2ms
+ ✓ src/ui/utils/displayUtils.test.ts (5 tests) 5ms
+ ✓ src/config/extensions/variables.test.ts (1 test) 2ms
+ ✓ src/ui/App.e2e.test.tsx (3 tests) 1ms
+ ✓ src/services/BuiltinCommandLoader.test.ts (4 tests) 3ms
+ ↓ src/providers/logging/performance.test.ts (8 tests | 8 skipped)
+ ✓ src/services/McpPromptLoader.test.ts (10 tests) 3ms
+ ✓ src/utils/startupWarnings.test.ts (4 tests) 2ms
+ ✓ src/utils/cleanup.test.ts (4 tests) 2ms
+ ✓ src/ui/components/OAuthCodeDialog.test.tsx (5 tests) 2ms
+
+ Test Files  2 failed | 149 passed | 1 skipped (152)
+      Tests  2 failed | 2138 passed | 19 skipped (2159)
+   Start at  17:07:25
+   Duration  28.93s (transform 5.27s, setup 3.38s, collect 148.55s, tests 37.76s, environment 55.80s, prepare 11.19s)
+
+JUNIT report written to /Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/cli/junit.xml
+
+> @vybestack/llxprt-code-core@0.3.4 test
+> vitest run
+
+
+ RUN  v3.2.4 /Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/core
+      Coverage enabled with v8
+
+ ✓ src/prompt-config/prompt-installer.test.ts (47 tests) 188ms
+ ✓ src/mcp/token-storage/file-token-storage.test.ts (16 tests) 568ms
+ ✓ src/prompt-config/prompt-loader.test.ts (44 tests) 796ms
+   ✓ PromptLoader > watchFiles > should notify on file changes  307ms
+ ✓ src/integration/compression-duplicate-ids.test.ts (2 tests) 423ms
+ ✓ src/utils/filesearch/fileSearch.test.ts (27 tests) 168ms
+ ✓ src/services/history/circular-reference.test.ts (4 tests) 356ms
+ ✓ src/services/history/compression-locking.test.ts (4 tests) 399ms
+ ✓ src/tools/grep.test.ts (24 tests) 264ms
+ ✓ src/services/history/HistoryService.test.ts (20 tests) 1438ms
+ ✓ src/tools/read-many-files.test.ts (31 tests) 491ms
+ ✓ src/providers/openai/OpenAIProvider.stateful.integration.test.ts (2 tests | 1 skipped) 496ms
+   ✓ OpenAIProvider Stateful Integration > should not break stateless models by correctly passing full message history  494ms
+ ✓ src/providers/integration/multi-provider.integration.test.ts (11 tests | 1 skipped) 548ms
+   ✓ Multi-Provider Integration Tests > Error Handling > should handle missing API key  542ms
+ ✓ src/tools/glob.test.ts (34 tests) 1728ms
+ ✓ src/prompt-config/prompt-service.test.ts (43 tests) 1744ms
+ ✓ src/tools/ripGrep.test.ts (36 tests) 444ms
+ ✓ src/services/history/orphaned-tools-comprehensive.test.ts (9 tests | 4 skipped) 493ms
+ ✓ src/utils/filesearch/crawler.test.ts (18 tests) 117ms
+ ✓ src/prompt-config/prompt-resolver.test.ts (56 tests) 247ms
+ ✓ src/utils/fileUtils.test.ts (62 tests) 163ms
+ ✓ src/utils/bfsFileSearch.test.ts (11 tests) 308ms
+ ✓ src/core/logger.test.ts (38 tests) 398ms
+ ✓ src/tools/read-file.test.ts (34 tests) 498ms
+ ✓ src/services/history/findfiles-circular.test.ts (2 tests) 260ms
+ ✓ src/auth/token-store.spec.ts (20 tests) 256ms
+ ✓ src/mcp/oauth-provider.test.ts (19 tests) 159ms
+ ✓ src/services/loopDetectionService.test.ts (34 tests) 352ms
+ ✓ src/debug/DebugLogger.test.ts (36 tests | 1 skipped) 174ms
+ ✓ src/filters/EmojiFilter.property.test.ts (30 tests) 138ms
+ ✓ src/utils/memoryDiscovery.test.ts (14 tests) 260ms
+ ✓ src/services/gitService.test.ts (14 tests) 97ms
+ ✓ src/utils/getFolderStructure.test.ts (15 tests) 140ms
+ ✓ src/services/fileDiscoveryService.test.ts (13 tests) 152ms
+ ✓ src/utils/flashFallback.integration.test.ts (4 tests) 187ms
+ ✓ src/core/client.test.ts (62 tests | 6 skipped) 210ms
+ ✓ src/utils/gitIgnoreParser.test.ts (18 tests) 94ms
+ ✓ src/providers/anthropic/AnthropicProvider.test.ts (11 tests) 13ms
+ ✓ src/utils/userAccountManager.test.ts (23 tests) 49ms
+ ✓ src/tools/modifiable-tool.test.ts (11 tests) 106ms
+ ✓ src/tools/edit.test.ts (43 tests) 199ms
+ ✓ src/core/prompts-async.test.ts (9 tests | 1 skipped) 134ms
+ ✓ src/tools/todo-store.test.ts (12 tests) 40ms
+ ✓ src/core/atomic-compression.test.ts (2 tests) 120ms
+ ✓ src/tools/write-file.test.ts (28 tests) 141ms
+ ✓ src/utils/memoryImportProcessor.test.ts (23 tests) 21ms
+ ✓ src/services/shellExecutionService.test.ts (30 tests) 52ms
+ ✓ src/utils/workspaceContext.test.ts (34 tests) 46ms
+ ✓ src/telemetry/metrics.test.ts (11 tests) 48ms
+ ✓ src/core/prompts.test.ts (6 tests) 100ms
+ ✓ src/tools/ls.test.ts (22 tests) 44ms
+ ✓ src/tools/mcp-tool.test.ts (36 tests) 53ms
+ ✓ src/tools/memoryTool.test.ts (19 tests) 39ms
+ ✓ src/tools/web-fetch.integration.test.ts (22 tests) 64ms
+ ✓ src/utils/errorReporting.test.ts (6 tests) 45ms
+ ✓ src/tools/shell.test.ts (21 tests) 63ms
+ ✓ src/utils/filesearch/crawlCache.test.ts (9 tests) 6ms
+ ✓ src/utils/schemaValidator.test.ts (7 tests) 29ms
+ ✓ src/auth/oauth-errors.spec.ts (38 tests | 2 skipped) 25ms
+ ✓ src/utils/editor.test.ts (108 tests) 21ms
+ ✓ src/utils/environmentContext.test.ts (8 tests) 23ms
+ ✓ src/providers/anthropic/AnthropicProvider.oauth.test.ts (10 tests) 85ms
+ ✓ src/utils/filesearch/ignore.test.ts (12 tests) 20ms
+ ✓ src/telemetry/uiTelemetry.test.ts (19 tests) 44ms
+ ✓ src/core/coreToolScheduler.test.ts (24 tests | 6 skipped) 29ms
+
+> llxprt-code-vscode-ide-companion@0.3.4 test
+> vitest run
+
+
+ RUN  v3.2.4 /Volumes/XS1000/acoliver/projects/merge/llxprt-code/packages/vscode-ide-companion
+
+ ✓ src/open-files-manager.test.ts (17 tests) 13ms
+ ✓ src/extension.test.ts (3 tests) 6ms
+ ✓ src/extension-multi-folder.test.ts (5 tests | 1 skipped) 7ms
+
+ Test Files  3 passed (3)
+      Tests  24 passed | 1 skipped (25)
+   Start at  17:08:02
+   Duration  357ms (transform 133ms, setup 0ms, collect 374ms, tests 26ms, environment 0ms, prepare 147ms)
+

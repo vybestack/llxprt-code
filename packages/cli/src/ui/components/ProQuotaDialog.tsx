@@ -32,9 +32,12 @@ export function ProQuotaDialog({
     },
   ];
 
-  const handleSelect = useCallback((choice: 'auth' | 'continue') => {
-    onChoice(choice);
-  }, [onChoice]);
+  const handleSelect = useCallback(
+    (choice: 'auth' | 'continue') => {
+      onChoice(choice);
+    },
+    [onChoice],
+  );
 
   return (
     <Box borderStyle="round" flexDirection="column" paddingX={1}>
