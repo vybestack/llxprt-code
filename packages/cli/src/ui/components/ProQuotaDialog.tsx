@@ -5,6 +5,7 @@
  */
 
 import type React from 'react';
+import { useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { RadioButtonSelect } from './shared/RadioButtonSelect.js';
 import { Colors } from '../colors.js';
@@ -31,9 +32,9 @@ export function ProQuotaDialog({
     },
   ];
 
-  const handleSelect = (choice: 'auth' | 'continue') => {
+  const handleSelect = useCallback((choice: 'auth' | 'continue') => {
     onChoice(choice);
-  };
+  }, [onChoice]);
 
   return (
     <Box borderStyle="round" flexDirection="column" paddingX={1}>

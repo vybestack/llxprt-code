@@ -356,7 +356,7 @@ const App = (props: AppInternalProps) => {
     sessionTokenTotal: 0,
   });
   const [_corgiMode, setCorgiMode] = useState(false);
-  const [isTrustedFolderState, setIsTrustedFolder] = useState(
+  const [_isTrustedFolderState, _setIsTrustedFolder] = useState(
     isWorkspaceTrusted(settings.merged),
   );
   const [currentModel, setCurrentModel] = useState(config.getModel());

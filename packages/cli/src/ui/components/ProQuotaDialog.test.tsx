@@ -20,11 +20,12 @@ describe('ProQuotaDialog', () => {
   });
 
   it('should render with correct title and options', () => {
+    const mockOnChoice = vi.fn();
     const { lastFrame } = render(
       <ProQuotaDialog
         currentModel="gemini-2.5-pro"
         fallbackModel="gemini-2.5-flash"
-        onChoice={() => {}}
+        onChoice={mockOnChoice}
       />,
     );
 
