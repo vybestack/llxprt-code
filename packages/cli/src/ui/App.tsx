@@ -850,7 +850,7 @@ You can switch authentication methods by typing /auth or switch to a different m
             logFlashFallback(
               config,
               new FlashFallbackEvent(
-                config.getContentGeneratorConfig().authType!,
+                config.getContentGeneratorConfig()?.authType || AuthType.USE_PROVIDER,
               ),
             );
             return true; // Continue with current prompt using fallback model
@@ -871,7 +871,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       // Don't set fallback mode either
       const contentGenConfigForEvent = config.getContentGeneratorConfig();
       const authTypeForEvent =
-        contentGenConfigForEvent?.authType || AuthType.USE_GEMINI;
+        contentGenConfigForEvent?.authType || AuthType.USE_PROVIDER;
       // Still log the event for telemetry
       logFlashFallback(config, new FlashFallbackEvent(authTypeForEvent));
       return false; // Don't continue with current prompt
