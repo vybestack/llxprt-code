@@ -6,7 +6,7 @@
 
 ## Commits Picked / Ported
 
-- **a63e67823** "feat: add Pro Quota Dialog (#7094)" → **b11fab6c0**
+- **a63e67823** "feat: add Pro Quota Dialog (#7094)" → **b11fab6c0** (plus fixes in ac54900ee, 2fc332d33, 87974a698)
   - Added interactive dialog for handling quota exceeded errors
   - Adapted imports to use @vybestack/llxprt-code-core package
   - Preserved multi-provider architecture and llxprt branding
@@ -73,7 +73,8 @@ Date: Fri Aug 29 04:19:43 2025 +0530
 ## Build Results
 
 - Command: `npm run build`
-- Status: IN PROGRESS
+- Status: PASSED
+- Build completes successfully after fixing TypeScript errors
 
 ## Format Check
 

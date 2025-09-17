@@ -850,7 +850,8 @@ You can switch authentication methods by typing /auth or switch to a different m
             logFlashFallback(
               config,
               new FlashFallbackEvent(
-                config.getContentGeneratorConfig()?.authType || AuthType.USE_PROVIDER,
+                config.getContentGeneratorConfig()?.authType ||
+                  AuthType.USE_PROVIDER,
               ),
             );
             return true; // Continue with current prompt using fallback model
