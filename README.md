@@ -3,6 +3,7 @@
 [![LLxprt Code CI](https://github.com/acoliver/llxprt-code/actions/workflows/ci.yml/badge.svg)](https://github.com/acoliver/llxprt-code/actions/workflows/ci.yml)
 &nbsp;
 [![Mentioned in Awesome Gemini CLI](https://awesome.re/mentioned-badge.svg)](https://github.com/Piebald-AI/awesome-gemini-cli)
+&nbps;[![Discord Server](https://dcbadge.limes.pink/api/server/https://discord.gg/Wc6dZqWWYv)](https://discord.gg/Wc6dZqWWYv)
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
