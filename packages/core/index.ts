@@ -20,6 +20,11 @@ export {
   openBrowserSecurely,
   shouldLaunchBrowser,
 } from './src/utils/secure-browser-launcher.js';
+export {
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+} from './src/config/config.js';
+export { IDE_DEFINITIONS, detectIdeFromEnv } from './src/ide/detect-ide.js';
 
 // Re-export settings system for explicit access
 export { SettingsService } from './src/settings/SettingsService.js';

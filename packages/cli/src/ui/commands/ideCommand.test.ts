@@ -15,7 +15,7 @@ import {
 } from 'vitest';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
-import { type Config, DetectedIde } from '@vybestack/llxprt-code-core';
+import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
 
 vi.mock('child_process');
@@ -67,7 +67,7 @@ describe('ideCommand', () => {
   it('should return the ide command', () => {
     vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
     vi.mocked(mockConfig.getIdeClient).mockReturnValue({
-      getCurrentIde: () => DetectedIde.VSCode,
+      getCurrentIde: () => IDE_DEFINITIONS.vscode,
       getDetectedIdeDisplayName: () => 'VS Code',
       getConnectionStatus: () => ({
         status: core.IDEConnectionStatus.Disconnected,
@@ -85,7 +85,7 @@ describe('ideCommand', () => {
   it('should show disable command when connected', () => {
     vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
     vi.mocked(mockConfig.getIdeClient).mockReturnValue({
-      getCurrentIde: () => DetectedIde.VSCode,
+      getCurrentIde: () => IDE_DEFINITIONS.vscode,
       getDetectedIdeDisplayName: () => 'VS Code',
       getConnectionStatus: () => ({
         status: core.IDEConnectionStatus.Connected,
@@ -103,7 +103,7 @@ describe('ideCommand', () => {
     beforeEach(() => {
       vi.mocked(mockConfig.getIdeClient).mockReturnValue({
         getConnectionStatus: mockGetConnectionStatus,
-        getCurrentIde: () => DetectedIde.VSCode,
+        getCurrentIde: () => IDE_DEFINITIONS.vscode,
         getDetectedIdeDisplayName: () => 'VS Code',
       } as unknown as ReturnType<Config['getIdeClient']>);
     });
@@ -179,7 +179,7 @@ describe('ideCommand', () => {
     beforeEach(() => {
       vi.mocked(mockConfig.getIdeMode).mockReturnValue(true);
       vi.mocked(mockConfig.getIdeClient).mockReturnValue({
-        getCurrentIde: () => DetectedIde.VSCode,
+        getCurrentIde: () => IDE_DEFINITIONS.vscode,
         getConnectionStatus: () => ({
           status: core.IDEConnectionStatus.Disconnected,
         }),

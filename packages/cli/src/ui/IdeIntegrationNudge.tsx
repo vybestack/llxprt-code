@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { DetectedIde, getIdeInfo } from '@vybestack/llxprt-code-core';
+import type { IdeInfo } from '@vybestack/llxprt-code-core';
 import { Box, Text } from 'ink';
 import {
   RadioButtonSelect,
@@ -18,7 +18,7 @@ export type IdeIntegrationNudgeResult = {
 };
 
 interface IdeIntegrationNudgeProps {
-  ide: DetectedIde;
+  ide: IdeInfo;
   onComplete: (result: IdeIntegrationNudgeResult) => void;
 }
 
@@ -38,7 +38,7 @@ export function IdeIntegrationNudge({
     { isActive: true },
   );
 
-  const { displayName: ideName } = getIdeInfo(ide);
+  const { displayName: ideName } = ide;
   // Assume extension is already installed if the env variables are set.
   const isExtensionPreInstalled =
     !!process.env.LLXPRT_CODE_IDE_SERVER_PORT &&

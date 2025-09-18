@@ -7,9 +7,8 @@
 import * as path from 'node:path';
 import {
   Config,
-  DetectedIde,
   IDEConnectionStatus,
-  getIdeInfo,
+  IDE_DEFINITIONS,
   getIdeInstaller,
   IdeClient,
   type File,
@@ -100,7 +99,7 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
     return null;
   }
   const currentIDE = ideClient.getCurrentIde();
-  if (!currentIDE || !ideClient.getDetectedIdeDisplayName()) {
+  if (!currentIDE) {
     return {
       name: 'ide',
       description: 'manage IDE integration',
@@ -110,9 +109,9 @@ export const ideCommand = (config: Config | null): SlashCommand | null => {
           type: 'message',
           messageType: 'error',
           content: `IDE integration is not supported in your current environment. To use this feature, run LLxprt Code in one of these supported IDEs: ${Object.values(
-            DetectedIde,
+            IDE_DEFINITIONS,
           )
-            .map((ide) => getIdeInfo(ide).displayName)
+            .map((ide) => ide.displayName)
             .join(', ')}`,
         }) as const,
     };
