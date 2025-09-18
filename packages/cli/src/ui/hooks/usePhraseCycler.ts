@@ -37,6 +37,23 @@ export const WITTY_LOADING_PHRASES = [
   "Looks like somebody's got a case of the Mondays.",
   'Did you get the memo about the TPS reports?',
   "It's not that I'm lazy—it's that I just don't care.",
+
+  // René Magritte quotes
+  'An object is not so attached to its name that we cannot find another one that would suit it better.',
+  'If the dream is a translation of waking life, waking life is also a translation of the dream.',
+  'Art evokes the mystery without which the world would not exist',
+  'This is not a pipe.',
+  'We must not fear daylight just because it almost always illuminates a miserable world.',
+
+  // More Salvador Dalí quotes
+  'I am not strange. I am just not normal.',
+  'Take me, I am the drug; take me, I am hallucinogenic',
+
+  // Marcel Duchamp quotes
+  'I force myself to contradict myself in order to avoid conforming to my own taste.',
+
+  // André Breton quotes
+  'It is living and ceasing to live that are imaginary solutions. Existence is elsewhere.',
 ];
 
 export const PHRASE_CHANGE_INTERVAL_MS = 15000; // 15 seconds between phrase changes
