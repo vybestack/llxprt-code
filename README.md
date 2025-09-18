@@ -4,7 +4,7 @@
 &nbsp;
 [![Mentioned in Awesome Gemini CLI](https://awesome.re/mentioned-badge.svg)](https://github.com/Piebald-AI/awesome-gemini-cli)
 &nbsp;
-[![Discord Server](https://dcbadge.limes.pink/api/server/https://discord.gg/Wc6dZqWWYv)](https://discord.gg/Wc6dZqWWYv)
+[![Discord Server](https://dcbadge.limes.pink/api/server/https://discord.gg/Wc6dZqWWYv?style=flat)](https://discord.gg/Wc6dZqWWYv)
 
 ![LLxprt Code Screenshot](./docs/assets/llxprt-screenshot.png)
 
