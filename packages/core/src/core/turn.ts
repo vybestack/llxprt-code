@@ -30,6 +30,8 @@ import {
 } from '../utils/errors.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
+import { getCodeAssistServer } from '../code_assist/codeAssist.js';
+import { UserTierId } from '../code_assist/types.js';
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
@@ -59,6 +61,7 @@ export enum GeminiEventType {
   MaxSessionTurns = 'max_session_turns',
   Finished = 'finished',
   LoopDetected = 'loop_detected',
+  Citation = 'citation',
 }
 
 export interface StructuredError {
@@ -177,6 +180,12 @@ export type ServerGeminiFinishedEvent = {
 export type ServerGeminiLoopDetectedEvent = {
   type: GeminiEventType.LoopDetected;
 };
+
+export type ServerGeminiCitationEvent = {
+  type: GeminiEventType.Citation;
+  value: string;
+};
+
 // The original union type, now composed of the individual types
 export type ServerGeminiStreamEvent =
   | ServerGeminiContentEvent
@@ -190,7 +199,8 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiUsageMetadataEvent
   | ServerGeminiMaxSessionTurnsEvent
   | ServerGeminiFinishedEvent
-  | ServerGeminiLoopDetectedEvent;
+  | ServerGeminiLoopDetectedEvent
+  | ServerGeminiCitationEvent;
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
@@ -208,6 +218,49 @@ export class Turn {
     this.debugResponses = [];
     this.finishReason = undefined;
     this.logger = new DebugLogger('llxprt:core:turn');
+  }
+
+  /**
+   * Check if citations should be shown for the current user/settings.
+   * Based on the upstream implementation from commit 997136ae.
+   */
+  private shouldShowCitations(): boolean {
+    try {
+      // Access config through the chat instance
+      const config = (this.chat as unknown as { config: unknown }).config as {
+        getSettingsService(): { get(key: string): unknown } | undefined;
+      };
+      
+      const settingsService = config?.getSettingsService();
+      if (settingsService) {
+        const enabled = settingsService.get('ui.showCitations');
+        if (enabled !== undefined) {
+          return enabled as boolean;
+        }
+      }
+
+      // Fallback: check user tier for code assist server
+      const server = getCodeAssistServer(config as never);
+      return (server && server.userTier !== UserTierId.FREE) ?? false;
+    } catch (error) {
+      this.logger.debug('Failed to determine citation settings:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Emits a citation event with the given text.
+   * This integrates with llxprt's provider abstraction to work across all providers.
+   */
+  private emitCitation(text: string): ServerGeminiCitationEvent | null {
+    if (!this.shouldShowCitations()) {
+      return null;
+    }
+
+    return {
+      type: GeminiEventType.Citation,
+      value: text,
+    };
   }
   // The run method yields simpler events suitable for server logic
   async *run(
@@ -264,6 +317,15 @@ export class Turn {
         const text = getResponseText(resp);
         if (text) {
           yield { type: GeminiEventType.Content, value: text };
+          
+          // Emit citation event if conditions are met
+          // Based on upstream implementation - emit citation after content
+          const citationEvent = this.emitCitation(
+            'Response may contain information from external sources. Please verify important details independently.',
+          );
+          if (citationEvent) {
+            yield citationEvent;
+          }
         }
 
         // Handle function calls (requesting tool execution)

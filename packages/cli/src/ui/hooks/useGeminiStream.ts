@@ -26,9 +26,9 @@ import {
   UserPromptEvent,
   DEFAULT_GEMINI_FLASH_MODEL,
   parseAndFormatApiError,
-  // TODO: Re-enable when ServerGeminiCitationEvent is added to core
-  // getCodeAssistServer,
-  // UserTierId,
+  getCodeAssistServer,
+  UserTierId,
+  ServerGeminiCitationEvent,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -87,15 +87,30 @@ enum StreamProcessingStatus {
   Error,
 }
 
-// TODO: Enable when ServerGeminiCitationEvent is added to core
-// function showCitations(settings: LoadedSettings, config: Config): boolean {
-//   const enabled = settings?.merged?.ui?.showCitations;
-//   if (enabled !== undefined) {
-//     return enabled;
-//   }
-//   const server = getCodeAssistServer(config);
-//   return (server && server.userTier !== UserTierId.FREE) ?? false;
-// }
+function showCitations(settings: LoadedSettings, config: Config): boolean {
+  // Try settings service first (consistent with core/turn.ts)
+  try {
+    const settingsService = config.getSettingsService();
+    if (settingsService) {
+      const enabled = settingsService.get('ui.showCitations');
+      if (enabled !== undefined) {
+        return enabled as boolean;
+      }
+    }
+  } catch {
+    // Fall through to other methods
+  }
+  
+  // Fallback: check loaded settings for backwards compatibility
+  const enabled = (settings?.merged as { ui?: { showCitations?: boolean } })?.ui?.showCitations;
+  if (enabled !== undefined) {
+    return enabled;
+  }
+  
+  // Final fallback: check user tier
+  const server = getCodeAssistServer(config);
+  return (server && server.userTier !== UserTierId.FREE) ?? false;
+}
 
 /**
  * Manages the Gemini stream, including user input, command processing,
@@ -494,21 +509,20 @@ export const useGeminiStream = (
     [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought],
   );
 
-  // TODO: Wire up when ServerGeminiCitationEvent is added to core
-  // const handleCitationEvent = useCallback(
-  //   (text: string, userMessageTimestamp: number) => {
-  //     if (!showCitations(settings, config)) {
-  //       return;
-  //     }
+  const handleCitationEvent = useCallback(
+    (text: string, userMessageTimestamp: number) => {
+      if (!showCitations(settings, config)) {
+        return;
+      }
 
-  //     if (pendingHistoryItemRef.current) {
-  //       addItem(pendingHistoryItemRef.current, userMessageTimestamp);
-  //       setPendingHistoryItem(null);
-  //     }
-  //     addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
-  //   },
-  //   [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config],
-  // );
+      if (pendingHistoryItemRef.current) {
+        addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+        setPendingHistoryItem(null);
+      }
+      addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
+    },
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config],
+  );
 
   const handleFinishedEvent = useCallback(
     (event: ServerGeminiFinishedEvent, userMessageTimestamp: number) => {
@@ -643,6 +657,9 @@ export const useGeminiStream = (
           case ServerGeminiEventType.UsageMetadata:
             // Handle usage metadata - for now just ignore
             break;
+          case ServerGeminiEventType.Citation:
+            handleCitationEvent((event as ServerGeminiCitationEvent).value, userMessageTimestamp);
+            break;
           default: {
             // enforces exhaustive switch-case
             const unreachable: never = event;
@@ -663,6 +680,7 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
+      handleCitationEvent,
     ],
   );
 
