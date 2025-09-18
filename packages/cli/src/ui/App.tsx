@@ -29,6 +29,7 @@ import {
   type HistoryItemWithoutId,
 } from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
+import { useResponsive } from './hooks/useResponsive.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
@@ -211,6 +212,7 @@ const App = (props: AppInternalProps) => {
     appDispatch,
   } = props;
   const isFocused = useFocus();
+  const { isNarrow } = useResponsive();
   useBracketedPaste();
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
@@ -1427,7 +1429,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
 
-  const hideContextSummary = settings.merged.ui?.hideContextSummary ?? false;
+  const hideContextSummary = settings.merged.hideContextSummary ?? false;
 
   return (
     <StreamingContext.Provider value={streamingState}>
@@ -1688,49 +1690,12 @@ You can switch authentication methods by typing /auth or switch to a different m
                 }
                 elapsedTime={elapsedTime}
               />
-<<<<<<< HEAD
               <Box
                 marginTop={1}
                 display="flex"
-                justifyContent="space-between"
-=======
-              {/* Display queued messages below loading indicator */}
-              {messageQueue.length > 0 && (
-                <Box flexDirection="column" marginTop={1}>
-                  {messageQueue
-                    .slice(0, MAX_DISPLAYED_QUEUED_MESSAGES)
-                    .map((message, index) => {
-                      // Ensure multi-line messages are collapsed for the preview.
-                      // Replace all whitespace (including newlines) with a single space.
-                      const preview = message.replace(/\s+/g, ' ');
-
-                      return (
-                        // Ensure the Box takes full width so truncation calculates correctly
-                        <Box key={index} paddingLeft={2} width="100%">
-                          {/* Use wrap="truncate" to ensure it fits the terminal width and doesn't wrap */}
-                          <Text dimColor wrap="truncate">
-                            {preview}
-                          </Text>
-                        </Box>
-                      );
-                    })}
-                  {messageQueue.length > MAX_DISPLAYED_QUEUED_MESSAGES && (
-                    <Box paddingLeft={2}>
-                      <Text dimColor>
-                        ... (+
-                        {messageQueue.length - MAX_DISPLAYED_QUEUED_MESSAGES}
-                        more)
-                      </Text>
-                    </Box>
-                  )}
-                </Box>
-              )}
-              <Box
-                marginTop={1}
                 justifyContent={
                   hideContextSummary ? 'flex-start' : 'space-between'
                 }
->>>>>>> 0a7f5be81 (Add footer configuration settings (#7419))
                 width="100%"
               >
                 <Box>

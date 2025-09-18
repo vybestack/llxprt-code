@@ -321,28 +321,52 @@ describe('Footer', () => {
 
   describe('visibility toggles', () => {
     it('should hide CWD when hideCWD is true', () => {
-      const { lastFrame } = renderWithWidth(120, {
-        ...defaultProps,
-        hideCWD: true,
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
       });
-      expect(lastFrame()).not.toContain(defaultProps.targetDir);
+
+      const { container } = render(
+        <Footer {...defaultProps} hideCWD={true} />
+      );
+      expect(container.textContent).not.toContain(defaultProps.targetDir);
     });
 
     it('should hide sandbox status when hideSandboxStatus is true', () => {
-      const { lastFrame } = renderWithWidth(120, {
-        ...defaultProps,
-        isTrustedFolder: true,
-        hideSandboxStatus: true,
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
       });
-      expect(lastFrame()).not.toContain('no sandbox');
+
+      const { container } = render(
+        <Footer
+          {...defaultProps}
+          isTrustedFolder={true}
+          hideSandboxStatus={true}
+        />
+      );
+      expect(container.textContent).not.toContain('no sandbox');
     });
 
     it('should hide model info when hideModelInfo is true', () => {
-      const { lastFrame } = renderWithWidth(120, {
-        ...defaultProps,
-        hideModelInfo: true,
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
       });
-      expect(lastFrame()).not.toContain(defaultProps.model);
+
+      const { container } = render(
+        <Footer {...defaultProps} hideModelInfo={true} />
+      );
+      expect(container.textContent).not.toContain(defaultProps.model);
     });
   });
 });
