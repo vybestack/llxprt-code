@@ -32,7 +32,7 @@ import {
   Part,
   PartListUnion,
 } from '@google/genai';
-import { findIndexAfterFraction, GeminiClient } from './client.js';
+import { findCompressSplitPoint, GeminiClient } from './client.js';
 import { getCoreSystemPromptAsync } from './prompts.js';
 import {
   AuthType,
@@ -156,52 +156,70 @@ async function fromAsync<T>(promise: AsyncGenerator<T>): Promise<readonly T[]> {
   return results;
 }
 
-describe('findIndexAfterFraction', () => {
-  const history: Content[] = [
-    { role: 'user', parts: [{ text: 'This is the first message.' }] }, // JSON length: 66
-    { role: 'model', parts: [{ text: 'This is the second message.' }] }, // JSON length: 68
-    { role: 'user', parts: [{ text: 'This is the third message.' }] }, // JSON length: 66
-    { role: 'model', parts: [{ text: 'This is the fourth message.' }] }, // JSON length: 68
-    { role: 'user', parts: [{ text: 'This is the fifth message.' }] }, // JSON length: 65
-  ];
-  // Total length: 333
-
+describe('findCompressSplitPoint', () => {
   it('should throw an error for non-positive numbers', () => {
-    expect(() => findIndexAfterFraction(history, 0)).toThrow(
+    expect(() => findCompressSplitPoint([], 0)).toThrow(
       'Fraction must be between 0 and 1',
     );
   });
 
   it('should throw an error for a fraction greater than or equal to 1', () => {
-    expect(() => findIndexAfterFraction(history, 1)).toThrow(
+    expect(() => findCompressSplitPoint([], 1)).toThrow(
       'Fraction must be between 0 and 1',
     );
   });
 
-  it('should handle a fraction in the middle', () => {
-    // 333 * 0.5 = 166.5
-    // 0: 66
-    // 1: 66 + 68 = 134
-    // 2: 134 + 66 = 200
-    // 200 >= 166.5, so index is 2
-    expect(findIndexAfterFraction(history, 0.5)).toBe(2);
-  });
-
-  it('should handle a fraction that results in the last index', () => {
-    // 333 * 0.9 = 299.7
-    // ...
-    // 3: 200 + 68 = 268
-    // 4: 268 + 65 = 333
-    // 333 >= 299.7, so index is 4
-    expect(findIndexAfterFraction(history, 0.9)).toBe(4);
-  });
-
   it('should handle an empty history', () => {
-    expect(findIndexAfterFraction([], 0.5)).toBe(0);
+    expect(findCompressSplitPoint([], 0.5)).toBe(0);
+  });
+
+  it('should handle a fraction in the middle', () => {
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
+      { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
+    ];
+    expect(findCompressSplitPoint(history, 0.5)).toBe(2);
+  });
+
+  it('should handle a fraction of last index', () => {
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
+      { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
+    ];
+    expect(findCompressSplitPoint(history, 0.9)).toBe(4);
+  });
+
+  it('should handle a fraction of after last index', () => {
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
+    ];
+    expect(findCompressSplitPoint(history, 0.8)).toBe(4);
+  });
+
+  it('should return earlier splitpoint if no valid ones are after threshhold', () => {
+    const history: Content[] = [
+      { role: 'user', parts: [{ text: 'This is the first message.' }] },
+      { role: 'model', parts: [{ text: 'This is the second message.' }] },
+      { role: 'user', parts: [{ text: 'This is the third message.' }] },
+      { role: 'model', parts: [{ functionCall: {} }] },
+    ];
+    expect(findCompressSplitPoint(history, 0.99)).toBe(2);
   });
 
   it('should handle a history with only one item', () => {
-    expect(findIndexAfterFraction(history.slice(0, 1), 0.5)).toBe(0);
+    const historyWithEmptyParts: Content[] = [
+      { role: 'user', parts: [{ text: 'Message 1' }] },
+    ];
+    expect(findCompressSplitPoint(historyWithEmptyParts, 0.5)).toBe(0);
   });
 
   it('should handle history with weird parts', () => {
@@ -210,7 +228,7 @@ describe('findIndexAfterFraction', () => {
       { role: 'model', parts: [{ fileData: { fileUri: 'derp' } }] },
       { role: 'user', parts: [{ text: 'Message 2' }] },
     ];
-    expect(findIndexAfterFraction(historyWithEmptyParts, 0.5)).toBe(1);
+    expect(findCompressSplitPoint(historyWithEmptyParts, 0.5)).toBe(2);
   });
 });
 
