@@ -165,7 +165,7 @@ export class IDEServer {
           'Bad Request: No valid session ID provided for non-initialize request.',
         );
         res.status(400).json({
-            jsonrpc: '2.0'
+            jsonrpc: '2.0',
             error: {
               code: -32000,
               message:
