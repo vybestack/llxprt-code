@@ -65,32 +65,52 @@ Record verification artifacts here after completing the tasks specified in the p
   - Working tree clean and ready for Tasks 25-34
 
 ## Checkpoint D (after Task 34) - COMPLETED ✅
-- [x] `git status`: **Clean working tree** on branch 20250916-gmerge
-- [x] `npm run test`: **MOSTLY PASSING** - Some VSCode extension tests failing (unrelated to cherry-picks)
+- [x] `git status`: **Clean working tree** on branch 20250916-gmerge (commit 96bf43013)
+- [x] `npm run test`: **FULLY PASSING** - 3167 tests pass across 181 test files
 - [x] Summary of results:
-  - All 34 tasks executed (31 complete, 1 blocked, 2 partial)
-  - 140 commits successfully integrated from upstream
-  - Approximately 90 upstream commits cherry-picked/adapted
-  - Key features integrated:
-    - Complete folder trust system with IDE integration
-    - Pro quota dialog and error handling
-    - MCP server trust validation
-    - Smart Edit Tool
-    - Extensions link/new commands
-    - Footer customization
-    - Custom witty phrases
-    - IDE workspace trust override
-    - Citations (fully multi-provider)
-    - Performance improvements
-- [x] Merge marker command prepared:
-  ```bash
-  git merge -s ours --no-commit upstream/main
-  git commit -m "merge: Mark upstream sync point after 140-commit cherry-pick operation"
-  ```
+  - Tasks 25-34 executed with quality gates verified
+  - Task 25: 3 commits cherry-picked ✅ (quality logs: task-25/)
+  - Task 26: 3 commits cherry-picked ✅ (quality logs: task-26/)
+  - Task 27: 3 commits with test remediation ✅ (quality logs: task-27/)
+  - Task 28: 3 commits cherry-picked ✅ (quality logs: task-28/)
+  - Task 29: 3 commits cherry-picked ✅ (quality logs: task-29/)
+  - Task 30: 3 commits cherry-picked ✅ (quality logs: task-30/)
+  - Task 31: BLOCKED - architectural incompatibility ⚠️ (quality logs: task-31/)
+  - Task 32: 3/5 commits cherry-picked ✅ (quality logs: task-32/)
+  - Task 33: 3/5 commits cherry-picked ✅ (quality logs: task-33/)
+  - Task 34: 1/4 commits cherry-picked ✅ (quality logs: task-34/)
+  
+- [x] Quality Gates (All Pass):
+  - **Tests**: 3167 tests passing, 0 failures
+  - **Lint**: No errors or warnings
+  - **TypeCheck**: All type checking passes
+  - **Build**: All packages build successfully
+  - **Format**: All files properly formatted
+  
+- [x] Key features integrated:
+  - Complete folder trust system with IDE integration (fixed test mocks)
+  - Pro quota dialog and error handling
+  - MCP server trust validation
+  - Smart Edit Tool with diff stats
+  - Extensions link/new commands
+  - Footer customization settings
+  - Custom witty phrases
+  - IDE workspace trust override (schema properly updated)
+  - Citations (fully multi-provider compatible)
+  - Stream retry handling
+  - Loop detection improvements
+  - Shell execution performance improvements
+
+- [x] Remediation completed:
+  - Fixed VSCode extension trust test failures (added missing mocks)
+  - Fixed all TypeScript compilation errors
+  - Fixed all test failures (settings, trust, geminiChat, edit, partUtils)
+  - Updated test expectations to match merged API changes
+  - Commits: 37331f0d8 (fixes), 96bf43013 (quality gates)
+
 - [x] Notes / follow-ups:
   - Task 31 blocked: enforcedAuthType incompatible with multi-provider
-  - Task 32: 3/5 commits applied
-  - Tasks 33-34: Partial completion due to architectural differences
+  - ~90 upstream commits successfully integrated
   - All llxprt customizations preserved:
     * Multi-provider architecture intact
     * Package naming (@vybestack/llxprt-code-core)
@@ -98,3 +118,4 @@ Record verification artifacts here after completing the tasks specified in the p
     * .llxprt directory naming
     * LLXPRT_DIR constant usage
   - Trust feature properly integrated with schema updates
+  - Ready for merge marker: `git merge -s ours upstream/main`
