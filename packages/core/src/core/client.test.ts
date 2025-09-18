@@ -62,6 +62,7 @@ import {
 } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
 import { tokenLimit } from './tokenLimits.js';
+import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 
 // --- Mocks ---
 const mockChatCreateFn = vi.fn();
@@ -142,6 +143,11 @@ vi.mock('../utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
 vi.mock('../ide/ideContext.js');
+vi.mock('../telemetry/uiTelemetry.js', () => ({
+  uiTelemetryService: {
+    setLastPromptTokenCount: vi.fn(),
+  },
+}));
 
 /**
  * Array.fromAsync ponyfill, which will be available in es 2024.
@@ -236,6 +242,7 @@ describe('Gemini Client (client.ts)', () => {
   let client: GeminiClient;
   beforeEach(async () => {
     vi.resetAllMocks();
+    vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
     mockTodoStoreConstructor.mockReset();
     todoStoreReadMock.mockReset();
     mockTodoStoreConstructor.mockImplementation(() => ({
@@ -805,7 +812,6 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return 999 tokens
       mockGetTotalTokens.mockReturnValue(999);
-
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
@@ -824,6 +830,46 @@ describe('Gemini Client (client.ts)', () => {
           }),
         }),
         'prompt-id-2',
+      );
+    });
+
+    it('updates telemetry when compression inflates the token count', async () => {
+      vi.mocked(tokenLimit).mockReturnValue(1000);
+      mockCountTokens.mockResolvedValue({
+        totalTokens: 999,
+      });
+      mockGetTotalTokens.mockReturnValue(1000);
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: '...history...' }] },
+      ]);
+      mockSendMessage.mockResolvedValue({
+        text: 'This is a summary.',
+      });
+
+      const inflatedTokenCount = 5000;
+      client['startChat'] = vi.fn().mockResolvedValue({
+        getHistory: vi.fn().mockReturnValue([]),
+        setHistory: vi.fn(),
+        sendMessage: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: vi.fn().mockReturnValue(inflatedTokenCount),
+          emit: vi.fn(),
+        }),
+      } as unknown as GeminiChat);
+
+      const result = await client.tryCompressChat('prompt-id-2', true);
+
+      expect(result).toEqual({
+        compressionStatus:
+          CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
+        newTokenCount: inflatedTokenCount,
+        originalTokenCount: 1000,
+      });
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(
+        inflatedTokenCount,
+      );
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(
+        1,
       );
     });
 
@@ -854,9 +900,52 @@ describe('Gemini Client (client.ts)', () => {
       expect(newChat).toBe(initialChat);
     });
 
-    it('placeholder test for removed ClearcutLogger telemetry functionality', async () => {
-      // ClearcutLogger was removed - this test is now a placeholder
-      expect(true).toBe(true);
+    it('updates telemetry when compression succeeds', async () => {
+      const MOCKED_TOKEN_LIMIT = 1000;
+      const CONTEXT_THRESHOLD = 0.5;
+      const originalTokenCount = MOCKED_TOKEN_LIMIT * CONTEXT_THRESHOLD;
+      const newTokenCount = 100;
+
+      vi.mocked(tokenLimit).mockReturnValue(MOCKED_TOKEN_LIMIT);
+      vi.spyOn(client['config'], 'getChatCompression').mockReturnValue({
+        contextPercentageThreshold: CONTEXT_THRESHOLD,
+      });
+
+      mockGetHistory.mockReturnValue([
+        { role: 'user', parts: [{ text: '...history...' }] },
+      ]);
+
+      mockCountTokens
+        .mockResolvedValueOnce({ totalTokens: originalTokenCount })
+        .mockResolvedValueOnce({ totalTokens: newTokenCount });
+
+      mockSendMessage.mockResolvedValue({
+        text: 'This is a summary.',
+      });
+
+      client['startChat'] = vi.fn().mockResolvedValue({
+        getHistory: vi.fn().mockReturnValue([]),
+        setHistory: vi.fn(),
+        sendMessage: vi.fn(),
+        getHistoryService: vi.fn().mockReturnValue({
+          getTotalTokens: vi.fn().mockReturnValue(newTokenCount),
+          emit: vi.fn(),
+        }),
+      } as unknown as GeminiChat);
+
+      const result = await client.tryCompressChat('prompt-id-3', false);
+
+      expect(result).toEqual({
+        compressionStatus: CompressionStatus.COMPRESSED,
+        originalTokenCount,
+        newTokenCount,
+      });
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(
+        newTokenCount,
+      );
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(
+        1,
+      );
     });
 
     it('should trigger summarization if token count is at threshold with contextPercentageThreshold setting', async () => {

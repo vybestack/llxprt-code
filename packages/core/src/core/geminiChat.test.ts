@@ -42,6 +42,7 @@ import {
 import { HistoryService } from '../services/history/HistoryService.js';
 import * as providerRuntime from '../runtime/providerRuntimeContext.js';
 import type { ProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
+import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 
 // Mocks
 const mockModelsModule = {
@@ -51,6 +52,12 @@ const mockModelsModule = {
   embedContent: vi.fn(),
   batchEmbedContents: vi.fn(),
 } as unknown as Models;
+
+vi.mock('../telemetry/uiTelemetry.js', () => ({
+  uiTelemetryService: {
+    setLastPromptTokenCount: vi.fn(),
+  },
+}));
 
 describe('GeminiChat', () => {
   let chat: GeminiChat;
@@ -79,6 +86,7 @@ describe('GeminiChat', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(uiTelemetryService.setLastPromptTokenCount).mockClear();
 
     mockProvider = {
       name: 'test-provider',
@@ -345,6 +353,11 @@ describe('GeminiChat', () => {
             },
           ],
           text: () => 'response',
+          usageMetadata: {
+            promptTokenCount: 42,
+            candidatesTokenCount: 15,
+            totalTokenCount: 57,
+          },
         } as unknown as GenerateContentResponse;
       })();
       // responseGenerator is for documentation only
@@ -386,6 +399,80 @@ describe('GeminiChat', () => {
           source: 'GeminiChat.generateRequest',
         }),
       );
+    });
+
+    it('should update telemetry when usage metadata includes prompt tokens', async () => {
+      const responseGenerator = (async function* () {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response' }],
+                role: 'model',
+              },
+              finishReason: 'STOP',
+              index: 0,
+              safetyRatings: [],
+            },
+          ],
+          text: () => 'response',
+          usageMetadata: {
+            promptTokenCount: 42,
+            candidatesTokenCount: 15,
+            totalTokenCount: 57,
+          },
+        } as unknown as GenerateContentResponse;
+      })();
+      vi.mocked(mockProvider.generateChatCompletion).mockReturnValueOnce(
+        responseGenerator,
+      );
+
+      const stream = await chat.sendMessageStream(
+        { message: 'hello' },
+        'prompt-id-1',
+      );
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledWith(
+        42,
+      );
+      expect(uiTelemetryService.setLastPromptTokenCount).toHaveBeenCalledTimes(
+        1,
+      );
+    });
+
+    it('should not update telemetry when usage metadata is missing', async () => {
+      const responseGenerator = (async function* () {
+        yield {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'response' }],
+                role: 'model',
+              },
+              finishReason: 'STOP',
+              index: 0,
+              safetyRatings: [],
+            },
+          ],
+          text: () => 'response',
+        } as unknown as GenerateContentResponse;
+      })();
+      vi.mocked(mockProvider.generateChatCompletion).mockReturnValueOnce(
+        responseGenerator,
+      );
+
+      const stream = await chat.sendMessageStream(
+        { message: 'hello' },
+        'prompt-id-2',
+      );
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      expect(uiTelemetryService.setLastPromptTokenCount).not.toHaveBeenCalled();
     });
   });
 

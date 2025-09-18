@@ -64,6 +64,7 @@ import {
   type ComplexityAnalysisResult,
 } from '../services/complexity-analyzer.js';
 import { TodoReminderService } from '../services/todo-reminder-service.js';
+import { uiTelemetryService } from '../telemetry/uiTelemetry.js';
 import { TodoStore } from '../tools/todo-store.js';
 import type { Todo } from '../tools/todo-schemas.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -1823,6 +1824,8 @@ export class GeminiClient {
           CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
       };
     }
+
+    uiTelemetryService.setLastPromptTokenCount(newTokenCount);
 
     // TODO: Add proper telemetry logging once available
     console.debug(
