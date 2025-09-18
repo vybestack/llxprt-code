@@ -101,7 +101,8 @@ export const SETTINGS_SCHEMA = {
     category: 'UI',
     requiresRestart: false,
     default: false,
-    description: 'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
+    description:
+      'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
     showInDialog: true,
   },
   showMemoryUsage: {

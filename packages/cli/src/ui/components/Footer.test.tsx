@@ -329,9 +329,7 @@ describe('Footer', () => {
         isWide: false,
       });
 
-      const { container } = render(
-        <Footer {...defaultProps} hideCWD={true} />
-      );
+      const { container } = render(<Footer {...defaultProps} hideCWD={true} />);
       expect(container.textContent).not.toContain(defaultProps.targetDir);
     });
 
@@ -349,7 +347,7 @@ describe('Footer', () => {
           {...defaultProps}
           isTrustedFolder={true}
           hideSandboxStatus={true}
-        />
+        />,
       );
       expect(container.textContent).not.toContain('no sandbox');
     });
@@ -364,7 +362,7 @@ describe('Footer', () => {
       });
 
       const { container } = render(
-        <Footer {...defaultProps} hideModelInfo={true} />
+        <Footer {...defaultProps} hideModelInfo={true} />,
       );
       expect(container.textContent).not.toContain(defaultProps.model);
     });

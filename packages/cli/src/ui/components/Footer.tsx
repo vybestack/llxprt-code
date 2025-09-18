@@ -332,28 +332,30 @@ export const Footer = React.memo<FooterProps>(
                 detailed={isDetailed}
               />
 
-            {/* Token tracking metrics - Debounced */}
-            {tokensPerMinute !== undefined && (
-              <>
-                <Text color={SemanticColors.text.secondary}> | </Text>
-                <DebouncedTPMDisplay tokensPerMinute={tokensPerMinute} />
-              </>
-            )}
+              {/* Token tracking metrics - Debounced */}
+              {tokensPerMinute !== undefined && (
+                <>
+                  <Text color={SemanticColors.text.secondary}> | </Text>
+                  <DebouncedTPMDisplay tokensPerMinute={tokensPerMinute} />
+                </>
+              )}
 
-            {throttleWaitTimeMs !== undefined && (
-              <>
-                <Text color={SemanticColors.text.secondary}> | </Text>
-                <DebouncedWaitDisplay throttleWaitTimeMs={throttleWaitTimeMs} />
-              </>
-            )}
+              {throttleWaitTimeMs !== undefined && (
+                <>
+                  <Text color={SemanticColors.text.secondary}> | </Text>
+                  <DebouncedWaitDisplay
+                    throttleWaitTimeMs={throttleWaitTimeMs}
+                  />
+                </>
+              )}
 
-            {/* Show timestamp only at wide width */}
-            {showTimestamp && (
-              <>
-                <Text color={SemanticColors.text.secondary}> | </Text>
-                <ResponsiveTimestamp />
-              </>
-            )}
+              {/* Show timestamp only at wide width */}
+              {showTimestamp && (
+                <>
+                  <Text color={SemanticColors.text.secondary}> | </Text>
+                  <ResponsiveTimestamp />
+                </>
+              )}
             </Box>
           )}
         </Box>
@@ -413,51 +415,51 @@ export const Footer = React.memo<FooterProps>(
                 <Text color={SemanticColors.text.accent}>{model}</Text>
               )}
 
-            {/* Show paid/free mode for Gemini provider */}
-            {isPaidMode !== undefined &&
-              (() => {
-                const providerManager = getProviderManager();
-                const activeProvider = providerManager?.getActiveProvider?.();
-                const isGeminiProvider = activeProvider?.name === 'gemini';
+              {/* Show paid/free mode for Gemini provider */}
+              {isPaidMode !== undefined &&
+                (() => {
+                  const providerManager = getProviderManager();
+                  const activeProvider = providerManager?.getActiveProvider?.();
+                  const isGeminiProvider = activeProvider?.name === 'gemini';
 
-                if (isGeminiProvider) {
-                  return (
-                    <>
-                      {showModelName && (
-                        <Text color={SemanticColors.text.secondary}> | </Text>
-                      )}
-                      <Text
-                        color={
-                          isPaidMode
-                            ? SemanticColors.status.warning
-                            : SemanticColors.status.success
-                        }
-                      >
-                        {isPaidMode ? 'paid mode' : 'free mode'}
-                      </Text>
-                    </>
-                  );
-                }
-                return null;
-              })()}
+                  if (isGeminiProvider) {
+                    return (
+                      <>
+                        {showModelName && (
+                          <Text color={SemanticColors.text.secondary}> | </Text>
+                        )}
+                        <Text
+                          color={
+                            isPaidMode
+                              ? SemanticColors.status.warning
+                              : SemanticColors.status.success
+                          }
+                        >
+                          {isPaidMode ? 'paid mode' : 'free mode'}
+                        </Text>
+                      </>
+                    );
+                  }
+                  return null;
+                })()}
 
-            {/* Show session token total */}
-            {sessionTokenTotal !== undefined && (
-              <>
-                <Text color={SemanticColors.text.secondary}> | </Text>
-                <Text color={SemanticColors.text.accent}>
-                  Tokens: {sessionTokenTotal.toLocaleString()}
-                </Text>
-              </>
-            )}
+              {/* Show session token total */}
+              {sessionTokenTotal !== undefined && (
+                <>
+                  <Text color={SemanticColors.text.secondary}> | </Text>
+                  <Text color={SemanticColors.text.accent}>
+                    Tokens: {sessionTokenTotal.toLocaleString()}
+                  </Text>
+                </>
+              )}
 
-            {/* Show error count */}
-            {!showErrorDetails && errorCount > 0 && (
-              <>
-                <Text color={SemanticColors.text.secondary}> | </Text>
-                <ConsoleSummaryDisplay errorCount={errorCount} />
-              </>
-            )}
+              {/* Show error count */}
+              {!showErrorDetails && errorCount > 0 && (
+                <>
+                  <Text color={SemanticColors.text.secondary}> | </Text>
+                  <ConsoleSummaryDisplay errorCount={errorCount} />
+                </>
+              )}
             </Box>
           )}
         </Box>
