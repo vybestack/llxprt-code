@@ -132,6 +132,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -217,6 +218,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -303,6 +305,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -387,6 +390,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -474,6 +478,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -572,6 +577,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -678,6 +684,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -1307,6 +1314,7 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
@@ -1731,6 +1739,7 @@ describe('Settings Loading and Merging', () => {
         expect(settings.system.settings).toEqual(systemSettingsContent);
         expect(settings.merged).toEqual({
           customThemes: {},
+          customWittyPhrases: [],
           hideWindowTitle: false,
           hideTips: false,
           hideBanner: false,
