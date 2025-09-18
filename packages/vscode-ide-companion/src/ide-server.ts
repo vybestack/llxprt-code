@@ -196,6 +196,7 @@ export class IDEServer {
 
         if (
           this.openFilesManager &&
+          sessionId &&
           !sessionsWithInitialNotification.has(sessionId)
         ) {
           sendIdeContextUpdateNotification(
@@ -231,6 +232,7 @@ export class IDEServer {
 
         if (
           this.openFilesManager &&
+          sessionId &&
           !sessionsWithInitialNotification.has(sessionId)
         ) {
           sendIdeContextUpdateNotification(
