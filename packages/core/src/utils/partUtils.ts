@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GenerateContentResponse, PartListUnion, Part } from '@google/genai';
+import { PartListUnion, Part } from '@google/genai';
 
 /**
  * Converts a PartListUnion into a string.
@@ -62,24 +62,4 @@ export function partToString(
   }
 
   return part.text ?? '';
-}
-
-export function getResponseText(
-  response: GenerateContentResponse,
-): string | null {
-  if (response.candidates && response.candidates.length > 0) {
-    const candidate = response.candidates[0];
-
-    if (
-      candidate.content &&
-      candidate.content.parts &&
-      candidate.content.parts.length > 0
-    ) {
-      return candidate.content.parts
-        .filter((part) => part.text)
-        .map((part) => part.text)
-        .join('');
-    }
-  }
-  return null;
 }

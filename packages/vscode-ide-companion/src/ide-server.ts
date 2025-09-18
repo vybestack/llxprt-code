@@ -106,9 +106,9 @@ export class IDEServer {
       this.context = context;
       const sessionsWithInitialNotification = new Set<string>();
 
-    const app = express();
-    app.use(express.json());
-    const mcpServer = createMcpServer(this.diffManager);
+      const app = express();
+      app.use(express.json());
+      const mcpServer = createMcpServer(this.diffManager);
 
       this.openFilesManager = new OpenFilesManager(context);
       const onDidChangeSubscription = this.openFilesManager.onDidChange(() => {
@@ -124,11 +124,11 @@ export class IDEServer {
       );
       context.subscriptions.push(onDidChangeDiffSubscription);
 
-    app.post('/mcp', async (req: Request, res: Response) => {
-      const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
-        | string
-        | undefined;
-      let transport: StreamableHTTPServerTransport;
+      app.post('/mcp', async (req: Request, res: Response) => {
+        const sessionId = req.headers[MCP_SESSION_ID_HEADER] as
+          | string
+          | undefined;
+        let transport: StreamableHTTPServerTransport;
 
         if (sessionId && this.transports[sessionId]) {
           transport = this.transports[sessionId];
@@ -138,33 +138,33 @@ export class IDEServer {
             onsessioninitialized: (newSessionId) => {
               this.log(`New session initialized: ${newSessionId}`);
               this.transports[newSessionId] = transport;
-          },
-        });
-        const keepAlive = setInterval(() => {
-          try {
-            transport.send({ jsonrpc: '2.0', method: 'ping' });
-          } catch (e) {
-            this.log(
-              'Failed to send keep-alive ping, cleaning up interval.' + e,
-            );
-            clearInterval(keepAlive);
-          }
-        }, 60000); // 60 sec
+            },
+          });
+          const keepAlive = setInterval(() => {
+            try {
+              transport.send({ jsonrpc: '2.0', method: 'ping' });
+            } catch (e) {
+              this.log(
+                'Failed to send keep-alive ping, cleaning up interval.' + e,
+              );
+              clearInterval(keepAlive);
+            }
+          }, 60000); // 60 sec
 
-        transport.onclose = () => {
-          clearInterval(keepAlive);
-          if (transport.sessionId) {
-            this.log(`Session closed: ${transport.sessionId}`);
-            sessionsWithInitialNotification.delete(transport.sessionId);
+          transport.onclose = () => {
+            clearInterval(keepAlive);
+            if (transport.sessionId) {
+              this.log(`Session closed: ${transport.sessionId}`);
+              sessionsWithInitialNotification.delete(transport.sessionId);
               delete this.transports[transport.sessionId];
-          }
-        };
-        mcpServer.connect(transport);
-      } else {
-        this.log(
-          'Bad Request: No valid session ID provided for non-initialize request.',
-        );
-        res.status(400).json({
+            }
+          };
+          mcpServer.connect(transport);
+        } else {
+          this.log(
+            'Bad Request: No valid session ID provided for non-initialize request.',
+          );
+          res.status(400).json({
             jsonrpc: '2.0',
             error: {
               code: -32000,
@@ -206,7 +206,7 @@ export class IDEServer {
           );
           sessionsWithInitialNotification.add(sessionId);
         }
-    });
+      });
 
       const handleSessionRequest = async (req: Request, res: Response) => {
         const sessionId = req.headers[MCP_SESSION_ID_HEADER] as

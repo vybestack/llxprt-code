@@ -35,6 +35,7 @@ import {
   TrustLevel,
   isWorkspaceTrusted,
 } from './trustedFolders.js';
+import type { Settings } from './settings.js';
 
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof fs>();
@@ -176,6 +177,9 @@ describe('Trusted Folders Loading', () => {
 describe('isWorkspaceTrusted', () => {
   let mockCwd: string;
   const mockRules: Record<string, TrustLevel> = {};
+  const mockSettings: Settings = {
+    folderTrust: true,
+  } as Settings;
 
   beforeEach(() => {
     vi.spyOn(process, 'cwd').mockImplementation(() => mockCwd);
@@ -199,52 +203,52 @@ describe('isWorkspaceTrusted', () => {
   it('should return true for a directly trusted folder', () => {
     mockCwd = '/home/user/projectA';
     mockRules['/home/user/projectA'] = TrustLevel.TRUST_FOLDER;
-    expect(isWorkspaceTrusted()).toBe(true);
+    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
   });
 
   it('should return true for a child of a trusted folder', () => {
     mockCwd = '/home/user/projectA/src';
     mockRules['/home/user/projectA'] = TrustLevel.TRUST_FOLDER;
-    expect(isWorkspaceTrusted()).toBe(true);
+    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
   });
 
   it('should return true for a child of a trusted parent folder', () => {
     mockCwd = '/home/user/projectB';
     mockRules['/home/user/projectB/somefile.txt'] = TrustLevel.TRUST_PARENT;
-    expect(isWorkspaceTrusted()).toBe(true);
+    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
   });
 
   it('should return false for a directly untrusted folder', () => {
     mockCwd = '/home/user/untrusted';
     mockRules['/home/user/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted()).toBe(false);
+    expect(isWorkspaceTrusted(mockSettings)).toBe(false);
   });
 
   it('should return undefined for a child of an untrusted folder', () => {
     mockCwd = '/home/user/untrusted/src';
     mockRules['/home/user/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted()).toBeUndefined();
+    expect(isWorkspaceTrusted(mockSettings)).toBeUndefined();
   });
 
   it('should return undefined when no rules match', () => {
     mockCwd = '/home/user/other';
     mockRules['/home/user/projectA'] = TrustLevel.TRUST_FOLDER;
     mockRules['/home/user/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted()).toBeUndefined();
+    expect(isWorkspaceTrusted(mockSettings)).toBeUndefined();
   });
 
   it('should prioritize trust over distrust', () => {
     mockCwd = '/home/user/projectA/untrusted';
     mockRules['/home/user/projectA'] = TrustLevel.TRUST_FOLDER;
     mockRules['/home/user/projectA/untrusted'] = TrustLevel.DO_NOT_TRUST;
-    expect(isWorkspaceTrusted()).toBe(true);
+    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
   });
 
   it('should handle path normalization', () => {
     mockCwd = '/home/user/projectA';
     mockRules[`/home/user/../user/${path.basename('/home/user/projectA')}`] =
       TrustLevel.TRUST_FOLDER;
-    expect(isWorkspaceTrusted()).toBe(true);
+    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
   });
 });
 
@@ -260,12 +264,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
 
 describe('isWorkspaceTrusted with IDE override', () => {
   const mockSettings: Settings = {
-    security: {
-      folderTrust: {
-        enabled: true,
-      },
-    },
-  };
+    folderTrust: true,
+  } as Settings;
 
   it('should return true when ideTrust is true, ignoring config', () => {
     vi.mocked(getIdeTrust).mockReturnValue(true);
@@ -296,12 +296,8 @@ describe('isWorkspaceTrusted with IDE override', () => {
 
   it('should always return true if folderTrust setting is disabled', () => {
     const settings: Settings = {
-      security: {
-        folderTrust: {
-          enabled: false,
-        },
-      },
-    };
+      folderTrust: false,
+    } as Settings;
     vi.mocked(getIdeTrust).mockReturnValue(false);
     expect(isWorkspaceTrusted(settings)).toBe(true);
   });

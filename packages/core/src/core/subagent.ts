@@ -236,6 +236,9 @@ export class SubAgentScope {
   };
   private readonly subagentId: string;
 
+  /** Optional callback for streaming text messages during execution */
+  onMessage?: (message: string) => void;
+
   /**
    * Constructs a new SubAgentScope instance.
    * @param name - The name for the subagent, used for logging and identification.

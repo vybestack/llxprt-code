@@ -1152,7 +1152,7 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.ui?.customWittyPhrases,
+    settings.merged.customWittyPhrases,
   );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 

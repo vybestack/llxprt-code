@@ -11,6 +11,7 @@ import {
   FunctionCall,
   FunctionDeclaration,
   FinishReason,
+  GenerateContentResponseUsageMetadata,
 } from '@google/genai';
 import {
   ToolCallConfirmationDetails,

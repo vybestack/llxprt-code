@@ -127,7 +127,6 @@ export function getProviderManager(
             { path: '', settings: {} }, // systemDefaults
             { path: USER_SETTINGS_PATH, settings: userSettings }, // user
             { path: '', settings: {} }, // workspace
-            [], // errors
             true, // isTrusted
           )
         : undefined;

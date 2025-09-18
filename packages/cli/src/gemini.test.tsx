@@ -13,7 +13,7 @@ import {
 } from './gemini.js';
 import {
   LoadedSettings,
-  SettingsFile,
+  // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
 import { appEvents, AppEvent } from './utils/events.js';

@@ -34,9 +34,12 @@ export const USER_SETTINGS_PATH = Storage.getGlobalSettingsPath();
 export const USER_SETTINGS_DIR = path.dirname(USER_SETTINGS_PATH);
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
-const MIGRATE_V2_OVERWRITE = false;
+// Currently unused - reserved for future migration implementation
+// const MIGRATE_V2_OVERWRITE = false;
 
 // As defined in spec.md - adapted for llxprt's flat settings structure
+// Currently unused - reserved for future migration implementation
+/*
 const MIGRATION_MAP: Record<string, string> = {
   preferredEditor: 'preferredEditor',
   vimMode: 'vimMode',
@@ -97,6 +100,7 @@ const MIGRATION_MAP: Record<string, string> = {
   extensionManagement: 'extensionManagement',
   extensions: 'extensions',
 };
+*/
 export function getSystemSettingsPath(): string {
   if (process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH) {
     return process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
@@ -410,7 +414,7 @@ export function loadEnvironment(settings: Settings): void {
 
   // Check if folder trust feature is enabled, and if so, check if workspace is trusted
   if (isFolderTrustEnabled(settings)) {
-    const trusted = isWorkspaceTrusted();
+    const trusted = isWorkspaceTrusted(settings);
     if (trusted !== true) {
       // If not explicitly trusted (false or undefined), don't load environment
       return;
@@ -573,8 +577,16 @@ export function loadSettings(
     systemSettings.folderTrust ?? userSettings.folderTrust ?? true; // default to true per schema logic
 
   const shouldCheckFolderTrust = folderTrustFeature && folderTrustEnabled;
+  // Create a temporary merged settings object for trust checking
+  const tempSettingsForTrust = mergeSettings(
+    systemSettings,
+    systemDefaultSettings,
+    userSettings,
+    workspaceSettings,
+    true, // Assume trusted for this temporary settings object
+  );
   const isTrusted = shouldCheckFolderTrust
-    ? (isWorkspaceTrusted() ?? true)
+    ? (isWorkspaceTrusted(tempSettingsForTrust) ?? true)
     : true;
 
   // Create a temporary merged settings object to pass to loadEnvironment.

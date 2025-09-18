@@ -83,9 +83,7 @@ describe('OAuth2', () => {
       question: vi.fn((_query, callback) => callback(mockCode)),
       close: vi.fn(),
     };
-    (readline.createInterface as unknown as Mock).mockReturnValue(
-      mockReadline,
-    );
+    (readline.createInterface as unknown as Mock).mockReturnValue(mockReadline);
 
     const result = await performLogin(
       AuthType.LOGIN_WITH_GOOGLE,
@@ -132,7 +130,7 @@ describe('OAuth2', () => {
       codeVerifier: 'test-verifier',
     };
     const mockAuthUrl = 'https://example.com/auth-browser';
-    const mockCode = 'test-browser-code';
+    const _mockCode = 'test-browser-code';
     const mockTokens = {
       access_token: 'test-access-token-browser',
       refresh_token: 'test-refresh-token-browser',
@@ -159,7 +157,7 @@ describe('OAuth2', () => {
     (open as unknown as Mock).mockResolvedValue(undefined);
 
     // Mock HTTP server for OAuth callback
-    const mockAuthWithWeb = vi.fn().mockImplementation(() => {
+    const _mockAuthWithWeb = vi.fn().mockImplementation(() => {
       // Simulate the callback being handled
       mockOAuth2Client.setCredentials(mockTokens);
       return Promise.resolve({
@@ -238,11 +236,11 @@ describe('OAuth2', () => {
     (open as unknown as Mock).mockResolvedValue(undefined);
 
     // Simulate auth flow that never completes (times out)
-    const neverResolvingPromise = new Promise(() => {});
+    const _neverResolvingPromise = new Promise(() => {});
 
     // Mock the internal authWithWeb to return a promise that never resolves
     vi.spyOn(global, 'Promise').mockImplementationOnce(
-      (executor) =>
+      (_executor) =>
         new Promise((resolve, reject) => {
           // Simulate a 100ms timeout for the test
           setTimeout(() => {
@@ -358,10 +356,7 @@ describe('OAuth2', () => {
       () => mockOAuth2Client,
     );
 
-    const client = await getOauthClient(
-      AuthType.LOGIN_WITH_GOOGLE,
-      mockConfig,
-    );
+    const client = await getOauthClient(AuthType.LOGIN_WITH_GOOGLE, mockConfig);
 
     expect(client).toBe(mockOAuth2Client);
     expect(mockSetCredentials).toHaveBeenCalledWith({

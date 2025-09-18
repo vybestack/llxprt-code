@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Content } from '@google/genai';
+// import type { Content } from '@google/genai'; // Currently unused
 import { createHash } from 'node:crypto';
 import { GeminiEventType, ServerGeminiStreamEvent } from '../core/turn.js';
 import { logLoopDetected } from '../telemetry/loggers.js';
 import { LoopDetectedEvent, LoopType } from '../telemetry/types.js';
 import { Config } from '../config/config.js';
-import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js';
-import {
-  isFunctionCall,
-  isFunctionResponse,
-} from '../utils/messageInspectors.js';
+// import { DEFAULT_GEMINI_FLASH_MODEL } from '../config/models.js'; // Currently unused
+// import {
+//   isFunctionCall,
+//   isFunctionResponse,
+// } from '../utils/messageInspectors.js'; // Currently unused
 
 const TOOL_CALL_LOOP_THRESHOLD = 10;
 const CONTENT_LOOP_THRESHOLD = 15;
@@ -23,31 +23,36 @@ const MAX_HISTORY_LENGTH = 1000;
 
 /**
  * The number of recent conversation turns to include in the history when asking the LLM to check for a loop.
+ * Currently unused - reserved for future implementation.
  */
-const LLM_LOOP_CHECK_HISTORY_COUNT = 20;
+// const LLM_LOOP_CHECK_HISTORY_COUNT = 20;
 
 /**
  * The number of turns that must pass in a single prompt before the LLM-based loop check is activated.
+ * Currently unused - reserved for future implementation.
  */
-const LLM_CHECK_AFTER_TURNS = 30;
+// const LLM_CHECK_AFTER_TURNS = 30;
 
 /**
  * The default interval, in number of turns, at which the LLM-based loop check is performed.
  * This value is adjusted dynamically based on the LLM's confidence.
+ * Currently unused - reserved for future implementation.
  */
-const DEFAULT_LLM_CHECK_INTERVAL = 3;
+// const DEFAULT_LLM_CHECK_INTERVAL = 3;
 
 /**
  * The minimum interval for LLM-based loop checks.
  * This is used when the confidence of a loop is high, to check more frequently.
+ * Currently unused - reserved for future implementation.
  */
-const MIN_LLM_CHECK_INTERVAL = 5;
+// const MIN_LLM_CHECK_INTERVAL = 5;
 
 /**
  * The maximum interval for LLM-based loop checks.
  * This is used when the confidence of a loop is low, to check less frequently.
+ * Currently unused - reserved for future implementation.
  */
-const MAX_LLM_CHECK_INTERVAL = 15;
+// const MAX_LLM_CHECK_INTERVAL = 15;
 
 /**
  * Service for detecting and preventing infinite loops in AI responses.
@@ -70,9 +75,9 @@ export class LoopDetectionService {
 
   // Turn tracking for potential future rule-based checks
   private turnsInCurrentPrompt = 0;
-  
-  // LLM-based loop detection
-  private llmCheckInterval = DEFAULT_LLM_CHECK_INTERVAL;
+
+  // LLM-based loop detection - currently unused, reserved for future implementation
+  // private llmCheckInterval = DEFAULT_LLM_CHECK_INTERVAL;
 
   constructor(config: Config) {
     this.config = config;
@@ -338,6 +343,8 @@ export class LoopDetectionService {
     return originalChunk === currentChunk;
   }
 
+  // Currently unused - reserved for future implementation
+  /*
   private trimRecentHistory(recentHistory: Content[]): Content[] {
     // A function response must be preceded by a function call.
     // Continuously removes dangling function calls from the end of the history
@@ -358,11 +365,14 @@ export class LoopDetectionService {
 
     return recentHistory;
   }
+  */
 
+  // Currently unused - reserved for future implementation
+  /*
   private async checkForLoopWithLLM(signal: AbortSignal) {
-    const recentHistory = this.config
+    const recentHistory = (await this.config
       .getGeminiClient()
-      .getHistory()
+      .getHistory())
       .slice(-LLM_LOOP_CHECK_HISTORY_COUNT);
 
     const trimmedHistory = this.trimRecentHistory(recentHistory);
@@ -421,15 +431,16 @@ Please analyze the conversation history to determine the possibility that the co
         );
         return true;
       } else {
-        this.llmCheckInterval = Math.round(
-          MIN_LLM_CHECK_INTERVAL +
-            (MAX_LLM_CHECK_INTERVAL - MIN_LLM_CHECK_INTERVAL) *
-              (1 - result['confidence']),
-        );
+        // this.llmCheckInterval = Math.round(
+        //   MIN_LLM_CHECK_INTERVAL +
+        //     (MAX_LLM_CHECK_INTERVAL - MIN_LLM_CHECK_INTERVAL) *
+        //       (1 - result['confidence']),
+        // );
       }
     }
     return false;
   }
+  */
 
   /**
    * Resets all loop detection state.

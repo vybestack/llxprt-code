@@ -474,6 +474,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     useSmartEdit: result.useSmartEdit as boolean | undefined,
     sessionSummary: result.sessionSummary as string | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
+    promptWords: result.promptWords as string[] | undefined,
   };
 
   return cliArgs;

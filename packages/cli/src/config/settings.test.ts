@@ -97,6 +97,11 @@ describe('Settings Loading and Merging', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
+    // Set environment variables to override system paths
+    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
+    process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
+      '/mock/system/system-defaults.json';
+
     mockFsExistsSync = vi.mocked(fs.existsSync);
     mockFsMkdirSync = vi.mocked(fs.mkdirSync);
     mockStripJsonComments = vi.mocked(stripJsonComments);
@@ -106,7 +111,20 @@ describe('Settings Loading and Merging', () => {
       (jsonString: string) => jsonString,
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
-    (fs.readFileSync as Mock).mockReturnValue('{}'); // Return valid empty JSON
+    (fs.readFileSync as Mock).mockImplementation(
+      (p: fs.PathOrFileDescriptor) => {
+        // Handle system paths specifically
+        if (
+          p === '/mock/system/settings.json' ||
+          p === '/mock/system/system-defaults.json'
+        ) {
+          return '{}'; // Return valid empty JSON for system paths
+        }
+        // Always return valid empty JSON for any path to prevent JSON parsing errors
+        // Individual tests can override this mock for specific paths they need
+        return '{}';
+      },
+    );
     (mockFsMkdirSync as Mock).mockImplementation(
       (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
@@ -122,6 +140,9 @@ describe('Settings Loading and Merging', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // Clean up environment variables
+    delete process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
+    delete process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH;
   });
 
   describe('loadSettings', () => {
@@ -376,7 +397,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -468,7 +489,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -566,7 +587,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -672,7 +693,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -817,7 +838,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -836,7 +857,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -855,7 +876,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -878,7 +899,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -904,7 +925,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -935,7 +956,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -1036,7 +1057,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -1078,7 +1099,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -1107,7 +1128,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -2072,12 +2093,19 @@ describe('Settings Loading and Merging', () => {
         return originalParse(text);
       });
 
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
 
-      expect(settings.user.settings).toEqual({});
-      expect(settings.errors).toHaveLength(1);
-      expect(settings.errors[0].path).toBe(USER_SETTINGS_PATH);
-      expect(settings.errors[0].message).toBe(parseError.message);
+      try {
+        loadSettings(MOCK_WORKSPACE_DIR);
+      } catch (error) {
+        expect(error).toBeInstanceOf(FatalConfigError);
+        expect((error as FatalConfigError).message).toContain(
+          USER_SETTINGS_PATH,
+        );
+        expect((error as FatalConfigError).message).toContain(
+          parseError.message,
+        );
+      }
 
       vi.restoreAllMocks();
     });

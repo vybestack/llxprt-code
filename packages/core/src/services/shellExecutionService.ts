@@ -413,9 +413,12 @@ export class ShellExecutionService {
             processingChain.then(() => {
               const finalBuffer = Buffer.concat(outputChunks);
 
+              const fullOutput = getFullText(headlessTerminal);
               resolve({
                 rawOutput: finalBuffer,
-                output: getFullText(headlessTerminal),
+                output: fullOutput,
+                stdout: fullOutput, // For PTY, stdout and stderr are combined
+                stderr: '', // PTY combines output streams
                 exitCode,
                 signal: signal ?? null,
                 error,

@@ -12,7 +12,8 @@ import {
 } from '@google/genai';
 import { GeminiClient } from '../core/client.js';
 import { DEFAULT_GEMINI_FLASH_LITE_MODEL } from '../config/models.js';
-import { getResponseText, partToString } from './partUtils.js';
+import { getResponseText } from './generateContentResponseUtilities.js';
+import { partToString } from './partUtils.js';
 
 /**
  * A function that summarizes the result of a tool execution.
