@@ -42,7 +42,8 @@ export interface ExtensionConfig {
 
 export interface ExtensionInstallMetadata {
   source: string;
-  type: 'git' | 'local' | 'link';
+  type: 'git' | 'local' | 'link' | 'github-release';
+  ref?: string;
 }
 
 export interface ExtensionUpdateInfo {
