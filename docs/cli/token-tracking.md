@@ -15,12 +15,12 @@ LLxprt Code provides real-time token tracking capabilities to help you monitor y
 The footer displays live token metrics that update as you use the CLI:
 
 ```
-TPM: 2450.75 | Tokens: 125k | Throttle: 6.2s
+TPM: 2450.75 | Tokens: 125k | Wait: 6.2s
 ```
 
 - **TPM**: Shows output tokens per minute (only output tokens, not input)
 - **Tokens**: Total session tokens (input + output + cache + tool + thought)
-- **Throttle**: Accumulated wait time from 429 rate limit retries
+- **Wait**: Accumulated wait time from 429 rate limit retries
 
 ### Provider Support
 
