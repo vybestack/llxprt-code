@@ -450,17 +450,25 @@ async function loadExtensionConfig(
 }
 
 export async function uninstallExtension(
-  extensionName: string,
+  extensionIdentifier: string,
   cwd: string = process.cwd(),
 ): Promise<void> {
   const installedExtensions = loadUserExtensions(cwd);
-  if (
-    !installedExtensions.some(
-      (installed) => installed.config.name === extensionName,
-    )
-  ) {
-    throw new Error(`Error: Extension "${extensionName}" not found.`);
+  const normalizedIdentifier = extensionIdentifier.toLowerCase();
+  const extensionName = installedExtensions.find((installed) => {
+    if (installed.config.name.toLowerCase() === normalizedIdentifier) {
+      return true;
+    }
+    const source = installed.installMetadata?.source?.toLowerCase();
+    return source === normalizedIdentifier;
+  })?.config.name;
+
+  if (!extensionName) {
+    throw new Error(
+      `Extension "${extensionIdentifier}" not found. Run llxprt extensions list to see available extensions.`,
+    );
   }
+
   const storage = new ExtensionStorage(extensionName);
   return await fs.promises.rm(storage.getExtensionDir(), {
     recursive: true,

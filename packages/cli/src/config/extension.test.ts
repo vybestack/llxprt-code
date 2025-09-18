@@ -588,6 +588,42 @@ describe('uninstallExtension', () => {
       'Error: Extension "nonexistent-extension" not found.',
     );
   });
+
+  it('should uninstall an extension using its source metadata', async () => {
+    const gitUrl = 'https://example.com/extensions/repo.git';
+    const extensionDir = createExtension({
+      extensionsDir: userExtensionsDir,
+      name: 'git-extension',
+      version: '1.0.0',
+      installMetadata: {
+        source: gitUrl,
+        type: 'git',
+      },
+    });
+
+    await uninstallExtension(gitUrl);
+
+    expect(fs.existsSync(extensionDir)).toBe(false);
+    expect(
+      loadExtensions(tempHomeDir).some(
+        (ext) => ext.config.name === 'git-extension',
+      ),
+    ).toBe(false);
+  });
+
+  it('should fail to uninstall by source when metadata is missing', async () => {
+    createExtension({
+      extensionsDir: userExtensionsDir,
+      name: 'no-metadata-extension',
+      version: '1.0.0',
+    });
+
+    await expect(
+      uninstallExtension('https://example.com/extensions/no-metadata'),
+    ).rejects.toThrow(
+      'Extension "https://example.com/extensions/no-metadata" not found. Run llxprt extensions list to see available extensions.',
+    );
+  });
 });
 
 describe('performWorkspaceExtensionMigration', () => {
