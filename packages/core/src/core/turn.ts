@@ -230,7 +230,7 @@ export class Turn {
       const config = (this.chat as unknown as { config: unknown }).config as {
         getSettingsService(): { get(key: string): unknown } | undefined;
       };
-      
+
       const settingsService = config?.getSettingsService();
       if (settingsService) {
         const enabled = settingsService.get('ui.showCitations');
@@ -317,7 +317,7 @@ export class Turn {
         const text = getResponseText(resp);
         if (text) {
           yield { type: GeminiEventType.Content, value: text };
-          
+
           // Emit citation event if conditions are met
           // Based on upstream implementation - emit citation after content
           const citationEvent = this.emitCitation(

@@ -90,10 +90,7 @@ export function getCodeAssistServer(
  * Emits a citation event if citation display is enabled for the current user.
  * This function integrates with llxprt's provider abstraction to work across all providers.
  */
-export function emitCitationEvent(
-  config: Config,
-  citationText: string,
-): void {
+export function emitCitationEvent(config: Config, citationText: string): void {
   // Get provider manager to emit citation through the event system
   const providerManager = config.getProviderManager();
   if (providerManager) {

@@ -100,13 +100,14 @@ function showCitations(settings: LoadedSettings, config: Config): boolean {
   } catch {
     // Fall through to other methods
   }
-  
+
   // Fallback: check loaded settings for backwards compatibility
-  const enabled = (settings?.merged as { ui?: { showCitations?: boolean } })?.ui?.showCitations;
+  const enabled = (settings?.merged as { ui?: { showCitations?: boolean } })?.ui
+    ?.showCitations;
   if (enabled !== undefined) {
     return enabled;
   }
-  
+
   // Final fallback: check user tier
   const server = getCodeAssistServer(config);
   return (server && server.userTier !== UserTierId.FREE) ?? false;
@@ -658,7 +659,10 @@ export const useGeminiStream = (
             // Handle usage metadata - for now just ignore
             break;
           case ServerGeminiEventType.Citation:
-            handleCitationEvent((event as ServerGeminiCitationEvent).value, userMessageTimestamp);
+            handleCitationEvent(
+              (event as ServerGeminiCitationEvent).value,
+              userMessageTimestamp,
+            );
             break;
           default: {
             // enforces exhaustive switch-case
