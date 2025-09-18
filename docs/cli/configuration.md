@@ -276,9 +276,9 @@ If you are experiencing performance issues with file searching (e.g., with `@` c
   - **Description:** Sandbox execution environment (can be a boolean or a path string).
   - **Default:** `undefined`
 
-- **`tools.usePty`** (boolean):
-  - **Description:** Use node-pty for shell command execution. Fallback to child_process still applies.
-  - **Default:** `false`
+- **`tools.shell.enableInteractiveShell`** (boolean):
+
+  Use `node-pty` for an interactive shell experience. Fallback to `child_process` still applies. Defaults to `false`.
 
 - **`tools.core`** (array of strings):
   - **Description:** Paths to core tool definitions.

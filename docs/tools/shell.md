@@ -4,7 +4,9 @@ This document describes the `run_shell_command` tool for the LLxprt Code.
 
 ## Description
 
-Use `run_shell_command` to interact with the underlying system, run scripts, or perform command-line operations. `run_shell_command` executes a given shell command. On Windows, the command will be executed with `cmd.exe /c`. On other platforms, the command will be executed with `bash -c`.
+Use `run_shell_command` to interact with the underlying system, run scripts, or perform command-line operations. When `tools.shell.enableInteractiveShell` is `true`, fully interactive programs (such as `vim` or `git rebase -i`) are supported; otherwise the command runs non-interactively.
+
+On Windows commands run via `cmd.exe /c`. On macOS/Linux they run via `bash -c`.
 
 ### Arguments
 
@@ -52,6 +54,58 @@ Start a background server:
 ```
 run_shell_command(command="npm run dev &", description="Start development server in background")
 ```
+
+## Configuration
+
+You can tune the `run_shell_command` tool by editing `settings.json` or by using `/settings` inside the LLxprt CLI.
+
+### Enabling Interactive Commands
+
+Set `tools.shell.enableInteractiveShell` to `true` to run commands inside a `node-pty` session (needed for editors, TUIs, etc.). If `node-pty` cannot be loaded, the CLI automatically falls back to the non-interactive `child_process` implementation.
+
+```json
+{
+  "tools": {
+    "shell": {
+      "enableInteractiveShell": true
+    }
+  }
+}
+```
+
+### Showing Color in Output
+
+Set `tools.shell.showColor` to `true` to stream ANSI color data back to the CLI. This option only takes effect when interactive shell support is enabled.
+
+```json
+{
+  "tools": {
+    "shell": {
+      "enableInteractiveShell": true,
+      "showColor": true
+    }
+  }
+}
+```
+
+### Setting the Pager
+
+You can use a custom pager (default is `cat`) by setting `tools.shell.pager`. This also requires `enableInteractiveShell` to be enabled.
+
+```json
+{
+  "tools": {
+    "shell": {
+      "enableInteractiveShell": true,
+      "pager": "less"
+    }
+  }
+}
+```
+
+## Interactive Commands
+
+With a PTY enabled, `run_shell_command` supports fully interactive programs (for example `vim`, `htop`, or `git rebase -i`). While an interactive session is active you can press `Ctrl+F` to focus the shell pane, and LLxprt will render the TUI output.
 
 ## Important notes
 
