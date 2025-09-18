@@ -1,42 +1,61 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useMemo, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { type PartListUnion } from '@google/genai';
 import process from 'node:process';
-import * as path from 'node:path';
-import * as os from 'node:os';
-import { UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
+import type { Config } from '@google/gemini-cli-core';
 import {
-  Config,
   GitService,
   Logger,
   logSlashCommand,
-  SlashCommandEvent,
+  makeSlashCommandEvent,
+  SlashCommandStatus,
   ToolConfirmationOutcome,
   Storage,
-  ProfileManager,
-  SubagentManager,
-} from '@vybestack/llxprt-code-core';
+  IdeClient,
+} from '@google/gemini-cli-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
-import {
+import type {
   Message,
-  MessageType,
   HistoryItemWithoutId,
-  HistoryItem,
   SlashCommandProcessorResult,
+  HistoryItem,
 } from '../types.js';
-import { LoadedSettings } from '../../config/settings.js';
+import { MessageType } from '../types.js';
+import type { LoadedSettings } from '../../config/settings.js';
 import { type CommandContext, type SlashCommand } from '../commands/types.js';
 import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
-import { secureInputHandler } from '../utils/secureInputHandler.js';
-import { runExitCleanup } from '../../utils/cleanup.js';
+import { parseSlashCommand } from '../../utils/commands.js';
+import type { ExtensionUpdateState } from '../state/extensions.js';
+
+interface SlashCommandProcessorActions {
+  openAuthDialog: () => void;
+  openThemeDialog: () => void;
+  openEditorDialog: () => void;
+  openPrivacyNotice: () => void;
+  openSettingsDialog: () => void;
+  quit: (messages: HistoryItem[]) => void;
+  setDebugMessage: (message: string) => void;
+  toggleCorgiMode: () => void;
+  setExtensionsUpdateState: Dispatch<
+    SetStateAction<Map<string, ExtensionUpdateState>>
+  >;
+}
 
 /**
  * Hook to define and process slash commands (e.g., /help, /clear).
@@ -48,22 +67,12 @@ export const useSlashCommandProcessor = (
   clearItems: UseHistoryManagerReturn['clearItems'],
   loadHistory: UseHistoryManagerReturn['loadHistory'],
   refreshStatic: () => void,
-  onDebugMessage: (message: string) => void,
-  openThemeDialog: () => void,
-  openAuthDialog: () => void,
-  openEditorDialog: () => void,
-  openProviderDialog: () => void,
-  openProviderModelDialog: () => void,
-  openLoadProfileDialog: () => void,
-  openToolsDialog: (action: 'enable' | 'disable') => void,
-  toggleCorgiMode: () => void,
-  setQuittingMessages: (message: HistoryItem[]) => void,
-  openPrivacyNotice: () => void,
-  openSettingsDialog: () => void,
   toggleVimEnabled: () => Promise<boolean>,
   setIsProcessing: (isProcessing: boolean) => void,
-  setLlxprtMdFileCount: (count: number) => void,
-  openPermissionsDialog: () => void,
+  setGeminiMdFileCount: (count: number) => void,
+  actions: SlashCommandProcessorActions,
+  extensionsUpdateState: Map<string, ExtensionUpdateState>,
+  isConfigInitialized: boolean,
 ) => {
   const session = useSessionStats();
   const [commands, setCommands] = useState<readonly SlashCommand[]>([]);
@@ -105,36 +114,17 @@ export const useSlashCommandProcessor = (
     return l;
   }, [config]);
 
-  /**
-   * Initialize SubagentManager for command context
-   *
-   * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
-   * @requirement:REQ-010
-   */
-  const profileManager = useMemo(() => {
-    if (!config) return undefined;
-    const llxprtDir = path.join(os.homedir(), '.llxprt');
-    const profilesDir = path.join(llxprtDir, 'profiles');
-    return new ProfileManager(profilesDir);
-  }, [config]);
-
-  const subagentManager = useMemo(() => {
-    if (!config || !profileManager) return undefined;
-    const llxprtDir = path.join(os.homedir(), '.llxprt');
-    const subagentsDir = path.join(llxprtDir, 'subagents');
-    return new SubagentManager(subagentsDir, profileManager);
-  }, [config, profileManager]);
-
-  const [pendingCompressionItem, setPendingCompressionItem] =
-    useState<HistoryItemWithoutId | null>(null);
+  const [pendingItem, setPendingItem] = useState<HistoryItemWithoutId | null>(
+    null,
+  );
 
   const pendingHistoryItems = useMemo(() => {
     const items: HistoryItemWithoutId[] = [];
-    if (pendingCompressionItem != null) {
-      items.push(pendingCompressionItem);
+    if (pendingItem != null) {
+      items.push(pendingItem);
     }
     return items;
-  }, [pendingCompressionItem]);
+  }, [pendingItem]);
 
   const addMessage = useCallback(
     (message: Message) => {
@@ -149,11 +139,7 @@ export const useSlashCommandProcessor = (
           modelVersion: message.modelVersion,
           selectedAuthType: message.selectedAuthType,
           gcpProject: message.gcpProject,
-          keyfile: message.keyfile,
-          key: message.key,
           ideClient: message.ideClient,
-          provider: message.provider,
-          baseURL: message.baseURL,
         };
       } else if (message.type === MessageType.HELP) {
         historyItemContent = {
@@ -172,10 +158,6 @@ export const useSlashCommandProcessor = (
       } else if (message.type === MessageType.TOOL_STATS) {
         historyItemContent = {
           type: 'tool_stats',
-        };
-      } else if (message.type === MessageType.CACHE_STATS) {
-        historyItemContent = {
-          type: 'cache_stats',
         };
       } else if (message.type === MessageType.QUIT) {
         historyItemContent = {
@@ -197,7 +179,6 @@ export const useSlashCommandProcessor = (
     },
     [addItem],
   );
-
   const commandContext = useMemo(
     (): CommandContext => ({
       services: {
@@ -205,8 +186,6 @@ export const useSlashCommandProcessor = (
         settings,
         git: gitService,
         logger,
-        profileManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
-        subagentManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
       },
       ui: {
         addItem,
@@ -216,14 +195,15 @@ export const useSlashCommandProcessor = (
           refreshStatic();
         },
         loadHistory,
-        setDebugMessage: onDebugMessage,
-        pendingItem: pendingCompressionItem,
-        setPendingItem: setPendingCompressionItem,
-        toggleCorgiMode,
+        setDebugMessage: actions.setDebugMessage,
+        pendingItem,
+        setPendingItem,
+        toggleCorgiMode: actions.toggleCorgiMode,
         toggleVimEnabled,
-        setLlxprtMdFileCount,
-        updateHistoryTokenCount: session.updateHistoryTokenCount,
+        setGeminiMdFileCount,
         reloadCommands,
+        extensionsUpdateState,
+        setExtensionsUpdateState: actions.setExtensionsUpdateState,
       },
       session: {
         stats: session.stats,
@@ -238,19 +218,16 @@ export const useSlashCommandProcessor = (
       loadHistory,
       addItem,
       clearItems,
-      session.updateHistoryTokenCount,
       refreshStatic,
       session.stats,
-      onDebugMessage,
-      pendingCompressionItem,
-      setPendingCompressionItem,
-      toggleCorgiMode,
+      actions,
+      pendingItem,
+      setPendingItem,
       toggleVimEnabled,
       sessionShellAllowlist,
-      setLlxprtMdFileCount,
+      setGeminiMdFileCount,
       reloadCommands,
-      profileManager,
-      subagentManager,
+      extensionsUpdateState,
     ],
   );
 
@@ -259,19 +236,20 @@ export const useSlashCommandProcessor = (
       return;
     }
 
-    const ideClient = config.getIdeClient();
-    if (!ideClient) {
-      return;
-    }
-
     const listener = () => {
       reloadCommands();
     };
 
-    ideClient.addStatusChangeListener(listener);
+    (async () => {
+      const ideClient = await IdeClient.getInstance();
+      ideClient.addStatusChangeListener(listener);
+    })();
 
     return () => {
-      ideClient.removeStatusChangeListener(listener);
+      (async () => {
+        const ideClient = await IdeClient.getInstance();
+        ideClient.removeStatusChangeListener(listener);
+      })();
     };
   }, [config, reloadCommands]);
 
@@ -287,10 +265,7 @@ export const useSlashCommandProcessor = (
         loaders,
         controller.signal,
       );
-      // Only update commands if not aborted
-      if (!controller.signal.aborted) {
-        setCommands(commandService.getCommands());
-      }
+      setCommands(commandService.getCommands());
     };
 
     load();
@@ -298,7 +273,7 @@ export const useSlashCommandProcessor = (
     return () => {
       controller.abort();
     };
-  }, [config, reloadTrigger]);
+  }, [config, reloadTrigger, isConfigInitialized]);
 
   const handleSlashCommand = useCallback(
     async (
@@ -306,83 +281,35 @@ export const useSlashCommandProcessor = (
       oneTimeShellAllowlist?: Set<string>,
       overwriteConfirmed?: boolean,
     ): Promise<SlashCommandProcessorResult | false> => {
+      if (typeof rawQuery !== 'string') {
+        return false;
+      }
+
+      const trimmed = rawQuery.trim();
+      if (!trimmed.startsWith('/') && !trimmed.startsWith('?')) {
+        return false;
+      }
+
       setIsProcessing(true);
+
+      const userMessageTimestamp = Date.now();
+      addItem({ type: MessageType.USER, text: trimmed }, userMessageTimestamp);
+
+      let hasError = false;
+      const {
+        commandToExecute,
+        args,
+        canonicalPath: resolvedCommandPath,
+      } = parseSlashCommand(trimmed, commands);
+
+      const subcommand =
+        resolvedCommandPath.length > 1
+          ? resolvedCommandPath.slice(1).join(' ')
+          : undefined;
+
       try {
-        if (typeof rawQuery !== 'string') {
-          return false;
-        }
-
-        const trimmed = rawQuery.trim();
-        if (!trimmed.startsWith('/') && !trimmed.startsWith('?')) {
-          return false;
-        }
-
-        const userMessageTimestamp = Date.now();
-
-        // Sanitize the command if it contains sensitive data
-        const sanitizedCommand = trimmed.startsWith('/key ')
-          ? secureInputHandler.sanitizeForHistory(trimmed)
-          : trimmed;
-
-        addItem(
-          { type: MessageType.USER, text: sanitizedCommand },
-          userMessageTimestamp,
-        );
-
-        const parts = trimmed.substring(1).trim().split(/\s+/);
-        const commandPath = parts.filter((p) => p); // The parts of the command, e.g., ['memory', 'add']
-
-        let currentCommands = commands;
-        let commandToExecute: SlashCommand | undefined;
-        let pathIndex = 0;
-        const canonicalPath: string[] = [];
-
-        for (const part of commandPath) {
-          // TODO: For better performance and architectural clarity, this two-pass
-          // search could be replaced. A more optimal approach would be to
-          // pre-compute a single lookup map in `CommandService.ts` that resolves
-          // all name and alias conflicts during the initial loading phase. The
-          // processor would then perform a single, fast lookup on that map.
-
-          // First pass: check for an exact match on the primary command name.
-          let foundCommand = currentCommands.find((cmd) => cmd.name === part);
-
-          // Second pass: if no primary name matches, check for an alias.
-          if (!foundCommand) {
-            foundCommand = currentCommands.find((cmd) =>
-              cmd.altNames?.includes(part),
-            );
-          }
-
-          if (foundCommand) {
-            commandToExecute = foundCommand;
-            canonicalPath.push(foundCommand.name);
-            pathIndex++;
-            if (foundCommand.subCommands) {
-              currentCommands = foundCommand.subCommands;
-            } else {
-              break;
-            }
-          } else {
-            break;
-          }
-        }
-
         if (commandToExecute) {
-          const args = parts.slice(pathIndex).join(' ');
-
           if (commandToExecute.action) {
-            if (config) {
-              const resolvedCommandPath = canonicalPath;
-              const event = new SlashCommandEvent(
-                resolvedCommandPath[0],
-                resolvedCommandPath.length > 1
-                  ? resolvedCommandPath.slice(1).join(' ')
-                  : undefined,
-              );
-              logSlashCommand(config, event);
-            }
-
             const fullCommandContext: CommandContext = {
               ...commandContext,
               invocation: {
@@ -404,7 +331,6 @@ export const useSlashCommandProcessor = (
                 ]),
               };
             }
-
             const result = await commandToExecute.action(
               fullCommandContext,
               args,
@@ -432,61 +358,22 @@ export const useSlashCommandProcessor = (
                   return { type: 'handled' };
                 case 'dialog':
                   switch (result.dialog) {
-                    case 'help': {
-                      const helpItem: HistoryItemWithoutId = {
-                        type: 'help',
-                        timestamp: new Date(),
-                      };
-                      addItem(helpItem, Date.now());
-                      return { type: 'handled' };
-                    }
                     case 'auth':
-                      openAuthDialog();
+                      actions.openAuthDialog();
                       return { type: 'handled' };
                     case 'theme':
-                      openThemeDialog();
+                      actions.openThemeDialog();
                       return { type: 'handled' };
                     case 'editor':
-                      openEditorDialog();
+                      actions.openEditorDialog();
                       return { type: 'handled' };
                     case 'privacy':
-                      openPrivacyNotice();
+                      actions.openPrivacyNotice();
                       return { type: 'handled' };
-                    case 'provider':
-                      openProviderDialog();
-                      return { type: 'handled' };
-                    case 'providerModel':
-                      openProviderModelDialog();
-                      return { type: 'handled' };
-                    case 'loadProfile':
-                      openLoadProfileDialog();
-                      return { type: 'handled' };
-                    case 'tools': {
-                      // Extract the subcommand from the original command
-                      const originalCommand = rawQuery.trim();
-                      const commandParts = originalCommand.split(/\s+/);
-                      const subCommand = commandParts[1] as
-                        | 'enable'
-                        | 'disable';
-                      openToolsDialog(subCommand);
-                      return { type: 'handled' };
-                    }
-                    case 'logging': {
-                      // For now, show the log entries as text since dialog system is not fully implemented
-                      const dialogData = result.dialogData as {
-                        entries?: unknown[];
-                      };
-                      if (dialogData && dialogData.entries) {
-                        // This would open the LoggingDialog when the dialog system is ready
-                        // For now, the command handles displaying the logs
-                      }
-                      return { type: 'handled' };
-                    }
                     case 'settings':
-                      openSettingsDialog();
+                      actions.openSettingsDialog();
                       return { type: 'handled' };
-                    case 'permissions':
-                      openPermissionsDialog();
+                    case 'help':
                       return { type: 'handled' };
                     default: {
                       const unhandled: never = result.dialog;
@@ -496,30 +383,16 @@ export const useSlashCommandProcessor = (
                     }
                   }
                 case 'load_history': {
-                  // Only clear UI history when loading a saved chat checkpoint (e.g., /chat resume)
-                  // Do NOT clear when switching providers or loading profiles - they preserve conversation
-                  // The load_history action is only returned by /chat resume command
+                  config?.getGeminiClient()?.setHistory(result.clientHistory);
+                  config?.getGeminiClient()?.stripThoughtsFromHistory();
                   fullCommandContext.ui.clear();
                   result.history.forEach((item, index) => {
                     fullCommandContext.ui.addItem(item, index);
                   });
-
-                  // Set the client history - it will be stored for later use if not initialized
-                  const client = config?.getGeminiClient();
-                  if (client) {
-                    await client.setHistory(result.clientHistory, {
-                      stripThoughts: true,
-                    });
-                  }
-
                   return { type: 'handled' };
                 }
                 case 'quit':
-                  setQuittingMessages(result.messages);
-                  setTimeout(() => {
-                    runExitCleanup();
-                    process.exit(0);
-                  }, 100);
+                  actions.quit(result.messages);
                   return { type: 'handled' };
 
                 case 'submit_prompt':
@@ -625,8 +498,18 @@ export const useSlashCommandProcessor = (
           content: `Unknown command: ${trimmed}`,
           timestamp: new Date(),
         });
+
         return { type: 'handled' };
-      } catch (e) {
+      } catch (e: unknown) {
+        hasError = true;
+        if (config) {
+          const event = makeSlashCommandEvent({
+            command: resolvedCommandPath[0],
+            subcommand,
+            status: SlashCommandStatus.ERROR,
+          });
+          logSlashCommand(config, event);
+        }
         addItem(
           {
             type: MessageType.ERROR,
@@ -636,30 +519,28 @@ export const useSlashCommandProcessor = (
         );
         return { type: 'handled' };
       } finally {
+        if (config && resolvedCommandPath[0] && !hasError) {
+          const event = makeSlashCommandEvent({
+            command: resolvedCommandPath[0],
+            subcommand,
+            status: SlashCommandStatus.SUCCESS,
+          });
+          logSlashCommand(config, event);
+        }
         setIsProcessing(false);
       }
     },
     [
       config,
       addItem,
-      openAuthDialog,
+      actions,
       commands,
       commandContext,
       addMessage,
-      openThemeDialog,
-      openPrivacyNotice,
-      openEditorDialog,
-      openProviderDialog,
-      openProviderModelDialog,
-      openLoadProfileDialog,
-      openToolsDialog,
-      setQuittingMessages,
-      openSettingsDialog,
       setShellConfirmationRequest,
       setSessionShellAllowlist,
       setIsProcessing,
       setConfirmationRequest,
-      openPermissionsDialog,
     ],
   );
 

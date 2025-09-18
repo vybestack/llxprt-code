@@ -18,7 +18,11 @@ import { recursivelyHydrateStrings } from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
-import { downloadFromGitHubRelease } from './extensions/github.js';
+import { randomUUID } from 'node:crypto';
+import {
+  cloneFromGit,
+  downloadFromGitHubRelease,
+} from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
 import chalk from 'chalk';
 
@@ -92,7 +96,7 @@ export function getWorkspaceExtensions(workspaceDir: string): Extension[] {
   return loadExtensionsFromDir(workspaceDir, workspaceDir);
 }
 
-async function copyExtension(
+export async function copyExtension(
   source: string,
   destination: string,
 ): Promise<void> {
@@ -617,67 +621,6 @@ export function toOutputString(
   return output;
 }
 
-export async function updateExtensionByName(
-  extensionName: string,
-  cwd: string = process.cwd(),
-): Promise<ExtensionUpdateInfo | undefined> {
-  const installedExtensions = loadUserExtensions(cwd);
-  const extension = installedExtensions.find(
-    (installed) => installed.config.name === extensionName,
-  );
-  if (!extension) {
-    throw new Error(
-      `Extension "${extensionName}" not found. Run llxprt extensions list to see available extensions.`,
-    );
-  }
-  return await updateExtension(extension, cwd);
-}
-
-export async function updateExtension(
-  extension: Extension,
-  cwd: string = process.cwd(),
-): Promise<ExtensionUpdateInfo> {
-  if (!extension.installMetadata) {
-    throw new Error(
-      `Extension cannot be updated because it is missing the .llxprt-extension-install.json file. To update manually, uninstall and then reinstall the updated version.`,
-    );
-  }
-  if (extension.installMetadata.type === 'link') {
-    throw new Error(`Extension is linked so does not need to be updated`);
-  }
-  const originalVersion = extension.config.version;
-
-  const tempDir = await ExtensionStorage.createTmpDir();
-  try {
-    await copyExtension(extension.path, tempDir);
-    await uninstallExtension(extension.config.name);
-    await installExtension(extension.installMetadata, cwd);
-
-    const updatedExtensionStorage = new ExtensionStorage(extension.config.name);
-    const updatedExtension = loadExtension({
-      extensionDir: updatedExtensionStorage.getExtensionDir(),
-      workspaceDir: cwd,
-    });
-    if (!updatedExtension) {
-      throw new Error('Updated extension not found after installation.');
-    }
-    const updatedVersion = updatedExtension.config.version;
-    return {
-      name: extension.config.name,
-      originalVersion,
-      updatedVersion,
-    };
-  } catch (e) {
-    console.error(
-      `Error updating extension, rolling back. ${getErrorMessage(e)}`,
-    );
-    await copyExtension(tempDir, extension.path);
-    throw e;
-  } finally {
-    await fs.promises.rm(tempDir, { recursive: true, force: true });
-  }
-}
-
 export function disableExtension(
   name: string,
   scope: SettingScope,
@@ -725,15 +668,4 @@ function removeFromDisabledExtensions(
     );
     settings.setValue(scope, 'extensions', extensionSettings);
   }
-}
-
-export async function updateAllUpdatableExtensions(
-  cwd: string = process.cwd(),
-): Promise<ExtensionUpdateInfo[]> {
-  const extensions = loadExtensions(cwd).filter(
-    (extension) => !!extension.installMetadata,
-  );
-  return await Promise.all(
-    extensions.map((extension) => updateExtension(extension, cwd)),
-  );
 }

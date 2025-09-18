@@ -1,24 +1,17 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type ReactNode } from 'react';
-import { Content } from '@google/genai';
-import { HistoryItemWithoutId } from '../types.js';
-import {
-  Config,
-  GitService,
-  Logger,
-  ProfileManager,
-  SubagentManager,
-} from '@vybestack/llxprt-code-core';
-import { LoadedSettings } from '../../config/settings.js';
-import { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import type { HistoryItem } from '../types.js';
-import { SessionStatsState } from '../contexts/SessionContext.js';
-import type { CommandArgumentSchema } from './schema/types.js';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { Content, PartListUnion } from '@google/genai';
+import type { HistoryItemWithoutId, HistoryItem } from '../types.js';
+import type { Config, GitService, Logger, ProfileManager, SubagentManager } from '@vybestack/llxprt-code-core';
+import type { LoadedSettings } from '../../config/settings.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { SessionStatsState } from '../contexts/SessionContext.js';
+import type { ExtensionUpdateState } from '../state/extensions.js';
 
 // Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
@@ -38,8 +31,6 @@ export interface CommandContext {
     settings: LoadedSettings;
     git: GitService | undefined;
     logger: Logger;
-    profileManager?: ProfileManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P06 @requirement:REQ-002
-    subagentManager?: SubagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P06 @requirement:REQ-002
   };
   // UI state and history management
   ui: {
@@ -68,15 +59,13 @@ export interface CommandContext {
     loadHistory: UseHistoryManagerReturn['loadHistory'];
     /** Toggles a special display mode. */
     toggleCorgiMode: () => void;
-    /**
-     * Toggles vim mode on/off.
-     *
-     * @returns A promise that resolves to the new vim enabled state.
-     */
     toggleVimEnabled: () => Promise<boolean>;
-    setLlxprtMdFileCount: (count: number) => void;
-    updateHistoryTokenCount: (count: number) => void;
+    setGeminiMdFileCount: (count: number) => void;
     reloadCommands: () => void;
+    extensionsUpdateState: Map<string, ExtensionUpdateState>;
+    setExtensionsUpdateState: Dispatch<
+      SetStateAction<Map<string, ExtensionUpdateState>>
+    >;
   };
   // Session-specific data
   session: {
@@ -118,20 +107,8 @@ export interface MessageActionReturn {
  */
 export interface OpenDialogActionReturn {
   type: 'dialog';
-  dialog:
-    | 'help'
-    | 'auth'
-    | 'theme'
-    | 'loadProfile'
-    | 'editor'
-    | 'privacy'
-    | 'provider'
-    | 'providerModel'
-    | 'tools'
-    | 'logging'
-    | 'settings'
-    | 'permissions';
-  dialogData?: unknown;
+
+  dialog: 'help' | 'auth' | 'theme' | 'editor' | 'privacy' | 'settings';
 }
 
 /**
@@ -150,7 +127,7 @@ export interface LoadHistoryActionReturn {
  */
 export interface SubmitPromptActionReturn {
   type: 'submit_prompt';
-  content: string;
+  content: PartListUnion;
 }
 
 /**
@@ -198,6 +175,7 @@ export interface SlashCommand {
   name: string;
   altNames?: string[];
   description: string;
+  hidden?: boolean;
 
   kind: CommandKind;
 
@@ -213,13 +191,11 @@ export interface SlashCommand {
     | SlashCommandActionReturn
     | Promise<void | SlashCommandActionReturn>;
 
-  /**
-   * Schema-based completion for structured argument handling
-   * @plan:PLAN-20251013-AUTOCOMPLETE.P05
-   * @plan:PLAN-20251013-AUTOCOMPLETE.P11
-   * Legacy completion helpers removed; schema is the single source.
-   */
-  schema?: CommandArgumentSchema;
+  // Provides argument completion (e.g., completing a tag for `/chat resume <tag>`).
+  completion?: (
+    context: CommandContext,
+    partialArg: string,
+  ) => Promise<string[]>;
 
   subCommands?: SlashCommand[];
 }

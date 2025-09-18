@@ -43,6 +43,15 @@ describe('extensions install command', () => {
       validationParser.parse('install --source some-url --path /some/path'),
     ).toThrow('Arguments source and path are mutually exclusive');
   });
+
+  it('should fail if both auto update and local path are provided', () => {
+    const validationParser = yargs([]).command(installCommand).fail(false);
+    expect(() =>
+      validationParser.parse(
+        'install some-url --path /some/path --auto-update',
+      ),
+    ).toThrow('Arguments path and auto-update are mutually exclusive');
+  });
 });
 
 describe('handleInstall', () => {
