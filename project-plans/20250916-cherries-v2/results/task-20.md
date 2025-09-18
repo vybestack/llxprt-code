@@ -152,11 +152,13 @@ Date:   Tue Sep 2 09:36:24 2025 -0700
 ## Manual Verification Notes
 - All imports properly adapted to use `@vybestack/llxprt-code-core` instead of `@google/gemini-cli-core`
 - Syntax highlighting feature for commands and file paths successfully integrated
-- Citation feature partially integrated:
-  - showCitations function and handleCitationEvent added but commented out
-  - getCodeAssistServer function not exported from core, temporary workaround added
-  - Server-side ServerGeminiCitationEvent type not present in core
-  - Feature will be fully enabled when core is updated with necessary exports and event types
+- **Citation feature FULLY integrated (2025-01-17 update)**:
+  - Citations now work across ALL providers (Gemini, Anthropic, OpenAI, Qwen)
+  - Follows llxprt's event-driven pattern like summarization
+  - No Gemini-specific dependencies
+  - Event handling properly connected between core and CLI
+  - Respects ui.showCitations setting and user tier restrictions
+  - All 36 useGeminiStream tests pass with citations enabled
 - Configuration documentation properly merged maintaining both llxprt-specific and new upstream sections
 - No provider-specific code was introduced that would break multi-provider support
 - No branding overwrites occurred
