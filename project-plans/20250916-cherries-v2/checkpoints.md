@@ -42,11 +42,27 @@ Record verification artifacts here after completing the tasks specified in the p
   - Folder trust properly restricts untrusted workspaces
   - Working tree clean and ready for Tasks 17-24
 
-## Checkpoint C (after Task 24)
-- [ ] `git status`
-- [ ] `npm run test`
-- [ ] Summary of results
-- [ ] Notes / follow-ups
+## Checkpoint C (after Task 24) - COMPLETED ✅
+- [x] `git status`: **Clean working tree** on branch 20250916-gmerge
+- [x] `npm run test`: **PASSED** - 3126 tests passed, 56 skipped across all packages
+- [x] Summary of results:
+  - Tasks 17-24 completed successfully
+  - 30 additional commits cherry-picked (4 skipped)
+  - All quality gates passed for each task
+  - Key features integrated:
+    - Extensions link/new commands for development
+    - Footer customization settings
+    - Ctrl+Backspace keyboard support
+    - Hybrid token storage for MCP
+    - IDE server port improvements
+    - Model requirement for utility calls
+    - Syntax highlighting for commands/paths
+- [x] Notes / follow-ups:
+  - Successfully maintained llxprt's flat settings structure
+  - Preserved multi-provider architecture throughout
+  - Fixed test failures from settings schema changes
+  - Citations feature partially integrated (needs core exports)
+  - Working tree clean and ready for Tasks 25-34
 
 ## Checkpoint D (after Task 34)
 - [ ] `git status`
