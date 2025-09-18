@@ -1187,7 +1187,8 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.chatCompression).toEqual({});
     });
 
-    it('should ignore chatCompression if contextPercentageThreshold is invalid', () => {
+    // Test removed - chatCompression validation was removed in upstream commit e6e60861
+    it.skip('should ignore chatCompression if contextPercentageThreshold is invalid', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === USER_SETTINGS_PATH,
@@ -1307,86 +1308,8 @@ describe('Settings Loading and Merging', () => {
         },
       );
 
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      // Check that settings are empty due to parsing errors
-      expect(settings.user.settings).toEqual({});
-      expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
-        customThemes: {},
-        customWittyPhrases: [],
-        hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
-        hideCWD: false,
-        hideContextSummary: false,
-        hideModelInfo: false,
-        hideSandboxStatus: false,
-        showMemoryUsage: false,
-        usageStatisticsEnabled: true,
-        autoConfigureMaxOldSpaceSize: false,
-        maxSessionTurns: -1,
-        maxTurnsPerPrompt: 100,
-        memoryDiscoveryMaxDirs: 200,
-        vimMode: false,
-        ideMode: false,
-        accessibility: {},
-        checkpointing: {},
-        emojifilter: 'auto',
-        fileFiltering: {},
-        disableAutoUpdate: false,
-        shouldUseNodePtyShell: false,
-        selectedAuthType: 'provider',
-        mcpServers: {},
-        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        disableUpdateNag: false,
-        includeDirectories: [],
-        loadMemoryFromIncludeDirectories: false,
-        hasSeenIdeIntegrationNudge: false,
-        folderTrustFeature: false,
-        folderTrust: false,
-        showLineNumbers: false,
-        providerApiKeys: {},
-        providerBaseUrls: {},
-        providerToolFormatOverrides: {},
-        providerKeyfiles: {},
-        extensionManagement: false,
-        extensions: {
-          disabled: [],
-          workspacesWithMigrationNudge: [],
-        },
-        enableTextToolCallParsing: false,
-        textToolCallModels: [],
-        openaiResponsesEnabled: false,
-        shellReplacement: false,
-        oauthEnabledProviders: {},
-        useRipgrep: false,
-        enablePromptCompletion: false,
-        debugKeystrokeLogging: false,
-        chatCompression: {},
-        mcp: {},
-        security: {},
-        tools: {},
-        useSmartEdit: false,
-      });
-
-      // Check that error objects are populated in settings.errors
-      expect(settings.errors).toBeDefined();
-      // Assuming both user and workspace files cause errors and are added in order
-      expect(settings.errors.length).toEqual(2);
-
-      const userError = settings.errors.find(
-        (e) => e.path === USER_SETTINGS_PATH,
-      );
-      expect(userError).toBeDefined();
-      expect(userError?.message).toBe(userReadError.message);
-
-      const workspaceError = settings.errors.find(
-        (e) => e.path === MOCK_WORKSPACE_SETTINGS_PATH,
-      );
-      expect(workspaceError).toBeDefined();
-      expect(workspaceError?.message).toBe(workspaceReadError.message);
+      // Errors now throw FatalConfigError instead of being collected
+      expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
 
       // Restore JSON.parse mock if it was spied on specifically for this test
       vi.restoreAllMocks(); // Or more targeted restore if needed

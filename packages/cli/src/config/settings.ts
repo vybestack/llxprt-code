@@ -200,6 +200,7 @@ export class LoadedSettings {
     this.workspace = workspace;
     this.isTrusted = isTrusted;
     this._merged = this.computeMergedSettings();
+    this.errors = []; // No errors if we got here, they would have thrown
   }
 
   readonly system: SettingsFile;
@@ -207,6 +208,7 @@ export class LoadedSettings {
   readonly user: SettingsFile;
   readonly workspace: SettingsFile;
   readonly isTrusted: boolean;
+  readonly errors: SettingsError[] = [];
 
   private _merged: Settings;
 
