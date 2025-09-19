@@ -91,12 +91,12 @@ jobs:
         run: |-
           echo "Current directory: $(pwd)"
           echo "Directory contents before bundle:"
-          ls -la
+          node -e "console.log(require('fs').readdirSync('.').map(f => { const s = require('fs').statSync(f); return s.isDirectory() ? f + '/' : f; }).join('\n'))"
           npm run bundle
           echo "Directory contents after bundle:"
-          ls -la
+          node -e "console.log(require('fs').readdirSync('.').map(f => { const s = require('fs').statSync(f); return s.isDirectory() ? f + '/' : f; }).join('\n'))"
           echo "Bundle directory contents:"
-          ls -la bundle/ || echo "Bundle directory not found"
+          node -e "try { console.log(require('fs').readdirSync('bundle').map(f => { const s = require('fs').statSync('bundle/' + f); return s.isDirectory() ? f + '/' : f; }).join('\n')); } catch(e) { console.log('Bundle directory not found'); }"
 
       - name: 'Set up Docker'
         if: |-

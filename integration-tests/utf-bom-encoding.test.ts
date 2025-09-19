@@ -125,10 +125,10 @@ d('BOM end-to-end integration', () => {
   it('Can describe a PNG file', async () => {
     const imagePath = resolve(
       process.cwd(),
-      'docs/assets/gemini-screenshot.png',
+      'docs/assets/llxprt-screenshot.png',
     );
     const imageContent = readFileSync(imagePath);
-    const filename = 'gemini-screenshot.png';
+    const filename = 'llxprt-screenshot.png';
     writeFileSync(join(dir, filename), imageContent);
     const prompt = `What is shown in the image ${filename}?`;
     const output = await rig.run(prompt);
@@ -136,6 +136,6 @@ d('BOM end-to-end integration', () => {
     const lower = output.toLowerCase();
     // The response is non-deterministic, so we just check for some
     // keywords that are very likely to be in the response.
-    expect(lower.includes('gemini')).toBeTruthy();
+    expect(lower.includes('llxprt')).toBeTruthy();
   });
 });
