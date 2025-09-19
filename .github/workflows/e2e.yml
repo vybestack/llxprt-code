@@ -40,19 +40,20 @@ jobs:
         os:
           - 'ubuntu-latest'
           - 'macos-latest'
-          - 'gemini-cli-windows-16-core'
+          - 'windows-latest'
         sandbox:
           - 'sandbox:none'
           # Temporarily disable sandbox:docker until OAuth issue is resolved
           # - 'sandbox:docker'
         node-version:
           - '24.x'
-        exclude:
-          # Docker tests are not supported on macOS or Windows
-          - os: 'macos-latest'
-            sandbox: 'sandbox:docker'
-          - os: 'gemini-cli-windows-16-core'
-            sandbox: 'sandbox:docker'
+        # No excludes needed since sandbox:docker is commented out
+        # exclude:
+        # Docker tests are not supported on macOS or Windows
+        # - os: 'macos-latest'
+        #   sandbox: 'sandbox:docker'
+        # - os: 'windows-latest'
+        #   sandbox: 'sandbox:docker'
     steps:
       - name: 'Checkout (fork)'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
