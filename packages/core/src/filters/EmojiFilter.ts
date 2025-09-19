@@ -372,6 +372,7 @@ export class EmojiFilter {
       ['⚡', '[ACTION]'], // ⚡ -> [ACTION]
       ['🪄', '[MAGIC]'], // 🪄 -> [MAGIC]
       ['🆙', '[UP]'], // 🆙 -> [UP]
+      ['⭐', '[STAR]'], // ⭐ -> [STAR]
       ['🪨', '[ROCK]'], // 🪨 -> [ROCK]
       ['🩸', '[BLOOD]'], // 🩸 -> [BLOOD]
       ['🪐', '[PLANET]'], // 🪐 -> [PLANET]

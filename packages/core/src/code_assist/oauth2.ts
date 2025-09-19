@@ -193,7 +193,7 @@ async function initOauthClient(
       );
     }
 
-    if (config.isInteractive()) {
+    if (typeof config.isInteractive === 'function' && config.isInteractive()) {
       console.log('Waiting for authentication...');
     }
 
@@ -223,6 +223,14 @@ async function initOauthClient(
   }
 
   return client;
+}
+
+export async function performLogin(
+  authType: AuthType,
+  config: Config,
+): Promise<boolean> {
+  await initOauthClient(authType, config);
+  return true;
 }
 
 export async function getOauthClient(
@@ -291,21 +299,7 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
     return false;
   }
 
-  try {
-    const { tokens } = await client.getToken({
-      code,
-      codeVerifier: codeVerifier.codeVerifier,
-      redirect_uri: redirectUri,
-    });
-    client.setCredentials(tokens);
-  } catch (error) {
-    console.error(
-      'Failed to authenticate with authorization code:',
-      getErrorMessage(error),
-    );
-    return false;
-  }
-  return true;
+  return authWithCode(client, code, codeVerifier, redirectUri);
 }
 
 async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
@@ -361,21 +355,17 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
           );
         } else if (qs.get('code')) {
           try {
-            const { tokens } = await client.getToken({
-              code: qs.get('code')!,
-              redirect_uri: redirectUri,
-            });
-            client.setCredentials(tokens);
+            const success = await authWithCode(
+              client,
+              qs.get('code')!,
+              undefined,
+              redirectUri,
+            );
 
-            // Retrieve and cache Google Account ID during authentication
-            try {
-              await fetchAndCacheUserInfo(client);
-            } catch (error) {
-              console.warn(
-                'Failed to retrieve Google Account ID during authentication:',
-                getErrorMessage(error),
+            if (!success) {
+              throw new FatalAuthenticationError(
+                'Failed to exchange authorization code for tokens.',
               );
-              // Don't fail the auth flow if Google Account ID retrieval fails
             }
 
             res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
@@ -385,9 +375,11 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
             res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
             res.end();
             reject(
-              new FatalAuthenticationError(
-                `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
-              ),
+              error instanceof FatalAuthenticationError
+                ? error
+                : new FatalAuthenticationError(
+                    `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
+                  ),
             );
           }
         } else {
@@ -524,6 +516,39 @@ async function cacheCredentials(credentials: Credentials) {
   } catch (error) {
     console.error('Failed to cache OAuth credentials:', error);
     // Don't throw - allow OAuth to continue without caching
+  }
+}
+
+export async function authWithCode(
+  client: OAuth2Client,
+  code: string,
+  codeVerifier: { codeVerifier: string } | undefined,
+  redirectUri: string,
+): Promise<boolean> {
+  try {
+    const { tokens } = await client.getToken({
+      code,
+      redirect_uri: redirectUri,
+      ...(codeVerifier ? { codeVerifier: codeVerifier.codeVerifier } : {}),
+    });
+    client.setCredentials(tokens);
+
+    try {
+      await fetchAndCacheUserInfo(client);
+    } catch (error) {
+      console.warn(
+        'Failed to retrieve Google Account ID during authentication:',
+        getErrorMessage(error),
+      );
+    }
+
+    return true;
+  } catch (error) {
+    console.error(
+      'Failed to authenticate with authorization code:',
+      getErrorMessage(error),
+    );
+    return false;
   }
 }
 

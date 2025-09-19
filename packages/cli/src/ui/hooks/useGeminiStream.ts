@@ -152,7 +152,10 @@ export const useGeminiStream = (
   // Initialize emoji filter
   const emojiFilter = useMemo(() => {
     const emojiFilterMode =
-      (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+      typeof config.getEphemeralSetting === 'function'
+        ? (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) ||
+          'auto'
+        : 'auto';
 
     return emojiFilterMode !== 'allowed'
       ? new EmojiFilter({ mode: emojiFilterMode })
@@ -162,7 +165,11 @@ export const useGeminiStream = (
   const sanitizeContent = useCallback(
     (text: string) => {
       if (!emojiFilter) {
-        return { text, feedback: undefined as string | undefined, blocked: false };
+        return {
+          text,
+          feedback: undefined as string | undefined,
+          blocked: false,
+        };
       }
 
       const result = emojiFilter.filterText(text);
@@ -175,9 +182,7 @@ export const useGeminiStream = (
       }
 
       const sanitized =
-        typeof result.filtered === 'string'
-          ? (result.filtered as string)
-          : '';
+        typeof result.filtered === 'string' ? (result.filtered as string) : '';
 
       return {
         text: sanitized,
@@ -196,9 +201,11 @@ export const useGeminiStream = (
       }
 
       if (pending.type === 'gemini' || pending.type === 'gemini_content') {
-        const { text: sanitized, feedback, blocked } = sanitizeContent(
-          pending.text,
-        );
+        const {
+          text: sanitized,
+          feedback,
+          blocked,
+        } = sanitizeContent(pending.text);
 
         if (blocked) {
           addItem(
@@ -336,6 +343,7 @@ export const useGeminiStream = (
     setPendingHistoryItem,
     onCancelSubmit,
     pendingHistoryItemRef,
+    flushPendingHistoryItem,
   ]);
 
   useKeypress(
@@ -487,11 +495,13 @@ export const useGeminiStream = (
         // Prevents additional output after a user initiated cancel.
         return '';
       }
-      
+
       const combined = currentGeminiMessageBuffer + eventValue;
-      const { text: sanitizedCombined, feedback, blocked } = sanitizeContent(
-        combined,
-      );
+      const {
+        text: sanitizedCombined,
+        feedback,
+        blocked,
+      } = sanitizeContent(combined);
 
       if (blocked) {
         addItem(
@@ -503,14 +513,20 @@ export const useGeminiStream = (
         );
 
         if (feedback) {
-          addItem({ type: MessageType.INFO, text: feedback }, userMessageTimestamp);
+          addItem(
+            { type: MessageType.INFO, text: feedback },
+            userMessageTimestamp,
+          );
         }
 
         return currentGeminiMessageBuffer;
       }
 
       if (feedback) {
-        addItem({ type: MessageType.INFO, text: feedback }, userMessageTimestamp);
+        addItem(
+          { type: MessageType.INFO, text: feedback },
+          userMessageTimestamp,
+        );
       }
 
       if (
@@ -594,7 +610,13 @@ export const useGeminiStream = (
       setIsResponding(false);
       setThought(null); // Reset thought when user cancels
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, setThought, flushPendingHistoryItem],
+    [
+      addItem,
+      pendingHistoryItemRef,
+      setPendingHistoryItem,
+      setThought,
+      flushPendingHistoryItem,
+    ],
   );
 
   const handleErrorEvent = useCallback(
@@ -618,7 +640,14 @@ export const useGeminiStream = (
       );
       setThought(null); // Reset thought when there's an error
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought, flushPendingHistoryItem],
+    [
+      addItem,
+      pendingHistoryItemRef,
+      setPendingHistoryItem,
+      config,
+      setThought,
+      flushPendingHistoryItem,
+    ],
   );
 
   const handleCitationEvent = useCallback(
@@ -633,7 +662,14 @@ export const useGeminiStream = (
       }
       addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config, flushPendingHistoryItem],
+    [
+      addItem,
+      pendingHistoryItemRef,
+      setPendingHistoryItem,
+      settings,
+      config,
+      flushPendingHistoryItem,
+    ],
   );
 
   const handleFinishedEvent = useCallback(
@@ -798,7 +834,6 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
-      emojiFilter,
       handleCitationEvent,
     ],
   );
@@ -912,6 +947,7 @@ export const useGeminiStream = (
       startNewPrompt,
       getPromptCount,
       handleLoopDetectedEvent,
+      flushPendingHistoryItem,
     ],
   );
 

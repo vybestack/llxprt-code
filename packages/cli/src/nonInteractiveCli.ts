@@ -46,7 +46,10 @@ export async function runNonInteractive(
 
     // Initialize emoji filter for non-interactive mode
     const emojiFilterMode =
-      (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+      typeof config.getEphemeralSetting === 'function'
+        ? (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) ||
+          'auto'
+        : 'auto';
     const emojiFilter =
       emojiFilterMode !== 'allowed'
         ? new EmojiFilter({ mode: emojiFilterMode })
@@ -108,7 +111,9 @@ export async function runNonInteractive(
 
             if (filterResult.blocked) {
               // In error mode: output error message and continue
-              process.stderr.write('[Error: Response blocked due to emoji detection]\n');
+              process.stderr.write(
+                '[Error: Response blocked due to emoji detection]\n',
+              );
               continue;
             }
 
@@ -133,6 +138,11 @@ export async function runNonInteractive(
           };
           functionCalls.push(fc);
         }
+      }
+
+      const remainingBuffered = emojiFilter?.flushBuffer?.();
+      if (remainingBuffered) {
+        process.stdout.write(remainingBuffered);
       }
 
       if (functionCalls.length > 0) {

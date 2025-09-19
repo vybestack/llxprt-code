@@ -370,7 +370,11 @@ export async function main() {
   const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
 
   let spinnerInstance;
-  if (config.isInteractive() && mcpServersCount > 0) {
+  if (
+    typeof config.isInteractive === 'function' &&
+    config.isInteractive() &&
+    mcpServersCount > 0
+  ) {
     spinnerInstance = render(
       <InitializingComponent initialTotal={mcpServersCount} />,
     );
@@ -768,7 +772,7 @@ export async function main() {
   providerManager.getActiveProvider();
 
   // Render UI, passing necessary config values. Check that there is no command line question.
-  if (config.isInteractive()) {
+  if (typeof config.isInteractive === 'function' && config.isInteractive()) {
     await startInteractiveUI(config, settings, startupWarnings, workspaceRoot);
     return;
   }
