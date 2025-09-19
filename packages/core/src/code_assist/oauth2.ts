@@ -193,7 +193,9 @@ async function initOauthClient(
       );
     }
 
-    console.log('Waiting for authentication...');
+    if (config.isInteractive()) {
+      console.log('Waiting for authentication...');
+    }
 
     // Add timeout to prevent infinite waiting when browser tab gets stuck
     const authTimeout = 5 * 60 * 1000; // 5 minutes timeout

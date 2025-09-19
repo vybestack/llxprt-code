@@ -15,9 +15,11 @@
  */
 
 import { encoding_for_model, TiktokenModel } from '@dqbd/tiktoken';
+import { DebugLogger } from '../../debug/DebugLogger.js';
 import { ITokenizer } from './ITokenizer.js';
 
 export class OpenAITokenizer implements ITokenizer {
+  private readonly logger = new DebugLogger('llxprt:tokenizer:openai');
   private encoderCache = new Map<
     string,
     ReturnType<typeof encoding_for_model>
@@ -34,8 +36,8 @@ export class OpenAITokenizer implements ITokenizer {
           this.encoderCache.set(model, encoder);
         } catch (_error) {
           // Fall back to o200k_base encoding for newer models
-          console.warn(
-            `No specific encoding for model ${model}, using o200k_base`,
+          this.logger.debug(
+            () => `No specific encoding for model ${model}, using o200k_base`,
           );
           encoder = encoding_for_model('gpt-4o-mini');
           this.encoderCache.set(model, encoder);
