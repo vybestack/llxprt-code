@@ -766,7 +766,7 @@ export async function main() {
   );
 
   try {
-    await runNonInteractive(nonInteractiveConfig, input, prompt_id);
+    await runNonInteractive(nonInteractiveConfig, settings, input, prompt_id);
   } catch (error) {
     const printableError =
       error instanceof Error ? (error.stack ?? error.message) : String(error);
