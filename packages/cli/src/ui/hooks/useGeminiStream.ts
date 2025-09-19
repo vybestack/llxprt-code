@@ -153,11 +153,83 @@ export const useGeminiStream = (
   const emojiFilter = useMemo(() => {
     const emojiFilterMode =
       (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
-    
+
     return emojiFilterMode !== 'allowed'
       ? new EmojiFilter({ mode: emojiFilterMode })
       : undefined;
   }, [config]);
+
+  const sanitizeContent = useCallback(
+    (text: string) => {
+      if (!emojiFilter) {
+        return { text, feedback: undefined as string | undefined, blocked: false };
+      }
+
+      const result = emojiFilter.filterText(text);
+      if (result.blocked) {
+        return {
+          text: '',
+          feedback: result.systemFeedback,
+          blocked: true as const,
+        };
+      }
+
+      const sanitized =
+        typeof result.filtered === 'string'
+          ? (result.filtered as string)
+          : '';
+
+      return {
+        text: sanitized,
+        feedback: result.systemFeedback,
+        blocked: false as const,
+      };
+    },
+    [emojiFilter],
+  );
+
+  const flushPendingHistoryItem = useCallback(
+    (timestamp: number) => {
+      const pending = pendingHistoryItemRef.current;
+      if (!pending) {
+        return;
+      }
+
+      if (pending.type === 'gemini' || pending.type === 'gemini_content') {
+        const { text: sanitized, feedback, blocked } = sanitizeContent(
+          pending.text,
+        );
+
+        if (blocked) {
+          addItem(
+            {
+              type: MessageType.ERROR,
+              text: '[Error: Response blocked due to emoji detection]',
+            },
+            timestamp,
+          );
+
+          if (feedback) {
+            addItem({ type: MessageType.INFO, text: feedback }, timestamp);
+          }
+
+          setPendingHistoryItem(null);
+          return;
+        }
+
+        addItem({ ...pending, text: sanitized }, timestamp);
+
+        if (feedback) {
+          addItem({ type: MessageType.INFO, text: feedback }, timestamp);
+        }
+      } else {
+        addItem(pending, timestamp);
+      }
+
+      setPendingHistoryItem(null);
+    },
+    [addItem, pendingHistoryItemRef, sanitizeContent, setPendingHistoryItem],
+  );
   const logger = useLogger(storage);
   const gitService = useMemo(() => {
     if (!config.getProjectRoot()) {
@@ -246,7 +318,7 @@ export const useGeminiStream = (
     turnCancelledRef.current = true;
     abortControllerRef.current?.abort();
     if (pendingHistoryItemRef.current) {
-      addItem(pendingHistoryItemRef.current, Date.now());
+      flushPendingHistoryItem(Date.now());
     }
     addItem(
       {
@@ -416,85 +488,78 @@ export const useGeminiStream = (
         return '';
       }
       
-      // Apply emoji filtering to the incoming content
-      let filteredEventValue = eventValue;
-      if (emojiFilter) {
-        const filterResult = emojiFilter.filterStreamChunk(eventValue);
-        
-        if (filterResult.blocked) {
-          // In error mode: inject error feedback to model for retry
-          addItem(
-            {
-              type: MessageType.ERROR,
-              text: '[Error: Response blocked due to emoji detection]',
-            },
-            userMessageTimestamp,
-          );
-          return currentGeminiMessageBuffer;
+      const combined = currentGeminiMessageBuffer + eventValue;
+      const { text: sanitizedCombined, feedback, blocked } = sanitizeContent(
+        combined,
+      );
+
+      if (blocked) {
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: '[Error: Response blocked due to emoji detection]',
+          },
+          userMessageTimestamp,
+        );
+
+        if (feedback) {
+          addItem({ type: MessageType.INFO, text: feedback }, userMessageTimestamp);
         }
-        
-        filteredEventValue = typeof filterResult.filtered === 'string' 
-          ? filterResult.filtered 
-          : '';
-          
-        // Add system feedback if needed
-        if (filterResult.systemFeedback) {
-          addItem(
-            {
-              type: MessageType.INFO,
-              text: filterResult.systemFeedback,
-            },
-            userMessageTimestamp,
-          );
-        }
+
+        return currentGeminiMessageBuffer;
       }
-      
-      let newGeminiMessageBuffer = currentGeminiMessageBuffer + filteredEventValue;
+
+      if (feedback) {
+        addItem({ type: MessageType.INFO, text: feedback }, userMessageTimestamp);
+      }
+
       if (
         pendingHistoryItemRef.current?.type !== 'gemini' &&
         pendingHistoryItemRef.current?.type !== 'gemini_content'
       ) {
         if (pendingHistoryItemRef.current) {
-          addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+          flushPendingHistoryItem(userMessageTimestamp);
         }
         setPendingHistoryItem({ type: 'gemini', text: '' });
-        newGeminiMessageBuffer = filteredEventValue;
       }
-      // Split large messages for better rendering performance. Ideally,
-      // we should maximize the amount of output sent to <Static />.
-      const splitPoint = findLastSafeSplitPoint(newGeminiMessageBuffer);
-      if (splitPoint === newGeminiMessageBuffer.length) {
-        // Update the existing message with accumulated content
+
+      const splitPoint = findLastSafeSplitPoint(sanitizedCombined);
+      if (splitPoint === sanitizedCombined.length) {
         setPendingHistoryItem((item) => ({
           type: item?.type as 'gemini' | 'gemini_content',
-          text: newGeminiMessageBuffer,
+          text: sanitizedCombined,
         }));
-      } else {
-        // This indicates that we need to split up this Gemini Message.
-        // Splitting a message is primarily a performance consideration. There is a
-        // <Static> component at the root of App.tsx which takes care of rendering
-        // content statically or dynamically. Everything but the last message is
-        // treated as static in order to prevent re-rendering an entire message history
-        // multiple times per-second (as streaming occurs). Prior to this change you'd
-        // see heavy flickering of the terminal. This ensures that larger messages get
-        // broken up so that there are more "statically" rendered.
-        const beforeText = newGeminiMessageBuffer.substring(0, splitPoint);
-        const afterText = newGeminiMessageBuffer.substring(splitPoint);
+        return sanitizedCombined;
+      }
+
+      const beforeText = sanitizedCombined.substring(0, splitPoint);
+      const afterText = sanitizedCombined.substring(splitPoint);
+
+      const pendingType =
+        pendingHistoryItemRef.current?.type === 'gemini_content'
+          ? 'gemini_content'
+          : 'gemini';
+
+      if (beforeText) {
         addItem(
           {
-            type: pendingHistoryItemRef.current?.type as
-              | 'gemini'
-              | 'gemini_content',
+            type: pendingType,
             text: beforeText,
           },
           userMessageTimestamp,
         );
-        setPendingHistoryItem({ type: 'gemini_content', text: afterText });
-        newGeminiMessageBuffer = afterText;
       }
-      return newGeminiMessageBuffer;
+
+      setPendingHistoryItem({ type: 'gemini_content', text: afterText });
+      return afterText;
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem],
+    [
+      addItem,
+      pendingHistoryItemRef,
+      sanitizeContent,
+      setPendingHistoryItem,
+      flushPendingHistoryItem,
+    ],
   );
 
   const handleUserCancelledEvent = useCallback(
@@ -518,7 +583,7 @@ export const useGeminiStream = (
           };
           addItem(pendingItem, userMessageTimestamp);
         } else {
-          addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+          flushPendingHistoryItem(userMessageTimestamp);
         }
         setPendingHistoryItem(null);
       }
@@ -529,13 +594,13 @@ export const useGeminiStream = (
       setIsResponding(false);
       setThought(null); // Reset thought when user cancels
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, setThought],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, setThought, flushPendingHistoryItem],
   );
 
   const handleErrorEvent = useCallback(
     (eventValue: ErrorEvent['value'], userMessageTimestamp: number) => {
       if (pendingHistoryItemRef.current) {
-        addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+        flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
       }
       addItem(
@@ -553,7 +618,7 @@ export const useGeminiStream = (
       );
       setThought(null); // Reset thought when there's an error
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, config, setThought, flushPendingHistoryItem],
   );
 
   const handleCitationEvent = useCallback(
@@ -563,12 +628,12 @@ export const useGeminiStream = (
       }
 
       if (pendingHistoryItemRef.current) {
-        addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+        flushPendingHistoryItem(userMessageTimestamp);
         setPendingHistoryItem(null);
       }
       addItem({ type: MessageType.INFO, text }, userMessageTimestamp);
     },
-    [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config],
+    [addItem, pendingHistoryItemRef, setPendingHistoryItem, settings, config, flushPendingHistoryItem],
   );
 
   const handleFinishedEvent = useCallback(
@@ -803,7 +868,7 @@ export const useGeminiStream = (
         }
 
         if (pendingHistoryItemRef.current) {
-          addItem(pendingHistoryItemRef.current, userMessageTimestamp);
+          flushPendingHistoryItem(userMessageTimestamp);
           setPendingHistoryItem(null);
         }
         if (loopDetectedRef.current) {
