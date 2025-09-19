@@ -24,7 +24,6 @@ import {
   FileDiscoveryService,
   TelemetryTarget,
   FileFilteringOptions,
-  IdeClient,
   ProfileManager,
   ShellTool,
   EditTool,
@@ -631,8 +630,6 @@ export async function loadCliConfig(
 
   // ideModeFeature flag removed - now using ideMode directly
 
-  const ideClient = await IdeClient.getInstance();
-
   // Folder trust feature flag removed - now using settings directly
   const folderTrust = settings.folderTrust ?? false;
   const trustedFolder = isWorkspaceTrusted(settings) ?? true;
@@ -900,7 +897,6 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
-    ideClient,
     chatCompression: settings.chatCompression,
     interactive,
     folderTrust,

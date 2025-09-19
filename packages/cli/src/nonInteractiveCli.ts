@@ -14,6 +14,8 @@ import {
   parseAndFormatApiError,
   FatalInputError,
   FatalTurnLimitedError,
+  EmojiFilter,
+  type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import { Content, Part, FunctionCall } from '@google/genai';
 
@@ -41,6 +43,14 @@ export async function runNonInteractive(
     });
 
     const geminiClient = config.getGeminiClient();
+
+    // Initialize emoji filter for non-interactive mode
+    const emojiFilterMode =
+      (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+    const emojiFilter =
+      emojiFilterMode !== 'allowed'
+        ? new EmojiFilter({ mode: emojiFilterMode })
+        : undefined;
 
     const abortController = new AbortController();
 
@@ -91,7 +101,29 @@ export async function runNonInteractive(
         }
 
         if (event.type === GeminiEventType.Content) {
-          process.stdout.write(event.value);
+          // Apply emoji filtering to content output
+          let outputValue = event.value;
+          if (emojiFilter) {
+            const filterResult = emojiFilter.filterStreamChunk(event.value);
+
+            if (filterResult.blocked) {
+              // In error mode: output error message and continue
+              process.stderr.write('[Error: Response blocked due to emoji detection]\n');
+              continue;
+            }
+
+            outputValue =
+              typeof filterResult.filtered === 'string'
+                ? (filterResult.filtered as string)
+                : '';
+
+            // Output system feedback if needed
+            if (filterResult.systemFeedback) {
+              process.stderr.write(`Warning: ${filterResult.systemFeedback}\n`);
+            }
+          }
+
+          process.stdout.write(outputValue);
         } else if (event.type === GeminiEventType.ToolCallRequest) {
           const toolCallRequest = event.value;
           const fc: FunctionCall = {

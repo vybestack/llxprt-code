@@ -29,6 +29,8 @@ import {
   getCodeAssistServer,
   UserTierId,
   ServerGeminiCitationEvent,
+  EmojiFilter,
+  type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import { type Part, type PartListUnion, FinishReason } from '@google/genai';
 import { LoadedSettings } from '../../config/settings.js';
@@ -146,6 +148,16 @@ export const useGeminiStream = (
   const processedMemoryToolsRef = useRef<Set<string>>(new Set());
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const storage = config.storage;
+
+  // Initialize emoji filter
+  const emojiFilter = useMemo(() => {
+    const emojiFilterMode =
+      (config.getEphemeralSetting('emojifilter') as EmojiFilterMode) || 'auto';
+    
+    return emojiFilterMode !== 'allowed'
+      ? new EmojiFilter({ mode: emojiFilterMode })
+      : undefined;
+  }, [config]);
   const logger = useLogger(storage);
   const gitService = useMemo(() => {
     if (!config.getProjectRoot()) {
@@ -403,7 +415,41 @@ export const useGeminiStream = (
         // Prevents additional output after a user initiated cancel.
         return '';
       }
-      let newGeminiMessageBuffer = currentGeminiMessageBuffer + eventValue;
+      
+      // Apply emoji filtering to the incoming content
+      let filteredEventValue = eventValue;
+      if (emojiFilter) {
+        const filterResult = emojiFilter.filterStreamChunk(eventValue);
+        
+        if (filterResult.blocked) {
+          // In error mode: inject error feedback to model for retry
+          addItem(
+            {
+              type: MessageType.ERROR,
+              text: '[Error: Response blocked due to emoji detection]',
+            },
+            userMessageTimestamp,
+          );
+          return currentGeminiMessageBuffer;
+        }
+        
+        filteredEventValue = typeof filterResult.filtered === 'string' 
+          ? filterResult.filtered 
+          : '';
+          
+        // Add system feedback if needed
+        if (filterResult.systemFeedback) {
+          addItem(
+            {
+              type: MessageType.INFO,
+              text: filterResult.systemFeedback,
+            },
+            userMessageTimestamp,
+          );
+        }
+      }
+      
+      let newGeminiMessageBuffer = currentGeminiMessageBuffer + filteredEventValue;
       if (
         pendingHistoryItemRef.current?.type !== 'gemini' &&
         pendingHistoryItemRef.current?.type !== 'gemini_content'
@@ -412,7 +458,7 @@ export const useGeminiStream = (
           addItem(pendingHistoryItemRef.current, userMessageTimestamp);
         }
         setPendingHistoryItem({ type: 'gemini', text: '' });
-        newGeminiMessageBuffer = eventValue;
+        newGeminiMessageBuffer = filteredEventValue;
       }
       // Split large messages for better rendering performance. Ideally,
       // we should maximize the amount of output sent to <Static />.
@@ -687,6 +733,7 @@ export const useGeminiStream = (
       handleChatCompressionEvent,
       handleFinishedEvent,
       handleMaxSessionTurnsEvent,
+      emojiFilter,
       handleCitationEvent,
     ],
   );
