@@ -22,7 +22,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
 import { HistoryItemWithoutId, MessageType } from '../types.js';
-import { Part } from '@google/genai';
+import { Content, Part } from '@google/genai';
 import { type CommandArgumentSchema } from './schema/types.js';
 
 interface ChatDetail {
@@ -328,11 +328,123 @@ const deleteCommand: SlashCommand = {
       };
     }
   },
+  completion: async (context, partialArg) => {
+    const chatDetails = await getSavedChatTags(context, true);
+    return chatDetails
+      .map((chat) => chat.name)
+      .filter((name) => name.startsWith(partialArg));
+  },
+};
+
+export function serializeHistoryToMarkdown(history: Content[]): string {
+  return history
+    .map((item) => {
+      const text =
+        item.parts
+          ?.map((part) => {
+            if (part.text) {
+              return part.text;
+            }
+            if (part.functionCall) {
+              return `**Tool Command**:\n\`\`\`json\n${JSON.stringify(
+                part.functionCall,
+                null,
+                2,
+              )}\n\`\`\``;
+            }
+            if (part.functionResponse) {
+              return `**Tool Response**:\n\`\`\`json\n${JSON.stringify(
+                part.functionResponse,
+                null,
+                2,
+              )}\n\`\`\``;
+            }
+            return '';
+          })
+          .join('') || '';
+      const roleIcon = item.role === 'user' ? '🧑‍💻' : '✨';
+      return `${roleIcon} ## ${(item.role || 'model').toUpperCase()}\n\n${text}`;
+    })
+    .join('\n\n---\n\n');
+}
+
+const shareCommand: SlashCommand = {
+  name: 'share',
+  description:
+    'Share the current conversation to a markdown or json file. Usage: /chat share <file>',
+  kind: CommandKind.BUILT_IN,
+  action: async (context, args): Promise<MessageActionReturn> => {
+    let filePathArg = args.trim();
+    if (!filePathArg) {
+      filePathArg = `gemini-conversation-${Date.now()}.json`;
+    }
+
+    const filePath = path.resolve(filePathArg);
+    const extension = path.extname(filePath);
+    if (extension !== '.md' && extension !== '.json') {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Invalid file format. Only .md and .json are supported.',
+      };
+    }
+
+    const chat = await context.services.config?.getGeminiClient()?.getChat();
+    if (!chat) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'No chat client available to share conversation.',
+      };
+    }
+
+    const history = chat.getHistory();
+
+    // An empty conversation has two hidden messages that setup the context for
+    // the chat. Thus, to check whether a conversation has been started, we
+    // can't check for length 0.
+    if (history.length <= 2) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: 'No conversation found to share.',
+      };
+    }
+
+    let content = '';
+    if (extension === '.json') {
+      content = JSON.stringify(history, null, 2);
+    } else {
+      content = serializeHistoryToMarkdown(history);
+    }
+
+    try {
+      await fsPromises.writeFile(filePath, content);
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Conversation shared to ${filePath}`,
+      };
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error sharing conversation: ${errorMessage}`,
+      };
+    }
+  },
 };
 
 export const chatCommand: SlashCommand = {
   name: 'chat',
   description: 'Manage conversation history.',
   kind: CommandKind.BUILT_IN,
-  subCommands: [listCommand, saveCommand, resumeCommand, deleteCommand],
+  subCommands: [
+    listCommand,
+    saveCommand,
+    resumeCommand,
+    deleteCommand,
+    shareCommand,
+  ],
 };
