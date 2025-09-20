@@ -353,9 +353,15 @@ export class TestRig {
         }, 2000);
       }
 
-      child.on('close', (code: number) => {
+      child.on('close', (code: number | null) => {
         if (timeoutId) {
           clearTimeout(timeoutId);
+        }
+
+        // On Windows, when we forcefully kill a process, code might be null
+        // Treat this as exit code 1 for consistency with Unix behavior
+        if (process.platform === 'win32' && code === null) {
+          code = 1;
         }
 
         if (code === 0) {
