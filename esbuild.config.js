@@ -10,6 +10,30 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import fs from 'fs';
 
+// Plugin to replace createRequire imports to avoid conflicts
+const createRequirePlugin = {
+  name: 'createRequire-plugin',
+  setup(build) {
+    build.onLoad(
+      { filter: /node_modules\/fdir\/dist\/index\.mjs$/ },
+      async (args) => {
+        const contents = await fs.promises.readFile(args.path, 'utf8');
+        // Replace the createRequire import with a reference to the global one
+        const transformed = contents
+          .replace(
+            'import { createRequire } from "module";',
+            '// createRequire imported from global',
+          )
+          .replace(
+            'var __require = /* @__PURE__ */ createRequire(import.meta.url);',
+            'var __require = /* @__PURE__ */ globalThis.createRequire(import.meta.url);',
+          );
+        return { contents: transformed, loader: 'js' };
+      },
+    );
+  },
+};
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
@@ -24,6 +48,7 @@ esbuild
     outfile: 'bundle/llxprt.js',
     platform: 'node',
     format: 'esm',
+    plugins: [createRequirePlugin],
     external: [
       '@lydell/node-pty',
       'node-pty',
@@ -43,7 +68,7 @@ esbuild
       'process.env.CLI_VERSION': JSON.stringify(pkg.version),
     },
     banner: {
-      js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
+      js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename); globalThis.createRequire = createRequire;`,
     },
     loader: { '.node': 'file' },
   })

@@ -477,18 +477,20 @@ export class Config {
     }
 
     // TELEMETRY: Re-enabled for local file logging only - no network endpoints allowed
-    if (process.env.VERBOSE === 'true') {
+    const isTestEnvironment =
+      process.env.NODE_ENV === 'test' || process.env.VITEST;
+    if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
       console.log(
         `[CONFIG] Telemetry settings:`,
         JSON.stringify(this.telemetrySettings),
       );
     }
     if (this.telemetrySettings.enabled) {
-      if (process.env.VERBOSE === 'true') {
+      if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
         console.log(`[CONFIG] Initializing telemetry`);
       }
       initializeTelemetry(this);
-    } else if (process.env.VERBOSE === 'true') {
+    } else if (process.env.VERBOSE === 'true' && !isTestEnvironment) {
       console.log(`[CONFIG] Telemetry disabled`);
     }
 

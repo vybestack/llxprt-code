@@ -5,8 +5,7 @@
  */
 
 import { type MutableRefObject } from 'react';
-import { render } from 'ink-testing-library';
-import { renderHook } from '@testing-library/react';
+import { render, renderHook } from '@testing-library/react';
 import { act } from 'react-dom/test-utils';
 import {
   SessionStatsProvider,
