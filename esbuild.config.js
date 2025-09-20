@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import fs from 'fs';
 
-// Plugin to replace createRequire imports to avoid conflicts
+// Plugin to remove duplicate createRequire imports
 const createRequirePlugin = {
   name: 'createRequire-plugin',
   setup(build) {
@@ -18,22 +18,10 @@ const createRequirePlugin = {
       { filter: /node_modules\/fdir\/dist\/index\.mjs$/ },
       async (args) => {
         const contents = await fs.promises.readFile(args.path, 'utf8');
-        // Replace the createRequire import with a reference to the global one
-        let transformed = contents
-          .replace(
-            'import { createRequire } from "module";',
-            '// createRequire imported from global',
-          )
-          .replace(
-            'var __require = /* @__PURE__ */ createRequire(import.meta.url);',
-            'var __require = /* @__PURE__ */ globalThis.createRequire(import.meta.url);',
-          );
-
-        // Also handle any other createRequire patterns that might appear
-        // Replace patterns like "/* @__PURE__ */ createRequire" specifically
-        transformed = transformed.replace(
-          /\/\* @__PURE__ \*\/ createRequire\(import\.meta\.url\)/g,
-          '/* @__PURE__ */ globalThis.createRequire(import.meta.url)',
+        // Remove duplicate createRequire import - it's already in the banner
+        let transformed = contents.replace(
+          'import { createRequire } from "module";',
+          '// createRequire imported from banner',
         );
 
         return { contents: transformed, loader: 'js' };
@@ -76,7 +64,7 @@ esbuild
       'process.env.CLI_VERSION': JSON.stringify(pkg.version),
     },
     banner: {
-      js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename); globalThis.createRequire = createRequire;`,
+      js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
     },
     loader: { '.node': 'file' },
   })
