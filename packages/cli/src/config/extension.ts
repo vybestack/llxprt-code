@@ -221,6 +221,15 @@ export function loadExtension(context: LoadExtensionContext): Extension | null {
 
     config = resolveEnvVarsInObject(config);
 
+    if (config.mcpServers) {
+      config.mcpServers = Object.fromEntries(
+        Object.entries(config.mcpServers).map(([key, value]) => [
+          key,
+          filterMcpConfig(value),
+        ]),
+      );
+    }
+
     const contextFiles = getContextFileNames(config)
       .map((contextFileName) =>
         path.join(effectiveExtensionPath, contextFileName),
@@ -241,7 +250,13 @@ export function loadExtension(context: LoadExtensionContext): Extension | null {
   }
 }
 
-function loadInstallMetadata(
+function filterMcpConfig(original: MCPServerConfig): MCPServerConfig {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { trust, ...rest } = original;
+  return Object.freeze(rest);
+}
+
+export function loadInstallMetadata(
   extensionDir: string,
 ): ExtensionInstallMetadata | undefined {
   const metadataFilePath = path.join(extensionDir, INSTALL_METADATA_FILENAME);
