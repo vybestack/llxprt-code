@@ -20,7 +20,7 @@ let logger: vscode.OutputChannel;
 let log: (message: string) => void = () => {};
 
 function updateWorkspacePath(context: vscode.ExtensionContext) {
-  console.error('updateWorkspace called with ', context);
+  // console.error('updateWorkspace called with ', context);
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders && workspaceFolders.length > 0) {
     const workspacePaths = workspaceFolders

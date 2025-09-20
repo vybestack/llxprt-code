@@ -19,7 +19,7 @@ const createRequirePlugin = {
       async (args) => {
         const contents = await fs.promises.readFile(args.path, 'utf8');
         // Replace the createRequire import with a reference to the global one
-        const transformed = contents
+        let transformed = contents
           .replace(
             'import { createRequire } from "module";',
             '// createRequire imported from global',
@@ -28,6 +28,14 @@ const createRequirePlugin = {
             'var __require = /* @__PURE__ */ createRequire(import.meta.url);',
             'var __require = /* @__PURE__ */ globalThis.createRequire(import.meta.url);',
           );
+
+        // Also handle any other createRequire patterns that might appear
+        // Replace patterns like "/* @__PURE__ */ createRequire" specifically
+        transformed = transformed.replace(
+          /\/\* @__PURE__ \*\/ createRequire\(import\.meta\.url\)/g,
+          '/* @__PURE__ */ globalThis.createRequire(import.meta.url)',
+        );
+
         return { contents: transformed, loader: 'js' };
       },
     );
