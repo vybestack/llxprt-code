@@ -86,6 +86,11 @@ describe('Agent Server Endpoints', () => {
         resolve();
       });
     });
+
+    // On Windows, give the server a moment to fully initialize
+    if (process.platform === 'win32') {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
   });
 
   afterAll(async () => {
@@ -96,6 +101,11 @@ describe('Agent Server Endpoints', () => {
           resolve();
         });
       });
+    }
+
+    // On Windows, give the server a moment to fully close before cleanup
+    if (process.platform === 'win32') {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     if (testWorkspace) {
@@ -111,7 +121,7 @@ describe('Agent Server Endpoints', () => {
     const response = await createTask('test-context');
     expect(response.status).toBe(201);
     expect(response.body).toBeTypeOf('string'); // Should return the task ID
-  }, 7000);
+  }, process.platform === 'win32' ? 12000 : 7000);
 
   it('should get metadata for a specific task via GET /tasks/:taskId/metadata', async () => {
     const createResponse = await createTask('test-context-2');
@@ -119,7 +129,7 @@ describe('Agent Server Endpoints', () => {
     const response = await request(app).get(`/tasks/${taskId}/metadata`);
     expect(response.status).toBe(200);
     expect(response.body.metadata.id).toBe(taskId);
-  }, 6000);
+  }, process.platform === 'win32' ? 10000 : 6000);
 
   it('should get metadata for all tasks via GET /tasks/metadata', async () => {
     const createResponse = await createTask('test-context-3');

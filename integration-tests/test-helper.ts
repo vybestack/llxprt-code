@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { env } from 'process';
+import { EOL } from 'os';
 import fs from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -333,7 +334,30 @@ export class TestRig {
     });
 
     const promise = new Promise<string>((resolve, reject) => {
+      // Add timeout for Windows when stdin doesn't end
+      let timeoutId: NodeJS.Timeout | null = null;
+      if (
+        typeof promptOrOptions === 'object' &&
+        promptOrOptions.stdinDoesNotEnd &&
+        process.platform === 'win32'
+      ) {
+        // On Windows, force terminate after 2 seconds if process doesn't exit
+        timeoutId = setTimeout(() => {
+          child.kill('SIGTERM');
+          // If SIGTERM doesn't work on Windows, try SIGKILL
+          setTimeout(() => {
+            if (!child.killed) {
+              child.kill('SIGKILL');
+            }
+          }, 500);
+        }, 2000);
+      }
+
       child.on('close', (code: number) => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
         if (code === 0) {
           // Store the raw stdout for Podman telemetry parsing
           this._lastRunStdout = stdout;
@@ -405,7 +429,12 @@ export class TestRig {
     // Clean up test directory
     if (this.testDir && !env.KEEP_OUTPUT) {
       try {
-        execSync(`rm -rf ${this.testDir}`);
+        if (process.platform === 'win32') {
+          // On Windows, use fs.rmSync which handles permissions better
+          fs.rmSync(this.testDir, { recursive: true, force: true });
+        } else {
+          execSync(`rm -rf ${this.testDir}`);
+        }
       } catch (error) {
         // Ignore cleanup errors
         if (env.VERBOSE === 'true') {
