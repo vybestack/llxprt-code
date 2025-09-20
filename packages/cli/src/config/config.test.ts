@@ -7,7 +7,7 @@
 /// <reference types="vitest/globals" />
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { loadCliConfig } from './config.js';
+import { loadCliConfig, parseArguments } from './config.js';
 import { Settings } from './settings.js';
 
 function createMockSettingsService() {
@@ -965,5 +965,24 @@ describe('loadCliConfig - Invalid Profile/Provider Handling', () => {
       );
       expect(config.getProvider()).toBe('nonexistent-provider');
     });
+  });
+});
+
+describe('parseArguments - comma-separated values', () => {
+  it('should support comma-separated values for --allowed-mcp-server-names', async () => {
+    process.argv = [
+      'node',
+      'script.js',
+      '--allowed-mcp-server-names',
+      'server1,server2',
+    ];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.allowedMcpServerNames).toEqual(['server1', 'server2']);
+  });
+
+  it('should support comma-separated values for --extensions', async () => {
+    process.argv = ['node', 'script.js', '--extensions', 'ext1,ext2'];
+    const argv = await parseArguments({} as Settings);
+    expect(argv.extensions).toEqual(['ext1', 'ext2']);
   });
 });
