@@ -267,7 +267,32 @@ export async function main() {
   const settings = loadSettings(workspaceRoot);
   const argv = await parseArguments(settings.merged);
 
+  const hasPipedInput = !process.stdin.isTTY;
+  let cachedStdinData: string | null = null;
+  let stdinWasRead = false;
+
+  const readStdinOnce = async () => {
+    if (!stdinWasRead) {
+      stdinWasRead = true;
+      cachedStdinData = await readStdin();
+    }
+    return cachedStdinData ?? '';
+  };
+
+  const questionFromArgs =
+    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
+
   await cleanupCheckpoints();
+
+  if (hasPipedInput) {
+    const stdinSnapshot = await readStdinOnce();
+    if (!stdinSnapshot && !questionFromArgs) {
+      console.error(
+        `No input provided via stdin. Input can be provided by piping data into gemini or using the --prompt option.`,
+      );
+      process.exit(1);
+    }
+  }
   if (settings.errors.length > 0) {
     const errorMessages = settings.errors.map(
       (error) => `Error in ${error.path}: ${error.message}`,
@@ -691,8 +716,8 @@ export async function main() {
         }
       }
       let stdinData = '';
-      if (!process.stdin.isTTY) {
-        stdinData = await readStdin();
+      if (hasPipedInput) {
+        stdinData = await readStdinOnce();
       }
 
       // This function is a copy of the one from sandbox.ts
@@ -778,10 +803,11 @@ export async function main() {
   }
   // If not a TTY, read from stdin
   // This is for cases where the user pipes input directly into the command
-  if (!process.stdin.isTTY) {
-    const stdinData = await readStdin();
+  if (hasPipedInput) {
+    const stdinData = await readStdinOnce();
     if (stdinData) {
-      input = `${stdinData}\n\n${input}`;
+      const existingInput = input ? `${input}` : '';
+      input = `${stdinData}\n\n${existingInput}`;
     }
   }
   if (!input) {
