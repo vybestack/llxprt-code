@@ -793,7 +793,7 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
                   currentLineGhost;
 
                 return (
-                  <Text key={`line-${visualIdxInRenderedSet}`}>
+                  <Text key={`line-${visualIdxInRenderedSet}`} color={theme.text.accent}>
                     {renderedLine}
                     {showCursorBeforeGhost && chalk.inverse(' ')}
                     {currentLineGhost && (
