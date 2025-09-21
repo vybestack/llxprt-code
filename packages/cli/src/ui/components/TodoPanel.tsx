@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { groupToolCalls } from './todo-utils.js';
 import { truncateEnd } from '../utils/responsive.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
 
 interface Todo extends CoreTodo {
   subtasks?: Subtask[];
@@ -24,6 +25,24 @@ interface Todo extends CoreTodo {
 
 interface TodoPanelProps {
   width: number;
+}
+
+interface UseVerticalResponsiveReturn {
+  height: number;
+  maxItems: number;
+}
+
+function useVerticalResponsive(): UseVerticalResponsiveReturn {
+  const { rows } = useTerminalSize();
+  
+  // Reserve space for header, footer, and input prompt (roughly 8 lines)
+  const reservedSpace = 8;
+  const maxItems = Math.max(1, rows - reservedSpace);
+  
+  return {
+    height: rows,
+    maxItems,
+  };
 }
 
 const formatParameters = (parameters: Record<string, unknown>): string => {
@@ -326,6 +345,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
   const { todos } = useTodoContext();
   const { getExecutingToolCalls, subscribe } = useToolCallContext();
   const { isNarrow, isStandard, isWide } = useResponsive();
+  const { maxItems } = useVerticalResponsive();
   const [, forceUpdate] = useState({});
   const [contentKey, setContentKey] = useState(0);
 
@@ -359,27 +379,111 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
     </Box>,
   );
 
-  // Render different content based on breakpoint
+  // Add current todo indicator
+  const currentTodoIndex = todos.findIndex(todo => todo.status === 'in_progress');
+  
+  // Render different content based on breakpoint and vertical space
   if (isNarrow) {
     // NARROW: Show only task count and status indicators
     const summaryElements = renderTodoSummary(todos);
     allElements.push(...summaryElements);
   } else if (isStandard) {
-    // STANDARD: Show abbreviated task titles
-    for (const todo of todos) {
+    // STANDARD: Show abbreviated task titles with vertical responsiveness
+    const visibleTodos = todos.slice(0, maxItems - 2); // Reserve space for header and potential overflow message
+    
+    for (const todo of visibleTodos) {
       const todoElements = renderTodoAbbreviated(todo, width);
       allElements.push(...todoElements);
       // Add spacing between todos
       allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
     }
+    
+    // If we've truncated todos, show how many more there are
+    if (todos.length > visibleTodos.length) {
+      const remainingCount = todos.length - visibleTodos.length;
+      allElements.push(
+        <Box key="todo-overflow" flexDirection="row" minHeight={1}>
+          <Text color={SemanticColors.text.secondary}>
+            ...{remainingCount} more tasks...
+          </Text>
+        </Box>
+      );
+    }
   } else if (isWide) {
-    // WIDE: Show full task details
-    for (const todo of todos) {
-      const allToolCalls = getExecutingToolCalls(todo.id); // This now gets all tool calls
-      const todoElements = renderTodo(todo, allToolCalls);
-      allElements.push(...todoElements);
-      // Add spacing between todos
-      allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
+    // WIDE: Show full task details with vertical responsiveness
+    
+    // If there's a current task, show it and some context around it
+    if (currentTodoIndex !== -1) {
+      const itemsBeforeCurrent = Math.floor((maxItems - 3) / 2); // Reserve space for header, current task, and overflow messages
+      const itemsAfterCurrent = maxItems - 3 - itemsBeforeCurrent;
+      
+      // Determine start and end indices
+      let startIndex = Math.max(0, currentTodoIndex - itemsBeforeCurrent);
+      let endIndex = Math.min(todos.length - 1, currentTodoIndex + itemsAfterCurrent);
+      
+      // Adjust if we're near the beginning or end of the list
+      if (startIndex === 0) {
+        endIndex = Math.min(todos.length - 1, maxItems - 3);
+      }
+      if (endIndex === todos.length - 1) {
+        startIndex = Math.max(0, endIndex - (maxItems - 3));
+      }
+      
+      // Show overflow message at the beginning if needed
+      if (startIndex > 0) {
+        allElements.push(
+          <Box key="todo-start-overflow" flexDirection="row" minHeight={1}>
+            <Text color={SemanticColors.text.secondary}>
+              ...{startIndex} more tasks...
+            </Text>
+          </Box>
+        );
+      }
+      
+      // Render visible todos
+      for (let i = startIndex; i <= endIndex; i++) {
+        const todo = todos[i];
+        const allToolCalls = getExecutingToolCalls(todo.id);
+        const todoElements = renderTodo(todo, allToolCalls);
+        allElements.push(...todoElements);
+        // Add spacing between todos
+        allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
+      }
+      
+      // Show overflow message at the end if needed
+      if (endIndex < todos.length - 1) {
+        const remainingCount = todos.length - 1 - endIndex;
+        allElements.push(
+          <Box key="todo-end-overflow" flexDirection="row" minHeight={1}>
+            <Text color={SemanticColors.text.secondary}>
+              ...{remainingCount} more tasks...
+            </Text>
+          </Box>
+        );
+      }
+    } else {
+      // No current task, show a limited number of tasks from the beginning
+      const visibleTodos = todos.slice(0, maxItems - 2); // Reserve space for header and overflow message
+      
+      for (const todo of visibleTodos) {
+        const allToolCalls = getExecutingToolCalls(todo.id);
+        const todoElements = renderTodo(todo, allToolCalls);
+        allElements.push(...todoElements);
+        // Add spacing between todos
+        allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
+      }
+      
+      // If we've truncated todos, show how many more there are
+      if (todos.length > visibleTodos.length) {
+        const remainingCount = todos.length - visibleTodos.length;
+        allElements.push(
+          <Box key="todo-overflow" flexDirection="row" minHeight={1}>
+            <Text color={SemanticColors.text.secondary}>
+              ...{remainingCount} more tasks...
+            </Text>
+          </Box>
+        );
+      }
     }
   }
 
