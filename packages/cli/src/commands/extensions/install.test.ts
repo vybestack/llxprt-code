@@ -23,7 +23,10 @@ describe('extensions install command', () => {
   });
 
   it('should fail if both git source and local path are provided', () => {
-    const validationParser = yargs([]).command(installCommand).fail(false);
+    const validationParser = yargs([])
+      .command(installCommand)
+      .fail(false)
+      .locale('en');
     expect(() =>
       validationParser.parse('install --source some-url --path /some/path'),
     ).toThrow('Arguments source and path are mutually exclusive');
