@@ -8,18 +8,32 @@ import { useEffect, useState } from 'react';
 
 const TERMINAL_PADDING_X = 8;
 
+// Get terminal dimensions using child_process to run tput command
+// as process.stdout.columns and process.stdout.rows aren't reliable in our environment
+function getTerminalDimensions() {
+  try {
+    const { execSync } = require('child_process');
+    const cols = parseInt(execSync('tput cols').toString().trim(), 10);
+    const rows = parseInt(execSync('tput lines').toString().trim(), 10);
+    return {
+      columns: cols || 80,
+      rows: rows || 24,
+    };
+  } catch (error) {
+    // Fallback to process.stdout if tput doesn't work
+    return {
+      columns: (process.stdout.columns || 80) - TERMINAL_PADDING_X,
+      rows: process.stdout.rows || 24,
+    };
+  }
+}
+
 export function useTerminalSize(): { columns: number; rows: number } {
-  const [size, setSize] = useState({
-    columns: (process.stdout.columns || 60) - TERMINAL_PADDING_X,
-    rows: process.stdout.rows || 20,
-  });
+  const [size, setSize] = useState(getTerminalDimensions());
 
   useEffect(() => {
     function updateSize() {
-      setSize({
-        columns: (process.stdout.columns || 60) - TERMINAL_PADDING_X,
-        rows: process.stdout.rows || 20,
-      });
+      setSize(getTerminalDimensions());
     }
 
     process.stdout.on('resize', updateSize);
