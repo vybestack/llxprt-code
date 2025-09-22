@@ -176,6 +176,18 @@ export class GeminiOAuthProvider implements OAuthProvider {
         } catch (error) {
           // Handle browser auth cancellation or other auth failures
           if (error instanceof Error) {
+            // Show error message to user if addItem is available
+            if (this.addItem) {
+              this.addItem(
+                {
+                  type: 'error',
+                  text: `Browser authentication failed: ${error.message}
+Please try again or use an API key with /keyfile <path-to-your-gemini-key>`,
+                },
+                Date.now(),
+              );
+            }
+
             // Check for specific cancellation messages
             if (
               error.message.includes('cancelled') ||
@@ -190,7 +202,7 @@ export class GeminiOAuthProvider implements OAuthProvider {
               );
 
               // Show fallback instructions to user
-              const fallbackMessage = `Browser authentication was cancelled.
+              const fallbackMessage = `Browser authentication was cancelled or failed.
 Fallback options:
 1. Use API key: /keyfile <path-to-your-gemini-key>
 2. Set environment: export GEMINI_API_KEY=<your-key>
@@ -206,7 +218,7 @@ Fallback options:
                 );
               } else {
                 console.log('\n' + '─'.repeat(60));
-                console.log('Browser authentication was cancelled.');
+                console.log('Browser authentication was cancelled or failed.');
                 console.log('Fallback options:');
                 console.log(
                   '1. Use API key: /keyfile <path-to-your-gemini-key>',
@@ -221,7 +233,7 @@ Fallback options:
               // Throw a user-friendly error that doesn't hang the system
               throw OAuthErrorFactory.authenticationRequired(this.name, {
                 reason:
-                  'Browser authentication was cancelled. Please use one of the fallback options shown above.',
+                  'Browser authentication was cancelled or failed. Please use one of the fallback options shown above, or check the URL in your history.',
               });
             }
           }

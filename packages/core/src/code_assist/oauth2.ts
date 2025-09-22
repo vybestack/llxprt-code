@@ -143,7 +143,13 @@ async function initOauthClient(
     let success = false;
     const maxRetries = 2;
     for (let i = 0; !success && i < maxRetries; i++) {
-      success = await authWithUserCode(client);
+      // Pass the addItem callback to authWithUserCode if browser launch is suppressed
+      success = await authWithUserCode(
+        client,
+        (global as Record<string, unknown>).__oauth_add_item as
+          | ((itemData: OAuthUrlItem, baseTimestamp: number) => number)
+          | undefined,
+      );
       if (!success) {
         console.error(
           '\nFailed to authenticate with user code.',
@@ -243,7 +249,16 @@ export async function getOauthClient(
   return oauthClientPromises.get(authType)!;
 }
 
-async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
+interface OAuthUrlItem {
+  type: 'oauth_url';
+  text: string;
+  url: string;
+}
+
+async function authWithUserCode(
+  client: OAuth2Client,
+  addItem?: (itemData: OAuthUrlItem, baseTimestamp: number) => number,
+): Promise<boolean> {
   const redirectUri = 'https://codeassist.google.com/authcode';
   const codeVerifier = await client.generateCodeVerifierAsync();
   const state = crypto.randomBytes(32).toString('hex');
@@ -255,6 +270,24 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
     code_challenge: codeVerifier.codeChallenge,
     state,
   });
+
+  // Add OAuth URL to history so user can copy it from the UI
+  /**
+   * @plan PLAN-20250822-GEMINIFALLBACK.P13
+   * @requirement REQ-004.1
+   * @pseudocode lines 11-13
+   */
+  if (addItem) {
+    addItem(
+      {
+        type: 'oauth_url',
+        text: `Please visit the following URL to authorize with Google Gemini:
+${authUrl}`,
+        url: authUrl,
+      },
+      Date.now(),
+    );
+  }
 
   // Try to copy URL to clipboard
   /**

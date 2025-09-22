@@ -15,7 +15,7 @@ import {
   isFunctionResponse,
   isFunctionCall,
 } from '../utils/messageInspectors.js';
-import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import {
   correctOldStringMismatch as deterministicCorrectOldString,
   correctNewString as deterministicCorrectNewString,
@@ -244,7 +244,7 @@ export async function ensureCorrectEdit(
         // was modified more than a second after the last edit tool was run, we
         // can assume it was modified by something else.
         if (lastEditedByUsTime > 0) {
-          const stats = fs.statSync(filePath);
+          const stats = await fsPromises.stat(filePath);
           const diff = stats.mtimeMs - lastEditedByUsTime;
           if (diff > 2000) {
             // Hard coded for 2 seconds

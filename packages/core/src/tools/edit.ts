@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import * as path from 'path';
 import * as Diff from 'diff';
 import {
@@ -475,7 +475,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
     }
 
     try {
-      this.ensureParentDirectoriesExist(this.params.file_path);
+      await this.ensureParentDirectoriesExist(this.params.file_path);
       await this.config
         .getFileSystemService()
         .writeTextFile(this.params.file_path, editData.newContent);
@@ -573,10 +573,12 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
   /**
    * Creates parent directories if they don't exist
    */
-  private ensureParentDirectoriesExist(filePath: string): void {
+  private async ensureParentDirectoriesExist(filePath: string): Promise<void> {
     const dirName = path.dirname(filePath);
-    if (!fs.existsSync(dirName)) {
-      fs.mkdirSync(dirName, { recursive: true });
+    try {
+      await fsPromises.access(dirName);
+    } catch {
+      await fsPromises.mkdir(dirName, { recursive: true });
     }
   }
 }
