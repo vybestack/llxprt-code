@@ -34,11 +34,14 @@ interface UseVerticalResponsiveReturn {
 
 function useVerticalResponsive(): UseVerticalResponsiveReturn {
   const { rows } = useTerminalSize();
-  
   // Reserve space for header, footer, and input prompt (roughly 8 lines)
   const reservedSpace = 8;
   const maxItems = Math.max(1, rows - reservedSpace);
-  
+
+  // Add debug logging
+  // const debugLogger = new DebugLogger('llxprt:ui:todo-panel');
+  // debugLogger.debug(`Terminal height: ${rows}, max items: ${maxItems}`);
+
   return {
     height: rows,
     maxItems,
@@ -380,8 +383,10 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
   );
 
   // Add current todo indicator
-  const currentTodoIndex = todos.findIndex(todo => todo.status === 'in_progress');
-  
+  const currentTodoIndex = todos.findIndex(
+    (todo) => todo.status === 'in_progress',
+  );
+
   // Render different content based on breakpoint and vertical space
   if (isNarrow) {
     // NARROW: Show only task count and status indicators
@@ -390,14 +395,14 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
   } else if (isStandard) {
     // STANDARD: Show abbreviated task titles with vertical responsiveness
     const visibleTodos = todos.slice(0, maxItems - 2); // Reserve space for header and potential overflow message
-    
+
     for (const todo of visibleTodos) {
       const todoElements = renderTodoAbbreviated(todo, width);
       allElements.push(...todoElements);
       // Add spacing between todos
       allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
     }
-    
+
     // If we've truncated todos, show how many more there are
     if (todos.length > visibleTodos.length) {
       const remainingCount = todos.length - visibleTodos.length;
@@ -406,21 +411,24 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
           <Text color={SemanticColors.text.secondary}>
             ...{remainingCount} more tasks...
           </Text>
-        </Box>
+        </Box>,
       );
     }
   } else if (isWide) {
     // WIDE: Show full task details with vertical responsiveness
-    
+
     // If there's a current task, show it and some context around it
     if (currentTodoIndex !== -1) {
       const itemsBeforeCurrent = Math.floor((maxItems - 3) / 2); // Reserve space for header, current task, and overflow messages
       const itemsAfterCurrent = maxItems - 3 - itemsBeforeCurrent;
-      
+
       // Determine start and end indices
       let startIndex = Math.max(0, currentTodoIndex - itemsBeforeCurrent);
-      let endIndex = Math.min(todos.length - 1, currentTodoIndex + itemsAfterCurrent);
-      
+      let endIndex = Math.min(
+        todos.length - 1,
+        currentTodoIndex + itemsAfterCurrent,
+      );
+
       // Adjust if we're near the beginning or end of the list
       if (startIndex === 0) {
         endIndex = Math.min(todos.length - 1, maxItems - 3);
@@ -428,7 +436,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
       if (endIndex === todos.length - 1) {
         startIndex = Math.max(0, endIndex - (maxItems - 3));
       }
-      
+
       // Show overflow message at the beginning if needed
       if (startIndex > 0) {
         allElements.push(
@@ -436,10 +444,10 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
             <Text color={SemanticColors.text.secondary}>
               ...{startIndex} more tasks...
             </Text>
-          </Box>
+          </Box>,
         );
       }
-      
+
       // Render visible todos
       for (let i = startIndex; i <= endIndex; i++) {
         const todo = todos[i];
@@ -449,7 +457,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
         // Add spacing between todos
         allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
       }
-      
+
       // Show overflow message at the end if needed
       if (endIndex < todos.length - 1) {
         const remainingCount = todos.length - 1 - endIndex;
@@ -458,13 +466,13 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
             <Text color={SemanticColors.text.secondary}>
               ...{remainingCount} more tasks...
             </Text>
-          </Box>
+          </Box>,
         );
       }
     } else {
       // No current task, show a limited number of tasks from the beginning
       const visibleTodos = todos.slice(0, maxItems - 2); // Reserve space for header and overflow message
-      
+
       for (const todo of visibleTodos) {
         const allToolCalls = getExecutingToolCalls(todo.id);
         const todoElements = renderTodo(todo, allToolCalls);
@@ -472,7 +480,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
         // Add spacing between todos
         allElements.push(<Box key={`${todo.id}-spacer`} height={1} />);
       }
-      
+
       // If we've truncated todos, show how many more there are
       if (todos.length > visibleTodos.length) {
         const remainingCount = todos.length - visibleTodos.length;
@@ -481,7 +489,7 @@ const TodoPanelComponent: React.FC<TodoPanelProps> = ({ width }) => {
             <Text color={SemanticColors.text.secondary}>
               ...{remainingCount} more tasks...
             </Text>
-          </Box>
+          </Box>,
         );
       }
     }

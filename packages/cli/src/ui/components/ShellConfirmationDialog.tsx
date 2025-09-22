@@ -34,7 +34,7 @@ export const ShellConfirmationDialog: React.FC<
 > = ({ request }) => {
   const { commands, onConfirm } = request;
   const { rows } = useTerminalSize();
-  
+
   // Calculate max number of commands to show based on terminal height
   // Reserve space for header text, radio buttons, and padding
   const maxCommandsToShow = Math.max(1, rows - 8);
