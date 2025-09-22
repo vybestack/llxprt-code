@@ -26,6 +26,7 @@ For tools provided by MCP servers, the names are prefixed with the server alias 
 ## Example: Disabling All File System Tools
 
 To disable all built-in file system tools for the session, you could run:
+
 ```
 /ephemeral disabled-tools list_directory read_file write_file glob search_file_content replace read_many_files
 ```

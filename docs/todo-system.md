@@ -16,6 +16,7 @@ This built-in tool allows the AI model to create, update, or overwrite the entir
 
 **Purpose**: To manage a structured list of tasks.
 **Parameters**:
+
 - `todos` (array[object], required): The complete list of todos to set for the session. Each todo object must contain the following fields:
   - `id` (string, required): A unique identifier for the todo item.
   - `content` (string, required): A clear, descriptive task for the AI to perform.
@@ -31,9 +32,10 @@ This built-in tool allows the AI model to pause its automatic workflow continuat
 
 **Purpose**: To signal an interruption in the AI's self-directed task execution loop.
 **Parameters**:
+
 - `reason` (string, 1-500 characters, required): A clear explanation of why the AI cannot proceed (e.g., "Missing configuration file", "Encountered an unknown error").
-**Behavior**:
-When called successfully, the AI's execution stream will halt, and the provided reason will be displayed to the user. This prevents the "Todo Continuation" system from automatically sending further prompts.
+  **Behavior**:
+  When called successfully, the AI's execution stream will halt, and the provided reason will be displayed to the user. This prevents the "Todo Continuation" system from automatically sending further prompts.
 
 ---
 

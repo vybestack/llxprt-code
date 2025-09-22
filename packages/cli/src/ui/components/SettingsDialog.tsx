@@ -32,6 +32,7 @@ import {
   setPendingSettingValueAny,
   getNestedValue,
 } from '../../utils/settingsUtils.js';
+import { saveSingleSetting } from '../../utils/singleSettingSaver.js';
 import { useVimMode } from '../contexts/VimModeContext.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import chalk from 'chalk';
@@ -137,23 +138,11 @@ export function SettingsDialog({
           );
 
           if (!requiresRestart(key)) {
-            const immediateSettings = new Set([key]);
-            const immediateSettingsObject = setPendingSettingValueAny(
-              key,
-              newValue,
-              {} as Settings,
-            );
-
             console.log(
               `[DEBUG SettingsDialog] Saving ${key} immediately with value:`,
               newValue,
             );
-            saveModifiedSettings(
-              immediateSettings,
-              immediateSettingsObject,
-              settings,
-              selectedScope,
-            );
+            saveSingleSetting(key, newValue, settings, selectedScope);
 
             // Special handling for vim mode to sync with VimModeContext
             if (key === 'vimMode' && newValue !== vimEnabled) {
@@ -277,18 +266,11 @@ export function SettingsDialog({
     setPendingSettings((prev) => setPendingSettingValueAny(key, parsed, prev));
 
     if (!requiresRestart(key)) {
-      const immediateSettings = new Set([key]);
-      const immediateSettingsObject = setPendingSettingValueAny(
-        key,
+      console.log(
+        `[DEBUG SettingsDialog] Saving ${key} immediately with value:`,
         parsed,
-        {} as Settings,
       );
-      saveModifiedSettings(
-        immediateSettings,
-        immediateSettingsObject,
-        settings,
-        selectedScope,
-      );
+      saveSingleSetting(key, parsed, settings, selectedScope);
 
       // Remove from modified sets if present
       setModifiedSettings((prev) => {
