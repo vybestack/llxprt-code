@@ -23,7 +23,6 @@ describe('<MarkdownDisplay />', () => {
     { path: '', settings: {} },
     { path: '', settings: {} },
     { path: '', settings: {} },
-    [],
     true,
   );
 
@@ -226,7 +225,6 @@ Another paragraph.
       { path: '', settings: {} },
       { path: '', settings: { showLineNumbers: false } },
       { path: '', settings: {} },
-      [],
       true,
     );
 

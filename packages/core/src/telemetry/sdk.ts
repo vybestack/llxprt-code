@@ -44,7 +44,8 @@ export function isTelemetrySdkInitialized(): boolean {
 export function initializeTelemetry(config: Config): void {
   // TELEMETRY: Modified to ONLY support local file logging - network exporters disabled
   if (telemetryInitialized || !config.getTelemetryEnabled()) {
-    if (process.env.VERBOSE === 'true') {
+    // Only output verbose logs when telemetry is enabled to avoid stdout spam
+    if (process.env.VERBOSE === 'true' && config.getTelemetryEnabled()) {
       console.log(
         `[TELEMETRY] Skipping initialization: initialized=${telemetryInitialized}, enabled=${config.getTelemetryEnabled()}`,
       );

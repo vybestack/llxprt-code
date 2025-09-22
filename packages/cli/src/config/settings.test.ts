@@ -30,10 +30,11 @@ vi.mock('./settings.js', async (importActual) => {
 // Mock trustedFolders
 vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn(),
+  isFolderTrustEnabled: vi.fn(),
 }));
 
 // NOW import everything else, including the (now effectively re-exported) settings.js
-import * as pathActual from 'path'; // Restored for MOCK_WORKSPACE_SETTINGS_PATH
+import path, * as pathActual from 'node:path'; // Restored for MOCK_WORKSPACE_SETTINGS_PATH
 import {
   describe,
   it,
@@ -46,7 +47,7 @@ import {
 } from 'vitest';
 import * as fs from 'fs'; // fs will be mocked separately
 import stripJsonComments from 'strip-json-comments'; // Will be mocked separately
-import { isWorkspaceTrusted } from './trustedFolders.js';
+import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 
 // These imports will get the versions from the vi.mock('./settings.js', ...) factory.
 import {
@@ -56,7 +57,10 @@ import {
   getSystemDefaultsPath,
   SETTINGS_DIRECTORY_NAME, // This is from the original module, but used by the mock.
   SettingScope,
+  type Settings,
+  loadEnvironment,
 } from './settings';
+import { FatalConfigError, LLXPRT_DIR } from '@vybestack/llxprt-code-core';
 
 const MOCK_WORKSPACE_DIR = '/mock/workspace';
 // Use the (mocked) SETTINGS_DIRECTORY_NAME for consistency
@@ -93,6 +97,11 @@ describe('Settings Loading and Merging', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
+    // Set environment variables to override system paths
+    process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH = '/mock/system/settings.json';
+    process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH =
+      '/mock/system/system-defaults.json';
+
     mockFsExistsSync = vi.mocked(fs.existsSync);
     mockFsMkdirSync = vi.mocked(fs.mkdirSync);
     mockStripJsonComments = vi.mocked(stripJsonComments);
@@ -102,7 +111,20 @@ describe('Settings Loading and Merging', () => {
       (jsonString: string) => jsonString,
     );
     (mockFsExistsSync as Mock).mockReturnValue(false);
-    (fs.readFileSync as Mock).mockReturnValue('{}'); // Return valid empty JSON
+    (fs.readFileSync as Mock).mockImplementation(
+      (p: fs.PathOrFileDescriptor) => {
+        // Handle system paths specifically
+        if (
+          p === '/mock/system/settings.json' ||
+          p === '/mock/system/system-defaults.json'
+        ) {
+          return '{}'; // Return valid empty JSON for system paths
+        }
+        // Always return valid empty JSON for any path to prevent JSON parsing errors
+        // Individual tests can override this mock for specific paths they need
+        return '{}';
+      },
+    );
     (mockFsMkdirSync as Mock).mockImplementation(
       (dir: string, _options?: unknown) => {
         // Mock implementation that validates directory creation
@@ -113,10 +135,14 @@ describe('Settings Loading and Merging', () => {
       },
     );
     vi.mocked(isWorkspaceTrusted).mockReturnValue(true);
+    vi.mocked(isFolderTrustEnabled).mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // Clean up environment variables
+    delete process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
+    delete process.env.LLXPRT_CODE_SYSTEM_DEFAULTS_PATH;
   });
 
   describe('loadSettings', () => {
@@ -127,10 +153,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -173,6 +204,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
       });
       expect(settings.errors.length).toBe(0);
     });
@@ -204,10 +239,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -250,6 +290,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...systemSettingsContent,
       });
     });
@@ -282,10 +326,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual({});
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -328,6 +377,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...userSettingsContent,
       });
     });
@@ -344,7 +397,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -358,10 +411,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -404,6 +462,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...workspaceSettingsContent,
       });
     });
@@ -427,7 +489,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -437,10 +499,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -483,6 +550,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...userSettingsContent,
         ...workspaceSettingsContent,
       });
@@ -516,7 +587,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -527,10 +598,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -573,6 +649,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         ...userSettingsContent,
         ...workspaceSettingsContent,
         ...systemSettingsContent,
@@ -613,7 +693,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -625,10 +705,15 @@ describe('Settings Loading and Merging', () => {
       expect(settings.workspace.settings).toEqual(workspaceSettingsContent);
       expect(settings.merged).toEqual({
         customThemes: {},
+        customWittyPhrases: [],
         hideWindowTitle: false,
         hideTips: false,
         hideBanner: false,
         hideFooter: false,
+        hideCWD: false,
+        hideContextSummary: false,
+        hideModelInfo: false,
+        hideSandboxStatus: false,
         showMemoryUsage: false,
         usageStatisticsEnabled: true,
         autoConfigureMaxOldSpaceSize: false,
@@ -677,6 +762,10 @@ describe('Settings Loading and Merging', () => {
         enablePromptCompletion: false,
         debugKeystrokeLogging: false,
         chatCompression: {},
+        mcp: {},
+        security: {},
+        tools: {},
+        useSmartEdit: false,
         theme: 'system-theme',
         sandbox: false,
         telemetry: false,
@@ -749,7 +838,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -768,7 +857,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -787,7 +876,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -810,7 +899,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -836,7 +925,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -867,7 +956,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -968,7 +1057,7 @@ describe('Settings Loading and Merging', () => {
             return JSON.stringify(userSettingsContent);
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -1010,7 +1099,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === USER_SETTINGS_PATH)
             return JSON.stringify(userSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -1039,7 +1128,7 @@ describe('Settings Loading and Merging', () => {
         (p: fs.PathOrFileDescriptor) => {
           if (p === MOCK_WORKSPACE_SETTINGS_PATH)
             return JSON.stringify(workspaceSettingsContent);
-          return '';
+          return '{}';
         },
       );
 
@@ -1119,7 +1208,8 @@ describe('Settings Loading and Merging', () => {
       expect(settings.merged.chatCompression).toEqual({});
     });
 
-    it('should ignore chatCompression if contextPercentageThreshold is invalid', () => {
+    // Test removed - chatCompression validation was removed in upstream commit e6e60861
+    it.skip('should ignore chatCompression if contextPercentageThreshold is invalid', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       (mockFsExistsSync as Mock).mockImplementation(
         (p: fs.PathLike) => p === USER_SETTINGS_PATH,
@@ -1239,77 +1329,8 @@ describe('Settings Loading and Merging', () => {
         },
       );
 
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
-
-      // Check that settings are empty due to parsing errors
-      expect(settings.user.settings).toEqual({});
-      expect(settings.workspace.settings).toEqual({});
-      expect(settings.merged).toEqual({
-        customThemes: {},
-        hideWindowTitle: false,
-        hideTips: false,
-        hideBanner: false,
-        hideFooter: false,
-        showMemoryUsage: false,
-        usageStatisticsEnabled: true,
-        autoConfigureMaxOldSpaceSize: false,
-        maxSessionTurns: -1,
-        maxTurnsPerPrompt: 100,
-        memoryDiscoveryMaxDirs: 200,
-        vimMode: false,
-        ideMode: false,
-        accessibility: {},
-        checkpointing: {},
-        emojifilter: 'auto',
-        fileFiltering: {},
-        disableAutoUpdate: false,
-        shouldUseNodePtyShell: false,
-        selectedAuthType: 'provider',
-        mcpServers: {},
-        excludedProjectEnvVars: ['DEBUG', 'DEBUG_MODE'],
-        disableUpdateNag: false,
-        includeDirectories: [],
-        loadMemoryFromIncludeDirectories: false,
-        hasSeenIdeIntegrationNudge: false,
-        folderTrustFeature: false,
-        folderTrust: false,
-        showLineNumbers: false,
-        providerApiKeys: {},
-        providerBaseUrls: {},
-        providerToolFormatOverrides: {},
-        providerKeyfiles: {},
-        extensionManagement: false,
-        extensions: {
-          disabled: [],
-          workspacesWithMigrationNudge: [],
-        },
-        enableTextToolCallParsing: false,
-        textToolCallModels: [],
-        openaiResponsesEnabled: false,
-        shellReplacement: false,
-        oauthEnabledProviders: {},
-        useRipgrep: false,
-        enablePromptCompletion: false,
-        debugKeystrokeLogging: false,
-        chatCompression: {},
-      });
-
-      // Check that error objects are populated in settings.errors
-      expect(settings.errors).toBeDefined();
-      // Assuming both user and workspace files cause errors and are added in order
-      expect(settings.errors.length).toEqual(2);
-
-      const userError = settings.errors.find(
-        (e) => e.path === USER_SETTINGS_PATH,
-      );
-      expect(userError).toBeDefined();
-      expect(userError?.message).toBe(userReadError.message);
-
-      const workspaceError = settings.errors.find(
-        (e) => e.path === MOCK_WORKSPACE_SETTINGS_PATH,
-      );
-      expect(workspaceError).toBeDefined();
-      expect(workspaceError?.message).toBe(workspaceReadError.message);
+      // Errors now throw FatalConfigError instead of being collected
+      expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
 
       // Restore JSON.parse mock if it was spied on specifically for this test
       vi.restoreAllMocks(); // Or more targeted restore if needed
@@ -1662,10 +1683,15 @@ describe('Settings Loading and Merging', () => {
         expect(settings.system.settings).toEqual(systemSettingsContent);
         expect(settings.merged).toEqual({
           customThemes: {},
+          customWittyPhrases: [],
           hideWindowTitle: false,
           hideTips: false,
           hideBanner: false,
           hideFooter: false,
+          hideCWD: false,
+          hideContextSummary: false,
+          hideModelInfo: false,
+          hideSandboxStatus: false,
           showMemoryUsage: false,
           usageStatisticsEnabled: true,
           autoConfigureMaxOldSpaceSize: false,
@@ -1708,6 +1734,10 @@ describe('Settings Loading and Merging', () => {
           enablePromptCompletion: false,
           debugKeystrokeLogging: false,
           chatCompression: {},
+          mcp: {},
+          security: {},
+          tools: {},
+          useSmartEdit: false,
           ...systemSettingsContent,
         });
       });
@@ -1924,11 +1954,14 @@ describe('Settings Loading and Merging', () => {
 
     it('should NOT merge workspace settings when workspace is not trusted', () => {
       vi.mocked(isWorkspaceTrusted).mockReturnValue(false);
+      vi.mocked(isFolderTrustEnabled).mockReturnValue(true); // Enable the feature for this test
       (mockFsExistsSync as Mock).mockReturnValue(true);
       const userSettingsContent = {
         theme: 'dark',
         sandbox: false,
         contextFileName: 'USER.md',
+        folderTrustFeature: true, // Enable the feature
+        folderTrust: true, // Enable the setting
       };
       const workspaceSettingsContent = {
         sandbox: true,
@@ -2060,12 +2093,19 @@ describe('Settings Loading and Merging', () => {
         return originalParse(text);
       });
 
-      const settings = loadSettings(MOCK_WORKSPACE_DIR);
+      expect(() => loadSettings(MOCK_WORKSPACE_DIR)).toThrow(FatalConfigError);
 
-      expect(settings.user.settings).toEqual({});
-      expect(settings.errors).toHaveLength(1);
-      expect(settings.errors[0].path).toBe(USER_SETTINGS_PATH);
-      expect(settings.errors[0].message).toBe(parseError.message);
+      try {
+        loadSettings(MOCK_WORKSPACE_DIR);
+      } catch (error) {
+        expect(error).toBeInstanceOf(FatalConfigError);
+        expect((error as FatalConfigError).message).toContain(
+          USER_SETTINGS_PATH,
+        );
+        expect((error as FatalConfigError).message).toContain(
+          parseError.message,
+        );
+      }
 
       vi.restoreAllMocks();
     });
@@ -2243,6 +2283,50 @@ describe('Settings Loading and Merging', () => {
 
       // Should have written 3 times (once per setValue call)
       expect(writeCallCount).toBe(3);
+    });
+  });
+
+  describe('loadEnvironment', () => {
+    function setup({
+      isFolderTrustEnabled: folderTrustEnabledValue = true,
+      isWorkspaceTrustedValue = true,
+    }) {
+      delete process.env['TESTTEST']; // reset
+      const geminiEnvPath = path.resolve(path.join(LLXPRT_DIR, '.env'));
+
+      vi.mocked(isWorkspaceTrusted).mockReturnValue(isWorkspaceTrustedValue);
+      vi.mocked(isFolderTrustEnabled).mockReturnValue(folderTrustEnabledValue);
+      (mockFsExistsSync as Mock).mockImplementation((p: fs.PathLike) =>
+        [USER_SETTINGS_PATH, geminiEnvPath].includes(p.toString()),
+      );
+      const userSettingsContent: Settings = {
+        theme: 'dark',
+        folderTrustFeature: true, // Enable the feature for these tests
+        folderTrust: folderTrustEnabledValue,
+        contextFileName: 'USER_CONTEXT.md',
+      };
+      (fs.readFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === geminiEnvPath) return 'TESTTEST=1234';
+          return '{}';
+        },
+      );
+    }
+
+    it('sets environment variables from .env files', () => {
+      setup({ isFolderTrustEnabled: false, isWorkspaceTrustedValue: true });
+      loadEnvironment(loadSettings(MOCK_WORKSPACE_DIR).merged);
+
+      expect(process.env['TESTTEST']).toEqual('1234');
+    });
+
+    it('does not load env files from untrusted spaces', () => {
+      setup({ isFolderTrustEnabled: true, isWorkspaceTrustedValue: false });
+      loadEnvironment(loadSettings(MOCK_WORKSPACE_DIR).merged);
+
+      expect(process.env['TESTTEST']).not.toEqual('1234');
     });
   });
 });

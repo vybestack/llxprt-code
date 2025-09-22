@@ -14,6 +14,8 @@ import {
   RadioSelectItem,
 } from './shared/RadioButtonSelect.js';
 import { useKeypress } from '../hooks/useKeypress.js';
+import { useTerminalSize } from '../hooks/useTerminalSize.js';
+import { truncateEnd } from '../utils/responsive.js';
 
 export interface ShellConfirmationRequest {
   commands: string[];
@@ -31,6 +33,11 @@ export const ShellConfirmationDialog: React.FC<
   ShellConfirmationDialogProps
 > = ({ request }) => {
   const { commands, onConfirm } = request;
+  const { rows } = useTerminalSize();
+
+  // Calculate max number of commands to show based on terminal height
+  // Reserve space for header text, radio buttons, and padding
+  const maxCommandsToShow = Math.max(1, rows - 8);
 
   useKeypress(
     (key) => {
@@ -88,11 +95,16 @@ export const ShellConfirmationDialog: React.FC<
           paddingX={1}
           marginTop={1}
         >
-          {commands.map((cmd) => (
+          {commands.slice(0, maxCommandsToShow).map((cmd) => (
             <Text key={cmd} color={Colors.AccentCyan}>
-              <RenderInline text={cmd} />
+              <RenderInline text={truncateEnd(cmd, 80)} />
             </Text>
           ))}
+          {commands.length > maxCommandsToShow && (
+            <Text color={Colors.Gray}>
+              ...{commands.length - maxCommandsToShow} more commands...
+            </Text>
+          )}
         </Box>
       </Box>
 

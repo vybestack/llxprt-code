@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { partToString, getResponseText } from './partUtils.js';
+import { partToString } from './partUtils.js';
+import { getResponseText } from './generateContentResponseUtilities.js';
 import { GenerateContentResponse, Part } from '@google/genai';
 
 const mockResponse = (
@@ -143,9 +144,9 @@ describe('partUtils', () => {
   });
 
   describe('getResponseText', () => {
-    it('should return null when no candidates exist', () => {
+    it('should return undefined when no candidates exist', () => {
       const response = mockResponse(undefined);
-      expect(getResponseText(response)).toBeNull();
+      expect(getResponseText(response)).toBeUndefined();
     });
 
     it('should return concatenated text from first candidate', () => {
@@ -158,9 +159,9 @@ describe('partUtils', () => {
       expect(getResponseText(result)).toBe('hello');
     });
 
-    it('should return null when candidate has no parts', () => {
+    it('should return undefined when candidate has no parts', () => {
       const result = mockResponse([]);
-      expect(getResponseText(result)).toBeNull();
+      expect(getResponseText(result)).toBeUndefined();
     });
   });
 });

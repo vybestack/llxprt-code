@@ -106,8 +106,9 @@ async function initOauthClient(
     if (!userAccountManager.getCachedGoogleAccount()) {
       try {
         await fetchAndCacheUserInfo(client);
-      } catch {
+      } catch (error) {
         // Non-fatal, continue with existing auth.
+        console.warn('Failed to fetch user info:', getErrorMessage(error));
       }
     }
     // Loaded cached credentials
@@ -174,22 +175,42 @@ async function initOauthClient(
       // Without this, if `open` fails to spawn a process (e.g., `xdg-open` is not found
       // in a minimal Docker container), it will emit an unhandled 'error' event,
       // causing the entire Node.js process to crash.
-      childProcess.on('error', (_) => {
+      childProcess.on('error', (error) => {
         console.error(
           'Failed to open browser automatically. Please try running again with NO_BROWSER=true set.',
         );
-        throw new FatalAuthenticationError('Failed to open browser.');
+        console.error('Browser error details:', getErrorMessage(error));
       });
     } catch (_err) {
       console.error(
-        'Failed to open browser automatically. Falling back to manual authentication.',
+        'An unexpected error occurred while trying to open the browser:',
+        getErrorMessage(_err),
+        '\nThis might be due to browser compatibility issues or system configuration.',
+        '\nPlease try running again with NO_BROWSER=true set for manual authentication.',
       );
-      throw new FatalAuthenticationError('Failed to open browser.');
+      throw new FatalAuthenticationError(
+        `Failed to open browser: ${getErrorMessage(_err)}`,
+      );
     }
 
-    console.log('Waiting for authentication...');
+    if (typeof config.isInteractive === 'function' && config.isInteractive()) {
+      console.log('Waiting for authentication...');
+    }
 
-    await webLogin.loginCompletePromise;
+    // Add timeout to prevent infinite waiting when browser tab gets stuck
+    const authTimeout = 5 * 60 * 1000; // 5 minutes timeout
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new FatalAuthenticationError(
+            'Authentication timed out after 5 minutes. The browser tab may have gotten stuck in a loading state. ' +
+              'Please try again or use NO_BROWSER=true for manual authentication.',
+          ),
+        );
+      }, authTimeout);
+    });
+
+    await Promise.race([webLogin.loginCompletePromise, timeoutPromise]);
 
     // Reset global state variables after successful authentication
     /**
@@ -202,6 +223,14 @@ async function initOauthClient(
   }
 
   return client;
+}
+
+export async function performLogin(
+  authType: AuthType,
+  config: Config,
+): Promise<boolean> {
+  await initOauthClient(authType, config);
+  return true;
 }
 
 export async function getOauthClient(
@@ -270,18 +299,7 @@ async function authWithUserCode(client: OAuth2Client): Promise<boolean> {
     return false;
   }
 
-  try {
-    const { tokens } = await client.getToken({
-      code,
-      codeVerifier: codeVerifier.codeVerifier,
-      redirect_uri: redirectUri,
-    });
-    client.setCredentials(tokens);
-  } catch (error) {
-    console.error('Failed to exchange authorization code for tokens:', error);
-    return false;
-  }
-  return true;
+  return authWithCode(client, code, codeVerifier, redirectUri);
 }
 
 async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
@@ -307,7 +325,11 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
         if (req.url!.indexOf('/oauth2callback') === -1) {
           res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
           res.end();
-          reject(new Error('Unexpected request: ' + req.url));
+          reject(
+            new FatalAuthenticationError(
+              'OAuth callback not received. Unexpected request: ' + req.url,
+            ),
+          );
         }
         // acquire the code from the querystring, and close the web server.
         const qs = new url.URL(req.url!, 'http://localhost:3000').searchParams;
@@ -315,41 +337,85 @@ async function authWithWeb(client: OAuth2Client): Promise<OauthWebLogin> {
           res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
           res.end();
 
-          reject(new Error(`Error during authentication: ${qs.get('error')}`));
+          const errorCode = qs.get('error');
+          const errorDescription =
+            qs.get('error_description') || 'No additional details provided';
+          reject(
+            new FatalAuthenticationError(
+              `Google OAuth error: ${errorCode}. ${errorDescription}`,
+            ),
+          );
         } else if (qs.get('state') !== state) {
           res.end('State mismatch. Possible CSRF attack');
 
-          reject(new Error('State mismatch. Possible CSRF attack'));
+          reject(
+            new FatalAuthenticationError(
+              'OAuth state mismatch. Possible CSRF attack or browser session issue.',
+            ),
+          );
         } else if (qs.get('code')) {
-          const { tokens } = await client.getToken({
-            code: qs.get('code')!,
-            redirect_uri: redirectUri,
-          });
-          client.setCredentials(tokens);
-          // Retrieve and cache Google Account ID during authentication
           try {
-            await fetchAndCacheUserInfo(client);
-          } catch (error) {
-            console.error(
-              'Failed to retrieve Google Account ID during authentication:',
-              error,
+            const success = await authWithCode(
+              client,
+              qs.get('code')!,
+              undefined,
+              redirectUri,
             );
-            // Don't fail the auth flow if Google Account ID retrieval fails
-          }
 
-          res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
-          res.end();
-          resolve();
+            if (!success) {
+              throw new FatalAuthenticationError(
+                'Failed to exchange authorization code for tokens.',
+              );
+            }
+
+            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_SUCCESS_URL });
+            res.end();
+            resolve();
+          } catch (error) {
+            res.writeHead(HTTP_REDIRECT, { Location: SIGN_IN_FAILURE_URL });
+            res.end();
+            reject(
+              error instanceof FatalAuthenticationError
+                ? error
+                : new FatalAuthenticationError(
+                    `Failed to exchange authorization code for tokens: ${getErrorMessage(error)}`,
+                  ),
+            );
+          }
         } else {
-          reject(new Error('No code found in request'));
+          reject(
+            new FatalAuthenticationError(
+              'No authorization code received from Google OAuth. Please try authenticating again.',
+            ),
+          );
         }
       } catch (e) {
-        reject(e);
+        // Provide more specific error message for unexpected errors during OAuth flow
+        if (e instanceof FatalAuthenticationError) {
+          reject(e);
+        } else {
+          reject(
+            new FatalAuthenticationError(
+              `Unexpected error during OAuth authentication: ${getErrorMessage(e)}`,
+            ),
+          );
+        }
       } finally {
         server.close();
       }
     });
-    server.listen(port, host);
+
+    server.listen(port, host, () => {
+      // Server started successfully
+    });
+
+    server.on('error', (err) => {
+      reject(
+        new FatalAuthenticationError(
+          `OAuth callback server error: ${getErrorMessage(err)}`,
+        ),
+      );
+    });
   });
 
   return {
@@ -403,8 +469,12 @@ async function loadCachedCredentials(client: OAuth2Client): Promise<boolean> {
         client.setCredentials(creds);
         return true;
       }
-    } catch {
-      // Continue to next path
+    } catch (error) {
+      // Log specific error for debugging, but continue trying other paths
+      console.debug(
+        `Failed to load credentials from ${credPath}:`,
+        getErrorMessage(error),
+      );
     }
   }
 
@@ -437,9 +507,48 @@ async function cacheCredentials(credentials: Credentials) {
     await fs.writeFile(filePath, JSON.stringify(credentials, null, 2), {
       mode: 0o600,
     });
+    // Belt-and-suspenders: explicitly chmod the file for platforms where writeFile mode may not work
+    try {
+      await fs.chmod(filePath, 0o600);
+    } catch {
+      /* empty - file already has correct permissions from writeFile */
+    }
   } catch (error) {
     console.error('Failed to cache OAuth credentials:', error);
     // Don't throw - allow OAuth to continue without caching
+  }
+}
+
+export async function authWithCode(
+  client: OAuth2Client,
+  code: string,
+  codeVerifier: { codeVerifier: string } | undefined,
+  redirectUri: string,
+): Promise<boolean> {
+  try {
+    const { tokens } = await client.getToken({
+      code,
+      redirect_uri: redirectUri,
+      ...(codeVerifier ? { codeVerifier: codeVerifier.codeVerifier } : {}),
+    });
+    client.setCredentials(tokens);
+
+    try {
+      await fetchAndCacheUserInfo(client);
+    } catch (error) {
+      console.warn(
+        'Failed to retrieve Google Account ID during authentication:',
+        getErrorMessage(error),
+      );
+    }
+
+    return true;
+  } catch (error) {
+    console.error(
+      'Failed to authenticate with authorization code:',
+      getErrorMessage(error),
+    );
+    return false;
   }
 }
 

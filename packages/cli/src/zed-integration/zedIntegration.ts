@@ -26,6 +26,7 @@ import {
   getFunctionCalls,
   EmojiFilter,
   FilterConfiguration,
+  StreamEventType,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
@@ -474,8 +475,12 @@ class Session {
             break;
           }
 
-          if (resp.candidates && resp.candidates.length > 0) {
-            const candidate = resp.candidates[0];
+          if (
+            resp.type === StreamEventType.CHUNK &&
+            resp.value.candidates &&
+            resp.value.candidates.length > 0
+          ) {
+            const candidate = resp.value.candidates[0];
             for (const part of candidate.content?.parts ?? []) {
               if (!part.text) {
                 continue;
@@ -520,10 +525,12 @@ class Session {
             }
           }
 
-          // Extract function calls from the response using the proper utility
-          const respFunctionCalls = getFunctionCalls(resp);
-          if (respFunctionCalls && respFunctionCalls.length > 0) {
-            functionCalls.push(...respFunctionCalls);
+          // Extract function calls from the response, checking for chunk type
+          if (resp.type === StreamEventType.CHUNK) {
+            const respFunctionCalls = getFunctionCalls(resp.value);
+            if (respFunctionCalls && respFunctionCalls.length > 0) {
+              functionCalls.push(...respFunctionCalls);
+            }
           }
         }
       } catch (error) {

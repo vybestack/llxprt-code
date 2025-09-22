@@ -23,6 +23,7 @@ import { parse } from 'shell-quote';
 import { ToolErrorType } from './tool-error.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { DebugLogger } from '../debug/index.js';
+import type { EventEmitter } from 'node:events';
 
 type ToolParams = Record<string, unknown>;
 
@@ -176,7 +177,7 @@ export class ToolRegistry {
   private mcpClientManager: McpClientManager;
   private logger = new DebugLogger('llxprt:tool-registry');
 
-  constructor(config: Config) {
+  constructor(config: Config, eventEmitter?: EventEmitter) {
     this.config = config;
     this.mcpClientManager = new McpClientManager(
       this.config.getMcpServers() ?? {},
@@ -185,6 +186,7 @@ export class ToolRegistry {
       this.config.getPromptRegistry(),
       this.config.getDebugMode(),
       this.config.getWorkspaceContext(),
+      eventEmitter,
     );
   }
 
@@ -271,7 +273,7 @@ export class ToolRegistry {
     this.tools = newTools;
 
     // Discover MCP tools into newTools
-    await this.mcpClientManager.discoverAllMcpTools();
+    await this.mcpClientManager.discoverAllMcpTools(this.config);
 
     // The tools are now already in the right place (this.tools === newTools)
     // No need to swap again
@@ -311,7 +313,7 @@ export class ToolRegistry {
     // Discover MCP tools into newTools
     const oldRegisterTool = this.registerTool.bind(this);
     this.registerTool = tempRegistry.registerTool;
-    await this.mcpClientManager.discoverAllMcpTools();
+    await this.mcpClientManager.discoverAllMcpTools(this.config);
     this.registerTool = oldRegisterTool;
 
     // Only NOW do we atomically swap the reference
@@ -325,7 +327,7 @@ export class ToolRegistry {
    * Restarts all MCP servers and re-discovers tools.
    */
   async restartMcpServers(): Promise<void> {
-    await this.mcpClientManager.discoverAllMcpTools();
+    await this.mcpClientManager.discoverAllMcpTools(this.config);
   }
 
   /**
@@ -361,6 +363,7 @@ export class ToolRegistry {
         this.config.getPromptRegistry(),
         this.config.getDebugMode(),
         this.config.getWorkspaceContext(),
+        this.config,
       );
     }
 

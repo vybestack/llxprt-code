@@ -242,6 +242,7 @@ describe('mergePartListUnions', () => {
 describe('useGeminiStream', () => {
   let mockAddItem: Mock;
   let mockConfig: Config;
+  let mockSettings: LoadedSettings;
   let mockOnDebugMessage: Mock;
   let mockHandleSlashCommand: Mock;
   let mockScheduleToolCalls: Mock;
@@ -307,6 +308,15 @@ describe('useGeminiStream', () => {
         .fn()
         .mockReturnValue(contentGeneratorConfig),
     } as unknown as Config;
+
+    mockSettings = {
+      merged: {
+        ui: {
+          showCitations: false,
+        },
+      },
+    } as LoadedSettings;
+
     mockOnDebugMessage = vi.fn();
     mockHandleSlashCommand = vi.fn().mockResolvedValue(false);
 
@@ -384,6 +394,7 @@ describe('useGeminiStream', () => {
           props.history,
           props.addItem,
           props.config,
+          mockSettings,
           props.onDebugMessage,
           props.handleSlashCommand,
           props.shellModeActive,
@@ -545,6 +556,7 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -624,6 +636,7 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -732,6 +745,7 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -841,6 +855,7 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,
@@ -970,6 +985,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1245,6 +1261,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1298,6 +1315,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           testConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1338,7 +1356,10 @@ describe('useGeminiStream', () => {
             type: ServerGeminiEventType.Content,
             value: 'This is a truncated response...',
           };
-          yield { type: ServerGeminiEventType.Finished, value: 'MAX_TOKENS' };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'MAX_TOKENS' },
+          };
         })(),
       );
 
@@ -1348,6 +1369,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1386,7 +1408,10 @@ describe('useGeminiStream', () => {
             type: ServerGeminiEventType.Content,
             value: 'Complete response',
           };
-          yield { type: ServerGeminiEventType.Finished, value: 'STOP' };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
         })(),
       );
 
@@ -1396,6 +1421,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1434,7 +1460,7 @@ describe('useGeminiStream', () => {
           };
           yield {
             type: ServerGeminiEventType.Finished,
-            value: 'FINISH_REASON_UNSPECIFIED',
+            value: { reason: 'FINISH_REASON_UNSPECIFIED' },
           };
         })(),
       );
@@ -1445,6 +1471,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1524,7 +1551,7 @@ describe('useGeminiStream', () => {
               type: ServerGeminiEventType.Content,
               value: `Response for ${reason}`,
             };
-            yield { type: ServerGeminiEventType.Finished, value: reason };
+            yield { type: ServerGeminiEventType.Finished, value: { reason } };
           })(),
         );
 
@@ -1534,6 +1561,7 @@ describe('useGeminiStream', () => {
             [],
             mockAddItem,
             mockConfig,
+            mockSettings,
             mockOnDebugMessage,
             mockHandleSlashCommand,
             false,
@@ -1580,7 +1608,10 @@ describe('useGeminiStream', () => {
             type: ServerGeminiEventType.Content,
             value: 'Some response content',
           };
-          yield { type: ServerGeminiEventType.Finished, value: 'STOP' };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
         })(),
       );
 
@@ -1590,6 +1621,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1626,7 +1658,10 @@ describe('useGeminiStream', () => {
             type: ServerGeminiEventType.Content,
             value: 'New response content',
           };
-          yield { type: ServerGeminiEventType.Finished, value: 'STOP' };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
         })(),
       );
 
@@ -1668,6 +1703,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1722,6 +1758,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1781,6 +1818,7 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false, // shellModeActive
@@ -1834,7 +1872,10 @@ describe('useGeminiStream', () => {
             type: ServerGeminiEventType.Content,
             value: 'Some response content',
           };
-          yield { type: ServerGeminiEventType.Finished, value: 'STOP' };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
         })(),
       );
 
@@ -1844,6 +1885,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1877,7 +1919,10 @@ describe('useGeminiStream', () => {
             type: ServerGeminiEventType.Content,
             value: 'New response content',
           };
-          yield { type: ServerGeminiEventType.Finished, value: 'STOP' };
+          yield {
+            type: ServerGeminiEventType.Finished,
+            value: { reason: 'STOP' },
+          };
         })(),
       );
 
@@ -1913,6 +1958,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -1963,6 +2009,7 @@ describe('useGeminiStream', () => {
           [],
           mockAddItem,
           mockConfig,
+          mockSettings,
           mockOnDebugMessage,
           mockHandleSlashCommand,
           false,
@@ -2019,6 +2066,7 @@ describe('useGeminiStream', () => {
         [],
         mockAddItem,
         mockConfig,
+        mockSettings,
         mockOnDebugMessage,
         mockHandleSlashCommand,
         false,

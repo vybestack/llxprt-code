@@ -8,20 +8,23 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir, platform } from 'os';
 import * as dotenv from 'dotenv';
+import process from 'node:process';
 import {
   LLXPRT_CONFIG_DIR as LLXPRT_DIR,
+  FatalConfigError,
   getErrorMessage,
   Storage,
 } from '@vybestack/llxprt-code-core';
 import stripJsonComments from 'strip-json-comments';
 import { DefaultLight } from '../ui/themes/default-light.js';
 import { DefaultDark } from '../ui/themes/default.js';
-import { isWorkspaceTrusted } from './trustedFolders.js';
+import { isWorkspaceTrusted, isFolderTrustEnabled } from './trustedFolders.js';
 import {
   Settings,
   MemoryImportFormat,
   SETTINGS_SCHEMA,
 } from './settingsSchema.js';
+import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 
 export type { Settings, MemoryImportFormat };
 
@@ -31,6 +34,73 @@ export const USER_SETTINGS_PATH = Storage.getGlobalSettingsPath();
 export const USER_SETTINGS_DIR = path.dirname(USER_SETTINGS_PATH);
 export const DEFAULT_EXCLUDED_ENV_VARS = ['DEBUG', 'DEBUG_MODE'];
 
+// Currently unused - reserved for future migration implementation
+// const MIGRATE_V2_OVERWRITE = false;
+
+// As defined in spec.md - adapted for llxprt's flat settings structure
+// Currently unused - reserved for future migration implementation
+/*
+const MIGRATION_MAP: Record<string, string> = {
+  preferredEditor: 'preferredEditor',
+  vimMode: 'vimMode',
+  disableAutoUpdate: 'disableAutoUpdate',
+  disableUpdateNag: 'disableUpdateNag',
+  checkpointing: 'checkpointing',
+  enablePromptCompletion: 'enablePromptCompletion',
+  debugKeystrokeLogging: 'debugKeystrokeLogging',
+  theme: 'theme',
+  customThemes: 'customThemes',
+  hideWindowTitle: 'hideWindowTitle',
+  hideTips: 'hideTips',
+  hideBanner: 'hideBanner',
+  hideFooter: 'hideFooter',
+  hideCWD: 'hideCWD',
+  hideSandboxStatus: 'hideSandboxStatus',
+  hideModelInfo: 'hideModelInfo',
+  hideContextSummary: 'hideContextSummary',
+  showMemoryUsage: 'showMemoryUsage',
+  showLineNumbers: 'showLineNumbers',
+  showCitations: 'showCitations',
+  accessibility: 'accessibility',
+  ideMode: 'ideMode',
+  hasSeenIdeIntegrationNudge: 'hasSeenIdeIntegrationNudge',
+  usageStatisticsEnabled: 'usageStatisticsEnabled',
+  telemetry: 'telemetry',
+  model: 'model',
+  maxSessionTurns: 'maxSessionTurns',
+  summarizeToolOutput: 'summarizeToolOutput',
+  chatCompression: 'chatCompression',
+  skipNextSpeakerCheck: 'skipNextSpeakerCheck',
+  contextFileName: 'contextFileName',
+  memoryImportFormat: 'memoryImportFormat',
+  memoryDiscoveryMaxDirs: 'memoryDiscoveryMaxDirs',
+  includeDirectories: 'includeDirectories',
+  loadMemoryFromIncludeDirectories: 'loadMemoryFromIncludeDirectories',
+  fileFiltering: 'fileFiltering',
+  useRipgrep: 'useRipgrep',
+  sandbox: 'sandbox',
+  shouldUseNodePtyShell: 'shouldUseNodePtyShell',
+  autoAccept: 'autoAccept',
+  allowedTools: 'allowedTools',
+  coreTools: 'coreTools',
+  excludeTools: 'excludeTools',
+  toolDiscoveryCommand: 'toolDiscoveryCommand',
+  toolCallCommand: 'toolCallCommand',
+  mcpServerCommand: 'mcpServerCommand',
+  allowMCPServers: 'allowMCPServers',
+  excludeMCPServers: 'excludeMCPServers',
+  folderTrust: 'folderTrust',
+  folderTrustFeature: 'folderTrustFeature',
+  selectedAuthType: 'selectedAuthType',
+  useExternalAuth: 'useExternalAuth',
+  autoConfigureMaxOldSpaceSize: 'autoConfigureMaxOldSpaceSize',
+  dnsResolutionOrder: 'dnsResolutionOrder',
+  excludedProjectEnvVars: 'excludedProjectEnvVars',
+  bugCommand: 'bugCommand',
+  extensionManagement: 'extensionManagement',
+  extensions: 'extensions',
+};
+*/
 export function getSystemSettingsPath(): string {
   if (process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH) {
     return process.env.GEMINI_CLI_SYSTEM_SETTINGS_PATH;
@@ -189,24 +259,23 @@ export class LoadedSettings {
     systemDefaults: SettingsFile,
     user: SettingsFile,
     workspace: SettingsFile,
-    errors: SettingsError[],
     isTrusted: boolean,
   ) {
     this.system = system;
     this.systemDefaults = systemDefaults;
     this.user = user;
     this.workspace = workspace;
-    this.errors = errors;
     this.isTrusted = isTrusted;
     this._merged = this.computeMergedSettings();
+    this.errors = []; // No errors if we got here, they would have thrown
   }
 
   readonly system: SettingsFile;
   readonly systemDefaults: SettingsFile;
   readonly user: SettingsFile;
   readonly workspace: SettingsFile;
-  readonly errors: SettingsError[];
   readonly isTrusted: boolean;
+  readonly errors: SettingsError[] = [];
 
   private _merged: Settings;
 
@@ -289,48 +358,6 @@ export class LoadedSettings {
   }
 }
 
-function resolveEnvVarsInString(value: string): string {
-  const envVarRegex = /\$(?:(\w+)|{([^}]+)})/g; // Find $VAR_NAME or ${VAR_NAME}
-  return value.replace(envVarRegex, (match, varName1, varName2) => {
-    const varName = varName1 || varName2;
-    if (process && process.env && typeof process.env[varName] === 'string') {
-      return process.env[varName]!;
-    }
-    return match;
-  });
-}
-
-function resolveEnvVarsInObject<T>(obj: T): T {
-  if (
-    obj === null ||
-    obj === undefined ||
-    typeof obj === 'boolean' ||
-    typeof obj === 'number'
-  ) {
-    return obj;
-  }
-
-  if (typeof obj === 'string') {
-    return resolveEnvVarsInString(obj) as unknown as T;
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => resolveEnvVarsInObject(item)) as unknown as T;
-  }
-
-  if (typeof obj === 'object') {
-    const newObj = { ...obj } as T;
-    for (const key in newObj) {
-      if (Object.prototype.hasOwnProperty.call(newObj, key)) {
-        newObj[key] = resolveEnvVarsInObject(newObj[key]);
-      }
-    }
-    return newObj;
-  }
-
-  return obj;
-}
-
 function findEnvFile(startDir: string): string | null {
   let currentDir = path.resolve(startDir);
   while (true) {
@@ -382,34 +409,21 @@ export function setUpCloudShellEnvironment(envFilePath: string | null): void {
   }
 }
 
-export function loadEnvironment(settings?: Settings): void {
+export function loadEnvironment(settings: Settings): void {
   const envFilePath = findEnvFile(process.cwd());
+
+  // Check if folder trust feature is enabled, and if so, check if workspace is trusted
+  if (isFolderTrustEnabled(settings)) {
+    const trusted = isWorkspaceTrusted(settings);
+    if (trusted !== true) {
+      // If not explicitly trusted (false or undefined), don't load environment
+      return;
+    }
+  }
 
   // Cloud Shell environment variable handling
   if (process.env.CLOUD_SHELL === 'true') {
     setUpCloudShellEnvironment(envFilePath);
-  }
-
-  // If no settings provided, try to load workspace settings for exclusions
-  let resolvedSettings = settings;
-  if (!resolvedSettings) {
-    const workspaceSettingsPath = new Storage(
-      process.cwd(),
-    ).getWorkspaceSettingsPath();
-    try {
-      if (fs.existsSync(workspaceSettingsPath)) {
-        const workspaceContent = fs.readFileSync(
-          workspaceSettingsPath,
-          'utf-8',
-        );
-        const parsedWorkspaceSettings = JSON.parse(
-          stripJsonComments(workspaceContent),
-        ) as Settings;
-        resolvedSettings = resolveEnvVarsInObject(parsedWorkspaceSettings);
-      }
-    } catch (_e) {
-      // Ignore errors loading workspace settings
-    }
   }
 
   if (envFilePath) {
@@ -420,7 +434,7 @@ export function loadEnvironment(settings?: Settings): void {
       const parsedEnv = dotenv.parse(envFileContent);
 
       const excludedVars =
-        resolvedSettings?.excludedProjectEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
+        settings?.excludedProjectEnvVars || DEFAULT_EXCLUDED_ENV_VARS;
       const isProjectEnvFile = !envFilePath.includes(LLXPRT_DIR);
 
       for (const key in parsedEnv) {
@@ -446,7 +460,9 @@ export function loadEnvironment(settings?: Settings): void {
  * Loads settings from user and workspace directories.
  * Project settings override user settings.
  */
-export function loadSettings(workspaceDir: string): LoadedSettings {
+export function loadSettings(
+  workspaceDir: string = process.cwd(),
+): LoadedSettings {
   let systemSettings: Settings = {};
   let systemDefaultSettings: Settings = {};
   let userSettings: Settings = {};
@@ -550,7 +566,28 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
     }
   }
 
-  const isTrusted = isWorkspaceTrusted() ?? true;
+  // Check if folder trust feature is enabled in any of the loaded settings
+  // before calling isWorkspaceTrusted() to avoid requiring Settings type
+  const folderTrustFeature =
+    systemSettings.folderTrustFeature ??
+    userSettings.folderTrustFeature ??
+    false; // default to false per schema
+
+  const folderTrustEnabled =
+    systemSettings.folderTrust ?? userSettings.folderTrust ?? true; // default to true per schema logic
+
+  const shouldCheckFolderTrust = folderTrustFeature && folderTrustEnabled;
+  // Create a temporary merged settings object for trust checking
+  const tempSettingsForTrust = mergeSettings(
+    systemSettings,
+    systemDefaultSettings,
+    userSettings,
+    workspaceSettings,
+    true, // Assume trusted for this temporary settings object
+  );
+  const isTrusted = shouldCheckFolderTrust
+    ? (isWorkspaceTrusted(tempSettingsForTrust) ?? true)
+    : true;
 
   // Create a temporary merged settings object to pass to loadEnvironment.
   const tempMergedSettings = mergeSettings(
@@ -571,7 +608,17 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
   workspaceSettings = resolveEnvVarsInObject(workspaceSettings);
 
   // Create LoadedSettings first
-  const loadedSettings = new LoadedSettings(
+
+  if (settingsErrors.length > 0) {
+    const errorMessages = settingsErrors.map(
+      (error) => `Error in ${error.path}: ${error.message}`,
+    );
+    throw new FatalConfigError(
+      `${errorMessages.join('\n')}\nPlease fix the configuration file(s) and try again.`,
+    );
+  }
+
+  return new LoadedSettings(
     {
       path: systemSettingsPath,
       settings: systemSettings,
@@ -588,24 +635,8 @@ export function loadSettings(workspaceDir: string): LoadedSettings {
       path: workspaceSettingsPath,
       settings: workspaceSettings,
     },
-    settingsErrors,
     isTrusted,
   );
-
-  // Validate chatCompression settings
-  const chatCompression = loadedSettings.merged.chatCompression;
-  const threshold = chatCompression?.contextPercentageThreshold;
-  if (
-    threshold != null &&
-    (typeof threshold !== 'number' || threshold < 0 || threshold > 1)
-  ) {
-    console.warn(
-      `Invalid value for chatCompression.contextPercentageThreshold: "${threshold}". Please use a value between 0 and 1. Using default compression settings.`,
-    );
-    delete loadedSettings.merged.chatCompression;
-  }
-
-  return loadedSettings;
 }
 
 export function saveSettings(settingsFile: SettingsFile): void {

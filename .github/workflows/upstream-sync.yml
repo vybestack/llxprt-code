@@ -201,12 +201,14 @@ jobs:
       - name: Summary
         if: steps.check-commits.outputs.has_new_commits == 'true'
         run: |
-          echo "## 🔄 Upstream Sync Complete" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### 📊 Sync Status" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Branch created:** \`${{ steps.create-branch.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Commits synced:** ${{ steps.check-commits.outputs.commits_behind }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **llxprt-code exit code:** ${{ steps.llxprt.outputs.exit_code }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## 🔄 Upstream Sync Complete"
+            echo ""
+            echo "### 📊 Sync Status"
+            echo "- **Branch created:** \`${{ steps.create-branch.outputs.branch_name }}\`"
+            echo "- **Commits synced:** ${{ steps.check-commits.outputs.commits_behind }}"
+            echo "- **llxprt-code exit code:** ${{ steps.llxprt.outputs.exit_code }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "${{ steps.llxprt.outputs.exit_code }}" == "0" ]; then
             echo "- **Empty merge commit:** ✅ Created (prevents 'behind' status)" >> "$GITHUB_STEP_SUMMARY"
@@ -215,32 +217,42 @@ jobs:
           fi
 
           if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
-            echo "- **Status:** ⚠️ Merge conflicts detected" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### ⚠️ Conflicted Files" >> "$GITHUB_STEP_SUMMARY"
-            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "${{ steps.check-conflicts.outputs.conflict_files }}" >> "$GITHUB_STEP_SUMMARY"
-            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "- **Status:** ⚠️ Merge conflicts detected"
+              echo ""
+              echo "### ⚠️ Conflicted Files"
+              echo "\`\`\`"
+              echo "${{ steps.check-conflicts.outputs.conflict_files }}"
+              echo "\`\`\`"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "- **Status:** ✅ No conflicts" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### 📝 Commits Cherry-picked" >> "$GITHUB_STEP_SUMMARY"
-          echo "Range: \`${{ steps.commit-info.outputs.commit_range }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.commit-info.outputs.commit_log }}" | head -20 >> "$GITHUB_STEP_SUMMARY"
-          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "### 📝 Commits Cherry-picked"
+            echo "Range: \`${{ steps.commit-info.outputs.commit_range }}\`"
+            echo "\`\`\`"
+            echo "${{ steps.commit-info.outputs.commit_log }}" | head -20
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### ⚡ Next Steps" >> "$GITHUB_STEP_SUMMARY"
-          echo "1. Check out the branch: \`git fetch origin && git checkout ${{ steps.create-branch.outputs.branch_name }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "2. Review the changes" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "### ⚡ Next Steps"
+            echo "1. Check out the branch: \`git fetch origin && git checkout ${{ steps.create-branch.outputs.branch_name }}\`"
+            echo "2. Review the changes"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.check-conflicts.outputs.has_conflicts }}" == "true" ]; then
-            echo "3. Resolve any remaining conflicts" >> "$GITHUB_STEP_SUMMARY"
-            echo "4. Run tests to ensure everything works" >> "$GITHUB_STEP_SUMMARY"
-            echo "5. Merge when ready" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "3. Resolve any remaining conflicts"
+              echo "4. Run tests to ensure everything works"
+              echo "5. Merge when ready"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "3. Run tests to ensure everything works" >> "$GITHUB_STEP_SUMMARY"
-            echo "4. Merge when ready" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "3. Run tests to ensure everything works"
+              echo "4. Merge when ready"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -18,7 +18,7 @@ import {
   FunctionDeclaration,
   Type,
 } from '@google/genai';
-import { GeminiChat } from './geminiChat.js';
+import { GeminiChat, StreamEventType } from './geminiChat.js';
 
 /**
  * @fileoverview Defines the configuration interfaces for a subagent.
@@ -236,6 +236,9 @@ export class SubAgentScope {
   };
   private readonly subagentId: string;
 
+  /** Optional callback for streaming text messages during execution */
+  onMessage?: (message: string) => void;
+
   /**
    * Constructs a new SubAgentScope instance.
    * @param name - The name for the subagent, used for logging and identification.
@@ -407,9 +410,19 @@ export class SubAgentScope {
         );
 
         const functionCalls: FunctionCall[] = [];
+        let textResponse = '';
         for await (const resp of responseStream) {
           if (abortController.signal.aborted) return;
-          if (resp.functionCalls) functionCalls.push(...resp.functionCalls);
+          if (resp.type === StreamEventType.CHUNK && resp.value.functionCalls) {
+            functionCalls.push(...resp.value.functionCalls);
+          }
+          if (resp.type === StreamEventType.CHUNK && resp.value.text) {
+            textResponse += resp.value.text;
+          }
+        }
+
+        if (this.onMessage && textResponse) {
+          this.onMessage(textResponse);
         }
 
         durationMin = (Date.now() - startTime) / (1000 * 60);

@@ -53,6 +53,18 @@ import {
   COMPRESSION_PRESERVE_THRESHOLD,
 } from './compression-config.js';
 
+export enum StreamEventType {
+  /** A regular content chunk from the API. */
+  CHUNK = 'chunk',
+  /** A signal that a retry is about to happen. The UI should discard any partial
+   * content from the attempt that just failed. */
+  RETRY = 'retry',
+}
+
+export type StreamEvent =
+  | { type: StreamEventType.CHUNK; value: GenerateContentResponse }
+  | { type: StreamEventType.RETRY };
+
 /**
  * Custom createUserContent function that properly handles function response arrays.
  * This fixes the issue where multiple function responses are incorrectly nested.
@@ -719,7 +731,7 @@ export class GeminiChat {
   async sendMessageStream(
     params: SendMessageParameters,
     prompt_id: string,
-  ): Promise<AsyncGenerator<GenerateContentResponse>> {
+  ): Promise<AsyncGenerator<StreamEvent>> {
     this.logger.debug(
       () => 'DEBUG [geminiChat]: ===== SEND MESSAGE STREAM START =====',
     );
@@ -817,6 +829,10 @@ export class GeminiChat {
           attempt++
         ) {
           try {
+            if (attempt > 0) {
+              yield { type: StreamEventType.RETRY };
+            }
+
             const stream = await instance.makeApiCallAndProcessStream(
               params,
               prompt_id,
@@ -824,7 +840,7 @@ export class GeminiChat {
             );
 
             for await (const chunk of stream) {
-              yield chunk;
+              yield { type: StreamEventType.CHUNK, value: chunk };
             }
 
             lastError = null;

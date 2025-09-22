@@ -29,11 +29,13 @@ import {
   type HistoryItemWithoutId,
 } from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
+import { useResponsive } from './hooks/useResponsive.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
 import { useAuthCommand } from './hooks/useAuthCommand.js';
 import { useFolderTrust } from './hooks/useFolderTrust.js';
+import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
 import { useEditorSettings } from './hooks/useEditorSettings.js';
 import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
 import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
@@ -62,6 +64,7 @@ import { DetailedMessagesDisplay } from './components/DetailedMessagesDisplay.js
 import { HistoryItemDisplay } from './components/HistoryItemDisplay.js';
 import { ContextSummaryDisplay } from './components/ContextSummaryDisplay.js';
 import { useHistory } from './hooks/useHistoryManager.js';
+import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
 import process from 'node:process';
 import {
   getErrorMessage,
@@ -82,6 +85,7 @@ import {
   isGenericQuotaExceededError,
   UserTierId,
   uiTelemetryService,
+  DEFAULT_GEMINI_FLASH_MODEL,
 } from '@vybestack/llxprt-code-core';
 import {
   IdeIntegrationNudge,
@@ -122,6 +126,7 @@ import { ShowMoreLines } from './components/ShowMoreLines.js';
 import { PrivacyNotice } from './privacy/PrivacyNotice.js';
 import { useSettingsCommand } from './hooks/useSettingsCommand.js';
 import { SettingsDialog } from './components/SettingsDialog.js';
+import { ProQuotaDialog } from './components/ProQuotaDialog.js';
 import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
 import { appEvents, AppEvent } from '../utils/events.js';
 import { getProviderManager } from '../providers/providerManagerInstance.js';
@@ -139,6 +144,7 @@ import { TodoPanel } from './components/TodoPanel.js';
 import { useTodoContext } from './contexts/TodoContext.js';
 import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
 import { WorkspaceMigrationDialog } from './components/WorkspaceMigrationDialog.js';
+import { isWorkspaceTrusted } from '../config/trustedFolders.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 
@@ -207,6 +213,7 @@ const App = (props: AppInternalProps) => {
     appDispatch,
   } = props;
   const isFocused = useFocus();
+  const { isNarrow } = useResponsive();
   useBracketedPaste();
   const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
   const { stdout } = useStdout();
@@ -353,6 +360,9 @@ const App = (props: AppInternalProps) => {
     sessionTokenTotal: 0,
   });
   const [_corgiMode, setCorgiMode] = useState(false);
+  const [_isTrustedFolderState, _setIsTrustedFolder] = useState(
+    isWorkspaceTrusted(settings.merged),
+  );
   const [currentModel, setCurrentModel] = useState(config.getModel());
   const [shellModeActive, setShellModeActive] = useState(false);
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
@@ -375,14 +385,21 @@ const App = (props: AppInternalProps) => {
     IdeContext | undefined
   >();
   const [showEscapePrompt, setShowEscapePrompt] = useState(false);
+  const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [providerModels, setProviderModels] = useState<IModel[]>([]);
+
   const {
     showWorkspaceMigrationDialog,
     workspaceExtensions,
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
+
+  const [isProQuotaDialogOpen, setIsProQuotaDialogOpen] = useState(false);
+  const [proQuotaDialogResolver, setProQuotaDialogResolver] = useState<
+    ((value: boolean) => void) | null
+  >(null);
 
   useEffect(() => {
     const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
@@ -480,6 +497,23 @@ const App = (props: AppInternalProps) => {
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
     useFolderTrust(settings, config);
+
+  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
+  useEffect(() => {
+    if (ideNeedsRestart) {
+      // IDE trust changed, force a restart.
+      setShowIdeRestartPrompt(true);
+    }
+  }, [ideNeedsRestart]);
+
+  useKeypress(
+    (key) => {
+      if (key.name === 'r' || key.name === 'R') {
+        process.exit(0);
+      }
+    },
+    { isActive: showIdeRestartPrompt },
+  );
 
   const {
     isAuthDialogOpen,
@@ -667,6 +701,7 @@ const App = (props: AppInternalProps) => {
         config.getFileService(),
         settings.merged,
         config.getExtensionContextFilePaths(),
+        config.getFolderTrust(),
         settings.merged.memoryImportFormat || 'tree', // Use setting or default to 'tree'
         config.getFileFilteringOptions(),
       );
@@ -752,6 +787,12 @@ const App = (props: AppInternalProps) => {
       fallbackModel: string,
       error?: unknown,
     ): Promise<boolean> => {
+      // Check if we've already switched to the fallback model
+      if (config.isInFallbackMode()) {
+        // If we're already in fallback mode, don't show the dialog again
+        return false;
+      }
+
       let message: string;
 
       const contentGenConfig = config.getContentGeneratorConfig();
@@ -764,14 +805,15 @@ const App = (props: AppInternalProps) => {
         // Check if this is a Pro quota exceeded error
         if (error && isProQuotaExceededError(error)) {
           if (isPaidTier) {
-            message = `You have reached your daily ${currentModel} quota limit.
-To continue using ${currentModel}, you can use /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey
-Or you can switch to a different model using the /model command`;
+            message = `⚡ You have reached your daily ${currentModel} quota limit.
+⚡ You can choose to authenticate with a paid API key or continue with the fallback model.
+⚡ To continue accessing the ${currentModel} model today, consider using /auth to switch to using a paid API key from AI Studio at https://aistudio.google.com/apikey`;
           } else {
-            message = `You have reached your daily ${currentModel} quota limit.
-To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
-Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
-You can switch authentication methods by typing /auth or switch to a different model using /model`;
+            message = `⚡ You have reached your daily ${currentModel} quota limit.
+⚡ You can choose to authenticate with a paid API key or continue with the fallback model.
+⚡ To increase your limits, upgrade to a Gemini Code Assist Standard or Enterprise plan with higher limits at https://goo.gle/set-up-gemini-code-assist
+⚡ Or you can utilize a Gemini API Key. See: https://goo.gle/gemini-cli-docs-auth#gemini-api-key
+⚡ You can switch authentication methods by typing /auth`;
           }
         } else if (error && isGenericQuotaExceededError(error)) {
           if (isPaidTier) {
@@ -812,6 +854,41 @@ You can switch authentication methods by typing /auth or switch to a different m
           );
         }
 
+        // For Pro quota errors, show the dialog and wait for user's choice
+        if (error && isProQuotaExceededError(error)) {
+          // Set the flag to prevent tool continuation
+          setModelSwitchedFromQuotaError(true);
+          // Set global quota error flag to prevent Flash model calls
+          config.setQuotaErrorOccurred(true);
+
+          // Show the ProQuotaDialog and wait for user's choice
+          const shouldContinueWithFallback = await new Promise<boolean>(
+            (resolve) => {
+              setIsProQuotaDialogOpen(true);
+              setProQuotaDialogResolver(() => resolve);
+            },
+          );
+
+          // If user chose to continue with fallback, we don't need to stop the current prompt
+          if (shouldContinueWithFallback) {
+            // Switch to fallback model for future use
+            config.setModel(fallbackModel);
+            config.setFallbackMode(true);
+            logFlashFallback(
+              config,
+              new FlashFallbackEvent(
+                config.getContentGeneratorConfig()?.authType ||
+                  AuthType.USE_PROVIDER,
+              ),
+            );
+            return true; // Continue with current prompt using fallback model
+          }
+
+          // If user chose to authenticate, stop current prompt
+          return false;
+        }
+
+        // For other quota errors, automatically switch to fallback model
         // Set the flag to prevent tool continuation
         setModelSwitchedFromQuotaError(true);
         // Set global quota error flag to prevent Flash model calls
@@ -822,7 +899,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       // Don't set fallback mode either
       const contentGenConfigForEvent = config.getContentGeneratorConfig();
       const authTypeForEvent =
-        contentGenConfigForEvent?.authType || AuthType.USE_GEMINI;
+        contentGenConfigForEvent?.authType || AuthType.USE_PROVIDER;
       // Still log the event for telemetry
       logFlashFallback(config, new FlashFallbackEvent(authTypeForEvent));
       return false; // Don't continue with current prompt
@@ -937,14 +1014,15 @@ You can switch authentication methods by typing /auth or switch to a different m
     shellModeActive,
   });
 
-  const [userMessages, setUserMessages] = useState<string[]>([]);
+  // Independent input history management (unaffected by /clear)
+  const inputHistoryStore = useInputHistoryStore();
 
   const handleUserCancel = useCallback(() => {
-    const lastUserMessage = userMessages.at(-1);
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
     if (lastUserMessage) {
       buffer.setText(lastUserMessage);
     }
-  }, [buffer, userMessages]);
+  }, [buffer, inputHistoryStore.inputHistory]);
 
   const handleOAuthCodeDialogClose = useCallback(() => {
     appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
@@ -985,6 +1063,7 @@ You can switch authentication methods by typing /auth or switch to a different m
     history,
     addItem,
     config,
+    settings,
     setDebugMessage,
     handleSlashCommand,
     shellModeActive,
@@ -1012,7 +1091,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       return;
     }
 
-    const lastUserMessage = userMessages.at(-1);
+    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
     const textToSet = lastUserMessage || '';
 
     // Queue functionality removed - no queued messages to append
@@ -1020,17 +1099,19 @@ You can switch authentication methods by typing /auth or switch to a different m
     if (textToSet) {
       buffer.setText(textToSet);
     }
-  }, [buffer, userMessages, pendingHistoryItems]);
+  }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
 
   // Input handling - queue messages for processing
   const handleFinalSubmit = useCallback(
     (submittedValue: string) => {
       const trimmedValue = submittedValue.trim();
       if (trimmedValue.length > 0) {
+        // Add to independent input history
+        inputHistoryStore.addInput(trimmedValue);
         submitQuery(trimmedValue);
       }
     },
-    [submitQuery],
+    [submitQuery, inputHistoryStore],
   );
 
   const handleUserInputSubmit = useCallback(
@@ -1069,9 +1150,35 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
 
-  const { elapsedTime, currentLoadingPhrase } =
-    useLoadingIndicator(streamingState);
+  const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
+    streamingState,
+    settings.merged.customWittyPhrases,
+  );
   const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
+
+  const handleProQuotaChoice = useCallback(
+    (choice: 'auth' | 'continue') => {
+      setIsProQuotaDialogOpen(false);
+      if (!proQuotaDialogResolver) return;
+
+      const resolveValue = choice !== 'auth';
+      proQuotaDialogResolver(resolveValue);
+      setProQuotaDialogResolver(null);
+
+      if (choice === 'auth') {
+        openAuthDialog();
+      } else {
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: 'Switched to fallback model. Tip: Press Ctrl+P to recall your previous prompt and submit it again if you wish.',
+          },
+          Date.now(),
+        );
+      }
+    },
+    [proQuotaDialogResolver, openAuthDialog, addItem],
+  );
 
   const handleExit = useCallback(
     (
@@ -1186,44 +1293,17 @@ You can switch authentication methods by typing /auth or switch to a different m
 
   const logger = useLogger(config.storage);
 
+  // Initialize independent input history from logger
   useEffect(() => {
-    const fetchUserMessages = async () => {
-      const pastMessagesRaw = (await logger?.getPreviousUserMessages()) || []; // Newest first
-
-      const currentSessionUserMessages = history
-        .filter(
-          (item): item is HistoryItem & { type: 'user'; text: string } =>
-            item.type === 'user' &&
-            typeof item.text === 'string' &&
-            item.text.trim() !== '',
-        )
-        .map((item) => item.text)
-        .reverse(); // Newest first, to match pastMessagesRaw sorting
-
-      // Combine, with current session messages being more recent
-      const combinedMessages = [
-        ...currentSessionUserMessages,
-        ...pastMessagesRaw,
-      ];
-
-      // Deduplicate consecutive identical messages from the combined list (still newest first)
-      const deduplicatedMessages: string[] = [];
-      if (combinedMessages.length > 0) {
-        deduplicatedMessages.push(combinedMessages[0]); // Add the newest one unconditionally
-        for (let i = 1; i < combinedMessages.length; i++) {
-          if (combinedMessages[i] !== combinedMessages[i - 1]) {
-            deduplicatedMessages.push(combinedMessages[i]);
-          }
-        }
-      }
-      // Reverse to oldest first for useInputHistory
-      setUserMessages(deduplicatedMessages.reverse());
-    };
-    fetchUserMessages();
-  }, [history, logger]);
+    inputHistoryStore.initializeFromLogger(logger);
+  }, [logger, inputHistoryStore]);
 
   const isInputActive =
-    streamingState === StreamingState.Idle && !initError && !isProcessing;
+    (streamingState === StreamingState.Idle ||
+      streamingState === StreamingState.Responding) &&
+    !initError &&
+    !isProcessing &&
+    !isProQuotaDialogOpen;
 
   const handleClearScreen = useCallback(() => {
     clearItems();
@@ -1370,6 +1450,8 @@ You can switch authentication methods by typing /auth or switch to a different m
       ? '  Type your message, @path/to/file or +path/to/file'
       : '  Type your message or @path/to/file';
 
+  const hideContextSummary = settings.merged.hideContextSummary ?? false;
+
   return (
     <StreamingContext.Provider value={streamingState}>
       <Box flexDirection="column" width="90%">
@@ -1469,6 +1551,23 @@ You can switch authentication methods by typing /auth or switch to a different m
               ide={currentIDE}
               onComplete={handleIdePromptComplete}
             />
+          ) : isProQuotaDialogOpen ? (
+            <ProQuotaDialog
+              currentModel={config.getModel()}
+              fallbackModel={DEFAULT_GEMINI_FLASH_MODEL}
+              onChoice={handleProQuotaChoice}
+            />
+          ) : showIdeRestartPrompt ? (
+            <Box
+              borderStyle="round"
+              borderColor={Colors.AccentYellow}
+              paddingX={1}
+            >
+              <Text color={Colors.AccentYellow}>
+                Workspace trust has changed. Press &apos;r&apos; to restart
+                Gemini to apply the changes.
+              </Text>
+            </Box>
           ) : isFolderTrustDialogOpen ? (
             <FolderTrustDialog
               onSelect={handleFolderTrustSelect}
@@ -1626,7 +1725,9 @@ You can switch authentication methods by typing /auth or switch to a different m
               <Box
                 marginTop={1}
                 display="flex"
-                justifyContent="space-between"
+                justifyContent={
+                  hideContextSummary ? 'flex-start' : 'space-between'
+                }
                 width="100%"
               >
                 <Box>
@@ -1643,7 +1744,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                     </Text>
                   ) : showEscapePrompt ? (
                     <Text color={Colors.Gray}>Press Esc again to clear.</Text>
-                  ) : (
+                  ) : !hideContextSummary ? (
                     <ContextSummaryDisplay
                       ideContext={ideContextState}
                       llxprtMdFileCount={llxprtMdFileCount}
@@ -1652,9 +1753,12 @@ You can switch authentication methods by typing /auth or switch to a different m
                       blockedMcpServers={config.getBlockedMcpServers()}
                       showToolDescriptions={showToolDescriptions}
                     />
-                  )}
+                  ) : null}
                 </Box>
-                <Box>
+                <Box
+                  paddingTop={isNarrow ? 1 : 0}
+                  marginLeft={hideContextSummary ? 1 : 2}
+                >
                   {showAutoAcceptIndicator !== ApprovalMode.DEFAULT &&
                     !shellModeActive && (
                       <AutoAcceptIndicator
@@ -1664,7 +1768,6 @@ You can switch authentication methods by typing /auth or switch to a different m
                   {shellModeActive && <ShellModeIndicator />}
                 </Box>
               </Box>
-
               {showErrorDetails && (
                 <OverflowProvider>
                   <Box flexDirection="column">
@@ -1679,7 +1782,6 @@ You can switch authentication methods by typing /auth or switch to a different m
                   </Box>
                 </OverflowProvider>
               )}
-
               {isInputActive && (
                 <>
                   <InputPrompt
@@ -1687,7 +1789,7 @@ You can switch authentication methods by typing /auth or switch to a different m
                     inputWidth={inputWidth}
                     suggestionsWidth={suggestionsWidth}
                     onSubmit={handleUserInputSubmit}
-                    userMessages={userMessages}
+                    userMessages={inputHistoryStore.inputHistory}
                     onClearScreen={handleClearScreen}
                     config={config}
                     slashCommands={slashCommands}
@@ -1762,6 +1864,9 @@ You can switch authentication methods by typing /auth or switch to a different m
               tokensPerMinute={tokenMetrics.tokensPerMinute}
               throttleWaitTimeMs={tokenMetrics.throttleWaitTimeMs}
               sessionTokenTotal={tokenMetrics.sessionTokenTotal}
+              hideCWD={settings.merged.hideCWD}
+              hideSandboxStatus={settings.merged.hideSandboxStatus}
+              hideModelInfo={settings.merged.hideModelInfo}
             />
           )}
         </Box>

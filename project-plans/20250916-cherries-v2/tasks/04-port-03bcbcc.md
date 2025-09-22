@@ -1,0 +1,55 @@
+# Task 04 – PORT 03bcbcc1
+
+**Task Type:** PORT\n**Area:** mcp\n**Risk Level:** low\n**Results File:** `project-plans/20250916-cherries-v2/results/task-04.md`\n
+## Commit Details
+- Upstream hash: `03bcbcc1`
+- Description: Add MCP loading indicator when initializing
+- Rationale: MCP loading indicator (rebrand gemini->llxprt)
+
+## Execution Steps
+1. Cherry-pick the commit with metadata preserved:
+   ```bash
+   git cherry-pick -x 03bcbcc1
+   ```
+2. Resolve conflicts carefully, preserving llxprt branding, settings shape, and multi-provider paths. Document every adaptation in the results file.
+3. Capture upstream and local diffs in `project-plans/20250916-cherries-v2/results/task-04.md` using the template.
+4. Run the automated quality gate (fails stop progress):
+   ```bash
+   ./project-plans/20250916-cherries-v2/run-quality-gates.sh project-plans/20250916-cherries-v2/results/task-04.md
+   ```
+5. Address any failures, update the results file, and rerun until the script passes.
+6. Stage the results/log updates only after the gate passes.
+7. Ask Claude to run the Codex audit (10-minute shell timeout):
+   ```bash
+   CLAUDE_PROMPT=$(cat <<'PROMPT'
+   codex exec "Evaluate the cherry-pick task results in project-plans/20250916-cherries-v2/results/task-04.md. Check:
+     1. Were ALL commits listed in the task file actually cherry-picked? Use \"git log --oneline -n 1\" to verify. List any missing commits.
+     2. Review the actual code changes with \"git diff HEAD~1\" - do they match what the task intended? Check for:
+        - Unauthorized settings migrations or schema changes
+        - Package name changes beyond @vybestack/llxprt-code-core replacements
+        - Removal of multi-provider support code
+        - Addition of Gemini-specific code that breaks provider abstraction
+     3. Did the quality gate script pass? Check the log file at project-plans/20250916-cherries-v2/.quality-logs/task-04 for any failures.
+     4. Run "npm test" and verify ZERO test failures. List all failing tests if any.
+     5. Run "npm run lint" and "npm run typecheck" - must have ZERO errors.
+     6. Check "git status" - working tree MUST be clean with no uncommitted changes.
+     7. Does the results file document all conflicts and resolutions?
+
+     VERDICT: Provide one of these EXACT responses:
+     - 'DO NOT CONTINUE. YOU MUST FIX: [specific issues]' if ANY check fails
+     - 'THIS PASSED. YOU MAY PROCEED TO NEXT TASK' if ALL checks pass
+
+     Be extremely critical. Any test failure, lint error, or unauthorized change means DO NOT CONTINUE."
+   PROMPT
+   )
+   claude --dangerously-bypass-approvals-and-sandbox \
+     -C "$REPO_ROOT" \
+     exec --timeout 600000 "$CLAUDE_PROMPT"
+   ```
+   Proceed only if Claude replies `THIS PASSED. YOU MAY PROCEED TO NEXT TASK`.
+
+
+
+## Reminders
+- Double-check for lingering "Gemini" strings or single-provider assumptions.
+- Note any manual test coverage specific to this feature (e.g., OAuth flows, MCP start-up).

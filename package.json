@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code",
-  "version": "0.3.4",
+  "version": "0.4.1",
   "engines": {
     "node": ">=24"
   },
@@ -54,6 +54,7 @@
     "prepare:package": "node scripts/prepare-package.js",
     "release:version": "node scripts/version.js",
     "telemetry": "node scripts/telemetry.js",
+    "check:lockfile": "node scripts/check-lockfile.js",
     "clean": "node scripts/clean.js"
   },
   "bin": {
@@ -93,7 +94,7 @@
     "memfs": "^4.17.2",
     "mock-fs": "^5.5.0",
     "prettier": "^3.5.3",
-    "react-devtools-core": "^4.28.5",
+    "react-devtools-core": "^6.1.2",
     "tsx": "^4.20.3",
     "typescript-eslint": "^8.30.1",
     "vitest": "^3.2.4",

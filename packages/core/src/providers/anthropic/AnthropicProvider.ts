@@ -130,11 +130,9 @@ export class AnthropicProvider extends BaseProvider {
   override async getModels(): Promise<IModel[]> {
     const authToken = await this.getAuthToken();
     if (!authToken) {
-      // Return empty array if no auth - models aren't critical for operation
-      this.logger.debug(
-        () => 'No authentication available for fetching Anthropic models',
+      throw new Error(
+        'No authentication available for Anthropic API calls. Use /auth anthropic to re-authenticate or /auth anthropic logout to clear any expired session.',
       );
-      return [];
     }
 
     // Update client with resolved auth (handles OAuth vs API key)

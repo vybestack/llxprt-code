@@ -102,6 +102,7 @@ describe('SessionController', () => {
       getDebugMode: vi.fn(() => false),
       getFileService: vi.fn(),
       getExtensionContextFilePaths: vi.fn(() => []),
+      getFolderTrust: vi.fn(() => true),
       setUserMemory: vi.fn(),
       setLlxprtMdFileCount: vi.fn(),
       setFlashFallbackHandler: vi.fn() as ReturnType<typeof vi.fn>,

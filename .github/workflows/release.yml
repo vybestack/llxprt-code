@@ -93,9 +93,11 @@ jobs:
         id: version
         run: |
           VERSION_JSON=$(node scripts/get-release-version.js)
-          echo "RELEASE_TAG=$(echo "$VERSION_JSON" | jq -r .releaseTag)" >> "$GITHUB_OUTPUT"
-          echo "RELEASE_VERSION=$(echo "$VERSION_JSON" | jq -r .releaseVersion)" >> "$GITHUB_OUTPUT"
-          echo "NPM_TAG=$(echo "$VERSION_JSON" | jq -r .npmTag)" >> "$GITHUB_OUTPUT"
+          {
+            echo "RELEASE_TAG=$(echo "$VERSION_JSON" | jq -r .releaseTag)"
+            echo "RELEASE_VERSION=$(echo "$VERSION_JSON" | jq -r .releaseVersion)"
+            echo "NPM_TAG=$(echo "$VERSION_JSON" | jq -r .npmTag)"
+          } >> "$GITHUB_OUTPUT"
         env:
           IS_NIGHTLY: ${{ steps.vars.outputs.is_nightly }}
           IS_PREVIEW: ${{ steps.vars.outputs.is_preview }}
@@ -207,24 +209,28 @@ jobs:
           git log --pretty=format:"- %s (%h)" "$LAST_STABLE_TAG"..HEAD > commits.txt
 
           # Start building the release notes with static header and installation
-          echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}" > release-notes.md
-          echo "" >> release-notes.md
+          {
+            echo "## Release ${{ steps.version.outputs.RELEASE_TAG }}"
+            echo ""
+          } > release-notes.md
 
           # Static installation instructions - always the same format
-          echo "### Installation" >> release-notes.md
-          echo "" >> release-notes.md
-          echo "Install or upgrade LLxprt Code using npm:" >> release-notes.md
-          echo "" >> release-notes.md
-          echo '```bash' >> release-notes.md
-          echo "npm install -g @vybestack/llxprt-code" >> release-notes.md
-          echo '```' >> release-notes.md
-          echo "" >> release-notes.md
-          echo "Or use directly with npx:" >> release-notes.md
-          echo "" >> release-notes.md
-          echo '```bash' >> release-notes.md
-          echo "npx @vybestack/llxprt-code" >> release-notes.md
-          echo '```' >> release-notes.md
-          echo "" >> release-notes.md
+          {
+            echo "### Installation"
+            echo ""
+            echo "Install or upgrade LLxprt Code using npm:"
+            echo ""
+            echo '```bash'
+            echo "npm install -g @vybestack/llxprt-code"
+            echo '```'
+            echo ""
+            echo "Or use directly with npx:"
+            echo ""
+            echo '```bash'
+            echo "npx @vybestack/llxprt-code"
+            echo '```'
+            echo ""
+          } >> release-notes.md
 
           # Generate feature summary with LLxprt or fall back to basic format
           echo "Attempting to generate feature summary with LLxprt Code..."
@@ -285,16 +291,20 @@ jobs:
           fi
 
           # Always add the full commit list
-          echo "### All Changes" >> release-notes.md
-          echo "" >> release-notes.md
+          {
+            echo "### All Changes"
+            echo ""
+          } >> release-notes.md
           cat commits.txt >> release-notes.md
 
           # Add comparison link if we have a real previous tag
           if [[ "$LAST_STABLE_TAG" != $(git rev-list --max-parents=0 HEAD) ]]; then
-            echo "" >> release-notes.md
-            echo "---" >> release-notes.md
-            echo "" >> release-notes.md
-            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_STABLE_TAG}...${{ steps.version.outputs.RELEASE_TAG }}" >> release-notes.md
+            {
+              echo ""
+              echo "---"
+              echo ""
+              echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${LAST_STABLE_TAG}...${{ steps.version.outputs.RELEASE_TAG }}"
+            } >> release-notes.md
           fi
 
           echo "Release notes generated"

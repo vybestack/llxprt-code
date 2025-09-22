@@ -632,6 +632,27 @@ export class PerformanceMetricsEvent {
   }
 }
 
+// IDE connection telemetry types for compatibility
+export enum IdeConnectionType {
+  EXTENSION = 'extension',
+  CLI = 'cli',
+  WEB = 'web',
+}
+
+export class IdeConnectionEvent {
+  'event.name': 'ide_connection';
+  'event.timestamp': string;
+  connectionType: IdeConnectionType;
+  version?: string;
+
+  constructor(connectionType: IdeConnectionType, version?: string) {
+    this['event.name'] = 'ide_connection';
+    this['event.timestamp'] = new Date().toISOString();
+    this.connectionType = connectionType;
+    this.version = version;
+  }
+}
+
 export type TelemetryEvent =
   | StartSessionEvent
   | EndSessionEvent

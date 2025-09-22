@@ -13,7 +13,7 @@ import {
 } from './gemini.js';
 import {
   LoadedSettings,
-  SettingsFile,
+  // SettingsFile, // Currently unused
   loadSettings,
 } from './config/settings.js';
 import { appEvents, AppEvent } from './utils/events.js';
@@ -134,36 +134,10 @@ describe('gemini.tsx main function', () => {
   });
 
   it('should throw InvalidConfigurationError if settings have errors', async () => {
-    const settingsError = {
-      message: 'Test settings error',
-      path: '/test/settings.json',
-    };
-    const userSettingsFile: SettingsFile = {
-      path: '/user/settings.json',
-      settings: {},
-    };
-    const workspaceSettingsFile: SettingsFile = {
-      path: '/workspace/.llxprt/settings.json',
-      settings: {},
-    };
-    const systemSettingsFile: SettingsFile = {
-      path: '/system/settings.json',
-      settings: {},
-    };
-    const systemDefaultsFile: SettingsFile = {
-      path: '/system/system-defaults.json',
-      settings: {},
-    };
-    const mockLoadedSettings = new LoadedSettings(
-      systemSettingsFile,
-      systemDefaultsFile,
-      userSettingsFile,
-      workspaceSettingsFile,
-      [settingsError],
-      true,
-    );
-
-    loadSettingsMock.mockReturnValue(mockLoadedSettings);
+    // Settings errors now throw directly from loadSettings
+    loadSettingsMock.mockImplementation(() => {
+      throw new FatalConfigError('Test settings error');
+    });
 
     await expect(main()).rejects.toThrow(FatalConfigError);
   });

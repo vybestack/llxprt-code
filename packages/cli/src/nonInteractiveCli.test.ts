@@ -107,9 +107,11 @@ describe('runNonInteractive', () => {
       expect.any(AbortSignal),
       'prompt-id-1',
     );
-    expect(processStdoutSpy).toHaveBeenCalledWith('Hello');
-    expect(processStdoutSpy).toHaveBeenCalledWith(' World');
-    expect(processStdoutSpy).toHaveBeenCalledWith('\n');
+    const meaningfulWrites = processStdoutSpy.mock.calls
+      .map(([value]) => value)
+      .filter((value) => value !== '');
+
+    expect(meaningfulWrites).toEqual(['Hello World', '\n']);
     expect(mockShutdownTelemetry).toHaveBeenCalled();
   });
 

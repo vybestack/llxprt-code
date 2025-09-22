@@ -33,7 +33,7 @@ export const MemoryUsageDisplay: React.FC = () => {
 
   return (
     <Box>
-      <Text color={SemanticColors.text.secondary}>| </Text>
+      <Text color={SemanticColors.text.secondary}> | </Text>
       <Text color={memoryUsageColor}>{memoryUsage}</Text>
     </Box>
   );

@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - 'main'
+  # This will run for PRs from the base repository, providing secrets.
+  pull_request:
+    branches:
+      - 'main'
+      - 'release/**'
+  # This will run for PRs from forks when a label is added.
+  pull_request_target:
+    types: ['labeled']
   merge_group:
   workflow_dispatch:
     # Manual trigger with optional overrides
@@ -16,23 +24,50 @@ on:
         required: false
 
 jobs:
-  e2e-test-linux:
-    name: 'E2E Test (Linux) - ${{ matrix.sandbox }}'
-    runs-on: 'ubuntu-latest'
+  e2e-test:
+    name: 'E2E Test (${{ matrix.os }}) - ${{ matrix.sandbox }}'
+    # This condition ensures the job runs for pushes to main, merge groups,
+    # PRs from the base repo, OR PRs from forks with the correct label.
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'merge_group' ||
+      (github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event.label.name == 'maintainer:e2e:ok')
+    runs-on: '${{ matrix.os }}'
     strategy:
+      fail-fast: false
       matrix:
+        os:
+          - 'ubuntu-latest'
+          - 'macos-latest'
+          - 'windows-latest'
         sandbox:
           - 'sandbox:none'
           # Temporarily disable sandbox:docker until OAuth issue is resolved
           # - 'sandbox:docker'
         node-version:
           - '24.x'
+        # No excludes needed since sandbox:docker is commented out
+        # exclude:
+        # Docker tests are not supported on macOS or Windows
+        # - os: 'macos-latest'
+        #   sandbox: 'sandbox:docker'
+        # - os: 'windows-latest'
+        #   sandbox: 'sandbox:docker'
     steps:
-      - name: 'Checkout'
+      - name: 'Checkout (fork)'
         uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        if: "github.event_name == 'pull_request_target'"
+        with:
+          ref: '${{ github.event.pull_request.head.sha }}'
+          repository: '${{ github.event.pull_request.head.repo.full_name }}'
+
+      - name: 'Checkout (internal)'
+        uses: 'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8' # ratchet:actions/checkout@v5
+        if: "github.event_name != 'pull_request_target'"
 
       - name: 'Set up Node.js ${{ matrix.node-version }}'
-        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions/setup-node@v4
+        uses: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' # ratchet:actions-node@v4
         with:
           node-version: '${{ matrix.node-version }}'
           cache: 'npm'
@@ -56,16 +91,16 @@ jobs:
         run: |-
           echo "Current directory: $(pwd)"
           echo "Directory contents before bundle:"
-          ls -la
+          node -e "console.log(require('fs').readdirSync('.').map(f => { const s = require('fs').statSync(f); return s.isDirectory() ? f + '/' : f; }).join('\n'))"
           npm run bundle
           echo "Directory contents after bundle:"
-          ls -la
+          node -e "console.log(require('fs').readdirSync('.').map(f => { const s = require('fs').statSync(f); return s.isDirectory() ? f + '/' : f; }).join('\n'))"
           echo "Bundle directory contents:"
-          ls -la bundle/ || echo "Bundle directory not found"
+          node -e "try { console.log(require('fs').readdirSync('bundle').map(f => { const s = require('fs').statSync('bundle/' + f); return s.isDirectory() ? f + '/' : f; }).join('\n')); } catch(e) { console.log('Bundle directory not found'); }"
 
       - name: 'Set up Docker'
         if: |-
-          ${{ matrix.sandbox == 'sandbox:docker' }}
+          matrix.os == 'ubuntu-latest' && matrix.sandbox == 'sandbox:docker'
         uses: 'docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435' # ratchet:docker/setup-buildx-action@v3
 
       - name: 'Build sandbox Docker image'
@@ -102,7 +137,6 @@ jobs:
           registry: 'docker.io'
           username: '${{ secrets.DOCKERHUB_USERNAME }}'
           password: '${{ secrets.DOCKERHUB_TOKEN }}'
-
       - name: 'Run E2E tests'
         env:
           # Provider configuration from repository secrets/variables
@@ -122,7 +156,18 @@ jobs:
           VERBOSE: 'true'
           KEEP_OUTPUT: 'true'
         run: |-
-          npm run "test:integration:${LLXPRT_SANDBOX}"
+          # Use different commands based on sandbox type to avoid PowerShell variable expansion issues
+          if [ "${{ matrix.sandbox }}" = "sandbox:none" ]; then
+            npm run test:integration:sandbox:none
+          elif [ "${{ matrix.sandbox }}" = "sandbox:docker" ]; then
+            npm run test:integration:sandbox:docker
+          elif [ "${{ matrix.sandbox }}" = "sandbox:podman" ]; then
+            npm run test:integration:sandbox:podman
+          else
+            echo "Unknown sandbox type: ${{ matrix.sandbox }}"
+            exit 1
+          fi
+        shell: bash
 
   e2e-test-macos:
     name: 'E2E Test - macOS'

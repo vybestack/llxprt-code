@@ -11,6 +11,7 @@ import {
   FunctionCall,
   FunctionDeclaration,
   FinishReason,
+  GenerateContentResponseUsageMetadata,
 } from '@google/genai';
 import {
   ToolCallConfirmationDetails,
@@ -30,6 +31,8 @@ import {
 } from '../utils/errors.js';
 import { GeminiChat } from './geminiChat.js';
 import { DebugLogger } from '../debug/index.js';
+import { getCodeAssistServer } from '../code_assist/codeAssist.js';
+import { UserTierId } from '../code_assist/types.js';
 
 // Define a structure for tools passed to the server
 export interface ServerTool {
@@ -59,7 +62,13 @@ export enum GeminiEventType {
   MaxSessionTurns = 'max_session_turns',
   Finished = 'finished',
   LoopDetected = 'loop_detected',
+  Citation = 'citation',
+  Retry = 'retry',
 }
+
+export type ServerGeminiRetryEvent = {
+  type: GeminiEventType.Retry;
+};
 
 export interface StructuredError {
   message: string;
@@ -171,12 +180,21 @@ export type ServerGeminiMaxSessionTurnsEvent = {
 
 export type ServerGeminiFinishedEvent = {
   type: GeminiEventType.Finished;
-  value: FinishReason;
+  value: {
+    reason: FinishReason;
+    usageMetadata?: GenerateContentResponseUsageMetadata;
+  };
 };
 
 export type ServerGeminiLoopDetectedEvent = {
   type: GeminiEventType.LoopDetected;
 };
+
+export type ServerGeminiCitationEvent = {
+  type: GeminiEventType.Citation;
+  value: string;
+};
+
 // The original union type, now composed of the individual types
 export type ServerGeminiStreamEvent =
   | ServerGeminiContentEvent
@@ -190,7 +208,9 @@ export type ServerGeminiStreamEvent =
   | ServerGeminiUsageMetadataEvent
   | ServerGeminiMaxSessionTurnsEvent
   | ServerGeminiFinishedEvent
-  | ServerGeminiLoopDetectedEvent;
+  | ServerGeminiLoopDetectedEvent
+  | ServerGeminiCitationEvent
+  | ServerGeminiRetryEvent;
 
 // A turn manages the agentic loop turn within the server context.
 export class Turn {
@@ -209,6 +229,49 @@ export class Turn {
     this.finishReason = undefined;
     this.logger = new DebugLogger('llxprt:core:turn');
   }
+
+  /**
+   * Check if citations should be shown for the current user/settings.
+   * Based on the upstream implementation from commit 997136ae.
+   */
+  private shouldShowCitations(): boolean {
+    try {
+      // Access config through the chat instance
+      const config = (this.chat as unknown as { config: unknown }).config as {
+        getSettingsService(): { get(key: string): unknown } | undefined;
+      };
+
+      const settingsService = config?.getSettingsService();
+      if (settingsService) {
+        const enabled = settingsService.get('ui.showCitations');
+        if (enabled !== undefined) {
+          return enabled as boolean;
+        }
+      }
+
+      // Fallback: check user tier for code assist server
+      const server = getCodeAssistServer(config as never);
+      return (server && server.userTier !== UserTierId.FREE) ?? false;
+    } catch (error) {
+      this.logger.debug('Failed to determine citation settings:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Emits a citation event with the given text.
+   * This integrates with llxprt's provider abstraction to work across all providers.
+   */
+  private emitCitation(text: string): ServerGeminiCitationEvent | null {
+    if (!this.shouldShowCitations()) {
+      return null;
+    }
+
+    return {
+      type: GeminiEventType.Citation,
+      value: text,
+    };
+  }
   // The run method yields simpler events suitable for server logic
   async *run(
     req: PartListUnion,
@@ -221,6 +284,8 @@ export class Turn {
     });
 
     try {
+      // Note: This assumes `sendMessageStream` yields events like
+      // { type: StreamEventType.RETRY } or { type: StreamEventType.CHUNK, value: GenerateContentResponse }
       const responseStream = await this.chat.sendMessageStream(
         {
           message: req,
@@ -231,12 +296,22 @@ export class Turn {
         this.prompt_id,
       );
 
-      for await (const resp of responseStream) {
+      for await (const streamEvent of responseStream) {
         if (signal?.aborted) {
           yield { type: GeminiEventType.UserCancelled };
-          // Do not add resp to debugResponses if aborted before processing
           return;
         }
+
+        // Handle the new RETRY event
+        if (streamEvent.type === 'retry') {
+          yield { type: GeminiEventType.Retry };
+          continue; // Skip to the next event in the stream
+        }
+
+        // Assuming other events are chunks with a `value` property
+        const resp = streamEvent.value as GenerateContentResponse;
+        if (!resp) continue; // Skip if there's no response body
+
         this.debugResponses.push(resp);
 
         const thoughtPart = resp.candidates?.[0]?.content?.parts?.[0];
@@ -264,6 +339,15 @@ export class Turn {
         const text = getResponseText(resp);
         if (text) {
           yield { type: GeminiEventType.Content, value: text };
+
+          // Emit citation event if conditions are met
+          // Based on upstream implementation - emit citation after content
+          const citationEvent = this.emitCitation(
+            'Response may contain information from external sources. Please verify important details independently.',
+          );
+          if (citationEvent) {
+            yield citationEvent;
+          }
         }
 
         // Handle function calls (requesting tool execution)
@@ -278,11 +362,15 @@ export class Turn {
         // Check if response was truncated or stopped for various reasons
         const finishReason = resp.candidates?.[0]?.finishReason;
 
+        // This is the key change: Only yield 'Finished' if there is a finishReason.
         if (finishReason) {
           this.finishReason = finishReason;
           yield {
             type: GeminiEventType.Finished,
-            value: finishReason as FinishReason,
+            value: {
+              reason: finishReason,
+              usageMetadata: resp.usageMetadata,
+            },
           };
         }
       }

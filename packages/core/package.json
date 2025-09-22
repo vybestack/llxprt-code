@@ -1,6 +1,6 @@
 {
   "name": "@vybestack/llxprt-code-core",
-  "version": "0.3.4",
+  "version": "0.4.1",
   "description": "LLxprt Code Core",
   "repository": {
     "type": "git",
@@ -23,11 +23,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",
     "@dqbd/tiktoken": "^1.0.21",
-    "@google/genai": "1.13.0",
+    "@google/genai": "1.16.0",
+    "@lvce-editor/ripgrep": "^1.6.0",
     "@modelcontextprotocol/sdk": "^1.11.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.203.0",
-    "@lvce-editor/ripgrep": "^1.6.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.203.0",
     "@opentelemetry/exporter-metrics-otlp-grpc": "^0.203.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.203.0",

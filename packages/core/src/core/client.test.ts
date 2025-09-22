@@ -477,7 +477,7 @@ describe('Gemini Client (client.ts)', () => {
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
       try {
-        await client.generateJson(contents, schema, abortSignal);
+        await client.generateJson(contents, schema, abortSignal, 'test-model');
       } catch (error) {
         console.error('Error in generateJson:', error);
         throw error;
@@ -487,7 +487,7 @@ describe('Gemini Client (client.ts)', () => {
       expect(capturedRequest).toBeDefined();
       expect(capturedPromptId).toBe('test-session-id');
       expect(capturedRequest).toMatchObject({
-        model: 'test-model', // Should use current model from config
+        model: 'test-model', // Now using the passed model parameter
         config: {
           abortSignal,
           systemInstruction: 'Test system instruction',
@@ -2157,11 +2157,16 @@ describe('Gemini Client (client.ts)', () => {
       };
       client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-      await client.generateContent(contents, generationConfig, abortSignal);
+      await client.generateContent(
+        contents,
+        generationConfig,
+        abortSignal,
+        DEFAULT_GEMINI_FLASH_MODEL,
+      );
 
       expect(mockGenerateContentFn).toHaveBeenCalledWith(
         {
-          model: 'test-model',
+          model: DEFAULT_GEMINI_FLASH_MODEL,
           config: {
             abortSignal,
             systemInstruction: 'Test system instruction',
@@ -2176,7 +2181,7 @@ describe('Gemini Client (client.ts)', () => {
 
     it('should use current model from config for content generation', async () => {
       const initialModel = client['config'].getModel();
-      const _contents = [{ role: 'user', parts: [{ text: 'test' }] }];
+      const contents = [{ role: 'user', parts: [{ text: 'test' }] }];
       const currentModel = initialModel + '-changed';
 
       vi.spyOn(client['config'], 'getModel').mockReturnValueOnce(currentModel);
@@ -2195,6 +2200,13 @@ describe('Gemini Client (client.ts)', () => {
         embedContent: vi.fn(),
       };
       client['contentGenerator'] = mockContentGenerator as ContentGenerator;
+
+      await client.generateContent(
+        contents,
+        {},
+        new AbortController().signal,
+        DEFAULT_GEMINI_FLASH_MODEL,
+      );
 
       // const initialChat = client['chat'];
 
@@ -2240,7 +2252,6 @@ describe('Gemini Client (client.ts)', () => {
         ok: true,
         json: vi.fn().mockResolvedValue({ models: mockModels }),
       });
-
       // Act
       // const models = await client.listAvailableModels();
       const models: unknown[] = []; // Placeholder - listAvailableModels not implemented
@@ -2252,6 +2263,14 @@ describe('Gemini Client (client.ts)', () => {
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
         }),
+      );
+      expect(mockGenerateContentFn).toHaveBeenCalledWith(
+        {
+          model: DEFAULT_GEMINI_FLASH_MODEL,
+          config: expect.any(Object),
+          contents,
+        },
+        'test-session-id',
       );
       expect(models).toEqual(mockModels);
     });

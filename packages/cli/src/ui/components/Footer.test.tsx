@@ -318,4 +318,53 @@ describe('Footer', () => {
       expect(textContent).toContain('(untrusted)');
     });
   });
+
+  describe('visibility toggles', () => {
+    it('should hide CWD when hideCWD is true', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(<Footer {...defaultProps} hideCWD={true} />);
+      expect(container.textContent).not.toContain(defaultProps.targetDir);
+    });
+
+    it('should hide sandbox status when hideSandboxStatus is true', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(
+        <Footer
+          {...defaultProps}
+          isTrustedFolder={true}
+          hideSandboxStatus={true}
+        />,
+      );
+      expect(container.textContent).not.toContain('no sandbox');
+    });
+
+    it('should hide model info when hideModelInfo is true', () => {
+      mockUseResponsive.mockReturnValue({
+        width: 120,
+        breakpoint: 'STANDARD',
+        isNarrow: false,
+        isStandard: true,
+        isWide: false,
+      });
+
+      const { container } = render(
+        <Footer {...defaultProps} hideModelInfo={true} />,
+      );
+      expect(container.textContent).not.toContain(defaultProps.model);
+    });
+  });
 });

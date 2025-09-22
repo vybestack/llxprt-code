@@ -55,6 +55,8 @@ export * from './utils/filesearch/fileSearch.js';
 export * from './utils/secure-browser-launcher.js';
 export * from './utils/errorParsing.js';
 export * from './utils/ignorePatterns.js';
+export * from './utils/partUtils.js';
+export * from './utils/ide-trust.js';
 
 // Export auth system
 export * from './auth/token-store.js';
@@ -225,3 +227,6 @@ export { Storage } from './config/storage.js';
 
 // Export models
 export * from './config/models.js';
+
+// Export test utils
+export * from './test-utils/index.js';

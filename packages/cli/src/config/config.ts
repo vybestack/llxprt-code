@@ -24,7 +24,6 @@ import {
   FileDiscoveryService,
   TelemetryTarget,
   FileFilteringOptions,
-  IdeClient,
   ProfileManager,
   ShellTool,
   EditTool,
@@ -41,6 +40,7 @@ import { loadSandboxConfig } from './sandboxConfig.js';
 import * as dotenv from 'dotenv';
 import * as os from 'node:os';
 import { resolvePath } from '../utils/resolvePath.js';
+import { appEvents } from '../utils/events.js';
 
 import { isWorkspaceTrusted } from './trustedFolders.js';
 
@@ -80,6 +80,9 @@ export interface CliArgs {
   loadMemoryFromIncludeDirectories: boolean | undefined;
   ideMode: string | undefined;
   screenReader: boolean | undefined;
+  useSmartEdit: boolean | undefined;
+  sessionSummary: string | undefined;
+  promptWords: string[] | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -90,7 +93,7 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
       '$0 [options]',
       'LLxprt Code - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
     )
-    .command('$0', 'Launch LLxprt CLI', (yargsInstance) =>
+    .command('$0 [promptWords...]', 'Launch LLxprt CLI', (yargsInstance) =>
       yargsInstance
         .option('model', {
           alias: 'm',
@@ -224,8 +227,71 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           description: 'Enable screen reader mode for accessibility.',
           default: false,
         })
+        .option('session-summary', {
+          type: 'string',
+          description: 'File to write session summary to.',
+        })
+        .deprecateOption(
+          'telemetry',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'telemetry-target',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'telemetry-otlp-endpoint',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'telemetry-otlp-protocol',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'telemetry-log-prompts',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'telemetry-outfile',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'show-memory-usage',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'sandbox-image',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'proxy',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'checkpointing',
+          'Use settings.json instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'all-files',
+          'Use @ includes in the application instead. This flag will be removed in a future version.',
+        )
+        .deprecateOption(
+          'prompt',
+          'Use the positional prompt instead. This flag will be removed in a future version.',
+        )
+        .positional('promptWords', {
+          describe: 'Prompt to run non-interactively',
+          type: 'string',
+          array: true,
+        })
         .check((argv) => {
-          if (argv.prompt && argv.promptInteractive) {
+          const promptWords = argv['promptWords'] as string[] | undefined;
+          if (argv['prompt'] && promptWords && promptWords.length > 0) {
+            throw new Error(
+              'Cannot use both a positional prompt and the --prompt (-p) flag together',
+            );
+          }
+          if (argv['prompt'] && argv['promptInteractive']) {
             throw new Error(
               'Cannot use both --prompt (-p) and --prompt-interactive (-i) together',
             );
@@ -385,7 +451,6 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     approvalMode: result.approvalMode as string | undefined,
     telemetry: result.telemetry as boolean | undefined,
     checkpointing: result.checkpointing as boolean | undefined,
-    screenReader: result.screenReader as boolean | undefined,
     telemetryTarget: result.telemetryTarget as string | undefined,
     telemetryOtlpEndpoint: result.telemetryOtlpEndpoint as string | undefined,
     telemetryLogPrompts: result.telemetryLogPrompts as boolean | undefined,
@@ -404,7 +469,11 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     loadMemoryFromIncludeDirectories:
       result.loadMemoryFromIncludeDirectories as boolean | undefined,
     ideMode: result.ideMode as string | undefined,
+    screenReader: result.screenReader as boolean | undefined,
+    useSmartEdit: result.useSmartEdit as boolean | undefined,
+    sessionSummary: result.sessionSummary as string | undefined,
     allowedTools: result.allowedTools as string[] | undefined,
+    promptWords: result.promptWords as string[] | undefined,
   };
 
   return cliArgs;
@@ -420,6 +489,7 @@ export async function loadHierarchicalLlxprtMemory(
   fileService: FileDiscoveryService,
   settings: Settings,
   extensionContextFilePaths: string[] = [],
+  folderTrust: boolean,
   memoryImportFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
 ): Promise<{ memoryContent: string; fileCount: number }> {
@@ -445,6 +515,7 @@ export async function loadHierarchicalLlxprtMemory(
     debugMode,
     fileService,
     extensionContextFilePaths,
+    folderTrust,
     memoryImportFormat,
     fileFilteringOptions,
     settings.memoryDiscoveryMaxDirs,
@@ -559,12 +630,9 @@ export async function loadCliConfig(
 
   // ideModeFeature flag removed - now using ideMode directly
 
-  const ideClient = await IdeClient.getInstance();
-
-  const folderTrustFeature = settings.folderTrustFeature ?? false;
-  const folderTrustSetting = settings.folderTrust ?? true;
-  const folderTrust = folderTrustFeature && folderTrustSetting;
-  const trustedFolder = folderTrust ? isWorkspaceTrusted() : true;
+  // Folder trust feature flag removed - now using settings directly
+  const folderTrust = settings.folderTrust ?? false;
+  const trustedFolder = isWorkspaceTrusted(settings) ?? true;
 
   const allExtensions = annotateActiveExtensions(
     extensions,
@@ -612,12 +680,14 @@ export async function loadCliConfig(
     fileService,
     effectiveSettings,
     extensionContextFilePaths,
+    trustedFolder,
     memoryImportFormat,
     fileFiltering,
   );
 
   let mcpServers = mergeMcpServers(effectiveSettings, activeExtensions);
-  const question = argv.promptInteractive || argv.prompt || '';
+  const question =
+    argv.promptInteractive || argv.prompt || (argv.promptWords || []).join(' ');
 
   // Determine approval mode with backward compatibility
   let approvalMode: ApprovalMode;
@@ -746,7 +816,9 @@ export async function loadCliConfig(
 
   // The screen reader argument takes precedence over the accessibility setting.
   const screenReader =
-    argv.screenReader ?? effectiveSettings.accessibility?.screenReader ?? false;
+    argv.screenReader !== undefined
+      ? argv.screenReader
+      : (effectiveSettings.accessibility?.screenReader ?? false);
 
   const config = new Config({
     sessionId,
@@ -797,14 +869,8 @@ export async function loadCliConfig(
       redactPersonalInfo: effectiveSettings.telemetry?.redactPersonalInfo,
     },
     usageStatisticsEnabled: effectiveSettings.usageStatisticsEnabled ?? true,
-    // Git-aware file filtering settings
-    fileFiltering: {
-      respectGitIgnore: effectiveSettings.fileFiltering?.respectGitIgnore,
-      respectLlxprtIgnore: effectiveSettings.fileFiltering?.respectLlxprtIgnore,
-      enableRecursiveFileSearch:
-        effectiveSettings.fileFiltering?.enableRecursiveFileSearch,
-      disableFuzzySearch: effectiveSettings.fileFiltering?.disableFuzzySearch,
-    },
+    // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
+    fileFiltering: effectiveSettings.fileFiltering,
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
     proxy:
@@ -831,9 +897,7 @@ export async function loadCliConfig(
     noBrowser: !!process.env.NO_BROWSER,
     summarizeToolOutput: effectiveSettings.summarizeToolOutput,
     ideMode,
-    ideClient,
     chatCompression: settings.chatCompression,
-    folderTrustFeature,
     interactive,
     folderTrust,
     trustedFolder,
@@ -841,6 +905,8 @@ export async function loadCliConfig(
     useRipgrep: effectiveSettings.useRipgrep,
     shouldUseNodePtyShell: effectiveSettings.shouldUseNodePtyShell,
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
+    eventEmitter: appEvents,
+    useSmartEdit: argv.useSmartEdit ?? effectiveSettings.useSmartEdit,
   });
 
   const enhancedConfig = config;

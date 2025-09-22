@@ -95,6 +95,16 @@ export const SETTINGS_SCHEMA = {
     description: 'Hide the footer from the UI',
     showInDialog: true,
   },
+  hideContextSummary: {
+    type: 'boolean',
+    label: 'Hide Context Summary',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description:
+      'Hide the context summary (LLXPRT.md, MCP servers) above the input.',
+    showInDialog: true,
+  },
   showMemoryUsage: {
     type: 'boolean',
     label: 'Show Memory Usage',
@@ -103,6 +113,15 @@ export const SETTINGS_SCHEMA = {
     default: false,
     description: 'Display memory usage information in the UI',
     showInDialog: true,
+  },
+  customWittyPhrases: {
+    type: 'array',
+    label: 'Custom Witty Phrases',
+    category: 'UI',
+    requiresRestart: false,
+    default: [] as string[],
+    description: 'Custom witty phrases to display during loading.',
+    showInDialog: false,
   },
 
   usageStatisticsEnabled: {
@@ -221,7 +240,7 @@ export const SETTINGS_SCHEMA = {
         label: 'Screen Reader Mode',
         category: 'Accessibility',
         requiresRestart: true,
-        default: false,
+        default: undefined as boolean | undefined,
         description:
           'Render output in plain-text to be more screen reader accessible',
         showInDialog: true,
@@ -419,6 +438,34 @@ export const SETTINGS_SCHEMA = {
     description: 'Configuration for MCP servers.',
     showInDialog: false,
   },
+  // Footer configuration settings - adapted to llxprt's flat structure
+  hideCWD: {
+    type: 'boolean',
+    label: 'Hide CWD',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the current working directory path in the footer.',
+    showInDialog: true,
+  },
+  hideSandboxStatus: {
+    type: 'boolean',
+    label: 'Hide Sandbox Status',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the sandbox status indicator in the footer.',
+    showInDialog: true,
+  },
+  hideModelInfo: {
+    type: 'boolean',
+    label: 'Hide Model Info',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description: 'Hide the model name and context usage in the footer.',
+    showInDialog: true,
+  },
   allowMCPServers: {
     type: 'array',
     label: 'Allow MCP Servers',
@@ -474,6 +521,213 @@ export const SETTINGS_SCHEMA = {
     description: 'The DNS resolution order.',
     showInDialog: false,
   },
+
+  tools: {
+    type: 'object',
+    label: 'Tools',
+    category: 'Tools',
+    requiresRestart: true,
+    default: {},
+    description: 'Settings for built-in and custom tools.',
+    showInDialog: false,
+    properties: {
+      sandbox: {
+        type: 'object',
+        label: 'Sandbox',
+        category: 'Tools',
+        requiresRestart: true,
+        default: undefined as boolean | string | undefined,
+        description:
+          'Sandbox execution environment (can be a boolean or a path string).',
+        showInDialog: false,
+      },
+      usePty: {
+        type: 'boolean',
+        label: 'Use node-pty for Shell Execution',
+        category: 'Tools',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Use node-pty for shell command execution. Fallback to child_process still applies.',
+        showInDialog: true,
+      },
+      autoAccept: {
+        type: 'boolean',
+        label: 'Auto Accept',
+        category: 'Tools',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Automatically accept and execute tool calls that are considered safe (e.g., read-only operations).',
+        showInDialog: true,
+      },
+      core: {
+        type: 'array',
+        label: 'Core Tools',
+        category: 'Tools',
+        requiresRestart: true,
+        default: undefined as string[] | undefined,
+        description: 'Paths to core tool definitions.',
+        showInDialog: false,
+      },
+      allowed: {
+        type: 'array',
+        label: 'Allowed Tools',
+        category: 'Advanced',
+        requiresRestart: true,
+        default: undefined as string[] | undefined,
+        description:
+          'A list of tool names that will bypass the confirmation dialog.',
+        showInDialog: false,
+      },
+      exclude: {
+        type: 'array',
+        label: 'Exclude Tools',
+        category: 'Tools',
+        requiresRestart: true,
+        default: undefined as string[] | undefined,
+        description: 'Tool names to exclude from discovery.',
+        showInDialog: false,
+      },
+      discoveryCommand: {
+        type: 'string',
+        label: 'Tool Discovery Command',
+        category: 'Tools',
+        requiresRestart: true,
+        default: undefined as string | undefined,
+        description: 'Command to run for tool discovery.',
+        showInDialog: false,
+      },
+      callCommand: {
+        type: 'string',
+        label: 'Tool Call Command',
+        category: 'Tools',
+        requiresRestart: true,
+        default: undefined as string | undefined,
+        description: 'Command to run for tool calls.',
+        showInDialog: false,
+      },
+      useRipgrep: {
+        type: 'boolean',
+        label: 'Use Ripgrep',
+        category: 'Tools',
+        requiresRestart: false,
+        default: false,
+        description:
+          'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+        showInDialog: true,
+      },
+    },
+  },
+
+  mcp: {
+    type: 'object',
+    label: 'MCP',
+    category: 'MCP',
+    requiresRestart: true,
+    default: {},
+    description: 'Settings for Model Context Protocol (MCP) servers.',
+    showInDialog: false,
+    properties: {
+      serverCommand: {
+        type: 'string',
+        label: 'MCP Server Command',
+        category: 'MCP',
+        requiresRestart: true,
+        default: undefined as string | undefined,
+        description: 'Command to start an MCP server.',
+        showInDialog: false,
+      },
+      allowed: {
+        type: 'array',
+        label: 'Allow MCP Servers',
+        category: 'MCP',
+        requiresRestart: true,
+        default: undefined as string[] | undefined,
+        description: 'A list of MCP servers to allow.',
+        showInDialog: false,
+      },
+      excluded: {
+        type: 'array',
+        label: 'Exclude MCP Servers',
+        category: 'MCP',
+        requiresRestart: true,
+        default: undefined as string[] | undefined,
+        description: 'A list of MCP servers to exclude.',
+        showInDialog: false,
+      },
+    },
+  },
+  useSmartEdit: {
+    type: 'boolean',
+    label: 'Use Smart Edit',
+    category: 'Advanced',
+    requiresRestart: false,
+    default: false,
+    description: 'Enable the smart-edit tool instead of the replace tool.',
+    showInDialog: false,
+  },
+  security: {
+    type: 'object',
+    label: 'Security',
+    category: 'Security',
+    requiresRestart: true,
+    default: {},
+    description: 'Security-related settings.',
+    showInDialog: false,
+    properties: {
+      folderTrust: {
+        type: 'object',
+        label: 'Folder Trust',
+        category: 'Security',
+        requiresRestart: true,
+        default: {},
+        description: 'Settings for folder trust.',
+        showInDialog: false,
+        properties: {
+          enabled: {
+            type: 'boolean',
+            label: 'Folder Trust',
+            category: 'Security',
+            requiresRestart: true,
+            default: false,
+            description: 'Setting to track whether Folder trust is enabled.',
+            showInDialog: true,
+          },
+        },
+      },
+      auth: {
+        type: 'object',
+        label: 'Authentication',
+        category: 'Security',
+        requiresRestart: true,
+        default: {},
+        description: 'Authentication settings.',
+        showInDialog: false,
+        properties: {
+          selectedType: {
+            type: 'string',
+            label: 'Selected Auth Type',
+            category: 'Security',
+            requiresRestart: true,
+            default: undefined as AuthType | undefined,
+            description: 'The currently selected authentication type.',
+            showInDialog: false,
+          },
+          useExternal: {
+            type: 'boolean',
+            label: 'Use External Auth',
+            category: 'Security',
+            requiresRestart: true,
+            default: undefined as boolean | undefined,
+            description: 'Whether to use an external authentication flow.',
+            showInDialog: false,
+          },
+        },
+      },
+    },
+  },
+
   excludedProjectEnvVars: {
     type: 'array',
     label: 'Excluded Project Environment Variables',
@@ -533,7 +787,7 @@ export const SETTINGS_SCHEMA = {
     type: 'boolean',
     label: 'Folder Trust Feature',
     category: 'General',
-    requiresRestart: false,
+    requiresRestart: true,
     default: false,
     description: 'Enable folder trust feature for enhanced security.',
     showInDialog: true,
@@ -542,7 +796,7 @@ export const SETTINGS_SCHEMA = {
     type: 'boolean',
     label: 'Folder Trust',
     category: 'General',
-    requiresRestart: false,
+    requiresRestart: true,
     default: false,
     description: 'Setting to track whether Folder trust is enabled.',
     showInDialog: true,
@@ -745,3 +999,9 @@ type InferSettings<T extends SettingsSchema> = {
 };
 
 export type Settings = InferSettings<typeof SETTINGS_SCHEMA>;
+
+export interface FooterSettings {
+  hideCWD?: boolean;
+  hideSandboxStatus?: boolean;
+  hideModelInfo?: boolean;
+}

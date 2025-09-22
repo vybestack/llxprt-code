@@ -183,6 +183,8 @@ vi.mock('@vybestack/llxprt-code-core', async (importOriginal) => {
         getEphemeralSettings: vi.fn(() => ({})),
         setEphemeralSetting: vi.fn(),
         clearEphemeralSetting: vi.fn(),
+        getFolderTrustFeature: vi.fn(() => false),
+        getFolderTrust: vi.fn(() => false),
       };
     });
 
@@ -236,9 +238,23 @@ vi.mock('./hooks/useFocus', () => ({
   useFocus: vi.fn(() => true),
 }));
 
+vi.mock('./hooks/useIdeTrustListener', () => ({
+  useIdeTrustListener: vi.fn(() => ({
+    needsRestart: false,
+  })),
+}));
+
 vi.mock('./hooks/useLogger', () => ({
   useLogger: vi.fn(() => ({
     getPreviousUserMessages: vi.fn().mockResolvedValue([]),
+  })),
+}));
+
+vi.mock('./hooks/useInputHistoryStore.js', () => ({
+  useInputHistoryStore: vi.fn(() => ({
+    inputHistory: [],
+    addInput: vi.fn(),
+    initializeFromLogger: vi.fn(),
   })),
 }));
 
@@ -353,7 +369,6 @@ describe('App UI', () => {
       systemDefaultsFile,
       userSettingsFile,
       workspaceSettingsFile,
-      [],
       true,
     );
   };
@@ -702,6 +717,42 @@ describe('App UI', () => {
     expect(lastFrame()).toContain(
       'Using: 1 open file (ctrl+g to view) | 1 GEMINI.md file',
     );
+  });
+
+  it('should not display context summary when hideContextSummary is true', async () => {
+    mockSettings = createMockSettings({
+      workspace: {
+        ui: { hideContextSummary: true },
+      },
+    });
+    vi.mocked(ideContext.getIdeContext).mockReturnValue({
+      workspaceState: {
+        openFiles: [
+          {
+            path: '/path/to/my-file.ts',
+            isActive: true,
+            selectedText: 'hello',
+            timestamp: 0,
+          },
+        ],
+      },
+    });
+    mockConfig.getGeminiMdFileCount.mockReturnValue(1);
+    mockConfig.getAllGeminiMdFilenames.mockReturnValue(['GEMINI.md']);
+
+    const { lastFrame, unmount } = renderWithProviders(
+      <App
+        config={mockConfig as unknown as ServerConfig}
+        settings={mockSettings}
+        version={mockVersion}
+      />,
+    );
+    currentUnmount = unmount;
+    await Promise.resolve();
+    const output = lastFrame();
+    expect(output).not.toContain('Using:');
+    expect(output).not.toContain('open file');
+    expect(output).not.toContain('GEMINI.md file');
   });
 
   it('should display default "GEMINI.md" in footer when contextFileName is not set and count is 1', async () => {

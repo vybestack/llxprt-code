@@ -343,7 +343,6 @@ export class ShellExecutionService {
         });
         let processingChain = Promise.resolve();
         let decoder: TextDecoder | null = null;
-        let output = '';
         const outputChunks: Buffer[] = [];
         const error: Error | null = null;
         let exited = false;
@@ -380,9 +379,10 @@ export class ShellExecutionService {
                 if (isStreamingRawContent) {
                   const decodedChunk = decoder.decode(data, { stream: true });
                   headlessTerminal.write(decodedChunk, () => {
-                    const newStrippedOutput = getFullText(headlessTerminal);
-                    output = newStrippedOutput;
-                    onOutputEvent({ type: 'data', chunk: newStrippedOutput });
+                    onOutputEvent({
+                      type: 'data',
+                      chunk: stripAnsi(decodedChunk),
+                    });
                     resolve();
                   });
                 } else {
@@ -413,11 +413,12 @@ export class ShellExecutionService {
             processingChain.then(() => {
               const finalBuffer = Buffer.concat(outputChunks);
 
+              const fullOutput = getFullText(headlessTerminal);
               resolve({
                 rawOutput: finalBuffer,
-                output,
-                stdout: output,
-                stderr: '',
+                output: fullOutput,
+                stdout: fullOutput, // For PTY, stdout and stderr are combined
+                stderr: '', // PTY combines output streams
                 exitCode,
                 signal: signal ?? null,
                 error,
