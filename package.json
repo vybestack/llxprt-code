@@ -123,7 +123,10 @@
     "rc-config-loader": {
       "js-yaml": "npm:js-yaml@4.1.1"
     },
-    "wrap-ansi": "9.0.2"
+    "wrap-ansi": "9.0.2",
+    "cliui": {
+      "wrap-ansi": "7.0.0"
+    }
   },
   "optionalDependencies": {
     "@lydell/node-pty": "1.1.0",
