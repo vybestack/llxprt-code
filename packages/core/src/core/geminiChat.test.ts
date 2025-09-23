@@ -1062,7 +1062,7 @@ describe('GeminiChat', () => {
       // !hasToolCall && ((!hasFinishReason && !hasTextResponse) || !responseText)
       // Let's modify the test to actually hit the error condition
 
-      // Following the system design理念: system handles edge cases gracefully
+      // Following the system design: system handles edge cases gracefully
       const streamWithoutFinishReason = (async function* () {
         yield {
           speaker: 'ai',
