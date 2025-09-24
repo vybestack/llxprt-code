@@ -11,9 +11,8 @@ import * as os from 'node:os';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { EXTENSIONS_CONFIG_FILENAME } from '../extension.js';
-import { quote } from 'shell-quote';
 
 export enum ExtensionUpdateState {
   CHECKING_FOR_UPDATES = 'checking for updates',
@@ -77,7 +76,7 @@ export async function cloneFromGit(
     await git.checkout('FETCH_HEAD');
   } catch (error) {
     throw new Error(
-      `Failed to clone Git repository from ${installMetadata.source}`,
+      `Failed to clone Git repository from ${installMetadata.source} ${getErrorMessage(error)}`,
       {
         cause: error,
       },
@@ -415,13 +414,23 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 }
 
 function extractFile(file: string, dest: string) {
-  const safeFile = quote([file]);
-  const safeDest = quote([dest]);
+  let args: string[];
   if (file.endsWith('.tar.gz')) {
-    execSync(`tar -xzf ${safeFile} -C ${safeDest}`);
+    args = ['-xzf', file, '-C', dest];
   } else if (file.endsWith('.zip')) {
-    execSync(`unzip ${safeFile} -d ${safeDest}`);
+    args = ['-xf', file, '-C', dest];
   } else {
     throw new Error(`Unsupported file extension for extraction: ${file}`);
+  }
+
+  const result = spawnSync('tar', args, { stdio: 'pipe' });
+
+  if (result.status !== 0) {
+    if (result.error) {
+      throw new Error(`Failed to spawn 'tar': ${result.error.message}`);
+    }
+    throw new Error(
+      `'tar' command failed with exit code ${result.status}: ${result.stderr.toString()}`,
+    );
   }
 }
