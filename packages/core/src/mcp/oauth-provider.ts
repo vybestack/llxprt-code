@@ -670,6 +670,7 @@ export class MCPOAuthProvider {
 
       // If no registration URL was previously discovered, try to discover it
       if (!registrationUrl) {
+        // Extract server URL from authorization URL
         if (!config.authorizationUrl) {
           throw new Error(
             'Cannot perform dynamic registration without authorization URL',
@@ -681,6 +682,7 @@ export class MCPOAuthProvider {
 
         console.debug('→ Attempting dynamic client registration...');
 
+        // Get the authorization server metadata for registration
         const authServerMetadata =
           await OAuthUtils.discoverAuthorizationServerMetadata(serverUrl);
 
