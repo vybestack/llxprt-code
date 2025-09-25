@@ -20,6 +20,8 @@ import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
 import { downloadFromGitHubRelease } from './extensions/github.js';
 import type { LoadExtensionContext } from './extensions/variableSchema.js';
+import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import chalk from 'chalk';
 
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
 
@@ -565,8 +567,12 @@ export async function uninstallExtension(
   });
 }
 
-export function toOutputString(extension: Extension): string {
-  let output = `${extension.config.name} (${extension.config.version})`;
+export function toOutputString(
+  extension: Extension,
+  isEnabled: boolean,
+): string {
+  const status = isEnabled ? chalk.green('✓') : chalk.red('✗');
+  let output = `${status} ${extension.config.name} (${extension.config.version})`;
   output += `\n Path: ${extension.path}`;
   if (extension.installMetadata) {
     output += `\n Source: ${extension.installMetadata.source} (Type: ${extension.installMetadata.type})`;
