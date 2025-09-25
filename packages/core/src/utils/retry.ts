@@ -254,9 +254,24 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options?: Partial<RetryOptions>,
 ): Promise<T> {
-  const { maxAttempts, initialDelayMs, maxDelayMs, shouldRetry } = {
+  if (options?.maxAttempts !== undefined && options.maxAttempts <= 0) {
+    throw new Error('maxAttempts must be a positive number.');
+  }
+
+  const cleanOptions = options
+    ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
+    : {};
+
+  const {
+    maxAttempts,
+    initialDelayMs,
+    maxDelayMs,
+    onPersistent429,
+    authType,
+    shouldRetry,
+  } = {
     ...DEFAULT_RETRY_OPTIONS,
-    ...options,
+    ...cleanOptions,
   };
 
   const logger = new DebugLogger('llxprt:retry');
