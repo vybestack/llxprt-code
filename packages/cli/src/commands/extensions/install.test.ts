@@ -16,9 +16,11 @@ const mockParseGitHubRepoForReleases = vi.hoisted(() =>
     return { owner: parts[0], repo: parts[1] };
   }),
 );
+const mockRequestConsentNonInteractive = vi.hoisted(() => vi.fn());
 
 vi.mock('../../config/extension.js', () => ({
   installExtension: mockInstallExtension,
+  requestConsentNonInteractive: mockRequestConsentNonInteractive,
 }));
 
 vi.mock('../../config/extensions/github.js', () => ({
@@ -78,7 +80,9 @@ describe('handleInstall', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    mockInstallExtension.mockClear();
+    mockRequestConsentNonInteractive.mockClear();
+    vi.resetAllMocks();
   });
 
   it('installs an extension from org/repo using github-release when releases exist', async () => {
@@ -91,10 +95,13 @@ describe('handleInstall', () => {
       'test-org',
       'test-repo',
     );
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'test-org/test-repo',
-      type: 'github-release',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'test-org/test-repo',
+        type: 'github-release',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "test-extension" installed successfully and enabled.',
     );
@@ -110,10 +117,13 @@ describe('handleInstall', () => {
       'test-org',
       'test-repo',
     );
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'https://github.com/test-org/test-repo.git',
-      type: 'git',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'https://github.com/test-org/test-repo.git',
+        type: 'git',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "test-extension" installed successfully and enabled.',
     );
@@ -129,10 +139,13 @@ describe('handleInstall', () => {
       'test-org',
       'test-repo',
     );
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'https://github.com/test-org/test-repo.git',
-      type: 'git',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'https://github.com/test-org/test-repo.git',
+        type: 'git',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "test-extension" installed successfully and enabled.',
     );
@@ -148,11 +161,14 @@ describe('handleInstall', () => {
       'test-org',
       'test-repo',
     );
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'test-org/test-repo',
-      type: 'github-release',
-      ref: 'v1.0.0',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'test-org/test-repo',
+        type: 'github-release',
+        ref: 'v1.0.0',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "test-extension" installed successfully and enabled.',
     );
@@ -164,11 +180,14 @@ describe('handleInstall', () => {
 
     await handleInstall({ source: 'test-org/test-repo', ref: 'my-branch' });
 
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'https://github.com/test-org/test-repo.git',
-      type: 'git',
-      ref: 'my-branch',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'https://github.com/test-org/test-repo.git',
+        type: 'git',
+        ref: 'my-branch',
+      },
+      mockRequestConsentNonInteractive,
+    );
   });
 
   it('installs an extension from a http source', async () => {
@@ -176,10 +195,13 @@ describe('handleInstall', () => {
 
     await handleInstall({ source: 'http://google.com' });
 
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'http://google.com',
-      type: 'git',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'http://google.com',
+        type: 'git',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "http-extension" installed successfully and enabled.',
     );
@@ -190,10 +212,13 @@ describe('handleInstall', () => {
 
     await handleInstall({ source: 'https://google.com' });
 
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'https://google.com',
-      type: 'git',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'https://google.com',
+        type: 'git',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "https-extension" installed successfully and enabled.',
     );
@@ -204,10 +229,13 @@ describe('handleInstall', () => {
 
     await handleInstall({ source: 'git@some-url' });
 
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'git@some-url',
-      type: 'git',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'git@some-url',
+        type: 'git',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "git-extension" installed successfully and enabled.',
     );
@@ -218,10 +246,13 @@ describe('handleInstall', () => {
 
     await handleInstall({ source: 'sso://google.com' });
 
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: 'sso://google.com',
-      type: 'git',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: 'sso://google.com',
+        type: 'git',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       expect.stringContaining('sso:// URLs require a git-remote-sso helper'),
     );
@@ -235,10 +266,13 @@ describe('handleInstall', () => {
 
     await handleInstall({ path: '/some/path' });
 
-    expect(mockInstallExtension).toHaveBeenCalledWith({
-      source: '/some/path',
-      type: 'local',
-    });
+    expect(mockInstallExtension).toHaveBeenCalledWith(
+      {
+        source: '/some/path',
+        type: 'local',
+      },
+      mockRequestConsentNonInteractive,
+    );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       'Extension "local-extension" installed successfully and enabled.',
     );

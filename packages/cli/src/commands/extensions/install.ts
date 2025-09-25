@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CommandModule } from 'yargs';
+import type { CommandModule } from 'yargs';
 import {
   installExtension,
-  ExtensionInstallMetadata,
+  requestConsentNonInteractive,
+  type ExtensionInstallMetadata,
 } from '../../config/extension.js';
 import {
   checkGitHubReleasesExist,
@@ -94,10 +95,11 @@ export async function handleInstall(args: InstallArgs) {
       throw new Error('Either --source or --path must be provided.');
     }
 
-    const extensionName = await installExtension(installMetadata);
-    console.log(
-      `Extension "${extensionName}" installed successfully and enabled.`,
+    const name = await installExtension(
+      installMetadata,
+      requestConsentNonInteractive,
     );
+    console.log(`Extension "${name}" installed successfully and enabled.`);
   } catch (error) {
     console.error((error as Error).message);
     process.exit(1);
