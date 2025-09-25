@@ -28,5 +28,5 @@ export const getStatusColor = (
   if (value >= thresholds.yellow) {
     return Colors.AccentYellow;
   }
-  return options.defaultColor || Colors.AccentRed;
+  return options.defaultColor ?? Colors.AccentRed;
 };
