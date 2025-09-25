@@ -444,9 +444,9 @@ export async function installExtension(
 }
 
 /**
- * Requests user consent before installing an extension with MCP servers or other features.
- * Shows warnings about what the extension will do and prompts for confirmation.
- * @param extensionConfig The extension configuration to show consent information for.
+ * Validates an extension name contains only alphanumeric characters and dashes.
+ * @param name The extension name to validate.
+ * @throws Error if the name contains invalid characters.
  */
 export function validateName(name: string): void {
   if (!/^[a-zA-Z0-9-]+$/.test(name)) {
@@ -456,6 +456,11 @@ export function validateName(name: string): void {
   }
 }
 
+/**
+ * Requests user consent before installing an extension with MCP servers or other features.
+ * Shows warnings about what the extension will do and prompts for confirmation.
+ * @param extensionConfig The extension configuration to show consent information for.
+ */
 export async function requestConsent(extensionConfig: ExtensionConfig) {
   const output: string[] = [];
   const mcpServerEntries = Object.entries(extensionConfig.mcpServers || {});
@@ -493,7 +498,7 @@ export async function requestConsent(extensionConfig: ExtensionConfig) {
   }
 }
 
-async function loadExtensionConfig(
+export async function loadExtensionConfig(
   context: LoadExtensionContext,
 ): Promise<ExtensionConfig | null> {
   const { extensionDir, workspaceDir } = context;
