@@ -175,19 +175,25 @@ export interface GeminiCLIExtension {
   isActive: boolean;
   path: string;
 }
-export interface FileFilteringOptions {
-  respectGitIgnore: boolean;
-  respectLlxprtIgnore: boolean;
+
+export interface ExtensionInstallMetadata {
+  source: string;
+  type: 'git' | 'local' | 'link' | 'github-release';
+  releaseTag?: string; // Only present for github-release installs.
+  ref?: string;
+  autoUpdate?: boolean;
 }
-// For memory files
-export const DEFAULT_MEMORY_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
-  respectGitIgnore: false,
-  respectLlxprtIgnore: true,
-};
-// For all other files
-export const DEFAULT_FILE_FILTERING_OPTIONS: FileFilteringOptions = {
-  respectGitIgnore: true,
-  respectLlxprtIgnore: true,
+
+import type { FileFilteringOptions } from './constants.js';
+import {
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_FILE_FILTERING_OPTIONS,
+} from './constants.js';
+
+export type { FileFilteringOptions };
+export {
+  DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
+  DEFAULT_FILE_FILTERING_OPTIONS,
 };
 export class MCPServerConfig {
   constructor(
