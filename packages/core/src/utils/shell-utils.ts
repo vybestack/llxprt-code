@@ -10,7 +10,7 @@ import os from 'node:os';
 import { quote } from 'shell-quote';
 import { doesToolInvocationMatch } from './tool-utils.js';
 
-const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
+export const SHELL_TOOL_NAMES = ['run_shell_command', 'ShellTool'];
 
 /**
  * An identifier for the shell type.
