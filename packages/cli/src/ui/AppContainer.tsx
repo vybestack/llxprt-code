@@ -22,6 +22,8 @@ import {
 } from './types.js';
 import { useTerminalSize } from './hooks/useTerminalSize.js';
 import { useResponsive } from './hooks/useResponsive.js';
+import { basename } from 'node:path';
+import { computeWindowTitle } from '../utils/windowTitle.js';
 import { useGeminiStream } from './hooks/useGeminiStream.js';
 import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
 import { useThemeCommand } from './hooks/useThemeCommand.js';
@@ -168,6 +170,13 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = config.getIdeClient()?.getCurrentIde();
+
+  // Window title state for status updates
+  const originalTitleRef = useRef(
+    computeWindowTitle(basename(config.getTargetDir())),
+  );
+  const lastTitleRef = useRef<string | null>(null);
+
   useEffect(() => {
     const ideClient = config.getIdeClient();
     if (ideClient) {
@@ -1151,6 +1160,7 @@ export const AppContainer = (props: AppContainerProps) => {
     [confirmationRequest],
   );
 
+<<<<<<< HEAD
   const mainControlsRef = useRef<DOMElement>(null);
   const pendingHistoryItemRef = useRef<DOMElement>(null);
   const rootUiRef = useRef<DOMElement>(null);
@@ -1222,6 +1232,40 @@ export const AppContainer = (props: AppContainerProps) => {
       refreshStatic();
     }
   }, [streamingState, refreshStatic, _staticNeedsRefresh]);
+
+  // Update terminal title with LLxprt status and thoughts
+  useEffect(() => {
+    // Respect both showStatusInTitle and hideWindowTitle settings (using flat structure)
+    if (
+      !settings.merged.showStatusInTitle ||
+      settings.merged.hideWindowTitle
+    )
+      return;
+
+    let title;
+    if (streamingState === StreamingState.Idle) {
+      title = originalTitleRef.current;
+    } else {
+      const statusText = thought?.subject?.replace(/[\r\n]+/g, ' ').substring(0, 80);
+      title = statusText || originalTitleRef.current;
+    }
+
+    // Pad the title to a fixed width to prevent taskbar icon resizing.
+    const paddedTitle = title.padEnd(80, ' ');
+
+    // Only update the title if it's different from the last value we set
+    if (lastTitleRef.current !== paddedTitle) {
+      lastTitleRef.current = paddedTitle;
+      stdout.write(`\x1b]2;${paddedTitle}\x07`);
+    }
+    // Note: We don't need to reset the window title on exit because it's handled elsewhere
+  }, [
+    streamingState,
+    thought,
+    settings.merged.showStatusInTitle,
+    settings.merged.hideWindowTitle,
+    stdout,
+  ]);
 
   const filteredConsoleMessages = useMemo(() => {
     if (config.getDebugMode()) {

@@ -501,6 +501,16 @@ export const SETTINGS_SCHEMA = {
     description: 'Configuration for MCP servers.',
     showInDialog: false,
   },
+  showStatusInTitle: {
+    type: 'boolean',
+    label: 'Show Status in Title',
+    category: 'UI',
+    requiresRestart: false,
+    default: false,
+    description:
+      'Show LLxprt status and thoughts in the terminal window title',
+    showInDialog: true,
+  },
   // Footer configuration settings - adapted to llxprt's flat structure
   hideCWD: {
     type: 'boolean',
