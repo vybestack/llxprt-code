@@ -146,6 +146,7 @@ vi.mock('../ide/ideContext.js');
 vi.mock('../telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
+    getLastPromptTokenCount: vi.fn(),
   },
 }));
 
@@ -795,6 +796,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Default to returning 1000 tokens unless overridden in specific tests
       mockGetTotalTokens.mockReturnValue(1000);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        1000,
+      );
     });
 
     // Removed setup function and mock theater tests that were testing implementation details
@@ -812,6 +816,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return 999 tokens
       mockGetTotalTokens.mockReturnValue(999);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        999,
+      );
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
@@ -880,12 +887,16 @@ describe('Gemini Client (client.ts)', () => {
         { role: 'user', parts: [{ text: '...history...' }] },
       ]);
 
+      const originalTokenCount = MOCKED_TOKEN_LIMIT * 0.699;
       mockCountTokens.mockResolvedValue({
-        totalTokens: MOCKED_TOKEN_LIMIT * 0.699, // TOKEN_THRESHOLD_FOR_SUMMARIZATION = 0.7
+        totalTokens: originalTokenCount, // TOKEN_THRESHOLD_FOR_SUMMARIZATION = 0.7
       });
 
       // Set the mock to return 699 tokens (below threshold)
       mockGetTotalTokens.mockReturnValue(699);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        originalTokenCount,
+      );
 
       const initialChat = client.getChat();
       const result = await client.tryCompressChat('prompt-id-2');
@@ -894,8 +905,8 @@ describe('Gemini Client (client.ts)', () => {
       expect(tokenLimit).toHaveBeenCalled();
       expect(result).toEqual({
         compressionStatus: CompressionStatus.NOOP,
-        newTokenCount: 699,
-        originalTokenCount: 699,
+        newTokenCount: originalTokenCount,
+        originalTokenCount,
       });
       expect(newChat).toBe(initialChat);
     });
@@ -917,6 +928,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return original token count before compression
       mockGetTotalTokens.mockReturnValue(originalTokenCount);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        originalTokenCount,
+      );
 
       mockCountTokens
         .mockResolvedValueOnce({ totalTokens: originalTokenCount })
@@ -972,6 +986,9 @@ describe('Gemini Client (client.ts)', () => {
 
       // Set the mock to return 500 tokens initially
       mockGetTotalTokens.mockReturnValue(originalTokenCount);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(
+        originalTokenCount,
+      );
 
       // Mock the summary response from the chat
       mockSendMessage.mockResolvedValue({

@@ -1719,26 +1719,13 @@ export class GeminiClient {
       };
     }
 
-    // Note: chat variable used later in method
+    // Use lastPromptTokenCount from telemetry service as the source of truth
+    // This is more accurate than estimating from history
+    const originalTokenCount = uiTelemetryService.getLastPromptTokenCount();
 
     // @plan PLAN-20251027-STATELESS5.P10
     // @requirement REQ-STAT5-003.1
     const model = this.runtimeState.model;
-    // Get the ACTUAL token count from the history service, not the curated subset
-    const historyService = this.getChat().getHistoryService();
-    const originalTokenCount = historyService
-      ? historyService.getTotalTokens()
-      : 0;
-    if (originalTokenCount === undefined) {
-      console.warn(`Could not determine token count for model ${model}.`);
-      this.hasFailedCompressionAttempt = !force && true;
-      return {
-        originalTokenCount: 0,
-        newTokenCount: 0,
-        compressionStatus:
-          CompressionStatus.COMPRESSION_FAILED_TOKEN_COUNT_ERROR,
-      };
-    }
 
     const contextPercentageThreshold =
       this.config.getChatCompression()?.contextPercentageThreshold;
@@ -1825,15 +1812,12 @@ export class GeminiClient {
       };
     }
 
-    uiTelemetryService.setLastPromptTokenCount(newTokenCount);
-
     // TODO: Add proper telemetry logging once available
     console.debug(
       `Chat compression: ${originalTokenCount} -> ${newTokenCount} tokens`,
     );
 
     if (newTokenCount > originalTokenCount) {
-      this.getChat().setHistory(curatedHistory);
       this.hasFailedCompressionAttempt = !force && true;
       return {
         originalTokenCount,
@@ -1843,6 +1827,9 @@ export class GeminiClient {
       };
     } else {
       this.chat = compressedChat; // Chat compression successful, set new state.
+
+      // Update telemetry service with new token count
+      uiTelemetryService.setLastPromptTokenCount(newTokenCount);
 
       // Emit token update event for the new compressed chat
       // This ensures the UI updates with the new token count
