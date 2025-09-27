@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'fs/promises';
-import * as path from 'path';
+import fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { globSync } from 'glob';
 
 /**
@@ -51,15 +51,12 @@ export class StandardFileSystemService implements FileSystemService {
   }
 
   findFiles(fileName: string, searchPaths: readonly string[]): string[] {
-    const foundFiles: string[] = [];
-    for (const searchPath of searchPaths) {
-      const pattern = path.join(searchPath, '**', fileName);
-      const matches = globSync(pattern, {
+    return searchPaths.flatMap((searchPath) => {
+      const pattern = path.posix.join(searchPath, '**', fileName);
+      return globSync(pattern, {
         nodir: true,
         absolute: true,
       });
-      foundFiles.push(...matches);
-    }
-    return foundFiles;
+    });
   }
 }
