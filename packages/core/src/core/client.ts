@@ -115,7 +115,6 @@ export function findCompressSplitPoint(
   let lastSplitPoint = 0;
   let cumulativeCharCount = 0;
   for (let i = 0; i < contents.length; i++) {
-    cumulativeCharCount += charCounts[i];
     const content = contents[i];
     const hasFunctionResponse = content.parts?.some(
       (part) => !!part.functionResponse,
@@ -126,6 +125,7 @@ export function findCompressSplitPoint(
       }
       lastSplitPoint = i;
     }
+    cumulativeCharCount += charCounts[i];
   }
 
   const lastContent = contents[contents.length - 1];

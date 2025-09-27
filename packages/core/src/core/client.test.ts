@@ -187,7 +187,7 @@ describe('findCompressSplitPoint', () => {
       { role: 'model', parts: [{ text: 'This is the fourth message.' }] },
       { role: 'user', parts: [{ text: 'This is the fifth message.' }] },
     ];
-    expect(findCompressSplitPoint(history, 0.5)).toBe(2);
+    expect(findCompressSplitPoint(history, 0.5)).toBe(4);
   });
 
   it('should handle a fraction of last index', () => {
