@@ -1,145 +1,199 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/// <reference types="vitest/globals" />
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { renderWithProviders } from '../../test-utils/render.js';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { PermissionsModifyTrustDialog } from './PermissionsModifyTrustDialog.js';
-import React from 'react';
-import { SettingsContext } from '../contexts/SettingsContext.js';
+import { TrustLevel } from '../../config/trustedFolders.js';
+import { waitFor, act } from '@testing-library/react';
+import * as processUtils from '../../utils/processUtils.js';
+import { usePermissionsModifyTrust } from '../hooks/usePermissionsModifyTrust.js';
 
-const mockedExit = vi.hoisted(() => vi.fn());
+// Hoist mocks for dependencies of the usePermissionsModifyTrust hook
+const mockedCwd = vi.hoisted(() => vi.fn());
+const mockedLoadTrustedFolders = vi.hoisted(() => vi.fn());
+const mockedIsWorkspaceTrusted = vi.hoisted(() => vi.fn());
 
-vi.mock('process', async () => {
-  const actual = await vi.importActual('process');
+// Mock the modules themselves
+vi.mock('node:process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:process')>();
   return {
     ...actual,
-    exit: mockedExit,
+    cwd: mockedCwd,
   };
 });
 
-// Mock the trustedFolders module
-vi.mock('../../config/trustedFolders.js', async () => {
-  const actual = await vi.importActual('../../config/trustedFolders.js');
-  return {
-    ...actual,
-    loadTrustedFolders: vi.fn(() => ({
-      rules: [],
-      setValue: vi.fn(),
-      user: { path: '/mock/path', config: {} },
-      errors: [],
-      isPathTrusted: vi.fn(() => undefined),
-    })),
-  };
-});
-
-// Mock getIdeTrust
-vi.mock('@vybestack/llxprt-code-core', async () => {
-  const actual = await vi.importActual('@vybestack/llxprt-code-core');
-  return {
-    ...actual,
-    getIdeTrust: vi.fn(() => undefined),
-  };
-});
-
-const mockSettings = {
-  merged: {
-    folderTrust: false,
+vi.mock('../../config/trustedFolders.js', () => ({
+  loadTrustedFolders: mockedLoadTrustedFolders,
+  isWorkspaceTrusted: mockedIsWorkspaceTrusted,
+  TrustLevel: {
+    TRUST_FOLDER: 'TRUST_FOLDER',
+    TRUST_PARENT: 'TRUST_PARENT',
+    DO_NOT_TRUST: 'DO_NOT_TRUST',
   },
-  user: {
-    settings: {},
-  },
-  workspace: {
-    settings: {},
-  },
-  setValue: vi.fn(),
-} as never;
+}));
 
-const Wrapper = ({ children }: { children: React.ReactNode }) => (
-  <SettingsContext.Provider value={mockSettings}>
-    {children}
-  </SettingsContext.Provider>
-);
+vi.mock('../hooks/usePermissionsModifyTrust.js');
 
 describe('PermissionsModifyTrustDialog', () => {
+  let mockUpdateTrustLevel: Mock;
+  let mockCommitTrustLevelChange: Mock;
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockUpdateTrustLevel = vi.fn();
+    mockCommitTrustLevelChange = vi.fn();
+    vi.mocked(usePermissionsModifyTrust).mockReturnValue({
+      cwd: '/test/dir',
+      currentTrustLevel: TrustLevel.DO_NOT_TRUST,
+      isInheritedTrustFromParent: false,
+      isInheritedTrustFromIde: false,
+      needsRestart: false,
+      updateTrustLevel: mockUpdateTrustLevel,
+      commitTrustLevelChange: mockCommitTrustLevelChange,
+      isFolderTrustEnabled: true,
+    });
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
-  it('should render the dialog with title', () => {
-    const onExit = vi.fn();
-    const addItem = vi.fn().mockReturnValue(0);
-
+  it('should render the main dialog with current trust level', async () => {
     const { lastFrame } = renderWithProviders(
-      <Wrapper>
-        <PermissionsModifyTrustDialog onExit={onExit} addItem={addItem} />
-      </Wrapper>,
+      <PermissionsModifyTrustDialog onExit={vi.fn()} addItem={vi.fn()} />,
     );
 
-    expect(lastFrame()).toContain('Modify Trust Settings');
+    await waitFor(() => {
+      expect(lastFrame()).toContain('Modify Trust Level');
+      expect(lastFrame()).toContain('Folder: /test/dir');
+      expect(lastFrame()).toContain('Current Level: DO_NOT_TRUST');
+    });
   });
 
-  it('should display trust options', () => {
-    const onExit = vi.fn();
-    const addItem = vi.fn().mockReturnValue(0);
-
+  it('should display the inherited trust note from parent', async () => {
+    vi.mocked(usePermissionsModifyTrust).mockReturnValue({
+      cwd: '/test/dir',
+      currentTrustLevel: TrustLevel.DO_NOT_TRUST,
+      isInheritedTrustFromParent: true,
+      isInheritedTrustFromIde: false,
+      needsRestart: false,
+      updateTrustLevel: mockUpdateTrustLevel,
+      commitTrustLevelChange: mockCommitTrustLevelChange,
+      isFolderTrustEnabled: true,
+    });
     const { lastFrame } = renderWithProviders(
-      <Wrapper>
-        <PermissionsModifyTrustDialog onExit={onExit} addItem={addItem} />
-      </Wrapper>,
+      <PermissionsModifyTrustDialog onExit={vi.fn()} addItem={vi.fn()} />,
     );
 
-    expect(lastFrame()).toContain('Trust this folder');
-    expect(lastFrame()).toContain('Trust parent folder');
-    expect(lastFrame()).toContain("Don't trust");
+    await waitFor(() => {
+      expect(lastFrame()).toContain(
+        'Note: This folder behaves as a trusted folder because one of the parent folders is trusted.',
+      );
+    });
   });
 
-  it('should show help text', () => {
-    const onExit = vi.fn();
-    const addItem = vi.fn().mockReturnValue(0);
-
+  it('should display the inherited trust note from IDE', async () => {
+    vi.mocked(usePermissionsModifyTrust).mockReturnValue({
+      cwd: '/test/dir',
+      currentTrustLevel: TrustLevel.DO_NOT_TRUST,
+      isInheritedTrustFromParent: false,
+      isInheritedTrustFromIde: true,
+      needsRestart: false,
+      updateTrustLevel: mockUpdateTrustLevel,
+      commitTrustLevelChange: mockCommitTrustLevelChange,
+      isFolderTrustEnabled: true,
+    });
     const { lastFrame } = renderWithProviders(
-      <Wrapper>
-        <PermissionsModifyTrustDialog onExit={onExit} addItem={addItem} />
-      </Wrapper>,
+      <PermissionsModifyTrustDialog onExit={vi.fn()} addItem={vi.fn()} />,
     );
 
-    expect(lastFrame()).toContain('Enter to select');
-    expect(lastFrame()).toContain('Escape to cancel');
+    await waitFor(() => {
+      expect(lastFrame()).toContain(
+        'Note: This folder behaves as a trusted folder because the connected IDE workspace is trusted.',
+      );
+    });
   });
 
-  it('should display folder path', () => {
+  it('should call onExit when escape is pressed', async () => {
     const onExit = vi.fn();
-    const addItem = vi.fn().mockReturnValue(0);
-
-    const { lastFrame } = renderWithProviders(
-      <Wrapper>
-        <PermissionsModifyTrustDialog onExit={onExit} addItem={addItem} />
-      </Wrapper>,
+    const { stdin, lastFrame } = renderWithProviders(
+      <PermissionsModifyTrustDialog onExit={onExit} addItem={vi.fn()} />,
     );
 
-    // Should contain "Folder:" label and the current working directory
-    expect(lastFrame()).toContain('Folder:');
-    // The actual path will be the real cwd since we can't easily mock it
+    await waitFor(() => expect(lastFrame()).not.toContain('Loading...'));
+
+    act(() => {
+      stdin.write('\x1b'); // escape key
+    });
+
+    await waitFor(() => {
+      expect(onExit).toHaveBeenCalled();
+    });
   });
 
-  it('should display current trust status', () => {
-    const onExit = vi.fn();
-    const addItem = vi.fn().mockReturnValue(0);
+  it('should commit, restart, and exit on `r` keypress', async () => {
+    const mockRelaunchApp = vi
+      .spyOn(processUtils, 'relaunchApp')
+      .mockResolvedValue(undefined);
+    vi.mocked(usePermissionsModifyTrust).mockReturnValue({
+      cwd: '/test/dir',
+      currentTrustLevel: TrustLevel.DO_NOT_TRUST,
+      isInheritedTrustFromParent: false,
+      isInheritedTrustFromIde: false,
+      needsRestart: true,
+      updateTrustLevel: mockUpdateTrustLevel,
+      commitTrustLevelChange: mockCommitTrustLevelChange,
+      isFolderTrustEnabled: true,
+    });
 
-    const { lastFrame } = renderWithProviders(
-      <Wrapper>
-        <PermissionsModifyTrustDialog onExit={onExit} addItem={addItem} />
-      </Wrapper>,
+    const onExit = vi.fn();
+    const { stdin, lastFrame } = renderWithProviders(
+      <PermissionsModifyTrustDialog onExit={onExit} addItem={vi.fn()} />,
     );
 
-    // Should contain "Current:" label
-    expect(lastFrame()).toContain('Current:');
+    await waitFor(() => expect(lastFrame()).not.toContain('Loading...'));
+
+    act(() => stdin.write('r')); // Press 'r' to restart
+
+    await waitFor(() => {
+      expect(mockCommitTrustLevelChange).toHaveBeenCalled();
+      expect(mockRelaunchApp).toHaveBeenCalled();
+      expect(onExit).toHaveBeenCalled();
+    });
+
+    mockRelaunchApp.mockRestore();
+  });
+
+  it('should not commit when escape is pressed during restart prompt', async () => {
+    vi.mocked(usePermissionsModifyTrust).mockReturnValue({
+      cwd: '/test/dir',
+      currentTrustLevel: TrustLevel.DO_NOT_TRUST,
+      isInheritedTrustFromParent: false,
+      isInheritedTrustFromIde: false,
+      needsRestart: true,
+      updateTrustLevel: mockUpdateTrustLevel,
+      commitTrustLevelChange: mockCommitTrustLevelChange,
+      isFolderTrustEnabled: true,
+    });
+
+    const onExit = vi.fn();
+    const { stdin, lastFrame } = renderWithProviders(
+      <PermissionsModifyTrustDialog onExit={onExit} addItem={vi.fn()} />,
+    );
+
+    await waitFor(() => expect(lastFrame()).not.toContain('Loading...'));
+
+    act(() => stdin.write('\x1b')); // Press escape
+
+    await waitFor(() => {
+      expect(mockCommitTrustLevelChange).not.toHaveBeenCalled();
+      expect(onExit).toHaveBeenCalled();
+    });
   });
 });

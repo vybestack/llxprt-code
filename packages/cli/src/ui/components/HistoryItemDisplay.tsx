@@ -38,6 +38,10 @@ interface HistoryItemDisplayProps {
   isFocused?: boolean;
   slashCommands?: readonly SlashCommand[]; // For help display
   showTodoPanel?: boolean;
+  commands?: readonly SlashCommand[];
+  activeShellPtyId?: number | null;
+  embeddedShellFocused?: boolean;
+  availableTerminalHeightGemini?: number;
 }
 
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
@@ -49,6 +53,9 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
   isFocused = true,
   slashCommands = [],
   showTodoPanel = true,
+  activeShellPtyId,
+  embeddedShellFocused,
+  availableTerminalHeightGemini,
 }) => {
   const itemForDisplay = useMemo(() => escapeAnsiCtrlCodes(item), [item]);
 
@@ -65,7 +72,9 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         <GeminiMessage
           text={itemForDisplay.text}
           isPending={isPending}
-          availableTerminalHeight={availableTerminalHeight}
+          availableTerminalHeight={
+            availableTerminalHeightGemini ?? availableTerminalHeight
+          }
           terminalWidth={terminalWidth}
           model={itemForDisplay.model}
         />
@@ -74,7 +83,9 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         <GeminiMessageContent
           text={itemForDisplay.text}
           isPending={isPending}
-          availableTerminalHeight={availableTerminalHeight}
+          availableTerminalHeight={
+            availableTerminalHeightGemini ?? availableTerminalHeight
+          }
           terminalWidth={terminalWidth}
         />
       )}
