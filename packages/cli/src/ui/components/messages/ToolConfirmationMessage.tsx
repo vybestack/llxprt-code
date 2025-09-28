@@ -231,29 +231,33 @@ export const ToolConfirmationMessage: React.FC<
     options.push({
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
+      key: 'Yes, allow once',
     });
     if (isTrustedFolder) {
       options.push({
         label: 'Yes, allow always',
         value: ToolConfirmationOutcome.ProceedAlways,
+        key: 'Yes, allow always',
       });
     }
     if (config.getIdeMode()) {
       options.push({
         label: 'No (esc)',
         value: ToolConfirmationOutcome.Cancel,
+        key: 'No (esc)',
       });
     } else {
       options.push({
         label: 'Modify with external editor',
         value: ToolConfirmationOutcome.ModifyWithEditor,
+        key: 'Modify with external editor',
       });
       options.push({
         label: 'No, suggest changes (esc)',
         value: ToolConfirmationOutcome.Cancel,
+        key: 'No, suggest changes (esc)',
       });
     }
-
     bodyContent = (
       <DiffRenderer
         diffContent={confirmationDetails.fileDiff}
@@ -270,16 +274,19 @@ export const ToolConfirmationMessage: React.FC<
     options.push({
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
+      key: 'Yes, allow once',
     });
     if (isTrustedFolder) {
       options.push({
         label: `Yes, allow always ...`,
         value: ToolConfirmationOutcome.ProceedAlways,
+        key: `Yes, allow always ...`,
       });
     }
     options.push({
       label: 'No, suggest changes (esc)',
       value: ToolConfirmationOutcome.Cancel,
+      key: 'No, suggest changes (esc)',
     });
 
     let bodyContentHeight = availableBodyContentHeight();
@@ -348,16 +355,19 @@ export const ToolConfirmationMessage: React.FC<
     options.push({
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
+      key: 'Yes, allow once',
     });
     if (isTrustedFolder) {
       options.push({
         label: 'Yes, allow always',
         value: ToolConfirmationOutcome.ProceedAlways,
+        key: 'Yes, allow always',
       });
     }
     options.push({
       label: 'No, suggest changes (esc)',
       value: ToolConfirmationOutcome.Cancel,
+      key: 'No, suggest changes (esc)',
     });
 
     if (shouldShowSummary) {
@@ -439,20 +449,24 @@ export const ToolConfirmationMessage: React.FC<
     options.push({
       label: 'Yes, allow once',
       value: ToolConfirmationOutcome.ProceedOnce,
+      key: 'Yes, allow once',
     });
     if (isTrustedFolder) {
       options.push({
         label: `Yes, always allow tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"`,
         value: ToolConfirmationOutcome.ProceedAlwaysTool, // Cast until types are updated
+        key: `Yes, always allow tool "${mcpProps.toolName}" from server "${mcpProps.serverName}"`,
       });
       options.push({
         label: `Yes, always allow all tools from server "${mcpProps.serverName}"`,
         value: ToolConfirmationOutcome.ProceedAlwaysServer,
+        key: `Yes, always allow all tools from server "${mcpProps.serverName}"`,
       });
     }
     options.push({
       label: 'No, suggest changes (esc)',
       value: ToolConfirmationOutcome.Cancel,
+      key: 'No, suggest changes (esc)',
     });
   }
 

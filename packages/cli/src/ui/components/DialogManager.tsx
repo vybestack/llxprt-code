@@ -118,8 +118,8 @@ export const DialogManager = ({
           <RadioButtonSelect
             isFocused={!!uiState.confirmationRequest}
             items={[
-              { label: 'Yes', value: true },
-              { label: 'No', value: false },
+              { label: 'Yes', value: true, key: 'Yes' },
+              { label: 'No', value: false, key: 'No' },
             ]}
             onSelect={uiActions.handleConfirmationSelect}
           />

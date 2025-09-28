@@ -12,15 +12,14 @@ import {
   BaseSelectionList,
   type RenderItemContext,
 } from './BaseSelectionList.js';
+import type { SelectionListItem } from '../../hooks/useSelectionList.js';
 
 /**
  * Represents a single option for the RadioButtonSelect.
  * Requires a label for display and a value to be returned on selection.
  */
-export interface RadioSelectItem<T> {
+export interface RadioSelectItem<T> extends SelectionListItem<T> {
   label: string;
-  value: T;
-  disabled?: boolean;
   themeNameDisplay?: string;
   themeTypeDisplay?: string;
 }
