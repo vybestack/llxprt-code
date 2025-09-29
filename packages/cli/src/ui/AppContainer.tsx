@@ -1,122 +1,97 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
+import {
   useMemo,
   useState,
+  useCallback,
+  useEffect,
   useRef,
+  useLayoutEffect,
 } from 'react';
-import { type DOMElement, measureElement, useStdin, useStdout } from 'ink';
+import { type DOMElement, measureElement } from 'ink';
+import { App } from './App.js';
+import { AppContext } from './contexts/AppContext.js';
+import { UIStateContext, type UIState } from './contexts/UIStateContext.js';
 import {
-  StreamingState,
-  MessageType,
-  ToolCallStatus,
-  type HistoryItemWithoutId,
-  type HistoryItem,
-} from './types.js';
-import { useTerminalSize } from './hooks/useTerminalSize.js';
-import { useResponsive } from './hooks/useResponsive.js';
-import { basename } from 'node:path';
-import { computeWindowTitle } from '../utils/windowTitle.js';
-import { useGeminiStream } from './hooks/useGeminiStream.js';
-import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
-import { useThemeCommand } from './hooks/useThemeCommand.js';
-import { useAuthCommand } from './hooks/useAuthCommand.js';
-import { useFolderTrust } from './hooks/useFolderTrust.js';
-import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
-import { useEditorSettings } from './hooks/useEditorSettings.js';
-import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
-import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
-import { useConsoleMessages } from './hooks/useConsoleMessages.js';
-import { useExtensionAutoUpdate } from './hooks/useExtensionAutoUpdate.js';
-import { loadHierarchicalLlxprtMemory } from '../config/config.js';
-import {
-  DEFAULT_HISTORY_MAX_BYTES,
-  DEFAULT_HISTORY_MAX_ITEMS,
-} from '../constants/historyLimits.js';
-import { LoadedSettings, SettingScope } from '../config/settings.js';
-import { ConsolePatcher } from './utils/ConsolePatcher.js';
-import { registerCleanup } from '../utils/cleanup.js';
-import { useHistory } from './hooks/useHistoryManager.js';
-import { useInputHistoryStore } from './hooks/useInputHistoryStore.js';
-import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
-import {
-  useTodoPausePreserver,
-  TodoPausePreserver,
-} from './hooks/useTodoPausePreserver.js';
-import process from 'node:process';
-import {
-  getErrorMessage,
-  type Config,
-  getAllLlxprtMdFilenames,
-  isEditorAvailable,
-  EditorType,
-  type IdeContext,
-  ideContext,
-  type IModel,
-  getSettingsService,
-  DebugLogger,
-  uiTelemetryService,
-} from '@vybestack/llxprt-code-core';
-import { IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
-import { validateAuthMethod } from '../config/auth.js';
-import { useLogger } from './hooks/useLogger.js';
-import { useSessionStats } from './contexts/SessionContext.js';
-import { useGitBranchName } from './hooks/useGitBranchName.js';
-import { useFocus } from './hooks/useFocus.js';
-import { useBracketedPaste } from './hooks/useBracketedPaste.js';
-import { useTextBuffer } from './components/shared/text-buffer.js';
-import { useVimMode } from './contexts/VimModeContext.js';
-import { useVim } from './hooks/vim.js';
-import { useKeypress, Key } from './hooks/useKeypress.js';
-import { keyMatchers, Command } from './keyMatchers.js';
-import * as fs from 'fs';
-import { type AppState, type AppAction } from './reducers/appReducer.js';
-import { UpdateObject } from './utils/updateCheck.js';
-import ansiEscapes from 'ansi-escapes';
-import { useSettingsCommand } from './hooks/useSettingsCommand.js';
-import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
-import { appEvents, AppEvent } from '../utils/events.js';
-import { useRuntimeApi } from './contexts/RuntimeContext.js';
-import { useProviderModelDialog } from './hooks/useProviderModelDialog.js';
-import { useProviderDialog } from './hooks/useProviderDialog.js';
-import { useLoadProfileDialog } from './hooks/useLoadProfileDialog.js';
-import { useToolsDialog } from './hooks/useToolsDialog.js';
-import {
-  shouldUpdateTokenMetrics,
-  toTokenMetricsSnapshot,
-  type TokenMetricsSnapshot,
-} from './utils/tokenMetricsTracker.js';
-import { useStaticHistoryRefresh } from './hooks/useStaticHistoryRefresh.js';
-import { useTodoContext } from './contexts/TodoContext.js';
-import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
-import { useFlickerDetector } from './hooks/useFlickerDetector.js';
-import { isWorkspaceTrusted } from '../config/trustedFolders.js';
-import { globalOAuthUI } from '../auth/global-oauth-ui.js';
-import { UIStateProvider, type UIState } from './contexts/UIStateContext.js';
-import {
-  UIActionsProvider,
+  UIActionsContext,
   type UIActions,
 } from './contexts/UIActionsContext.js';
-import { DefaultAppLayout } from './layouts/DefaultAppLayout.js';
+import { ConfigContext } from './contexts/ConfigContext.js';
+import {
+  type HistoryItem,
+  ToolCallStatus,
+  type HistoryItemWithoutId,
+  AuthState,
+} from './types.js';
+import { MessageType, StreamingState } from './types.js';
+import {
+  type EditorType,
+  type Config,
+  type IdeInfo,
+  type IdeContext,
+  type UserTierId,
+  DEFAULT_GEMINI_FLASH_MODEL,
+  IdeClient,
+  ideContextStore,
+  getErrorMessage,
+  getAllGeminiMdFilenames,
+  AuthType,
+  clearCachedCredentialFile,
+  ShellExecutionService,
+} from '@google/gemini-cli-core';
+import { validateAuthMethod } from '../config/auth.js';
+import { loadHierarchicalGeminiMemory } from '../config/config.js';
+import process from 'node:process';
+import { useHistory } from './hooks/useHistoryManager.js';
+import { useMemoryMonitor } from './hooks/useMemoryMonitor.js';
+import { useThemeCommand } from './hooks/useThemeCommand.js';
+import { useAuthCommand } from './auth/useAuth.js';
+import { useQuotaAndFallback } from './hooks/useQuotaAndFallback.js';
+import { useEditorSettings } from './hooks/useEditorSettings.js';
+import { useSettingsCommand } from './hooks/useSettingsCommand.js';
+import { useModelCommand } from './hooks/useModelCommand.js';
+import { useSlashCommandProcessor } from './hooks/slashCommandProcessor.js';
+import { useVimMode } from './contexts/VimModeContext.js';
+import { useConsoleMessages } from './hooks/useConsoleMessages.js';
+import { useTerminalSize } from './hooks/useTerminalSize.js';
+import { calculatePromptWidths } from './components/InputPrompt.js';
+import { useStdin, useStdout } from 'ink';
+import ansiEscapes from 'ansi-escapes';
+import * as fs from 'node:fs';
+import { basename } from 'node:path';
+import { computeWindowTitle } from '../utils/windowTitle.js';
+import { useTextBuffer } from './components/shared/text-buffer.js';
+import { useLogger } from './hooks/useLogger.js';
+import { useGeminiStream } from './hooks/useGeminiStream.js';
+import { useVim } from './hooks/vim.js';
+import { type LoadedSettings, SettingScope } from '../config/settings.js';
+import { type InitializationResult } from '../core/initializer.js';
+import { useFocus } from './hooks/useFocus.js';
+import { useBracketedPaste } from './hooks/useBracketedPaste.js';
+import { useKeypress, type Key } from './hooks/useKeypress.js';
+import { keyMatchers, Command } from './keyMatchers.js';
+import { useLoadingIndicator } from './hooks/useLoadingIndicator.js';
+import { useFolderTrust } from './hooks/useFolderTrust.js';
+import { useIdeTrustListener } from './hooks/useIdeTrustListener.js';
+import { type IdeIntegrationNudgeResult } from './IdeIntegrationNudge.js';
+import { appEvents, AppEvent } from '../utils/events.js';
+import { type UpdateObject } from './utils/updateCheck.js';
+import { setUpdateHandler } from '../utils/handleAutoUpdate.js';
+import { ConsolePatcher } from './utils/ConsolePatcher.js';
+import { registerCleanup, runExitCleanup } from '../utils/cleanup.js';
+import { useMessageQueue } from './hooks/useMessageQueue.js';
+import { useAutoAcceptIndicator } from './hooks/useAutoAcceptIndicator.js';
+import { useWorkspaceMigration } from './hooks/useWorkspaceMigration.js';
+import { useSessionStats } from './contexts/SessionContext.js';
+import { useGitBranchName } from './hooks/useGitBranchName.js';
+import { useExtensionUpdates } from './hooks/useExtensionUpdates.js';
+import { ShellFocusContext } from './contexts/ShellFocusContext.js';
 
 const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
-const debug = new DebugLogger('llxprt:ui:appcontainer');
-
-interface AppContainerProps {
-  config: Config;
-  settings: LoadedSettings;
-  startupWarnings?: string[];
-  version: string;
-  appState: AppState;
-  appDispatch: React.Dispatch<AppAction>;
-}
 
 function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   return pendingHistoryItems.some((item) => {
@@ -129,111 +104,148 @@ function isToolExecuting(pendingHistoryItems: HistoryItemWithoutId[]) {
   });
 }
 
+interface AppContainerProps {
+  config: Config;
+  settings: LoadedSettings;
+  startupWarnings?: string[];
+  version: string;
+  initializationResult: InitializationResult;
+}
+
+/**
+ * The fraction of the terminal width to allocate to the shell.
+ * This provides horizontal padding.
+ */
+const SHELL_WIDTH_FRACTION = 0.89;
+
+/**
+ * The number of lines to subtract from the available terminal height
+ * for the shell. This provides vertical padding and space for other UI elements.
+ */
+const SHELL_HEIGHT_PADDING = 10;
+
 export const AppContainer = (props: AppContainerProps) => {
-  debug.log('AppContainer architecture active (v2)');
-  const {
-    config,
-    settings,
-    startupWarnings = [],
-    version,
-    appState,
-    appDispatch,
-  } = props;
-  const runtime = useRuntimeApi();
-  const isFocused = useFocus();
-  const { isNarrow } = useResponsive();
-  useBracketedPaste();
-  const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
-  const { stdout } = useStdout();
-  const nightly = version.includes('nightly');
-  const historyLimits = useMemo(
-    () => ({
-      maxItems:
-        typeof settings.merged.historyMaxItems === 'number'
-          ? settings.merged.historyMaxItems
-          : DEFAULT_HISTORY_MAX_ITEMS,
-      maxBytes:
-        typeof settings.merged.historyMaxBytes === 'number'
-          ? settings.merged.historyMaxBytes
-          : DEFAULT_HISTORY_MAX_BYTES,
-    }),
-    [settings.merged.historyMaxItems, settings.merged.historyMaxBytes],
+  const { settings, config, initializationResult } = props;
+  const historyManager = useHistory();
+  useMemoryMonitor(historyManager);
+  const [corgiMode, setCorgiMode] = useState(false);
+  const [debugMessage, setDebugMessage] = useState<string>('');
+  const [quittingMessages, setQuittingMessages] = useState<
+    HistoryItem[] | null
+  >(null);
+  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
+  const [themeError, setThemeError] = useState<string | null>(
+    initializationResult.themeError,
   );
-  const { history, addItem, clearItems, loadHistory } =
-    useHistory(historyLimits);
-  useMemoryMonitor({ addItem });
-  const { updateTodos } = useTodoContext();
-  const todoPauseController = useMemo(() => new TodoPausePreserver(), []);
-  const registerTodoPause = useCallback(() => {
-    todoPauseController.registerTodoPause();
-  }, [todoPauseController]);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [embeddedShellFocused, setEmbeddedShellFocused] = useState(false);
 
-  const [idePromptAnswered, setIdePromptAnswered] = useState(false);
-  const currentIDE = config.getIdeClient()?.getCurrentIde();
+  const [geminiMdFileCount, setGeminiMdFileCount] = useState<number>(
+    initializationResult.geminiMdFileCount,
+  );
+  const [shellModeActive, setShellModeActive] = useState(false);
+  const [modelSwitchedFromQuotaError, setModelSwitchedFromQuotaError] =
+    useState<boolean>(false);
+  const [historyRemountKey, setHistoryRemountKey] = useState(0);
+  const [updateInfo, setUpdateInfo] = useState<UpdateObject | null>(null);
+  const [isTrustedFolder, setIsTrustedFolder] = useState<boolean | undefined>(
+    config.isTrustedFolder(),
+  );
 
-  // Window title state for status updates
+  const extensions = config.getExtensions();
+  const {
+    extensionsUpdateState,
+    setExtensionsUpdateState,
+    confirmUpdateExtensionRequests,
+    addConfirmUpdateExtensionRequest,
+  } = useExtensionUpdates(
+    extensions,
+    historyManager.addItem,
+    config.getWorkingDir(),
+  );
+
+  const [isPermissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
+  const openPermissionsDialog = useCallback(
+    () => setPermissionsDialogOpen(true),
+    [],
+  );
+  const closePermissionsDialog = useCallback(
+    () => setPermissionsDialogOpen(false),
+    [],
+  );
+
+  // Helper to determine the effective model, considering the fallback state.
+  const getEffectiveModel = useCallback(() => {
+    if (config.isInFallbackMode()) {
+      return DEFAULT_GEMINI_FLASH_MODEL;
+    }
+    return config.getModel();
+  }, [config]);
+
+  const [currentModel, setCurrentModel] = useState(getEffectiveModel());
+
+  const [userTier, setUserTier] = useState<UserTierId | undefined>(undefined);
+
+  const [isConfigInitialized, setConfigInitialized] = useState(false);
+
+  const logger = useLogger(config.storage);
+  const [userMessages, setUserMessages] = useState<string[]>([]);
+
+  // Terminal and layout hooks
+  const { columns: terminalWidth, rows: terminalHeight } = useTerminalSize();
+  const { stdin, setRawMode } = useStdin();
+  const { stdout } = useStdout();
+
+  // Additional hooks moved from App.tsx
+  const { stats: sessionStats } = useSessionStats();
+  const branchName = useGitBranchName(config.getTargetDir());
+
+  // Layout measurements
+  const mainControlsRef = useRef<DOMElement>(null);
   const originalTitleRef = useRef(
     computeWindowTitle(basename(config.getTargetDir())),
   );
   const lastTitleRef = useRef<string | null>(null);
+  const staticExtraHeight = 3;
 
   useEffect(() => {
-    const ideClient = config.getIdeClient();
-    if (ideClient) {
-      registerCleanup(() => ideClient.disconnect());
-    }
+    (async () => {
+      // Note: the program will not work if this fails so let errors be
+      // handled by the global catch.
+      await config.initialize();
+      setConfigInitialized(true);
+    })();
+    registerCleanup(async () => {
+      const ideClient = await IdeClient.getInstance();
+      await ideClient.disconnect();
+    });
   }, [config]);
 
-  const shouldShowIdePrompt =
-    currentIDE &&
-    !config.getIdeMode() &&
-    !settings.merged.hasSeenIdeIntegrationNudge &&
-    !idePromptAnswered;
+  useEffect(
+    () => setUpdateHandler(historyManager.addItem, setUpdateInfo),
+    [historyManager.addItem],
+  );
 
+  // Watch for model changes (e.g., from Flash fallback)
   useEffect(() => {
-    const cleanup = setUpdateHandler(addItem, setUpdateInfo);
-
-    // Attach addItem to OAuth providers for displaying auth URLs
-    if (addItem) {
-      const oauthManager = runtime.getCliOAuthManager();
-      if (oauthManager) {
-        const providersMap = (
-          oauthManager as unknown as { providers?: Map<string, unknown> }
-        ).providers;
-        if (providersMap instanceof Map) {
-          for (const provider of providersMap.values()) {
-            const candidate = provider as {
-              setAddItem?: (callback: typeof addItem) => void;
-            };
-            candidate.setAddItem?.(addItem);
-          }
-        }
+    const checkModelChange = () => {
+      const effectiveModel = getEffectiveModel();
+      if (effectiveModel !== currentModel) {
+        setCurrentModel(effectiveModel);
       }
-    }
-
-    return cleanup;
-  }, [addItem, runtime]);
-
-  // Set global OAuth addItem callback for all OAuth flows
-  useEffect(() => {
-    (global as Record<string, unknown>).__oauth_add_item = addItem;
-    globalOAuthUI.setAddItem(addItem);
-    return () => {
-      delete (global as Record<string, unknown>).__oauth_add_item;
-      globalOAuthUI.clearAddItem();
     };
-  }, [addItem]);
+
+    checkModelChange();
+    const interval = setInterval(checkModelChange, 1000); // Check every second
+
+    return () => clearInterval(interval);
+  }, [config, currentModel, getEffectiveModel]);
 
   const {
     consoleMessages,
     handleNewMessage,
     clearConsoleMessages: clearConsoleMessagesState,
   } = useConsoleMessages();
-
-  useExtensionAutoUpdate({
-    settings,
-    onConsoleMessage: handleNewMessage,
-  });
 
   useEffect(() => {
     const consolePatcher = new ConsolePatcher({
@@ -244,157 +256,181 @@ export const AppContainer = (props: AppContainerProps) => {
     registerCleanup(consolePatcher.cleanup);
   }, [handleNewMessage, config]);
 
-  const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
-  const historyTokenCleanupRef = useRef<(() => void) | null>(null);
-  const lastHistoryServiceRef = useRef<unknown>(null);
-  const lastPublishedHistoryTokensRef = useRef<number | null>(null);
-  const tokenLogger = useMemo(
-    () => new DebugLogger('llxprt:ui:tokentracking'),
-    [],
-  );
+  // Derive widths for InputPrompt using shared helper
+  const { inputWidth, suggestionsWidth } = useMemo(() => {
+    const { inputWidth, suggestionsWidth } =
+      calculatePromptWidths(terminalWidth);
+    return { inputWidth, suggestionsWidth };
+  }, [terminalWidth]);
+  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
+  const staticAreaMaxItemHeight = Math.max(terminalHeight * 4, 100);
 
-  // Set up history token count listener
+  const isValidPath = useCallback((filePath: string): boolean => {
+    try {
+      return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+    } catch (_e) {
+      return false;
+    }
+  }, []);
+
+  const buffer = useTextBuffer({
+    initialText: '',
+    viewport: { height: 10, width: inputWidth },
+    stdin,
+    setRawMode,
+    isValidPath,
+    shellModeActive,
+  });
+
   useEffect(() => {
-    let intervalCleared = false;
-
-    // Poll continuously to detect when the history service changes (e.g., after compression)
-    const checkInterval = setInterval(() => {
-      if (intervalCleared) return;
-
-      const geminiClient = config.getGeminiClient();
-
-      // Check if chat is initialized first
-      if (geminiClient?.hasChatInitialized?.()) {
-        const historyService = geminiClient.getHistoryService?.();
-
-        if (!historyService && lastHistoryServiceRef.current === null) {
-          tokenLogger.debug(() => 'No history service available yet');
-        } else if (historyService) {
-          // Always get the current token count even if not a new instance
-          const currentTokens = historyService.getTotalTokens();
-          if (
-            currentTokens > 0 &&
-            currentTokens !== lastPublishedHistoryTokensRef.current
-          ) {
-            lastPublishedHistoryTokensRef.current = currentTokens;
-            updateHistoryTokenCount(currentTokens);
+    const fetchUserMessages = async () => {
+      const pastMessagesRaw = (await logger?.getPreviousUserMessages()) || [];
+      const currentSessionUserMessages = historyManager.history
+        .filter(
+          (item): item is HistoryItem & { type: 'user'; text: string } =>
+            item.type === 'user' &&
+            typeof item.text === 'string' &&
+            item.text.trim() !== '',
+        )
+        .map((item) => item.text)
+        .reverse();
+      const combinedMessages = [
+        ...currentSessionUserMessages,
+        ...pastMessagesRaw,
+      ];
+      const deduplicatedMessages: string[] = [];
+      if (combinedMessages.length > 0) {
+        deduplicatedMessages.push(combinedMessages[0]);
+        for (let i = 1; i < combinedMessages.length; i++) {
+          if (combinedMessages[i] !== combinedMessages[i - 1]) {
+            deduplicatedMessages.push(combinedMessages[i]);
           }
         }
-
-        // Check if we have a new history service instance (happens after compression)
-        if (
-          historyService &&
-          historyService !== lastHistoryServiceRef.current
-        ) {
-          tokenLogger.debug(
-            () => 'Found new history service, setting up listener',
-          );
-
-          // Clean up old listener if it exists
-          if (historyTokenCleanupRef.current) {
-            historyTokenCleanupRef.current();
-            historyTokenCleanupRef.current = null;
-          }
-
-          // Store reference to current history service
-          lastHistoryServiceRef.current = historyService;
-
-          const handleTokensUpdated = (event: { totalTokens: number }) => {
-            tokenLogger.debug(
-              () =>
-                `Received tokensUpdated event: totalTokens=${event.totalTokens}`,
-            );
-            if (event.totalTokens !== lastPublishedHistoryTokensRef.current) {
-              lastPublishedHistoryTokensRef.current = event.totalTokens;
-              updateHistoryTokenCount(event.totalTokens);
-            }
-          };
-
-          historyService.on('tokensUpdated', handleTokensUpdated);
-
-          // Initialize with current token count
-          const currentTokens = historyService.getTotalTokens();
-          tokenLogger.debug(() => `Initial token count: ${currentTokens}`);
-          lastPublishedHistoryTokensRef.current = currentTokens;
-          updateHistoryTokenCount(currentTokens);
-
-          // Store cleanup function for later
-          historyTokenCleanupRef.current = () => {
-            historyService.off('tokensUpdated', handleTokensUpdated);
-          };
-        }
       }
-    }, 100); // Check every 100ms
-
-    return () => {
-      clearInterval(checkInterval);
-      intervalCleared = true;
-      // Clean up the event listener if it was set up
-      if (historyTokenCleanupRef.current) {
-        historyTokenCleanupRef.current();
-        historyTokenCleanupRef.current = null;
-      }
-      lastHistoryServiceRef.current = null;
-      lastPublishedHistoryTokensRef.current = null;
+      setUserMessages(deduplicatedMessages.reverse());
     };
-  }, [config, updateHistoryTokenCount, tokenLogger]);
-  const [_staticNeedsRefresh, setStaticNeedsRefresh] = useState(false);
-  const [staticKey, setStaticKey] = useState(0);
+    fetchUserMessages();
+  }, [historyManager.history, logger]);
+
   const refreshStatic = useCallback(() => {
     stdout.write(ansiEscapes.clearTerminal);
-    setStaticKey((prev) => prev + 1);
-  }, [setStaticKey, stdout]);
-  useStaticHistoryRefresh(history, refreshStatic);
+    setHistoryRemountKey((prev) => prev + 1);
+  }, [setHistoryRemountKey, stdout]);
 
-  const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
-  const [debugMessage, setDebugMessage] = useState<string>('');
-  const [themeError, _setThemeError] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [editorError, _setEditorError] = useState<string | null>(null);
-  const [footerHeight, setFooterHeight] = useState<number>(0);
-
-  // Token metrics state for live updates
-  const [tokenMetrics, setTokenMetrics] = useState({
-    tokensPerMinute: 0,
-    throttleWaitTimeMs: 0,
-    sessionTokenTotal: 0,
-  });
-  const tokenMetricsSnapshotRef = useRef<TokenMetricsSnapshot | null>(null);
-  const [_corgiMode, setCorgiMode] = useState(false);
-  const [_isTrustedFolderState, _setIsTrustedFolder] = useState(
-    isWorkspaceTrusted(settings.merged),
+  const {
+    isThemeDialogOpen,
+    openThemeDialog,
+    handleThemeSelect,
+    handleThemeHighlight,
+  } = useThemeCommand(
+    settings,
+    setThemeError,
+    historyManager.addItem,
+    initializationResult.themeError,
   );
-  const [currentModel, setCurrentModel] = useState(config.getModel());
-  const [shellModeActive, setShellModeActive] = useState(false);
-  const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
-  const [showToolDescriptions, setShowToolDescriptions] =
-    useState<boolean>(false);
 
-  const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
-  const [quittingMessages, setQuittingMessages] = useState<
-    HistoryItem[] | null
-  >(null);
-  const ctrlCTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
-  const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
-  const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
-  const [ideContextState, setIdeContextState] = useState<
-    IdeContext | undefined
-  >();
-  const [showEscapePrompt, setShowEscapePrompt] = useState(false);
-  const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [providerModels, setProviderModels] = useState<IModel[]>([]);
-  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const { authState, setAuthState, authError, onAuthError } = useAuthCommand(
+    settings,
+    config,
+  );
 
-  const openPermissionsDialog = useCallback(() => {
-    setIsPermissionsDialogOpen(true);
-  }, []);
+  const { proQuotaRequest, handleProQuotaChoice } = useQuotaAndFallback({
+    config,
+    historyManager,
+    userTier,
+    setAuthState,
+    setModelSwitchedFromQuotaError,
+  });
 
-  const closePermissionsDialog = useCallback(() => {
-    setIsPermissionsDialogOpen(false);
-  }, []);
+  // Derive auth state variables for backward compatibility with UIStateContext
+  const isAuthDialogOpen = authState === AuthState.Updating;
+  const isAuthenticating = authState === AuthState.Unauthenticated;
+
+  // Create handleAuthSelect wrapper for backward compatibility
+  const handleAuthSelect = useCallback(
+    async (authType: AuthType | undefined, scope: SettingScope) => {
+      if (authType) {
+        await clearCachedCredentialFile();
+        settings.setValue(scope, 'security.auth.selectedType', authType);
+
+        try {
+          await config.refreshAuth(authType);
+          setAuthState(AuthState.Authenticated);
+        } catch (e) {
+          onAuthError(
+            `Failed to authenticate: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          return;
+        }
+
+        if (
+          authType === AuthType.LOGIN_WITH_GOOGLE &&
+          config.isBrowserLaunchSuppressed()
+        ) {
+          await runExitCleanup();
+          console.log(`
+----------------------------------------------------------------
+Logging in with Google... Please restart Gemini CLI to continue.
+----------------------------------------------------------------
+          `);
+          process.exit(0);
+        }
+      }
+      setAuthState(AuthState.Authenticated);
+    },
+    [settings, config, setAuthState, onAuthError],
+  );
+
+  // Sync user tier from config when authentication changes
+  useEffect(() => {
+    // Only sync when not currently authenticating
+    if (authState === AuthState.Authenticated) {
+      setUserTier(config.getUserTier());
+    }
+  }, [config, authState]);
+
+  // Check for enforced auth type mismatch
+  useEffect(() => {
+    if (
+      settings.merged.security?.auth?.enforcedType &&
+      settings.merged.security?.auth.selectedType &&
+      settings.merged.security?.auth.enforcedType !==
+        settings.merged.security?.auth.selectedType
+    ) {
+      onAuthError(
+        `Authentication is enforced to be ${settings.merged.security?.auth.enforcedType}, but you are currently using ${settings.merged.security?.auth.selectedType}.`,
+      );
+    } else if (
+      settings.merged.security?.auth?.selectedType &&
+      !settings.merged.security?.auth?.useExternal
+    ) {
+      const error = validateAuthMethod(
+        settings.merged.security.auth.selectedType,
+      );
+      if (error) {
+        onAuthError(error);
+      }
+    }
+  }, [
+    settings.merged.security?.auth?.selectedType,
+    settings.merged.security?.auth?.enforcedType,
+    settings.merged.security?.auth?.useExternal,
+    onAuthError,
+  ]);
+
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const {
+    isEditorDialogOpen,
+    openEditorDialog,
+    handleEditorSelect,
+    exitEditorDialog,
+  } = useEditorSettings(settings, setEditorError, historyManager.addItem);
+
+  const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
+    useSettingsCommand();
+
+  const { isModelDialogOpen, openModelDialog, closeModelDialog } =
+    useModelCommand();
 
   const {
     showWorkspaceMigrationDialog,
@@ -403,54 +439,390 @@ export const AppContainer = (props: AppContainerProps) => {
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
 
-  useEffect(() => {
-    const unsubscribe = ideContext.subscribeToIdeContext(setIdeContextState);
-    // Set the initial value
-    setIdeContextState(ideContext.getIdeContext());
-    return unsubscribe;
-  }, []);
+  const { toggleVimEnabled } = useVimMode();
 
-  // Update currentModel when settings change - get it from the SAME place as diagnostics
-  useEffect(() => {
-    const updateModel = async () => {
-      const settingsService = getSettingsService();
+  const slashCommandActions = useMemo(
+    () => ({
+      openAuthDialog: () => setAuthState(AuthState.Updating),
+      openThemeDialog,
+      openEditorDialog,
+      openPrivacyNotice: () => setShowPrivacyNotice(true),
+      openSettingsDialog,
+      openModelDialog,
+      openPermissionsDialog,
+      quit: (messages: HistoryItem[]) => {
+        setQuittingMessages(messages);
+        setTimeout(async () => {
+          await runExitCleanup();
+          process.exit(0);
+        }, 100);
+      },
+      setDebugMessage,
+      toggleCorgiMode: () => setCorgiMode((prev) => !prev),
+      setExtensionsUpdateState,
+      addConfirmUpdateExtensionRequest,
+    }),
+    [
+      setAuthState,
+      openThemeDialog,
+      openEditorDialog,
+      openSettingsDialog,
+      openModelDialog,
+      setQuittingMessages,
+      setDebugMessage,
+      setShowPrivacyNotice,
+      setCorgiMode,
+      setExtensionsUpdateState,
+      openPermissionsDialog,
+      addConfirmUpdateExtensionRequest,
+    ],
+  );
 
-      // Try to get from SettingsService first (same as diagnostics does)
-      if (settingsService && settingsService.getDiagnosticsData) {
-        try {
-          const diagnosticsData = await settingsService.getDiagnosticsData();
-          if (diagnosticsData && diagnosticsData.model) {
-            setCurrentModel(diagnosticsData.model);
-            return;
-          }
-        } catch (_error) {
-          // Fall through to config
-        }
+  const {
+    handleSlashCommand,
+    slashCommands,
+    pendingHistoryItems: pendingSlashCommandHistoryItems,
+    commandContext,
+    shellConfirmationRequest,
+    confirmationRequest,
+  } = useSlashCommandProcessor(
+    config,
+    settings,
+    historyManager.addItem,
+    historyManager.clearItems,
+    historyManager.loadHistory,
+    refreshStatic,
+    toggleVimEnabled,
+    setIsProcessing,
+    setGeminiMdFileCount,
+    slashCommandActions,
+    extensionsUpdateState,
+    isConfigInitialized,
+  );
+
+  const performMemoryRefresh = useCallback(async () => {
+    historyManager.addItem(
+      {
+        type: MessageType.INFO,
+        text: 'Refreshing hierarchical memory (GEMINI.md or other context files)...',
+      },
+      Date.now(),
+    );
+    try {
+      const { memoryContent, fileCount } = await loadHierarchicalGeminiMemory(
+        process.cwd(),
+        settings.merged.context?.loadMemoryFromIncludeDirectories
+          ? config.getWorkspaceContext().getDirectories()
+          : [],
+        config.getDebugMode(),
+        config.getFileService(),
+        settings.merged,
+        config.getExtensionContextFilePaths(),
+        config.isTrustedFolder(),
+        settings.merged.context?.importFormat || 'tree', // Use setting or default to 'tree'
+        config.getFileFilteringOptions(),
+      );
+
+      config.setUserMemory(memoryContent);
+      config.setGeminiMdFileCount(fileCount);
+      setGeminiMdFileCount(fileCount);
+
+      historyManager.addItem(
+        {
+          type: MessageType.INFO,
+          text: `Memory refreshed successfully. ${
+            memoryContent.length > 0
+              ? `Loaded ${memoryContent.length} characters from ${fileCount} file(s).`
+              : 'No memory content found.'
+          }`,
+        },
+        Date.now(),
+      );
+      if (config.getDebugMode()) {
+        console.log(
+          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(
+            0,
+            200,
+          )}...`,
+        );
       }
+    } catch (error) {
+      const errorMessage = getErrorMessage(error);
+      historyManager.addItem(
+        {
+          type: MessageType.ERROR,
+          text: `Error refreshing memory: ${errorMessage}`,
+        },
+        Date.now(),
+      );
+      console.error('Error refreshing memory:', error);
+    }
+  }, [config, historyManager, settings.merged]);
 
-      // Otherwise use config (which is what diagnostics falls back to)
-      setCurrentModel(config.getModel());
-    };
+  const cancelHandlerRef = useRef<() => void>(() => {});
 
-    // Update immediately
-    updateModel();
+  const {
+    streamingState,
+    submitQuery,
+    initError,
+    pendingHistoryItems: pendingGeminiHistoryItems,
+    thought,
+    cancelOngoingRequest,
+    handleApprovalModeChange,
+    activePtyId,
+    loopDetectionConfirmationRequest,
+  } = useGeminiStream(
+    config.getGeminiClient(),
+    historyManager.history,
+    historyManager.addItem,
+    config,
+    settings,
+    setDebugMessage,
+    handleSlashCommand,
+    shellModeActive,
+    () => settings.merged.general?.preferredEditor as EditorType,
+    onAuthError,
+    performMemoryRefresh,
+    modelSwitchedFromQuotaError,
+    setModelSwitchedFromQuotaError,
+    refreshStatic,
+    () => cancelHandlerRef.current(),
+    setEmbeddedShellFocused,
+    terminalWidth,
+    terminalHeight,
+    embeddedShellFocused,
+  );
 
-    // Also listen for any changes if SettingsService is available
-    const settingsService = getSettingsService();
-    if (settingsService) {
-      settingsService.on('settings-changed', updateModel);
-      return () => {
-        settingsService.off('settings-changed', updateModel);
-      };
+  // Auto-accept indicator
+  const showAutoAcceptIndicator = useAutoAcceptIndicator({
+    config,
+    addItem: historyManager.addItem,
+    onApprovalModeChange: handleApprovalModeChange,
+  });
+
+  const { messageQueue, addMessage, clearQueue, getQueuedMessagesText } =
+    useMessageQueue({
+      isConfigInitialized,
+      streamingState,
+      submitQuery,
+    });
+
+  cancelHandlerRef.current = useCallback(() => {
+    const pendingHistoryItems = [
+      ...pendingSlashCommandHistoryItems,
+      ...pendingGeminiHistoryItems,
+    ];
+    if (isToolExecuting(pendingHistoryItems)) {
+      buffer.setText(''); // Just clear the prompt
+      return;
     }
 
-    return undefined;
-  }, [config]);
+    const lastUserMessage = userMessages.at(-1);
+    let textToSet = lastUserMessage || '';
+
+    const queuedText = getQueuedMessagesText();
+    if (queuedText) {
+      textToSet = textToSet ? `${textToSet}\n\n${queuedText}` : queuedText;
+      clearQueue();
+    }
+
+    if (textToSet) {
+      buffer.setText(textToSet);
+    }
+  }, [
+    buffer,
+    userMessages,
+    getQueuedMessagesText,
+    clearQueue,
+    pendingSlashCommandHistoryItems,
+    pendingGeminiHistoryItems,
+  ]);
+
+  const handleFinalSubmit = useCallback(
+    (submittedValue: string) => {
+      addMessage(submittedValue);
+    },
+    [addMessage],
+  );
+
+  const handleClearScreen = useCallback(() => {
+    historyManager.clearItems();
+    clearConsoleMessagesState();
+    console.clear();
+    refreshStatic();
+  }, [historyManager, clearConsoleMessagesState, refreshStatic]);
+
+  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
+
+  /**
+   * Determines if the input prompt should be active and accept user input.
+   * Input is disabled during:
+   * - Initialization errors
+   * - Slash command processing
+   * - Tool confirmations (WaitingForConfirmation state)
+   * - Any future streaming states not explicitly allowed
+   */
+  const isInputActive =
+    !initError &&
+    !isProcessing &&
+    (streamingState === StreamingState.Idle ||
+      streamingState === StreamingState.Responding) &&
+    !proQuotaRequest;
+
+  const [controlsHeight, setControlsHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    if (mainControlsRef.current) {
+      const fullFooterMeasurement = measureElement(mainControlsRef.current);
+      if (fullFooterMeasurement.height > 0) {
+        setControlsHeight(fullFooterMeasurement.height);
+      }
+    }
+  }, [buffer, terminalWidth, terminalHeight]);
+
+  // Compute available terminal height based on controls measurement
+  const availableTerminalHeight = Math.max(
+    0,
+    terminalHeight - controlsHeight - staticExtraHeight - 2,
+  );
+
+  config.setShellExecutionConfig({
+    terminalWidth: Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+    terminalHeight: Math.max(
+      Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING),
+      1,
+    ),
+    pager: settings.merged.tools?.shell?.pager,
+    showColor: settings.merged.tools?.shell?.showColor,
+  });
+
+  const isFocused = useFocus();
+  useBracketedPaste();
+
+  // Context file names computation
+  const contextFileNames = useMemo(() => {
+    const fromSettings = settings.merged.context?.fileName;
+    return fromSettings
+      ? Array.isArray(fromSettings)
+        ? fromSettings
+        : [fromSettings]
+      : getAllGeminiMdFilenames();
+  }, [settings.merged.context?.fileName]);
+  // Initial prompt handling
+  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
+  const initialPromptSubmitted = useRef(false);
+  const geminiClient = config.getGeminiClient();
+
+  useEffect(() => {
+    if (activePtyId) {
+      ShellExecutionService.resizePty(
+        activePtyId,
+        Math.floor(terminalWidth * SHELL_WIDTH_FRACTION),
+        Math.max(Math.floor(availableTerminalHeight - SHELL_HEIGHT_PADDING), 1),
+      );
+    }
+  }, [terminalWidth, availableTerminalHeight, activePtyId]);
+
+  useEffect(() => {
+    if (
+      initialPrompt &&
+      isConfigInitialized &&
+      !initialPromptSubmitted.current &&
+      !isAuthenticating &&
+      !isAuthDialogOpen &&
+      !isThemeDialogOpen &&
+      !isEditorDialogOpen &&
+      !showPrivacyNotice &&
+      geminiClient?.isInitialized?.()
+    ) {
+      handleFinalSubmit(initialPrompt);
+      initialPromptSubmitted.current = true;
+    }
+  }, [
+    initialPrompt,
+    isConfigInitialized,
+    handleFinalSubmit,
+    isAuthenticating,
+    isAuthDialogOpen,
+    isThemeDialogOpen,
+    isEditorDialogOpen,
+    showPrivacyNotice,
+    geminiClient,
+  ]);
+
+  const [idePromptAnswered, setIdePromptAnswered] = useState(false);
+  const [currentIDE, setCurrentIDE] = useState<IdeInfo | null>(null);
+
+  useEffect(() => {
+    const getIde = async () => {
+      const ideClient = await IdeClient.getInstance();
+      const currentIde = ideClient.getCurrentIde();
+      setCurrentIDE(currentIde || null);
+    };
+    getIde();
+  }, []);
+  const shouldShowIdePrompt = Boolean(
+    currentIDE &&
+      !config.getIdeMode() &&
+      !settings.merged.ide?.hasSeenNudge &&
+      !idePromptAnswered,
+  );
+
+  const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
+  const [showToolDescriptions, setShowToolDescriptions] =
+    useState<boolean>(false);
+
+  const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
+  const ctrlCTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
+  const ctrlDTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [constrainHeight, setConstrainHeight] = useState<boolean>(true);
+  const [ideContextState, setIdeContextState] = useState<
+    IdeContext | undefined
+  >();
+  const [showEscapePrompt, setShowEscapePrompt] = useState(false);
+  const [showIdeRestartPrompt, setShowIdeRestartPrompt] = useState(false);
+
+  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
+    useFolderTrust(settings, setIsTrustedFolder);
+  const {
+    needsRestart: ideNeedsRestart,
+    restartReason: ideTrustRestartReason,
+  } = useIdeTrustListener();
+  const isInitialMount = useRef(true);
+
+  useEffect(() => {
+    if (ideNeedsRestart) {
+      // IDE trust changed, force a restart.
+      setShowIdeRestartPrompt(true);
+    }
+  }, [ideNeedsRestart]);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
+    const handler = setTimeout(() => {
+      refreshStatic();
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [terminalWidth, refreshStatic]);
+
+  useEffect(() => {
+    const unsubscribe = ideContextStore.subscribe(setIdeContextState);
+    setIdeContextState(ideContextStore.get());
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     const openDebugConsole = () => {
       setShowErrorDetails(true);
-      setConstrainHeight(false); // Make sure the user sees the full message.
+      setConstrainHeight(false);
     };
     appEvents.on(AppEvent.OpenDebugConsole, openDebugConsole);
 
@@ -469,517 +841,14 @@ export const AppContainer = (props: AppContainerProps) => {
     };
   }, [handleNewMessage]);
 
-  const openPrivacyNotice = useCallback(() => {
-    setShowPrivacyNotice(true);
-  }, []);
-
   const handleEscapePromptChange = useCallback((showPrompt: boolean) => {
     setShowEscapePrompt(showPrompt);
   }, []);
 
-  const initialPromptSubmitted = useRef(false);
-
-  const errorCount = useMemo(
-    () =>
-      consoleMessages
-        .filter((msg) => msg.type === 'error')
-        .reduce((total, msg) => total + msg.count, 0),
-    [consoleMessages],
-  );
-
-  const {
-    isThemeDialogOpen,
-    openThemeDialog,
-    handleThemeSelect,
-    handleThemeHighlight,
-  } = useThemeCommand(settings, appState, addItem);
-
-  const { isSettingsDialogOpen, openSettingsDialog, closeSettingsDialog } =
-    useSettingsCommand();
-
-  const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
-    useFolderTrust(settings, config);
-
-  const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
-  useEffect(() => {
-    if (ideNeedsRestart) {
-      // IDE trust changed, force a restart.
-      setShowIdeRestartPrompt(true);
-    }
-  }, [ideNeedsRestart]);
-
-  useKeypress(
-    (key) => {
-      if (key.name === 'r' || key.name === 'R') {
-        process.exit(0);
-      }
-    },
-    { isActive: showIdeRestartPrompt },
-  );
-
-  const {
-    isAuthDialogOpen,
-    openAuthDialog,
-    handleAuthSelect,
-    isAuthenticating,
-    cancelAuthentication,
-  } = useAuthCommand(settings, appState, config);
-
-  useEffect(() => {
-    if (settings.merged.selectedAuthType && !settings.merged.useExternalAuth) {
-      const error = validateAuthMethod(settings.merged.selectedAuthType);
-      if (error) {
-        setAuthError(error);
-        // Don't automatically open auth dialog - user must use /auth command
-      }
-    }
-  }, [
-    settings.merged.selectedAuthType,
-    settings.merged.useExternalAuth,
-    setAuthError,
-  ]);
-
-  // Check for OAuth code needed flag
-  useEffect(() => {
-    const checkOAuthFlag = setInterval(() => {
-      if ((global as Record<string, unknown>).__oauth_needs_code) {
-        // Clear the flag
-        (global as Record<string, unknown>).__oauth_needs_code = false;
-        // Open the OAuth code dialog
-        appDispatch({ type: 'OPEN_DIALOG', payload: 'oauthCode' });
-      }
-    }, 100); // Check every 100ms
-
-    return () => clearInterval(checkOAuthFlag);
-  }, [appDispatch]);
-
-  const {
-    isEditorDialogOpen,
-    openEditorDialog,
-    handleEditorSelect,
-    exitEditorDialog,
-  } = useEditorSettings(settings, appState, addItem);
-
-  const {
-    showDialog: isProviderDialogOpen,
-    openDialog: openProviderDialog,
-    handleSelect: handleProviderSelect,
-    closeDialog: exitProviderDialog,
-    providers: providerOptions,
-    currentProvider: selectedProvider,
-  } = useProviderDialog({
-    addMessage: (msg) =>
-      addItem(
-        { type: msg.type as MessageType, text: msg.content },
-        msg.timestamp.getTime(),
-      ),
-    appState,
-    config,
-  });
-
-  const {
-    showDialog: isProviderModelDialogOpen,
-    openDialog: openProviderModelDialogRaw,
-    handleSelect: handleProviderModelChange,
-    closeDialog: exitProviderModelDialog,
-  } = useProviderModelDialog({
-    addMessage: (msg) =>
-      addItem(
-        { type: msg.type as MessageType, text: msg.content },
-        msg.timestamp.getTime(),
-      ),
-    appState,
-  });
-
-  const openProviderModelDialog = useCallback(async () => {
-    try {
-      const models = await runtime.listAvailableModels();
-      setProviderModels(models);
-    } catch (e) {
-      console.error('Failed to load models:', e);
-      setProviderModels([]);
-    }
-    await openProviderModelDialogRaw();
-  }, [openProviderModelDialogRaw, runtime]);
-
-  // Watch for model changes from config
-  useEffect(() => {
-    const checkModelChange = () => {
-      const configModel = config.getModel();
-      const providerModel = runtime.getActiveModelName();
-      const effectiveModel =
-        providerModel && providerModel.trim() !== ''
-          ? providerModel
-          : configModel;
-
-      if (effectiveModel !== currentModel) {
-        console.debug(
-          `[Model Update] Updating footer from ${currentModel} to ${effectiveModel}`,
-        );
-        setCurrentModel(effectiveModel);
-      }
-    };
-
-    // Check immediately
-    checkModelChange();
-
-    // Check periodically (every 500ms)
-    const interval = setInterval(checkModelChange, 500);
-
-    return () => clearInterval(interval);
-  }, [config, currentModel, runtime]); // Include currentModel in dependencies
-
-  const toggleCorgiMode = useCallback(() => {
-    setCorgiMode((prev) => !prev);
-  }, []);
-
-  const {
-    showDialog: isLoadProfileDialogOpen,
-    openDialog: openLoadProfileDialog,
-    handleSelect: handleProfileSelect,
-    closeDialog: exitLoadProfileDialog,
-    profiles,
-  } = useLoadProfileDialog({
-    addMessage: (msg) =>
-      addItem(
-        { type: msg.type as MessageType, text: msg.content },
-        msg.timestamp.getTime(),
-      ),
-    appState,
-    config,
-    settings,
-  });
-
-  const {
-    showDialog: isToolsDialogOpen,
-    openDialog: openToolsDialogRaw,
-    closeDialog: exitToolsDialog,
-    action: toolsDialogAction,
-    availableTools: toolsDialogTools,
-    disabledTools: toolsDialogDisabledTools,
-    handleSelect: handleToolsSelect,
-  } = useToolsDialog({
-    addMessage: (msg) =>
-      addItem(
-        { type: msg.type as MessageType, text: msg.content },
-        msg.timestamp.getTime(),
-      ),
-    appState,
-    config,
-  });
-
-  const openToolsDialog = useCallback(
-    (action: 'enable' | 'disable') => {
-      openToolsDialogRaw(action);
-    },
-    [openToolsDialogRaw],
-  );
-
-  const performMemoryRefresh = useCallback(async () => {
-    addItem(
-      {
-        type: MessageType.INFO,
-        text: 'Refreshing hierarchical memory (LLXPRT.md or other context files)...',
-      },
-      Date.now(),
-    );
-    try {
-      const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
-        process.cwd(),
-        settings.merged.loadMemoryFromIncludeDirectories
-          ? config.getWorkspaceContext().getDirectories()
-          : [],
-        config.getDebugMode(),
-        config.getFileService(),
-        settings.merged,
-        config.getExtensionContextFilePaths(),
-        config.getFolderTrust(),
-        settings.merged.memoryImportFormat || 'tree', // Use setting or default to 'tree'
-        config.getFileFilteringOptions(),
-      );
-
-      config.setUserMemory(memoryContent);
-      config.setLlxprtMdFileCount(fileCount);
-      setLlxprtMdFileCount(fileCount);
-
-      addItem(
-        {
-          type: MessageType.INFO,
-          text: `Memory refreshed successfully. ${memoryContent.length > 0 ? `Loaded ${memoryContent.length} characters from ${fileCount} file(s).` : 'No memory content found.'}`,
-        },
-        Date.now(),
-      );
-      if (config.getDebugMode()) {
-        console.log(
-          `[DEBUG] Refreshed memory content in config: ${memoryContent.substring(0, 200)}...`,
-        );
-      }
-    } catch (error) {
-      const errorMessage = getErrorMessage(error);
-      addItem(
-        {
-          type: MessageType.ERROR,
-          text: `Error refreshing memory: ${errorMessage}`,
-        },
-        Date.now(),
-      );
-      console.error('Error refreshing memory:', error);
-    }
-  }, [config, addItem, settings.merged]);
-
-  // Poll for token metrics updates
-  useEffect(() => {
-    const updateTokenMetrics = () => {
-      const metrics = runtime.getActiveProviderMetrics();
-      const usage = runtime.getSessionTokenUsage();
-
-      if (
-        !shouldUpdateTokenMetrics(
-          tokenMetricsSnapshotRef.current,
-          metrics,
-          usage,
-        )
-      ) {
-        return;
-      }
-
-      const snapshot = toTokenMetricsSnapshot(metrics, usage);
-      tokenMetricsSnapshotRef.current = snapshot;
-
-      setTokenMetrics({
-        tokensPerMinute: snapshot.tokensPerMinute,
-        throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
-        sessionTokenTotal: snapshot.sessionTokenTotal,
-      });
-
-      uiTelemetryService.setTokenTrackingMetrics({
-        tokensPerMinute: snapshot.tokensPerMinute,
-        throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
-        sessionTokenUsage: usage,
-      });
-    };
-
-    // Update immediately
-    updateTokenMetrics();
-
-    // Poll every second to show live updates
-    const interval = setInterval(updateTokenMetrics, 1000);
-
-    return () => clearInterval(interval);
-  }, [runtime]);
-
-  // Terminal and UI setup
-  const { rows: terminalHeight, columns: terminalWidth } = useTerminalSize();
-  const { stdin, setRawMode } = useStdin();
-  const isInitialMount = useRef(true);
-
-  const widthFraction = 0.9;
-  // Calculate inputWidth accounting for:
-  // - Prompt: 2 chars ("! " or "> ")
-  // - Padding: 2 chars (paddingX={1} on each side in InputPrompt)
-  // - Additional margin: 2 chars (for proper wrapping)
-  const inputWidth = Math.max(
-    20,
-    Math.floor(terminalWidth * widthFraction) - 6,
-  );
-  const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
-
-  // Utility callbacks
-  const isValidPath = useCallback((filePath: string): boolean => {
-    try {
-      return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
-    } catch (_e) {
-      return false;
-    }
-  }, []);
-
-  const getPreferredEditor = useCallback(() => {
-    const editorType = settings.merged.preferredEditor;
-    const isValidEditor = isEditorAvailable(editorType);
-    if (!isValidEditor) {
-      openEditorDialog();
-      return;
-    }
-    return editorType as EditorType;
-  }, [settings, openEditorDialog]);
-
-  const onAuthError = useCallback(() => {
-    setAuthError('reauth required');
-    // Open the auth dialog when authentication errors occur
-    appDispatch({ type: 'OPEN_DIALOG', payload: 'auth' });
-  }, [setAuthError, appDispatch]);
-
-  const handleAuthTimeout = useCallback(() => {
-    setAuthError('Authentication timed out. Please try again.');
-    cancelAuthentication();
-    // NEVER automatically open auth dialog - user must use /auth
-  }, [setAuthError, cancelAuthentication]);
-
-  const handlePrivacyNoticeExit = useCallback(() => {
-    setShowPrivacyNotice(false);
-  }, []);
-
-  // Core hooks and processors
-  const {
-    vimEnabled: vimModeEnabled,
-    vimMode,
-    toggleVimEnabled,
-  } = useVimMode();
-
-  const {
-    handleSlashCommand,
-    slashCommands,
-    pendingHistoryItems: pendingSlashCommandHistoryItems,
-    commandContext,
-    shellConfirmationRequest,
-    confirmationRequest,
-  } = useSlashCommandProcessor(
-    config,
-    settings,
-    addItem,
-    clearItems,
-    loadHistory,
-    refreshStatic,
-    setDebugMessage,
-    openThemeDialog,
-    openAuthDialog,
-    openEditorDialog,
-    openProviderDialog,
-    openProviderModelDialog,
-    openLoadProfileDialog,
-    openToolsDialog,
-    toggleCorgiMode,
-    setQuittingMessages,
-    openPrivacyNotice,
-    openSettingsDialog,
-    toggleVimEnabled,
-    setIsProcessing,
-    setLlxprtMdFileCount,
-    openPermissionsDialog,
-  );
-
-  // Memoize viewport to ensure it updates when inputWidth changes
-  const viewport = useMemo(
-    () => ({ height: 10, width: inputWidth }),
-    [inputWidth],
-  );
-
-  const buffer = useTextBuffer({
-    initialText: '',
-    viewport,
-    stdin,
-    setRawMode,
-    isValidPath,
-    shellModeActive,
-  });
-
-  // Independent input history management (unaffected by /clear)
-  const inputHistoryStore = useInputHistoryStore();
-
-  const handleUserCancel = useCallback(() => {
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    if (lastUserMessage) {
-      buffer.setText(lastUserMessage);
-    }
-  }, [buffer, inputHistoryStore.inputHistory]);
-
-  const handleOAuthCodeDialogClose = useCallback(() => {
-    appDispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
-  }, [appDispatch]);
-
-  const handleOAuthCodeSubmit = useCallback(
-    async (code: string) => {
-      const provider = (global as unknown as { __oauth_provider?: string })
-        .__oauth_provider;
-
-      if (provider === 'anthropic') {
-        const oauthManager = runtime.getCliOAuthManager();
-
-        if (oauthManager) {
-          const anthropicProvider = oauthManager.getProvider('anthropic');
-          if (anthropicProvider && 'submitAuthCode' in anthropicProvider) {
-            (
-              anthropicProvider as { submitAuthCode: (code: string) => void }
-            ).submitAuthCode(code);
-          }
-        }
-      }
-    },
-    [runtime],
-  );
-
-  const {
-    streamingState,
-    submitQuery,
-    initError,
-    pendingHistoryItems: pendingGeminiHistoryItems,
-    thought,
-    cancelOngoingRequest,
-  } = useGeminiStream(
-    config.getGeminiClient(),
-    history,
-    addItem,
-    config,
-    settings,
-    setDebugMessage,
-    handleSlashCommand,
-    shellModeActive,
-    getPreferredEditor,
-    onAuthError,
-    performMemoryRefresh,
-    refreshStatic,
-    handleUserCancel,
-    registerTodoPause,
-  );
-
-  const pendingHistoryItems = useMemo(
-    () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
-    [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
-  );
-
-  // Update the cancel handler with message queue support
-  const cancelHandlerRef = useRef<(() => void) | null>(null);
-  cancelHandlerRef.current = useCallback(() => {
-    if (isToolExecuting(pendingHistoryItems)) {
-      buffer.setText(''); // Just clear the prompt
-      return;
-    }
-
-    const lastUserMessage = inputHistoryStore.inputHistory.at(-1);
-    const textToSet = lastUserMessage || '';
-
-    if (textToSet) {
-      buffer.setText(textToSet);
-    }
-  }, [buffer, inputHistoryStore.inputHistory, pendingHistoryItems]);
-
-  // Input handling - queue messages for processing
-  const handleFinalSubmit = useCallback(
-    (submittedValue: string) => {
-      const trimmedValue = submittedValue.trim();
-      if (trimmedValue.length > 0) {
-        // Add to independent input history
-        inputHistoryStore.addInput(trimmedValue);
-        submitQuery(trimmedValue);
-      }
-    },
-    [submitQuery, inputHistoryStore],
-  );
-
-  const { handleUserInputSubmit } = useTodoPausePreserver({
-    controller: todoPauseController,
-    updateTodos,
-    handleFinalSubmit,
-  });
-
   const handleIdePromptComplete = useCallback(
     (result: IdeIntegrationNudgeResult) => {
       if (result.userSelection === 'yes') {
-        if (result.isExtensionPreInstalled) {
-          handleSlashCommand('/ide enable');
-        } else {
-          handleSlashCommand('/ide install');
-        }
+        handleSlashCommand('/ide install');
         settings.setValue(
           SettingScope.User,
           'hasSeenIdeIntegrationNudge',
@@ -997,13 +866,10 @@ export const AppContainer = (props: AppContainerProps) => {
     [handleSlashCommand, settings],
   );
 
-  const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
-
   const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
     streamingState,
-    settings.merged.customWittyPhrases,
+    settings.merged.ui?.customWittyPhrases,
   );
-  const showAutoAcceptIndicator = useAutoAcceptIndicator({ config, addItem });
 
   const handleExit = useCallback(
     (
@@ -1015,7 +881,6 @@ export const AppContainer = (props: AppContainerProps) => {
         if (timerRef.current) {
           clearTimeout(timerRef.current);
         }
-        // Directly invoke the central command handler.
         handleSlashCommand('/quit');
       } else {
         setPressedOnce(true);
@@ -1028,23 +893,14 @@ export const AppContainer = (props: AppContainerProps) => {
     [handleSlashCommand],
   );
 
-  const handleSettingsRestart = useCallback(() => {
-    handleSlashCommand('/quit');
-  }, [handleSlashCommand]);
-
   const handleGlobalKeypress = useCallback(
     (key: Key) => {
       // Debug log keystrokes if enabled
-      if (settings.merged.debugKeystrokeLogging) {
+      if (settings.merged.general?.debugKeystrokeLogging) {
         console.log('[DEBUG] Keystroke:', JSON.stringify(key));
       }
 
-      // Handle exit keys BEFORE dialog visibility check so exit prompts work even when dialogs are open
       if (keyMatchers[Command.QUIT](key)) {
-        // When authenticating, let AuthInProgress component handle Ctrl+C.
-        if (isAuthenticating) {
-          return;
-        }
         if (!ctrlCPressedOnce) {
           cancelOngoingRequest?.();
         }
@@ -1089,13 +945,16 @@ export const AppContainer = (props: AppContainerProps) => {
         config.getIdeMode() &&
         ideContextState
       ) {
-        // Show IDE status when in IDE mode and context is available.
         handleSlashCommand('/ide status');
       } else if (
         keyMatchers[Command.SHOW_MORE_LINES](key) &&
         !enteringConstrainHeightMode
       ) {
         setConstrainHeight(false);
+      } else if (keyMatchers[Command.TOGGLE_SHELL_INPUT_FOCUS](key)) {
+        if (activePtyId || embeddedShellFocused) {
+          setEmbeddedShellFocused((prev) => !prev);
+        }
       }
     },
     [
@@ -1115,127 +974,22 @@ export const AppContainer = (props: AppContainerProps) => {
       setCtrlDPressedOnce,
       ctrlDTimerRef,
       handleSlashCommand,
-      isAuthenticating,
       cancelOngoingRequest,
-      settings.merged.debugKeystrokeLogging,
+      activePtyId,
+      embeddedShellFocused,
+      settings.merged.general?.debugKeystrokeLogging,
     ],
   );
 
-  useKeypress(handleGlobalKeypress, {
-    isActive: true,
-  });
+  useKeypress(handleGlobalKeypress, { isActive: true });
 
+  // Update terminal title with Gemini CLI status and thoughts
   useEffect(() => {
-    if (config) {
-      setLlxprtMdFileCount(config.getLlxprtMdFileCount());
-    }
-  }, [config, config.getLlxprtMdFileCount]);
-
-  const logger = useLogger(config.storage);
-
-  // Initialize independent input history from logger
-  useEffect(() => {
-    inputHistoryStore.initializeFromLogger(logger);
-  }, [logger, inputHistoryStore]);
-
-  const isInputActive =
-    (streamingState === StreamingState.Idle ||
-      streamingState === StreamingState.Responding) &&
-    !initError &&
-    !isProcessing;
-
-  const handleClearScreen = useCallback(() => {
-    clearItems();
-    clearConsoleMessagesState();
-    console.clear();
-    refreshStatic();
-  }, [clearItems, clearConsoleMessagesState, refreshStatic]);
-
-  const handleConfirmationSelect = useCallback(
-    (value: boolean) => {
-      if (confirmationRequest) {
-        confirmationRequest.onConfirm(value);
-      }
-    },
-    [confirmationRequest],
-  );
-
-  const mainControlsRef = useRef<DOMElement>(null);
-  const pendingHistoryItemRef = useRef<DOMElement>(null);
-  const rootUiRef = useRef<DOMElement>(null);
-
-  useLayoutEffect(() => {
-    if (mainControlsRef.current) {
-      const fullFooterMeasurement = measureElement(mainControlsRef.current);
-      setFooterHeight(fullFooterMeasurement.height);
-    }
-  }, [terminalHeight, consoleMessages, showErrorDetails]);
-
-  const staticExtraHeight = /* margins and padding */ 3;
-  const availableTerminalHeight = useMemo(
-    () => terminalHeight - footerHeight - staticExtraHeight,
-    [terminalHeight, footerHeight],
-  );
-
-  // Flicker detection - measures root UI element vs terminal height
-  // to detect overflow that could cause flickering (issue #456)
-  // This is for TELEMETRY ONLY - actual prevention is via availableTerminalHeight
-  useFlickerDetector(rootUiRef, terminalHeight, constrainHeight);
-
-  // Listen for Flicker events for additional corrective actions
-  useEffect(() => {
-    const handleFlicker = (data: {
-      contentHeight: number;
-      terminalHeight: number;
-      overflow: number;
-    }) => {
-      debug.log(
-        `Flicker event received: overflow=${data.overflow}, content=${data.contentHeight}, terminal=${data.terminalHeight}`,
-      );
-      // When flicker is detected, ensure constrainHeight is enabled
-      // This provides a feedback loop to keep the UI constrained
-      if (!constrainHeight) {
-        setConstrainHeight(true);
-      }
-    };
-    appEvents.on(AppEvent.Flicker, handleFlicker);
-    return () => {
-      appEvents.off(AppEvent.Flicker, handleFlicker);
-    };
-  }, [constrainHeight]);
-
-  useEffect(() => {
-    // skip refreshing Static during first mount
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
-    // debounce so it doesn't fire up too often during resize
-    const handler = setTimeout(() => {
-      if (streamingState === StreamingState.Idle) {
-        refreshStatic();
-      } else {
-        setStaticNeedsRefresh(true);
-      }
-    }, 300);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [terminalWidth, terminalHeight, refreshStatic, streamingState]);
-
-  useEffect(() => {
-    if (streamingState === StreamingState.Idle && _staticNeedsRefresh) {
-      setStaticNeedsRefresh(false);
-      refreshStatic();
-    }
-  }, [streamingState, refreshStatic, _staticNeedsRefresh]);
-
-  // Update terminal title with LLxprt status and thoughts
-  useEffect(() => {
-    // Respect both showStatusInTitle and hideWindowTitle settings (using flat structure)
-    if (!settings.merged.showStatusInTitle || settings.merged.hideWindowTitle)
+    // Respect both showStatusInTitle and hideWindowTitle settings
+    if (
+      !settings.merged.ui?.showStatusInTitle ||
+      settings.merged.ui?.hideWindowTitle
+    )
       return;
 
     let title;
@@ -1256,12 +1010,12 @@ export const AppContainer = (props: AppContainerProps) => {
       lastTitleRef.current = paddedTitle;
       stdout.write(`\x1b]2;${paddedTitle}\x07`);
     }
-    // Note: We don't need to reset the window title on exit because it's handled elsewhere
+    // Note: We don't need to reset the window title on exit because Gemini CLI is already doing that elsewhere
   }, [
     streamingState,
     thought,
-    settings.merged.showStatusInTitle,
-    settings.merged.hideWindowTitle,
+    settings.merged.ui?.showStatusInTitle,
+    settings.merged.ui?.hideWindowTitle,
     stdout,
   ]);
 
@@ -1272,310 +1026,273 @@ export const AppContainer = (props: AppContainerProps) => {
     return consoleMessages.filter((msg) => msg.type !== 'debug');
   }, [consoleMessages, config]);
 
-  const branchName = useGitBranchName(config.getTargetDir());
+  // Computed values
+  const errorCount = useMemo(
+    () =>
+      filteredConsoleMessages
+        .filter((msg) => msg.type === 'error')
+        .reduce((total, msg) => total + msg.count, 0),
+    [filteredConsoleMessages],
+  );
 
-  const contextFileNames = useMemo(() => {
-    const fromSettings = settings.merged.contextFileName;
-    if (fromSettings) {
-      return Array.isArray(fromSettings) ? fromSettings : [fromSettings];
-    }
-    return getAllLlxprtMdFilenames();
-  }, [settings.merged.contextFileName]);
+  const nightly = props.version.includes('nightly');
 
-  const initialPrompt = useMemo(() => config.getQuestion(), [config]);
-  const geminiClient = config.getGeminiClient();
+  const dialogsVisible =
+    showWorkspaceMigrationDialog ||
+    shouldShowIdePrompt ||
+    isFolderTrustDialogOpen ||
+    !!shellConfirmationRequest ||
+    !!confirmationRequest ||
+    confirmUpdateExtensionRequests.length > 0 ||
+    !!loopDetectionConfirmationRequest ||
+    isThemeDialogOpen ||
+    isSettingsDialogOpen ||
+    isModelDialogOpen ||
+    isPermissionsDialogOpen ||
+    isAuthenticating ||
+    isAuthDialogOpen ||
+    isEditorDialogOpen ||
+    showPrivacyNotice ||
+    showIdeRestartPrompt ||
+    !!proQuotaRequest;
 
-  useEffect(() => {
-    if (
-      initialPrompt &&
-      !initialPromptSubmitted.current &&
-      !isAuthenticating &&
-      !isAuthDialogOpen &&
-      !isThemeDialogOpen &&
-      !isEditorDialogOpen &&
-      !isProviderDialogOpen &&
-      !isProviderModelDialogOpen &&
-      !isToolsDialogOpen &&
-      !showPrivacyNotice &&
-      geminiClient
-    ) {
-      submitQuery(initialPrompt);
-      initialPromptSubmitted.current = true;
-    }
-  }, [
-    initialPrompt,
-    submitQuery,
-    isAuthenticating,
-    isAuthDialogOpen,
-    isThemeDialogOpen,
-    isEditorDialogOpen,
-    isProviderDialogOpen,
-    isProviderModelDialogOpen,
-    isToolsDialogOpen,
-    showPrivacyNotice,
-    geminiClient,
-  ]);
+  const pendingHistoryItems = useMemo(
+    () => [...pendingSlashCommandHistoryItems, ...pendingGeminiHistoryItems],
+    [pendingSlashCommandHistoryItems, pendingGeminiHistoryItems],
+  );
 
-  const mainAreaWidth = Math.floor(terminalWidth * 0.9);
+  const uiState: UIState = useMemo(
+    () => ({
+      history: historyManager.history,
+      historyManager,
+      isThemeDialogOpen,
+      themeError,
+      isAuthenticating,
+      isConfigInitialized,
+      authError,
+      isAuthDialogOpen,
+      editorError,
+      isEditorDialogOpen,
+      showPrivacyNotice,
+      corgiMode,
+      debugMessage,
+      quittingMessages,
+      isSettingsDialogOpen,
+      isModelDialogOpen,
+      isPermissionsDialogOpen,
+      slashCommands,
+      pendingSlashCommandHistoryItems,
+      commandContext,
+      shellConfirmationRequest,
+      confirmationRequest,
+      confirmUpdateExtensionRequests,
+      loopDetectionConfirmationRequest,
+      geminiMdFileCount,
+      streamingState,
+      initError,
+      pendingGeminiHistoryItems,
+      thought,
+      shellModeActive,
+      userMessages,
+      buffer,
+      inputWidth,
+      suggestionsWidth,
+      isInputActive,
+      shouldShowIdePrompt,
+      isFolderTrustDialogOpen: isFolderTrustDialogOpen ?? false,
+      isTrustedFolder,
+      constrainHeight,
+      showErrorDetails,
+      filteredConsoleMessages,
+      ideContextState,
+      showToolDescriptions,
+      ctrlCPressedOnce,
+      ctrlDPressedOnce,
+      showEscapePrompt,
+      isFocused,
+      elapsedTime,
+      currentLoadingPhrase,
+      historyRemountKey,
+      messageQueue,
+      showAutoAcceptIndicator,
+      showWorkspaceMigrationDialog,
+      workspaceExtensions,
+      currentModel,
+      userTier,
+      proQuotaRequest,
+      contextFileNames,
+      errorCount,
+      availableTerminalHeight,
+      mainAreaWidth,
+      staticAreaMaxItemHeight,
+      staticExtraHeight,
+      dialogsVisible,
+      pendingHistoryItems,
+      nightly,
+      branchName,
+      sessionStats,
+      terminalWidth,
+      terminalHeight,
+      mainControlsRef,
+      currentIDE,
+      updateInfo,
+      showIdeRestartPrompt,
+      ideTrustRestartReason,
+      isRestarting,
+      extensionsUpdateState,
+      activePtyId,
+      embeddedShellFocused,
+    }),
+    [
+      isThemeDialogOpen,
+      themeError,
+      isAuthenticating,
+      isConfigInitialized,
+      authError,
+      isAuthDialogOpen,
+      editorError,
+      isEditorDialogOpen,
+      showPrivacyNotice,
+      corgiMode,
+      debugMessage,
+      quittingMessages,
+      isSettingsDialogOpen,
+      isModelDialogOpen,
+      isPermissionsDialogOpen,
+      slashCommands,
+      pendingSlashCommandHistoryItems,
+      commandContext,
+      shellConfirmationRequest,
+      confirmationRequest,
+      confirmUpdateExtensionRequests,
+      loopDetectionConfirmationRequest,
+      geminiMdFileCount,
+      streamingState,
+      initError,
+      pendingGeminiHistoryItems,
+      thought,
+      shellModeActive,
+      userMessages,
+      buffer,
+      inputWidth,
+      suggestionsWidth,
+      isInputActive,
+      shouldShowIdePrompt,
+      isFolderTrustDialogOpen,
+      isTrustedFolder,
+      constrainHeight,
+      showErrorDetails,
+      filteredConsoleMessages,
+      ideContextState,
+      showToolDescriptions,
+      ctrlCPressedOnce,
+      ctrlDPressedOnce,
+      showEscapePrompt,
+      isFocused,
+      elapsedTime,
+      currentLoadingPhrase,
+      historyRemountKey,
+      messageQueue,
+      showAutoAcceptIndicator,
+      showWorkspaceMigrationDialog,
+      workspaceExtensions,
+      userTier,
+      proQuotaRequest,
+      contextFileNames,
+      errorCount,
+      availableTerminalHeight,
+      mainAreaWidth,
+      staticAreaMaxItemHeight,
+      staticExtraHeight,
+      dialogsVisible,
+      pendingHistoryItems,
+      nightly,
+      branchName,
+      sessionStats,
+      terminalWidth,
+      terminalHeight,
+      mainControlsRef,
+      currentIDE,
+      updateInfo,
+      showIdeRestartPrompt,
+      ideTrustRestartReason,
+      isRestarting,
+      currentModel,
+      extensionsUpdateState,
+      activePtyId,
+      historyManager,
+      embeddedShellFocused,
+    ],
+  );
 
-  // Detect PowerShell for file reference syntax tip
-  const isPowerShell =
-    process.env.PSModulePath !== undefined ||
-    process.env.PSVERSION !== undefined;
-
-  const placeholder = vimModeEnabled
-    ? "  Press 'i' for INSERT mode and 'Esc' for NORMAL mode."
-    : isPowerShell
-      ? '  Type your message, @path/to/file or +path/to/file'
-      : '  Type your message or @path/to/file';
-
-  // Build UIState object
-  const uiState: UIState = {
-    // Terminal dimensions
-    terminalWidth,
-    terminalHeight,
-    mainAreaWidth,
-    inputWidth,
-    suggestionsWidth,
-
-    // History and streaming
-    history,
-    pendingHistoryItems,
-    streamingState,
-    thought,
-
-    // Input buffer
-    buffer,
-    shellModeActive,
-
-    // Dialog states
-    isThemeDialogOpen,
-    isSettingsDialogOpen,
-    isAuthDialogOpen,
-    isAuthenticating,
-    isEditorDialogOpen,
-    isProviderDialogOpen,
-    isProviderModelDialogOpen,
-    isLoadProfileDialogOpen,
-    isToolsDialogOpen,
-    isFolderTrustDialogOpen,
-    showWorkspaceMigrationDialog,
-    showPrivacyNotice,
-    isOAuthCodeDialogOpen: appState.openDialogs.oauthCode,
-    isPermissionsDialogOpen,
-
-    // Dialog data
-    providerOptions,
-    selectedProvider,
-    providerModels,
-    currentModel,
-    profiles,
-    toolsDialogAction,
-    toolsDialogTools,
-    toolsDialogDisabledTools,
-    workspaceExtensions,
-
-    // Confirmation requests
-    shellConfirmationRequest,
-    confirmationRequest,
-
-    // Exit/warning states
-    ctrlCPressedOnce,
-    ctrlDPressedOnce,
-    showEscapePrompt,
-    showIdeRestartPrompt,
-    quittingMessages,
-
-    // Display options
-    constrainHeight,
-    showErrorDetails,
-    showToolDescriptions,
-    isNarrow,
-    vimModeEnabled,
-    vimMode,
-
-    // Context and status
-    ideContextState,
-    llxprtMdFileCount,
-    branchName,
-    errorCount,
-
-    // Console and messages
-    consoleMessages: filteredConsoleMessages,
-
-    // Loading and status
-    elapsedTime,
-    currentLoadingPhrase,
-    showAutoAcceptIndicator,
-
-    // Token metrics
-    tokenMetrics,
-    historyTokenCount: sessionStats.historyTokenCount,
-
-    // Error states
-    initError,
-    authError,
-    themeError,
-    editorError,
-
-    // Processing states
-    isProcessing,
-    isInputActive,
-    isFocused,
-
-    // Refs for flicker detection
-    rootUiRef,
-    pendingHistoryItemRef,
-
-    // Slash commands
-    slashCommands,
-    commandContext,
-
-    // IDE prompt
-    shouldShowIdePrompt: !!shouldShowIdePrompt,
-    currentIDE: currentIDE?.displayName,
-
-    // Trust
-    isRestarting,
-    isTrustedFolder: config.isTrustedFolder(),
-
-    // Input history
-    inputHistory: inputHistoryStore.inputHistory,
-
-    // Static key for refreshing
-    staticKey,
-
-    // Debug
-    debugMessage,
-
-    // Footer height
-    footerHeight,
-
-    // Placeholder text
-    placeholder,
-
-    // Available terminal height for content (after footer measurement)
-    availableTerminalHeight,
-  };
-
-  // Build UIActions object
-  const uiActions: UIActions = {
-    // History actions
-    addItem,
-    clearItems,
-    loadHistory,
-    refreshStatic,
-
-    // Input actions
-    handleUserInputSubmit,
-    handleClearScreen,
-
-    // Theme dialog
-    openThemeDialog,
-    handleThemeSelect,
-    handleThemeHighlight,
-
-    // Settings dialog
-    openSettingsDialog,
-    closeSettingsDialog,
-    handleSettingsRestart,
-
-    // Auth dialog
-    openAuthDialog,
-    handleAuthSelect,
-    cancelAuthentication,
-    handleAuthTimeout,
-
-    // Editor dialog
-    openEditorDialog,
-    handleEditorSelect,
-    exitEditorDialog,
-
-    // Provider dialog
-    openProviderDialog,
-    handleProviderSelect,
-    exitProviderDialog,
-
-    // Provider model dialog
-    openProviderModelDialog,
-    handleProviderModelChange,
-    exitProviderModelDialog,
-
-    // Load profile dialog
-    openLoadProfileDialog,
-    handleProfileSelect,
-    exitLoadProfileDialog,
-
-    // Tools dialog
-    openToolsDialog,
-    handleToolsSelect,
-    exitToolsDialog,
-
-    // Folder trust dialog
-    handleFolderTrustSelect,
-
-    // Permissions dialog
-    openPermissionsDialog,
-    closePermissionsDialog,
-
-    // Workspace migration dialog
-    onWorkspaceMigrationDialogOpen,
-    onWorkspaceMigrationDialogClose,
-
-    // Privacy notice
-    openPrivacyNotice,
-    handlePrivacyNoticeExit,
-
-    // OAuth code dialog
-    handleOAuthCodeDialogClose,
-    handleOAuthCodeSubmit,
-
-    // Confirmation handlers
-    handleConfirmationSelect,
-
-    // IDE prompt
-    handleIdePromptComplete,
-
-    // Vim
-    vimHandleInput,
-    toggleVimEnabled,
-
-    // Slash commands
-    handleSlashCommand,
-
-    // Memory
-    performMemoryRefresh,
-
-    // Display toggles
-    setShowErrorDetails,
-    setShowToolDescriptions,
-    setConstrainHeight,
-
-    // Shell mode
-    setShellModeActive,
-
-    // Escape prompt
-    handleEscapePromptChange,
-
-    // Cancel ongoing request
-    cancelOngoingRequest,
-  };
+  const uiActions: UIActions = useMemo(
+    () => ({
+      handleThemeSelect,
+      handleThemeHighlight,
+      handleAuthSelect,
+      setAuthState,
+      onAuthError,
+      handleEditorSelect,
+      exitEditorDialog,
+      exitPrivacyNotice: () => setShowPrivacyNotice(false),
+      closeSettingsDialog,
+      closeModelDialog,
+      closePermissionsDialog,
+      setShellModeActive,
+      vimHandleInput,
+      handleIdePromptComplete,
+      handleFolderTrustSelect,
+      setConstrainHeight,
+      onEscapePromptChange: handleEscapePromptChange,
+      refreshStatic,
+      handleFinalSubmit,
+      handleClearScreen,
+      onWorkspaceMigrationDialogOpen,
+      onWorkspaceMigrationDialogClose,
+      handleProQuotaChoice,
+    }),
+    [
+      handleThemeSelect,
+      handleThemeHighlight,
+      handleAuthSelect,
+      setAuthState,
+      onAuthError,
+      handleEditorSelect,
+      exitEditorDialog,
+      closeSettingsDialog,
+      closeModelDialog,
+      closePermissionsDialog,
+      setShellModeActive,
+      vimHandleInput,
+      handleIdePromptComplete,
+      handleFolderTrustSelect,
+      setConstrainHeight,
+      handleEscapePromptChange,
+      refreshStatic,
+      handleFinalSubmit,
+      handleClearScreen,
+      onWorkspaceMigrationDialogOpen,
+      onWorkspaceMigrationDialogClose,
+      handleProQuotaChoice,
+    ],
+  );
 
   return (
-    <UIStateProvider value={uiState}>
-      <UIActionsProvider value={uiActions}>
-        <DefaultAppLayout
-          config={config}
-          settings={settings}
-          startupWarnings={startupWarnings}
-          version={version}
-          nightly={nightly}
-          mainControlsRef={mainControlsRef}
-          availableTerminalHeight={availableTerminalHeight}
-          contextFileNames={contextFileNames}
-          updateInfo={updateInfo}
-        />
-      </UIActionsProvider>
-    </UIStateProvider>
+    <UIStateContext.Provider value={uiState}>
+      <UIActionsContext.Provider value={uiActions}>
+        <ConfigContext.Provider value={config}>
+          <AppContext.Provider
+            value={{
+              version: props.version,
+              startupWarnings: props.startupWarnings || [],
+            }}
+          >
+            <ShellFocusContext.Provider value={isFocused}>
+              <App />
+            </ShellFocusContext.Provider>
+          </AppContext.Provider>
+        </ConfigContext.Provider>
+      </UIActionsContext.Provider>
+    </UIStateContext.Provider>
   );
 };

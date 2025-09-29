@@ -80,6 +80,7 @@ export interface UIState {
     prompt: React.ReactNode;
     onConfirm: (value: boolean) => void;
   } | null;
+  confirmUpdateExtensionRequests: ConfirmationRequest[];
 
   // Exit/warning states
   ctrlCPressedOnce: boolean;

@@ -31,5 +31,8 @@ export function createNonInteractiveUI(): CommandContext['ui'] {
     setLlxprtMdFileCount: (_count: number) => {},
     updateHistoryTokenCount: (_count: number) => {},
     reloadCommands: () => {},
+    extensionsUpdateState: new Map(),
+    setExtensionsUpdateState: (_updateState) => {},
+    addConfirmUpdateExtensionRequest: (_request) => {},
   };
 }

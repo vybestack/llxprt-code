@@ -298,3 +298,8 @@ export type SlashCommandProcessorResult =
       type: 'handled'; // Indicates the command was processed and no further action is needed.
     }
   | SubmitPromptResult;
+
+export interface ConfirmationRequest {
+  prompt: React.ReactNode;
+  onConfirm: (confirm: boolean) => void;
+}
