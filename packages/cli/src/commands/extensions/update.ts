@@ -9,6 +9,7 @@ import { FatalConfigError, getErrorMessage } from '@vybestack/llxprt-code-core';
 import {
   loadExtensions,
   annotateActiveExtensions,
+  ExtensionStorage,
 } from '../../config/extension.js';
 import {
   updateAllUpdatableExtensions,
@@ -18,6 +19,7 @@ import {
 } from '../../config/extensions/update.js';
 import { checkForExtensionUpdate } from '../../config/extensions/github.js';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
+import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
 
 interface UpdateArgs {
   name?: string;
@@ -29,11 +31,17 @@ const updateOutput = (info: ExtensionUpdateInfo) =>
 
 export async function handleUpdate(args: UpdateArgs) {
   const workingDir = process.cwd();
-  const loadedExtensions = loadExtensions(workingDir);
-  // Mark all extensions as active for CLI update command
+  const extensionEnablementManager = new ExtensionEnablementManager(
+    ExtensionStorage.getUserExtensionsDir(),
+    // Force enable named extensions, otherwise we will only update the enabled
+    // ones.
+    args.name ? [args.name] : [],
+  );
+  const allExtensions = loadExtensions(extensionEnablementManager, workingDir);
   const extensions = annotateActiveExtensions(
-    loadedExtensions,
-    loadedExtensions.map((ext) => ext.config.name),
+    allExtensions,
+    workingDir,
+    extensionEnablementManager,
   );
 
   if (args.all) {

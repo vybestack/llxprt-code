@@ -56,6 +56,10 @@ import {
   clearActiveModelParam,
   getActiveModelParams,
 } from '../runtime/runtimeSettings.js';
+import { ExtensionStorage, type Extension } from '../config/extension.js';
+import type { CliArgs } from '../config/config.js';
+import { loadCliConfig } from '../config/config.js';
+import { ExtensionEnablementManager } from '../config/extensions/extensionEnablement.js';
 
 type ToolRunResult = {
   parts: Part[];

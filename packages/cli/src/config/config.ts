@@ -53,6 +53,7 @@ import {
   createBootstrapResult,
   type BootstrapProfileArgs,
 } from './profileBootstrap.js';
+import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 import {
   applyProfileSnapshot,
@@ -659,6 +660,7 @@ function createToolExclusionFilter(
 export async function loadCliConfig(
   settings: Settings,
   extensions: Extension[],
+  extensionEnablementManager: ExtensionEnablementManager,
   sessionId: string,
   argv: CliArgs,
   cwd: string = process.cwd(),
@@ -893,7 +895,8 @@ export async function loadCliConfig(
 
   const allExtensions = annotateActiveExtensions(
     extensions,
-    argv.extensions || [],
+    cwd,
+    extensionEnablementManager,
   );
 
   const activeExtensions = extensions.filter(

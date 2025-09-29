@@ -71,7 +71,7 @@ import { getStartupWarnings } from './utils/startupWarnings.js';
 import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { runNonInteractive } from './nonInteractiveCli.js';
-import { loadExtensions } from './config/extension.js';
+import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import {
   cleanupCheckpoints,
   registerCleanup,
@@ -154,6 +154,8 @@ import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { loadSandboxConfig } from './config/sandboxConfig.js';
+import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
@@ -314,7 +316,6 @@ export async function main() {
     console.info = console.error;
     console.debug = console.error;
   }
-  const extensions = loadExtensions(workspaceRoot);
 
   /**
    * @plan:PLAN-20250218-STATELESSPROVIDER.P06
@@ -327,9 +328,16 @@ export async function main() {
     metadata: { source: 'cli-bootstrap', stage: 'pre-config' },
   });
 
+  const extensionEnablementManager = new ExtensionEnablementManager(
+    ExtensionStorage.getUserExtensionsDir(),
+    argv.extensions,
+  );
+  const extensions = loadExtensions(extensionEnablementManager, workspaceRoot);
+
   const config = await loadCliConfig(
     settings.merged,
     extensions,
+    extensionEnablementManager,
     sessionId,
     argv,
     workspaceRoot,
@@ -619,6 +627,7 @@ export async function main() {
       const partialConfig = await loadCliConfig(
         settings.merged,
         [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
         sessionId,
         argv,
         workspaceRoot,
