@@ -5,6 +5,12 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
+import type { GenerateContentResponse } from '@google/genai';
+import { AuthType } from '../core/contentGenerator.js';
+import {
+  isProQuotaExceededError,
+  isGenericQuotaExceededError,
+} from './quotaErrorDetection.js';
 import { DebugLogger } from '../debug/index.js';
 
 export interface HttpError extends Error {
@@ -15,7 +21,13 @@ export interface RetryOptions {
   maxAttempts: number;
   initialDelayMs: number;
   maxDelayMs: number;
-  shouldRetry: (error: Error) => boolean;
+  shouldRetryOnError: (error: Error) => boolean;
+  shouldRetryOnContent?: (content: GenerateContentResponse) => boolean;
+  onPersistent429?: (
+    authType?: string,
+    error?: unknown,
+  ) => Promise<string | boolean | null>;
+  authType?: string;
   trackThrottleWaitTime?: (waitTimeMs: number) => void;
 }
 
@@ -23,7 +35,7 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   maxAttempts: 5,
   initialDelayMs: 5000,
   maxDelayMs: 30000, // 30 seconds
-  shouldRetry: defaultShouldRetry,
+  shouldRetryOnError: defaultShouldRetry,
 };
 
 export const STREAM_INTERRUPTED_ERROR_CODE = 'LLXPRT_STREAM_INTERRUPTED';
@@ -262,7 +274,19 @@ export async function retryWithBackoff<T>(
     ? Object.fromEntries(Object.entries(options).filter(([_, v]) => v != null))
     : {};
 
+<<<<<<< HEAD
   const { maxAttempts, initialDelayMs, maxDelayMs, shouldRetry } = {
+=======
+  const {
+    maxAttempts,
+    initialDelayMs,
+    maxDelayMs,
+    onPersistent429,
+    authType,
+    shouldRetryOnError,
+    shouldRetryOnContent,
+  } = {
+>>>>>>> ac4a79223 (feat(core): Add content-based retries for JSON generation (#9264))
     ...DEFAULT_RETRY_OPTIONS,
     ...cleanOptions,
   };
@@ -274,12 +298,25 @@ export async function retryWithBackoff<T>(
   while (attempt < maxAttempts) {
     attempt++;
     try {
-      return await fn();
+      const result = await fn();
+
+      if (
+        shouldRetryOnContent &&
+        shouldRetryOnContent(result as GenerateContentResponse)
+      ) {
+        const jitter = currentDelay * 0.3 * (Math.random() * 2 - 1);
+        const delayWithJitter = Math.max(0, currentDelay + jitter);
+        await delay(delayWithJitter);
+        currentDelay = Math.min(maxDelayMs, currentDelay * 2);
+        continue;
+      }
+
+      return result;
     } catch (error) {
       const errorStatus = getErrorStatus(error);
 
       // Check if we've exhausted retries or shouldn't retry
-      if (attempt >= maxAttempts || !shouldRetry(error as Error)) {
+      if (attempt >= maxAttempts || !shouldRetryOnError(error as Error)) {
         throw error;
       }
 
