@@ -10,6 +10,8 @@ import {
   TelemetrySettings,
   AuthType,
   ChatCompressionSettings,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
 } from '@vybestack/llxprt-code-core';
 import { CustomTheme } from '../ui/themes/theme.js';
 import {
@@ -678,6 +680,34 @@ export const SETTINGS_SCHEMA = {
         default: false,
         description:
           'Use ripgrep for file content search instead of the fallback implementation. Provides faster search performance.',
+        showInDialog: true,
+      },
+      enableToolOutputTruncation: {
+        type: 'boolean',
+        label: 'Enable Tool Output Truncation',
+        category: 'Tools',
+        requiresRestart: true,
+        default: true,
+        description: 'Enable truncation of large tool outputs.',
+        showInDialog: true,
+      },
+      truncateToolOutputThreshold: {
+        type: 'number',
+        label: 'Tool Output Truncation Threshold',
+        category: 'Tools',
+        requiresRestart: true,
+        default: DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+        description:
+          'Truncate tool output if it is larger than this many characters. Set to -1 to disable.',
+        showInDialog: true,
+      },
+      truncateToolOutputLines: {
+        type: 'number',
+        label: 'Tool Output Truncation Lines',
+        category: 'Tools',
+        requiresRestart: true,
+        default: DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+        description: 'The number of lines to keep when truncating tool output.',
         showInDialog: true,
       },
       policyPath: {
