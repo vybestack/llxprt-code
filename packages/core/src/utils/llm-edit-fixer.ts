@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createHash } from 'node:crypto';
 import { type Content, Type } from '@google/genai';
 import { type GeminiClient } from '../core/client.js';
 import { LruCache } from './LruCache.js';
@@ -106,7 +107,17 @@ export async function FixLLMEditWithInstruction(
   geminiClient: GeminiClient,
   abortSignal: AbortSignal,
 ): Promise<SearchReplaceEdit> {
-  const cacheKey = `${instruction}---${old_string}---${new_string}--${current_content}--${error}`;
+  const cacheKey = createHash('sha256')
+    .update(
+      JSON.stringify([
+        current_content,
+        old_string,
+        new_string,
+        instruction,
+        error,
+      ]),
+    )
+    .digest('hex');
   const cachedResult = editCorrectionWithInstructionCache.get(cacheKey);
   if (cachedResult) {
     return cachedResult;
