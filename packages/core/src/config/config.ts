@@ -262,6 +262,7 @@ export interface ConfigParameters {
   mcpServers?: Record<string, MCPServerConfig>;
   userMemory?: string;
   llxprtMdFileCount?: number;
+  llxprtMdFilePaths?: string[];
   approvalMode?: ApprovalMode;
   showMemoryUsage?: boolean;
   contextLimit?: number;
@@ -342,6 +343,7 @@ export class Config {
   private readonly mcpServers: Record<string, MCPServerConfig> | undefined;
   private userMemory: string;
   private llxprtMdFileCount: number;
+  private llxprtMdFilePaths: string[];
   private approvalMode: ApprovalMode;
   private readonly showMemoryUsage: boolean;
   private readonly accessibility: AccessibilitySettings;
@@ -518,6 +520,7 @@ export class Config {
     this.mcpServers = params.mcpServers;
     this.userMemory = params.userMemory ?? '';
     this.llxprtMdFileCount = params.llxprtMdFileCount ?? 0;
+    this.llxprtMdFilePaths = params.llxprtMdFilePaths ?? [];
     this.approvalMode = params.approvalMode ?? ApprovalMode.DEFAULT;
     this.showMemoryUsage = params.showMemoryUsage ?? false;
     this.accessibility = params.accessibility ?? {};
@@ -942,6 +945,14 @@ export class Config {
 
   setLlxprtMdFileCount(count: number): void {
     this.llxprtMdFileCount = count;
+  }
+
+  getLlxprtMdFilePaths(): string[] {
+    return this.llxprtMdFilePaths;
+  }
+
+  setLlxprtMdFilePaths(paths: string[]): void {
+    this.llxprtMdFilePaths = paths;
   }
 
   getApprovalMode(): ApprovalMode {
@@ -1527,8 +1538,8 @@ export class Config {
     return this.fileExclusions;
   }
 
-  async refreshMemory(): Promise<{ memoryContent: string; fileCount: number }> {
-    const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
+  async refreshMemory(): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
+    const { memoryContent, fileCount, filePaths } = await loadServerHierarchicalMemory(
       this.getWorkingDir(),
       this.shouldLoadMemoryFromIncludeDirectories()
         ? this.getWorkspaceContext().getDirectories()
@@ -1541,8 +1552,9 @@ export class Config {
 
     this.setUserMemory(memoryContent);
     this.setLlxprtMdFileCount(fileCount);
+    this.setLlxprtMdFilePaths(filePaths);
 
-    return { memoryContent, fileCount };
+    return { memoryContent, fileCount, filePaths };
   }
 
   async createToolRegistry(): Promise<ToolRegistry> {

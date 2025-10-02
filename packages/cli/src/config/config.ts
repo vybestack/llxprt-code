@@ -596,7 +596,7 @@ export async function loadHierarchicalLlxprtMemory(
   folderTrust: boolean,
   memoryImportFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
-): Promise<{ memoryContent: string; fileCount: number }> {
+): Promise<{ memoryContent: string; fileCount: number; filePaths: string[] }> {
   // FIX: Use real, canonical paths for a reliable comparison to handle symlinks.
   const realCwd = fs.realpathSync(path.resolve(currentWorkingDirectory));
   const realHome = fs.realpathSync(path.resolve(homedir()));
@@ -949,7 +949,7 @@ export async function loadCliConfig(
   }
 
   // Call the (now wrapper) loadHierarchicalLlxprtMemory which calls the server's version
-  const { memoryContent, fileCount } = await loadHierarchicalLlxprtMemory(
+  const { memoryContent, fileCount, filePaths } = await loadHierarchicalLlxprtMemory(
     cwd,
     resolvedLoadMemoryFromIncludeDirectories ? includeDirectories : [],
     debugMode,
@@ -1155,6 +1155,7 @@ export async function loadCliConfig(
     mcpServers,
     userMemory: memoryContent,
     llxprtMdFileCount: fileCount,
+    llxprtMdFilePaths: filePaths,
     approvalMode,
     showMemoryUsage:
       argv.showMemoryUsage || effectiveSettings.showMemoryUsage || false,
