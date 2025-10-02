@@ -591,6 +591,10 @@ export async function discoverTools(
 
   try {
     debug.log(`Starting tool discovery for server: ${mcpServerName}`);
+
+    // Only request tools if the server supports them.
+    if (mcpClient.getServerCapabilities()?.tools == null) return [];
+
     const mcpCallableTool = mcpToTool(mcpClient, {
       timeout: mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
     });
