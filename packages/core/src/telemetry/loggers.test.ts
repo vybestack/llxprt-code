@@ -26,6 +26,14 @@ import {
   EVENT_CLI_CONFIG,
   EVENT_TOOL_CALL,
   EVENT_USER_PROMPT,
+  EVENT_FILE_OPERATION,
+  EVENT_TOOL_OUTPUT_TRUNCATED,
+  EVENT_MALFORMED_JSON_RESPONSE,
+  EVENT_MODEL_ROUTING,
+  EVENT_EXTENSION_INSTALL,
+  EVENT_EXTENSION_UNINSTALL,
+  EVENT_EXTENSION_ENABLE,
+  EVENT_EXTENSION_DISABLE,
 } from './constants.js';
 import {
   logApiRequest,
@@ -33,6 +41,14 @@ import {
   logCliConfiguration,
   logUserPrompt,
   logToolCall,
+  logFileOperation,
+  logToolOutputTruncated,
+  logMalformedJsonResponse,
+  logModelRouting,
+  logExtensionInstallEvent,
+  logExtensionUninstall,
+  logExtensionEnable,
+  logExtensionDisable,
 } from './loggers.js';
 import { ToolCallDecision } from './tool-call-decision.js';
 import {
@@ -41,12 +57,25 @@ import {
   StartSessionEvent,
   ToolCallEvent,
   UserPromptEvent,
+  FileOperationEvent,
+  ToolOutputTruncatedEvent,
+  MalformedJsonResponseEvent,
+  ModelRoutingEvent,
+  ExtensionInstallEvent,
+  ExtensionUninstallEvent,
+  ExtensionEnableEvent,
+  ExtensionDisableEvent,
+  FileOperation,
 } from './types.js';
 import * as metrics from './metrics.js';
 import * as sdk from './sdk.js';
 import { vi, describe, beforeEach, it, expect } from 'vitest';
 import { GenerateContentResponseUsageMetadata } from '@google/genai';
 import * as uiTelemetry from './uiTelemetry.js';
+import { DiscoveredMCPTool } from '../tools/mcp-tool.js';
+import { CallableTool } from '../tools/tool.js';
+import { AnyToolInvocation } from '../tools/invocation.js';
+import { CompletedToolCall } from '../tools/completed-tool-call.js';
 
 describe('loggers', () => {
   const mockLogger = {
@@ -771,6 +800,418 @@ describe('loggers', () => {
         'event.name': EVENT_TOOL_CALL,
         'event.timestamp': '2025-01-01T00:00:00.000Z',
         agent_id: 'agent-failure',
+      });
+    });
+
+    it('should log a tool call with mcp_server_name for MCP tools', () => {
+      const mockMcpTool = new DiscoveredMCPTool(
+        {} as CallableTool,
+        'mock_mcp_server',
+        'mock_mcp_tool',
+        'tool description',
+        {
+          type: 'object',
+          properties: {
+            arg1: { type: 'string' },
+            arg2: { type: 'number' },
+          },
+          required: ['arg1', 'arg2'],
+        },
+      );
+
+      const call: CompletedToolCall = {
+        status: 'success',
+        request: {
+          name: 'mock_mcp_tool',
+          args: { arg1: 'value1', arg2: 2 },
+          callId: 'test-call-id',
+          isClientInitiated: true,
+          prompt_id: 'prompt-id',
+        },
+        response: {
+          callId: 'test-call-id',
+          responseParts: [{ text: 'test-response' }],
+          resultDisplay: undefined,
+          error: undefined,
+          errorType: undefined,
+        },
+        tool: mockMcpTool,
+        invocation: {} as AnyToolInvocation,
+        durationMs: 100,
+      };
+      const event = new ToolCallEvent(call);
+
+      logToolCall(mockConfig, event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Tool call: mock_mcp_tool. Success: true. Duration: 100ms.',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_TOOL_CALL,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          function_name: 'mock_mcp_tool',
+          function_args: JSON.stringify(
+            {
+              arg1: 'value1',
+              arg2: 2,
+            },
+            null,
+            2,
+          ),
+          duration_ms: 100,
+          success: true,
+          prompt_id: 'prompt-id',
+          tool_type: 'mcp',
+          mcp_server_name: 'mock_mcp_server',
+          decision: undefined,
+          error: undefined,
+          error_type: undefined,
+          metadata: undefined,
+        },
+      });
+    });
+  });
+
+  describe('logMalformedJsonResponse', () => {
+    beforeEach(() => {
+      vi.spyOn(ClearcutLogger.prototype, 'logMalformedJsonResponseEvent');
+    });
+
+    it('logs the event to Clearcut and OTEL', () => {
+      const mockConfig = makeFakeConfig();
+      const event = new MalformedJsonResponseEvent('test-model');
+
+      logMalformedJsonResponse(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logMalformedJsonResponseEvent,
+      ).toHaveBeenCalledWith(event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Malformed JSON response from test-model.',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_MALFORMED_JSON_RESPONSE,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          model: 'test-model',
+        },
+      });
+    });
+  });
+
+  describe('logFileOperation', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getTargetDir: () => 'target-dir',
+      getUsageStatisticsEnabled: () => true,
+      getTelemetryEnabled: () => true,
+      getTelemetryLogPromptsEnabled: () => true,
+    } as Config;
+
+    const mockMetrics = {
+      recordFileOperationMetric: vi.fn(),
+    };
+
+    beforeEach(() => {
+      vi.spyOn(metrics, 'recordFileOperationMetric').mockImplementation(
+        mockMetrics.recordFileOperationMetric,
+      );
+    });
+
+    it('should log a file operation event', () => {
+      const event = new FileOperationEvent(
+        'test-tool',
+        FileOperation.READ,
+        10,
+        'text/plain',
+        '.txt',
+        'typescript',
+      );
+
+      logFileOperation(mockConfig, event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'File operation: read. Lines: 10.',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_FILE_OPERATION,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          tool_name: 'test-tool',
+          operation: 'read',
+          lines: 10,
+          mimetype: 'text/plain',
+          extension: '.txt',
+          programming_language: 'typescript',
+        },
+      });
+
+      expect(mockMetrics.recordFileOperationMetric).toHaveBeenCalledWith(
+        mockConfig,
+        {
+          operation: 'read',
+          lines: 10,
+          mimetype: 'text/plain',
+          extension: '.txt',
+          programming_language: 'typescript',
+        },
+      );
+    });
+  });
+
+  describe('logToolOutputTruncated', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+    } as unknown as Config;
+
+    it('should log a tool output truncated event', () => {
+      const event = new ToolOutputTruncatedEvent('prompt-id-1', {
+        toolName: 'test-tool',
+        originalContentLength: 1000,
+        truncatedContentLength: 100,
+        threshold: 500,
+        lines: 10,
+      });
+
+      logToolOutputTruncated(mockConfig, event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Tool output truncated for test-tool.',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_TOOL_OUTPUT_TRUNCATED,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          eventName: 'tool_output_truncated',
+          prompt_id: 'prompt-id-1',
+          tool_name: 'test-tool',
+          original_content_length: 1000,
+          truncated_content_length: 100,
+          threshold: 500,
+          lines: 10,
+        },
+      });
+    });
+  });
+
+  describe('logModelRouting', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+    } as unknown as Config;
+
+    beforeEach(() => {
+      vi.spyOn(ClearcutLogger.prototype, 'logModelRoutingEvent');
+      vi.spyOn(metrics, 'recordModelRoutingMetrics');
+    });
+
+    it('should log the event to Clearcut and OTEL, and record metrics', () => {
+      const event = new ModelRoutingEvent(
+        'gemini-pro',
+        'default',
+        100,
+        'test-reason',
+        false,
+        undefined,
+      );
+
+      logModelRouting(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logModelRoutingEvent,
+      ).toHaveBeenCalledWith(event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Model routing decision. Model: gemini-pro, Source: default',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          ...event,
+          'event.name': EVENT_MODEL_ROUTING,
+        },
+      });
+
+      expect(metrics.recordModelRoutingMetrics).toHaveBeenCalledWith(
+        mockConfig,
+        event,
+      );
+    });
+
+    it('should only log to Clearcut if OTEL SDK is not initialized', () => {
+      vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
+      const event = new ModelRoutingEvent(
+        'gemini-pro',
+        'default',
+        100,
+        'test-reason',
+        false,
+        undefined,
+      );
+
+      logModelRouting(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logModelRoutingEvent,
+      ).toHaveBeenCalledWith(event);
+      expect(mockLogger.emit).not.toHaveBeenCalled();
+      expect(metrics.recordModelRoutingMetrics).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('logExtensionInstall', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+    } as unknown as Config;
+
+    beforeEach(() => {
+      vi.spyOn(ClearcutLogger.prototype, 'logExtensionInstallEvent');
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('should log extension install event', () => {
+      const event = new ExtensionInstallEvent(
+        'vscode',
+        '0.1.0',
+        'git',
+        'success',
+      );
+
+      logExtensionInstallEvent(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logExtensionInstallEvent,
+      ).toHaveBeenCalledWith(event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Installed extension vscode',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_EXTENSION_INSTALL,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          extension_name: 'vscode',
+          extension_version: '0.1.0',
+          extension_source: 'git',
+          status: 'success',
+        },
+      });
+    });
+  });
+
+  describe('logExtensionUninstall', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+    } as unknown as Config;
+
+    beforeEach(() => {
+      vi.spyOn(ClearcutLogger.prototype, 'logExtensionUninstallEvent');
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('should log extension uninstall event', () => {
+      const event = new ExtensionUninstallEvent('vscode', 'success');
+
+      logExtensionUninstall(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logExtensionUninstallEvent,
+      ).toHaveBeenCalledWith(event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Uninstalled extension vscode',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_EXTENSION_UNINSTALL,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          extension_name: 'vscode',
+          status: 'success',
+        },
+      });
+    });
+  });
+
+  describe('logExtensionEnable', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+    } as unknown as Config;
+
+    beforeEach(() => {
+      vi.spyOn(ClearcutLogger.prototype, 'logExtensionEnableEvent');
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('should log extension enable event', () => {
+      const event = new ExtensionEnableEvent('vscode', 'user');
+
+      logExtensionEnable(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logExtensionEnableEvent,
+      ).toHaveBeenCalledWith(event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Enabled extension vscode',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_EXTENSION_ENABLE,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          extension_name: 'vscode',
+          setting_scope: 'user',
+        },
+      });
+    });
+  });
+
+  describe('logExtensionDisable', () => {
+    const mockConfig = {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+    } as unknown as Config;
+
+    beforeEach(() => {
+      vi.spyOn(ClearcutLogger.prototype, 'logExtensionDisableEvent');
+    });
+
+    afterEach(() => {
+      vi.resetAllMocks();
+    });
+
+    it('should log extension disable event', () => {
+      const event = new ExtensionDisableEvent('vscode', 'user');
+
+      logExtensionDisable(mockConfig, event);
+
+      expect(
+        ClearcutLogger.prototype.logExtensionDisableEvent,
+      ).toHaveBeenCalledWith(event);
+
+      expect(mockLogger.emit).toHaveBeenCalledWith({
+        body: 'Disabled extension vscode',
+        attributes: {
+          'session.id': 'test-session-id',
+          'user.email': 'test-user@example.com',
+          'event.name': EVENT_EXTENSION_DISABLE,
+          'event.timestamp': '2025-01-01T00:00:00.000Z',
+          extension_name: 'vscode',
+          setting_scope: 'user',
+        },
       });
     });
   });

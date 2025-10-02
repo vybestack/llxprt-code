@@ -17,6 +17,8 @@ import {
   EVENT_NEXT_SPEAKER_CHECK,
   SERVICE_NAME,
   EVENT_SLASH_COMMAND,
+  EVENT_TOOL_OUTPUT_TRUNCATED,
+  EVENT_FILE_OPERATION,
 } from './constants.js';
 import {
   ApiErrorEvent,
@@ -35,12 +37,15 @@ import {
   KittySequenceOverflowEvent,
   TokenUsageEvent,
   PerformanceMetricsEvent,
+  ToolOutputTruncatedEvent,
+  FileOperationEvent,
 } from './types.js';
 import {
   recordApiErrorMetrics,
   recordTokenUsageMetrics,
   recordApiResponseMetrics,
   recordToolCallMetrics,
+  recordFileOperationMetric,
 } from './metrics.js';
 import { isTelemetrySdkInitialized } from './sdk.js';
 import { uiTelemetryService, UiEvent } from './uiTelemetry.js';
@@ -170,6 +175,72 @@ export function logToolCall(
     event.decision,
     event.tool_type,
   );
+}
+
+export function logToolOutputTruncated(
+  config: Config,
+  event: ToolOutputTruncatedEvent,
+): void {
+  ClearcutLogger.getInstance(config)?.logToolOutputTruncatedEvent(event);
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    ...event,
+    'event.name': EVENT_TOOL_OUTPUT_TRUNCATED,
+    'event.timestamp': new Date().toISOString(),
+  };
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `Tool output truncated for ${event.tool_name}.`,
+    attributes,
+  };
+  logger.emit(logRecord);
+}
+
+export function logFileOperation(
+  config: Config,
+  event: FileOperationEvent,
+): void {
+  ClearcutLogger.getInstance(config)?.logFileOperationEvent(event);
+  if (!isTelemetrySdkInitialized()) return;
+
+  const attributes: LogAttributes = {
+    ...getCommonAttributes(config),
+    'event.name': EVENT_FILE_OPERATION,
+    'event.timestamp': new Date().toISOString(),
+    tool_name: event.tool_name,
+    operation: event.operation,
+  };
+
+  if (event.lines) {
+    attributes['lines'] = event.lines;
+  }
+  if (event.mimetype) {
+    attributes['mimetype'] = event.mimetype;
+  }
+  if (event.extension) {
+    attributes['extension'] = event.extension;
+  }
+  if (event.programming_language) {
+    attributes['programming_language'] = event.programming_language;
+  }
+
+  const logger = logs.getLogger(SERVICE_NAME);
+  const logRecord: LogRecord = {
+    body: `File operation: ${event.operation}. Lines: ${event.lines}.`,
+    attributes,
+  };
+  logger.emit(logRecord);
+
+  recordFileOperationMetric(config, {
+    operation: event.operation,
+    lines: event.lines,
+    mimetype: event.mimetype,
+    extension: event.extension,
+    programming_language: event.programming_language,
+  });
 }
 
 export function logApiRequest(config: Config, event: ApiRequestEvent): void {
