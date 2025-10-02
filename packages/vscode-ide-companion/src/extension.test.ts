@@ -34,6 +34,9 @@ vi.mock('vscode', () => ({
     onDidChangeWorkspaceFolders: vi.fn(),
     onDidGrantWorkspaceTrust: vi.fn(() => ({ dispose: vi.fn() })),
     isTrusted: true,
+    getConfiguration: vi.fn(() => ({
+      get: vi.fn(),
+    })),
   },
   commands: {
     registerCommand: vi.fn(),
