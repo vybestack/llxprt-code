@@ -21,14 +21,14 @@ import {
   type EmojiFilterMode,
 } from '@vybestack/llxprt-code-core';
 import path from 'path';
-import { HistoryItemWithoutId, MessageType } from '../types.js';
+import type {
+  HistoryItemWithoutId,
+  HistoryItemChatList,
+  ChatDetail,
+} from '../types.js';
+import { MessageType } from '../types.js';
 import { Content, Part } from '@google/genai';
 import { type CommandArgumentSchema } from './schema/types.js';
-
-interface ChatDetail {
-  name: string;
-  mtime: Date;
-}
 
 const getSavedChatTags = async (
   context: CommandContext,
@@ -43,7 +43,7 @@ const getSavedChatTags = async (
     const file_head = 'checkpoint-';
     const file_tail = '.json';
     const files = await fsPromises.readdir(geminiDir);
-    const chatDetails: Array<{ name: string; mtime: Date }> = [];
+    const chatDetails: ChatDetail[] = [];
 
     for (const file of files) {
       if (file.startsWith(file_head) && file.endsWith(file_tail)) {
@@ -52,15 +52,15 @@ const getSavedChatTags = async (
         const tagName = file.slice(file_head.length, -file_tail.length);
         chatDetails.push({
           name: decodeTagName(tagName),
-          mtime: stats.mtime,
+          mtime: stats.mtime.toISOString(),
         });
       }
     }
 
     chatDetails.sort((a, b) =>
       mtSortDesc
-        ? b.mtime.getTime() - a.mtime.getTime()
-        : a.mtime.getTime() - b.mtime.getTime(),
+        ? b.mtime.localeCompare(a.mtime)
+        : a.mtime.localeCompare(b.mtime),
     );
 
     return chatDetails;
@@ -102,34 +102,15 @@ const listCommand: SlashCommand = {
   name: 'list',
   description: 'List saved conversation checkpoints',
   kind: CommandKind.BUILT_IN,
-  action: async (context): Promise<MessageActionReturn> => {
+  action: async (context): Promise<void> => {
     const chatDetails = await getSavedChatTags(context, false);
-    if (chatDetails.length === 0) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No saved conversation checkpoints found.',
-      };
-    }
 
-    const maxNameLength = Math.max(
-      ...chatDetails.map((chat) => chat.name.length),
-    );
-
-    let message = 'List of saved conversations:\n\n';
-    for (const chat of chatDetails) {
-      const paddedName = chat.name.padEnd(maxNameLength, ' ');
-      const isoString = chat.mtime.toISOString();
-      const match = isoString.match(/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/);
-      const formattedDate = match ? `${match[1]} ${match[2]}` : 'Invalid Date';
-      message += `  - \u001b[36m${paddedName}\u001b[0m  \u001b[90m(saved on ${formattedDate})\u001b[0m\n`;
-    }
-    message += `\n\u001b[90mNote: Newest last, oldest first\u001b[0m`;
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: message,
+    const item: HistoryItemChatList = {
+      type: MessageType.CHAT_LIST,
+      chats: chatDetails,
     };
+
+    context.ui.addItem(item, Date.now());
   },
 };
 
@@ -258,50 +239,30 @@ const resumeCommand: SlashCommand = {
       };
     }
 
-    const rolemap: { [key: string]: MessageType } = {
-      user: MessageType.USER,
-      model: MessageType.GEMINI,
-    };
+    const client = config?.getGeminiClient();
+    const chat = client.getChat();
+    await chat.loadHistory(conversation);
 
-    const uiHistory: HistoryItemWithoutId[] = [];
-    let hasSystemPrompt = false;
-    let i = 0;
-
-    for (const item of conversation) {
-      i += 1;
-      const text =
-        item.parts
-          ?.filter((m: Part) => !!m.text)
-          .map((m: Part) => m.text)
-          .join('') || '';
-      if (!text) {
-        continue;
-      }
-      if (i === 1 && text.match(/context for our chat/)) {
-        hasSystemPrompt = true;
-      }
-      if (i > 2 || !hasSystemPrompt) {
-        uiHistory.push({
-          type: (item.role && rolemap[item.role]) || MessageType.GEMINI,
-          text,
-        } as HistoryItemWithoutId);
-      }
-    }
+    const modelName = checkpoint.modelName || 'unknown';
     return {
-      type: 'load_history',
-      history: uiHistory,
-      clientHistory: conversation,
+      type: 'message',
+      messageType: 'info',
+      content: `Conversation from checkpoint (${decodeTagName(tag)}) with model ${modelName} is resumed. You can continue the conversation now.`,
     };
   },
 };
 
 const deleteCommand: SlashCommand = {
   name: 'delete',
-  description: 'Delete a conversation checkpoint. Usage: /chat delete <tag>',
+  altNames: ['rm', 'remove'],
+  description:
+    'Delete a conversation checkpoint. Usage: /chat delete <tag> [--force]',
   kind: CommandKind.BUILT_IN,
   schema: chatTagSchema,
   action: async (context, args): Promise<MessageActionReturn> => {
-    const tag = args.trim();
+    const force = args.includes('--force');
+    const tag = args.replace('--force', '').trim();
+
     if (!tag) {
       return {
         type: 'message',
@@ -312,133 +273,241 @@ const deleteCommand: SlashCommand = {
 
     const { logger } = context.services;
     await logger.initialize();
-    const deleted = await logger.deleteCheckpoint(tag);
 
-    if (deleted) {
+    if (!force && !context.overwriteConfirmed) {
+      return {
+        type: 'confirm_action',
+        prompt: React.createElement(
+          Text,
+          null,
+          'Are you sure you want to delete the checkpoint ',
+          React.createElement(Text, { color: Colors.AccentPurple }, tag),
+          '?',
+        ),
+        originalInvocation: {
+          raw: context.invocation?.raw || `/chat delete ${tag}`,
+        },
+      };
+    }
+
+    if (!(await logger.checkpointExists(tag))) {
       return {
         type: 'message',
         messageType: 'info',
-        content: `Conversation checkpoint '${decodeTagName(tag)}' has been deleted.`,
-      };
-    } else {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Error: No checkpoint found with tag '${decodeTagName(tag)}'.`,
+        content: `No saved checkpoint found with tag: ${decodeTagName(tag)}.`,
       };
     }
+
+    await logger.deleteCheckpoint(tag);
+
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Deleted checkpoint: ${decodeTagName(tag)}`,
+    };
   },
 };
 
-export function serializeHistoryToMarkdown(history: Content[]): string {
-  return history
-    .map((item) => {
-      const text =
-        item.parts
-          ?.map((part) => {
-            if (part.text) {
-              return part.text;
-            }
-            if (part.functionCall) {
-              return `**Tool Command**:\n\`\`\`json\n${JSON.stringify(
-                part.functionCall,
-                null,
-                2,
-              )}\n\`\`\``;
-            }
-            if (part.functionResponse) {
-              return `**Tool Response**:\n\`\`\`json\n${JSON.stringify(
-                part.functionResponse,
-                null,
-                2,
-              )}\n\`\`\``;
-            }
-            return '';
-          })
-          .join('') || '';
-      const roleIcon = item.role === 'user' ? '🧑‍💻' : '✨';
-      return `${roleIcon} ## ${(item.role || 'model').toUpperCase()}\n\n${text}`;
-    })
-    .join('\n\n---\n\n');
-}
-
-const shareCommand: SlashCommand = {
-  name: 'share',
+const renameCommand: SlashCommand = {
+  name: 'rename',
+  altNames: ['mv'],
   description:
-    'Share the current conversation to a markdown or json file. Usage: /chat share <file>',
+    'Rename a conversation checkpoint. Usage: /chat rename <old_tag> <new_tag>',
   kind: CommandKind.BUILT_IN,
   action: async (context, args): Promise<MessageActionReturn> => {
-    let filePathArg = args.trim();
-    if (!filePathArg) {
-      filePathArg = `gemini-conversation-${Date.now()}.json`;
-    }
-
-    const filePath = path.resolve(filePathArg);
-    const extension = path.extname(filePath);
-    if (extension !== '.md' && extension !== '.json') {
+    const parts = args.trim().split(/\s+/);
+    if (parts.length !== 2) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Invalid file format. Only .md and .json are supported.',
+        content: 'Usage: /chat rename <old_tag> <new_tag>',
       };
     }
 
-    const chat = await context.services.config?.getGeminiClient()?.getChat();
-    if (!chat) {
+    const [oldTag, newTag] = parts;
+    const { logger } = context.services;
+    await logger.initialize();
+
+    if (!(await logger.checkpointExists(oldTag))) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'No chat client available to share conversation.',
+        content: `No checkpoint found with tag: ${decodeTagName(oldTag)}`,
       };
     }
 
+    if (await logger.checkpointExists(newTag)) {
+      if (!context.overwriteConfirmed) {
+        return {
+          type: 'confirm_action',
+          prompt: React.createElement(
+            Text,
+            null,
+            'A checkpoint with the tag ',
+            React.createElement(Text, { color: Colors.AccentPurple }, newTag),
+            ' already exists. Do you want to overwrite it?',
+          ),
+          originalInvocation: {
+            raw: context.invocation?.raw || `/chat rename ${oldTag} ${newTag}`,
+          },
+        };
+      }
+      // If confirmed, delete the target checkpoint first
+      await logger.deleteCheckpoint(newTag);
+    }
+
+    await logger.renameCheckpoint(oldTag, newTag);
+
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Renamed checkpoint from ${decodeTagName(oldTag)} to ${decodeTagName(newTag)}`,
+    };
+  },
+};
+
+const clearCommand: SlashCommand = {
+  name: 'clear',
+  description: 'Clear the current conversation history',
+  kind: CommandKind.BUILT_IN,
+  action: async (context): Promise<MessageActionReturn | void> => {
+    const client = context.services.config?.getGeminiClient();
+    // Check if chat is initialized before clearing
+    if (!client?.hasChatInitialized()) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: 'No conversation to clear.',
+      };
+    }
+
+    const chat = client.getChat();
     const history = chat.getHistory();
-
-    // An empty conversation has two hidden messages that setup the context for
-    // the chat. Thus, to check whether a conversation has been started, we
-    // can't check for length 0.
     if (history.length <= 2) {
       return {
         type: 'message',
         messageType: 'info',
-        content: 'No conversation found to share.',
+        content: 'No conversation to clear.',
       };
     }
 
-    let content = '';
-    if (extension === '.json') {
-      content = JSON.stringify(history, null, 2);
-    } else {
-      content = serializeHistoryToMarkdown(history);
-    }
+    await chat.clearHistory();
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'Conversation history cleared.',
+    };
+  },
+};
 
-    try {
-      await fsPromises.writeFile(filePath, content);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Conversation shared to ${filePath}`,
-      };
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
+/**
+ * Restore the conversation based on the number of turns to go back.
+ * @param context The slash command context.
+ * @param turns Number of turns to restore (negative number).
+ * @returns A message about the restore operation.
+ */
+const restoreHistory = async (
+  context: CommandContext,
+  turns: number,
+): Promise<MessageActionReturn | void> => {
+  const client = context.services.config?.getGeminiClient();
+  if (!client?.hasChatInitialized()) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'No chat history available to restore.',
+    };
+  }
+
+  const chat = client.getChat();
+  const currentHistory = chat.getHistory();
+  const turnsToRestore = Math.abs(turns);
+
+  if (turnsToRestore < 1) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: 'Number of turns to restore must be greater than 0.',
+    };
+  }
+
+  // Calculate how many entries to keep
+  // Each turn typically has 2 entries (user + assistant), plus initial system/user
+  const entriesToRemove = turnsToRestore * 2;
+  const minEntries = 2; // Keep at least the initial entries
+
+  if (currentHistory.length <= minEntries + entriesToRemove) {
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: 'Not enough history to restore the requested number of turns.',
+    };
+  }
+
+  // Create new history by removing the last N turns
+  const newHistory = currentHistory.slice(0, -entriesToRemove);
+  await chat.loadHistory(newHistory);
+
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Restored conversation to ${turnsToRestore} turn${turnsToRestore > 1 ? 's' : ''} ago.`,
+  };
+};
+
+const restoreCommand: SlashCommand = {
+  name: 'restore',
+  altNames: ['undo'],
+  description:
+    'Restore conversation to N turns ago. Usage: /chat restore <number>',
+  kind: CommandKind.BUILT_IN,
+  action: async (context, args): Promise<MessageActionReturn | void> => {
+    const turnsStr = args.trim();
+    if (!turnsStr) {
       return {
         type: 'message',
         messageType: 'error',
-        content: `Error sharing conversation: ${errorMessage}`,
+        content: 'Usage: /chat restore <number>',
       };
     }
+
+    const turns = parseInt(turnsStr, 10);
+    if (isNaN(turns) || turns < 1) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Please provide a valid positive number of turns to restore.',
+      };
+    }
+
+    return restoreHistory(context, -turns);
   },
 };
 
 export const chatCommand: SlashCommand = {
   name: 'chat',
-  description: 'Manage conversation history.',
+  description: 'Manage conversation checkpoints',
   kind: CommandKind.BUILT_IN,
   subCommands: [
     listCommand,
     saveCommand,
     resumeCommand,
     deleteCommand,
-    shareCommand,
+    renameCommand,
+    clearCommand,
+    restoreCommand,
   ],
+  action: async (): Promise<HistoryItemWithoutId> => {
+    return {
+      type: 'info',
+      text: `Available /chat commands:
+• list - List all saved conversation checkpoints
+• save <tag> - Save current conversation with a tag
+• resume <tag> - Resume a saved conversation
+• delete <tag> [--force] - Delete a saved checkpoint
+• rename <old_tag> <new_tag> - Rename a checkpoint
+• clear - Clear current conversation history
+• restore <number> - Restore conversation to N turns ago`,
+    };
+  },
 };

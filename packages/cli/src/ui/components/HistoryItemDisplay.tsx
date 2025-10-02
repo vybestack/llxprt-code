@@ -26,8 +26,12 @@ import { ToolStatsDisplay } from './ToolStatsDisplay.js';
 import { CacheStatsDisplay } from './CacheStatsDisplay.js';
 import { SessionSummaryDisplay } from './SessionSummaryDisplay.js';
 import { Help } from './Help.js';
-import { Config } from '@vybestack/llxprt-code-core';
-import { SlashCommand } from '../commands/types.js';
+import { Config, getMCPServerStatus } from '@vybestack/llxprt-code-core';
+import type { SlashCommand } from '../commands/types.js';
+import { ExtensionsList } from './views/ExtensionsList.js';
+import { ToolsList } from './views/ToolsList.js';
+import { McpStatus } from './views/McpStatus.js';
+import { ChatList } from './views/ChatList.js';
 
 interface HistoryItemDisplayProps {
   item: HistoryItem;
@@ -140,6 +144,20 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
       )}
       {itemForDisplay.type === 'compression' && (
         <CompressionMessage compression={itemForDisplay.compression} />
+      )}
+      {itemForDisplay.type === 'extensions_list' && <ExtensionsList />}
+      {itemForDisplay.type === 'tools_list' && (
+        <ToolsList
+          terminalWidth={terminalWidth}
+          tools={itemForDisplay.tools}
+          showDescriptions={itemForDisplay.showDescriptions}
+        />
+      )}
+      {itemForDisplay.type === 'mcp_status' && (
+        <McpStatus {...itemForDisplay} serverStatus={getMCPServerStatus} />
+      )}
+      {itemForDisplay.type === 'chat_list' && (
+        <ChatList chats={itemForDisplay.chats} />
       )}
     </Box>
   );

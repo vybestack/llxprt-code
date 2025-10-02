@@ -171,10 +171,47 @@ export type HistoryItemExtensionsList = HistoryItemBase & {
   type: 'extensions_list';
 };
 
-// Using Omit<HistoryItem, 'id'> seems to have some issues with typescript's
-// type inference e.g. historyItem.type === 'tool_group' isn't auto-inferring that
-// 'tools' in historyItem.
-// Individually exported types extending HistoryItemBase
+export interface ChatDetail {
+  name: string;
+  mtime: string;
+}
+
+export type HistoryItemChatList = HistoryItemBase & {
+  type: 'chat_list';
+  chats: ChatDetail[];
+};
+
+export interface ToolDefinition {
+  name: string;
+  displayName: string;
+  description?: string;
+}
+
+export type HistoryItemToolsList = HistoryItemBase & {
+  type: 'tools_list';
+  tools: ToolDefinition[];
+  showDescriptions: boolean;
+};
+
+// JSON-friendly types for using as a simple data model showing info about an
+// MCP Server.
+export interface McpServer {
+  name: string;
+  connected: boolean;
+  description?: string;
+  environment?: Record<string, string>;
+  error?: string;
+  tools: string[];
+  prompts: string[];
+  resources: string[];
+}
+
+export type HistoryItemMcpStatus = HistoryItemBase & {
+  type: 'mcp_status';
+  servers: McpServer[];
+};
+
+// Union type for all history item types
 export type HistoryItemWithoutId =
   | HistoryItemUser
   | HistoryItemUserShell
@@ -193,7 +230,10 @@ export type HistoryItemWithoutId =
   | HistoryItemQuit
   | HistoryItemCompression
   | HistoryItemOAuthURL
-  | HistoryItemExtensionsList;
+  | HistoryItemExtensionsList
+  | HistoryItemToolsList
+  | HistoryItemMcpStatus
+  | HistoryItemChatList;
 
 export type HistoryItem = HistoryItemWithoutId & { id: number };
 
@@ -213,6 +253,9 @@ export enum MessageType {
   GEMINI = 'gemini',
   COMPRESSION = 'compression',
   EXTENSIONS_LIST = 'extensions_list',
+  TOOLS_LIST = 'tools_list',
+  MCP_STATUS = 'mcp_status',
+  CHAT_LIST = 'chat_list',
 }
 
 // Simplified message structure for internal feedback
