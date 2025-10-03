@@ -9,15 +9,16 @@
 
 import {
   GenerateContentResponse,
-  Content,
-  GenerateContentConfig,
-  SendMessageParameters,
+  type Content,
+  type GenerateContentConfig,
+  type SendMessageParameters,
   createUserContent,
-  Part,
+  type Part,
   GenerateContentResponseUsageMetadata,
-  Tool,
+  type Tool,
   PartListUnion,
   ApiError,
+  FinishReason,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
@@ -1421,15 +1422,8 @@ export class GeminiChat {
     };
 
     const streamResponse = await retryWithBackoff(apiCall, {
-      shouldRetryOnError: (error: unknown) => {
-        if (error instanceof ApiError && error.message) {
-          if (error.status === 400) return false;
-          if (isSchemaDepthError(error.message)) return false;
-          if (error.status === 429) return true;
-          if (error.status >= 500 && error.status < 600) return true;
-        }
-        return false;
-      },
+      onPersistent429: onPersistent429Callback,
+      authType: this.config.getContentGeneratorConfig()?.authType,
     });
 
     return this.processStreamResponse(streamResponse, userContent);
