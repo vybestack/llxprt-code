@@ -396,6 +396,15 @@ jobs:
           VITEST_TEST_TIMEOUT: 15000
         run: 'npm run test'
 
+      - name: 'Bundle'
+        run: 'npm run bundle'
+
+      - name: 'Smoke test bundle'
+        run: 'node ./bundle/llxprt.js --version'
+
+      - name: 'Wait for file system sync'
+        run: 'sleep 2'
+
       - name: 'Publish Test Report (for non-forks)'
         if: |-
           ${{ always() && (github.event.pull_request.head.repo.full_name == github.repository) }}
