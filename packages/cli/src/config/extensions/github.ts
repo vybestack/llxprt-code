@@ -6,18 +6,17 @@
 
 import { simpleGit } from 'simple-git';
 import { getErrorMessage } from '../../utils/errors.js';
-import type { ExtensionInstallMetadata } from '../extension.js';
-import type { GeminiCLIExtension } from '@vybestack/llxprt-code-core';
+import type {
+  ExtensionInstallMetadata,
+  GeminiCLIExtension,
+} from '@google/gemini-cli-core';
 import { ExtensionUpdateState } from '../../ui/state/extensions.js';
 import * as os from 'node:os';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { EXTENSIONS_CONFIG_FILENAME } from '../extension.js';
-
-// Re-export ExtensionUpdateState for use by other modules
-export { ExtensionUpdateState };
+import { EXTENSIONS_CONFIG_FILENAME, loadExtension } from '../extension.js';
 
 function getGitHubToken(): string | undefined {
   return process.env['GITHUB_TOKEN'];
@@ -118,37 +117,33 @@ async function fetchReleaseFromGithub(
   return await fetchJson(url);
 }
 
-/**
- * Checks if a GitHub repository has any releases available.
- * @param owner The GitHub repository owner.
- * @param repo The GitHub repository name.
- * @returns True if releases exist, false otherwise.
- */
-export async function checkGitHubReleasesExist(
-  owner: string,
-  repo: string,
-): Promise<boolean> {
-  try {
-    await fetchReleaseFromGithub(owner, repo);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export async function checkForExtensionUpdate(
   extension: GeminiCLIExtension,
-  setExtensionUpdateState: (updateState: ExtensionUpdateState) => void,
-): Promise<void> {
-  setExtensionUpdateState(ExtensionUpdateState.CHECKING_FOR_UPDATES);
+  cwd: string = process.cwd(),
+): Promise<ExtensionUpdateState> {
   const installMetadata = extension.installMetadata;
+  if (installMetadata?.type === 'local') {
+    const newExtension = loadExtension({
+      extensionDir: installMetadata.source,
+      workspaceDir: cwd,
+    });
+    if (!newExtension) {
+      console.error(
+        `Failed to check for update for local extension "${extension.name}". Could not load extension from source path: ${installMetadata.source}`,
+      );
+      return ExtensionUpdateState.ERROR;
+    }
+    if (newExtension.config.version !== extension.version) {
+      return ExtensionUpdateState.UPDATE_AVAILABLE;
+    }
+    return ExtensionUpdateState.UP_TO_DATE;
+  }
   if (
     !installMetadata ||
     (installMetadata.type !== 'git' &&
       installMetadata.type !== 'github-release')
   ) {
-    setExtensionUpdateState(ExtensionUpdateState.NOT_UPDATABLE);
-    return;
+    return ExtensionUpdateState.NOT_UPDATABLE;
   }
   try {
     if (installMetadata.type === 'git') {
@@ -156,14 +151,12 @@ export async function checkForExtensionUpdate(
       const remotes = await git.getRemotes(true);
       if (remotes.length === 0) {
         console.error('No git remotes found.');
-        setExtensionUpdateState(ExtensionUpdateState.ERROR);
-        return;
+        return ExtensionUpdateState.ERROR;
       }
       const remoteUrl = remotes[0].refs.fetch;
       if (!remoteUrl) {
         console.error(`No fetch URL found for git remote ${remotes[0].name}.`);
-        setExtensionUpdateState(ExtensionUpdateState.ERROR);
-        return;
+        return ExtensionUpdateState.ERROR;
       }
 
       // Determine the ref to check on the remote.
@@ -173,8 +166,7 @@ export async function checkForExtensionUpdate(
 
       if (typeof lsRemoteOutput !== 'string' || lsRemoteOutput.trim() === '') {
         console.error(`Git ref ${refToCheck} not found.`);
-        setExtensionUpdateState(ExtensionUpdateState.ERROR);
-        return;
+        return ExtensionUpdateState.ERROR;
       }
 
       const remoteHash = lsRemoteOutput.split('\t')[0];
@@ -184,21 +176,17 @@ export async function checkForExtensionUpdate(
         console.error(
           `Unable to parse hash from git ls-remote output "${lsRemoteOutput}"`,
         );
-        setExtensionUpdateState(ExtensionUpdateState.ERROR);
-        return;
+        return ExtensionUpdateState.ERROR;
       }
       if (remoteHash === localHash) {
-        setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
-        return;
+        return ExtensionUpdateState.UP_TO_DATE;
       }
-      setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
-      return;
+      return ExtensionUpdateState.UPDATE_AVAILABLE;
     } else {
-      const { source, ref } = installMetadata;
+      const { source, releaseTag } = installMetadata;
       if (!source) {
         console.error(`No "source" provided for extension.`);
-        setExtensionUpdateState(ExtensionUpdateState.ERROR);
-        return;
+        return ExtensionUpdateState.ERROR;
       }
       const { owner, repo } = parseGitHubRepoForReleases(source);
 
@@ -207,19 +195,16 @@ export async function checkForExtensionUpdate(
         repo,
         installMetadata.ref,
       );
-      if (releaseData.tag_name !== ref) {
-        setExtensionUpdateState(ExtensionUpdateState.UPDATE_AVAILABLE);
-        return;
+      if (releaseData.tag_name !== releaseTag) {
+        return ExtensionUpdateState.UPDATE_AVAILABLE;
       }
-      setExtensionUpdateState(ExtensionUpdateState.UP_TO_DATE);
-      return;
+      return ExtensionUpdateState.UP_TO_DATE;
     }
   } catch (error) {
     console.error(
       `Failed to check for updates for extension "${installMetadata.source}": ${getErrorMessage(error)}`,
     );
-    setExtensionUpdateState(ExtensionUpdateState.ERROR);
-    return;
+    return ExtensionUpdateState.ERROR;
   }
 }
 export interface GitHubDownloadResult {
@@ -403,13 +388,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
     https
       .get(url, { headers }, (res) => {
         if (res.statusCode === 302 || res.statusCode === 301) {
-          const location = res.headers.location;
-          if (!location) {
-            reject(new Error('Redirect response missing location header'));
-            return;
-          }
-          const resolvedUrl = new URL(location, url).toString();
-          downloadFile(resolvedUrl, dest).then(resolve).catch(reject);
+          downloadFile(res.headers.location!, dest).then(resolve).catch(reject);
           return;
         }
         if (res.statusCode !== 200) {
