@@ -1109,7 +1109,7 @@ export class GeminiChat {
         if (lastError) {
           // With send-then-commit pattern, we don't add to history until success,
           // so there's nothing to remove on failure. This is the approach upstream
-          // moved to in 11f7a6a2d - we were already doing this correctly.
+          // moved to in e705f45c - we were already doing this correctly.
           throw lastError;
         }
       } finally {
