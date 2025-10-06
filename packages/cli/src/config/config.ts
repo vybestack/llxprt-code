@@ -656,6 +656,15 @@ function createToolExclusionFilter(
   };
 }
 
+export function isDebugMode(argv: CliArgs): boolean {
+  return (
+    argv.debug ||
+    [process.env['DEBUG'], process.env['DEBUG_MODE']].some(
+      (v) => v === 'true' || v === '1',
+    )
+  );
+}
+
 export async function loadCliConfig(
   settings: Settings,
   extensions: Extension[],
@@ -1149,6 +1158,7 @@ export async function loadCliConfig(
     fullContext: argv.allFiles || false,
     coreTools: effectiveSettings.coreTools || undefined,
     allowedTools: allowedTools.length > 0 ? allowedTools : undefined,
+    policyEngineConfig,
     excludeTools,
     toolDiscoveryCommand: effectiveSettings.toolDiscoveryCommand,
     toolCallCommand: effectiveSettings.toolCallCommand,
@@ -1223,7 +1233,6 @@ export async function loadCliConfig(
     enablePromptCompletion: effectiveSettings.enablePromptCompletion ?? false,
     eventEmitter: appEvents,
     useSmartEdit: argv.useSmartEdit ?? effectiveSettings.useSmartEdit,
-    policyEngineConfig,
   });
 
   const enhancedConfig = config;
