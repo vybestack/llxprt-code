@@ -20,6 +20,7 @@ import {
   ApiError,
 } from '@google/genai';
 import { retryWithBackoff } from '../utils/retry.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
 import { isFunctionResponse } from '../utils/messageInspectors.js';
 import { ContentGenerator } from './contentGenerator.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -2158,6 +2159,18 @@ export class GeminiChat {
       undefined,
       streamingUsageMetadata,
     );
+  }
+
+  /**
+   * Records completed tool calls with full metadata.
+   * This is called by external components when tool calls complete, before sending responses to Gemini.
+   * NOTE: llxprt does not use ChatRecordingService, so this is a no-op stub for compatibility.
+   */
+  recordCompletedToolCalls(
+    _model: string,
+    _toolCalls: CompletedToolCall[],
+  ): void {
+    // No-op: llxprt does not record chat sessions like gemini-cli
   }
 
   private recordHistory(

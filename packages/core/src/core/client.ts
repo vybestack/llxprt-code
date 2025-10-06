@@ -722,6 +722,10 @@ export class GeminiClient {
     this._previousHistory = [];
   }
 
+  getCurrentSequenceModel(): string | null {
+    return this.currentSequenceModel;
+  }
+
   async addDirectoryContext(): Promise<void> {
     if (!this.chat) {
       return;

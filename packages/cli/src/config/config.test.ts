@@ -27,6 +27,10 @@ vi.mock('./trustedFolders.js', () => ({
   isWorkspaceTrusted: vi.fn().mockReturnValue(true), // Default to trusted
 }));
 
+vi.mock('./sandboxConfig.js', () => ({
+  loadSandboxConfig: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('fs', async (importOriginal) => {
   const actualFs = await importOriginal<typeof import('fs')>();
   const pathMod = await import('node:path');

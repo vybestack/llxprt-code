@@ -86,6 +86,8 @@ import { getCliVersion } from './utils/version.js';
 import { validateAuthMethod } from './config/auth.js';
 import { setMaxSizedBoxDebugging } from './ui/components/shared/MaxSizedBox.js';
 // createProviderManager removed - provider manager now created in loadCliConfig()
+import { runZedIntegration } from './zed-integration/zedIntegration.js';
+import { cleanupExpiredSessions } from './utils/sessionCleanup.js';
 import { validateNonInteractiveAuth } from './validateNonInterActiveAuth.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
@@ -105,6 +107,12 @@ import {
   applyCliArgumentOverrides,
 } from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
+import {
+  relaunchAppInChildProcess,
+  relaunchOnExitCode,
+} from './utils/relaunch.js';
+import { loadSandboxConfig } from './config/sandboxConfig.js';
+import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -155,11 +163,9 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
   );
 };
 
-import { runZedIntegration } from './zed-integration/zedIntegration.js';
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;
@@ -726,6 +732,17 @@ export async function main() {
   ) {
     // Do oauth before app renders to make copying the link possible.
     await getOauthClient(settings.merged.selectedAuthType, config);
+  }
+
+  // Cleanup sessions after config initialization
+  await cleanupExpiredSessions(config, settings.merged);
+
+  if (config.getListExtensions()) {
+    console.log('Installed extensions:');
+    for (const extension of extensions) {
+      console.log(`- ${extension.config.name}`);
+    }
+    process.exit(0);
   }
 
   if (config.getExperimentalZedIntegration()) {
