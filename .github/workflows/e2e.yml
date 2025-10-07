@@ -120,12 +120,12 @@ jobs:
           docker images
 
           # The image should be tagged as specified in package.json
-          if docker images | grep -q "ghcr.io/acoliver/llxprt-code/sandbox"; then
-            echo "✓ Sandbox image built successfully"
-            docker images | grep "ghcr.io/acoliver/llxprt-code/sandbox"
+          if docker images | grep -q "ghcr.io/vybestack/llpxrt-code/sandbox"; then
+            echo "[OK] Sandbox image built successfully"
+            docker images | grep "ghcr.io/vybestack/llpxrt-code/sandbox"
           else
-            echo "✗ Sandbox image not found after build!"
-            echo "Expected to find image matching: ghcr.io/acoliver/llxprt-code/sandbox"
+            echo " Sandbox image not found after build!"
+            echo "Expected to find image matching: ghcr.io/vybestack/llpxrt-code/sandbox"
             exit 1
           fi
 

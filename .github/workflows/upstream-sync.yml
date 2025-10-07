@@ -91,7 +91,7 @@ jobs:
 
           # Run llxprt-code and capture output
           set +e  # Don't exit on error
-          npx https://github.com/acoliver/llxprt-code \
+          npx https://github.com/vybestack/llpxrt-code \
             --yolo \
             --provider gemini \
             --model gemini-2.5-pro \

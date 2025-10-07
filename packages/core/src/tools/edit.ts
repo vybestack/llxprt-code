@@ -21,7 +21,6 @@ import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { isNodeError } from '../utils/errors.js';
 import { Config, ApprovalMode } from '../config/config.js';
-import { ensureCorrectEdit } from '../utils/editCorrector.js';
 import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ReadFileTool } from './read-file.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
@@ -175,7 +174,7 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
    */
   private async calculateEdit(
     params: EditToolParams,
-    abortSignal: AbortSignal,
+    _abortSignal: AbortSignal,
   ): Promise<CalculatedEdit> {
     // Apply emoji filtering to edit content
     // NOTE: old_string is NOT filtered because it needs to match existing content exactly
@@ -241,17 +240,24 @@ class EditToolInvocation implements ToolInvocation<EditToolParams, ToolResult> {
         type: ToolErrorType.FILE_NOT_FOUND,
       };
     } else if (currentContent !== null) {
-      // Editing an existing file
-      const correctedEdit = await ensureCorrectEdit(
-        filteredParams.file_path,
-        currentContent,
-        filteredParams,
-        this.config.getGeminiClient(),
-        abortSignal,
-      );
-      finalOldString = correctedEdit.params.old_string;
-      finalNewString = correctedEdit.params.new_string;
-      occurrences = correctedEdit.occurrences;
+      // Editing an existing file - count occurrences directly
+      finalOldString = filteredParams.old_string;
+      finalNewString = filteredParams.new_string;
+
+      if (finalOldString === '') {
+        occurrences = 0;
+      } else {
+        let count = 0;
+        let pos = currentContent.indexOf(finalOldString);
+        while (pos !== -1) {
+          count++;
+          pos = currentContent.indexOf(
+            finalOldString,
+            pos + finalOldString.length,
+          );
+        }
+        occurrences = count;
+      }
 
       if (filteredParams.old_string === '' && expectedReplacements > 1) {
         // Error: Invalid combination that would cause infinite loop

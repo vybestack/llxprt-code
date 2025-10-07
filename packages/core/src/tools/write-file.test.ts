@@ -19,18 +19,12 @@ import {
   ToolConfirmationOutcome,
   ToolEditConfirmationDetails,
 } from './tools.js';
-import { type EditToolParams } from './edit.js';
 import { ApprovalMode, Config } from '../config/config.js';
 import { ToolRegistry } from './tool-registry.js';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { GeminiClient } from '../core/client.js';
-import {
-  ensureCorrectEdit,
-  ensureCorrectFileContent,
-  CorrectedEditResult,
-} from '../utils/editCorrector.js';
 import { createMockWorkspaceContext } from '../test-utils/mockWorkspaceContext.js';
 import { StandardFileSystemService } from '../services/fileSystemService.js';
 import { ToolErrorType } from './tool-error.js';
@@ -39,17 +33,8 @@ const rootDir = path.resolve(os.tmpdir(), 'gemini-cli-test-root');
 
 // --- MOCKS ---
 vi.mock('../core/client.js');
-vi.mock('../utils/editCorrector.js');
 
 let mockGeminiClientInstance: Mocked<GeminiClient>;
-const mockEnsureCorrectEdit = vi.fn<typeof ensureCorrectEdit>();
-const mockEnsureCorrectFileContent = vi.fn<typeof ensureCorrectFileContent>();
-
-// Wire up the mocked functions to be used by the actual module imports
-vi.mocked(ensureCorrectEdit).mockImplementation(mockEnsureCorrectEdit);
-vi.mocked(ensureCorrectFileContent).mockImplementation(
-  mockEnsureCorrectFileContent,
-);
 
 // Mock Config
 const fsService = new StandardFileSystemService();
@@ -109,11 +94,6 @@ describe('WriteFileTool', () => {
     ) as Mocked<GeminiClient>;
     vi.mocked(GeminiClient).mockImplementation(() => mockGeminiClientInstance);
 
-    vi.mocked(ensureCorrectEdit).mockImplementation(mockEnsureCorrectEdit);
-    vi.mocked(ensureCorrectFileContent).mockImplementation(
-      mockEnsureCorrectFileContent,
-    );
-
     // Now that mockGeminiClientInstance is initialized, set the mock implementation for getGeminiClient
     mockConfigInternal.getGeminiClient.mockReturnValue(
       mockGeminiClientInstance,
@@ -132,40 +112,6 @@ describe('WriteFileTool', () => {
     // Reset mocks before each test
     mockConfigInternal.getApprovalMode.mockReturnValue(ApprovalMode.DEFAULT);
     mockConfigInternal.setApprovalMode.mockClear();
-    mockEnsureCorrectEdit.mockReset();
-    mockEnsureCorrectFileContent.mockReset();
-
-    // Default mock implementations that return valid structures
-    mockEnsureCorrectEdit.mockImplementation(
-      async (
-        filePath: string,
-        _currentContent: string,
-        params: EditToolParams,
-        _client: GeminiClient,
-        signal?: AbortSignal, // Make AbortSignal optional to match usage
-      ): Promise<CorrectedEditResult> => {
-        if (signal?.aborted) {
-          return Promise.reject(new Error('Aborted'));
-        }
-        return Promise.resolve({
-          params: { ...params, new_string: params.new_string ?? '' },
-          occurrences: 1,
-        });
-      },
-    );
-    mockEnsureCorrectFileContent.mockImplementation(
-      async (
-        content: string,
-        _client: GeminiClient,
-        signal?: AbortSignal,
-      ): Promise<string> => {
-        // Make AbortSignal optional
-        if (signal?.aborted) {
-          return Promise.reject(new Error('Aborted'));
-        }
-        return Promise.resolve(content ?? '');
-      },
-    );
   });
 
   afterEach(() => {
@@ -220,119 +166,6 @@ describe('WriteFileTool', () => {
     });
   });
 
-  describe('getCorrectedFileContent', () => {
-    it('should call ensureCorrectFileContent for a new file', async () => {
-      const filePath = path.join(rootDir, 'new_corrected_file.txt');
-      const proposedContent = 'Proposed new content.';
-      const correctedContent = 'Corrected new content.';
-      const abortSignal = new AbortController().signal;
-      // Ensure the mock is set for this specific test case if needed, or rely on beforeEach
-      mockEnsureCorrectFileContent.mockResolvedValue(correctedContent);
-
-      // Import the getCorrectedFileContent function directly
-      const { getCorrectedFileContent } = await import('./write-file.js');
-
-      const result = await getCorrectedFileContent(
-        filePath,
-        proposedContent,
-        mockConfig,
-        abortSignal,
-      );
-
-      expect(mockEnsureCorrectFileContent).toHaveBeenCalledWith(
-        proposedContent,
-        mockGeminiClientInstance,
-        abortSignal,
-      );
-      expect(mockEnsureCorrectEdit).not.toHaveBeenCalled();
-      expect(result.correctedContent).toBe(correctedContent);
-      expect(result.originalContent).toBe('');
-      expect(result.fileExists).toBe(false);
-      expect(result.error).toBeUndefined();
-    });
-
-    it('should call ensureCorrectEdit for an existing file', async () => {
-      const filePath = path.join(rootDir, 'existing_corrected_file.txt');
-      const originalContent = 'Original existing content.';
-      const proposedContent = 'Proposed replacement content.';
-      const correctedProposedContent = 'Corrected replacement content.';
-      const abortSignal = new AbortController().signal;
-      fs.writeFileSync(filePath, originalContent, 'utf8');
-
-      // Ensure this mock is active and returns the correct structure
-      mockEnsureCorrectEdit.mockResolvedValue({
-        params: {
-          file_path: filePath,
-          old_string: originalContent,
-          new_string: correctedProposedContent,
-        },
-        occurrences: 1,
-      } as CorrectedEditResult);
-
-      // Import the getCorrectedFileContent function directly
-      const { getCorrectedFileContent } = await import('./write-file.js');
-
-      const result = await getCorrectedFileContent(
-        filePath,
-        proposedContent,
-        mockConfig,
-        abortSignal,
-      );
-
-      expect(mockEnsureCorrectEdit).toHaveBeenCalledWith(
-        filePath,
-        originalContent,
-        {
-          old_string: originalContent,
-          new_string: proposedContent,
-          file_path: filePath,
-        },
-        mockGeminiClientInstance,
-        abortSignal,
-      );
-      expect(mockEnsureCorrectFileContent).not.toHaveBeenCalled();
-      expect(result.correctedContent).toBe(correctedProposedContent);
-      expect(result.originalContent).toBe(originalContent);
-      expect(result.fileExists).toBe(true);
-      expect(result.error).toBeUndefined();
-    });
-
-    it('should return error if reading an existing file fails (e.g. permissions)', async () => {
-      const filePath = path.join(rootDir, 'unreadable_file.txt');
-      const proposedContent = 'some content';
-      const abortSignal = new AbortController().signal;
-      fs.writeFileSync(filePath, 'content', { mode: 0o000 });
-
-      const readError = new Error('Permission denied');
-      vi.spyOn(fsService, 'readTextFile').mockImplementationOnce(() =>
-        Promise.reject(readError),
-      );
-
-      // Import the getCorrectedFileContent function directly
-      const { getCorrectedFileContent } = await import('./write-file.js');
-
-      const result = await getCorrectedFileContent(
-        filePath,
-        proposedContent,
-        mockConfig,
-        abortSignal,
-      );
-
-      expect(fsService.readTextFile).toHaveBeenCalledWith(filePath);
-      expect(mockEnsureCorrectEdit).not.toHaveBeenCalled();
-      expect(mockEnsureCorrectFileContent).not.toHaveBeenCalled();
-      expect(result.correctedContent).toBe(proposedContent);
-      expect(result.originalContent).toBe('');
-      expect(result.fileExists).toBe(true);
-      expect(result.error).toEqual({
-        message: 'Permission denied',
-        code: undefined,
-      });
-
-      fs.chmodSync(filePath, 0o600);
-    });
-  });
-
   describe('shouldConfirmExecute', () => {
     const abortSignal = new AbortController().signal;
     it('should return false if params are invalid (relative path)', async () => {
@@ -379,11 +212,9 @@ describe('WriteFileTool', () => {
       fs.chmodSync(filePath, 0o600);
     });
 
-    it('should request confirmation with diff for a new file (with corrected content)', async () => {
+    it('should request confirmation with diff for a new file', async () => {
       const filePath = path.join(rootDir, 'confirm_new_file.txt');
       const proposedContent = 'Proposed new content for confirmation.';
-      const correctedContent = 'Corrected new content for confirmation.';
-      mockEnsureCorrectFileContent.mockResolvedValue(correctedContent); // Ensure this mock is active
 
       const params = { file_path: filePath, content: proposedContent };
       const invocation = tool.build(params);
@@ -391,16 +222,11 @@ describe('WriteFileTool', () => {
         abortSignal,
       )) as ToolEditConfirmationDetails;
 
-      expect(mockEnsureCorrectFileContent).toHaveBeenCalledWith(
-        proposedContent,
-        mockGeminiClientInstance,
-        abortSignal,
-      );
       expect(confirmation).toEqual(
         expect.objectContaining({
           title: `Confirm Write: ${path.basename(filePath)}`,
           fileName: 'confirm_new_file.txt',
-          fileDiff: expect.stringContaining(correctedContent),
+          fileDiff: expect.stringContaining(proposedContent),
         }),
       );
       expect(confirmation.fileDiff).toMatch(
@@ -411,22 +237,11 @@ describe('WriteFileTool', () => {
       );
     });
 
-    it('should request confirmation with diff for an existing file (with corrected content)', async () => {
+    it('should request confirmation with diff for an existing file', async () => {
       const filePath = path.join(rootDir, 'confirm_existing_file.txt');
       const originalContent = 'Original content for confirmation.';
       const proposedContent = 'Proposed replacement for confirmation.';
-      const correctedProposedContent =
-        'Corrected replacement for confirmation.';
       fs.writeFileSync(filePath, originalContent, 'utf8');
-
-      mockEnsureCorrectEdit.mockResolvedValue({
-        params: {
-          file_path: filePath,
-          old_string: originalContent,
-          new_string: correctedProposedContent,
-        },
-        occurrences: 1,
-      });
 
       const params = { file_path: filePath, content: proposedContent };
       const invocation = tool.build(params);
@@ -434,22 +249,11 @@ describe('WriteFileTool', () => {
         abortSignal,
       )) as ToolEditConfirmationDetails;
 
-      expect(mockEnsureCorrectEdit).toHaveBeenCalledWith(
-        filePath,
-        originalContent,
-        {
-          old_string: originalContent,
-          new_string: proposedContent,
-          file_path: filePath,
-        },
-        mockGeminiClientInstance,
-        abortSignal,
-      );
       expect(confirmation).toEqual(
         expect.objectContaining({
           title: `Confirm Write: ${path.basename(filePath)}`,
           fileName: 'confirm_existing_file.txt',
-          fileDiff: expect.stringContaining(correctedProposedContent),
+          fileDiff: expect.stringContaining(proposedContent),
         }),
       );
       expect(confirmation.fileDiff).toMatch(
@@ -519,11 +323,9 @@ describe('WriteFileTool', () => {
       fs.chmodSync(filePath, 0o600);
     });
 
-    it('should write a new file with corrected content and return diff', async () => {
-      const filePath = path.join(rootDir, 'execute_new_corrected_file.txt');
+    it('should write a new file and return diff', async () => {
+      const filePath = path.join(rootDir, 'execute_new_file.txt');
       const proposedContent = 'Proposed new content for execute.';
-      const correctedContent = 'Corrected new content for execute.';
-      mockEnsureCorrectFileContent.mockResolvedValue(correctedContent);
 
       const params = { file_path: filePath, content: proposedContent };
       const invocation = tool.build(params);
@@ -539,48 +341,26 @@ describe('WriteFileTool', () => {
 
       const result = await invocation.execute(abortSignal);
 
-      expect(mockEnsureCorrectFileContent).toHaveBeenCalledWith(
-        proposedContent,
-        mockGeminiClientInstance,
-        abortSignal,
-      );
       expect(result.llmContent).toMatch(
         /Successfully created and wrote to new file/,
       );
       expect(fs.existsSync(filePath)).toBe(true);
       const writtenContent = await fsService.readTextFile(filePath);
-      expect(writtenContent).toBe(correctedContent);
+      expect(writtenContent).toBe(proposedContent);
       const display = result.returnDisplay as FileDiff;
-      expect(display.fileName).toBe('execute_new_corrected_file.txt');
+      expect(display.fileName).toBe('execute_new_file.txt');
+      expect(display.fileDiff).toMatch(/--- execute_new_file.txt\tOriginal/);
+      expect(display.fileDiff).toMatch(/\+\+\+ execute_new_file.txt\tWritten/);
       expect(display.fileDiff).toMatch(
-        /--- execute_new_corrected_file.txt\tOriginal/,
-      );
-      expect(display.fileDiff).toMatch(
-        /\+\+\+ execute_new_corrected_file.txt\tWritten/,
-      );
-      expect(display.fileDiff).toMatch(
-        correctedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
+        proposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
 
-    it('should overwrite an existing file with corrected content and return diff', async () => {
-      const filePath = path.join(
-        rootDir,
-        'execute_existing_corrected_file.txt',
-      );
+    it('should overwrite an existing file and return diff', async () => {
+      const filePath = path.join(rootDir, 'execute_existing_file.txt');
       const initialContent = 'Initial content for execute.';
       const proposedContent = 'Proposed overwrite for execute.';
-      const correctedProposedContent = 'Corrected overwrite for execute.';
       fs.writeFileSync(filePath, initialContent, 'utf8');
-
-      mockEnsureCorrectEdit.mockResolvedValue({
-        params: {
-          file_path: filePath,
-          old_string: initialContent,
-          new_string: correctedProposedContent,
-        },
-        occurrences: 1,
-      });
 
       const params = { file_path: filePath, content: proposedContent };
       const invocation = tool.build(params);
@@ -596,27 +376,16 @@ describe('WriteFileTool', () => {
 
       const result = await invocation.execute(abortSignal);
 
-      expect(mockEnsureCorrectEdit).toHaveBeenCalledWith(
-        filePath,
-        initialContent,
-        {
-          old_string: initialContent,
-          new_string: proposedContent,
-          file_path: filePath,
-        },
-        mockGeminiClientInstance,
-        abortSignal,
-      );
       expect(result.llmContent).toMatch(/Successfully overwrote file/);
       const writtenContent = await fsService.readTextFile(filePath);
-      expect(writtenContent).toBe(correctedProposedContent);
+      expect(writtenContent).toBe(proposedContent);
       const display = result.returnDisplay as FileDiff;
-      expect(display.fileName).toBe('execute_existing_corrected_file.txt');
+      expect(display.fileName).toBe('execute_existing_file.txt');
       expect(display.fileDiff).toMatch(
         initialContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
       expect(display.fileDiff).toMatch(
-        correctedProposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
+        proposedContent.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'),
       );
     });
 
@@ -624,7 +393,6 @@ describe('WriteFileTool', () => {
       const dirPath = path.join(rootDir, 'new_dir_for_write');
       const filePath = path.join(dirPath, 'file_in_new_dir.txt');
       const content = 'Content in new directory';
-      mockEnsureCorrectFileContent.mockResolvedValue(content); // Ensure this mock is active
 
       const params = { file_path: filePath, content };
       const invocation = tool.build(params);
@@ -649,7 +417,6 @@ describe('WriteFileTool', () => {
     it('should include modification message when proposed content is modified', async () => {
       const filePath = path.join(rootDir, 'new_file_modified.txt');
       const content = 'New file content modified by user';
-      mockEnsureCorrectFileContent.mockResolvedValue(content);
 
       const params = {
         file_path: filePath,
@@ -665,7 +432,6 @@ describe('WriteFileTool', () => {
     it('should not include modification message when proposed content is not modified', async () => {
       const filePath = path.join(rootDir, 'new_file_unmodified.txt');
       const content = 'New file content not modified';
-      mockEnsureCorrectFileContent.mockResolvedValue(content);
 
       const params = {
         file_path: filePath,
@@ -681,7 +447,6 @@ describe('WriteFileTool', () => {
     it('should not include modification message when modified_by_user is not provided', async () => {
       const filePath = path.join(rootDir, 'new_file_unmodified.txt');
       const content = 'New file content not modified';
-      mockEnsureCorrectFileContent.mockResolvedValue(content);
 
       const params = {
         file_path: filePath,

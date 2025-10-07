@@ -43,7 +43,7 @@ jobs:
     environment:
       name: production-release
       url: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.RELEASE_TAG }}
-    if: github.repository == 'acoliver/llxprt-code'
+    if: github.repository == 'vybestack/llpxrt-code'
     permissions:
       contents: write
       packages: write

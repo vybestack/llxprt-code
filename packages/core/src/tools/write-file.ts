@@ -23,10 +23,6 @@ import {
 import { ToolErrorType } from './tool-error.js';
 import { makeRelative, shortenPath } from '../utils/paths.js';
 import { getErrorMessage, isNodeError } from '../utils/errors.js';
-import {
-  ensureCorrectEdit,
-  ensureCorrectFileContent,
-} from '../utils/editCorrector.js';
 import { DEFAULT_DIFF_OPTIONS, getDiffStat } from './diffOptions.js';
 import { ModifiableDeclarativeTool, ModifyContext } from './modifiable-tool.js';
 import { getSpecificMimeType } from '../utils/fileUtils.js';
@@ -108,7 +104,7 @@ export async function getCorrectedFileContent(
   filePath: string,
   proposedContent: string,
   config: Config,
-  abortSignal: AbortSignal,
+  _abortSignal: AbortSignal,
 ): Promise<GetCorrectedFileContentResult> {
   let originalContent = '';
   let fileExists = false;
@@ -140,28 +136,8 @@ export async function getCorrectedFileContent(
   // So, file was either read successfully (fileExists=true, originalContent set)
   // or it was ENOENT (fileExists=false, originalContent='').
 
-  if (fileExists) {
-    // This implies originalContent is available
-    const { params: correctedParams } = await ensureCorrectEdit(
-      filePath,
-      originalContent,
-      {
-        old_string: originalContent, // Treat entire current content as old_string
-        new_string: proposedContent,
-        file_path: filePath,
-      },
-      config.getGeminiClient(),
-      abortSignal,
-    );
-    correctedContent = correctedParams.new_string;
-  } else {
-    // This implies new file (ENOENT)
-    correctedContent = await ensureCorrectFileContent(
-      proposedContent,
-      config.getGeminiClient(),
-      abortSignal,
-    );
-  }
+  // Use the proposed content directly without correction
+  correctedContent = proposedContent;
   return { originalContent, correctedContent, fileExists };
 }
 
