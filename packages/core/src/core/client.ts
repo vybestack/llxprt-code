@@ -136,6 +136,7 @@ export class GeminiClient {
   private _pendingConfig?: ContentGeneratorConfig;
   private _previousHistory?: Content[];
   private _storedHistoryService?: HistoryService;
+  private currentSequenceModel: string | null = null;
 
   private readonly loopDetector: LoopDetectionService;
   private lastPromptId?: string;
@@ -1147,6 +1148,7 @@ export class GeminiClient {
     if (this.lastPromptId !== prompt_id) {
       this.loopDetector.reset(prompt_id);
       this.lastPromptId = prompt_id;
+      this.currentSequenceModel = null;
     }
 
     this.sessionTurnCount++;

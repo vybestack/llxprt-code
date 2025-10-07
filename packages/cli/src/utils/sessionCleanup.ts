@@ -6,7 +6,7 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { type Config } from '@google/gemini-cli-core';
+import { type Config } from '@vybestack/llxprt-code-core';
 import type { Settings, SessionRetentionSettings } from '../config/settings.js';
 import { getAllSessionFiles, type SessionFileEntry } from './sessionUtils.js';
 
@@ -48,11 +48,11 @@ export async function cleanupExpiredSessions(
 
   try {
     // Early exit if cleanup is disabled
-    if (!settings.general?.sessionRetention?.enabled) {
+    if (!settings.sessionRetention?.enabled) {
       return { ...result, disabled: true };
     }
 
-    const retentionConfig = settings.general.sessionRetention;
+    const retentionConfig = settings.sessionRetention;
     const chatsDir = path.join(config.storage.getProjectTempDir(), 'chats');
 
     // Validate retention configuration

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { cleanupExpiredSessions } from './sessionCleanup.js';
 import type { Settings } from '../config/settings.js';
-import { SESSION_FILE_PREFIX, type Config } from '@google/gemini-cli-core';
+import { SESSION_FILE_PREFIX, type Config } from '@vybestack/llxprt-code-core';
 
 // Create a mock config for integration testing
 function createTestConfig(): Config {
@@ -25,12 +25,10 @@ describe('Session Cleanup Integration', () => {
   it('should gracefully handle non-existent directories', async () => {
     const config = createTestConfig();
     const settings: Settings = {
-      general: {
-        sessionRetention: {
+      sessionRetention: {
           enabled: true,
           maxAge: '30d',
         },
-      },
     };
 
     const result = await cleanupExpiredSessions(config, settings);
@@ -46,11 +44,9 @@ describe('Session Cleanup Integration', () => {
   it('should not impact startup when disabled', async () => {
     const config = createTestConfig();
     const settings: Settings = {
-      general: {
-        sessionRetention: {
+      sessionRetention: {
           enabled: false,
         },
-      },
     };
 
     const result = await cleanupExpiredSessions(config, settings);
@@ -116,12 +112,10 @@ describe('Session Cleanup Integration', () => {
     const config = createTestConfig();
 
     const settings: Settings = {
-      general: {
-        sessionRetention: {
+      sessionRetention: {
           enabled: true,
           maxAge: 'invalid-format',
         },
-      },
     };
 
     const result = await cleanupExpiredSessions(config, settings);
@@ -213,12 +207,10 @@ describe('Session Cleanup Integration', () => {
     } as unknown as Config;
 
     const settings: Settings = {
-      general: {
-        sessionRetention: {
+      sessionRetention: {
           enabled: true,
           maxAge: '30d', // Keep sessions for 30 days
         },
-      },
     };
 
     try {

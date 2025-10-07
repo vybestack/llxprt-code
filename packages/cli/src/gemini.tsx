@@ -107,12 +107,6 @@ import {
   applyCliArgumentOverrides,
 } from './runtime/runtimeSettings.js';
 import { writeFileSync } from 'node:fs';
-import {
-  relaunchAppInChildProcess,
-  relaunchOnExitCode,
-} from './utils/relaunch.js';
-import { loadSandboxConfig } from './config/sandboxConfig.js';
-import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function validateDnsResolutionOrder(
   order: string | undefined,
@@ -166,6 +160,7 @@ const InitializingComponent = ({ initialTotal }: { initialTotal: number }) => {
 import { existsSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 
 export function setupUnhandledRejectionHandler() {
   let unhandledRejectionOccurred = false;

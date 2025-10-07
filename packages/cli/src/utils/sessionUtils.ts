@@ -7,7 +7,7 @@
 import {
   SESSION_FILE_PREFIX,
   type ConversationRecord,
-} from '@google/gemini-cli-core';
+} from '@vybestack/llxprt-code-core';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 

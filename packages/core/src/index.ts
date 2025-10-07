@@ -329,3 +329,4 @@ export { SubagentManager } from './config/subagentManager.js';
 export { SubagentOrchestrator } from './core/subagentOrchestrator.js';
 export type { SubagentConfig } from './config/types.js';
 // --- End of Subagent Feature ---
+export { SESSION_FILE_PREFIX, type ConversationRecord } from './storage/sessionTypes.js';

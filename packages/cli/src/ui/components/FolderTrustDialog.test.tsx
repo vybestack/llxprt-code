@@ -12,8 +12,9 @@ import { FolderTrustDialog, FolderTrustChoice } from './FolderTrustDialog.js';
 const mockedExit = vi.hoisted(() => vi.fn());
 const mockedCwd = vi.hoisted(() => vi.fn());
 
-vi.mock('process', async () => {
-  const actual = await vi.importActual('process');
+vi.mock('node:process', async () => {
+  const actual =
+    await vi.importActual<typeof import('node:process')>('node:process');
   return {
     ...actual,
     exit: mockedExit,
