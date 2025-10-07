@@ -99,7 +99,7 @@ describe('IdeClient', () => {
         'utf8',
       );
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
-        new URL('http://localhost:8080/mcp'),
+        new URL('http://127.0.0.1:8080/mcp'),
         expect.any(Object),
       );
       expect(mockClient.connect).toHaveBeenCalledWith(mockHttpTransport);
@@ -118,7 +118,7 @@ describe('IdeClient', () => {
       await ideClient.connect();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
-        new URL('http://localhost:9090/mcp'),
+        new URL('http://127.0.0.1:9090/mcp'),
         expect.any(Object),
       );
       expect(mockClient.connect).toHaveBeenCalledWith(mockHttpTransport);
@@ -137,7 +137,7 @@ describe('IdeClient', () => {
       await ideClient.connect();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
-        new URL('http://localhost:8080/mcp'),
+        new URL('http://127.0.0.1:8080/mcp'),
         expect.any(Object),
       );
       expect(ideClient.getConnectionStatus().status).toBe(
@@ -179,7 +179,7 @@ describe('IdeClient', () => {
       await ideClient.connect();
 
       expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
-        new URL('http://localhost:8080/mcp'),
+        new URL('http://127.0.0.1:8080/mcp'),
         expect.objectContaining({
           requestInit: {
             headers: {
