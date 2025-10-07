@@ -1,6 +1,6 @@
 # LLxprt Code
 
-[![LLxprt Code CI](https://github.com/vybestack/llpxrt-code/actions/workflows/ci.yml/badge.svg)](https://github.com/vybestack/llpxrt-code/actions/workflows/ci.yml)
+[![LLxprt Code CI](https://github.com/vybestack/llxprt-code/actions/workflows/ci.yml/badge.svg)](https://github.com/vybestack/llxprt-code/actions/workflows/ci.yml)
 &nbsp;
 [![Mentioned in Awesome Gemini CLI](https://awesome.re/mentioned-badge.svg)](https://github.com/Piebald-AI/awesome-gemini-cli)
 &nbsp;
@@ -46,7 +46,7 @@ You have two options to install LLxprt Code.
    Or run directly with npx:
 
    ```bash
-   npx https://github.com/acoliver/llxprt-code
+   npx https://github.com/vybestack/llxprt-code
    ```
 
 ### Common Configuration Steps

@@ -53,7 +53,7 @@ debug:
 
 
 run-npx:
-	npx https://github.com/acoliver/llxprt-code
+	npx https://github.com/vybestack/llxprt-code
 
 create-alias:
 	scripts/create_alias.sh

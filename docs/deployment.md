@@ -80,7 +80,7 @@ You can run the most recently committed version of LLxprt Code directly from the
 
 ```bash
 # Execute the CLI directly from the main branch on GitHub
-npx https://github.com/acoliver/llxprt-code
+npx https://github.com/vybestack/llxprt-code
 ```
 
 ## Deployment architecture

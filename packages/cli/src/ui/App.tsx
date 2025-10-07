@@ -914,9 +914,13 @@ You can switch authentication methods by typing /auth or switch to a different m
   const isInitialMount = useRef(true);
 
   const widthFraction = 0.9;
+  // Calculate inputWidth accounting for:
+  // - Prompt: 2 chars ("! " or "> ")
+  // - Padding: 2 chars (paddingX={1} on each side in InputPrompt)
+  // - Additional margin: 2 chars (for proper wrapping)
   const inputWidth = Math.max(
     20,
-    Math.floor(terminalWidth * widthFraction) - 3,
+    Math.floor(terminalWidth * widthFraction) - 6,
   );
   const suggestionsWidth = Math.max(60, Math.floor(terminalWidth * 0.8));
 
@@ -1005,9 +1009,15 @@ You can switch authentication methods by typing /auth or switch to a different m
     setLlxprtMdFileCount,
   );
 
+  // Memoize viewport to ensure it updates when inputWidth changes
+  const viewport = useMemo(
+    () => ({ height: 10, width: inputWidth }),
+    [inputWidth],
+  );
+
   const buffer = useTextBuffer({
     initialText: '',
-    viewport: { height: 10, width: inputWidth },
+    viewport,
     stdin,
     setRawMode,
     isValidPath,

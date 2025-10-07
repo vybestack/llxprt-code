@@ -5,42 +5,37 @@
  */
 
 import { useEffect, useState } from 'react';
-import { execSync } from 'child_process';
-
-const TERMINAL_PADDING_X = 8;
-
-// Get terminal dimensions using child_process to run tput command
-// as process.stdout.columns and process.stdout.rows aren't reliable in our environment
-function getTerminalDimensions() {
-  try {
-    const cols = parseInt(execSync('tput cols').toString().trim(), 10);
-    const rows = parseInt(execSync('tput lines').toString().trim(), 10);
-    return {
-      columns: cols || 80,
-      rows: rows || 24,
-    };
-  } catch (_error) {
-    // Fallback to process.stdout if tput doesn't work
-    return {
-      columns: (process.stdout.columns || 80) - TERMINAL_PADDING_X,
-      rows: process.stdout.rows || 24,
-    };
-  }
-}
+import { useStdout } from 'ink';
 
 export function useTerminalSize(): { columns: number; rows: number } {
-  const [size, setSize] = useState(getTerminalDimensions());
+  // Use Ink's useStdout hook to get access to the stdout that Ink is using
+  // This ensures we're reading from the same source as Ink's layout engine
+  const { stdout } = useStdout();
+
+  const [size, setSize] = useState(() => ({
+    columns: stdout?.columns || process.stdout.columns || 80,
+    rows: stdout?.rows || process.stdout.rows || 24,
+  }));
 
   useEffect(() => {
     function updateSize() {
-      setSize(getTerminalDimensions());
+      setSize({
+        columns: stdout?.columns || process.stdout.columns || 80,
+        rows: stdout?.rows || process.stdout.rows || 24,
+      });
     }
 
+    // Listen to resize events on process.stdout
     process.stdout.on('resize', updateSize);
+
+    // Also check size periodically in case resize event doesn't fire
+    const interval = setInterval(updateSize, 100);
+
     return () => {
       process.stdout.off('resize', updateSize);
+      clearInterval(interval);
     };
-  }, []);
+  }, [stdout]);
 
   return size;
 }
