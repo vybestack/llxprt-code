@@ -55,10 +55,6 @@ export function useSlashCompletion(
   reverseSearchActive: boolean = false,
   config?: Config,
 ): UseSlashCompletionReturn {
-  debugLogger.debug(
-    () =>
-      `useSlashCompletion called - buffer: "${buffer.lines[0] || ''}", commands: ${slashCommands.length}`,
-  );
   const {
     suggestions,
     activeSuggestionIndex,
@@ -136,19 +132,20 @@ export function useSlashCompletion(
   }, [buffer.lines, cursorRow, commandIndex, cursorCol]);
 
   useEffect(() => {
-    debugLogger.debug(
-      () =>
-        `useEffect triggered - commandIndex: ${commandIndex}, reverseSearchActive: ${reverseSearchActive}`,
-    );
     if (commandIndex === -1 || reverseSearchActive) {
-      debugLogger.debug(() => 'Resetting completion state');
       // Only reset if we actually had suggestions before
       if (previousInput.current !== '') {
+        debugLogger.debug(() => 'Resetting completion state');
         resetCompletionState();
         previousInput.current = '';
       }
       return;
     }
+
+    debugLogger.debug(
+      () =>
+        `useEffect triggered - commandIndex: ${commandIndex}, reverseSearchActive: ${reverseSearchActive}`,
+    );
 
     if (!memoizedInput) return;
 
@@ -696,9 +693,6 @@ export function useSlashCompletion(
   }, [
     // Only re-run when the actual input changes
     memoizedInput,
-    memoizedInput?.line,
-    memoizedInput?.commandIndex,
-    memoizedInput?.cursorCol,
     commandIndex,
     cursorCol,
     reverseSearchActive,
