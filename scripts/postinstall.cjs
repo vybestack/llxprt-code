@@ -2,7 +2,7 @@
 
 /**
  * Postinstall script to build the bundle when installing from GitHub
- * This enables `npx github:acoliver/llxprt-code` to work properly
+ * This enables `npx github:vybestack/llxprt-code` to work properly
  */
 
 /* eslint-env node */

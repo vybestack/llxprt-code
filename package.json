@@ -11,7 +11,7 @@
   "private": "true",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/acoliver/llxprt-code.git"
+    "url": "git+https://github.com/vybestack/llxprt-code.git"
   },
   "config": {
     "sandboxImageUri": "ghcr.io/acoliver/llxprt-code/sandbox:0.1.19"
