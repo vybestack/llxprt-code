@@ -27,6 +27,7 @@ export function createNonInteractiveUI(): CommandContext['ui'] {
       _item: Parameters<CommandContext['ui']['setPendingItem']>[0],
     ) => {},
     toggleCorgiMode: () => {},
+    toggleDebugProfiler: () => {},
     toggleVimEnabled: async () => false,
     setGeminiMdFileCount: (_count: number) => {},
     setLlxprtMdFileCount: (_count: number) => {},

@@ -448,6 +448,7 @@ export const AppContainer = (props: AppContainerProps) => {
   const [showErrorDetails, setShowErrorDetails] = useState<boolean>(false);
   const [showToolDescriptions, setShowToolDescriptions] =
     useState<boolean>(false);
+  const [showDebugProfiler, setShowDebugProfiler] = useState(false);
 
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [quittingMessages, setQuittingMessages] = useState<
@@ -734,6 +735,10 @@ export const AppContainer = (props: AppContainerProps) => {
     setCorgiMode((prev) => !prev);
   }, []);
 
+  const toggleDebugProfiler = useCallback(() => {
+    setShowDebugProfiler((prev) => !prev);
+  }, []);
+
   const {
     showDialog: isLoadProfileDialogOpen,
     openDialog: openLoadProfileDialog,
@@ -941,6 +946,7 @@ export const AppContainer = (props: AppContainerProps) => {
       quit: setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
+      toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
     }),
@@ -958,6 +964,7 @@ export const AppContainer = (props: AppContainerProps) => {
       setQuittingMessages,
       setDebugMessage,
       toggleCorgiMode,
+      toggleDebugProfiler,
       dispatchExtensionStateUpdate,
       addConfirmUpdateExtensionRequest,
     ],
@@ -1584,6 +1591,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
     // Debug
     debugMessage,
+    showDebugProfiler,
 
     // Footer height
     footerHeight,
