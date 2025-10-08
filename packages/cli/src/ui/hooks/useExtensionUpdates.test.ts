@@ -73,6 +73,7 @@ describe('useExtensionUpdates', () => {
           source: 'https://some/repo',
           autoUpdate: false,
         },
+        contextFiles: [],
       },
     ];
     const addItem = vi.fn();
@@ -265,6 +266,7 @@ describe('useExtensionUpdates', () => {
           source: 'https://some/repo1',
           autoUpdate: false,
         },
+        contextFiles: [],
       },
       {
         name: 'test-extension-2',
@@ -277,6 +279,7 @@ describe('useExtensionUpdates', () => {
           source: 'https://some/repo2',
           autoUpdate: false,
         },
+        contextFiles: [],
       },
     ];
     const addItem = vi.fn();

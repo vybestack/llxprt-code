@@ -18,7 +18,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { loadCliConfig, parseArguments, type CliArgs } from './config.js';
 import type { Settings } from './settings.js';
-import { ExtensionStorage, type Extension } from './extension.js';
+import { ExtensionStorage } from './extension.js';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
@@ -979,33 +979,30 @@ describe('Hierarchical Memory Loading (config.ts) - Placeholder Suite', () => {
   it('should pass extension context file paths to loadServerHierarchicalMemory', async () => {
     process.argv = ['node', 'script.js'];
     const settings: Settings = {};
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-        },
+        name: 'ext1',
+        version: '1.0.0',
         contextFiles: ['/path/to/ext1/GEMINI.md'],
+        isActive: true,
       },
       {
         path: '/path/to/ext2',
-        config: {
-          name: 'ext2',
-          version: '1.0.0',
-        },
+        name: 'ext2',
+        version: '1.0.0',
         contextFiles: [],
+        isActive: true,
       },
       {
         path: '/path/to/ext3',
-        config: {
-          name: 'ext3',
-          version: '1.0.0',
-        },
+        name: 'ext3',
+        version: '1.0.0',
         contextFiles: [
           '/path/to/ext3/context1.md',
           '/path/to/ext3/context2.md',
         ],
+        isActive: true,
       },
     ];
     const argv = await parseArguments({} as Settings);
@@ -1084,19 +1081,18 @@ describe('mergeMcpServers', () => {
         },
       },
     };
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          mcpServers: {
-            'ext1-server': {
-              url: 'http://localhost:8081',
-            },
+        name: 'ext1',
+        version: '1.0.0',
+        mcpServers: {
+          'ext1-server': {
+            url: 'http://localhost:8081',
           },
         },
         contextFiles: [],
+        isActive: true,
       },
     ];
     const originalSettings = JSON.parse(JSON.stringify(settings));
@@ -1131,25 +1127,23 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should merge excludeTools from settings and extensions', async () => {
-    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
-    const extensions: Extension[] = [
+    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool3', 'tool4'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool3', 'tool4'],
         contextFiles: [],
+        isActive: true,
       },
       {
         path: '/path/to/ext2',
-        config: {
-          name: 'ext2',
-          version: '1.0.0',
-          excludeTools: ['tool5'],
-        },
+        name: 'ext2',
+        version: '1.0.0',
+        excludeTools: ['tool5'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1171,16 +1165,15 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should handle overlapping excludeTools between settings and extensions', async () => {
-    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
-    const extensions: Extension[] = [
+    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool2', 'tool3'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool2', 'tool3'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1202,25 +1195,23 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should handle overlapping excludeTools between extensions', async () => {
-    const settings: Settings = { excludeTools: ['tool1'] };
-    const extensions: Extension[] = [
+    const settings: Settings = { tools: { exclude: ['tool1'] } };
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext1',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool2', 'tool3'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool2', 'tool3'],
         contextFiles: [],
+        isActive: true,
       },
       {
         path: '/path/to/ext2',
-        config: {
-          name: 'ext2',
-          version: '1.0.0',
-          excludeTools: ['tool3', 'tool4'],
-        },
+        name: 'ext2',
+        version: '1.0.0',
+        excludeTools: ['tool3', 'tool4'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1244,7 +1235,7 @@ describe('mergeExcludeTools', () => {
   it('should return an empty array when no excludeTools are specified and it is interactive', async () => {
     process.stdin.isTTY = true;
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
@@ -1263,7 +1254,7 @@ describe('mergeExcludeTools', () => {
   it('should return default excludes when no excludeTools are specified and it is not interactive', async () => {
     process.stdin.isTTY = false;
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     process.argv = ['node', 'script.js', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
     const config = await loadCliConfig(
@@ -1282,8 +1273,8 @@ describe('mergeExcludeTools', () => {
   it('should handle settings with excludeTools but no extensions', async () => {
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { excludeTools: ['tool1', 'tool2'] };
-    const extensions: Extension[] = [];
+    const settings: Settings = { tools: { exclude: ['tool1', 'tool2'] } };
+    const extensions: GeminiCLIExtension[] = [];
     const config = await loadCliConfig(
       settings,
       extensions,
@@ -1302,15 +1293,14 @@ describe('mergeExcludeTools', () => {
 
   it('should handle extensions with excludeTools but no settings', async () => {
     const settings: Settings = {};
-    const extensions: Extension[] = [
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool1', 'tool2'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool1', 'tool2'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     process.argv = ['node', 'script.js'];
@@ -1332,16 +1322,15 @@ describe('mergeExcludeTools', () => {
   });
 
   it('should not modify the original settings object', async () => {
-    const settings: Settings = { excludeTools: ['tool1'] };
-    const extensions: Extension[] = [
+    const settings: Settings = { tools: { exclude: ['tool1'] } };
+    const extensions: GeminiCLIExtension[] = [
       {
         path: '/path/to/ext',
-        config: {
-          name: 'ext1',
-          version: '1.0.0',
-          excludeTools: ['tool2'],
-        },
+        name: 'ext1',
+        version: '1.0.0',
+        excludeTools: ['tool2'],
         contextFiles: [],
+        isActive: true,
       },
     ];
     const originalSettings = JSON.parse(JSON.stringify(settings));
@@ -1379,7 +1368,7 @@ describe('Approval mode tool exclusion logic', () => {
     process.argv = ['node', 'script.js', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1409,7 +1398,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1439,7 +1428,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1469,7 +1458,7 @@ describe('Approval mode tool exclusion logic', () => {
     ];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1492,7 +1481,7 @@ describe('Approval mode tool exclusion logic', () => {
     process.argv = ['node', 'script.js', '--yolo', '-p', 'test'];
     const argv = await parseArguments({} as Settings);
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1526,7 +1515,7 @@ describe('Approval mode tool exclusion logic', () => {
       process.argv = testCase.args;
       const argv = await parseArguments({} as Settings);
       const settings: Settings = {};
-      const extensions: Extension[] = [];
+      const extensions: GeminiCLIExtension[] = [];
 
       const config = await loadCliConfig(
         settings,
@@ -1556,8 +1545,6 @@ describe('Approval mode tool exclusion logic', () => {
       'test',
     ];
     const argv = await parseArguments({} as Settings);
-    const settings: Settings = { excludeTools: ['custom_tool'] };
-    const extensions: Extension[] = [];
 
     const config = await loadCliConfig(
       settings,
@@ -1587,7 +1574,7 @@ describe('Approval mode tool exclusion logic', () => {
     };
 
     const settings: Settings = {};
-    const extensions: Extension[] = [];
+    const extensions: GeminiCLIExtension[] = [];
     await expect(
       loadCliConfig(
         settings,
@@ -1873,16 +1860,20 @@ describe('loadCliConfig extensions', () => {
     clearActiveProviderRuntimeContext();
   });
 
-  const mockExtensions: Extension[] = [
+  const mockExtensions: GeminiCLIExtension[] = [
     {
       path: '/path/to/ext1',
-      config: { name: 'ext1', version: '1.0.0' },
+      name: 'ext1',
+      version: '1.0.0',
       contextFiles: ['/path/to/ext1.md'],
+      isActive: true,
     },
     {
       path: '/path/to/ext2',
-      config: { name: 'ext2', version: '1.0.0' },
+      name: 'ext2',
+      version: '1.0.0',
       contextFiles: ['/path/to/ext2.md'],
+      isActive: true,
     },
   ];
 

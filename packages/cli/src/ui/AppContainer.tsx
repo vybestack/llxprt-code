@@ -493,7 +493,7 @@ export const AppContainer = (props: AppContainerProps) => {
 
   const {
     showWorkspaceMigrationDialog,
-    workspaceExtensions,
+    workspaceGeminiCLIExtensions,
     onWorkspaceMigrationDialogOpen,
     onWorkspaceMigrationDialogClose,
   } = useWorkspaceMigration(settings);
@@ -1514,13 +1514,13 @@ export const AppContainer = (props: AppContainerProps) => {
     toolsDialogAction,
     toolsDialogTools,
     toolsDialogDisabledTools,
-    workspaceExtensions,
+    workspaceGeminiCLIExtensions,
     loggingDialogData,
 
     // Confirmation requests
     shellConfirmationRequest,
     confirmationRequest,
-    confirmUpdateExtensionRequests,
+    confirmUpdateGeminiCLIExtensionRequests: confirmUpdateExtensionRequests,
 
     // Exit/warning states
     ctrlCPressedOnce,
