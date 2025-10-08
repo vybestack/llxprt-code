@@ -23,6 +23,7 @@ import type { LoadExtensionContext } from './extensions/variableSchema.js';
 import chalk from 'chalk';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { ConfirmationRequest } from '../ui/types.js';
+import { escapeAnsiCtrlCodes } from '../ui/utils/textUtils.js';
 
 export { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 export const EXTENSIONS_DIRECTORY_NAME = '.llxprt/extensions';
@@ -566,9 +567,10 @@ export function validateName(name: string): void {
  * extensionConfig.
  */
 function extensionConsentString(extensionConfig: ExtensionConfig): string {
+  const sanitizedConfig = escapeAnsiCtrlCodes(extensionConfig);
   const output: string[] = [];
-  const mcpServerEntries = Object.entries(extensionConfig.mcpServers || {});
-  output.push(`Installing extension "${extensionConfig.name}".`);
+  const mcpServerEntries = Object.entries(sanitizedConfig.mcpServers || {});
+  output.push(`Installing extension "${sanitizedConfig.name}".`);
   output.push(
     '**Extensions may introduce unexpected behavior. Ensure you have investigated the extension source and trust the author.**',
   );
@@ -583,14 +585,14 @@ function extensionConsentString(extensionConfig: ExtensionConfig): string {
       output.push(`  * ${key} (${isLocal ? 'local' : 'remote'}): ${source}`);
     }
   }
-  if (extensionConfig.contextFileName) {
+  if (sanitizedConfig.contextFileName) {
     output.push(
-      `This extension will append info to your LLXPRT.md context using ${extensionConfig.contextFileName}`,
+      `This extension will append info to your LLXPRT.md context using ${sanitizedConfig.contextFileName}`,
     );
   }
-  if (extensionConfig.excludeTools) {
+  if (sanitizedConfig.excludeTools) {
     output.push(
-      `This extension will exclude the following core tools: ${extensionConfig.excludeTools}`,
+      `This extension will exclude the following core tools: ${sanitizedConfig.excludeTools}`,
     );
   }
   return output.join('\n');
