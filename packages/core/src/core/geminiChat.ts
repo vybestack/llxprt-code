@@ -128,13 +128,9 @@ function createUserContentWithFunctionResponseFix(
  * Normalizes tool interaction input to prevent tool call loops.
  *
  * When the UI flattens multiple tool call/response pairs into a single array
- * [call1, response1, call2, response2, ...], we must split them back into
- * proper Content objects with correct roles:
- * - functionCall parts → { role: 'model', parts: [call] }
- * - functionResponse parts → { role: 'user', parts: [response] }
- *
- * This ensures tool calls are recorded as AI messages, not user messages,
- * preventing the model from repeating the same tool calls infinitely.
+ * [call1, response1, call2, response2, ...], we need to restore the
+ * alternating model/user turn structure so providers see `tool_use` blocks
+ * immediately followed by their matching `tool_result`.
  *
  * @param message - Raw input from caller (string, Part, or Part[])
  * @returns Single Content or array of Content objects with correct roles
@@ -155,8 +151,7 @@ function normalizeToolInteractionInput(
   // Now we have an array of parts - check if it contains tool interactions
   const parts = message as Part[];
 
-  // Detect if this is a flattened tool interaction sequence
-  // Look for any functionCall or functionResponse parts
+  // Detect if this is a tool interaction sequence
   const hasFunctionCalls = parts.some(
     (part) => part && typeof part === 'object' && 'functionCall' in part,
   );
@@ -169,45 +164,54 @@ function normalizeToolInteractionInput(
     return createUserContentWithFunctionResponseFix(message);
   }
 
-  // Parse the flattened array into alternating model/user Content objects
-  // Assumption: tool calls come from model, responses go to model as user input
-  // Pattern: [call1, response1, call2, response2, ...]
   const result: Content[] = [];
+  let pendingRole: 'user' | null = null;
+  let pendingParts: Part[] = [];
+
+  const flushPending = () => {
+    if (pendingRole && pendingParts.length > 0) {
+      result.push({ role: pendingRole, parts: pendingParts });
+    }
+    pendingRole = null;
+    pendingParts = [];
+  };
 
   for (const part of parts) {
     if (!part || typeof part !== 'object') {
-      // Skip invalid parts
       continue;
     }
 
     if ('functionCall' in part) {
-      // This is a tool call from the model
-      result.push({
-        role: 'model',
-        parts: [part],
-      });
-    } else if ('functionResponse' in part) {
-      // This is a tool response sent back to the model as user input
-      result.push({
-        role: 'user',
-        parts: [part],
-      });
-    } else {
-      // Other parts (text, inlineData, etc.)
-      // Add as user content if we don't already have a trailing user message
-      const lastContent = result[result.length - 1];
-      if (lastContent && lastContent.role === 'user' && lastContent.parts) {
-        lastContent.parts.push(part);
-      } else {
-        result.push({
-          role: 'user',
-          parts: [part],
-        });
-      }
+      // Finish any accumulated user content before the next call
+      flushPending();
+      result.push({ role: 'model', parts: [part] });
+      continue;
     }
+
+    if ('functionResponse' in part) {
+      if (pendingRole !== 'user') {
+        flushPending();
+        pendingRole = 'user';
+      }
+      pendingParts.push(part);
+      continue;
+    }
+
+    // Any other parts (text, inline data, etc.) belong with the most recent
+    // user-facing content.
+    if (pendingRole !== 'user') {
+      flushPending();
+      pendingRole = 'user';
+    }
+    pendingParts.push(part);
   }
 
-  // If we only created one Content, return it directly (not as array)
+  flushPending();
+
+  if (result.length === 0) {
+    return createUserContentWithFunctionResponseFix(message);
+  }
+
   if (result.length === 1) {
     return result[0];
   }

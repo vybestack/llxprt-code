@@ -1085,7 +1085,7 @@ describe('GeminiChat', () => {
       // Get the history
       const history = chat.getHistory();
 
-      // The history should contain:
+      // The history should contain alternating tool call / response pairs:
       // 1. model: functionCall1
       // 2. user: functionResponse1
       // 3. model: functionCall2
@@ -1093,11 +1093,9 @@ describe('GeminiChat', () => {
       // 5. model: "Tool results processed"
       expect(history.length).toBe(5);
 
-      // Check that functionCalls are recorded as 'model' role
       expect(history[0]?.role).toBe('model');
       expect(history[0]?.parts?.[0]).toHaveProperty('functionCall');
 
-      // Check that functionResponses are recorded as 'user' role
       expect(history[1]?.role).toBe('user');
       expect(history[1]?.parts?.[0]).toHaveProperty('functionResponse');
 

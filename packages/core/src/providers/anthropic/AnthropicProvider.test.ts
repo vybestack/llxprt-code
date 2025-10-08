@@ -304,7 +304,7 @@ describe('AnthropicProvider', () => {
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5-20250929',
           messages: [{ role: 'user', content: 'Say hello' }],
           max_tokens: 64000,
           stream: true,
@@ -386,7 +386,7 @@ describe('AnthropicProvider', () => {
 
       expect(mockAnthropicInstance.messages.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5-20250929',
           messages: [{ role: 'user', content: 'What is the weather?' }],
           max_tokens: 64000,
           stream: true,
