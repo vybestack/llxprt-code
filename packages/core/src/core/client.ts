@@ -1105,6 +1105,16 @@ export class GeminiClient {
     }
   }
 
+  private _getEffectiveModelForCurrentTurn(): string {
+    if (this.currentSequenceModel) {
+      return this.currentSequenceModel;
+    }
+
+    // In LLxprt, config.getModel() already handles provider-specific model resolution
+    // and fallback mode, so we just return it directly
+    return this.config.getModel();
+  }
+
   async *sendMessageStream(
     initialRequest: PartListUnion,
     signal: AbortSignal,
@@ -1178,6 +1188,34 @@ export class GeminiClient {
       const providerManager = contentGenConfig?.providerManager;
       const providerName =
         providerManager?.getActiveProviderName() || 'backend';
+      return new Turn(
+        this.getChat(),
+        prompt_id,
+        DEFAULT_AGENT_ID,
+        providerName,
+      );
+    }
+
+    // Check for context window overflow
+    const modelForLimitCheck = this._getEffectiveModelForCurrentTurn();
+
+    const estimatedRequestTokenCount = Math.floor(
+      JSON.stringify(initialRequest).length / 4,
+    );
+
+    const remainingTokenCount =
+      tokenLimit(modelForLimitCheck) -
+      uiTelemetryService.getLastPromptTokenCount();
+
+    if (estimatedRequestTokenCount > remainingTokenCount * 0.95) {
+      const contentGenConfig = this.config.getContentGeneratorConfig();
+      const providerManager = contentGenConfig?.providerManager;
+      const providerName =
+        providerManager?.getActiveProviderName() || 'backend';
+      yield {
+        type: GeminiEventType.ContextWindowWillOverflow,
+        value: { estimatedRequestTokenCount, remainingTokenCount },
+      };
       return new Turn(
         this.getChat(),
         prompt_id,
@@ -1651,6 +1689,13 @@ export class GeminiClient {
       };
     }
 
+    // If the model is 'auto', we will use a placeholder model to check.
+    // Compression occurs before we choose a model, so calling `count_tokens`
+    // before the model is chosen would result in an error.
+    // @plan PLAN-20251027-STATELESS5.P10
+    // @requirement REQ-STAT5-003.1
+    const model = this._getEffectiveModelForCurrentTurn();
+
     const curatedHistory = this.getChat().getHistory(true);
 
     // Regardless of `force`, don't do anything if the history is empty.
@@ -1668,10 +1713,6 @@ export class GeminiClient {
     // Use lastPromptTokenCount from telemetry service as the source of truth
     // This is more accurate than estimating from history
     const originalTokenCount = uiTelemetryService.getLastPromptTokenCount();
-
-    // @plan PLAN-20251027-STATELESS5.P10
-    // @requirement REQ-STAT5-003.1
-    const model = this.runtimeState.model;
 
     const contextPercentageThreshold =
       this.config.getChatCompression()?.contextPercentageThreshold;
