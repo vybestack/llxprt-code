@@ -125,6 +125,97 @@ function createUserContentWithFunctionResponseFix(
 }
 
 /**
+ * Normalizes tool interaction input to prevent tool call loops.
+ *
+ * When the UI flattens multiple tool call/response pairs into a single array
+ * [call1, response1, call2, response2, ...], we must split them back into
+ * proper Content objects with correct roles:
+ * - functionCall parts → { role: 'model', parts: [call] }
+ * - functionResponse parts → { role: 'user', parts: [response] }
+ *
+ * This ensures tool calls are recorded as AI messages, not user messages,
+ * preventing the model from repeating the same tool calls infinitely.
+ *
+ * @param message - Raw input from caller (string, Part, or Part[])
+ * @returns Single Content or array of Content objects with correct roles
+ */
+function normalizeToolInteractionInput(
+  message: PartListUnion,
+): Content | Content[] {
+  // Handle simple string input
+  if (typeof message === 'string') {
+    return createUserContent(message);
+  }
+
+  // Handle single Part (not an array)
+  if (!Array.isArray(message)) {
+    return createUserContentWithFunctionResponseFix(message);
+  }
+
+  // Now we have an array of parts - check if it contains tool interactions
+  const parts = message as Part[];
+
+  // Detect if this is a flattened tool interaction sequence
+  // Look for any functionCall or functionResponse parts
+  const hasFunctionCalls = parts.some(
+    (part) => part && typeof part === 'object' && 'functionCall' in part,
+  );
+  const hasFunctionResponses = parts.some(
+    (part) => part && typeof part === 'object' && 'functionResponse' in part,
+  );
+
+  // If no tool interactions, fall back to original behavior
+  if (!hasFunctionCalls && !hasFunctionResponses) {
+    return createUserContentWithFunctionResponseFix(message);
+  }
+
+  // Parse the flattened array into alternating model/user Content objects
+  // Assumption: tool calls come from model, responses go to model as user input
+  // Pattern: [call1, response1, call2, response2, ...]
+  const result: Content[] = [];
+
+  for (const part of parts) {
+    if (!part || typeof part !== 'object') {
+      // Skip invalid parts
+      continue;
+    }
+
+    if ('functionCall' in part) {
+      // This is a tool call from the model
+      result.push({
+        role: 'model',
+        parts: [part],
+      });
+    } else if ('functionResponse' in part) {
+      // This is a tool response sent back to the model as user input
+      result.push({
+        role: 'user',
+        parts: [part],
+      });
+    } else {
+      // Other parts (text, inlineData, etc.)
+      // Add as user content if we don't already have a trailing user message
+      const lastContent = result[result.length - 1];
+      if (lastContent && lastContent.role === 'user' && lastContent.parts) {
+        lastContent.parts.push(part);
+      } else {
+        result.push({
+          role: 'user',
+          parts: [part],
+        });
+      }
+    }
+  }
+
+  // If we only created one Content, return it directly (not as array)
+  if (result.length === 1) {
+    return result[0];
+  }
+
+  return result;
+}
+
+/**
  * Options for retrying due to invalid content from the model.
  */
 interface ContentRetryOptions {
@@ -460,9 +551,7 @@ export class GeminiChat {
       this.compressionPromise = null;
     }
 
-    const userContent = createUserContentWithFunctionResponseFix(
-      params.message,
-    );
+    const userContent = normalizeToolInteractionInput(params.message);
 
     // DO NOT add user content to history yet - use send-then-commit pattern
 
@@ -485,14 +574,14 @@ export class GeminiChat {
     // Convert user content to IContent
     const idGen = this.historyService.getIdGeneratorCallback();
     const matcher = this.makePositionMatcher();
-    const userIContent = ContentConverters.toIContent(
-      userContent,
-      idGen,
-      matcher,
-    );
 
-    // Build request with history + new message
-    const iContents = [...currentHistory, userIContent];
+    // Handle both single Content and Content[] from normalizeToolInteractionInput
+    const userIContents: IContent[] = Array.isArray(userContent)
+      ? userContent.map((c) => ContentConverters.toIContent(c, idGen, matcher))
+      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+
+    // Build request with history + new message(s)
+    const iContents = [...currentHistory, ...userIContents];
 
     this._logApiRequest(
       ContentConverters.toGeminiContents(iContents),
@@ -657,10 +746,21 @@ export class GeminiChat {
           // Regular case: Add user content first
           const idGen = this.historyService.getIdGeneratorCallback();
           const matcher = this.makePositionMatcher();
-          this.historyService.add(
-            ContentConverters.toIContent(userContent, idGen, matcher),
-            currentModel,
-          );
+
+          // Handle both single Content and Content[] from normalizeToolInteractionInput
+          if (Array.isArray(userContent)) {
+            for (const content of userContent) {
+              this.historyService.add(
+                ContentConverters.toIContent(content, idGen, matcher),
+                currentModel,
+              );
+            }
+          } else {
+            this.historyService.add(
+              ContentConverters.toIContent(userContent, idGen, matcher),
+              currentModel,
+            );
+          }
         }
 
         // Add model response if we have one (but filter out pure thinking responses)
@@ -775,37 +875,10 @@ export class GeminiChat {
       this.compressionPromise = null;
     }
 
-    // Check if this is a paired tool call/response array
-    let userContent: Content | Content[];
-
-    // Quick check for paired tool call/response
-    const messageArray = Array.isArray(params.message) ? params.message : null;
-    const isPairedToolResponse =
-      messageArray &&
-      messageArray.length === 2 &&
-      messageArray[0] &&
-      typeof messageArray[0] === 'object' &&
-      'functionCall' in messageArray[0] &&
-      messageArray[1] &&
-      typeof messageArray[1] === 'object' &&
-      'functionResponse' in messageArray[1];
-
-    if (isPairedToolResponse && messageArray) {
-      // This is a paired tool call/response from the executor
-      // Create separate Content objects with correct roles
-      userContent = [
-        {
-          role: 'model' as const,
-          parts: [messageArray[0] as Part],
-        },
-        {
-          role: 'user' as const,
-          parts: [messageArray[1] as Part],
-        },
-      ];
-    } else {
-      userContent = createUserContentWithFunctionResponseFix(params.message);
-    }
+    // Normalize tool interaction input - handles flattened arrays from UI
+    const userContent: Content | Content[] = normalizeToolInteractionInput(
+      params.message,
+    );
 
     // DO NOT add anything to history here - wait until after successful send!
     // Tool responses will be handled in recordHistory after the model responds

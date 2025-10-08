@@ -1021,4 +1021,160 @@ describe('GeminiChat', () => {
     // The model turn should only contain the text from the successful attempt
     expect(modelTurn!.parts![0]!.text).toBe('Successful final response');
   });
+
+  describe('normalizeToolInteractionInput', () => {
+    it('should handle flattened tool call/response arrays from UI', async () => {
+      // Setup: Mock a flattened array like the UI sends
+      // [functionCall1, functionResponse1, functionCall2, functionResponse2]
+      const flattenedToolArray: Part[] = [
+        {
+          functionCall: {
+            id: 'call1',
+            name: 'readFile',
+            args: { path: '/test/file1.ts' },
+          },
+        },
+        {
+          functionResponse: {
+            id: 'call1',
+            name: 'readFile',
+            response: { content: 'file1 content' },
+          },
+        },
+        {
+          functionCall: {
+            id: 'call2',
+            name: 'readFile',
+            args: { path: '/test/file2.ts' },
+          },
+        },
+        {
+          functionResponse: {
+            id: 'call2',
+            name: 'readFile',
+            response: { content: 'file2 content' },
+          },
+        },
+      ];
+
+      // Mock provider to return a simple response
+      vi.mocked(mockProvider.generateChatCompletion).mockImplementationOnce(
+        () =>
+          (async function* () {
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'Tool results processed' }],
+            };
+          })(),
+      );
+
+      // Send the flattened array
+      const stream = await chat.sendMessageStream(
+        { message: flattenedToolArray },
+        'prompt-id-flattened',
+      );
+
+      // Consume the stream
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      // Verify the provider was called
+      expect(mockProvider.generateChatCompletion).toHaveBeenCalledTimes(1);
+
+      // Get the history
+      const history = chat.getHistory();
+
+      // The history should contain:
+      // 1. model: functionCall1
+      // 2. user: functionResponse1
+      // 3. model: functionCall2
+      // 4. user: functionResponse2
+      // 5. model: "Tool results processed"
+      expect(history.length).toBe(5);
+
+      // Check that functionCalls are recorded as 'model' role
+      expect(history[0]?.role).toBe('model');
+      expect(history[0]?.parts?.[0]).toHaveProperty('functionCall');
+
+      // Check that functionResponses are recorded as 'user' role
+      expect(history[1]?.role).toBe('user');
+      expect(history[1]?.parts?.[0]).toHaveProperty('functionResponse');
+
+      expect(history[2]?.role).toBe('model');
+      expect(history[2]?.parts?.[0]).toHaveProperty('functionCall');
+
+      expect(history[3]?.role).toBe('user');
+      expect(history[3]?.parts?.[0]).toHaveProperty('functionResponse');
+
+      // Final model response
+      expect(history[4]?.role).toBe('model');
+      const modelPart = history[4]?.parts?.[0];
+      if (!modelPart || !('text' in modelPart)) {
+        throw new Error('Expected text part in final model response');
+      }
+      expect(modelPart.text).toBe('Tool results processed');
+    });
+
+    it('should handle single paired tool call/response (2 elements)', async () => {
+      // Setup: Mock a traditional paired array [functionCall, functionResponse]
+      const pairedToolArray: Part[] = [
+        {
+          functionCall: {
+            id: 'call1',
+            name: 'readFile',
+            args: { path: '/test/file.ts' },
+          },
+        },
+        {
+          functionResponse: {
+            id: 'call1',
+            name: 'readFile',
+            response: { content: 'file content' },
+          },
+        },
+      ];
+
+      // Mock provider
+      vi.mocked(mockProvider.generateChatCompletion).mockImplementationOnce(
+        () =>
+          (async function* () {
+            yield {
+              speaker: 'ai',
+              blocks: [{ type: 'text', text: 'Single tool processed' }],
+            };
+          })(),
+      );
+
+      // Send the paired array
+      const stream = await chat.sendMessageStream(
+        { message: pairedToolArray },
+        'prompt-id-paired',
+      );
+
+      // Consume the stream
+      for await (const _ of stream) {
+        // consume stream
+      }
+
+      // Get the history
+      const history = chat.getHistory();
+
+      // Should have: model (call), user (response), model (final response)
+      expect(history.length).toBe(3);
+
+      expect(history[0]?.role).toBe('model');
+      expect(history[0]?.parts?.[0]).toHaveProperty('functionCall');
+
+      expect(history[1]?.role).toBe('user');
+      expect(history[1]?.parts?.[0]).toHaveProperty('functionResponse');
+
+      expect(history[2]?.role).toBe('model');
+      const modelPart = history[2]?.parts?.[0];
+      if (!modelPart || !('text' in modelPart)) {
+        throw new Error('Expected text part in final model response');
+      }
+      expect(modelPart.text).toBe('Single tool processed');
+    });
+  });
 });
