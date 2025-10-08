@@ -19,29 +19,49 @@ if (profileName) {
   console.log(`Using profile: ${profileName}`);
 }
 
+const env = { ...process.env, DEBUG: 'llxprt:*' };
+console.log('Spawning with args:', llxprtArgs);
+console.log('DEBUG env set to:', env.DEBUG);
 const llxprt = spawn('node', llxprtArgs, {
   stdio: ['pipe', 'pipe', 'pipe'],
   cwd: process.cwd(),
+  env: env,
 });
 
-// Send initialize with CORRECT fs capabilities structure
-const initRequest = {
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'initialize',
-  params: {
-    protocolVersion: 1,
-    clientCapabilities: {
-      fs: {
-        readTextFile: true,
-        writeTextFile: true,
+llxprt.on('spawn', () => {
+  console.log('Process spawned successfully with PID:', llxprt.pid);
+});
+
+llxprt.on('error', (err) => {
+  console.error('Failed to spawn process:', err);
+});
+
+llxprt.on('exit', (code, signal) => {
+  console.log(`Process exited immediately with code ${code}, signal ${signal}`);
+});
+
+// Wait a bit for the process to be ready
+setTimeout(() => {
+  // Send initialize with CORRECT fs capabilities structure
+  const initRequest = {
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'initialize',
+    params: {
+      protocolVersion: 1,
+      clientCapabilities: {
+        fs: {
+          readTextFile: true,
+          writeTextFile: true,
+        },
       },
     },
-  },
-};
+  };
 
-console.log('Sending initialize request...');
-llxprt.stdin.write(JSON.stringify(initRequest) + '\n');
+  console.log('Sending initialize request...');
+  console.log('Request:', JSON.stringify(initRequest));
+  llxprt.stdin.write(JSON.stringify(initRequest) + '\n');
+}, 500);
 
 let testPassed = false;
 let buffer = '';
@@ -111,7 +131,14 @@ llxprt.stderr.on('data', (data) => {
 });
 
 setTimeout(() => {
-  llxprt.kill();
+  // Check if process is still alive
+  if (llxprt.killed) {
+    console.log('Process was already dead');
+  } else {
+    console.log('Process is still running, killing it');
+    llxprt.kill();
+  }
+
   if (testPassed) {
     console.log('\n✅ ACP integration test PASSED');
     process.exit(0);

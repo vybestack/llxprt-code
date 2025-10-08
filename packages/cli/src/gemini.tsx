@@ -267,7 +267,7 @@ export async function main() {
   const settings = loadSettings(workspaceRoot);
   const argv = await parseArguments(settings.merged);
 
-  const hasPipedInput = !process.stdin.isTTY;
+  const hasPipedInput = !process.stdin.isTTY && !argv.experimentalAcp;
   let cachedStdinData: string | null = null;
   let stdinWasRead = false;
 
@@ -768,14 +768,14 @@ export async function main() {
   if (config.getExperimentalZedIntegration()) {
     // In ACP mode, authentication happens through the protocol
     // Just ensure the provider manager is set up if configured
-    const providerManager = config.getProviderManager();
+    const providerManagerForAcp = config.getProviderManager();
     const configProvider = config.getProvider();
 
-    if (configProvider && providerManager) {
+    if (configProvider && providerManagerForAcp) {
       try {
         // Set the active provider if not already set
-        if (!providerManager.hasActiveProvider()) {
-          await providerManager.setActiveProvider(configProvider);
+        if (!providerManagerForAcp.hasActiveProvider()) {
+          await providerManagerForAcp.setActiveProvider(configProvider);
         }
       } catch (_e) {
         // Non-fatal - continue without provider
@@ -783,8 +783,7 @@ export async function main() {
       }
     }
 
-    await runZedIntegration(config, settings);
-    return;
+    return runZedIntegration(config, settings);
   }
 
   let input = config.getQuestion();

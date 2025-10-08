@@ -12,6 +12,9 @@ import * as schema from './schema.js';
 export * from './schema.js';
 
 import { WritableStream, ReadableStream } from 'node:stream/web';
+import { DebugLogger } from '@vybestack/llxprt-code-core';
+
+const acpLogger = new DebugLogger('llxprt:acp:connection');
 
 export class AgentSideConnection implements Client {
   #connection: Connection;
@@ -169,9 +172,11 @@ class Connection {
   }
 
   async #receive(output: ReadableStream<Uint8Array>) {
+    acpLogger.debug(() => 'Starting #receive loop');
     let content = '';
     const decoder = new TextDecoder();
     for await (const chunk of output) {
+      acpLogger.debug(() => `Received chunk of size: ${chunk.length}`);
       content += decoder.decode(chunk, { stream: true });
       const lines = content.split(EOL);
       content = lines.pop() || '';

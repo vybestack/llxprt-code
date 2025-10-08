@@ -43,11 +43,15 @@ import { randomUUID } from 'crypto';
 export async function runZedIntegration(
   config: Config,
   settings: LoadedSettings,
-) {
+): Promise<never> {
   const logger = new DebugLogger('llxprt:zed-integration');
   logger.debug(() => 'Starting Zed integration');
 
   const stdout = Writable.toWeb(process.stdout) as WritableStream;
+
+  // Ensure stdin is in flowing mode
+  process.stdin.resume();
+
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
   logger.debug(() => 'Streams created');
@@ -70,7 +74,7 @@ export async function runZedIntegration(
   logger.debug(() => 'Zed integration ready, waiting for messages');
 
   // Keep the process alive - the Connection's #receive method will handle messages
-  await new Promise(() => {
+  return await new Promise<never>(() => {
     // This promise never resolves, keeping the process alive
   });
 }
