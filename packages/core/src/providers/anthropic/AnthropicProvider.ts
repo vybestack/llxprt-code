@@ -142,7 +142,7 @@ export class AnthropicProvider extends BaseProvider {
     const isOAuthToken = authToken.startsWith('sk-ant-oat');
 
     if (isOAuthToken) {
-      // For OAuth, return only the two working models
+      // For OAuth, return only the working models
       this.logger.debug(
         () => 'Using hardcoded model list for OAuth authentication',
       );
@@ -154,6 +154,14 @@ export class AnthropicProvider extends BaseProvider {
           supportedToolFormats: ['anthropic'],
           contextWindow: 500000,
           maxOutputTokens: 32000,
+        },
+        {
+          id: 'claude-sonnet-4-5-20250929',
+          name: 'Claude Sonnet 4.5',
+          provider: 'anthropic',
+          supportedToolFormats: ['anthropic'],
+          contextWindow: 400000,
+          maxOutputTokens: 64000,
         },
         {
           id: 'claude-sonnet-4-20250514',
@@ -266,7 +274,7 @@ export class AnthropicProvider extends BaseProvider {
 
   override getDefaultModel(): string {
     // Return hardcoded default - do NOT call getModel() to avoid circular dependency
-    return 'claude-sonnet-4-20250514';
+    return 'claude-sonnet-4-5-20250929';
   }
 
   /**
