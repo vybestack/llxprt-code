@@ -185,10 +185,11 @@ export async function openDiff(
       case 'cursor':
       case 'zed':
         // Use spawn for GUI-based editors to avoid blocking the entire process
-        // Security: Remove shell: true - spawn() with args array is safe without shell
+        // Use shell: true on Windows to handle paths with spaces correctly
         return new Promise((resolve, reject) => {
           const childProcess = spawn(diffCommand.command, diffCommand.args, {
             stdio: 'inherit',
+            shell: process.platform === 'win32',
           });
 
           childProcess.on('close', (code) => {

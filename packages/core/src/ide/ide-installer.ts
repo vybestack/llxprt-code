@@ -117,9 +117,23 @@ class VsCodeInstaller implements IdeInstaller {
       };
     }
 
-    const command = `"${commandPath}" --install-extension vybestack.llxprt-code-vscode-ide-companion --force`;
     try {
-      child_process.execSync(command, { stdio: 'pipe' });
+      const result = child_process.spawnSync(
+        commandPath,
+        [
+          '--install-extension',
+          'vybestack.llxprt-code-vscode-ide-companion',
+          '--force',
+        ],
+        { stdio: 'pipe', shell: this.platform === 'win32' },
+      );
+
+      if (result.status !== 0) {
+        throw new Error(
+          `Failed to install extension: ${result.stderr?.toString()}`,
+        );
+      }
+
       return {
         success: true,
         message: `${this.ideInfo.displayName} companion extension was installed successfully.`,
