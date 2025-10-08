@@ -49,9 +49,6 @@ export async function runZedIntegration(
 
   const stdout = Writable.toWeb(process.stdout) as WritableStream;
 
-  // Ensure stdin is in flowing mode
-  process.stdin.resume();
-
   const stdin = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
 
   logger.debug(() => 'Streams created');
