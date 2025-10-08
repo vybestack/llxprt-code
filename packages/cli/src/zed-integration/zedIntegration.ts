@@ -16,6 +16,7 @@ import {
   convertToFunctionResponse,
   ToolCallConfirmationDetails,
   ToolConfirmationOutcome,
+  ContextAwareTool,
   clearCachedCredentialFile,
   isNodeError,
   getErrorMessage,
@@ -24,14 +25,18 @@ import {
   DiscoveredMCPTool,
   DebugLogger,
   getFunctionCalls,
+  getResponseTextFromParts,
   EmojiFilter,
   FilterConfiguration,
   StreamEventType,
+  todoEvents,
+  type TodoUpdateEvent,
+  type Todo,
 } from '@vybestack/llxprt-code-core';
 import * as acp from './acp.js';
 import { AcpFileSystemService } from './fileSystemService.js';
 import { Readable, Writable } from 'node:stream';
-import { Content, Part, FunctionCall } from '@google/genai';
+import { Content, Part, FunctionCall, PartListUnion } from '@google/genai';
 import { LoadedSettings, SettingScope } from '../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -39,6 +44,11 @@ import { z } from 'zod';
 import os from 'os';
 
 import { randomUUID } from 'crypto';
+
+type ToolRunResult = {
+  parts: Part[];
+  message?: string | null;
+};
 
 export async function runZedIntegration(
   config: Config,
@@ -431,6 +441,16 @@ class Session {
         | 'error') || 'auto';
     const filterConfig: FilterConfiguration = { mode: emojiFilterMode };
     this.emojiFilter = new EmojiFilter(filterConfig);
+
+    // Subscribe to todo events for this session
+    todoEvents.onTodoUpdated((event: TodoUpdateEvent) => {
+      // Only handle events for this session
+      if (event.sessionId === this.id) {
+        this.sendPlanUpdate(event.todos).catch((error) => {
+          console.error('Failed to send plan update to Zed:', error);
+        });
+      }
+    });
   }
 
   async cancelPendingPrompt(): Promise<void> {
@@ -453,6 +473,8 @@ class Session {
     const parts = await this.#resolvePrompt(params.prompt, pendingSend.signal);
 
     let nextMessage: Content | null = { role: 'user', parts };
+    let hasStreamedAgentContent = false;
+    const fallbackMessages: string[] = [];
 
     while (nextMessage !== null) {
       const functionCalls: FunctionCall[] = [];
@@ -494,6 +516,7 @@ class Session {
 
               if (filterResult.blocked) {
                 // In error mode: inject error feedback to model for retry
+                hasStreamedAgentContent = true;
                 this.sendUpdate({
                   sessionUpdate: 'agent_message_chunk',
                   content: {
@@ -511,6 +534,11 @@ class Session {
                 typeof filterResult.filtered === 'string'
                   ? filterResult.filtered
                   : '';
+
+              const trimmedText = filteredText.trim();
+              if (trimmedText.length > 0) {
+                hasStreamedAgentContent = true;
+              }
 
               const content: acp.ContentBlock = {
                 type: 'text',
@@ -573,7 +601,10 @@ class Session {
           }
 
           const response = await this.runTool(pendingSend.signal, promptId, fc);
-          toolResponseParts.push(...response);
+          toolResponseParts.push(...response.parts);
+          if (response.message) {
+            fallbackMessages.push(response.message);
+          }
         }
 
         // For multiple tool responses, send them all together as the TUI does
@@ -583,6 +614,24 @@ class Session {
         } else {
           nextMessage = null;
         }
+      }
+    }
+
+    if (!hasStreamedAgentContent && fallbackMessages.length > 0) {
+      const combinedMessage = fallbackMessages
+        .map((message) => message.trim())
+        .filter((message) => message.length > 0)
+        .join('\n\n');
+
+      if (combinedMessage.length > 0) {
+        await this.sendUpdate({
+          sessionUpdate: 'agent_message_chunk',
+          content: {
+            type: 'text',
+            text: combinedMessage,
+          },
+        });
+        hasStreamedAgentContent = true;
       }
     }
 
@@ -602,13 +651,13 @@ class Session {
     abortSignal: AbortSignal,
     promptId: string,
     fc: FunctionCall,
-  ): Promise<Part[]> {
+  ): Promise<ToolRunResult> {
     const callId = fc.id ?? `${fc.name}-${Date.now()}`;
     const args = (fc.args ?? {}) as Record<string, unknown>;
 
     const startTime = Date.now();
 
-    const errorResponse = (error: Error) => {
+    const errorResponse = (error: Error): ToolRunResult => {
       const durationMs = Date.now() - startTime;
       logToolCall(this.config, {
         'event.name': 'tool_call',
@@ -625,23 +674,25 @@ class Session {
             : 'native',
       });
 
-      // Return paired function call and function response for proper conversation history
-      return [
-        {
-          functionCall: {
-            id: callId,
-            name: fc.name ?? '',
-            args,
+      return {
+        parts: [
+          {
+            functionCall: {
+              id: callId,
+              name: fc.name ?? '',
+              args,
+            },
           },
-        },
-        {
-          functionResponse: {
-            id: callId,
-            name: fc.name ?? '',
-            response: { error: error.message },
+          {
+            functionResponse: {
+              id: callId,
+              name: fc.name ?? '',
+              response: { error: error.message },
+            },
           },
-        },
-      ];
+        ],
+        message: error.message,
+      };
     };
 
     if (!fc.name) {
@@ -658,6 +709,13 @@ class Session {
     }
 
     try {
+      if ('context' in tool) {
+        (tool as ContextAwareTool).context = {
+          sessionId: this.id,
+          interactiveMode: true,
+        };
+      }
+
       const invocation = tool.build(args);
 
       const confirmationDetails =
@@ -751,26 +809,26 @@ class Session {
             : 'native',
       });
 
-      // Return paired function call and function response like the TUI does
-      // This ensures proper conversation history for providers that need it (like Anthropic)
       const functionResponseParts = convertToFunctionResponse(
         fc.name,
         callId,
         toolResult.llmContent,
       );
+      const message = this.extractToolResultText(toolResult);
 
-      // Return atomic pairing of function call and response
-      return [
-        {
-          functionCall: {
-            id: callId,
-            name: fc.name,
-            args,
+      return {
+        parts: [
+          {
+            functionCall: {
+              id: callId,
+              name: fc.name,
+              args,
+            },
           },
-        },
-        // Spread the response parts since convertToFunctionResponse returns Part[]
-        ...functionResponseParts,
-      ];
+          ...functionResponseParts,
+        ],
+        message,
+      };
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
 
@@ -785,6 +843,123 @@ class Session {
 
       return errorResponse(error);
     }
+  }
+
+  private extractToolResultText(toolResult: ToolResult): string | null {
+    const textFromLlmContent = this.extractTextFromPartList(
+      toolResult.llmContent,
+    );
+    if (textFromLlmContent) {
+      return textFromLlmContent;
+    }
+
+    if (typeof toolResult.returnDisplay === 'string') {
+      const trimmed = toolResult.returnDisplay.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    return null;
+  }
+
+  private extractTextFromPartList(
+    llmContent: PartListUnion | undefined,
+  ): string | null {
+    if (!llmContent) {
+      return null;
+    }
+
+    if (typeof llmContent === 'string') {
+      const trimmed = llmContent.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    const parts = this.normalizeToParts(llmContent);
+    const text = getResponseTextFromParts(parts);
+    if (text) {
+      const trimmed = text.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    for (const part of parts) {
+      const response = part.functionResponse?.response;
+      const extracted = this.extractOutputString(response);
+      if (extracted) {
+        return extracted;
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeToParts(input: PartListUnion): Part[] {
+    if (typeof input === 'string') {
+      return [{ text: input }];
+    }
+
+    if (Array.isArray(input)) {
+      return input.flatMap((item) =>
+        this.normalizeToParts(item as PartListUnion),
+      );
+    }
+
+    if (this.isContent(input)) {
+      return input.parts ?? [];
+    }
+
+    return [input as Part];
+  }
+
+  private extractOutputString(response: unknown): string | null {
+    if (!response) {
+      return null;
+    }
+
+    if (typeof response === 'string') {
+      const trimmed = response.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (typeof response !== 'object') {
+      return null;
+    }
+
+    const responseRecord = response as Record<string, unknown>;
+
+    const output = responseRecord.output;
+    if (typeof output === 'string') {
+      const trimmed = output.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    if (responseRecord.content) {
+      const contentParts = this.normalizeToParts(
+        responseRecord.content as PartListUnion,
+      );
+      const text = getResponseTextFromParts(contentParts);
+      if (text) {
+        const trimmed = text.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private isContent(value: unknown): value is Content {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const candidate = value as Partial<Content>;
+    return Array.isArray(candidate.parts);
   }
 
   async #resolvePrompt(
@@ -1128,6 +1303,21 @@ class Session {
     if (this.config.getDebugMode()) {
       console.warn(msg);
     }
+  }
+
+  private async sendPlanUpdate(todos: Todo[]): Promise<void> {
+    // Convert llxprt-code Todo format to ACP PlanEntry format
+    const entries: acp.PlanEntry[] = todos.map((todo) => ({
+      content: todo.content,
+      status: todo.status,
+      priority: todo.priority,
+    }));
+
+    // Send plan update to Zed via ACP protocol
+    await this.sendUpdate({
+      sessionUpdate: 'plan',
+      entries,
+    });
   }
 }
 
