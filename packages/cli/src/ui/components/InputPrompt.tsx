@@ -494,6 +494,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
+      // Ctrl+R to refresh keypress handling (for tmux reattach issues)
+      if (keyMatchers[Command.REFRESH_KEYPRESS](key)) {
+        refresh();
+        return;
+      }
+
       // Kill line commands
       if (keyMatchers[Command.KILL_LINE_RIGHT](key)) {
         buffer.killLineRight();
@@ -555,10 +561,11 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       reverseSearchActive,
       textBeforeReverseSearch,
       cursorPosition,
+      refresh,
     ],
   );
 
-  useKeypress(handleInput, {
+  const { refresh } = useKeypress(handleInput, {
     isActive: true,
   });
 

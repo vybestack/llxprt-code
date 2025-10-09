@@ -37,6 +37,7 @@ import {
 } from '../utils/platformConstants.js';
 
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
+import { useRef } from 'react';
 
 const ESC = '\u001B';
 export const PASTE_MODE_PREFIX = `${ESC}[200~`;
@@ -57,6 +58,7 @@ export type KeypressHandler = (key: Key) => void;
 interface KeypressContextValue {
   subscribe: (handler: KeypressHandler) => void;
   unsubscribe: (handler: KeypressHandler) => void;
+  refresh: () => void;
 }
 
 const KeypressContext = createContext<KeypressContextValue | undefined>(
@@ -86,6 +88,8 @@ export function KeypressProvider({
 }) {
   const { stdin, setRawMode } = useStdin();
   const subscribers = useRef<Set<KeypressHandler>>(new Set()).current;
+  const cleanupRef = useRef<(() => void) | null>(null);
+  const isInitializedRef = useRef(false);
 
   const subscribe = useCallback(
     (handler: KeypressHandler) => {
@@ -101,7 +105,13 @@ export function KeypressProvider({
     [subscribers],
   );
 
-  useEffect(() => {
+  const initializeKeypressHandling = useCallback(() => {
+    // Clean up any existing handlers
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
     setRawMode(true);
 
     const keypressStream = new PassThrough();
@@ -632,7 +642,7 @@ export function KeypressProvider({
       stdin.on('keypress', handleKeypress);
     }
 
-    return () => {
+    const cleanup = () => {
       if (usePassthrough) {
         keypressStream.removeListener('keypress', handleKeypress);
         stdin.removeListener('data', handleRawKeypress);
@@ -663,6 +673,11 @@ export function KeypressProvider({
         pasteBuffer = Buffer.alloc(0);
       }
     };
+
+    cleanupRef.current = cleanup;
+    isInitializedRef.current = true;
+
+    return cleanup;
   }, [
     stdin,
     setRawMode,
@@ -672,12 +687,50 @@ export function KeypressProvider({
     debugKeystrokeLogging,
   ]);
 
+  // Initialize keypress handling on mount
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      initializeKeypressHandling();
+    }
+  }, [initializeKeypressHandling]);
+
+  // Handle terminal resize events (which occur when reattaching to tmux)
+  useEffect(() => {
+    const handleResize = () => {
+      // Reinitialize keypress handling when terminal is resized
+      // This happens when reattaching to tmux sessions
+      if (isInitializedRef.current) {
+        if (debugKeystrokeLogging) {
+          console.log('[DEBUG] Terminal resized - reinitializing keypress handling');
+        }
+        initializeKeypressHandling();
+      }
+    };
+    
+    process.stdout.on('resize', handleResize);
+    
+    return () => {
+      process.stdout.off('resize', handleResize);
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
+    };
+  }, [initializeKeypressHandling, debugKeystrokeLogging]);
+
+  const refresh = useCallback(() => {
+    if (debugKeystrokeLogging) {
+      console.log('[DEBUG] Manual refresh of keypress handling requested');
+    }
+    initializeKeypressHandling();
+  }, [initializeKeypressHandling, debugKeystrokeLogging]);
+
   const contextValue = useMemo(
     () => ({
       subscribe,
       unsubscribe,
+      refresh,
     }),
-    [subscribe, unsubscribe],
+    [subscribe, unsubscribe, refresh],
   );
 
   return (
