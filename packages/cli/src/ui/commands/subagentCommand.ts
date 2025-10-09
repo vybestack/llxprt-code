@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/* @jsxImportSource react */
+
 import {
   SlashCommand,
   CommandContext,
@@ -18,7 +20,7 @@ import * as path from 'path';
 
 /**
  * Parse save command arguments
- * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P12
  * @requirement:REQ-004
  * @requirement:REQ-011
  * @pseudocode SubagentCommand.md lines 1-17
@@ -43,20 +45,20 @@ function parseSaveArgs(args: string): {
 
 /**
  * Handle manual mode subagent save
- * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P12
  * @requirement:REQ-004
  * @pseudocode SubagentCommand.md lines 61-66
  */
-async function handleManualMode(
+const handleManualMode = async (
   context: CommandContext,
   name: string,
   profile: string,
   systemPrompt: string,
   options?: { existed: boolean },
-): Promise<SlashCommandActionReturn> {
+): Promise<SlashCommandActionReturn> => {
   const existed = options?.existed ?? false;
   return saveSubagent(context, name, profile, systemPrompt, existed);
-}
+};
 
 /**
  * Shared save subagent logic
@@ -104,23 +106,34 @@ async function saveSubagent(
 }
 
 /**
- * /subagent save command - Manual mode only (auto mode in Phase 12)
+ * /subagent save command - Auto and Manual modes
  *
- * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
- * @requirement:REQ-004
- * @requirement:REQ-014
- * @pseudocode SubagentCommand.md lines 1-134
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P14
+ * @requirement:REQ-003, REQ-004, REQ-014
+ * @pseudocode SubagentCommand.md lines 1-90
  */
 const saveCommand: SlashCommand = {
   name: 'save',
-  description: 'Save a subagent configuration',
+  description: 'Save a subagent configuration (auto or manual mode)',
   kind: CommandKind.BUILT_IN,
   action: async (
     context: CommandContext,
     args: string,
   ): Promise<SlashCommandActionReturn> => {
+    // Parse arguments: <name> <profile> <mode> "<input>"
+    const parsedArgs = parseSaveArgs(args);
+
+    if (!parsedArgs) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Usage: /subagent save <name> <profile> auto|manual "<text>"',
+      };
+    }
+
+    const { name, profile, mode, input } = parsedArgs;
     const { services, overwriteConfirmed, invocation } = context;
-    const subagentManager = services.subagentManager;
+    const subagentManager = services.subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
     if (!subagentManager) {
       return {
         type: 'message',
@@ -130,25 +143,6 @@ const saveCommand: SlashCommand = {
       };
     }
 
-    // 1. Parse arguments using helper function (Pseudocode lines 1-17)
-    const parsedArgs = parseSaveArgs(args);
-
-    if (!parsedArgs) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Usage: /subagent save <name> <profile> auto|manual "<system_prompt>"',
-      };
-    }
-
-    const { name, profile, mode, input: systemPrompt } = parsedArgs;
-
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-004
-     * @pseudocode SubagentCommand.md lines 74-78
-     */
     // Validate profile exists (pseudocode lines 263-281 cover this)
     const profileExists =
       await subagentManager.validateProfileReference(profile);
@@ -160,49 +154,82 @@ const saveCommand: SlashCommand = {
       };
     }
 
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-004
-     * @requirement:REQ-014
-     * @pseudocode SubagentCommand.md lines 110-127
-     */
     // Check if exists for overwrite confirmation
     const exists = await subagentManager.subagentExists(name);
 
     if (exists && !overwriteConfirmed) {
       return {
         type: 'confirm_action',
-        prompt: `A subagent named '${name}' already exists. Do you want to overwrite it?`,
+        prompt: `A subagent with the name '${name}' already exists. Do you want to overwrite it?`,
         originalInvocation: {
           raw: invocation?.raw || '',
         },
       };
     }
 
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-004
-     * @pseudocode SubagentCommand.md lines 128-134
-     */
-    // Dispatch to correct mode handler (auto mode will be implemented in Phase 12)
-    if (mode === 'auto') {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Auto mode will be implemented in Phase 12. Please use manual mode for now.',
-      };
-    }
+    let finalSystemPrompt: string;
 
-    /**
-     * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
-     * @requirement:REQ-004
-     * @requirement:REQ-014
-     * @pseudocode SubagentCommand.md lines 61-66
-     */
-    return handleManualMode(context, name, profile, systemPrompt, {
-      existed: exists,
-    });
+    if (mode === 'manual') {
+      // Manual mode: use input directly
+      finalSystemPrompt = input;
+      return handleManualMode(context, name, profile, finalSystemPrompt, {
+        existed: exists,
+      });
+    } else {
+      // Auto mode: generate using LLM
+      const configService = services.config; // @plan:PLAN-20250117-SUBAGENTCONFIG.P14 @requirement:REQ-003
+      if (!configService) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Configuration service unavailable. Set up the CLI before using auto mode.',
+        };
+      }
+
+      try {
+        const client = configService.getGeminiClient();
+
+        if (!client || !client.hasChatInitialized()) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content:
+              'Error: Chat not initialized. Try manual mode or check your connection.',
+          };
+        }
+
+        const chat = client.getChat();
+
+        // Construct prompt
+        const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
+
+        // Call LLM
+        const response = await chat.sendMessage(
+          { message: autoModePrompt },
+          'subagent-auto-prompt',
+        );
+        finalSystemPrompt = response.text || '';
+
+        if (finalSystemPrompt.trim() === '') {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content:
+              'Error: Model returned empty response. Try manual mode or rephrase your description.',
+          };
+        }
+      } catch (_error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Error: Failed to generate system prompt. Try manual mode or check your connection.',
+        };
+      }
+      // Dispatch to shared save logic for auto mode
+      return saveSubagent(context, name, profile, finalSystemPrompt, exists);
+    }
   },
 };
 
@@ -254,6 +281,7 @@ const listCommand: SlashCommand = {
       /**
        * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
        * @requirement:REQ-005
+       * @requirement:REQ-009
        * @pseudocode SubagentCommand.md lines 159-166
        */
       // Sort by creation date (oldest first as per pseudocode)

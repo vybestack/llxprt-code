@@ -755,3 +755,169 @@ describe('completion @requirement:REQ-009', () => {
     expect(results).toEqual([]);
   });
 });
+
+/**
+ * Auto mode tests
+ *
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P13
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P14
+ * @requirement:REQ-003
+ */
+describe('saveCommand - auto mode @requirement:REQ-003', () => {
+  let context: CommandContext;
+  let subagentManager: SubagentManager;
+  let profileManager: ProfileManager;
+  let tempDir: string;
+  let mockGeminiClient: {
+    getChat: ReturnType<typeof vi.fn>;
+    hasChatInitialized: ReturnType<typeof vi.fn>;
+  };
+  let mockChat: {
+    sendMessage: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(async () => {
+    // Create temp directories for a realistic test environment
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'subagent-auto-test-'));
+    const subagentsDir = path.join(tempDir, 'subagents');
+    const profilesDir = path.join(tempDir, 'profiles');
+
+    // Initialize real managers
+    profileManager = new ProfileManager(profilesDir);
+    subagentManager = new SubagentManager(subagentsDir, profileManager);
+
+    // Create test profile
+    await fs.mkdir(profilesDir, { recursive: true });
+    await profileManager.saveProfile('testprofile', {
+      version: 1,
+      provider: 'openai',
+      model: 'gpt-4',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+
+    context = createTestContext({
+      profileManager,
+      subagentManager,
+    });
+
+    // Mock GeminiClient and chat
+    mockChat = {
+      sendMessage: vi.fn(),
+    };
+
+    mockGeminiClient = {
+      getChat: vi.fn(() => mockChat),
+      hasChatInitialized: vi.fn(() => true),
+    };
+
+    // Add to context in a way that avoids TypeScript errors
+    (context as unknown as { services: { config: unknown } }).services.config =
+      {
+        getGeminiClient: vi.fn(() => mockGeminiClient),
+      };
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('should generate system prompt using LLM', async () => {
+    // Mock LLM response
+    mockChat.sendMessage.mockResolvedValue({
+      text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
+    });
+
+    const args = 'testagent testprofile auto "expert Python debugger"';
+    // Access the save subcommand directly from the imported module
+    const result = await subagentCommand.subCommands![0].action!(context, args);
+
+    // Verify LLM was called
+    expect(mockChat.sendMessage).toHaveBeenCalledTimes(1);
+    const callArgs = mockChat.sendMessage.mock.calls[0][0];
+    expect(callArgs.message).toMatch(/expert Python debugger/);
+    expect(callArgs.message).toMatch(/system prompt/i);
+
+    // Verify success message type and content
+    expect(result).toBeDefined();
+    expect(result?.type).toBe('message');
+    if (result && result.type === 'message') {
+      expect(result.messageType).toBe('info');
+      expect(result.content).toMatch(/created successfully/i);
+    }
+
+    // Verify the subagent was saved with the generated prompt
+    const loaded = await subagentManager.loadSubagent('testagent');
+    expect(loaded.systemPrompt).toBe(
+      'You are an expert Python debugger specializing in finding and fixing bugs.',
+    );
+  });
+
+  it('should handle LLM generation failure', async () => {
+    // Mock LLM error
+    mockChat.sendMessage.mockRejectedValue(new Error('Network error'));
+
+    const args = 'testagent testprofile auto "expert debugger"';
+    const result = await subagentCommand.subCommands![0].action!(context, args);
+
+    expect(result).toBeDefined();
+    expect(result?.type).toBe('message');
+    if (result && result.type === 'message') {
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(
+        /failed to generate|connection|manual mode/i,
+      );
+    }
+  });
+
+  it('should handle empty LLM response', async () => {
+    // Mock empty response
+    mockChat.sendMessage.mockResolvedValue({
+      text: '',
+    });
+
+    const args = 'testagent testprofile auto "expert debugger"';
+    const result = await subagentCommand.subCommands![0].action!(context, args);
+
+    expect(result).toBeDefined();
+    expect(result?.type).toBe('message');
+    if (result && result.type === 'message') {
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(/empty.*response|manual mode/i);
+    }
+  });
+
+  it('should handle chat not initialized', async () => {
+    mockGeminiClient.hasChatInitialized.mockReturnValue(false);
+
+    const args = 'testagent testprofile auto "expert debugger"';
+    const result = await subagentCommand.subCommands![0].action!(context, args);
+
+    expect(result).toBeDefined();
+    expect(result?.type).toBe('message');
+    if (result && result.type === 'message') {
+      expect(result.messageType).toBe('error');
+      expect(result.content).toMatch(/chat not.*initialized|connection/i);
+    }
+  });
+
+  it('should use correct prompt template for LLM', async () => {
+    mockChat.sendMessage.mockResolvedValue({
+      text: 'Generated prompt',
+    });
+
+    const description = 'expert code reviewer';
+    const args = `testagent testprofile auto "${description}"`;
+    await subagentCommand.subCommands![0].action!(context, args);
+
+    const callArgs = mockChat.sendMessage.mock.calls[0][0];
+
+    // Verify prompt includes description
+    expect(callArgs.message).toContain(description);
+
+    // Verify prompt includes instructions
+    expect(callArgs.message).toMatch(/comprehensive/i);
+    expect(callArgs.message).toMatch(/role.*capabilities.*behavior/i);
+    expect(callArgs.message).toMatch(/output.*only/i);
+  });
+});
