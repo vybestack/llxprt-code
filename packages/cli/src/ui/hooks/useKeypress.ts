@@ -23,7 +23,7 @@ export { Key };
 export function useKeypress(
   onKeypress: KeypressHandler,
   { isActive }: { isActive: boolean },
-) {
+): { refresh: () => void } {
   const { subscribe, unsubscribe, refresh } = useKeypressContext();
 
   useEffect(() => {

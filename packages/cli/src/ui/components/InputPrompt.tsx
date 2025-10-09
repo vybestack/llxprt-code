@@ -561,7 +561,6 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
       reverseSearchActive,
       textBeforeReverseSearch,
       cursorPosition,
-      refresh,
     ],
   );
 

@@ -37,7 +37,6 @@ import {
 } from '../utils/platformConstants.js';
 
 import { FOCUS_IN, FOCUS_OUT } from '../hooks/useFocus.js';
-import { useRef } from 'react';
 
 const ESC = '\u001B';
 export const PASTE_MODE_PREFIX = `${ESC}[200~`;
