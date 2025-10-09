@@ -997,6 +997,7 @@ export const useGeminiStream = (
             );
             break;
           case ServerGeminiEventType.Retry:
+          case ServerGeminiEventType.InvalidStream:
             // Will add the missing logic later
             break;
           default:

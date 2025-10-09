@@ -358,6 +358,7 @@ export interface ConfigParameters {
   truncateToolOutputThreshold?: number;
   truncateToolOutputLines?: number;
   enableToolOutputTruncation?: boolean;
+  continueOnFailedApiCall?: boolean;
 }
 
 export class Config {
@@ -517,6 +518,7 @@ export class Config {
   truncateToolOutputThreshold: number;
   truncateToolOutputLines: number;
   enableToolOutputTruncation: boolean;
+  private readonly continueOnFailedApiCall: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -648,6 +650,7 @@ export class Config {
       params.truncateToolOutputLines ?? DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES;
     this.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
     this.useSmartEdit = params.useSmartEdit ?? false;
+    this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
@@ -1558,6 +1561,10 @@ export class Config {
 
   getSkipNextSpeakerCheck(): boolean {
     return this.skipNextSpeakerCheck;
+  }
+
+  getContinueOnFailedApiCall(): boolean {
+    return this.continueOnFailedApiCall;
   }
 
   getScreenReader(): boolean {

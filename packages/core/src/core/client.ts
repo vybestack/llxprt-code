@@ -1120,6 +1120,7 @@ export class GeminiClient {
     signal: AbortSignal,
     prompt_id: string,
     turns: number = this.MAX_TURNS,
+    isInvalidStreamRetry: boolean = false,
   ): AsyncGenerator<ServerGeminiStreamEvent, Turn> {
     const logger = new DebugLogger('llxprt:client:stream');
     logger.debug(() => 'DEBUG: GeminiClient.sendMessageStream called');
@@ -1392,6 +1393,25 @@ export class GeminiClient {
             yield deferred;
           }
           return turn;
+        }
+
+        // Handle InvalidStream with retry via "Please continue" prompt
+        if (event.type === GeminiEventType.InvalidStream) {
+          if (this.config.getContinueOnFailedApiCall()) {
+            if (isInvalidStreamRetry) {
+              // We already retried once, so stop here.
+              return turn;
+            }
+            const nextRequest = [{ text: 'System: Please continue.' }];
+            yield* this.sendMessageStream(
+              nextRequest,
+              signal,
+              prompt_id,
+              boundedTurns - 1,
+              true, // Set isInvalidStreamRetry to true
+            );
+            return turn;
+          }
         }
       }
 
