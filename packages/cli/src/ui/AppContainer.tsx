@@ -601,7 +601,7 @@ export const AppContainer = (props: AppContainerProps) => {
     useSettingsCommand();
 
   const { isFolderTrustDialogOpen, handleFolderTrustSelect, isRestarting } =
-    useFolderTrust(settings, config);
+    useFolderTrust(settings, config, addItem);
 
   const { needsRestart: ideNeedsRestart } = useIdeTrustListener(config);
   useEffect(() => {
