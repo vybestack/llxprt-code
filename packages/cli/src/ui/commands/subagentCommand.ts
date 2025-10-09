@@ -204,7 +204,7 @@ const saveCommand: SlashCommand = {
         // Construct prompt
         const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
-        // Call LLM
+        // Call LLM with correct signature: sendMessage(params, prompt_id)
         const response = await chat.sendMessage(
           { message: autoModePrompt },
           'subagent-auto-prompt',

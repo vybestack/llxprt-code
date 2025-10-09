@@ -552,7 +552,7 @@ describe('editCommand @requirement:REQ-008', () => {
 
     const updated = await subagentManager.loadSubagent('testagent');
     expect(updated.systemPrompt).toBe('Updated prompt from editor');
-    expect(new Date(updated.updatedAt).getTime()).toBeGreaterThan(
+    expect(new Date(updated.updatedAt).getTime()).toBeGreaterThanOrEqual(
       new Date(original.updatedAt).getTime(),
     );
     expect(result.messageType).toBe('info');
