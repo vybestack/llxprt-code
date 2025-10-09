@@ -212,9 +212,11 @@ export interface SlashCommand {
     | Promise<void | SlashCommandActionReturn>;
 
   // Provides argument completion (e.g., completing a tag for `/chat resume <tag>`).
+  // @plan:PLAN-20250117-SUBAGENTCONFIG.P10
   completion?: (
     context: CommandContext,
     partialArg: string,
+    fullLine?: string, // @plan:PLAN-20250117-SUBAGENTCONFIG.P10
   ) => Promise<string[]>;
 
   subCommands?: SlashCommand[];

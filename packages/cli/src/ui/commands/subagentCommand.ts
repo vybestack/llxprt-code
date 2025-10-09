@@ -11,6 +11,10 @@ import {
   CommandKind,
 } from './types.js';
 import { SubagentConfig } from '@vybestack/llxprt-code-core';
+import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 /**
  * Parse save command arguments
@@ -19,9 +23,7 @@ import { SubagentConfig } from '@vybestack/llxprt-code-core';
  * @requirement:REQ-011
  * @pseudocode SubagentCommand.md lines 1-17
  */
-function parseSaveArgs(
-  args: string,
-): {
+function parseSaveArgs(args: string): {
   name: string;
   profile: string;
   mode: 'auto' | 'manual';
@@ -455,23 +457,152 @@ const deleteCommand: SlashCommand = {
 /**
  * /subagent edit command
  *
- * @plan:PLAN-20250117-SUBAGENTCONFIG.P09
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P11
  * @requirement:REQ-008
+ * @pseudocode SubagentCommand.md lines 166-210
+ *
+ * Pattern: Uses spawnSync approach from text-buffer.ts
  */
 const editCommand: SlashCommand = {
   name: 'edit',
   description: 'Edit subagent configuration in system editor',
   kind: CommandKind.BUILT_IN,
   action: async (
-    _context: CommandContext,
-    _args: string,
-  ): Promise<SlashCommandActionReturn> =>
-    // STUB: To be implemented in Phase 11
-    ({
-      type: 'message',
-      messageType: 'info',
-      content: 'Edit command will be implemented in Phase 11',
-    }),
+    context: CommandContext,
+    args: string,
+  ): Promise<SlashCommandActionReturn> => {
+    const name = args.trim();
+
+    if (!name) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Usage: /subagent edit <name>',
+      };
+    }
+
+    const { services } = context;
+    const subagentManager = services.subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P11 @requirement:REQ-008
+    if (!subagentManager) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+      };
+    }
+
+    // Check if subagent exists
+    const exists = await subagentManager.subagentExists(name);
+
+    if (!exists) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Error: Subagent '${name}' not found.`,
+      };
+    }
+
+    // Load current config
+    const config = await subagentManager.loadSubagent(name);
+
+    // Create temp file (like text-buffer.ts does)
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'subagent-edit-'));
+    const filePath = path.join(tmpDir, `${name}.json`);
+
+    try {
+      // Write current config to temp file
+      fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
+
+      // Determine editor (like text-buffer.ts)
+      const editor = process.env.VISUAL || process.env.EDITOR || 'vi';
+
+      // Launch editor with spawnSync (BLOCKS until editor closes)
+      const { status, error } = spawnSync(editor, [filePath], {
+        stdio: 'inherit',
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (typeof status === 'number' && status !== 0) {
+        throw new Error(`Editor exited with status ${status}`);
+      }
+
+      // Read edited content
+      const editedContent = fs.readFileSync(filePath, 'utf8');
+
+      // Parse and validate JSON
+      let editedConfig: SubagentConfig;
+      try {
+        editedConfig = JSON.parse(editedContent);
+      } catch (_error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Error: Invalid JSON after edit. Changes not saved.',
+        };
+      }
+
+      // Validate required fields
+      if (
+        !editedConfig.name ||
+        !editedConfig.profile ||
+        !editedConfig.systemPrompt
+      ) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Error: Required fields missing. Changes not saved.',
+        };
+      }
+
+      // Validate profile exists
+      const profileValid = await subagentManager.validateProfileReference(
+        editedConfig.profile,
+      );
+      if (!profileValid) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Error: Profile '${editedConfig.profile}' not found. Changes not saved.`,
+        };
+      }
+
+      // Save the edited config (updates updatedAt timestamp)
+      await subagentManager.saveSubagent(
+        editedConfig.name,
+        editedConfig.profile,
+        editedConfig.systemPrompt,
+      );
+
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `Subagent '${name}' updated successfully.`,
+      };
+    } catch (error) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content:
+          error instanceof Error ? error.message : 'Failed to edit subagent',
+      };
+    } finally {
+      // Cleanup temp file and directory (like text-buffer.ts)
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        /* ignore */
+      }
+      try {
+        fs.rmdirSync(tmpDir);
+      } catch {
+        /* ignore */
+      }
+    }
+  },
 };
 
 /**
@@ -495,18 +626,81 @@ export const subagentCommand: SlashCommand = {
   ],
   /**
    * Multi-level autocomplete
-   * STUB: Returns empty array, implementation in Phase 11
+   *
+   * @plan:PLAN-20250117-SUBAGENTCONFIG.P11
+   * @requirement:REQ-009
+   * @pseudocode SubagentCommand.md lines 211-280
    */
   completion: async (
     context: CommandContext,
-    _partialArg: string,
+    partialArg: string,
+    fullLine?: string,
   ): Promise<string[]> => {
-    if (!context.services.subagentManager) {
-      // @plan:PLAN-20250117-SUBAGENTCONFIG.P09 @requirement:REQ-009
+    const subagentManager = context.services.subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P11 @requirement:REQ-009
+    if (!subagentManager) {
       return [];
     }
 
-    // STUB: Return empty array
+    const rawInput = fullLine ?? partialArg;
+
+    // Extract the portion after the command keyword while preserving trailing spaces
+    const commandMatch = rawInput.match(/^(?:\/?subagent)?\s*(.*)$/);
+    const argsSection = commandMatch ? commandMatch[1] : rawInput;
+    const hasTrailingSpace = /\s$/.test(argsSection);
+    const cleanedArgs = argsSection.trim();
+    const tokens = cleanedArgs.length > 0 ? cleanedArgs.split(/\s+/) : [];
+
+    let currentToken = '';
+    let tokensBefore: string[] = [];
+
+    if (tokens.length === 0) {
+      currentToken = '';
+    } else if (hasTrailingSpace) {
+      tokensBefore = tokens;
+      currentToken = '';
+    } else {
+      currentToken = tokens[tokens.length - 1];
+      tokensBefore = tokens.slice(0, -1);
+    }
+
+    const position = tokensBefore.length;
+    const rootSubcommands = ['save', 'list', 'show', 'delete', 'edit'];
+
+    // Level 1: Subcommand completion
+    if (position === 0) {
+      const search = currentToken;
+      return rootSubcommands.filter((cmd) => cmd.startsWith(search));
+    }
+
+    const subcommand = tokensBefore[0];
+
+    // Level 2: Agent name completion for show/delete/edit
+    if (position === 1 && ['show', 'delete', 'edit'].includes(subcommand)) {
+      const nameToFilter = currentToken;
+      const subagents = await subagentManager.listSubagents();
+      return subagents.filter((name) => name.startsWith(nameToFilter));
+    }
+
+    // Level 3: Profile name completion for save
+    if (
+      position === 2 &&
+      subcommand === 'save' &&
+      context.services.profileManager
+    ) {
+      const profileNameToFilter = currentToken;
+      const profileManager = context.services.profileManager;
+      const profiles = await profileManager.listProfiles();
+      return profiles.filter((name) => name.startsWith(profileNameToFilter));
+    }
+
+    // Level 4: Mode completion for save
+    if (position === 3 && subcommand === 'save') {
+      const modeToFilter = currentToken;
+      const modes = ['auto', 'manual'];
+      return modes.filter((mode) => mode.startsWith(modeToFilter));
+    }
+
+    // Beyond mode argument: no completion
     return [];
   },
   action: async (

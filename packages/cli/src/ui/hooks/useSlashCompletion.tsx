@@ -273,9 +273,11 @@ export function useSlashCompletion(
         const argString = rawParts.slice(depth).join(' ');
 
         // Call completion function directly to check if it's async
+        // @plan:PLAN-20250117-SUBAGENTCONFIG.P11
         const completionResult = leafCommand!.completion!(
           commandContext,
           argString,
+          currentLine, // Pass the full line for advanced completion logic
         );
 
         if (completionResult instanceof Promise) {
