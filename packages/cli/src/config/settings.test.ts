@@ -2350,4 +2350,192 @@ describe('Settings Loading and Merging', () => {
       expect(process.env['TESTTEST']).not.toEqual('1234');
     });
   });
+
+  describe('needsMigration', () => {
+    it('should return false for an empty object', () => {
+      expect(needsMigration({})).toBe(false);
+    });
+
+    it('should return false for settings that are already in V2 format', () => {
+      const v2Settings: Partial<Settings> = {
+        ui: {
+          theme: 'dark',
+        },
+        tools: {
+          sandbox: true,
+        },
+      };
+      expect(needsMigration(v2Settings)).toBe(false);
+    });
+
+    it('should return true for settings with a V1 key that needs to be moved', () => {
+      const v1Settings = {
+        theme: 'dark', // v1 key
+      };
+      expect(needsMigration(v1Settings)).toBe(true);
+    });
+
+    it('should return true for settings with a mix of V1 and V2 keys', () => {
+      const mixedSettings = {
+        theme: 'dark', // v1 key
+        tools: {
+          sandbox: true, // v2 key
+        },
+      };
+      expect(needsMigration(mixedSettings)).toBe(true);
+    });
+
+    it('should return false for settings with only V1 keys that are the same in V2', () => {
+      const v1Settings = {
+        mcpServers: {},
+        telemetry: {},
+        extensions: [],
+      };
+      expect(needsMigration(v1Settings)).toBe(false);
+    });
+
+    it('should return true for settings with a mix of V1 keys that are the same in V2 and V1 keys that need moving', () => {
+      const v1Settings = {
+        mcpServers: {}, // same in v2
+        theme: 'dark', // needs moving
+      };
+      expect(needsMigration(v1Settings)).toBe(true);
+    });
+
+    it('should return false for settings with unrecognized keys', () => {
+      const settings = {
+        someUnrecognizedKey: 'value',
+      };
+      expect(needsMigration(settings)).toBe(false);
+    });
+
+    it('should return false for settings with v2 keys and unrecognized keys', () => {
+      const settings = {
+        ui: { theme: 'dark' },
+        someUnrecognizedKey: 'value',
+      };
+      expect(needsMigration(settings)).toBe(false);
+    });
+  });
+
+  describe('migrateDeprecatedSettings', () => {
+    let mockFsExistsSync: Mocked<typeof fs.existsSync>;
+    let mockFsReadFileSync: Mocked<typeof fs.readFileSync>;
+    let mockDisableExtension: Mocked<typeof disableExtension>;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+
+      mockFsExistsSync = vi.mocked(fs.existsSync);
+      mockFsReadFileSync = vi.mocked(fs.readFileSync);
+      mockDisableExtension = vi.mocked(disableExtension);
+
+      (mockFsExistsSync as Mock).mockReturnValue(true);
+      vi.mocked(isWorkspaceTrusted).mockReturnValue({
+        isTrusted: true,
+        source: undefined,
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should migrate disabled extensions from user and workspace settings', () => {
+      const userSettingsContent = {
+        extensions: {
+          disabled: ['user-ext-1', 'shared-ext'],
+        },
+      };
+      const workspaceSettingsContent = {
+        extensions: {
+          disabled: ['workspace-ext-1', 'shared-ext'],
+        },
+      };
+
+      (mockFsReadFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+      const setValueSpy = vi.spyOn(loadedSettings, 'setValue');
+
+      migrateDeprecatedSettings(loadedSettings, MOCK_WORKSPACE_DIR);
+
+      // Check user settings migration
+      expect(mockDisableExtension).toHaveBeenCalledWith(
+        'user-ext-1',
+        SettingScope.User,
+        MOCK_WORKSPACE_DIR,
+      );
+      expect(mockDisableExtension).toHaveBeenCalledWith(
+        'shared-ext',
+        SettingScope.User,
+        MOCK_WORKSPACE_DIR,
+      );
+
+      // Check workspace settings migration
+      expect(mockDisableExtension).toHaveBeenCalledWith(
+        'workspace-ext-1',
+        SettingScope.Workspace,
+        MOCK_WORKSPACE_DIR,
+      );
+      expect(mockDisableExtension).toHaveBeenCalledWith(
+        'shared-ext',
+        SettingScope.Workspace,
+        MOCK_WORKSPACE_DIR,
+      );
+
+      // Check that setValue was called to remove the deprecated setting
+      expect(setValueSpy).toHaveBeenCalledWith(
+        SettingScope.User,
+        'extensions',
+        {
+          disabled: undefined,
+        },
+      );
+      expect(setValueSpy).toHaveBeenCalledWith(
+        SettingScope.Workspace,
+        'extensions',
+        {
+          disabled: undefined,
+        },
+      );
+    });
+
+    it('should not do anything if there are no deprecated settings', () => {
+      const userSettingsContent = {
+        extensions: {
+          enabled: ['user-ext-1'],
+        },
+      };
+      const workspaceSettingsContent = {
+        someOtherSetting: 'value',
+      };
+
+      (mockFsReadFileSync as Mock).mockImplementation(
+        (p: fs.PathOrFileDescriptor) => {
+          if (p === USER_SETTINGS_PATH)
+            return JSON.stringify(userSettingsContent);
+          if (p === MOCK_WORKSPACE_SETTINGS_PATH)
+            return JSON.stringify(workspaceSettingsContent);
+          return '{}';
+        },
+      );
+
+      const loadedSettings = loadSettings(MOCK_WORKSPACE_DIR);
+      const setValueSpy = vi.spyOn(loadedSettings, 'setValue');
+
+      migrateDeprecatedSettings(loadedSettings, MOCK_WORKSPACE_DIR);
+
+      expect(mockDisableExtension).not.toHaveBeenCalled();
+      expect(setValueSpy).not.toHaveBeenCalled();
+    });
+  });
 });
