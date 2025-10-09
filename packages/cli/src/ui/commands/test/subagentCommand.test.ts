@@ -8,7 +8,11 @@ import {
   Logger,
   SessionMetrics,
 } from '@vybestack/llxprt-code-core';
-import { CommandContext, MessageActionReturn, ConfirmActionReturn } from '../types.js';
+import {
+  CommandContext,
+  MessageActionReturn,
+  ConfirmActionReturn,
+} from '../types.js';
 import { LoadedSettings } from '../../../config/settings.js';
 import { SessionStatsState } from '../../contexts/SessionContext.js';
 import { subagentCommand } from '../subagentCommand.js';
@@ -111,10 +115,10 @@ const createTestContext = ({
 
 /**
  * SubagentCommand behavioral tests - Basic commands
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P07
  * @requirement:REQ-004, REQ-005, REQ-006, REQ-007, REQ-014
- * 
+ *
  * Tests verify command interactions with SubagentManager
  * Mock GeminiClient, use real file system
  */
@@ -129,11 +133,11 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'subagent-cmd-test-'));
     const subagentsDir = path.join(tempDir, 'subagents');
     const profilesDir = path.join(tempDir, 'profiles');
-    
+
     // Initialize managers
     profileManager = new ProfileManager(profilesDir);
     subagentManager = new SubagentManager(subagentsDir, profileManager);
-    
+
     // Create test profile
     await fs.mkdir(profilesDir, { recursive: true });
     await profileManager.saveProfile('testprofile', {
@@ -141,9 +145,9 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       provider: 'openai',
       model: 'gpt-4',
       modelParams: {},
-      ephemeralSettings: {}
+      ephemeralSettings: {},
     });
-    
+
     context = createTestContext({
       profileManager,
       subagentManager,
@@ -157,10 +161,11 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
   describe('saveCommand - manual mode @requirement:REQ-004', () => {
     it('should save new subagent with manual mode', async () => {
       const args = 'testagent testprofile manual "You are a test agent"';
-      const result = await subagentCommand.subCommands![0].action!(context, args) as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![0].action!(
+        context,
+        args,
+      )) as MessageActionReturn;
 
-      
-      
       expect(result.type).toBe('message');
       expect(result.messageType).toBe('info');
       expect(result.content).toMatch(/created successfully/i);
@@ -176,14 +181,17 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should reject invalid syntax', async () => {
       const invalidArgs = [
-        'testagent',  // Missing profile and mode
-        'testagent testprofile',  // Missing mode and prompt
-        'testagent testprofile manual',  // Missing prompt
-        'testagent testprofile invalid "prompt"',  // Invalid mode
+        'testagent', // Missing profile and mode
+        'testagent testprofile', // Missing mode and prompt
+        'testagent testprofile manual', // Missing prompt
+        'testagent testprofile invalid "prompt"', // Invalid mode
       ];
 
       for (const args of invalidArgs) {
-        const result = await subagentCommand.subCommands![0].action!(context, args) as MessageActionReturn;
+        const result = (await subagentCommand.subCommands![0].action!(
+          context,
+          args,
+        )) as MessageActionReturn;
         expect(result.messageType).toBe('error');
         expect(result.content).toMatch(/usage|syntax/i);
       }
@@ -195,10 +203,10 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
         subagentManager: undefined,
       });
 
-      const result = await subagentCommand.subCommands![0].action!(
+      const result = (await subagentCommand.subCommands![0].action!(
         contextWithoutManager,
-        'testagent testprofile manual "Prompt"'
-      ) as MessageActionReturn;
+        'testagent testprofile manual "Prompt"',
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/service .* unavailable/i);
@@ -206,7 +214,10 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should reject non-existent profile @requirement:REQ-013', async () => {
       const args = 'testagent nonexistent manual "prompt"';
-      const result = await subagentCommand.subCommands![0].action!(context, args) as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![0].action!(
+        context,
+        args,
+      )) as MessageActionReturn;
 
       expect(result.type).toBe('message');
       expect(result.messageType).toBe('error');
@@ -215,11 +226,18 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should prompt for confirmation on overwrite @requirement:REQ-014', async () => {
       // Create existing subagent
-      await subagentManager.saveSubagent('testagent', 'testprofile', 'Original prompt');
+      await subagentManager.saveSubagent(
+        'testagent',
+        'testprofile',
+        'Original prompt',
+      );
 
       // Try to overwrite without confirmation
       const args = 'testagent testprofile manual "New prompt"';
-      const result = await subagentCommand.subCommands![0].action!(context, args) as ConfirmActionReturn;
+      const result = (await subagentCommand.subCommands![0].action!(
+        context,
+        args,
+      )) as ConfirmActionReturn;
 
       expect(result.type).toBe('confirm_action');
       expect(result.prompt).toMatch(/overwrite/i);
@@ -228,13 +246,20 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
     it('should overwrite when confirmed', async () => {
       // Create existing subagent
-      await subagentManager.saveSubagent('testagent', 'testprofile', 'Original prompt');
+      await subagentManager.saveSubagent(
+        'testagent',
+        'testprofile',
+        'Original prompt',
+      );
 
       // Set confirmation flag
       context.overwriteConfirmed = true;
 
       const args = 'testagent testprofile manual "New prompt"';
-      const result = await subagentCommand.subCommands![0].action!(context, args) as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![0].action!(
+        context,
+        args,
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('info');
       expect(result.content).toMatch(/updated successfully/i);
@@ -254,7 +279,10 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
         subagentManager,
       });
 
-      const result = await subagentCommand.subCommands![1].action!(context, '') as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![1].action!(
+        context,
+        '',
+      )) as MessageActionReturn;
 
       expect(result.type).toBe('message');
       expect(result.messageType).toBe('info');
@@ -266,7 +294,10 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
       await subagentManager.saveSubagent('agent1', 'testprofile', 'Prompt 1');
       await subagentManager.saveSubagent('agent2', 'testprofile', 'Prompt 2');
 
-      const result = await subagentCommand.subCommands![1].action!(context, '') as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![1].action!(
+        context,
+        '',
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('info');
       expect(result.content).toMatch(/agent1/);
@@ -277,9 +308,16 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
   describe('showCommand @requirement:REQ-006 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
     it('should display full subagent configuration', async () => {
-      await subagentManager.saveSubagent('testagent', 'testprofile', 'Test system prompt');
+      await subagentManager.saveSubagent(
+        'testagent',
+        'testprofile',
+        'Test system prompt',
+      );
 
-      const result = await subagentCommand.subCommands![2].action!(context, 'testagent') as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![2].action!(
+        context,
+        'testagent',
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('info');
       expect(result.content).toMatch(/testagent/);
@@ -288,14 +326,20 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
     });
 
     it('should error for non-existent subagent', async () => {
-      const result = await subagentCommand.subCommands![2].action!(context, 'nonexistent') as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![2].action!(
+        context,
+        'nonexistent',
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/not found/i);
     });
 
     it('should error when name not provided', async () => {
-      const result = await subagentCommand.subCommands![2].action!(context, '') as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![2].action!(
+        context,
+        '',
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/usage|name required/i);
@@ -304,15 +348,25 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
 
   describe('deleteCommand @requirement:REQ-007 @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () => {
     it('should delete subagent with confirmation', async () => {
-      await subagentManager.saveSubagent('testagent', 'testprofile', 'Test prompt');
+      await subagentManager.saveSubagent(
+        'testagent',
+        'testprofile',
+        'Test prompt',
+      );
 
       // First call: should prompt for confirmation
-      const result1 = await subagentCommand.subCommands![3].action!(context, 'testagent') as ConfirmActionReturn;
+      const result1 = (await subagentCommand.subCommands![3].action!(
+        context,
+        'testagent',
+      )) as ConfirmActionReturn;
       expect(result1.type).toBe('confirm_action');
 
       // Second call: with confirmation
       context.overwriteConfirmed = true;
-      const result2 = await subagentCommand.subCommands![3].action!(context, 'testagent') as MessageActionReturn;
+      const result2 = (await subagentCommand.subCommands![3].action!(
+        context,
+        'testagent',
+      )) as MessageActionReturn;
 
       expect(result2.messageType).toBe('info');
       expect(result2.content).toMatch(/deleted/i);
@@ -323,7 +377,10 @@ describe('subagentCommand - basic @plan:PLAN-20250117-SUBAGENTCONFIG.P07', () =>
     });
 
     it('should error for non-existent subagent', async () => {
-      const result = await subagentCommand.subCommands![3].action!(context, 'nonexistent') as MessageActionReturn;
+      const result = (await subagentCommand.subCommands![3].action!(
+        context,
+        'nonexistent',
+      )) as MessageActionReturn;
 
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/not found/i);

@@ -8,6 +8,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import { SubagentConfig } from '../config/types.js';
 import { ProfileManager } from './profileManager.js';
+import { NodeJSError } from '../interfaces/nodejs-error.interface.js';
 
 // Error message templates for consistency
 // @plan:PLAN-20250117-SUBAGENTCONFIG.P05
@@ -26,18 +27,20 @@ const ERROR_MESSAGES = {
   INVALID_CONFIG: "Subagent '{name}' is invalid: {reason}.",
   DIRECTORY_NOT_FOUND: 'Directory not found: {path}',
   CANNOT_PERFORM_OP: 'Cannot perform operation: {reason}',
-  MISSING_FIELDS: "Subagent '{name}' file is missing required configuration fields.",
-  INVALID_TIMESTAMP: "Subagent '{name}' has an invalid timestamp format. Expected ISO 8601.",
+  MISSING_FIELDS:
+    "Subagent '{name}' file is missing required configuration fields.",
+  INVALID_TIMESTAMP:
+    "Subagent '{name}' has an invalid timestamp format. Expected ISO 8601.",
   FILENAME_MISMATCH:
     "Subagent filename mismatch: expected '{expected}', found '{actual}'",
 };
 
 /**
  * Manages subagent configuration files in ~/.llxprt/subagents/
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
  * @requirement:REQ-002
- * 
+ *
  * Pattern: Follows ProfileManager design
  * Storage: JSON files in baseDir directory
  * Naming: <name>.json
@@ -49,7 +52,7 @@ export class SubagentManager {
   /**
    * @param baseDir Directory where subagent configs are stored (e.g., ~/.llxprt/subagents/)
    * @param profileManager ProfileManager instance for validation
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 1-8
@@ -61,7 +64,7 @@ export class SubagentManager {
 
   /**
    * Save or update a subagent configuration
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 61-128
@@ -96,9 +99,9 @@ export class SubagentManager {
       // Load existing to preserve createdAt
       const existing = await this.loadSubagent(name);
       config = {
-        name: name,
-        profile: profile,
-        systemPrompt: systemPrompt,
+        name,
+        profile,
+        systemPrompt,
         createdAt: existing.createdAt, // Preserve original timestamp
         updatedAt: new Date().toISOString(), // Update timestamp
       };
@@ -106,9 +109,9 @@ export class SubagentManager {
       // Create new with current timestamps
       const now = new Date().toISOString();
       config = {
-        name: name,
-        profile: profile,
-        systemPrompt: systemPrompt,
+        name,
+        profile,
+        systemPrompt,
         createdAt: now,
         updatedAt: now,
       };
@@ -128,7 +131,7 @@ export class SubagentManager {
       await fsPromises.writeFile(filePath, jsonString, 'utf-8');
     } catch (error) {
       if (error instanceof Error && 'code' in error) {
-        const code = (error as any).code;
+        const code = (error as NodeJSError).code;
         if (code === 'EACCES') {
           throw new Error(
             ERROR_MESSAGES.PERMISSION_DENIED.replace(
@@ -160,7 +163,7 @@ export class SubagentManager {
 
   /**
    * Load a subagent configuration from disk
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 129-180
@@ -175,7 +178,7 @@ export class SubagentManager {
       content = await fsPromises.readFile(filePath, 'utf-8');
     } catch (error) {
       if (error instanceof Error && 'code' in error) {
-        const code = (error as any).code;
+        const code = (error as NodeJSError).code;
         if (code === 'ENOENT') {
           throw new Error(
             ERROR_MESSAGES.SUBAGENT_NOT_FOUND.replace('{name}', name),
@@ -203,9 +206,7 @@ export class SubagentManager {
       config = JSON.parse(content) as SubagentConfig;
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new Error(
-          ERROR_MESSAGES.CORRUPTED_FILE.replace('{name}', name),
-        );
+        throw new Error(ERROR_MESSAGES.CORRUPTED_FILE.replace('{name}', name));
       }
       throw new Error(
         ERROR_MESSAGES.CANNOT_PERFORM_OP.replace(
@@ -216,31 +217,41 @@ export class SubagentManager {
     }
 
     // Validate required fields
-    if (!config.name || !config.profile || !config.systemPrompt) {
-      throw new Error(`Subagent '${name}' file is missing required field(s): name, profile, or systemPrompt.`);
+    const {
+      name: configName,
+      profile,
+      systemPrompt,
+      createdAt,
+      updatedAt,
+    } = config;
+    if (!configName || !profile || !systemPrompt) {
+      throw new Error(
+        `Subagent '${name}' file is missing required field(s): name, profile, or systemPrompt.`,
+      );
     }
 
-    if (!config.createdAt || !config.updatedAt) {
-      throw new Error(`Subagent '${name}' file is missing required field(s): createdAt or updatedAt.`);
-    }
+    if (!createdAt || !updatedAt) {
+      throw new Error(
+        `Subagent '${name}' file is missing required field(s): createdAt or updatedAt.`,
+      );
+    } // @plan:PLAN-20250117-SUBAGENTCONFIG.P05 @requirement:REQ-002
 
     // Validate timestamp format
     if (
       Number.isNaN(Date.parse(config.createdAt)) ||
       Number.isNaN(Date.parse(config.updatedAt))
     ) {
-      throw new Error(
-        ERROR_MESSAGES.INVALID_TIMESTAMP.replace('{name}', name),
-      );
+      throw new Error(ERROR_MESSAGES.INVALID_TIMESTAMP.replace('{name}', name));
     }
 
     // Validate name matches filename after sanitization
     const canonicalName = config.name.replace(/[^a-zA-Z0-9_-]/g, '');
     if (canonicalName !== path.basename(filePath, '.json')) {
       throw new Error(
-        ERROR_MESSAGES.FILENAME_MISMATCH
-          .replace('{expected}', canonicalName)
-          .replace('{actual}', path.basename(filePath, '.json')),
+        ERROR_MESSAGES.FILENAME_MISMATCH.replace(
+          '{expected}',
+          canonicalName,
+        ).replace('{actual}', path.basename(filePath, '.json')),
       );
     }
 
@@ -249,7 +260,7 @@ export class SubagentManager {
 
   /**
    * List all subagent names
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 181-209
@@ -272,7 +283,7 @@ export class SubagentManager {
       return subagentNames;
     } catch (error) {
       if (error instanceof Error && 'code' in error) {
-        const code = (error as any).code;
+        const code = (error as NodeJSError).code;
         if (code === 'ENOENT') {
           // Directory doesn't exist yet, return empty list
           return [];
@@ -296,11 +307,11 @@ export class SubagentManager {
 
   /**
    * Delete a subagent configuration
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 210-236
-   * 
+   *
    * @returns true if deleted, false if not found
    */
   async deleteSubagent(name: string): Promise<boolean> {
@@ -319,7 +330,7 @@ export class SubagentManager {
       return true;
     } catch (error) {
       if (error instanceof Error && 'code' in error) {
-        const code = (error as any).code;
+        const code = (error as NodeJSError).code;
         if (code === 'ENOENT') {
           // File already deleted
           return false;
@@ -343,7 +354,7 @@ export class SubagentManager {
 
   /**
    * Check if a subagent configuration exists
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 237-262
@@ -354,7 +365,7 @@ export class SubagentManager {
     let filePath: string;
     try {
       filePath = this.getSubagentPath(name);
-    } catch (error) {
+    } catch (_error) {
       // getSubagentPath throws for invalid names. If it throws here, the agent doesn't exist.
       return false;
     }
@@ -365,7 +376,7 @@ export class SubagentManager {
       return true;
     } catch (error) {
       if (error instanceof Error && 'code' in error) {
-        const code = (error as any).code;
+        const code = (error as NodeJSError).code;
         if (code === 'ENOENT') {
           return false;
         }
@@ -377,14 +388,18 @@ export class SubagentManager {
 
   /**
    * Validate that a profile exists in ProfileManager
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 263-281
    */
   async validateProfileReference(profileName: string): Promise<boolean> {
     // Validate input
-    if (profileName === undefined || profileName === null || profileName.trim() === '') {
+    if (
+      profileName === undefined ||
+      profileName === null ||
+      profileName.trim() === ''
+    ) {
       return false;
     }
 
@@ -394,14 +409,16 @@ export class SubagentManager {
       return availableProfiles.includes(profileName);
     } catch (error) {
       // If ProfileManager fails, we cannot validate
-      console.warn(`Cannot validate profile reference '${profileName}': ${error instanceof Error ? error.message : 'unknown error'}`);
+      console.warn(
+        `Cannot validate profile reference '${profileName}': ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
       return false;
     }
   }
 
   /**
    * Get full path to subagent config file
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 9-43
@@ -436,10 +453,7 @@ export class SubagentManager {
     }
 
     // 6. Validate profileManager is provided to the instance
-    if (
-      this.profileManager === undefined ||
-      this.profileManager === null
-    ) {
+    if (this.profileManager === undefined || this.profileManager === null) {
       throw new Error('ProfileManager instance is required');
     }
 
@@ -449,7 +463,7 @@ export class SubagentManager {
 
   /**
    * Ensure subagent directory exists, create if not
-   * 
+   *
    * @plan:PLAN-20250117-SUBAGENTCONFIG.P05
    * @requirement:REQ-002
    * @pseudocode SubagentManager.md lines 45-60
@@ -460,7 +474,7 @@ export class SubagentManager {
       await fsPromises.mkdir(this.baseDir, { recursive: true });
     } catch (error) {
       if (error instanceof Error && 'code' in error) {
-        const code = (error as any).code;
+        const code = (error as NodeJSError).code;
         if (code === 'EACCES') {
           throw new Error(
             ERROR_MESSAGES.PERMISSION_DENIED.replace(
@@ -485,6 +499,4 @@ export class SubagentManager {
       );
     }
   }
-
-  
 }

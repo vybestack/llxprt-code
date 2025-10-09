@@ -19,13 +19,22 @@ import { SubagentConfig } from '@vybestack/llxprt-code-core';
  * @requirement:REQ-011
  * @pseudocode SubagentCommand.md lines 1-17
  */
-function parseSaveArgs(args: string): { name: string; profile: string; mode: 'auto' | 'manual'; input: string } | null {
-  const match = args.match(/^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)(\"?)?/);
+function parseSaveArgs(
+  args: string,
+): {
+  name: string;
+  profile: string;
+  mode: 'auto' | 'manual';
+  input: string;
+} | null {
+  const match = args.match(
+    /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("?)?/,
+  );
 
   if (!match) {
     return null;
   }
-  
+
   const [, name, profile, mode, input] = match;
   return { name, profile, mode: mode as 'auto' | 'manual', input };
 }
@@ -41,7 +50,7 @@ async function handleManualMode(
   name: string,
   profile: string,
   systemPrompt: string,
-  options?: { existed: boolean }
+  options?: { existed: boolean },
 ): Promise<SlashCommandActionReturn> {
   const existed = options?.existed ?? false;
   return saveSubagent(context, name, profile, systemPrompt, existed);
@@ -60,7 +69,7 @@ async function saveSubagent(
   name: string,
   profile: string,
   systemPrompt: string,
-  existed: boolean
+  existed: boolean,
 ): Promise<SlashCommandActionReturn> {
   const manager = context.services.subagentManager;
   if (!manager) {
@@ -104,14 +113,18 @@ const saveCommand: SlashCommand = {
   name: 'save',
   description: 'Save a subagent configuration',
   kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string): Promise<SlashCommandActionReturn> => {
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<SlashCommandActionReturn> => {
     const { services, overwriteConfirmed, invocation } = context;
     const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content:
+          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
       };
     }
 
@@ -122,7 +135,8 @@ const saveCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Usage: /subagent save <name> <profile> auto|manual "<system_prompt>"',
+        content:
+          'Usage: /subagent save <name> <profile> auto|manual "<system_prompt>"',
       };
     }
 
@@ -134,7 +148,8 @@ const saveCommand: SlashCommand = {
      * @pseudocode SubagentCommand.md lines 74-78
      */
     // Validate profile exists (pseudocode lines 263-281 cover this)
-    const profileExists = await subagentManager.validateProfileReference(profile);
+    const profileExists =
+      await subagentManager.validateProfileReference(profile);
     if (!profileExists) {
       return {
         type: 'message',
@@ -158,7 +173,7 @@ const saveCommand: SlashCommand = {
         prompt: `A subagent named '${name}' already exists. Do you want to overwrite it?`,
         originalInvocation: {
           raw: invocation?.raw || '',
-        }
+        },
       };
     }
 
@@ -172,7 +187,8 @@ const saveCommand: SlashCommand = {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'Auto mode will be implemented in Phase 12. Please use manual mode for now.',
+        content:
+          'Auto mode will be implemented in Phase 12. Please use manual mode for now.',
       };
     }
 
@@ -182,13 +198,15 @@ const saveCommand: SlashCommand = {
      * @requirement:REQ-014
      * @pseudocode SubagentCommand.md lines 61-66
      */
-    return handleManualMode(context, name, profile, systemPrompt, { existed: exists });
+    return handleManualMode(context, name, profile, systemPrompt, {
+      existed: exists,
+    });
   },
 };
 
 /**
  * /subagent list command
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-005
  * @pseudocode SubagentCommand.md lines 135-182
@@ -197,20 +215,24 @@ const listCommand: SlashCommand = {
   name: 'list',
   description: 'List all saved subagents',
   kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string): Promise<SlashCommandActionReturn> => {
+  action: async (
+    context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => {
     const { services } = context;
     const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content:
+          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
       };
     }
-    
+
     try {
       const names = await subagentManager.listSubagents();
-      
+
       if (names.length === 0) {
         return {
           type: 'message',
@@ -218,39 +240,45 @@ const listCommand: SlashCommand = {
           content: "No subagents found. Use '/subagent save' to create one.",
         };
       }
-      
+
       // Load each subagent for details
       const details = await Promise.all(
-        names.map(async (name) => {
-          const config = await subagentManager.loadSubagent(name);
-          return { name, config };
-        })
-      );
-      
+        names.map(async (n) => {
+          const config = await subagentManager.loadSubagent(n);
+          return { name: n, config };
+        }),
+      ); // @plan:PLAN-20250117-SUBAGENTCONFIG.P08 @requirement:REQ-005
+
       /**
        * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
        * @requirement:REQ-005
        * @pseudocode SubagentCommand.md lines 159-166
        */
       // Sort by creation date (oldest first as per pseudocode)
-      details.sort((a, b) => 
-        new Date(a.config.createdAt).getTime() - new Date(b.config.createdAt).getTime()
-      );
-      
+      details.sort(
+        (itemA, itemB) =>
+          new Date(itemA.config.createdAt).getTime() -
+          new Date(itemB.config.createdAt).getTime(),
+      ); // @plan:PLAN-20250117-SUBAGENTCONFIG.P09 @requirement:REQ-009
+
       // Format output
       const lines = ['List of saved subagents:\n'];
       for (const { name, config } of details) {
         const createdDate = new Date(config.createdAt).toLocaleString();
-        lines.push(`  - ${name}     (profile: ${config.profile}, created: ${createdDate})`);
+        lines.push(
+          `  - ${name}     (profile: ${config.profile}, created: ${createdDate})`,
+        );
       }
-      lines.push("\nNote: Use '/subagent show <name>' to view full configuration");
-      
+      lines.push(
+        "\nNote: Use '/subagent show <name>' to view full configuration",
+      );
+
       return {
         type: 'message',
         messageType: 'info',
         content: lines.join('\n'),
       };
-    } catch (error) {
+    } catch (_error) {
       return {
         type: 'message',
         messageType: 'error',
@@ -262,7 +290,7 @@ const listCommand: SlashCommand = {
 
 /**
  * /subagent show command
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-006
  * @pseudocode SubagentCommand.md lines 183-234
@@ -271,9 +299,12 @@ const showCommand: SlashCommand = {
   name: 'show',
   description: 'Show detailed subagent configuration',
   kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string): Promise<SlashCommandActionReturn> => {
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<SlashCommandActionReturn> => {
     const name = args.trim();
-    
+
     if (!name) {
       return {
         type: 'message',
@@ -281,23 +312,24 @@ const showCommand: SlashCommand = {
         content: 'Usage: /subagent show <name>',
       };
     }
-    
+
     const { services } = context;
     const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content:
+          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
       };
     }
-    
+
     try {
       const config: SubagentConfig = await subagentManager.loadSubagent(name);
-      
+
       const createdDate = new Date(config.createdAt).toLocaleString();
       const updatedDate = new Date(config.updatedAt).toLocaleString();
-      
+
       const separator = '-'.repeat(60);
       const output = [
         `Subagent: ${config.name}`,
@@ -310,13 +342,13 @@ const showCommand: SlashCommand = {
         config.systemPrompt,
         separator,
       ].join('\n');
-      
+
       return {
         type: 'message',
         messageType: 'info',
         content: output,
       };
-    } catch (error) {
+    } catch (_error) {
       return {
         type: 'message',
         messageType: 'error',
@@ -328,7 +360,7 @@ const showCommand: SlashCommand = {
 
 /**
  * /subagent delete command
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-007
  * @pseudocode SubagentCommand.md lines 235-291
@@ -337,9 +369,12 @@ const deleteCommand: SlashCommand = {
   name: 'delete',
   description: 'Delete a subagent configuration',
   kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string): Promise<SlashCommandActionReturn> => {
+  action: async (
+    context: CommandContext,
+    args: string,
+  ): Promise<SlashCommandActionReturn> => {
     const name = args.trim();
-    
+
     if (!name) {
       return {
         type: 'message',
@@ -347,17 +382,18 @@ const deleteCommand: SlashCommand = {
         content: 'Usage: /subagent delete <name>',
       };
     }
-    
+
     const { services, overwriteConfirmed, invocation } = context;
     const subagentManager = services.subagentManager;
     if (!subagentManager) {
       return {
         type: 'message',
         messageType: 'error',
-        content: 'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
+        content:
+          'SubagentManager service is unavailable. Please run integration (Phase 15) before using /subagent.',
       };
     }
-    
+
     /**
      * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
      * @requirement:REQ-007
@@ -365,7 +401,7 @@ const deleteCommand: SlashCommand = {
      */
     // Check if subagent exists
     const exists = await subagentManager.subagentExists(name);
-    
+
     if (!exists) {
       return {
         type: 'message',
@@ -373,7 +409,7 @@ const deleteCommand: SlashCommand = {
         content: `Subagent '${name}' not found.`,
       };
     }
-    
+
     /**
      * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
      * @requirement:REQ-007
@@ -386,10 +422,10 @@ const deleteCommand: SlashCommand = {
         prompt: `Are you sure you want to delete subagent '${name}'? This action cannot be undone.`,
         originalInvocation: {
           raw: invocation?.raw || '',
-        }
+        },
       };
     }
-    
+
     /**
      * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
      * @requirement:REQ-007
@@ -418,7 +454,7 @@ const deleteCommand: SlashCommand = {
 
 /**
  * /subagent edit command
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P09
  * @requirement:REQ-008
  */
@@ -426,19 +462,21 @@ const editCommand: SlashCommand = {
   name: 'edit',
   description: 'Edit subagent configuration in system editor',
   kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string): Promise<SlashCommandActionReturn> => {
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> =>
     // STUB: To be implemented in Phase 11
-    return {
+    ({
       type: 'message',
       messageType: 'info',
       content: 'Edit command will be implemented in Phase 11',
-    };
-  },
+    }),
 };
 
 /**
  * /subagent parent command with autocomplete
- * 
+ *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P09
  * @requirement:REQ-001
  * @requirement:REQ-009
@@ -461,18 +499,25 @@ export const subagentCommand: SlashCommand = {
    */
   completion: async (
     context: CommandContext,
-    partialArg: string
+    _partialArg: string,
   ): Promise<string[]> => {
-    if (!context.services.subagentManager) { // @plan:PLAN-20250117-SUBAGENTCONFIG.P09 @requirement:REQ-009
+    if (!context.services.subagentManager) {
+      // @plan:PLAN-20250117-SUBAGENTCONFIG.P09 @requirement:REQ-009
       return [];
     }
 
     // STUB: Return empty array
     return [];
   },
-  action: async (context: CommandContext, args: string): Promise<SlashCommandActionReturn> => {
+  action: async (
+    _context: CommandContext,
+    _args: string,
+  ): Promise<SlashCommandActionReturn> => {
     // No default action, list subcommands in a message.
-    const subCommandsList = subagentCommand.subCommands?.map(cmd => `  - ${cmd.name}: ${cmd.description}`).join('\n') || 'No subcommands available.';
+    const subCommandsList =
+      subagentCommand.subCommands
+        ?.map((cmd) => `  - ${cmd.name}: ${cmd.description}`)
+        .join('\n') || 'No subcommands available.';
     return {
       type: 'message',
       messageType: 'info',

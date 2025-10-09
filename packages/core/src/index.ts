@@ -7,6 +7,7 @@
 // Export config
 export * from './config/config.js';
 export * from './config/profileManager.js';
+export * from './config/subagentManager.js';
 
 // Export services
 export * from './services/git-stats-service.js';
@@ -230,3 +231,9 @@ export * from './config/models.js';
 
 // Export test utils
 export * from './test-utils/index.js';
+
+// --- Subagent Feature: PLAN-20250117-SUBAGENTCONFIG ---
+export { SubagentManager } from './config/subagentManager.js';
+
+export type { SubagentConfig } from './config/types.js';
+// --- End of Subagent Feature ---

@@ -13,12 +13,19 @@ import path from 'path';
 /**
  * Manages saving and loading of configuration profiles.
  * Profiles are stored in ~/.llxprt/profiles/<profileName>.json
+ *
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P04
+ * @requirement:REQ-018
  */
 export class ProfileManager {
   private profilesDir: string;
 
-  constructor() {
-    this.profilesDir = path.join(os.homedir(), '.llxprt', 'profiles');
+  /**
+   * @param profilesDir Optional custom directory for testing. If not provided, uses ~/.llxprt/profiles.
+   */
+  constructor(profilesDir?: string) {
+    this.profilesDir =
+      profilesDir || path.join(os.homedir(), '.llxprt', 'profiles');
   }
 
   /**

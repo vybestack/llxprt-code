@@ -46,6 +46,8 @@ export const createMockCommandContext = (
         loadCheckpoint: vi.fn().mockResolvedValue([]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any, // Cast because Logger is a class.
+      profileManager: undefined, // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
+      subagentManager: undefined, // @plan:PLAN-20250117-SUBAGENTCONFIG.P07
     },
     ui: {
       addItem: vi.fn(),
@@ -80,6 +82,7 @@ export const createMockCommandContext = (
     },
   };
 
+  // Deep merge that preserves special objects (Dates, vitest mocks, etc.)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const merge = (target: any, source: any): any => {
     const output = { ...target };
@@ -90,13 +93,13 @@ export const createMockCommandContext = (
         const targetValue = output[key];
 
         if (
-          // We only want to recursivlty merge plain objects
+          // We only want to recursively merge plain objects
           Object.prototype.toString.call(sourceValue) === '[object Object]' &&
           Object.prototype.toString.call(targetValue) === '[object Object]'
         ) {
           output[key] = merge(targetValue, sourceValue);
         } else {
-          // If not, we do a direct assignment. This preserves Date objects and others.
+          // If not, we do a direct assignment. This preserves Date objects, vitest mocks, and others.
           output[key] = sourceValue;
         }
       }
