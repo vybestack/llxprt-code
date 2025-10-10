@@ -15,6 +15,7 @@ import stripAnsi from 'strip-ansi';
 const { Terminal } = pkg;
 
 const SIGKILL_TIMEOUT_MS = 200;
+const MAX_CHILD_PROCESS_BUFFER_SIZE = 16 * 1024 * 1024; // 16MB
 
 // @ts-expect-error getFullText is not a public API.
 const getFullText = (terminal: Terminal) => {
@@ -120,6 +121,36 @@ export class ShellExecutionService {
     );
   }
 
+  private static appendAndTruncate(
+    currentBuffer: string,
+    chunk: string,
+    maxSize: number,
+  ): { newBuffer: string; truncated: boolean } {
+    const chunkLength = chunk.length;
+    const currentLength = currentBuffer.length;
+    const newTotalLength = currentLength + chunkLength;
+
+    if (newTotalLength <= maxSize) {
+      return { newBuffer: currentBuffer + chunk, truncated: false };
+    }
+
+    // Truncation is needed.
+    if (chunkLength >= maxSize) {
+      // The new chunk is larger than or equal to the max buffer size.
+      // The new buffer will be the tail of the new chunk.
+      return {
+        newBuffer: chunk.substring(chunkLength - maxSize),
+        truncated: true,
+      };
+    }
+
+    // The combined buffer exceeds the max size, but the new chunk is smaller than it.
+    // We need to truncate the current buffer from the beginning to make space.
+    const charsToTrim = newTotalLength - maxSize;
+    const truncatedBuffer = currentBuffer.substring(charsToTrim);
+    return { newBuffer: truncatedBuffer + chunk, truncated: true };
+  }
+
   private static childProcessFallback(
     commandToExecute: string,
     cwd: string,
@@ -152,6 +183,8 @@ export class ShellExecutionService {
 
         let stdout = '';
         let stderr = '';
+        let stdoutTruncated = false;
+        let stderrTruncated = false;
         const outputChunks: Buffer[] = [];
         let error: Error | null = null;
         let exited = false;
@@ -189,9 +222,25 @@ export class ShellExecutionService {
           const strippedChunk = stripAnsi(decodedChunk);
 
           if (stream === 'stdout') {
-            stdout += strippedChunk;
+            const { newBuffer, truncated } = this.appendAndTruncate(
+              stdout,
+              strippedChunk,
+              MAX_CHILD_PROCESS_BUFFER_SIZE,
+            );
+            stdout = newBuffer;
+            if (truncated) {
+              stdoutTruncated = true;
+            }
           } else {
-            stderr += strippedChunk;
+            const { newBuffer, truncated } = this.appendAndTruncate(
+              stderr,
+              strippedChunk,
+              MAX_CHILD_PROCESS_BUFFER_SIZE,
+            );
+            stderr = newBuffer;
+            if (truncated) {
+              stderrTruncated = true;
+            }
           }
 
           if (isStreamingRawContent) {
@@ -215,8 +264,15 @@ export class ShellExecutionService {
           const { finalBuffer } = cleanup();
           // Ensure we don't add an extra newline if stdout already ends with one.
           const separator = stdout.endsWith('\n') ? '' : '\n';
-          const combinedOutput =
+          let combinedOutput =
             stdout + (stderr ? (stdout ? separator : '') + stderr : '');
+
+          if (stdoutTruncated || stderrTruncated) {
+            const truncationMessage = `\n[LLXPRT_CODE_WARNING: Output truncated. The buffer is limited to ${
+              MAX_CHILD_PROCESS_BUFFER_SIZE / (1024 * 1024)
+            }MB.]`;
+            combinedOutput += truncationMessage;
+          }
 
           resolve({
             rawOutput: finalBuffer,
@@ -416,7 +472,7 @@ export class ShellExecutionService {
             exited = true;
             abortSignal.removeEventListener('abort', abortHandler);
 
-            processingChain.then(() => {
+            const finalize = () => {
               const finalBuffer = Buffer.concat(outputChunks);
 
               const fullOutput = getFullText(headlessTerminal);
@@ -432,13 +488,51 @@ export class ShellExecutionService {
                 pid: ptyProcess.pid,
                 executionMethod: ptyInfo?.name ?? 'node-pty',
               });
+            };
+
+            if (abortSignal.aborted) {
+              finalize();
+              return;
+            }
+
+            const processingComplete = processingChain.then(() => 'processed');
+            const abortFired = new Promise<'aborted'>((res) => {
+              if (abortSignal.aborted) {
+                res('aborted');
+                return;
+              }
+              abortSignal.addEventListener('abort', () => res('aborted'), {
+                once: true,
+              });
+            });
+
+            Promise.race([processingComplete, abortFired]).then(() => {
+              finalize();
             });
           },
         );
 
         const abortHandler = async () => {
           if (ptyProcess.pid && !exited) {
-            ptyProcess.kill('SIGHUP');
+            if (os.platform() === 'win32') {
+              ptyProcess.kill();
+            } else {
+              try {
+                // Kill the entire process group
+                process.kill(-ptyProcess.pid, 'SIGTERM');
+                await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+                if (!exited) {
+                  process.kill(-ptyProcess.pid, 'SIGKILL');
+                }
+              } catch (_e) {
+                // Fallback to killing just the process if the group kill fails
+                ptyProcess.kill('SIGTERM');
+                await new Promise((res) => setTimeout(res, SIGKILL_TIMEOUT_MS));
+                if (!exited) {
+                  ptyProcess.kill('SIGKILL');
+                }
+              }
+            }
           }
         };
 
