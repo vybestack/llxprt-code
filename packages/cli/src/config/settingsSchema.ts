@@ -681,6 +681,25 @@ export const SETTINGS_SCHEMA = {
         description: 'Use the entire width of the terminal for output.',
         showInDialog: true,
       },
+      disableLoadingPhrases: {
+        type: 'boolean',
+        label: 'Disable Loading Phrases',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description: 'Disable loading phrases for accessibility.',
+        showInDialog: true,
+      },
+      screenReader: {
+        type: 'boolean',
+        label: 'Screen Reader Mode',
+        category: 'UI',
+        requiresRestart: true,
+        default: false,
+        description:
+          'Render output in plain-text to be more screen reader accessible.',
+        showInDialog: true,
+      },
     },
   },
 
