@@ -1222,7 +1222,7 @@ export async function loadCliConfig(
     usageStatisticsEnabled:
       effectiveSettings.ui?.usageStatisticsEnabled ?? true,
     // Git-aware file filtering settings - fix from upstream: pass fileFiltering correctly
-    fileFiltering: effectiveSettings.fileFiltering,
+    fileFiltering,
     checkpointing:
       argv.checkpointing || effectiveSettings.checkpointing?.enabled,
     dumpOnError: argv.dumponerror || false,

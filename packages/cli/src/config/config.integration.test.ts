@@ -12,6 +12,7 @@ import {
   Config,
   ConfigParameters,
   ContentGeneratorConfig,
+  DEFAULT_FILE_FILTERING_OPTIONS,
 } from '@vybestack/llxprt-code-core';
 import type { Settings } from './settings.js';
 
@@ -60,12 +61,14 @@ describe('Configuration Integration Tests', () => {
         sandbox: false,
         targetDir: tempDir,
         debugMode: false,
-        fileFilteringRespectGitIgnore: undefined, // Should default to true
+        fileFilteringRespectGitIgnore: undefined, // Should default to  DEFAULT_FILE_FILTERING_OPTIONS
       };
 
       const config = new Config(configParams);
 
-      expect(config.getFileFilteringRespectGitIgnore()).toBe(true);
+      expect(config.getFileFilteringRespectGitIgnore()).toBe(
+        DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
+      );
     });
 
     it('should load custom file filtering settings from configuration', async () => {
@@ -94,7 +97,9 @@ describe('Configuration Integration Tests', () => {
         sandbox: false,
         targetDir: tempDir,
         debugMode: false,
-        fileFilteringRespectGitIgnore: true,
+        fileFiltering: {
+          respectGitIgnore: true,
+        },
       };
 
       const config = new Config(configParams);
@@ -131,13 +136,15 @@ describe('Configuration Integration Tests', () => {
         sandbox: false,
         targetDir: tempDir,
         debugMode: false,
-        fileFilteringRespectGitIgnore: undefined,
+        fileFiltering: {},
       };
 
       const config = new Config(configParams);
 
       // All settings should use defaults
-      expect(config.getFileFilteringRespectGitIgnore()).toBe(true);
+      expect(config.getFileFilteringRespectGitIgnore()).toBe(
+        DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
+      );
     });
 
     it('should handle missing configuration sections gracefully', async () => {
@@ -154,7 +161,9 @@ describe('Configuration Integration Tests', () => {
       const config = new Config(configParams);
 
       // All git-aware settings should use defaults
-      expect(config.getFileFilteringRespectGitIgnore()).toBe(true);
+      expect(config.getFileFilteringRespectGitIgnore()).toBe(
+        DEFAULT_FILE_FILTERING_OPTIONS.respectGitIgnore,
+      );
     });
   });
 
@@ -167,7 +176,9 @@ describe('Configuration Integration Tests', () => {
         sandbox: false,
         targetDir: tempDir,
         debugMode: false,
-        fileFilteringRespectGitIgnore: true,
+        fileFiltering: {
+          respectGitIgnore: true,
+        },
       };
 
       const config = new Config(configParams);
