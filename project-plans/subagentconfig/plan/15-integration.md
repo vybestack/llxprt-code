@@ -23,38 +23,63 @@ Add import and registration:
 // Add import at top of file
 import { subagentCommand } from '../ui/commands/subagentCommand.js';
 
-// In registerBuiltinCommands() method, add to commands array:
-/**
- * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
- * @requirement:REQ-010
- */
-commands.push(subagentCommand);
+// In registerBuiltinCommands() method, add to allDefinitions array:
+const allDefinitions: Array<SlashCommand | null> = [
+  // ... other commands ...
+  subagentCommand, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
+];
 ```
 
 ### 2. Initialize SubagentManager in Services
 
-**File**: `packages/cli/src/services/BuiltinCommandLoader.ts`
+**File**: `packages/cli/src/ui/hooks/slashCommandProcessor.ts`
 
-Find where ProfileManager is initialized and add SubagentManager:
+Add imports at the top:
+
+```typescript
+import { ProfileManager, SubagentManager } from '@vybestack/llxprt-code-core';
+import * as path from 'path';
+import * as os from 'os';
+```
+
+Find where ProfileManager is initialized (in the hook body) and add SubagentManager:
 
 ```typescript
 /**
- * Initialize SubagentManager for command context
- * 
+ * Initialize ProfileManager for command context
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
  * @requirement:REQ-010
  */
-import { SubagentManager } from '@vybestack/llxprt-code-core';
-import * as path from 'path';
-import * as os from 'os';
+const profileManager = useMemo(() => {
+  if (!config) return undefined;
+  const llxprtDir = path.join(os.homedir(), '.llxprt');
+  return new ProfileManager(llxprtDir);
+}, [config]);
 
-// In the initialization section (where ProfileManager is created):
-const llxprtDir = path.join(os.homedir(), '.llxprt');
-const subagentsDir = path.join(llxprtDir, 'subagents');
-const subagentManager = new SubagentManager(subagentsDir, profileManager);
+/**
+ * Initialize SubagentManager for command context
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+ * @requirement:REQ-010
+ */
+const subagentManager = useMemo(() => {
+  if (!config || !profileManager) return undefined;
+  const llxprtDir = path.join(os.homedir(), '.llxprt');
+  const subagentsDir = path.join(llxprtDir, 'subagents');
+  return new SubagentManager(subagentsDir, profileManager);
+}, [config, profileManager]);
 
-// Add to context.services object (ensure services is instantiated first)
-context.services.subagentManager = subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
+// Later in commandContext:
+const commandContext: CommandContext = {
+  services: {
+    config,
+    settings,
+    git: gitService,
+    logger,
+    profileManager,    // @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+    subagentManager,   // @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+  },
+  // ...
+};
 ```
 
 ### 3. Verify CommandContext Type
@@ -94,11 +119,14 @@ export type { SubagentConfig } from './types.js';
 ## Verification Commands
 
 ```bash
-# Check command registered
+# Check command registered in BuiltinCommandLoader
 grep -q "subagentCommand" packages/cli/src/services/BuiltinCommandLoader.ts || exit 1
 
-# Check SubagentManager imported
-grep -q "import.*SubagentManager" packages/cli/src/services/BuiltinCommandLoader.ts || exit 1
+# Check SubagentManager imported in slashCommandProcessor (where services are initialized)
+grep -q "SubagentManager" packages/cli/src/ui/hooks/slashCommandProcessor.ts || exit 1
+
+# Check ProfileManager imported in slashCommandProcessor
+grep -q "ProfileManager" packages/cli/src/ui/hooks/slashCommandProcessor.ts || exit 1
 
 # CommandContext exposes optional subagentManager
 grep -q "subagentManager\?:" packages/cli/src/ui/commands/types.ts || exit 1
@@ -106,9 +134,16 @@ grep -q "subagentManager\?:" packages/cli/src/ui/commands/types.ts || exit 1
 # Mock command context helper supports the new service
 grep -q "subagentManager" packages/cli/src/test-utils/mockCommandContext.ts || exit 1
 
-# Check plan markers in BuiltinCommandLoader
+# Check plan markers in BuiltinCommandLoader (command registration)
 grep -c "@plan:PLAN-20250117-SUBAGENTCONFIG.P15" packages/cli/src/services/BuiltinCommandLoader.ts
-# Expected: 2+
+# Expected: 2
+
+# Check plan markers in slashCommandProcessor (service initialization)
+grep -c "@plan:PLAN-20250117-SUBAGENTCONFIG.P15" packages/cli/src/ui/hooks/slashCommandProcessor.ts
+# Expected: 3+
+
+# Check SubagentManager exported from core
+grep -q "export.*SubagentManager" packages/core/src/config/index.ts || exit 1
 
 # TypeScript compiles
 npm run typecheck
