@@ -14,7 +14,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { simpleGit } from 'simple-git';
-import { recursivelyHydrateStrings } from './extensions/variables.js';
+import {
+  recursivelyHydrateStrings,
+  type JsonObject,
+} from './extensions/variables.js';
 import { SettingScope, loadSettings } from './settings.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
 import { resolveEnvVarsInObject } from '../utils/envVarResolver.js';
@@ -645,20 +648,32 @@ export async function loadExtensionConfig(
   }
   try {
     const configContent = fs.readFileSync(configFilePath, 'utf-8');
-    const config = recursivelyHydrateStrings(JSON.parse(configContent), {
-      extensionPath: extensionDir,
-      workspacePath: workspaceDir,
-      '/': path.sep,
-      pathSeparator: path.sep,
-    }) as unknown as ExtensionConfig;
-    if (!config.name || !config.version) {
-      return null;
+    const rawConfig = JSON.parse(configContent) as ExtensionConfig;
+    if (!rawConfig.name || !rawConfig.version) {
+      throw new Error(
+        `Invalid configuration in ${configFilePath}: missing ${!rawConfig.name ? '"name"' : '"version"'}`,
+      );
     }
+    const installDir = new ExtensionStorage(rawConfig.name).getExtensionDir();
+    const config = recursivelyHydrateStrings(
+      rawConfig as unknown as JsonObject,
+      {
+        extensionPath: installDir,
+        workspacePath: workspaceDir,
+        '/': path.sep,
+        pathSeparator: path.sep,
+      },
+    ) as unknown as ExtensionConfig;
+
     validateName(config.name);
     return config;
   } catch (e) {
     // Re-throw validation errors so installExtension() can report them
-    if (e instanceof Error && e.message.includes('Invalid extension name')) {
+    if (
+      e instanceof Error &&
+      (e.message.includes('Invalid extension name') ||
+        e.message.includes('Invalid configuration'))
+    ) {
       throw e;
     }
     return null;
