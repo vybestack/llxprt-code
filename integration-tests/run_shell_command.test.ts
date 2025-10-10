@@ -235,12 +235,14 @@ describe('run_shell_command', () => {
     ).toBeTruthy();
   });
 
-  it('should allow all with "ShellTool" and other specifics', async () => {
+  it('should allow all with "ShellTool" and other specific tools', async () => {
     const rig = new TestRig();
-    await rig.setup('should allow all with "ShellTool" and other specifics');
+    await rig.setup(
+      'should allow all with "ShellTool" and other specific tools',
+    );
 
     const { tool } = getLineCountCommand();
-    const prompt = `use date`;
+    const prompt = `Please run the command "echo test-allow-all" and show me the output`;
 
     const result = await rig.run({
       stdin: prompt,
@@ -252,9 +254,10 @@ describe('run_shell_command', () => {
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
 
-    if (!foundToolCall) {
+    if (!foundToolCall || !result.includes('test-allow-all')) {
       printDebugInfo(rig, result, {
         'Found tool call': foundToolCall,
+        Result: result,
       });
     }
 
@@ -262,6 +265,13 @@ describe('run_shell_command', () => {
       foundToolCall,
       'Expected to find a run_shell_command tool call',
     ).toBeTruthy();
+
+    // Validate model output - will throw if no output, warn if missing expected content
+    validateModelOutput(
+      result,
+      'test-allow-all',
+      'Shell command stdin allow all',
+    );
   });
 
   it.skipIf(process.env.LLXPRT_SANDBOX !== 'false')(
