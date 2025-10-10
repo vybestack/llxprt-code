@@ -7,6 +7,8 @@
 import { useCallback, useMemo, useEffect, useState } from 'react';
 import { type PartListUnion } from '@google/genai';
 import process from 'node:process';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
   Config,
@@ -16,6 +18,8 @@ import {
   SlashCommandEvent,
   ToolConfirmationOutcome,
   Storage,
+  ProfileManager,
+  SubagentManager,
 } from '@vybestack/llxprt-code-core';
 import { useSessionStats } from '../contexts/SessionContext.js';
 import {
@@ -100,6 +104,25 @@ export const useSlashCommandProcessor = (
     return l;
   }, [config]);
 
+  /**
+   * Initialize SubagentManager for command context
+   *
+   * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+   * @requirement:REQ-010
+   */
+  const profileManager = useMemo(() => {
+    if (!config) return undefined;
+    const llxprtDir = path.join(os.homedir(), '.llxprt');
+    return new ProfileManager(llxprtDir);
+  }, [config]);
+
+  const subagentManager = useMemo(() => {
+    if (!config || !profileManager) return undefined;
+    const llxprtDir = path.join(os.homedir(), '.llxprt');
+    const subagentsDir = path.join(llxprtDir, 'subagents');
+    return new SubagentManager(subagentsDir, profileManager);
+  }, [config, profileManager]);
+
   const [pendingCompressionItem, setPendingCompressionItem] =
     useState<HistoryItemWithoutId | null>(null);
 
@@ -174,6 +197,8 @@ export const useSlashCommandProcessor = (
         settings,
         git: gitService,
         logger,
+        profileManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
+        subagentManager, // @plan:PLAN-20250117-SUBAGENTCONFIG.P15 @requirement:REQ-010
       },
       ui: {
         addItem,
@@ -216,6 +241,8 @@ export const useSlashCommandProcessor = (
       sessionShellAllowlist,
       setLlxprtMdFileCount,
       reloadCommands,
+      profileManager,
+      subagentManager,
     ],
   );
 

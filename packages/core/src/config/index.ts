@@ -29,3 +29,10 @@ export {
 } from './config.js';
 
 export { DEFAULT_GEMINI_FLASH_MODEL as DEFAULT_FLASH_MODEL } from './models.js';
+
+/**
+ * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+ * @requirement:REQ-010
+ */
+export { SubagentManager } from './subagentManager.js';
+export type { SubagentConfig } from './types.js';

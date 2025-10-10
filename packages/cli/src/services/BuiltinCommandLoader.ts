@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ICommandLoader } from './types.js';
 import { SlashCommand } from '../ui/commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
+import { ICommandLoader } from './types.js';
+
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { authCommand } from '../ui/commands/authCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
@@ -46,6 +47,7 @@ import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
 import { logoutCommand } from '../ui/commands/logoutCommand.js';
 import { statusCommand } from '../ui/commands/statusCommand.js';
+import { subagentCommand } from '../ui/commands/subagentCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -55,13 +57,25 @@ export class BuiltinCommandLoader implements ICommandLoader {
   constructor(private config: Config | null) {}
 
   /**
+   * Discovers and returns all built-in slash commands.
+   * @param signal An AbortSignal to allow cancellation.
+   * @returns A promise that resolves to an array of SlashCommand objects.
+   *
+   * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+   * @requirement:REQ-010
+   */
+  async loadCommands(_signal: AbortSignal): Promise<SlashCommand[]> {
+    return this.registerBuiltinCommands();
+  }
+
+  /**
    * Gathers all raw built-in command definitions, injects dependencies where
    * needed (e.g., config) and filters out any that are not available.
    *
-   * @param _signal An AbortSignal (unused for this synchronous loader).
-   * @returns A promise that resolves to an array of `SlashCommand` objects.
+   * @plan:PLAN-20250117-SUBAGENTCONFIG.P15
+   * @requirement:REQ-010
    */
-  async loadCommands(_signal: AbortSignal): Promise<SlashCommand[]> {
+  private registerBuiltinCommands(): SlashCommand[] {
     const allDefinitions: Array<SlashCommand | null> = [
       aboutCommand,
       authCommand,
@@ -94,14 +108,15 @@ export class BuiltinCommandLoader implements ICommandLoader {
       keyfileCommand,
       baseurlCommand,
       toolformatCommand,
+      setupGithubCommand,
       setCommand,
       profileCommand,
       diagnosticsCommand,
-      setupGithubCommand,
       terminalSetupCommand,
       debugCommand,
       logoutCommand,
       statusCommand,
+      subagentCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
