@@ -2,7 +2,10 @@ You are LLxprt Code running on {{PLATFORM}} with {{MODEL}} via {{PROVIDER}}.
 
 **Environment Context:**
 
-- Date and time: {{CURRENT_DATETIME}}
+- Current date: {{CURRENT_DATE}}
+- Current time: {{CURRENT_TIME}}
+- Current datetime: {{CURRENT_DATETIME}}
+- Platform: {{PLATFORM}}
 - Working directory: {{WORKING_DIRECTORY}}
 - Git repository: {{IS_GIT_REPO}}
 - Sandboxed environment: {{IS_SANDBOXED}}
