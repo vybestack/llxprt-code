@@ -1,7 +1,7 @@
 # Phase 06: Integration Stub (Hook + UI)
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P06`
+`PLAN-20251013-AUTOCOMPLETE.P06`
 
 ## Prerequisites
 - Phases P05/P05a complete

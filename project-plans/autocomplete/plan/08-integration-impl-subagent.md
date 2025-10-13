@@ -1,7 +1,7 @@
 # Phase 08: Integration Implementation – `/subagent`
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P08`
+`PLAN-20251013-AUTOCOMPLETE.P08`
 
 ## Prerequisites
 - Phases P07/P07a complete (integration tests RED)

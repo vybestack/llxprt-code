@@ -1,7 +1,7 @@
 # Phase 11: Legacy Completion Removal
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P11`
+`PLAN-20251013-AUTOCOMPLETE.P11`
 
 ## Prerequisites
 - `/subagent` and `/set` schema migrations verified (P08a, P10a)
@@ -21,7 +21,7 @@
 ### Required Comment Example
 ```typescript
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P11
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P11
  * @requirement:REQ-004
  * @requirement:REQ-006
  * Deprecation: Removed legacy completion branch (see specification Integration Analysis).

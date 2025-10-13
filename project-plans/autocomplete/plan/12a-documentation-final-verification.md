@@ -1,7 +1,7 @@
 # Phase 12a: Documentation Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P12a`
+`PLAN-20251013-AUTOCOMPLETE.P12a`
 
 ## Prerequisites
 - Phase 12 documentation complete
@@ -12,7 +12,7 @@
 
 ### Required Marker
 ```markdown
-<!-- @plan:PLAN-20250214-AUTOCOMPLETE.P12a @requirement:REQ-006 -->
+<!-- @plan:PLAN-20251013-AUTOCOMPLETE.P12a @requirement:REQ-006 -->
 Verification: Documentation reviewed on YYYY-MM-DD by <reviewer>.
 ```
 

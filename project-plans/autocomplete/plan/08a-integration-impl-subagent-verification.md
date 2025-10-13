@@ -1,7 +1,7 @@
 # Phase 08a: Integration Implementation Verification – `/subagent`
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P08a`
+`PLAN-20251013-AUTOCOMPLETE.P08a`
 
 ## Prerequisites
 - Phase 08 implementation completed
@@ -16,7 +16,7 @@
 ### Required Comment Example
 ```typescript
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P08a
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08a
  * @requirement:REQ-002
  * @requirement:REQ-003
  * @requirement:REQ-004

@@ -1,7 +1,7 @@
 # Phase 04a: Schema TDD Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P04a`
+`PLAN-20251013-AUTOCOMPLETE.P04a`
 
 ## Prerequisites
 - Phase 04 tests created and failing
@@ -12,14 +12,14 @@
 
 ### Required Comment
 ```typescript
-// @plan:PLAN-20250214-AUTOCOMPLETE.P04a @requirement:REQ-002 @requirement:REQ-005
+// @plan:PLAN-20251013-AUTOCOMPLETE.P04a @requirement:REQ-002 @requirement:REQ-005
 // Verification: Tests RED on YYYY-MM-DD – see .completed/P04.md for stack trace.
 ```
 
 ## Verification Commands
 
 ```bash
-npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P04" || true
+(cd packages/cli && npm test -- --run --reporter verbose argumentResolver.test.ts) || true
 ```
 
 ## Manual Verification Checklist

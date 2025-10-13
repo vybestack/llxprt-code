@@ -1,6 +1,6 @@
 # Argument Schema & Resolver Pseudocode
 
-<!-- @plan:PLAN-20250214-AUTOCOMPLETE.P02 @requirement:REQ-001 @requirement:REQ-002 @requirement:REQ-004 @requirement:REQ-005 @requirement:REQ-006 -->
+<!-- @plan:PLAN-20251013-AUTOCOMPLETE.P02 @requirement:REQ-001 @requirement:REQ-002 @requirement:REQ-004 @requirement:REQ-005 @requirement:REQ-006 -->
 
 **Lines 1-10**: Define types
 1. `LiteralArgument` structure: `{ kind: 'literal', value: string, description?: string, next?: CommandArgumentSchema[] }`

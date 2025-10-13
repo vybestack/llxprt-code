@@ -1,7 +1,7 @@
 # Phase 05: Schema Implementation
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P05`
+`PLAN-20251013-AUTOCOMPLETE.P05`
 
 ## Prerequisites
 - Phases P04/P04a complete (tests failing)
@@ -14,7 +14,7 @@
   - Within each function, include detailed comment referencing every line implemented, e.g.:
     ```typescript
     /**
-     * @plan:PLAN-20250214-AUTOCOMPLETE.P05
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P05
      * @requirement:REQ-001
      * @requirement:REQ-002
      * @pseudocode ArgumentSchema.md lines 7-40

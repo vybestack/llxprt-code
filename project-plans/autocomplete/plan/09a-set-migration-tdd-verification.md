@@ -1,7 +1,7 @@
 # Phase 09a: `/set` Migration TDD Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P09a`
+`PLAN-20251013-AUTOCOMPLETE.P09a`
 
 ## Prerequisites
 - Phase 09 tests present (failing)
@@ -12,7 +12,7 @@
 
 ### Required Comment Example
 ```typescript
-// @plan:PLAN-20250214-AUTOCOMPLETE.P09a @requirement:REQ-006
+// @plan:PLAN-20251013-AUTOCOMPLETE.P09a @requirement:REQ-006
 // Verification: RED on YYYY-MM-DD – property ratio XX%.
 ```
 

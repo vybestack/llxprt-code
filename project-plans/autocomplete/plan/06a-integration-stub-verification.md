@@ -1,7 +1,7 @@
 # Phase 06a: Integration Stub Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P06a`
+`PLAN-20251013-AUTOCOMPLETE.P06a`
 
 ## Prerequisites
 - Phase 06 completed
@@ -13,7 +13,7 @@
 ### Required Comment Example
 ```typescript
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P06a
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06a
  * @requirement:REQ-002
  * Verification: Feature flag disables hints (tested YYYY-MM-DD).
  */

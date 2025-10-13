@@ -1,7 +1,7 @@
 # Phase 10: `/set` Implementation
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P10`
+`PLAN-20251013-AUTOCOMPLETE.P10`
 
 ## Prerequisites
 - Phases P09/P09a complete
@@ -15,7 +15,7 @@
   - Code comment example:
     ```typescript
     /**
-     * @plan:PLAN-20250214-AUTOCOMPLETE.P10
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P10
      * @requirement:REQ-006
      * @pseudocode ArgumentSchema.md lines 111-130
      * - Line 111: literal `unset`

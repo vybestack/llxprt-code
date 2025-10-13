@@ -1,7 +1,7 @@
 # Phase 12: Documentation & Final Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P12`
+`PLAN-20251013-AUTOCOMPLETE.P12`
 
 ## Prerequisites
 - Legacy removal verified (P11a)
@@ -16,7 +16,7 @@
 
 ### Required Marker
 ```markdown
-<!-- @plan:PLAN-20250214-AUTOCOMPLETE.P12 @requirement:REQ-006 -->
+<!-- @plan:PLAN-20251013-AUTOCOMPLETE.P12 @requirement:REQ-006 -->
 ```
 
 ## Verification Commands

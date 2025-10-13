@@ -1,7 +1,7 @@
 # Phase 03a: Schema Stub Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P03a`
+`PLAN-20251013-AUTOCOMPLETE.P03a`
 
 ## Prerequisites
 - Phase 03 completed

@@ -1,7 +1,7 @@
 # Phase 07: Integration TDD – `/subagent`
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P07`
+`PLAN-20251013-AUTOCOMPLETE.P07`
 
 ## Prerequisites
 - Phases P06/P06a complete

@@ -1,7 +1,7 @@
 # Phase 07a: Integration TDD Verification – `/subagent`
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P07a`
+`PLAN-20251013-AUTOCOMPLETE.P07a`
 
 ## Prerequisites
 - Phase 07 tests in place (failing)
@@ -12,7 +12,7 @@
 
 ### Required Comment Example
 ```typescript
-// @plan:PLAN-20250214-AUTOCOMPLETE.P07a @requirement:REQ-003 @requirement:REQ-004 @requirement:REQ-005
+// @plan:PLAN-20251013-AUTOCOMPLETE.P07a @requirement:REQ-003 @requirement:REQ-004 @requirement:REQ-005
 // Verification: RED on YYYY-MM-DD – see .completed/P07.md.
 ```
 

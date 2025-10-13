@@ -1,6 +1,6 @@
 # Domain Analysis
 
-<!-- @plan:PLAN-20250214-AUTOCOMPLETE.P01 @requirement:REQ-001 @requirement:REQ-002 @requirement:REQ-003 @requirement:REQ-004 @requirement:REQ-006 -->
+<!-- @plan:PLAN-20251013-AUTOCOMPLETE.P01 @requirement:REQ-001 @requirement:REQ-002 @requirement:REQ-003 @requirement:REQ-004 @requirement:REQ-006 -->
 
 ## Current Completion Architecture
 - `useSlashCompletion.tsx` couples command navigation and argument completion with manual token splitting.

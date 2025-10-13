@@ -1,7 +1,7 @@
 # Phase 04: Schema TDD (Unit)
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P04`
+`PLAN-20251013-AUTOCOMPLETE.P04`
 
 ## Prerequisites
 - Phases P03/P03a complete

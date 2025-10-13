@@ -1,7 +1,7 @@
 # Phase 05a: Schema Implementation Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P05a`
+`PLAN-20251013-AUTOCOMPLETE.P05a`
 
 ## Prerequisites
 - Phase 05 implementation complete
@@ -13,7 +13,7 @@
 ### Required Comment Example
 ```typescript
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P05a
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P05a
  * @requirement:REQ-001
  * @requirement:REQ-002
  * Verification:

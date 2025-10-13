@@ -1,7 +1,7 @@
 # Phase 10a: `/set` Implementation Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P10a`
+`PLAN-20251013-AUTOCOMPLETE.P10a`
 
 ## Prerequisites
 - Phase 10 implementation complete
@@ -13,7 +13,7 @@
 ### Required Comment
 ```typescript
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P10a
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P10a
  * @requirement:REQ-006
  * Verification: Tests PASS, mutation score X%, property ratio Y% on YYYY-MM-DD.
  */

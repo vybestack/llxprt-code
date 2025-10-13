@@ -1,7 +1,7 @@
 # Phase 11a: Legacy Removal Verification
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P11a`
+`PLAN-20251013-AUTOCOMPLETE.P11a`
 
 ## Prerequisites
 - Phase 11 deletions executed
@@ -13,7 +13,7 @@
 ### Required Comment
 ```typescript
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P11a
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P11a
  * @requirement:REQ-004
  * @requirement:REQ-006
  * Verification: Legacy completion removed; tests PASS on YYYY-MM-DD.

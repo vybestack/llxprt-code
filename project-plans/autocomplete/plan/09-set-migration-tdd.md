@@ -1,7 +1,7 @@
 # Phase 09: `/set` Migration TDD
 
 ## Phase ID
-`PLAN-20250214-AUTOCOMPLETE.P09`
+`PLAN-20251013-AUTOCOMPLETE.P09`
 
 ## Prerequisites
 - `/subagent` migration verified (P08a complete)
