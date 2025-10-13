@@ -109,7 +109,10 @@ async function saveSubagent(
  * /subagent save command - Auto and Manual modes
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P14
- * @requirement:REQ-003, REQ-004, REQ-014
+ * @requirement:REQ-003
+ * @requirement:REQ-004
+ * @requirement:REQ-014
+ * @requirement:REQ-015
  * @pseudocode SubagentCommand.md lines 1-90
  */
 const saveCommand: SlashCommand = {
@@ -190,12 +193,38 @@ const saveCommand: SlashCommand = {
       try {
         const client = configService.getGeminiClient();
 
-        if (!client || !client.hasChatInitialized()) {
+        if (!client) {
           return {
             type: 'message',
             messageType: 'error',
             content:
-              'Error: Chat not initialized. Try manual mode or check your connection.',
+              'Unable to access Gemini client. Run /auth login or try manual mode.',
+          };
+        }
+
+        if (!client.hasChatInitialized?.()) {
+          try {
+            if (typeof client.resetChat === 'function') {
+              await client.resetChat();
+            } else if (typeof client.startChat === 'function') {
+              await client.startChat();
+            }
+          } catch (_initializeError) {
+            return {
+              type: 'message',
+              messageType: 'error',
+              content:
+                'Error: Unable to start chat session. Try manual mode or check your connection.',
+            };
+          }
+        }
+
+        if (!client.hasChatInitialized?.()) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content:
+              'Error: Unable to start chat session. Try manual mode or check your connection.',
           };
         }
 
@@ -393,6 +422,7 @@ const showCommand: SlashCommand = {
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P08
  * @requirement:REQ-007
+ * @requirement:REQ-015
  * @pseudocode SubagentCommand.md lines 235-291
  */
 const deleteCommand: SlashCommand = {
@@ -487,6 +517,7 @@ const deleteCommand: SlashCommand = {
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P11
  * @requirement:REQ-008
+ * @requirement:REQ-015
  * @pseudocode SubagentCommand.md lines 166-210
  *
  * Pattern: Uses spawnSync approach from text-buffer.ts

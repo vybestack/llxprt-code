@@ -1,7 +1,8 @@
 /**
  * Subagent configuration stored in ~/.llxprt/subagents/<name>.json
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P03
- * @requirement:REQ-001, REQ-012
+ * @requirement:REQ-001
+ * @requirement:REQ-012
  */
 export interface SubagentConfig {
   /** Subagent identifier (matches filename without .json) */

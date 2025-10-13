@@ -771,6 +771,8 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
   let mockGeminiClient: {
     getChat: ReturnType<typeof vi.fn>;
     hasChatInitialized: ReturnType<typeof vi.fn>;
+    resetChat: ReturnType<typeof vi.fn>;
+    startChat?: ReturnType<typeof vi.fn>;
   };
   let mockChat: {
     sendMessage: ReturnType<typeof vi.fn>;
@@ -809,6 +811,9 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     mockGeminiClient = {
       getChat: vi.fn(() => mockChat),
       hasChatInitialized: vi.fn(() => true),
+      resetChat: vi.fn(async () => {
+        mockGeminiClient.hasChatInitialized.mockReturnValue(true);
+      }),
     };
 
     // Add to context in a way that avoids TypeScript errors
@@ -887,17 +892,38 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     }
   });
 
-  it('should handle chat not initialized', async () => {
-    mockGeminiClient.hasChatInitialized.mockReturnValue(false);
+  it('should initialize chat automatically when not already started', async () => {
+    mockGeminiClient.hasChatInitialized
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+
+    mockChat.sendMessage.mockResolvedValue({ text: 'Auto generated prompt' });
 
     const args = 'testagent testprofile auto "expert debugger"';
     const result = await subagentCommand.subCommands![0].action!(context, args);
 
+    expect(mockGeminiClient.resetChat).toHaveBeenCalled();
+    expect(result).toBeDefined();
+    expect(result?.type).toBe('message');
+    if (result && result.type === 'message') {
+      expect(result.messageType).toBe('info');
+      expect(result.content).toMatch(/created successfully/i);
+    }
+  });
+
+  it('should surface an error if chat cannot be initialized', async () => {
+    mockGeminiClient.hasChatInitialized.mockReturnValue(false);
+    mockGeminiClient.resetChat.mockRejectedValue(new Error('init failed'));
+
+    const args = 'testagent testprofile auto "expert debugger"';
+    const result = await subagentCommand.subCommands![0].action!(context, args);
+
+    expect(mockGeminiClient.resetChat).toHaveBeenCalled();
     expect(result).toBeDefined();
     expect(result?.type).toBe('message');
     if (result && result.type === 'message') {
       expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/chat not.*initialized|connection/i);
+      expect(result.content).toMatch(/unable to start chat session/i);
     }
   });
 

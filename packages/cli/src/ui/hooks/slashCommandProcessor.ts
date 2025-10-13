@@ -113,7 +113,8 @@ export const useSlashCommandProcessor = (
   const profileManager = useMemo(() => {
     if (!config) return undefined;
     const llxprtDir = path.join(os.homedir(), '.llxprt');
-    return new ProfileManager(llxprtDir);
+    const profilesDir = path.join(llxprtDir, 'profiles');
+    return new ProfileManager(profilesDir);
   }, [config]);
 
   const subagentManager = useMemo(() => {
