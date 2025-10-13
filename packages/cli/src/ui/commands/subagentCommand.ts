@@ -6,12 +6,15 @@
 
 /* @jsxImportSource react */
 
+import React from 'react';
+import { Text } from 'ink';
 import {
   SlashCommand,
   CommandContext,
   SlashCommandActionReturn,
   CommandKind,
 } from './types.js';
+import { Colors } from '../colors.js';
 import { SubagentConfig } from '@vybestack/llxprt-code-core';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
@@ -163,7 +166,13 @@ const saveCommand: SlashCommand = {
     if (exists && !overwriteConfirmed) {
       return {
         type: 'confirm_action',
-        prompt: `A subagent with the name '${name}' already exists. Do you want to overwrite it?`,
+        prompt: React.createElement(
+          Text,
+          null,
+          'A subagent with the name ',
+          React.createElement(Text, { color: Colors.AccentPurple }, name),
+          ' already exists. Do you want to overwrite it?',
+        ),
         originalInvocation: {
           raw: invocation?.raw || '',
         },
@@ -479,7 +488,13 @@ const deleteCommand: SlashCommand = {
     if (!overwriteConfirmed) {
       return {
         type: 'confirm_action',
-        prompt: `Are you sure you want to delete subagent '${name}'? This action cannot be undone.`,
+        prompt: React.createElement(
+          Text,
+          null,
+          'Are you sure you want to delete subagent ',
+          React.createElement(Text, { color: Colors.AccentPurple }, name),
+          '? This action cannot be undone.',
+        ),
         originalInvocation: {
           raw: invocation?.raw || '',
         },
