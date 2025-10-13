@@ -29,6 +29,25 @@ import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
 import { useCompletion } from './useCompletion.js';
 
+/**
+ * @plan:PLAN-20250214-AUTOCOMPLETE.P03
+ * @requirement:REQ-001
+ * TODO: Integrate schema-driven completion system in Phase 06
+ *
+ * The schema system provides a more structured approach to command completion:
+ * - Import: import { createCompletionHandler } from '../commands/schema/index.js';
+ * - Create handler: const handler = createCompletionHandler(commandSchema);
+ * - Use handler: const suggestions = await handler(buffer.getCursorLine());
+ *
+ * See @project-plans/autocomplete/plan/03-schema-stub.md for schema system documentation
+ * See @project-plans/autocomplete/plan/06-integration.md for integration details
+ */
+/**
+ * @plan:PLAN-20250214-AUTOCOMPLETE.P03a
+ * @requirement:REQ-001
+ * Verification: Placeholder wiring reviewed during schema stub verification (`npm run typecheck` on 2025-02-15). No runtime behavior changes.
+ */
+
 export interface UseSlashCompletionReturn {
   suggestions: Suggestion[];
   activeSuggestionIndex: number;
