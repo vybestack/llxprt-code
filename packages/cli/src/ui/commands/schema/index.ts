@@ -29,12 +29,19 @@ export type {
  * @pseudocode ArgumentSchema.md lines 71-90
  * Placeholder handler - will be implemented in Phase 05
  */
-import type { CommandArgumentSchema } from './types.js';
+import type { CommandArgumentSchema, CompletionResult } from './types.js';
+import type { CommandContext } from '../types.js';
 
 export function createCompletionHandler(_schema: CommandArgumentSchema) {
-  throw new Error(
-    'NotImplemented: P04 - createCompletionHandler implementation pending',
-  );
+  return (
+    _ctx: CommandContext,
+    _partial: string,
+    _fullLine: string,
+  ): CompletionResult => {
+    throw new Error(
+      'NotImplemented: P04 - createCompletionHandler implementation pending',
+    );
+  };
 }
 
 /**
