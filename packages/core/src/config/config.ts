@@ -358,6 +358,7 @@ export interface ConfigParameters {
   truncateToolOutputLines?: number;
   enableToolOutputTruncation?: boolean;
   continueOnFailedApiCall?: boolean;
+  enableShellOutputEfficiency?: boolean;
 }
 
 export class Config {
@@ -517,6 +518,7 @@ export class Config {
   truncateToolOutputLines: number;
   enableToolOutputTruncation: boolean;
   private readonly continueOnFailedApiCall: boolean;
+  private readonly enableShellOutputEfficiency: boolean;
 
   constructor(params: ConfigParameters) {
     const providedSettingsService = params.settingsService;
@@ -652,6 +654,8 @@ export class Config {
     this.enableToolOutputTruncation = params.enableToolOutputTruncation ?? true;
     this.useSmartEdit = params.useSmartEdit ?? false;
     this.continueOnFailedApiCall = params.continueOnFailedApiCall ?? true;
+    this.enableShellOutputEfficiency =
+      params.enableShellOutputEfficiency ?? true;
     this.extensionManagement = params.extensionManagement ?? false;
     this.storage = new Storage(this.targetDir);
     this.enablePromptCompletion = params.enablePromptCompletion ?? false;
@@ -1565,6 +1569,10 @@ export class Config {
 
   getContinueOnFailedApiCall(): boolean {
     return this.continueOnFailedApiCall;
+  }
+
+  getEnableShellOutputEfficiency(): boolean {
+    return this.enableShellOutputEfficiency;
   }
 
   getScreenReader(): boolean {
