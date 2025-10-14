@@ -13,8 +13,67 @@ const execAsync = promisify(exec);
 
 const MAX_TRAVERSAL_DEPTH = 32;
 
+interface ProcessInfo {
+  pid: number;
+  parentPid: number;
+  name: string;
+  command: string;
+}
+
+interface RawProcessInfo {
+  ProcessId?: number;
+  ParentProcessId?: number;
+  Name?: string;
+  CommandLine?: string;
+}
+
 /**
- * Fetches the parent process ID, name, and command for a given process ID.
+ * Fetches the entire process table on Windows.
+ */
+async function getProcessTableWindows(): Promise<Map<number, ProcessInfo>> {
+  const processMap = new Map<number, ProcessInfo>();
+  try {
+    // Fetch ProcessId, ParentProcessId, Name, and CommandLine for all processes.
+    const powershellCommand =
+      'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress';
+    // Increase maxBuffer to handle large process lists (default is 1MB)
+    const { stdout } = await execAsync(`powershell "${powershellCommand}"`, {
+      maxBuffer: 10 * 1024 * 1024,
+    });
+
+    if (!stdout.trim()) {
+      return processMap;
+    }
+
+    let processes: RawProcessInfo | RawProcessInfo[];
+    try {
+      processes = JSON.parse(stdout);
+    } catch (_e) {
+      return processMap;
+    }
+
+    if (!Array.isArray(processes)) {
+      processes = [processes];
+    }
+
+    for (const p of processes) {
+      if (p && typeof p.ProcessId === 'number') {
+        processMap.set(p.ProcessId, {
+          pid: p.ProcessId,
+          parentPid: p.ParentProcessId || 0,
+          name: p.Name || '',
+          command: p.CommandLine || '',
+        });
+      }
+    }
+  } catch (_e) {
+    // Fallback or error handling if PowerShell fails
+  }
+  return processMap;
+}
+
+/**
+ * Fetches the parent process ID, name, and command for a given process ID on Unix.
  *
  * @param pid The process ID to inspect.
  * @returns A promise that resolves to the parent's PID, name, and command.
@@ -25,74 +84,24 @@ async function getProcessInfo(pid: number): Promise<{
   command: string;
 }> {
   try {
-    const platform = os.platform();
-    if (platform === 'win32') {
-      const powershellSegments = [
-        '$p = Get-CimInstance Win32_Process',
-        `-Filter 'ProcessId=${pid}'`,
-        '-ErrorAction SilentlyContinue;',
-        'if ($p) {',
-        '@{Name=$p.Name;ParentProcessId=$p.ParentProcessId;CommandLine=$p.CommandLine}',
-        '| ConvertTo-Json',
-        '}',
-      ];
-      const powershellCommand = `powershell "${powershellSegments.join(' ')}"`;
-      const { stdout } = await execAsync(powershellCommand);
-      const output = stdout.trim();
-      if (!output) {
-        return { parentPid: 0, name: '', command: '' };
-      }
-
-      try {
-        const parsed = JSON.parse(output) as {
-          Name?: string;
-          ParentProcessId?: number;
-          CommandLine?: string;
-        };
-        const parentPid =
-          typeof parsed.ParentProcessId === 'number'
-            ? parsed.ParentProcessId
-            : 0;
-        return {
-          parentPid,
-          name: parsed.Name ?? '',
-          command: parsed.CommandLine ?? '',
-        };
-      } catch (parseError) {
-        console.debug(
-          `Failed to parse PowerShell output for pid ${pid}:`,
-          parseError,
-        );
-        return { parentPid: 0, name: '', command: '' };
-      }
-    }
-
-    // Non-Windows platforms - use command= instead of comm=
     const command = `ps -o ppid=,command= -p ${pid}`;
     const { stdout } = await execAsync(command);
     const trimmedStdout = stdout.trim();
-
-    const match = trimmedStdout.match(/^\s*(\d+)\s+(.+)$/);
-    if (!match) {
-      throw new Error(`Failed to parse ps output: ${trimmedStdout}`);
+    if (!trimmedStdout) {
+      return { parentPid: 0, name: '', command: '' };
     }
-
-    const parentPid = parseInt(match[1], 10);
-    const execPath = match[2].trim();
-
-    const { stdout: fullCmdStdout } = await execAsync(
-      `ps -o command= -p ${pid}`,
-    );
-    const fullCommand = fullCmdStdout.trim();
-    const processName = path.basename(execPath);
+    const parts = trimmedStdout.split(/\s+/);
+    const ppidString = parts[0];
+    const parentPid = parseInt(ppidString, 10);
+    const fullCommand = trimmedStdout.substring(ppidString.length).trim();
+    const processName = path.basename(fullCommand.split(' ')[0]);
 
     return {
-      parentPid: Number.isNaN(parentPid) ? 1 : parentPid,
+      parentPid: isNaN(parentPid) ? 1 : parentPid,
       name: processName,
       command: fullCommand,
     };
-  } catch (error) {
-    console.debug(`Failed to get process info for pid ${pid}:`, error);
+  } catch (_e) {
     return { parentPid: 0, name: '', command: '' };
   }
 }
@@ -161,84 +170,45 @@ async function getIdeProcessInfoForUnix(): Promise<{
 }
 
 /**
- * Finds the IDE process info on Windows using an optimized single PowerShell call.
- *
- * The strategy is to get all ancestor processes in one call, then traverse in memory.
- * This is much faster than making multiple PowerShell calls.
- *
- * @returns A promise that resolves to the PID and command of the IDE process.
+ * Finds the IDE process info on Windows using a snapshot approach.
  */
 async function getIdeProcessInfoForWindows(): Promise<{
   pid: number;
   command: string;
 }> {
-  try {
-    // Get all processes in a single PowerShell call - much faster than multiple calls
-    const powershellCommand = `powershell "Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine | ConvertTo-Json"`;
-    const { stdout } = await execAsync(powershellCommand, { timeout: 5000 });
-    const output = stdout.trim();
+  // Fetch the entire process table in one go.
+  const processMap = await getProcessTableWindows();
+  const myPid = process.pid;
+  const myProc = processMap.get(myPid);
 
-    if (!output) {
-      return { pid: process.pid, command: '' };
-    }
-
-    // Parse all processes into a map for fast lookup
-    const processes = JSON.parse(output) as Array<{
-      ProcessId?: number;
-      ParentProcessId?: number;
-      Name?: string;
-      CommandLine?: string;
-    }>;
-
-    const processMap = new Map<
-      number,
-      { parentPid: number; name: string; command: string }
-    >();
-    for (const p of processes) {
-      if (p.ProcessId !== undefined) {
-        processMap.set(p.ProcessId, {
-          parentPid: p.ParentProcessId ?? 0,
-          name: p.Name ?? '',
-          command: p.CommandLine ?? '',
-        });
-      }
-    }
-
-    // Traverse up from current process to find the IDE
-    let currentPid = process.pid;
-    let previousPid = process.pid;
-
-    for (let i = 0; i < MAX_TRAVERSAL_DEPTH; i++) {
-      const current = processMap.get(currentPid);
-      if (!current) {
-        break;
-      }
-
-      const parentPid = current.parentPid;
-      if (parentPid > 0) {
-        const parent = processMap.get(parentPid);
-        const grandParentPid = parent?.parentPid ?? 0;
-
-        if (grandParentPid === 0) {
-          // Found the grandchild of root - the IDE is previousPid
-          const ide = processMap.get(previousPid);
-          return { pid: previousPid, command: ide?.command ?? '' };
-        }
-      }
-
-      if (parentPid <= 0) {
-        break;
-      }
-      previousPid = currentPid;
-      currentPid = parentPid;
-    }
-
-    const current = processMap.get(currentPid);
-    return { pid: currentPid, command: current?.command ?? '' };
-  } catch (error) {
-    console.debug('Failed to get Windows process info:', error);
-    return { pid: process.pid, command: '' };
+  if (!myProc) {
+    // Fallback: try to get info for current process directly if snapshot fails
+    const { command } = await getProcessInfo(myPid);
+    return { pid: myPid, command };
   }
+
+  // Perform tree traversal in memory.
+  // Strategy: Find the great-grandchild of the root process (pid 0 or non-existent parent).
+  const ancestors: ProcessInfo[] = [];
+  let curr: ProcessInfo | undefined = myProc;
+
+  for (let i = 0; i < MAX_TRAVERSAL_DEPTH && curr; i++) {
+    ancestors.push(curr);
+    if (curr.parentPid === 0 || !processMap.has(curr.parentPid)) {
+      break; // Reached root
+    }
+    curr = processMap.get(curr.parentPid);
+  }
+
+  if (ancestors.length >= 3) {
+    const target = ancestors[ancestors.length - 3];
+    return { pid: target.pid, command: target.command };
+  } else if (ancestors.length > 0) {
+    const target = ancestors[ancestors.length - 1];
+    return { pid: target.pid, command: target.command };
+  }
+
+  return { pid: myPid, command: myProc.command };
 }
 
 /**
