@@ -572,6 +572,8 @@ const App = (props: AppInternalProps) => {
     openDialog: openProviderDialog,
     handleSelect: handleProviderSelect,
     closeDialog: exitProviderDialog,
+    providers: providerOptions,
+    currentProvider: selectedProvider,
   } = useProviderDialog({
     addMessage: (msg) =>
       addItem(
@@ -1679,8 +1681,8 @@ You can switch authentication methods by typing /auth or switch to a different m
           ) : isProviderDialogOpen ? (
             <Box flexDirection="column">
               <ProviderDialog
-                providers={providerManager.listProviders()}
-                currentProvider={providerManager.getActiveProviderName()}
+                providers={providerOptions}
+                currentProvider={selectedProvider}
                 onSelect={handleProviderSelect}
                 onClose={exitProviderDialog}
               />

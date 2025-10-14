@@ -700,14 +700,16 @@ export function KeypressProvider({
       // This happens when reattaching to tmux sessions
       if (isInitializedRef.current) {
         if (debugKeystrokeLogging) {
-          console.log('[DEBUG] Terminal resized - reinitializing keypress handling');
+          console.log(
+            '[DEBUG] Terminal resized - reinitializing keypress handling',
+          );
         }
         initializeKeypressHandling();
       }
     };
-    
+
     process.stdout.on('resize', handleResize);
-    
+
     return () => {
       process.stdout.off('resize', handleResize);
       if (cleanupRef.current) {
