@@ -1772,6 +1772,14 @@ export class GeminiClient {
     const historyToCompress = curatedHistory.slice(0, compressBeforeIndex);
     const historyToKeep = curatedHistory.slice(compressBeforeIndex);
 
+    if (historyToCompress.length === 0) {
+      return {
+        originalTokenCount,
+        newTokenCount: originalTokenCount,
+        compressionStatus: CompressionStatus.NOOP,
+      };
+    }
+
     this.getChat().setHistory(historyToCompress);
 
     const { text: summary } = await this.getChat().sendMessage(

@@ -888,6 +888,19 @@ describe('Gemini Client (client.ts)', () => {
       expect(newChat).toBe(initialChat);
     });
 
+    it('should return NOOP if history is too short to compress', async () => {
+      mockGetHistory.mockReturnValue([{ role: 'user', parts: [{ text: 'hi' }] }]);
+      vi.mocked(uiTelemetryService.getLastPromptTokenCount).mockReturnValue(50);
+
+      const result = await client.tryCompressChat('prompt-id-noop', false);
+
+      expect(result).toEqual({
+        compressionStatus: CompressionStatus.NOOP,
+        originalTokenCount: 50,
+        newTokenCount: 50,
+      });
+    });
+
     it('updates telemetry when compression succeeds', async () => {
       const MOCKED_TOKEN_LIMIT = 1000;
       const CONTEXT_THRESHOLD = 0.5;
@@ -901,6 +914,11 @@ describe('Gemini Client (client.ts)', () => {
 
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
       ]);
 
       // Set the mock to return original token count before compression
@@ -951,6 +969,11 @@ describe('Gemini Client (client.ts)', () => {
       });
       mockGetHistory.mockReturnValue([
         { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
+        { role: 'user', parts: [{ text: '...history...' }] },
+        { role: 'model', parts: [{ text: '...history...' }] },
       ]);
 
       const originalTokenCount =
