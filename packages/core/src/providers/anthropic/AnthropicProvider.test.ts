@@ -4,6 +4,26 @@ import { ITool } from '../ITool.js';
 import { IContent } from '../../services/history/IContent.js';
 import { TEST_PROVIDER_CONFIG } from '../test-utils/providerTestConfig.js';
 
+type AnthropicContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+    }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string;
+      is_error?: boolean;
+    };
+
+interface AnthropicMessage {
+  role: 'user' | 'assistant';
+  content: string | AnthropicContentBlock[];
+}
+
 // Mock the ToolFormatter
 vi.mock('../../tools/ToolFormatter.js', () => ({
   ToolFormatter: vi.fn().mockImplementation(() => ({
@@ -311,6 +331,105 @@ describe('AnthropicProvider', () => {
           system: expect.any(String),
         }),
       );
+    });
+
+    it('should emit tool_result blocks for tool responses with text content', async () => {
+      const mockStream = {
+        async *[Symbol.asyncIterator]() {
+          yield {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'Done' },
+          };
+        },
+      };
+
+      mockAnthropicInstance.messages.create.mockResolvedValue(mockStream);
+
+      const toolCallId = 'hist_tool_readmany_123';
+      const messages: IContent[] = [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'Please read these files' }],
+        },
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: toolCallId,
+              name: 'ReadManyFiles',
+              parameters: { paths: ['docs/**/*.md'] },
+            },
+          ],
+        },
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: toolCallId,
+              toolName: 'ReadManyFiles',
+              result: { output: 'Tool execution succeeded.' },
+            },
+            {
+              type: 'text',
+              text: '--- docs/example.md ---\nExample content line 1\n',
+            },
+            {
+              type: 'text',
+              text: '--- End of content ---',
+            },
+          ],
+        },
+      ];
+
+      const generator = provider.generateChatCompletion(messages);
+      const collected: IContent[] = [];
+      for await (const chunk of generator) {
+        collected.push(chunk);
+      }
+
+      expect(collected).toEqual([
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'Done' }],
+        },
+      ]);
+
+      const request = mockAnthropicInstance.messages.create.mock.calls[0][0];
+      const anthropicMessages = request.messages as AnthropicMessage[];
+
+      const assistantToolIndex = anthropicMessages.findIndex(
+        (msg) =>
+          msg.role === 'assistant' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((block) => block.type === 'tool_use'),
+      );
+
+      expect(assistantToolIndex).toBeGreaterThan(-1);
+
+      const toolResultMessage = anthropicMessages[assistantToolIndex + 1];
+      expect(toolResultMessage).toBeDefined();
+      expect(toolResultMessage.role).toBe('user');
+      expect(Array.isArray(toolResultMessage.content)).toBe(true);
+      const toolResultBlock = (
+        toolResultMessage.content as AnthropicContentBlock[]
+      )[0];
+      expect(toolResultBlock).toMatchObject({
+        type: 'tool_result',
+        tool_use_id: expect.stringMatching(/^toolu_/),
+      });
+      expect(toolResultBlock.content).toContain('docs/example.md');
+      expect(toolResultBlock.content).toContain('Example content line 1');
+
+      const duplicateUserText = anthropicMessages
+        .slice(assistantToolIndex + 2)
+        .filter(
+          (msg): msg is AnthropicMessage & { content: string } =>
+            msg.role === 'user' && typeof msg.content === 'string',
+        )
+        .find((msg) => msg.content.includes('docs/example.md'));
+      expect(duplicateUserText).toBeUndefined();
     });
 
     it('should handle tool calls in the stream', async () => {
