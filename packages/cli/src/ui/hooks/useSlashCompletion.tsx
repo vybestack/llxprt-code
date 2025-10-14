@@ -28,19 +28,22 @@ import {
 import { isSlashCommand } from '../utils/commandUtils.js';
 import { toCodePoints } from '../utils/textUtils.js';
 import { useCompletion } from './useCompletion.js';
+import { createCompletionHandler } from '../commands/schema/index.js';
 
 /**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P03
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P05
  * @requirement:REQ-001
- * TODO: Integrate schema-driven completion system in Phase 06
+ * @requirement:REQ-002
+ * @pseudocode ArgumentSchema.md lines 71-90
+ * Integration of schema-driven completion system
  *
  * The schema system provides a more structured approach to command completion:
  * - Import: import { createCompletionHandler } from '../commands/schema/index.js';
  * - Create handler: const handler = createCompletionHandler(commandSchema);
- * - Use handler: const suggestions = await handler(buffer.getCursorLine());
+ * - Use handler: const suggestions = await handler(commandContext, partialArg, fullLine);
  *
- * See @project-plans/autocomplete/plan/03-schema-stub.md for schema system documentation
- * See @project-plans/autocomplete/plan/06-integration.md for integration details
+ * Schema completion is now available for commands that provide a schema definition.
+ * The integration maintains existing UI behavior while providing enhanced completion.
  */
 /**
  * @plan:PLAN-20250214-AUTOCOMPLETE.P03a
@@ -263,7 +266,7 @@ export function useSlashCompletion(
 
       const depth = commandPathParts.length;
       const isArgumentCompletion =
-        leafCommand?.completion &&
+        (leafCommand?.completion || leafCommand?.schema) &&
         (hasTrailingSpace ||
           (rawParts.length > depth && depth > 0 && partial !== ''));
 
@@ -291,6 +294,36 @@ export function useSlashCompletion(
       if (isArgumentCompletion) {
         const argString = rawParts.slice(depth).join(' ');
 
+        // Check if command has schema-based completion
+        if (leafCommand!.schema) {
+          const schemaHandler = createCompletionHandler(leafCommand!.schema);
+          setIsLoadingSuggestions(true);
+
+          schemaHandler(commandContext, argString, currentLine)
+            .then((completionResult) => {
+              const finalSuggestions = completionResult.suggestions.map(
+                (s) => ({
+                  label: s.value,
+                  value: s.value,
+                  description: s.description,
+                }),
+              );
+              setSuggestions(finalSuggestions);
+              setShowSuggestions(finalSuggestions.length > 0);
+              setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
+              setIsLoadingSuggestions(false);
+            })
+            .catch((error) => {
+              console.error('Schema completion error:', error);
+              setSuggestions([]);
+              setShowSuggestions(false);
+              setActiveSuggestionIndex(-1);
+              setIsLoadingSuggestions(false);
+            });
+          return;
+        }
+
+        // Fallback to legacy completion function
         // Call completion function directly to check if it's async
         // @plan:PLAN-20250117-SUBAGENTCONFIG.P11
         const completionResult = leafCommand!.completion!(

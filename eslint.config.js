@@ -48,6 +48,8 @@ export default tseslint.config(
       'tmp/**',
       'package/bundle/**',
       '.integration-tests/**',
+      '.stryker-tmp/**',
+      '**/.stryker-tmp/**',
     ],
   },
   eslint.configs.recommended,
