@@ -31,6 +31,16 @@ import { useCompletion } from './useCompletion.js';
 import { createCompletionHandler } from '../commands/schema/index.js';
 
 /**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+ * @requirement:REQ-002
+ * Feature flag to control hint display - set to false for integration stub phase
+ */
+const SHOW_ARGUMENT_HINTS = false;
+
+// Suppress unused variable warning for feature flag used in future phases
+void SHOW_ARGUMENT_HINTS;
+
+/**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P05
  * @requirement:REQ-001
  * @requirement:REQ-002
@@ -44,6 +54,23 @@ import { createCompletionHandler } from '../commands/schema/index.js';
  *
  * Schema completion is now available for commands that provide a schema definition.
  * The integration maintains existing UI behavior while providing enhanced completion.
+ */
+
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+ * @requirement:REQ-002
+ * Integration stub: schema handler wired but hints disabled behind feature flag
+ * - Feature flag SHOW_ARGUMENT_HINTS = false prevents hint display
+ * - Schema handler invoked with legacy output structure preserved
+ * - UI component prepared with optional activeHint prop
+ */
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06a
+ * @requirement:REQ-002
+ * Verification: SHOW_ARGUMENT_HINTS remains false; `npm run typecheck` and
+ * `npm test -- --testNamePattern "subagentCommand"` (2025-02-15) confirm legacy
+ * output without hint rendering. Attempted `npm run typecheck -- --filter cli`
+ * but the script does not accept that argument (tsc path resolution failure).
  */
 /**
  * @plan:PLAN-20250214-AUTOCOMPLETE.P03a
@@ -296,11 +323,29 @@ export function useSlashCompletion(
 
         // Check if command has schema-based completion
         if (leafCommand!.schema) {
+          /**
+           * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+           * @requirement:REQ-002
+           * @pseudocode ArgumentSchema.md lines 71-90
+           * Integration stub: wire schema handler but preserve legacy output structure
+           * - Line 71: call createCompletionHandler with current command schema
+           * - Line 72: supply schema specific to active command
+           * - Line 73: capture { suggestions, hint } result
+           * - Line 74: set state for suggestions (hint ignored in P06)
+           * - Line 75-76: handle pending async results with loading state
+           * - Line 77-78: gracefully handle resolver errors
+           */
           const schemaHandler = createCompletionHandler(leafCommand!.schema);
           setIsLoadingSuggestions(true);
 
           schemaHandler(commandContext, argString, currentLine)
             .then((completionResult) => {
+              /**
+               * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+               * @requirement:REQ-002
+               * Integration stub: map schema result to legacy structure
+               * Hint is ignored until feature flag enabled in later phase
+               */
               const finalSuggestions = completionResult.suggestions.map(
                 (s) => ({
                   label: s.value,

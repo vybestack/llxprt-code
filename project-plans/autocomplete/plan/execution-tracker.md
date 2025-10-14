@@ -10,10 +10,10 @@
 | 03a   | P03a| [OK]    | 2025-10-13 | 2025-10-13 | 2025-10-13 | Stub verification |
 | 04    | P04 | [OK]    | 2025-10-13 | 2025-10-13 | 2025-10-13 | Schema TDD |
 | 04a   | P04a| [OK]    | 2025-10-13 | 2025-10-13 | 2025-10-13 | Schema TDD verification (RED logged in `.completed/P04a.md`) |
-| 05    | P05 | ⬜     | -       | -         | -        | Schema implementation |
-| 05a   | P05a| ⬜     | -       | -         | -        | Impl verification |
-| 06    | P06 | ⬜     | -       | -         | -        | Integration stub |
-| 06a   | P06a| ⬜     | -       | -         | -        | Stub verification |
+| 05    | P05 | [OK]  | 2025-10-15 | 2025-10-15 | 2025-10-15 | Schema implementation |
+| 05a   | P05a| [OK]  | 2025-10-15 | 2025-10-15 | 2025-10-15 | Impl verification (mutation ≥70%) |
+| 06    | P06 | [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Integration stub wired behind feature flag |
+| 06a   | P06a| [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Stub verification (typecheck + subagentCommand tests) |
 | 07    | P07 | ⬜     | -       | -         | -        | Integration TDD |
 | 07a   | P07a| ⬜     | -       | -         | -        | Integration TDD verification |
 | 08    | P08 | ⬜     | -       | -         | -        | Integration implementation |

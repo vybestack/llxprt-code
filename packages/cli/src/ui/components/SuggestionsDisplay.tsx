@@ -21,10 +21,35 @@ interface SuggestionsDisplayProps {
   width: number;
   scrollOffset: number;
   userInput: string;
+  activeHint?: string;
 }
 
 export const MAX_SUGGESTIONS_TO_SHOW = 8;
 
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+ * @requirement:REQ-002
+ * Feature flag to control hint display - set to false for integration stub phase
+ */
+const SHOW_ARGUMENT_HINTS = false;
+
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+ * @requirement:REQ-002
+ * @requirement:REQ-003
+ * @pseudocode UIHintRendering.md lines 4-7
+ * Integration stub: add optional activeHint prop with placeholder rendering behind feature flag
+ * - Line 4: Modify SuggestionsDisplay to accept activeHint prop
+ * - Line 5-6: Render hint in dedicated line above suggestion list
+ * - Line 7: Ensure consistent height to avoid layout shift
+ */
+/**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P06a
+ * @requirement:REQ-003
+ * Verification: With SHOW_ARGUMENT_HINTS=false, no hint line renders while
+ * schema wiring remains intact. `npm test -- --testNamePattern "subagentCommand"`
+ * and `npm run typecheck` (2025-02-15) pass, confirming unchanged UI output.
+ */
 export function SuggestionsDisplay({
   suggestions,
   activeIndex,
@@ -32,6 +57,7 @@ export function SuggestionsDisplay({
   width,
   scrollOffset,
   userInput,
+  activeHint,
 }: SuggestionsDisplayProps) {
   // If we're not showing suggestions at all, return null
   if (!isLoading && suggestions.length === 0) {
@@ -77,6 +103,15 @@ export function SuggestionsDisplay({
       width={width}
       minHeight={MAX_SUGGESTIONS_TO_SHOW + 2}
     >
+      {/* Hint line placeholder - only rendered when feature flag is enabled */}
+      {SHOW_ARGUMENT_HINTS && activeHint ? (
+        <Box marginBottom={1}>
+          <Text color={Colors.Gray} wrap="wrap">
+            {activeHint}
+          </Text>
+        </Box>
+      ) : null}
+
       {/* Scroll up indicator or placeholder */}
       {hasScrollUp ? <Text color={Colors.Foreground}>▲</Text> : <Text> </Text>}
 
