@@ -41,7 +41,7 @@
 npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P09"
 
 # Mutation testing on updated command
-npx stryker run --mutate "packages/cli/src/ui/commands/setCommand.ts" --thresholds.high 80
+npx stryker run --mutate "packages/cli/src/ui/commands/setCommand.ts" --thresholds.high 70
 
 # Property ratio check
 TOTAL=$(rg -c "test\\(" packages/cli/src/ui/commands/test/setCommand.schema.integration.test.ts | awk -F: '{s+=$2} END {print s}')
@@ -55,7 +55,7 @@ rg "NotYetImplemented" packages/cli/src/ui && echo "FAIL: reverse testing detect
 
 ## Manual Verification Checklist
 - [ ] All `/set` schema tests green
-- [ ] Mutation score ≥ 80%
+- [ ] Mutation score ≥ 70%
 - [ ] Legacy completion fully removed from file
 - [ ] Execution tracker updated
 

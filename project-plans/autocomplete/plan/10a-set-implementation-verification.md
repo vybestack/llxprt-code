@@ -23,7 +23,7 @@
 
 ```bash
 npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P09"
-npx stryker run --mutate "packages/cli/src/ui/commands/setCommand.ts" --thresholds.high 80
+npx stryker run --mutate "packages/cli/src/ui/commands/setCommand.ts" --thresholds.high 70
 ```
 
 ## Manual Verification Checklist

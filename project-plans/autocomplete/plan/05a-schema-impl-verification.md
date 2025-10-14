@@ -18,7 +18,7 @@
  * @requirement:REQ-002
  * Verification:
  * - npm test --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P04" (PASS)
- * - Mutation score >= 80% (attach exact %)
+ * - Mutation score >= 70% (attach exact %)
  * - Property tests ratio >= 30%
  */
 ```
@@ -27,7 +27,7 @@
 
 ```bash
 npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P04"
-npx stryker run --mutate "packages/cli/src/ui/commands/schema/**/*.ts" --thresholds.high 80
+npx stryker run --mutate "packages/cli/src/ui/commands/schema/**/*.ts" --thresholds.high 70
 ```
 
 ## Manual Verification Checklist

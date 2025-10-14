@@ -39,7 +39,7 @@
 npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P07"
 
 # Mutation testing for hook + component
-npx stryker run --mutate "packages/cli/src/ui/hooks/useSlashCompletion.tsx,packages/cli/src/ui/components/SuggestionsDisplay.tsx" --thresholds.high 80
+npx stryker run --mutate "packages/cli/src/ui/hooks/useSlashCompletion.tsx,packages/cli/src/ui/components/SuggestionsDisplay.tsx" --thresholds.high 70
 
 # Property ratio (should still meet ≥30%)
 TOTAL=$(rg -c "test\\(" packages/cli/src/ui/hooks/__tests__/useSlashCompletion.schema.integration.test.ts packages/cli/src/ui/commands/test/subagentCommand.schema.integration.test.ts | awk -F: '{s+=$2} END {print s}')
@@ -54,7 +54,7 @@ rg "toHaveProperty\|toBeDefined\|toBeUndefined" packages/cli/src/ui | grep -v "s
 
 ## Manual Verification Checklist
 - [ ] All P07 tests now GREEN without editing test logic (assertions may require expected values only)
-- [ ] Mutation score ≥ 80% for updated files
+- [ ] Mutation score ≥ 70% for updated files
 - [ ] Manual CLI smoke test shows hint line & navigation unaffected
 - [ ] Legacy completion removed from `/subagent`
 

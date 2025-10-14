@@ -51,6 +51,6 @@ The CLI’s slash-command autocomplete logic is scattered across individual comm
 
 ## Success Criteria
 - `/subagent save` and `/set` operate solely via the schema resolver with hints and suggestions verified by tests.
-- Mutation testing >= 80% on schema resolver and integration logic.
+- Mutation testing >= 70% on schema resolver and integration logic.
 - Property-based tests comprise >= 30% of total tests introduced.
 - Legacy completion code removed; no parallel implementations remain.

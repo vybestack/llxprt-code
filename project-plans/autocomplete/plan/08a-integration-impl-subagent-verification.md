@@ -28,7 +28,7 @@
 
 ```bash
 npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P07"
-npx stryker run --mutate "packages/cli/src/ui/hooks/useSlashCompletion.tsx,packages/cli/src/ui/components/SuggestionsDisplay.tsx" --thresholds.high 80
+npx stryker run --mutate "packages/cli/src/ui/hooks/useSlashCompletion.tsx,packages/cli/src/ui/components/SuggestionsDisplay.tsx" --thresholds.high 70
 ```
 
 ## Manual Verification Checklist

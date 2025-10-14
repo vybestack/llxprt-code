@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
-import { createCompletionHandler } from './index.js';
+import { createCompletionHandler, tokenize } from './index.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
 import type {
   CommandArgumentSchema,
@@ -36,7 +36,8 @@ const value = (
   description: string,
   options?: string[],
   completer?: CompleterFn,
-  hint?: HintFn,
+  hint?: HintFn | string,
+  next?: CommandArgumentSchema,
 ): ValueArgument => ({
   kind: 'value',
   name,
@@ -46,6 +47,7 @@ const value = (
   ),
   completer,
   hint,
+  next,
 });
 
 describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
@@ -59,6 +61,7 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       expect(result).toHaveProperty('suggestions');
       expect(result).toHaveProperty('hint');
       expect(Array.isArray(result.suggestions)).toBe(true);
+      expect(result.position).toBe(1);
     });
 
     it('provides hints for value arguments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
@@ -75,7 +78,173 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const handler = createCompletionHandler(schema);
 
       const result = await handler(mockContext, '', '/username');
-      expect(typeof result.hint).toBe('string');
+      expect(result.hint).toBe('Enter a valid username');
+      expect(result.position).toBe(1);
+    });
+
+    it('returns literal descriptions as hints when literal nodes are active @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
+      const schema: CommandArgumentSchema = [
+        literal('create', 'Create a resource'),
+      ];
+
+      const handler = createCompletionHandler(schema);
+
+      const result = await handler(mockContext, '', '/subagent ');
+      expect(result.hint).toBe('Create a resource');
+      expect(result.suggestions).toEqual([
+        expect.objectContaining({ value: 'create' }),
+      ]);
+      expect(result.position).toBe(1);
+    });
+
+    it('filters literal suggestions based on partial input @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
+      const schema: CommandArgumentSchema = [
+        literal('create', 'Create a resource'),
+        literal('delete', 'Delete a resource'),
+      ];
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(mockContext, '', '/subagent cr');
+
+      expect(result.suggestions).toEqual([
+        expect.objectContaining({ value: 'create' }),
+      ]);
+    });
+
+    it('omits literal suggestions when partial does not match @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
+      const schema: CommandArgumentSchema = [
+        literal('create', 'Create a resource'),
+        literal('delete', 'Delete a resource'),
+      ];
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(mockContext, '', '/subagent zz');
+
+      expect(result.suggestions).toEqual([]);
+    });
+
+    it('prefers string hints on value arguments over descriptions @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-004', async () => {
+      const schema: CommandArgumentSchema = [
+        value('mode', '', ['manual', 'auto'], undefined, 'Select mode'),
+      ];
+
+      const handler = createCompletionHandler(schema);
+
+      const result = await handler(mockContext, '', '/command ');
+      expect(result.hint).toBe('Select mode');
+      expect(result.suggestions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'manual' }),
+          expect.objectContaining({ value: 'auto' }),
+        ]),
+      );
+      expect(result.position).toBe(1);
+    });
+
+    it('awaits async hint functions for value arguments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-004', async () => {
+      const dynamicHint: HintFn = vi.fn(async () => 'Dynamic mode hint');
+      const schema: CommandArgumentSchema = [
+        value('mode', '', ['manual', 'auto'], undefined, dynamicHint),
+      ];
+
+      const handler = createCompletionHandler(schema);
+
+      const result = await handler(mockContext, '', '/command m');
+      expect(dynamicHint).toHaveBeenCalledTimes(1);
+      expect(result.hint).toBe('Dynamic mode hint');
+      expect(result.suggestions).toEqual([
+        expect.objectContaining({ value: 'manual' }),
+      ]);
+      expect(result.position).toBe(2);
+    });
+
+    it('falls back to value descriptions when hints are absent @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-004', async () => {
+      const schema: CommandArgumentSchema = [
+        value('mode', 'Mode description', ['manual', 'auto']),
+      ];
+
+      const handler = createCompletionHandler(schema);
+
+      const result = await handler(mockContext, '', '/command ');
+      expect(result.hint).toBe('Mode description');
+      expect(result.suggestions.length).toBeGreaterThan(0);
+      expect(result.position).toBe(1);
+    });
+
+    it('returns empty hint when no hint or description is provided @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-004', async () => {
+      const schema: CommandArgumentSchema = [
+        value('mode', '', ['manual', 'auto']),
+      ];
+
+      const handler = createCompletionHandler(schema);
+
+      const result = await handler(mockContext, '', '/command ');
+      expect(result.hint).toBe('');
+      expect(result.suggestions.length).toBeGreaterThan(0);
+    });
+
+    it('returns empty suggestions when value has no options or completer @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
+      await fc.assert(
+        fc.asyncProperty(fc.string(), async (input) => {
+          const schema: CommandArgumentSchema = [value('mode', '', undefined)];
+          const handler = createCompletionHandler(schema);
+          const result = await handler(mockContext, '', `/command ${input}`);
+          expect(result.suggestions).toEqual([]);
+        }),
+      );
+    });
+
+    it('filters value suggestions based on partial input @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
+      const schema: CommandArgumentSchema = [
+        value('mode', 'Mode description', ['manual', 'auto', 'archive']),
+      ];
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(mockContext, '', '/command ar');
+
+      expect(result.suggestions).toEqual([
+        expect.objectContaining({ value: 'archive' }),
+      ]);
+    });
+
+    it('returns empty suggestions when schema is empty @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
+      await fc.assert(
+        fc.asyncProperty(fc.string(), async (input) => {
+          const warnSpy = vi
+            .spyOn(console, 'warn')
+            .mockImplementation(() => {});
+          const handler = createCompletionHandler([]);
+          const result = await handler(mockContext, '', input);
+          expect(result.suggestions).toEqual([]);
+          expect(result.hint).toBe('');
+          expect(warnSpy).not.toHaveBeenCalled();
+          warnSpy.mockRestore();
+        }),
+      );
+    });
+
+    it('logs and recovers when suggestion generation throws @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
+      const failingCompleter: CompleterFn = async () => {
+        throw new Error('completer boom');
+      };
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const schema: CommandArgumentSchema = [
+        value('mode', '', undefined, failingCompleter),
+      ];
+
+      const handler = createCompletionHandler(schema);
+
+      const result = await handler(mockContext, '', '/command ');
+      expect(result.suggestions).toEqual([]);
+      expect(result.hint).toBe('');
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Error generating suggestions:',
+        expect.any(Error),
+      );
+
+      warnSpy.mockRestore();
     });
 
     it('handles complex nested schemas @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-002', async () => {
@@ -91,10 +260,61 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       expect(afterCreateResult.suggestions).toEqual([
         expect.objectContaining({ value: 'create' }),
       ]);
+      expect(afterCreateResult.position).toBe(1);
     });
   });
 
   describe('Tokenization and context resolution', () => {
+    it('tokenize handles escaped spaces @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const safeWord = fc
+        .array(fc.constantFrom('a', 'b', 'c', 'd', 'e'), {
+          minLength: 1,
+          maxLength: 5,
+        })
+        .map((chars) => chars.join(''));
+
+      fc.assert(
+        fc.property(
+          fc.array(safeWord, { minLength: 1, maxLength: 3 }),
+          (words) => {
+            const rawSegment = words.join(' ');
+            const escapedSegment = rawSegment.replace(/ /g, '\\ ');
+
+            const info = tokenize(`/cmd ${escapedSegment}`);
+
+            expect(info.tokens[0]).toBe('cmd');
+            expect(info.tokens[1]).toBe(rawSegment);
+            expect(info.partialToken).toBe(rawSegment);
+            expect(info.hasTrailingSpace).toBe(false);
+          },
+        ),
+      );
+    });
+
+    it('tokenize handles quoted segments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const info = tokenize('/cmd "quoted value" next');
+
+      expect(info.tokens).toEqual(['cmd', 'quoted value', 'next']);
+      expect(info.partialToken).toBe('next');
+      expect(info.hasTrailingSpace).toBe(false);
+    });
+
+    it('tokenize handles single quoted segments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const info = tokenize("/cmd 'single quoted' next");
+
+      expect(info.tokens).toEqual(['cmd', 'single quoted', 'next']);
+      expect(info.partialToken).toBe('next');
+      expect(info.hasTrailingSpace).toBe(false);
+    });
+
+    it('tokenize splits unquoted segments @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const info = tokenize('/cmd alpha beta');
+
+      expect(info.tokens).toEqual(['cmd', 'alpha', 'beta']);
+      expect(info.partialToken).toBe('beta');
+      expect(info.hasTrailingSpace).toBe(false);
+    });
+
     it('tokenize removes command prefix and command name correctly @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
       const schema: CommandArgumentSchema = [value('arg1', 'First argument')];
 
@@ -104,6 +324,8 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const result1 = await handler(mockContext, '', '/command arg1');
       expect(result1).toHaveProperty('suggestions');
       expect(result1).toHaveProperty('hint');
+      const prefixInfo = tokenize('/command arg1');
+      expect(prefixInfo.tokens).toEqual(['command', 'arg1']);
 
       // Test that "@command arg1" correctly removes "@command"
       const result2 = await handler(mockContext, '', '@command arg1');
@@ -114,6 +336,21 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       const result3 = await handler(mockContext, '', '/command');
       expect(result3).toHaveProperty('suggestions');
       expect(result3).toHaveProperty('hint');
+    });
+
+    it('tokenize removes command prefix tokens even without additional args @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const info = tokenize('/command');
+
+      expect(info.tokens).toEqual(['/command']);
+      expect(info.partialToken).toBe('/command');
+    });
+
+    it('tokenize detects trailing space @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const info = tokenize('/cmd value ');
+
+      expect(info.tokens).toEqual(['cmd', 'value']);
+      expect(info.partialToken).toBe('');
+      expect(info.hasTrailingSpace).toBe(true);
     });
 
     it('resolves context position correctly after command removal @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
@@ -382,6 +619,46 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
             }
           },
         ),
+      );
+    });
+
+    // Property Test 2a: Value hints prefer explicit string hints when provided
+    it('value hints prefer explicit strings over descriptions @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-004', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.string({ minLength: 1, maxLength: 12 }),
+          async (hintText) => {
+            const schema: CommandArgumentSchema = [
+              value('mode', '', ['manual', 'auto'], undefined, hintText),
+            ];
+
+            const handler = createCompletionHandler(schema);
+            const result = await handler(mockContext, '', '/command ');
+
+            expect(result.hint).toBe(hintText);
+            expect(result.suggestions.length).toBeGreaterThan(0);
+          },
+        ),
+      );
+    });
+
+    // Property Test 2b: tokenize removes wrapping quotes consistently
+    it('tokenize unwraps quoted tokens across inputs @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
+      const safeString = fc
+        .array(fc.constantFrom('a', 'b', 'c', 'd', 'e'), {
+          minLength: 1,
+          maxLength: 5,
+        })
+        .map((chars) => chars.join(''));
+
+      fc.assert(
+        fc.property(safeString, safeString, (quoted, tail) => {
+          const info = tokenize(`/cmd "${quoted}" ${tail}`);
+
+          expect(info.tokens[0]).toBe('cmd');
+          expect(info.tokens[1]).toBe(quoted);
+          expect(info.tokens[2]).toBe(tail);
+        }),
       );
     });
 

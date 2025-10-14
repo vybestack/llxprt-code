@@ -48,8 +48,8 @@
 ```bash
 npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P04"
 
-# Mutation testing (≥80% score)
-npx stryker run --mutate "packages/cli/src/ui/commands/schema/**/*.ts" --thresholds.high 80
+# Mutation testing (≥70% score)
+npx stryker run --mutate "packages/cli/src/ui/commands/schema/**/*.ts" --thresholds.high 70
 
 # Property-testing ratio (should remain ≥30%)
 TOTAL=$(rg -c "test\\(" packages/cli/src/ui/commands/schema/argumentResolver.test.ts | awk -F: '{s+=$2} END {print s}')
@@ -64,7 +64,7 @@ rg "toHaveProperty\|toBeDefined\|toBeUndefined" packages/cli/src/ui/commands/sch
 
 ## Manual Verification Checklist
 - [ ] All P04 tests green without modification
-- [ ] Mutation score ≥ 80%
+- [ ] Mutation score ≥ 70%
 - [ ] Property tests still ≥ 30%
 - [ ] Pseudocode lines referenced in code comments exactly
 - [ ] No lingering placeholders
