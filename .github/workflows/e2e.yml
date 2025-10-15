@@ -141,11 +141,11 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] || secrets.OPENAI_API_KEY || '' }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || '' }}
           # Allow override from workflow_dispatch, otherwise use repository variables
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.override_provider || vars.LLXPRT_DEFAULT_PROVIDER }}
+          LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929' }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.override_provider || vars.LLXPRT_DEFAULT_PROVIDER || 'anthropic' }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: 'none'
           # Suppress browser launch for OAuth (important for CI)
@@ -205,11 +205,11 @@ jobs:
         env:
           # Provider configuration from repository secrets/variables
           # Works for both push and workflow_dispatch triggers
-          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets[vars.KEY_VAR_NAME] || secrets.OPENAI_API_KEY || '' }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || '' }}
           # Allow override from workflow_dispatch, otherwise use repository variables
-          LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.override_provider || vars.LLXPRT_DEFAULT_PROVIDER }}
+          LLXPRT_DEFAULT_MODEL: ${{ inputs.override_model || vars.LLXPRT_DEFAULT_MODEL || 'claude-sonnet-4-5-20250929' }}
+          LLXPRT_DEFAULT_PROVIDER: ${{ inputs.override_provider || vars.LLXPRT_DEFAULT_PROVIDER || 'anthropic' }}
           # Set auth type to none since we're not using Google services in these tests
           LLXPRT_AUTH_TYPE: 'none'
           # Suppress browser launch for OAuth (important for CI)
