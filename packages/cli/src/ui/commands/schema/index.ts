@@ -7,22 +7,339 @@
 import type {
   CommandArgumentSchema,
   CompletionResult,
-  TokenInfo,
-  ResolvedContext,
   LiteralArgument,
-  ValueArgument,
   Option,
+  TokenInfo,
+  ValueArgument,
 } from './types.js';
 import type { CommandContext } from '../types.js';
 
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P05
- * @requirement:REQ-001
- * @requirement:REQ-002
- * @pseudocode ArgumentSchema.md lines 7-8
- * - Line 7: tokenize handles quotes/escapes
- * - Line 8: returns partial token info
- */
+export type CompletionInput =
+  | string
+  | {
+      args?: string;
+      completedArgs?: readonly string[];
+      partialArg?: string;
+      commandPathLength?: number;
+    };
+
+interface NormalizedInput {
+  commandPathLength: number;
+  completedArgs: string[];
+  partialArg: string;
+  hasTrailingSpace: boolean;
+}
+
+interface ValueStepContext {
+  kind: 'value';
+  node: ValueArgument;
+  remainingSchema: CommandArgumentSchema;
+  consumedCount: number;
+}
+
+interface LiteralStepContext {
+  kind: 'literal';
+  nodes: LiteralArgument[];
+  remainingSchema: CommandArgumentSchema;
+  consumedCount: number;
+}
+
+interface EmptyContext {
+  kind: 'none';
+  consumedCount: number;
+}
+
+type ActiveContext = ValueStepContext | LiteralStepContext | EmptyContext;
+
+function mergeSchemas(
+  primary: CommandArgumentSchema | undefined,
+  secondary: CommandArgumentSchema,
+): CommandArgumentSchema {
+  if (!primary || primary.length === 0) {
+    return secondary;
+  }
+  if (secondary.length === 0) {
+    return primary;
+  }
+  return [...primary, ...secondary];
+}
+
+function gatherLiteralGroup(schema: CommandArgumentSchema): {
+  literals: LiteralArgument[];
+  nextIndex: number;
+} {
+  const literals: LiteralArgument[] = [];
+  let index = 0;
+  while (index < schema.length && schema[index]?.kind === 'literal') {
+    literals.push(schema[index] as LiteralArgument);
+    index += 1;
+  }
+  return { literals, nextIndex: index };
+}
+
+function normalizeCompletionContext(
+  input: CompletionInput | undefined,
+  tokenInfo: TokenInfo,
+): NormalizedInput {
+  const tokens = [...tokenInfo.tokens];
+  const hasTrailingSpace = tokenInfo.hasTrailingSpace;
+
+  let commandPathLength = tokens.length > 0 ? 1 : 0;
+  let completedArgs: string[] = [];
+  let partialArg = hasTrailingSpace ? '' : (tokenInfo.partialToken ?? '');
+  let explicitCompleted = false;
+  let explicitPartial = false;
+
+  if (typeof input === 'object' && input !== null) {
+    if (
+      typeof input.commandPathLength === 'number' &&
+      Number.isFinite(input.commandPathLength)
+    ) {
+      commandPathLength = Math.max(0, Math.floor(input.commandPathLength));
+    }
+
+    if (Array.isArray(input.completedArgs)) {
+      completedArgs = [...input.completedArgs];
+      explicitCompleted = true;
+    }
+
+    if (typeof input.partialArg === 'string') {
+      partialArg = input.partialArg;
+      explicitPartial = true;
+    }
+
+    if (typeof input.args === 'string' && !explicitCompleted) {
+      const trimmed = input.args.trim();
+      completedArgs = trimmed ? trimmed.split(/\s+/) : [];
+    }
+  } else if (typeof input === 'string') {
+    const trimmed = input.trim();
+    completedArgs = trimmed ? trimmed.split(/\s+/) : [];
+  }
+
+  const sanitizedPath = Math.max(0, Math.min(commandPathLength, tokens.length));
+  const argsFromTokens = tokens.slice(sanitizedPath);
+
+  if (!explicitCompleted) {
+    completedArgs = [...argsFromTokens];
+    if (!hasTrailingSpace && tokenInfo.partialToken && argsFromTokens.length) {
+      completedArgs = argsFromTokens.slice(0, -1);
+    }
+  }
+
+  if (!explicitPartial) {
+    partialArg = hasTrailingSpace ? '' : (tokenInfo.partialToken ?? '');
+    if (tokens.length <= sanitizedPath) {
+      partialArg = '';
+    }
+  }
+
+  return {
+    commandPathLength: sanitizedPath,
+    completedArgs,
+    partialArg,
+    hasTrailingSpace,
+  };
+}
+
+function buildArgumentTokenInfo(
+  completedArgs: readonly string[],
+  partialArg: string,
+  hasTrailingSpace: boolean,
+): TokenInfo {
+  const tokens = [...completedArgs];
+  if (!hasTrailingSpace && partialArg) {
+    tokens.push(partialArg);
+  }
+
+  const positionBase = completedArgs.length;
+  const position = Math.max(1, positionBase + (partialArg ? 2 : 1));
+
+  return {
+    tokens,
+    partialToken: hasTrailingSpace ? '' : partialArg,
+    hasTrailingSpace,
+    position,
+  };
+}
+
+function resolveActiveStep(
+  schema: CommandArgumentSchema,
+  completedArgs: readonly string[],
+): ActiveContext {
+  let currentSchema = schema ?? [];
+  const remainingArgs = [...completedArgs];
+  let consumedCount = 0;
+
+  while (currentSchema.length > 0) {
+    const firstNode = currentSchema[0];
+
+    if (firstNode.kind === 'literal') {
+      const { literals, nextIndex } = gatherLiteralGroup(currentSchema);
+
+      if (remainingArgs.length === 0) {
+        return {
+          kind: 'literal',
+          nodes: literals,
+          remainingSchema: currentSchema.slice(nextIndex),
+          consumedCount,
+        };
+      }
+
+      const candidate = remainingArgs[0];
+      const matched = literals.find((literal) => literal.value === candidate);
+
+      if (matched) {
+        remainingArgs.shift();
+        consumedCount += 1;
+        currentSchema = mergeSchemas(
+          matched.next,
+          currentSchema.slice(nextIndex),
+        );
+        continue;
+      }
+
+      return {
+        kind: 'literal',
+        nodes: literals,
+        remainingSchema: currentSchema.slice(nextIndex),
+        consumedCount,
+      };
+    }
+
+    const valueNode = firstNode as ValueArgument;
+
+    if (remainingArgs.length === 0) {
+      return {
+        kind: 'value',
+        node: valueNode,
+        remainingSchema: currentSchema.slice(1),
+        consumedCount,
+      };
+    }
+
+    remainingArgs.shift();
+    consumedCount += 1;
+    currentSchema = mergeSchemas(valueNode.next, currentSchema.slice(1));
+  }
+
+  return {
+    kind: 'none',
+    consumedCount,
+  };
+}
+
+async function suggestForValue(
+  ctx: CommandContext,
+  node: ValueArgument,
+  partialArg: string,
+  tokenInfo: TokenInfo,
+): Promise<readonly Option[]> {
+  try {
+    if (node.options?.length) {
+      const lowerPartial = partialArg.toLowerCase();
+      return node.options
+        .filter((option) =>
+          lowerPartial.length === 0
+            ? true
+            : option.value.toLowerCase().startsWith(lowerPartial),
+        )
+        .map((option) => ({
+          value: option.value,
+          description: option.description,
+        }));
+    }
+
+    if (node.completer) {
+      const results = await node.completer(ctx, partialArg, tokenInfo);
+      return results.map((option) => ({
+        value: option.value,
+        description: option.description,
+      }));
+    }
+  } catch (error) {
+    console.warn('Error generating suggestions:', error);
+  }
+
+  return [];
+}
+
+function suggestForLiterals(
+  nodes: LiteralArgument[],
+  partialArg: string,
+): readonly Option[] {
+  const lowerPartial = partialArg.toLowerCase();
+  return nodes
+    .filter((node) =>
+      lowerPartial.length === 0
+        ? true
+        : node.value.toLowerCase().startsWith(lowerPartial),
+    )
+    .map((node) => ({
+      value: node.value,
+      description: node.description,
+    }));
+}
+
+async function computeHintForValue(
+  ctx: CommandContext,
+  node: ValueArgument,
+  tokenInfo: TokenInfo,
+): Promise<string> {
+  try {
+    if (node.hint) {
+      if (typeof node.hint === 'function') {
+        return await node.hint(ctx, tokenInfo);
+      }
+      return node.hint;
+    }
+  } catch (error) {
+    console.warn('Error computing hint:', error);
+  }
+
+  if (node.description) {
+    return node.description;
+  }
+
+  return '';
+}
+
+function inferLiteralHint(nodes: LiteralArgument[]): string {
+  if (nodes.length === 0) {
+    return '';
+  }
+
+  if (nodes.length === 1) {
+    return nodes[0].description ?? '';
+  }
+
+  const descriptions = nodes
+    .map((literal) => literal.description ?? '')
+    .filter((desc) => desc.length > 0);
+
+  if (descriptions.length > 1) {
+    const lastTokens = descriptions
+      .map((desc) => desc.trim().split(/\s+/))
+      .filter((parts) => parts.length > 0)
+      .map((parts) => parts[parts.length - 1].toLowerCase());
+
+    if (
+      lastTokens.length > 0 &&
+      lastTokens.every((token) => token === lastTokens[0]) &&
+      lastTokens[0]
+    ) {
+      const word = lastTokens[0];
+      return `Select ${word}`;
+    }
+  }
+
+  return descriptions[0] || 'Select option';
+}
+
+function computeHintForLiterals(nodes: LiteralArgument[]): string {
+  return inferLiteralHint(nodes);
+}
+
 export function tokenize(fullLine: string): TokenInfo {
   const tokens: string[] = [];
   let current = '';
@@ -30,7 +347,7 @@ export function tokenize(fullLine: string): TokenInfo {
   let escapeNext = false;
   let hasTrailingSpace = false;
 
-  for (let i = 0; i < fullLine.length; i++) {
+  for (let i = 0; i < fullLine.length; i += 1) {
     const char = fullLine[i];
 
     if (escapeNext) {
@@ -45,11 +362,7 @@ export function tokenize(fullLine: string): TokenInfo {
     }
 
     if (char === '"' || char === "'") {
-      if (inQuotes) {
-        inQuotes = false;
-      } else {
-        inQuotes = true;
-      }
+      inQuotes = !inQuotes;
       continue;
     }
 
@@ -66,279 +379,86 @@ export function tokenize(fullLine: string): TokenInfo {
     hasTrailingSpace = false;
   }
 
-  // Remove the initial command prefix if present, but keep command name for schema matching
-  if (
-    tokens.length > 0 &&
-    (tokens[0].startsWith('/') || tokens[0].startsWith('@'))
-  ) {
-    // Keep tokens after the command prefix
-    const firstToken = tokens[0];
-    const afterPrefix = firstToken.slice(1);
-    if (afterPrefix) {
-      tokens[0] = afterPrefix;
-    } else {
-      tokens.shift();
-    }
-  }
-
-  // Add final token if exists
   if (current.length > 0) {
     tokens.push(current);
   }
 
+  const firstToken = tokens[0];
+  const prefixChars = new Set<string>(['/', '@']);
+  const prefixChar = firstToken?.[0];
+  // Stryker disable next-line BooleanLiteral
+  const hasPrefixChar =
+    typeof prefixChar === 'string' && prefixChars.has(prefixChar);
+  // Stryker disable next-line ConditionalExpression -- ensures only `/` and `@` prefixes trigger schema stripping
+  if (firstToken && hasPrefixChar) {
+    const afterPrefix = firstToken!.slice(1);
+    if (afterPrefix.length === 0) {
+      tokens.shift();
+    } else if (tokens.length > 1 || hasTrailingSpace) {
+      tokens[0] = afterPrefix;
+    }
+  }
+
+  let partialTokenValue = '';
+  // Stryker disable next-line ConditionalExpression
+  const lastToken = tokens.length === 0 ? undefined : tokens[tokens.length - 1];
+  if (!hasTrailingSpace) {
+    const candidateLength = lastToken?.length ?? 0;
+    // Stryker disable next-line ConditionalExpression, EqualityOperator
+    if (candidateLength > 0 && lastToken) {
+      partialTokenValue = lastToken;
+    }
+  }
+
   return {
     tokens,
-    partialToken: hasTrailingSpace ? '' : current,
+    partialToken: partialTokenValue,
     hasTrailingSpace,
     position: tokens.length,
   };
 }
 
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P05
- * @requirement:REQ-001
- * @requirement:REQ-002
- * @pseudocode ArgumentSchema.md lines 9-11
- * - Line 9: initialize position = 0, nodeList = schema
- * - Line 10: iterate tokens, handle literals and values
- * - Line 11: return ResolvedContext with activeNode, position, consumedValues
- */
-function resolveContext(
-  tokenInfo: TokenInfo,
-  schema: CommandArgumentSchema,
-): ResolvedContext {
-  let position = 0;
-  let nodeList: CommandArgumentSchema = schema;
-  let activeNode: LiteralArgument | ValueArgument | null = null;
-  const consumedValues: string[] = [];
-  let isValid = true;
-
-  // Strip the first token (command name) from tokens for schema processing
-  // This allows literal-first schemas to work correctly
-  const tokensToProcess = tokenInfo.tokens.slice(1);
-
-  // Process each token against the schema
-  for (const token of tokensToProcess) {
-    if (position >= nodeList.length) {
-      isValid = false;
-      break;
-    }
-
-    const node = nodeList[position];
-
-    // Stryker disable next-line ConditionalExpression -- literal handling validated via deterministic tests
-    if (node.kind === 'literal') {
-      if (node.value !== token) {
-        isValid = false;
-        break;
-      }
-      activeNode = node;
-      nodeList = node.next ?? [];
-      position = 0;
-    } else if (node.kind === 'value') {
-      activeNode = node;
-      consumedValues.push(token);
-      nodeList = node.next ?? [];
-      position = 0;
-    }
-  }
-
-  // Handle partial token - if we're at a position and have a partial token, set activeNode
-  // but only if we're not already on a value node (to avoid advancing prematurely)
-  if (
-    !tokenInfo.hasTrailingSpace &&
-    tokenInfo.partialToken &&
-    position < nodeList.length
-  ) {
-    // If we're already on a value node, stay there to provide its completions
-    if (activeNode && activeNode.kind === 'value') {
-      // Keep activeNode as is - don't advance to next node
-    } else {
-      activeNode = nodeList[position];
-    }
-  }
-
-  // If we have no partial token and haven't consumed anything, suggest the first position
-  if (
-    !tokenInfo.hasTrailingSpace &&
-    !tokenInfo.partialToken &&
-    position === 0 &&
-    nodeList.length > 0
-  ) {
-    activeNode = nodeList[0];
-  }
-
-  // If we've consumed all available nodes and have trailing space, the branch is complete
-  if (
-    tokenInfo.hasTrailingSpace &&
-    position >= nodeList.length &&
-    nodeList.length === 0
-  ) {
-    activeNode = null;
-  }
-
-  // Special case: only command prefix should suggest first schema node
-  if (
-    tokenInfo.tokens.length === 1 &&
-    (tokenInfo.tokens[0] === '/' ||
-      tokenInfo.tokens[0] === '@' ||
-      tokenInfo.tokens[0].startsWith('/') ||
-      tokenInfo.tokens[0].startsWith('@'))
-  ) {
-    if (schema.length > 0) {
-      activeNode = schema[0];
-    }
-  }
-
-  // If we have consumed all tokens and are at the next position (trailing space), suggest the next node
-  if (tokenInfo.hasTrailingSpace && position < nodeList.length) {
-    activeNode = nodeList[position];
-  }
-
-  return {
-    activeNode,
-    position,
-    consumedValues,
-    isValid,
-  };
-}
-
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P05
- * @requirement:REQ-001
- * @requirement:REQ-002
- * @pseudocode ArgumentSchema.md lines 12-15
- * - Line 12: literal matching and suggestion filter
- * - Line 13: value suggestions via options
- * - Line 14: await completer for dynamic suggestions
- * - Line 15: error fallback to empty array
- */
-async function generateSuggestions(
-  ctx: CommandContext,
-  tokenInfo: TokenInfo,
-  node: LiteralArgument | ValueArgument | null,
-): Promise<readonly Option[]> {
-  if (!node) {
-    return [];
-  }
-
-  try {
-    if (node.kind === 'literal') {
-      const partial = (tokenInfo.partialToken ?? '').toLowerCase();
-      const matches =
-        partial.length === 0 || node.value.toLowerCase().startsWith(partial);
-      return matches
-        ? [{ value: node.value, description: node.description }]
-        : [];
-    }
-
-    // Stryker disable next-line ConditionalExpression -- guard ensures only value nodes processed below
-    if (node.kind !== 'value') {
-      return [];
-    }
-
-    const optionList = node.options
-      ? Array.isArray(node.options)
-        ? node.options
-        : []
-      : [];
-    if (optionList.length > 0) {
-      const partial = (tokenInfo.partialToken ?? '').toLowerCase();
-      const filtered = optionList.filter(
-        (option) =>
-          partial.length === 0 ||
-          option.value.toLowerCase().startsWith(partial),
-      );
-      return filtered.map((option) => ({
-        value: option.value,
-        description: option.description,
-      }));
-    }
-
-    // Stryker disable next-line ConditionalExpression -- completer branch already exercised via failure test
-    if (node.completer) {
-      return await node.completer(ctx, tokenInfo.partialToken, tokenInfo);
-    }
-  } catch (error) {
-    console.warn('Error generating suggestions:', error);
-  }
-
-  return [];
-}
-
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P05
- * @requirement:REQ-002
- * @requirement:REQ-004
- * @pseudocode ArgumentSchema.md lines 16-18
- * - Line 16: try hint function first
- * - Line 17: fallback to description
- * - Line 18: default empty string
- */
-async function generateHint(
-  ctx: CommandContext,
-  tokenInfo: TokenInfo,
-  node: LiteralArgument | ValueArgument | null,
-): Promise<string> {
-  if (!node) {
-    return '';
-  }
-
-  try {
-    if (node.kind === 'literal') {
-      return node.description ?? '';
-    }
-
-    // Stryker disable next-line ConditionalExpression -- ensures non-value nodes exit early
-    if (node.kind !== 'value') {
-      return '';
-    }
-
-    if (node.hint) {
-      if (typeof node.hint === 'function') {
-        return await node.hint(ctx, tokenInfo);
-      }
-      return node.hint;
-    }
-
-    // Stryker disable next-line ConditionalExpression -- description fallback executed only when provided
-    if (node.description) {
-      return node.description;
-    }
-  } catch (error) {
-    console.warn('Error generating hint:', error);
-  }
-
-  return '';
-}
-
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P05
- * @requirement:REQ-001
- * @requirement:REQ-002
- * @pseudocode ArgumentSchema.md lines 19-21
- * - Line 19: tokenize input
- * - Line 20: resolve context
- * - Line 21: generate suggestions and hints
- */
 export function createCompletionHandler(schema: CommandArgumentSchema) {
   return async (
     ctx: CommandContext,
-    command: string,
+    input: CompletionInput | undefined,
     fullLine: string,
   ): Promise<CompletionResult> => {
     const tokenInfo = tokenize(fullLine);
-    const context = resolveContext(tokenInfo, schema);
+    const normalized = normalizeCompletionContext(input, tokenInfo);
+    const active = resolveActiveStep(schema, normalized.completedArgs);
 
-    const [suggestions, hint] = await Promise.all([
-      generateSuggestions(ctx, tokenInfo, context.activeNode),
-      generateHint(ctx, tokenInfo, context.activeNode),
-    ]);
+    const argumentTokenInfo = buildArgumentTokenInfo(
+      normalized.completedArgs,
+      normalized.partialArg,
+      normalized.hasTrailingSpace,
+    );
+
+    let suggestions: readonly Option[] = [];
+    let hint = '';
+
+    if (active.kind === 'value') {
+      suggestions = await suggestForValue(
+        ctx,
+        active.node,
+        normalized.partialArg,
+        argumentTokenInfo,
+      );
+      hint = await computeHintForValue(ctx, active.node, argumentTokenInfo);
+    } else if (active.kind === 'literal') {
+      suggestions = suggestForLiterals(active.nodes, normalized.partialArg);
+      hint = computeHintForLiterals(active.nodes);
+    }
+
+    const position = Math.max(
+      1,
+      normalized.completedArgs.length + (normalized.partialArg ? 2 : 1),
+    );
 
     return {
       suggestions,
       hint,
-      position: tokenInfo.position,
+      position,
     };
   };
 }

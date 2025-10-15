@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { glob } from 'glob';
@@ -31,14 +31,13 @@ import { useCompletion } from './useCompletion.js';
 import { createCompletionHandler } from '../commands/schema/index.js';
 
 /**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
  * @requirement:REQ-002
- * Feature flag to control hint display - set to false for integration stub phase
+ * @requirement:REQ-003
+ * @requirement:REQ-004
+ * Feature flag enabled for hint display integration
  */
-const SHOW_ARGUMENT_HINTS = false;
-
-// Suppress unused variable warning for feature flag used in future phases
-void SHOW_ARGUMENT_HINTS;
+const SHOW_ARGUMENT_HINTS = true;
 
 /**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P05
@@ -57,25 +56,19 @@ void SHOW_ARGUMENT_HINTS;
  */
 
 /**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
  * @requirement:REQ-002
- * Integration stub: schema handler wired but hints disabled behind feature flag
- * - Feature flag SHOW_ARGUMENT_HINTS = false prevents hint display
- * - Schema handler invoked with legacy output structure preserved
- * - UI component prepared with optional activeHint prop
- */
-/**
- * @plan:PLAN-20251013-AUTOCOMPLETE.P06a
- * @requirement:REQ-002
- * Verification: SHOW_ARGUMENT_HINTS remains false; `npm run typecheck` and
- * `npm test -- --testNamePattern "subagentCommand"` (2025-02-15) confirm legacy
- * output without hint rendering. Attempted `npm run typecheck -- --filter cli`
- * but the script does not accept that argument (tsc path resolution failure).
- */
-/**
- * @plan:PLAN-20250214-AUTOCOMPLETE.P03a
- * @requirement:REQ-001
- * Verification: Placeholder wiring reviewed during schema stub verification (`npm run typecheck` on 2025-02-15). No runtime behavior changes.
+ * @requirement:REQ-003
+ * @requirement:REQ-004
+ * @pseudocode ArgumentSchema.md lines 71-90
+ * Full integration of schema-driven completion system with hints
+ * - Line 71: call createCompletionHandler with current command context
+ * - Line 72: supply schema specific to active command
+ * - Line 73: capture { suggestions, hint } result
+ * - Line 74: set state for suggestions and new activeHint field
+ * - Line 75: handle pending async results with sequence/timestamp guard
+ * - Line 76-78: gracefully handle resolver errors (log + fallback to empty suggestions + hint)
+ * - Line 79-80: ensure cleanup on component unmount / completion reset
  */
 
 export interface UseSlashCompletionReturn {
@@ -85,6 +78,7 @@ export interface UseSlashCompletionReturn {
   showSuggestions: boolean;
   isLoadingSuggestions: boolean;
   isPerfectMatch: boolean;
+  activeHint: string;
   setActiveSuggestionIndex: React.Dispatch<React.SetStateAction<number>>;
   setShowSuggestions: React.Dispatch<React.SetStateAction<boolean>>;
   resetCompletionState: () => void;
@@ -123,6 +117,12 @@ export function useSlashCompletion(
     navigateUp,
     navigateDown,
   } = useCompletion();
+
+  // Track active hint for schema-based completions
+  const [activeHint, setActiveHint] = React.useState<string>('');
+
+  // Track async completion sequence to avoid race conditions
+  const completionSequenceRef = useRef<number>(0);
 
   const completionStart = useRef(-1);
   const completionEnd = useRef(-1);
@@ -182,10 +182,11 @@ export function useSlashCompletion(
 
   useEffect(() => {
     if (commandIndex === -1 || reverseSearchActive) {
-      // Only reset if we actually had suggestions before
+      // Only reset if we actually had suggestions or hints before
       if (previousInput.current !== '') {
         debugLogger.debug(() => 'Resetting completion state');
         resetCompletionState();
+        setActiveHint('');
         previousInput.current = '';
       }
       return;
@@ -208,6 +209,9 @@ export function useSlashCompletion(
     }
     previousInput.current = currentInputKey;
 
+    // Increment completion sequence for race condition protection
+    const currentSequence = ++completionSequenceRef.current;
+
     const codePoints = toCodePoints(currentLine);
 
     if (codePoints[commandIndex] === '/') {
@@ -217,99 +221,107 @@ export function useSlashCompletion(
       const fullPath = currentLine.substring(commandIndex + 1);
       const hasTrailingSpace = currentLine.endsWith(' ');
 
-      // Get all non-empty parts of the command.
       const rawParts = fullPath.split(/\s+/).filter((p) => p);
 
-      let commandPathParts = rawParts;
-      let partial = '';
-
-      // If there's no trailing space, the last part is potentially a partial segment.
-      // We tentatively separate it.
-      if (!hasTrailingSpace && rawParts.length > 0) {
-        partial = rawParts[rawParts.length - 1];
-        commandPathParts = rawParts.slice(0, -1);
-      }
-
-      // Traverse the Command Tree using the tentative completed path
+      const pathParts: string[] = [];
       let currentLevel: readonly SlashCommand[] | undefined = slashCommands;
       let leafCommand: SlashCommand | null = null;
 
-      for (const part of commandPathParts) {
+      for (const part of rawParts) {
         if (!currentLevel) {
-          leafCommand = null;
-          currentLevel = [];
           break;
         }
-        const found: SlashCommand | undefined = currentLevel.find(
+        const found = currentLevel.find(
           (cmd) => cmd.name === part || cmd.altNames?.includes(part),
         );
-        if (found) {
-          leafCommand = found;
-          currentLevel = found.subCommands as
-            | readonly SlashCommand[]
-            | undefined;
-        } else {
-          leafCommand = null;
-          currentLevel = [];
+        if (!found) {
           break;
         }
+        pathParts.push(part);
+        leafCommand = found;
+        currentLevel = found.subCommands as readonly SlashCommand[] | undefined;
+      }
+
+      const remainingParts = rawParts.slice(pathParts.length);
+      const commandPathLength = pathParts.length;
+
+      const leafSupportsArguments = Boolean(
+        leafCommand && (leafCommand.schema || leafCommand.completion),
+      );
+
+      let commandPartial = '';
+      let argumentPartial = '';
+      let completedArgsForSchema: string[] = [];
+
+      if (leafSupportsArguments) {
+        if (remainingParts.length > 0) {
+          if (hasTrailingSpace) {
+            completedArgsForSchema = remainingParts;
+          } else {
+            argumentPartial = remainingParts[remainingParts.length - 1];
+            completedArgsForSchema = remainingParts.slice(0, -1);
+          }
+        }
+      } else if (!hasTrailingSpace && remainingParts.length > 0) {
+        commandPartial = remainingParts[remainingParts.length - 1];
       }
 
       let exactMatchAsParent: SlashCommand | undefined;
-      // Handle the Ambiguous Case
       if (!hasTrailingSpace && currentLevel) {
-        exactMatchAsParent = currentLevel.find(
-          (cmd) =>
-            (cmd.name === partial || cmd.altNames?.includes(partial)) &&
-            cmd.subCommands,
-        );
+        const candidate = commandPartial || argumentPartial;
+        if (candidate) {
+          exactMatchAsParent = currentLevel.find(
+            (cmd) =>
+              (cmd.name === candidate || cmd.altNames?.includes(candidate)) &&
+              cmd.subCommands,
+          );
 
-        if (exactMatchAsParent) {
-          // It's a perfect match for a parent command. Override our initial guess.
-          // Treat it as a completed command path.
-          leafCommand = exactMatchAsParent;
-          currentLevel = exactMatchAsParent.subCommands;
-          partial = ''; // We now want to suggest ALL of its sub-commands.
+          if (exactMatchAsParent) {
+            leafCommand = exactMatchAsParent;
+            currentLevel = exactMatchAsParent.subCommands;
+            commandPartial = '';
+            argumentPartial = '';
+          }
         }
       }
 
       // Check for perfect, executable match
       if (!hasTrailingSpace) {
-        if (leafCommand && partial === '' && leafCommand.action) {
-          // Case: /command<enter> - command has action, no sub-commands were suggested
+        if (
+          leafCommand &&
+          commandPartial === '' &&
+          argumentPartial === '' &&
+          leafCommand.action &&
+          !leafSupportsArguments
+        ) {
           setIsPerfectMatch(true);
-        } else if (currentLevel) {
-          // Case: /command subcommand<enter>
+          setActiveHint('');
+        } else if (currentLevel && commandPartial) {
           const perfectMatch = currentLevel.find(
             (cmd) =>
-              (cmd.name === partial || cmd.altNames?.includes(partial)) &&
+              (cmd.name === commandPartial ||
+                cmd.altNames?.includes(commandPartial)) &&
               cmd.action,
           );
           if (perfectMatch) {
             setIsPerfectMatch(true);
+            setActiveHint('');
           }
         }
       }
 
-      const depth = commandPathParts.length;
-      const isArgumentCompletion =
-        (leafCommand?.completion || leafCommand?.schema) &&
-        (hasTrailingSpace ||
-          (rawParts.length > depth && depth > 0 && partial !== ''));
+      const isArgumentCompletion = leafSupportsArguments;
 
       // Set completion range
+      const activePartial = leafSupportsArguments
+        ? argumentPartial
+        : commandPartial;
+
       if (hasTrailingSpace || exactMatchAsParent) {
         completionStart.current = currentLine.length;
         completionEnd.current = currentLine.length;
-      } else if (partial) {
-        if (isArgumentCompletion) {
-          const commandSoFar = `/${commandPathParts.join(' ')}`;
-          const argStartIndex =
-            commandSoFar.length + (commandPathParts.length > 0 ? 1 : 0);
-          completionStart.current = argStartIndex;
-        } else {
-          completionStart.current = currentLine.length - partial.length;
-        }
+      } else if (activePartial) {
+        completionStart.current = currentLine.length - activePartial.length;
         completionEnd.current = currentLine.length;
       } else {
         // e.g. /
@@ -319,33 +331,47 @@ export function useSlashCompletion(
 
       // Provide Suggestions based on the now-corrected context
       if (isArgumentCompletion) {
-        const argString = rawParts.slice(depth).join(' ');
+        const argsForHandler = [...completedArgsForSchema];
+        if (!hasTrailingSpace && argumentPartial) {
+          argsForHandler.push(argumentPartial);
+        }
+        const argString = argsForHandler.join(' ');
 
         // Check if command has schema-based completion
         if (leafCommand!.schema) {
           /**
-           * @plan:PLAN-20251013-AUTOCOMPLETE.P06
+           * @plan:PLAN-20251013-AUTOCOMPLETE.P08
            * @requirement:REQ-002
+           * @requirement:REQ-003
+           * @requirement:REQ-004
            * @pseudocode ArgumentSchema.md lines 71-90
-           * Integration stub: wire schema handler but preserve legacy output structure
+           * Full integration of schema handler with hint support
            * - Line 71: call createCompletionHandler with current command schema
            * - Line 72: supply schema specific to active command
            * - Line 73: capture { suggestions, hint } result
-           * - Line 74: set state for suggestions (hint ignored in P06)
-           * - Line 75-76: handle pending async results with loading state
-           * - Line 77-78: gracefully handle resolver errors
+           * - Line 74: set state for suggestions and activeHint field
+           * - Line 75: handle pending async results with sequence guard
+           * - Line 76-78: gracefully handle resolver errors (log + fallback)
            */
           const schemaHandler = createCompletionHandler(leafCommand!.schema);
           setIsLoadingSuggestions(true);
 
-          schemaHandler(commandContext, argString, currentLine)
+          schemaHandler(
+            commandContext,
+            {
+              args: argString,
+              completedArgs: completedArgsForSchema,
+              partialArg: argumentPartial,
+              commandPathLength,
+            },
+            currentLine,
+          )
             .then((completionResult) => {
-              /**
-               * @plan:PLAN-20251013-AUTOCOMPLETE.P06
-               * @requirement:REQ-002
-               * Integration stub: map schema result to legacy structure
-               * Hint is ignored until feature flag enabled in later phase
-               */
+              // Race condition protection: only process if this is the latest completion
+              if (currentSequence !== completionSequenceRef.current) {
+                return;
+              }
+
               const finalSuggestions = completionResult.suggestions.map(
                 (s) => ({
                   label: s.value,
@@ -353,16 +379,31 @@ export function useSlashCompletion(
                   description: s.description,
                 }),
               );
+
+              // Set suggestions and hint based on feature flag
               setSuggestions(finalSuggestions);
               setShowSuggestions(finalSuggestions.length > 0);
               setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
+
+              if (SHOW_ARGUMENT_HINTS) {
+                setActiveHint(completionResult.hint || '');
+              } else {
+                setActiveHint('');
+              }
+
               setIsLoadingSuggestions(false);
             })
             .catch((error) => {
+              // Race condition protection: only process if this is the latest completion
+              if (currentSequence !== completionSequenceRef.current) {
+                return;
+              }
+
               console.error('Schema completion error:', error);
               setSuggestions([]);
               setShowSuggestions(false);
               setActiveSuggestionIndex(-1);
+              setActiveHint('');
               setIsLoadingSuggestions(false);
             });
           return;
@@ -374,7 +415,7 @@ export function useSlashCompletion(
         const completionResult = leafCommand!.completion!(
           commandContext,
           argString,
-          currentLine, // Pass the full line for advanced completion logic
+          currentLine,
         );
 
         if (completionResult instanceof Promise) {
@@ -409,7 +450,7 @@ export function useSlashCompletion(
       const commandsToSearch = currentLevel || [];
       debugLogger.debug(
         () =>
-          `Commands to search: ${commandsToSearch.length}, Partial: "${partial}"`,
+          `Commands to search: ${commandsToSearch.length}, Partial: "${commandPartial}"`,
       );
       debugLogger.debug(
         () => `currentLevel: ${currentLevel ? 'exists' : 'null/undefined'}`,
@@ -419,8 +460,8 @@ export function useSlashCompletion(
         let potentialSuggestions = commandsToSearch.filter(
           (cmd) =>
             cmd.description &&
-            (cmd.name.startsWith(partial) ||
-              cmd.altNames?.some((alt) => alt.startsWith(partial))),
+            (cmd.name.startsWith(commandPartial) ||
+              cmd.altNames?.some((alt) => alt.startsWith(commandPartial))),
         );
         debugLogger.debug(
           () => `Found ${potentialSuggestions.length} potential suggestions`,
@@ -430,7 +471,8 @@ export function useSlashCompletion(
         // enter should submit immediately.
         if (potentialSuggestions.length > 0 && !hasTrailingSpace) {
           const perfectMatch = potentialSuggestions.find(
-            (s) => s.name === partial || s.altNames?.includes(partial),
+            (s) =>
+              s.name === commandPartial || s.altNames?.includes(commandPartial),
           );
           if (perfectMatch && perfectMatch.action) {
             potentialSuggestions = [];
@@ -451,10 +493,11 @@ export function useSlashCompletion(
       }
 
       // If we fall through, no suggestions are available.
-      // Don't reset everything - just set empty suggestions
+      // Don't reset everything - just set empty suggestions and clear hint
       setSuggestions([]);
       setShowSuggestions(false);
       setActiveSuggestionIndex(-1);
+      setActiveHint('');
       return;
     }
 
@@ -853,6 +896,7 @@ export function useSlashCompletion(
     showSuggestions,
     isLoadingSuggestions,
     isPerfectMatch,
+    activeHint,
     setActiveSuggestionIndex,
     setShowSuggestions,
     resetCompletionState,

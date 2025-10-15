@@ -18,7 +18,7 @@
 // limitations under the License.
 
 import { execSync } from 'child_process';
-import { writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 if (!process.cwd().includes('packages')) {
@@ -26,16 +26,19 @@ if (!process.cwd().includes('packages')) {
   process.exit(1);
 }
 
+const hasBuildConfig = existsSync('tsconfig.build.json');
+const tsconfig = hasBuildConfig ? 'tsconfig.build.json' : 'tsconfig.json';
+
 // Perform a full clean of previous build artifacts _including_ the cached
 // incremental graph (.tsbuildinfo). We still preserve incremental rebuilds
 // by letting TypeScript regenerate a fresh cache right after the clean.
 // This avoids TS6305 ("output file has not been built") when dist is wiped
 // but the .tsbuildinfo still references old artifacts.
-execSync('tsc --build --clean', { stdio: 'inherit' });
+execSync(`tsc --build --clean ${tsconfig}`, { stdio: 'inherit' });
 
 // Re-build the project (this creates a new .tsbuildinfo for subsequent
 // fast incremental compilations).
-execSync('tsc --build', { stdio: 'inherit' });
+execSync(`tsc --build ${tsconfig}`, { stdio: 'inherit' });
 
 // copy .{md,json} files
 execSync('node ../../scripts/copy_files.js', { stdio: 'inherit' });

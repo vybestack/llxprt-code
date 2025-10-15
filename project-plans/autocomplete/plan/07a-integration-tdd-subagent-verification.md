@@ -7,7 +7,8 @@
 - Phase 07 tests in place (failing)
 
 ## Implementation Tasks
-- Append verification comments to new test files documenting failure stacks and anti-fraud check results.
+- Append verification comments to moved test files documenting failure stacks and anti-fraud check results.
+  - Files moved due to React 19 compatibility issues with vitest exclusions.
 - Update execution tracker statuses.
 
 ### Required Comment Example
@@ -19,7 +20,11 @@
 ## Verification Commands
 
 ```bash
-npm test -- --filter "@plan:PLAN-20250214-AUTOCOMPLETE.P07" || true
+# Test moved command integration file
+npm test -- --run --reporter verbose src/ui/commands/subagentCommand.phase07.test.ts || true
+
+# Note: Hook tests moved to src/integration-tests/useSlashCompletion.phase07.test.ts
+# but cannot run due to React 19 compatibility issues with vitest exclusions
 ```
 
 ## Manual Verification Checklist

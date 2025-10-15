@@ -35,7 +35,7 @@ function parseSaveArgs(args: string): {
   input: string;
 } | null {
   const match = args.match(
-    /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("?)?/,
+    /^(\S+)\s+(\S+)\s+(auto|manual)\s+"((?:[^"\\]|\\.)*)("|"?)/,
   );
 
   if (!match) {
@@ -109,6 +109,90 @@ async function saveSubagent(
 }
 
 /**
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
+ * @requirement:REQ-002
+ * @requirement:REQ-003
+ * @requirement:REQ-004
+ * @pseudocode ArgumentSchema.md lines 91-104
+ * Schema definition for subagent command completion
+ */
+const subagentSchema = [
+  {
+    kind: 'value' as const,
+    name: 'name',
+    description: 'Enter subagent name',
+    completer: async (ctx: CommandContext, partialArg: string) => {
+      const manager = ctx.services.subagentManager;
+      if (!manager) {
+        return [];
+      }
+
+      const names = await manager.listSubagents();
+      const normalizedPartial = partialArg.toLowerCase();
+      const matchingNames = names.filter((name) =>
+        normalizedPartial.length === 0
+          ? true
+          : name.toLowerCase().startsWith(normalizedPartial),
+      );
+
+      const suggestions = await Promise.all(
+        matchingNames.map(async (name) => {
+          try {
+            const details = await manager.loadSubagent(name);
+            return {
+              value: name,
+              description: `Profile: ${details.profile}`,
+            };
+          } catch {
+            return {
+              value: name,
+              description: 'Subagent',
+            };
+          }
+        }),
+      );
+
+      return suggestions;
+    },
+  },
+  {
+    kind: 'value' as const,
+    name: 'profile',
+    description: 'Select profile configuration',
+    options: [
+      { value: 'default', description: 'Default configuration' },
+      { value: 'custom', description: 'Custom settings' },
+      { value: 'coding', description: 'Code generation focused' },
+      { value: 'analysis', description: 'Analysis focused' },
+    ],
+  },
+  {
+    kind: 'literal' as const,
+    value: 'auto',
+    description: 'Automatic mode',
+    next: [
+      {
+        kind: 'value' as const,
+        name: 'prompt',
+        description: 'Enter system prompt for automatic mode',
+      },
+    ],
+  },
+  {
+    kind: 'literal' as const,
+    value: 'manual',
+    description: 'Manual mode',
+    next: [
+      {
+        kind: 'value' as const,
+        name: 'prompt',
+        description: 'Enter system prompt for manual mode',
+      },
+    ],
+  },
+];
+
+/**
  * /subagent save command - Auto and Manual modes
  *
  * @plan:PLAN-20250117-SUBAGENTCONFIG.P14
@@ -122,11 +206,13 @@ const saveCommand: SlashCommand = {
   name: 'save',
   description: 'Save a subagent configuration (auto or manual mode)',
   kind: CommandKind.BUILT_IN,
+  // Schema-based completion replaces legacy completion function
+  schema: subagentSchema,
   action: async (
     context: CommandContext,
     args: string,
   ): Promise<SlashCommandActionReturn> => {
-    // Parse arguments: <name> <profile> <mode> "<input>"
+    // Parse arguments: <name> <profile> <mode> "<text>"
     const parsedArgs = parseSaveArgs(args);
 
     if (!parsedArgs) {
@@ -680,12 +766,13 @@ const editCommand: SlashCommand = {
 };
 
 /**
- * /subagent parent command with autocomplete
+ * /subagent parent command with schema-based completion
  *
- * @plan:PLAN-20250117-SUBAGENTCONFIG.P09
- * @requirement:REQ-001
- * @requirement:REQ-009
- * @requirement:REQ-011
+ * @plan:PLAN-20251013-AUTOCOMPLETE.P08
+ * @requirement:REQ-002
+ * @requirement:REQ-003
+ * @requirement:REQ-004
+ * Legacy completion removed - now fully schema-driven
  */
 export const subagentCommand: SlashCommand = {
   name: 'subagent',
@@ -698,85 +785,6 @@ export const subagentCommand: SlashCommand = {
     deleteCommand,
     editCommand,
   ],
-  /**
-   * Multi-level autocomplete
-   *
-   * @plan:PLAN-20250117-SUBAGENTCONFIG.P11
-   * @requirement:REQ-009
-   * @pseudocode SubagentCommand.md lines 211-280
-   */
-  completion: async (
-    context: CommandContext,
-    partialArg: string,
-    fullLine?: string,
-  ): Promise<string[]> => {
-    const subagentManager = context.services.subagentManager; // @plan:PLAN-20250117-SUBAGENTCONFIG.P11 @requirement:REQ-009
-    if (!subagentManager) {
-      return [];
-    }
-
-    const rawInput = fullLine ?? partialArg;
-
-    // Extract the portion after the command keyword while preserving trailing spaces
-    const commandMatch = rawInput.match(/^(?:\/?subagent)?\s*(.*)$/);
-    const argsSection = commandMatch ? commandMatch[1] : rawInput;
-    const hasTrailingSpace = /\s$/.test(argsSection);
-    const cleanedArgs = argsSection.trim();
-    const tokens = cleanedArgs.length > 0 ? cleanedArgs.split(/\s+/) : [];
-
-    let currentToken = '';
-    let tokensBefore: string[] = [];
-
-    if (tokens.length === 0) {
-      currentToken = '';
-    } else if (hasTrailingSpace) {
-      tokensBefore = tokens;
-      currentToken = '';
-    } else {
-      currentToken = tokens[tokens.length - 1];
-      tokensBefore = tokens.slice(0, -1);
-    }
-
-    const position = tokensBefore.length;
-    const rootSubcommands = ['save', 'list', 'show', 'delete', 'edit'];
-
-    // Level 1: Subcommand completion
-    if (position === 0) {
-      const search = currentToken;
-      return rootSubcommands.filter((cmd) => cmd.startsWith(search));
-    }
-
-    const subcommand = tokensBefore[0];
-
-    // Level 2: Agent name completion for show/delete/edit
-    if (position === 1 && ['show', 'delete', 'edit'].includes(subcommand)) {
-      const nameToFilter = currentToken;
-      const subagents = await subagentManager.listSubagents();
-      return subagents.filter((name) => name.startsWith(nameToFilter));
-    }
-
-    // Level 3: Profile name completion for save
-    if (
-      position === 2 &&
-      subcommand === 'save' &&
-      context.services.profileManager
-    ) {
-      const profileNameToFilter = currentToken;
-      const profileManager = context.services.profileManager;
-      const profiles = await profileManager.listProfiles();
-      return profiles.filter((name) => name.startsWith(profileNameToFilter));
-    }
-
-    // Level 4: Mode completion for save
-    if (position === 3 && subcommand === 'save') {
-      const modeToFilter = currentToken;
-      const modes = ['auto', 'manual'];
-      return modes.filter((mode) => mode.startsWith(modeToFilter));
-    }
-
-    // Beyond mode argument: no completion
-    return [];
-  },
   action: async (
     _context: CommandContext,
     _args: string,

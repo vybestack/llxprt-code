@@ -23,6 +23,7 @@
     "test:ci:covered": "vitest run -c vitest.ci.covered.config.ts",
     "test:ci:fast": "vitest run -c vitest.ci.fast.config.ts",
     "test:ci": "npm run test:ci:covered && npm run test:ci:fast",
+    "test:mutation": "npx stryker run",
     "test:legacy": "OPENAI_RESPONSES_DISABLE=true vitest run -t \"legacy|gpt-3.5-turbo\"",
     "typecheck": "tsc --noEmit",
     "prerelease:version": "node ../../scripts/bind_package_version.js",

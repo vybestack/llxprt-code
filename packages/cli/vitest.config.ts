@@ -6,10 +6,16 @@
 
 /// <reference types="vitest" />
 import { defineConfig } from 'vitest/config';
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  root: __dirname,
   resolve: {
     conditions: ['node', 'import', 'module', 'browser', 'default'],
+    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
   },
   test: {
     include: ['**/*.{test,spec}.?(c|m)[jt]s?(x)', 'config.test.ts'],
@@ -22,10 +28,14 @@ export default defineConfig({
       // This is a comprehensive exclusion until React 19 compatibility is properly resolved
       '**/*.test.tsx',
       '**/gemini.test.tsx',
-      // Also exclude UI-related tests that may indirectly import React DOM
-      '**/ui/hooks/**/*.test.ts',
-      '**/ui/hooks/**/*.spec.ts',
+      // Exclude UI component tests that may directly import React DOM
       '**/ui/components/**/*.test.ts',
+      // Allow hook tests to run - let's see if React 19 issues are actually resolved
+      // But exclude existing hook tests that have known issues
+      '**/ui/hooks/useSlashCompletion.test.ts',
+      '**/ui/hooks/useTodoContinuation.spec.ts',
+      '**/ui/hooks/useInputHistoryStore.test.ts',
+      '**/ui/hooks/useShellHistory.test.ts',
     ],
     environment: 'jsdom',
     globals: true,

@@ -14,12 +14,11 @@ import {
 import { getProviderManager } from '../../providers/providerManagerInstance.js';
 import { MessageType } from '../types.js';
 import { AuthType } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-core/src/settings/SettingsService.js';
 
 /**
  * Get SettingsService instance for provider switching
  */
-async function getSettingsServiceForProvider(): Promise<SettingsService> {
+async function getSettingsServiceForProvider() {
   try {
     const { getSettingsService } = await import('@vybestack/llxprt-code-core');
 

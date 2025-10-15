@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
     "jsx": "react-jsx",
@@ -81,6 +81,5 @@
     "src/ui/themes/theme.test.ts",
     "src/validateNonInterActiveAuth.test.ts",
     "src/services/prompt-processors/shellProcessor.test.ts"
-  ],
-  "references": [{ "path": "../core" }]
+  ]
 }

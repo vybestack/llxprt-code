@@ -34,6 +34,7 @@ rmSync(join(root, 'packages/cli/src/generated/'), {
 });
 const RMRF_OPTIONS = { recursive: true, force: true };
 rmSync(join(root, 'bundle'), RMRF_OPTIONS);
+rmSync(join(root, '.stryker-tmp'), RMRF_OPTIONS);
 // Dynamically clean dist directories in all workspaces
 const rootPackageJson = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf-8'),
@@ -44,6 +45,15 @@ for (const workspace of rootPackageJson.workspaces) {
     const pkgDir = dirname(join(root, pkgPath));
     rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
   }
+}
+
+// Clean Stryker sandboxes that may remain after aborted runs
+const strayStrykerDirs = globSync('**/.stryker-tmp', {
+  cwd: root,
+  dot: true,
+});
+for (const dir of strayStrykerDirs) {
+  rmSync(join(root, dir), RMRF_OPTIONS);
 }
 
 // Clean up vsix files in vscode-ide-companion

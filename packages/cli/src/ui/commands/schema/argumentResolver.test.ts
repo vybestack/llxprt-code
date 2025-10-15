@@ -345,6 +345,84 @@ describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
       expect(info.partialToken).toBe('/command');
     });
 
+    it('tokenize keeps a single command token without stripping slash when no args present', () => {
+      const info = tokenize('/single');
+
+      expect(info.tokens).toEqual(['/single']);
+      expect(info.partialToken).toBe('/single');
+      expect(info.hasTrailingSpace).toBe(false);
+    });
+
+    it('tokenize strips prefix when arguments follow the command', () => {
+      const info = tokenize('/cmd argument');
+
+      expect(info.tokens).toEqual(['cmd', 'argument']);
+      expect(info.partialToken).toBe('argument');
+    });
+
+    it('tokenize strips @ prefix when arguments follow the command', () => {
+      const info = tokenize('@cmd argument');
+
+      expect(info.tokens).toEqual(['cmd', 'argument']);
+      expect(info.partialToken).toBe('argument');
+    });
+
+    it('tokenize returns empty partial token when trailing space follows command', () => {
+      const info = tokenize('/cmd ');
+
+      expect(info.tokens).toEqual(['cmd']);
+      expect(info.partialToken).toBe('');
+      expect(info.hasTrailingSpace).toBe(true);
+    });
+
+    it('tokenize removes prefix-only commands', () => {
+      const info = tokenize('/');
+
+      expect(info.tokens).toEqual([]);
+      expect(info.partialToken).toBe('');
+    });
+
+    it('tokenize leaves tokens untouched when no prefix is present', () => {
+      const info = tokenize('plain argument');
+
+      expect(info.tokens).toEqual(['plain', 'argument']);
+      expect(info.partialToken).toBe('argument');
+      expect(info.hasTrailingSpace).toBe(false);
+    });
+
+    it('tokenize does not emit empty tokens for repeated spaces', () => {
+      const info = tokenize('/cmd    value');
+
+      expect(info.tokens).toEqual(['cmd', 'value']);
+    });
+
+    it('tokenize only strips known prefix characters', () => {
+      const info = tokenize('!cmd argument');
+
+      expect(info.tokens).toEqual(['!cmd', 'argument']);
+    });
+
+    it('computeHintForLiterals falls back to first description when endings differ', async () => {
+      const schema: CommandArgumentSchema = [
+        literal('auto', 'Automatic mode'),
+        literal('manual', 'Manual prompt required'),
+      ];
+
+      const handler = createCompletionHandler(schema);
+      const result = await handler(
+        mockContext,
+        {
+          args: '',
+          completedArgs: [],
+          partialArg: '',
+          commandPathLength: 0,
+        },
+        '',
+      );
+
+      expect(result.hint).toBe('Automatic mode');
+    });
+
     it('tokenize detects trailing space @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', () => {
       const info = tokenize('/cmd value ');
 
