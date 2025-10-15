@@ -18,7 +18,7 @@ import {
   OAuthManager,
 } from '../auth/precedence.js';
 import { getSettingsService } from '../settings/settingsServiceInstance.js';
-import { Config } from '../config/config.js';
+import type { Config } from '../config/config.js';
 import { IProviderConfig } from './types/IProviderConfig.js';
 
 export interface BaseProviderConfig {
@@ -372,8 +372,25 @@ export abstract class BaseProvider implements IProvider {
   clearState?(): void {
     this.clearAuthCache();
   }
-  setConfig?(config: IProviderConfig): void {
-    this.providerConfig = config;
+  setConfig?(config: unknown): void {
+    if (!config || typeof config !== 'object') {
+      return;
+    }
+
+    const maybeConfig = config as {
+      getUserMemory?: () => string;
+      getModel?: () => string;
+    };
+
+    if (
+      typeof maybeConfig.getUserMemory === 'function' &&
+      typeof maybeConfig.getModel === 'function'
+    ) {
+      this.globalConfig = config as Config;
+      return;
+    }
+
+    this.providerConfig = config as IProviderConfig;
   }
   getServerTools(): string[] {
     return [];
