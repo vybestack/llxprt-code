@@ -372,8 +372,15 @@ export abstract class BaseProvider implements IProvider {
   clearState?(): void {
     this.clearAuthCache();
   }
-  setConfig?(config: IProviderConfig): void {
-    this.providerConfig = config;
+  setConfig?(config: unknown): void {
+    if (config instanceof Config) {
+      this.globalConfig = config;
+      return;
+    }
+
+    if (config && typeof config === 'object') {
+      this.providerConfig = config as IProviderConfig;
+    }
   }
   getServerTools(): string[] {
     return [];
