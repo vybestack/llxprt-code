@@ -608,7 +608,12 @@ export class AnthropicProvider extends BaseProvider {
         | Array<
             | { type: 'text'; text: string }
             | { type: 'tool_use'; id: string; name: string; input: unknown }
-            | { type: 'tool_result'; tool_use_id: string; content: string }
+            | {
+                type: 'tool_result';
+                tool_use_id: string;
+                content: string;
+                is_error?: boolean;
+              }
           >;
     }> = [];
 
@@ -636,6 +641,7 @@ export class AnthropicProvider extends BaseProvider {
       type: 'tool_result';
       tool_use_id: string;
       content: string;
+      is_error?: boolean;
     }> = [];
 
     const flushToolResults = () => {
@@ -648,10 +654,94 @@ export class AnthropicProvider extends BaseProvider {
       }
     };
 
+    const serializeToolResult = (result: unknown): string | undefined => {
+      if (result === undefined || result === null) {
+        return undefined;
+      }
+      if (typeof result === 'string') {
+        return result;
+      }
+      try {
+        return JSON.stringify(result);
+      } catch (error) {
+        this.logger.debug(
+          () =>
+            `Failed to stringify tool result, falling back to string conversion: ${error}`,
+        );
+        return String(result);
+      }
+    };
+
+    const blocksToText = (blocks: ContentBlock[]): string => {
+      let combined = '';
+      for (const block of blocks) {
+        if (block.type === 'text') {
+          combined += block.text;
+        } else if (block.type === 'code') {
+          const language = block.language ? block.language : '';
+          combined += `\n\n\u0060\u0060\u0060${language}\n${block.code}\n\u0060\u0060\u0060\n`;
+        }
+      }
+      return combined.trimStart();
+    };
+
     for (const c of filteredContent) {
+      const toolResponseBlocks = c.blocks.filter(
+        (b) => b.type === 'tool_response',
+      ) as ToolResponseBlock[];
+      const nonToolResponseBlocks = c.blocks.filter(
+        (b) => b.type !== 'tool_response',
+      );
+      const toolTextContent = toolResponseBlocks.length
+        ? blocksToText(nonToolResponseBlocks)
+        : '';
+      const onlyToolResponseContent =
+        toolResponseBlocks.length > 0 &&
+        nonToolResponseBlocks.every(
+          (block) => block.type === 'text' || block.type === 'code',
+        );
+
+      if (toolResponseBlocks.length > 0) {
+        for (const toolResponseBlock of toolResponseBlocks) {
+          const serializedResult = serializeToolResult(
+            toolResponseBlock.result,
+          );
+          let contentPayload = toolTextContent || serializedResult || '';
+
+          if (!contentPayload) {
+            contentPayload = '[empty tool result]';
+          }
+
+          const toolResult: {
+            type: 'tool_result';
+            tool_use_id: string;
+            content: string;
+            is_error?: boolean;
+          } = {
+            type: 'tool_result',
+            tool_use_id: this.normalizeToAnthropicToolId(
+              toolResponseBlock.callId,
+            ),
+            content: contentPayload,
+          };
+
+          if (toolResponseBlock.error) {
+            toolResult.is_error = true;
+          }
+
+          pendingToolResults.push(toolResult);
+        }
+      }
+
       if (c.speaker === 'human') {
+        const skipHumanMessage = onlyToolResponseContent;
+
         // Flush any pending tool results before adding a human message
         flushToolResults();
+
+        if (skipHumanMessage) {
+          continue;
+        }
 
         const textBlock = c.blocks.find((b) => b.type === 'text') as
           | TextBlock
@@ -720,21 +810,13 @@ export class AnthropicProvider extends BaseProvider {
           });
         }
       } else if (c.speaker === 'tool') {
-        const toolResponseBlock = c.blocks.find(
-          (b) => b.type === 'tool_response',
-        ) as ToolResponseBlock | undefined;
-        if (!toolResponseBlock) {
+        if (toolResponseBlocks.length === 0) {
           throw new Error('Tool content must have a tool_response block');
         }
-
-        // Collect tool results to be grouped together
-        pendingToolResults.push({
-          type: 'tool_result',
-          tool_use_id: this.normalizeToAnthropicToolId(
-            toolResponseBlock.callId,
-          ),
-          content: JSON.stringify(toolResponseBlock.result),
-        });
+        if (onlyToolResponseContent) {
+          // Content already captured in pending tool results
+          continue;
+        }
       } else {
         throw new Error(`Unknown speaker type: ${c.speaker}`);
       }

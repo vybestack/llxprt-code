@@ -115,6 +115,7 @@ describe('useAutoAcceptIndicator', () => {
     mockedUseKeypress.mockImplementation(
       (handler: UseKeypressHandler, _options) => {
         capturedUseKeypressHandler = handler;
+        return { refresh: () => {} };
       },
     );
 

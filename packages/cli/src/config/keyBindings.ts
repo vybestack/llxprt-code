@@ -56,6 +56,9 @@ export enum Command {
   REVERSE_SEARCH = 'reverseSearch',
   SUBMIT_REVERSE_SEARCH = 'submitReverseSearch',
   ACCEPT_SUGGESTION_REVERSE_SEARCH = 'acceptSuggestionReverseSearch',
+
+  // Debugging/Terminal fixes
+  REFRESH_KEYPRESS = 'refreshKeypress',
 }
 
 /**
@@ -162,4 +165,7 @@ export const defaultKeyBindings: KeyBindingConfig = {
   // Note: original logic ONLY checked ctrl=false, ignored meta/shift/paste
   [Command.SUBMIT_REVERSE_SEARCH]: [{ key: 'return', ctrl: false }],
   [Command.ACCEPT_SUGGESTION_REVERSE_SEARCH]: [{ key: 'tab' }],
+
+  // Debugging/Terminal fixes
+  [Command.REFRESH_KEYPRESS]: [{ key: 'r', ctrl: true, shift: true }],
 };

@@ -28,6 +28,8 @@ describe('keyMatchers', () => {
     [Command.KILL_LINE_RIGHT]: (key: Key) => key.ctrl && key.name === 'k',
     [Command.KILL_LINE_LEFT]: (key: Key) => key.ctrl && key.name === 'u',
     [Command.CLEAR_INPUT]: (key: Key) => key.ctrl && key.name === 'c',
+    [Command.REFRESH_KEYPRESS]: (key: Key) =>
+      key.ctrl && key.shift && key.name === 'r',
     [Command.DELETE_WORD_BACKWARD]: (key: Key) =>
       (key.ctrl || key.meta) && key.name === 'backspace',
     [Command.CLEAR_SCREEN]: (key: Key) => key.ctrl && key.name === 'l',

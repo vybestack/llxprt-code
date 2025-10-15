@@ -105,6 +105,8 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
   const resetReverseSearchCompletionState =
     reverseSearchCompletion.resetCompletionState;
 
+  const keypressRefreshRef = useRef<() => void>(() => {});
+
   const resetEscapeState = useCallback(() => {
     if (escapeTimerRef.current) {
       clearTimeout(escapeTimerRef.current);
@@ -494,6 +496,12 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
         return;
       }
 
+      // Ctrl+R to refresh keypress handling (for tmux reattach issues)
+      if (keyMatchers[Command.REFRESH_KEYPRESS](key)) {
+        keypressRefreshRef.current();
+        return;
+      }
+
       // Kill line commands
       if (keyMatchers[Command.KILL_LINE_RIGHT](key)) {
         buffer.killLineRight();
@@ -558,9 +566,13 @@ export const InputPrompt: React.FC<InputPromptProps> = ({
     ],
   );
 
-  useKeypress(handleInput, {
+  const { refresh } = useKeypress(handleInput, {
     isActive: true,
   });
+
+  useEffect(() => {
+    keypressRefreshRef.current = refresh;
+  }, [refresh]);
 
   const linesToRender = buffer.viewportVisualLines;
   const [cursorVisualRowAbsolute, cursorVisualColAbsolute] =
