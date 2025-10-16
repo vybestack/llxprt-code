@@ -56,6 +56,85 @@ interface GeminiResponseWithUsage {
 }
 
 export class GeminiProvider extends BaseProvider {
+  /**
+   * @description Cleans a JSON Schema object to ensure it strictly conforms to the Gemini API's supported Schema definition.
+   * This function acts as a whitelist, removing any properties not explicitly defined in the OpenAPI 3.03 Schema Object
+   * as understood by the Gemini API. This is crucial for compatibility, as external SDKs might generate schemas
+   * with unsupported keywords (e.g., `exclusiveMinimum`, `exclusiveMaximum`) which cause API errors.
+   *
+   * This approach aligns with how `gemini-cli` handles schema compatibility by relying on the `@google/genai` library's
+   * internal cleaning mechanisms.
+   *
+   * @see https://ai.google.dev/api/caching#Schema
+   * @param schema The JSON Schema object to clean.
+   * @returns A new Schema object containing only supported properties.
+   */
+  private cleanGeminiSchema(schema: unknown): Schema {
+    if (typeof schema !== 'object' || schema === null) {
+      return schema as Schema;
+    }
+
+    const cleanedSchema: { [key: string]: unknown } = {};
+    const typedSchema = schema as Record<string, unknown>;
+    const supportedSchemaProperties: Array<keyof Schema> = [
+      'type',
+      'format',
+      'title',
+      'description',
+      'nullable',
+      'enum',
+      'maxItems',
+      'minItems',
+      'properties',
+      'required',
+      'minProperties',
+      'maxProperties',
+      'minLength',
+      'maxLength',
+      'pattern',
+      'example',
+      'anyOf',
+      'propertyOrdering',
+      'default',
+      'items',
+      'minimum',
+      'maximum',
+    ];
+
+    for (const key of supportedSchemaProperties) {
+      if (Object.prototype.hasOwnProperty.call(schema, key)) {
+        if (
+          key === 'properties' &&
+          typeof typedSchema[key] === 'object' &&
+          typedSchema[key] !== null
+        ) {
+          // Recursively clean properties within 'properties'
+          const cleanedProperties: { [key: string]: Schema } = {};
+          const propertiesObject = typedSchema[key] as Record<string, unknown>;
+          for (const propKey in propertiesObject) {
+            cleanedProperties[propKey] = this.cleanGeminiSchema(
+              propertiesObject[propKey],
+            ) as Schema;
+          }
+          cleanedSchema[key] = cleanedProperties;
+        } else if (key === 'items' && typeof typedSchema[key] === 'object') {
+          // Recursively clean schema within 'items' for array types
+          cleanedSchema[key] = this.cleanGeminiSchema(
+            typedSchema[key],
+          ) as Schema;
+        } else if (key === 'anyOf' && Array.isArray(typedSchema[key])) {
+          // Recursively clean schemas within 'anyOf'
+          cleanedSchema[key] = (typedSchema[key] as unknown[]).map(
+            (item: unknown) => this.cleanGeminiSchema(item),
+          ) as Schema[];
+        } else {
+          cleanedSchema[key] = (schema as { [key: string]: unknown })[key];
+        }
+      }
+    }
+    return cleanedSchema as Schema;
+  }
+
   private logger: DebugLogger;
   private authMode: GeminiAuthMode = 'none';
   private currentModel: string = 'gemini-2.5-pro';
@@ -950,6 +1029,10 @@ export class GeminiProvider extends BaseProvider {
       ? tools.map((toolGroup) => ({
           functionDeclarations: toolGroup.functionDeclarations.map((decl) => {
             let parameters = decl.parametersJsonSchema;
+            // CRITICAL FIX: Clean the JSON schema to remove unsupported properties by Gemini API.
+            // This ensures compatibility and prevents API errors when using tools.
+            // Ref: https://ai.google.dev/api/caching#Schema
+            parameters = this.cleanGeminiSchema(parameters);
             if (
               parameters &&
               typeof parameters === 'object' &&

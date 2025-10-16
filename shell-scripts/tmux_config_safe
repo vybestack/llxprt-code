@@ -1,0 +1,4 @@
+# Enable true color (if available)
+set -ga terminal-overrides ",xterm-256color:Tc"
+# Force UTF-8
+set -ga terminal-overrides ",*:UTF-8"

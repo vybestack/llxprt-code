@@ -78,7 +78,9 @@ export class ProviderManager implements IProviderManager {
       // ALWAYS wrap with LoggingProviderWrapper for token tracking
       let finalProvider = baseProvider;
       if (this.config) {
+        baseProvider.setConfig?.(this.config);
         finalProvider = new LoggingProviderWrapper(baseProvider, this.config);
+        finalProvider.setConfig?.(this.config);
       }
 
       this.providers.set(name, finalProvider);
@@ -91,11 +93,16 @@ export class ProviderManager implements IProviderManager {
   }
 
   registerProvider(provider: IProvider): void {
+    if (this.config) {
+      provider.setConfig?.(this.config);
+    }
+
     // ALWAYS wrap provider to enable token tracking
     // (LoggingProviderWrapper handles both token tracking AND conversation logging)
     let finalProvider = provider;
     if (this.config) {
       finalProvider = new LoggingProviderWrapper(provider, this.config);
+      finalProvider.setConfig?.(this.config);
     }
 
     this.providers.set(provider.name, finalProvider);

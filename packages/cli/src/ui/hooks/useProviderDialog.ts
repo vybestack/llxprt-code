@@ -11,6 +11,18 @@ import { useAppDispatch } from '../contexts/AppDispatchContext.js';
 import { AppState } from '../reducers/appReducer.js';
 import { AuthType, Config } from '@vybestack/llxprt-code-core';
 
+const PROVIDER_SWITCH_EPHEMERAL_KEYS = [
+  'auth-key',
+  'auth-keyfile',
+  'base-url',
+  'context-limit',
+  'compression-threshold',
+  'tool-format',
+  'api-version',
+  'custom-headers',
+  'model',
+];
+
 interface UseProviderDialogParams {
   addMessage: (msg: {
     type: MessageType;
@@ -61,16 +73,53 @@ export const useProviderDialog = ({
         const providerManager = getProviderManager();
         const prev = providerManager.getActiveProviderName();
 
+        // Reset provider-specific ephemeral settings before switching
+        for (const key of PROVIDER_SWITCH_EPHEMERAL_KEYS) {
+          config.setEphemeralSetting(key, undefined);
+        }
+
+        // Clear cached state on the target provider if possible
+        const providersMap = (
+          providerManager as unknown as { providers?: Map<string, unknown> }
+        ).providers;
+        if (providersMap && providersMap instanceof Map) {
+          const targetProvider = providersMap.get(providerName) as
+            | { clearState?: () => void }
+            | undefined;
+          targetProvider?.clearState?.();
+        }
+
         // Switch provider first
         providerManager.setActiveProvider(providerName);
 
-        // Ensure provider manager is set on config
+        // Ensure provider manager is set on config and update provider reference
         config.setProviderManager(providerManager);
+        config.setProvider(providerName);
 
-        // Update model to match the new provider's default
-        const newModel =
-          providerManager.getActiveProvider().getCurrentModel?.() || '';
-        config.setModel(newModel);
+        const activeProvider = providerManager.getActiveProvider();
+
+        // Reset provider state that may linger between providers
+        activeProvider.setBaseUrl?.(undefined);
+        activeProvider.setModelParams?.({});
+
+        // Provider-specific defaults (e.g., qwen base URL)
+        if (providerName === 'qwen') {
+          const baseUrl = 'https://portal.qwen.ai/v1';
+          config.setEphemeralSetting('base-url', baseUrl);
+          activeProvider.setBaseUrl?.(baseUrl);
+        }
+
+        const defaultModel =
+          activeProvider.getDefaultModel?.() ||
+          activeProvider.getCurrentModel?.() ||
+          '';
+
+        if (defaultModel) {
+          activeProvider.setModel?.(defaultModel);
+          config.setModel(defaultModel);
+        } else {
+          config.setModel('');
+        }
 
         // With HistoryService and ContentConverters, we can now keep conversation history
         // when switching providers as the conversion handles format differences
@@ -123,6 +172,7 @@ export const useProviderDialog = ({
           });
         }
 
+        setCurrentProvider(providerName);
         onProviderChange?.();
       } catch (e) {
         addMessage({
