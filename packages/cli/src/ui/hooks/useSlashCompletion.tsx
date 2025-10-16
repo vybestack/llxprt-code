@@ -885,8 +885,28 @@ export function useSlashCompletion(
         logicalPosToOffset(buffer.lines, cursorRow, completionEnd.current),
         suggestionText,
       );
+
+      // Clear current suggestions so we don't re-apply stale entries while
+      // the resolver recomputes the next argument context.
+      setSuggestions([]);
+      setShowSuggestions(false);
+      setActiveSuggestionIndex(-1);
+      setVisibleStartIndex(0);
+      setActiveHint('');
+      setIsLoadingSuggestions(false);
     },
-    [cursorRow, buffer, suggestions, commandIndex],
+    [
+      cursorRow,
+      buffer,
+      suggestions,
+      commandIndex,
+      setSuggestions,
+      setShowSuggestions,
+      setActiveSuggestionIndex,
+      setVisibleStartIndex,
+      setActiveHint,
+      setIsLoadingSuggestions,
+    ],
   );
 
   return {

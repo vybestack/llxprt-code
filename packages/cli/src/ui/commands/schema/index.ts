@@ -35,6 +35,7 @@ interface ValueStepContext {
   node: ValueArgument;
   remainingSchema: CommandArgumentSchema;
   consumedCount: number;
+  consumedLiterals: number;
 }
 
 interface LiteralStepContext {
@@ -42,11 +43,13 @@ interface LiteralStepContext {
   nodes: LiteralArgument[];
   remainingSchema: CommandArgumentSchema;
   consumedCount: number;
+  consumedLiterals: number;
 }
 
 interface EmptyContext {
   kind: 'none';
   consumedCount: number;
+  consumedLiterals: number;
 }
 
 type ActiveContext = ValueStepContext | LiteralStepContext | EmptyContext;
@@ -170,6 +173,7 @@ function resolveActiveStep(
   let currentSchema = schema ?? [];
   const remainingArgs = [...completedArgs];
   let consumedCount = 0;
+  let consumedLiterals = 0;
 
   while (currentSchema.length > 0) {
     const firstNode = currentSchema[0];
@@ -183,6 +187,7 @@ function resolveActiveStep(
           nodes: literals,
           remainingSchema: currentSchema.slice(nextIndex),
           consumedCount,
+          consumedLiterals,
         };
       }
 
@@ -192,6 +197,7 @@ function resolveActiveStep(
       if (matched) {
         remainingArgs.shift();
         consumedCount += 1;
+        consumedLiterals += 1;
         currentSchema = mergeSchemas(
           matched.next,
           currentSchema.slice(nextIndex),
@@ -204,6 +210,7 @@ function resolveActiveStep(
         nodes: literals,
         remainingSchema: currentSchema.slice(nextIndex),
         consumedCount,
+        consumedLiterals,
       };
     }
 
@@ -215,6 +222,7 @@ function resolveActiveStep(
         node: valueNode,
         remainingSchema: currentSchema.slice(1),
         consumedCount,
+        consumedLiterals,
       };
     }
 
@@ -226,6 +234,7 @@ function resolveActiveStep(
   return {
     kind: 'none',
     consumedCount,
+    consumedLiterals,
   };
 }
 
@@ -313,6 +322,8 @@ function inferLiteralHint(nodes: LiteralArgument[]): string {
     return nodes[0].description ?? '';
   }
 
+  // Check if all descriptions end with a common word (e.g., "parameter", "mode")
+  // If so, suggest "Select <that_word>". Otherwise, fall back to "Select option".
   const descriptions = nodes
     .map((literal) => literal.description ?? '')
     .filter((desc) => desc.length > 0);
@@ -333,11 +344,8 @@ function inferLiteralHint(nodes: LiteralArgument[]): string {
     }
   }
 
+  // If no common suffix, return the first available description (fallback to generic prompt)
   return descriptions[0] || 'Select option';
-}
-
-function computeHintForLiterals(nodes: LiteralArgument[]): string {
-  return inferLiteralHint(nodes);
 }
 
 export function tokenize(fullLine: string): TokenInfo {
@@ -436,7 +444,6 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
 
     let suggestions: readonly Option[] = [];
     let hint = '';
-
     if (active.kind === 'value') {
       suggestions = await suggestForValue(
         ctx,
@@ -447,12 +454,13 @@ export function createCompletionHandler(schema: CommandArgumentSchema) {
       hint = await computeHintForValue(ctx, active.node, argumentTokenInfo);
     } else if (active.kind === 'literal') {
       suggestions = suggestForLiterals(active.nodes, normalized.partialArg);
-      hint = computeHintForLiterals(active.nodes);
+      hint = inferLiteralHint(active.nodes);
     }
 
+    const baseIndex = active.consumedCount - active.consumedLiterals;
     const position = Math.max(
       1,
-      normalized.completedArgs.length + (normalized.partialArg ? 2 : 1),
+      baseIndex + 1 + (normalized.partialArg ? 1 : 0),
     );
 
     return {

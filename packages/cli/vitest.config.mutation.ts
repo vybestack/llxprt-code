@@ -14,6 +14,8 @@ export default defineConfig({
     include: [
       'src/ui/commands/schema/argumentResolver.test.ts',
       'src/ui/commands/test/subagentCommand.schema.test.ts',
+      'src/ui/commands/test/setCommand.phase09.test.ts',
+      'src/ui/commands/test/setCommand.mutation.test.ts',
     ],
     // Keep the same excludes as base config but ensure our focus files remain accessible
     exclude: baseConfig.test?.exclude,

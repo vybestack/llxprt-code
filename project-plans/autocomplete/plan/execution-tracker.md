@@ -18,10 +18,10 @@
 | 07a   | P07a| [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Integration TDD verification |
 | 08    | P08 | [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Integration implementation |
 | 08a   | P08a| [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Verification run (focused Vitest + Stryker 71.25%) |
-| 09    | P09 | ⬜     | -       | -         | -        | `/set` migration TDD |
-| 09a   | P09a| ⬜     | -       | -         | -        | `/set` TDD verification |
-| 10    | P10 | ⬜     | -       | -         | -        | `/set` implementation |
-| 10a   | P10a| ⬜     | -       | -         | -        | `/set` impl verification |
+| 09    | P09 | [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-15 | `/set` migration TDD (GREEN after Phase 10) |
+| 09a   | P09a| [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-15 | `/set` TDD verification rerun (property ratio 30.77%) |
+| 10    | P10 | [OK]  | 2025-10-15 | 2025-10-15 | 2025-10-15 | `/set` implementation + `/subagent create` alias |
+| 10a   | P10a| [OK]  | 2025-10-15 | 2025-10-15 | 2025-10-15 | Build + Vitest + Stryker 73.67% |
 | 11    | P11 | ⬜     | -       | -         | -        | Legacy removal |
 | 11a   | P11a| ⬜     | -       | -         | -        | Legacy removal verification |
 | 12    | P12 | ⬜     | -       | -         | -        | Documentation |

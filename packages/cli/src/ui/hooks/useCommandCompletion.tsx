@@ -37,6 +37,7 @@ export interface UseCommandCompletionReturn {
   showSuggestions: boolean;
   isLoadingSuggestions: boolean;
   isPerfectMatch: boolean;
+  activeHint: string;
   setActiveSuggestionIndex: React.Dispatch<React.SetStateAction<number>>;
   setShowSuggestions: React.Dispatch<React.SetStateAction<boolean>>;
   resetCompletionState: () => void;
@@ -261,6 +262,7 @@ export function useCommandCompletion(
       showSuggestions: slashCompletionResults.showSuggestions,
       isLoadingSuggestions: slashCompletionResults.isLoadingSuggestions,
       isPerfectMatch: slashCompletionResults.isPerfectMatch,
+      activeHint: slashCompletionResults.activeHint,
       setActiveSuggestionIndex: slashCompletionResults.setActiveSuggestionIndex,
       setShowSuggestions: slashCompletionResults.setShowSuggestions,
       resetCompletionState: slashCompletionResults.resetCompletionState,
@@ -278,6 +280,7 @@ export function useCommandCompletion(
     showSuggestions,
     isLoadingSuggestions,
     isPerfectMatch,
+    activeHint: '',
     setActiveSuggestionIndex,
     setShowSuggestions,
     resetCompletionState,

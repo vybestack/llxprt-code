@@ -159,12 +159,34 @@ const subagentSchema = [
     kind: 'value' as const,
     name: 'profile',
     description: 'Select profile configuration',
-    options: [
-      { value: 'default', description: 'Default configuration' },
-      { value: 'custom', description: 'Custom settings' },
-      { value: 'coding', description: 'Code generation focused' },
-      { value: 'analysis', description: 'Analysis focused' },
-    ],
+    completer: async (ctx: CommandContext, partialArg: string) => {
+      const profileManager = ctx.services.profileManager;
+      if (
+        !profileManager ||
+        typeof profileManager.listProfiles !== 'function'
+      ) {
+        return [];
+      }
+
+      try {
+        const profiles = await profileManager.listProfiles();
+        const normalizedPartial = partialArg.toLowerCase();
+
+        const filtered = profiles.filter((name) =>
+          normalizedPartial.length === 0
+            ? true
+            : name.toLowerCase().startsWith(normalizedPartial),
+        );
+
+        return filtered.map((name) => ({
+          value: name,
+          description: 'Saved profile',
+        }));
+      } catch (error) {
+        console.warn('Error loading profiles for subagent completion:', error);
+        return [];
+      }
+    },
   },
   {
     kind: 'literal' as const,
@@ -204,6 +226,7 @@ const subagentSchema = [
  */
 const saveCommand: SlashCommand = {
   name: 'save',
+  altNames: ['create'],
   description: 'Save a subagent configuration (auto or manual mode)',
   kind: CommandKind.BUILT_IN,
   // Schema-based completion replaces legacy completion function

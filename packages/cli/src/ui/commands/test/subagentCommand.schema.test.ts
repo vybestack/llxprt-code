@@ -6,8 +6,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createCompletionHandler } from '../schema/index.js';
-import type { CommandArgumentSchema } from '../schema/types.js';
 import { createMockCommandContext } from '../../../test-utils/mockCommandContext.js';
+import { subagentCommand } from '../subagentCommand.js';
 
 type MockSubagentDetail = {
   name: string;
@@ -41,6 +41,8 @@ const mockSubagents: Record<string, MockSubagentDetail> = {
   },
 };
 
+const mockProfiles = ['default', 'analysis', 'ops'];
+
 const createContext = () =>
   createMockCommandContext({
     services: {
@@ -50,76 +52,11 @@ const createContext = () =>
         saveSubagent: vi.fn(async () => undefined),
         deleteSubagent: vi.fn(async () => undefined),
       },
+      profileManager: {
+        listProfiles: vi.fn(async () => mockProfiles),
+      },
     },
   });
-
-const subagentSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'name',
-    description: 'Enter subagent name',
-    completer: async (ctx, partial) => {
-      const manager = ctx.services.subagentManager;
-      if (!manager) {
-        return [];
-      }
-
-      const names = await manager.listSubagents();
-      const normalized = partial.toLowerCase();
-      const matching = names.filter((name) =>
-        normalized.length === 0
-          ? true
-          : name.toLowerCase().startsWith(normalized),
-      );
-
-      const entries = await Promise.all(
-        matching.map(async (name) => {
-          const details = await manager.loadSubagent?.(name);
-          return {
-            value: name,
-            description: `Profile: ${details?.profile ?? 'default'}`,
-          };
-        }),
-      );
-
-      return entries;
-    },
-  },
-  {
-    kind: 'value',
-    name: 'profile',
-    description: 'Select profile configuration',
-    options: [
-      { value: 'default', description: 'Default configuration' },
-      { value: 'custom', description: 'Custom settings' },
-      { value: 'coding', description: 'Code generation focused' },
-    ],
-  },
-  {
-    kind: 'literal',
-    value: 'auto',
-    description: 'Automatic mode',
-    next: [
-      {
-        kind: 'value',
-        name: 'prompt',
-        description: 'Enter system prompt for automatic mode',
-      },
-    ],
-  },
-  {
-    kind: 'literal',
-    value: 'manual',
-    description: 'Manual mode',
-    next: [
-      {
-        kind: 'value',
-        name: 'prompt',
-        description: 'Enter system prompt for manual mode',
-      },
-    ],
-  },
-];
 
 const invoke = async (
   fullLine: string,
@@ -130,11 +67,27 @@ const invoke = async (
     commandPathLength: 2,
   },
 ) => {
-  const handler = createCompletionHandler(subagentSchema);
+  const saveCommand = subagentCommand.subCommands?.find(
+    (cmd) => cmd.name === 'save',
+  );
+
+  if (!saveCommand?.schema) {
+    throw new Error('saveCommand schema is not configured');
+  }
+
+  const handler = createCompletionHandler(saveCommand.schema);
   return handler(createContext(), input, fullLine);
 };
 
 describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.P08 @requirement:REQ-002 @requirement:REQ-003 @requirement:REQ-005', () => {
+  it('exposes create alias for save command', () => {
+    const saveCommand = subagentCommand.subCommands?.find(
+      (cmd) => cmd.name === 'save',
+    );
+
+    expect(saveCommand?.altNames).toEqual(expect.arrayContaining(['create']));
+  });
+
   it('suggests subagent names with hint on first argument', async () => {
     const result = await invoke('/subagent save ', {
       args: '',
@@ -175,11 +128,7 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
       commandPathLength: 2,
     });
 
-    expect(result.suggestions.map((s) => s.value)).toEqual([
-      'default',
-      'custom',
-      'coding',
-    ]);
+    expect(result.suggestions.map((s) => s.value)).toEqual(mockProfiles);
     expect(result.hint).toBe('Select profile configuration');
     expect(result.position).toBe(2);
   });
