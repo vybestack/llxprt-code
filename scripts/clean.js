@@ -17,9 +17,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { rmSync, readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { rmSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { globSync } from 'glob';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,10 +40,21 @@ const rootPackageJson = JSON.parse(
   readFileSync(join(root, 'package.json'), 'utf-8'),
 );
 for (const workspace of rootPackageJson.workspaces) {
-  const packages = globSync(join(workspace, 'package.json'), { cwd: root });
-  for (const pkgPath of packages) {
-    const pkgDir = dirname(join(root, pkgPath));
-    rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
+  // Note: this is a simple glob implementation that only supports "packages/*".
+  const workspaceDir = join(root, dirname(workspace));
+  const packageDirs = readdirSync(workspaceDir);
+
+  for (const pkg of packageDirs) {
+    const pkgDir = join(workspaceDir, pkg);
+    try {
+      if (statSync(pkgDir).isDirectory()) {
+        rmSync(join(pkgDir, 'dist'), RMRF_OPTIONS);
+      }
+    } catch (e) {
+      if (e.code !== 'ENOENT') {
+        throw e;
+      }
+    }
   }
 }
 
@@ -61,9 +72,23 @@ rmSync(join(root, 'packages/vscode-ide-companion/node_modules'), {
   recursive: true,
   force: true,
 });
-const vsixFiles = globSync('packages/vscode-ide-companion/*.vsix', {
-  cwd: root,
-});
-for (const vsixFile of vsixFiles) {
-  rmSync(join(root, vsixFile), RMRF_OPTIONS);
+
+const vscodeCompanionDir = join(root, 'packages/vscode-ide-companion');
+try {
+  const files = readdirSync(vscodeCompanionDir);
+  for (const file of files) {
+    if (file.endsWith('.vsix')) {
+      rmSync(join(vscodeCompanionDir, file), RMRF_OPTIONS);
+    }
+  }
+} catch (e) {
+  if (e.code !== 'ENOENT') {
+    throw e;
+  }
+}
+  }
+} catch (e) {
+  if (e.code !== 'ENOENT') {
+    throw e;
+  }
 }
