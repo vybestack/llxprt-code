@@ -2,7 +2,7 @@
   "name": "llxprt-code-vscode-ide-companion",
   "displayName": "LLxprt Code Companion",
   "description": "Enable LLxprt Code with direct access to your IDE workspace.",
-  "version": "0.4.2",
+  "version": "0.4.2-nightly.251016.b2bc46ab",
   "publisher": "vybestack",
   "icon": "assets/icon.png",
   "repository": {
