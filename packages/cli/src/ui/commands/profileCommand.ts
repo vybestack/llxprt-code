@@ -14,6 +14,103 @@ import {
 import { ProfileManager, Profile, AuthType } from '@vybestack/llxprt-code-core';
 import type { EphemeralSettings } from '@vybestack/llxprt-code-core';
 import { SettingScope } from '../../config/settings.js';
+import {
+  type CommandArgumentSchema,
+  type CompleterFn,
+} from './schema/types.js';
+
+const profileSuggestionDescription = 'Saved profile';
+const normalizeProfilePartial = (partial: string): string =>
+  partial.startsWith('"') ? partial.slice(1) : partial;
+
+async function listProfiles(): Promise<string[]> {
+  const profileManager = new ProfileManager();
+  return profileManager.listProfiles();
+}
+
+function filterProfiles(partialArg: string, profiles: string[]): string[] {
+  const normalizedPartial = normalizeProfilePartial(partialArg).toLowerCase();
+  return profiles.filter((profile) =>
+    normalizedPartial.length === 0
+      ? true
+      : profile.toLowerCase().startsWith(normalizedPartial),
+  );
+}
+
+const profileNameCompleter: CompleterFn = async (_ctx, partialArg) => {
+  try {
+    const profiles = await listProfiles();
+    return filterProfiles(partialArg, profiles).map((profile) => ({
+      value: profile,
+      description: profileSuggestionDescription,
+    }));
+  } catch {
+    return [];
+  }
+};
+
+const profileSaveSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'profile',
+    description: 'Enter profile name to save',
+    /**
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+     * @requirement:REQ-004
+     * Schema-driven completion replaces legacy helpers.
+     */
+    completer: profileNameCompleter,
+  },
+];
+
+const profileLoadSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'profile',
+    description: 'Select profile to load',
+    completer: profileNameCompleter,
+  },
+];
+
+const profileDeleteSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'profile',
+    description: 'Select profile to delete',
+    completer: profileNameCompleter,
+  },
+];
+
+const profileSetDefaultSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'profile',
+    description: 'Set default profile or choose none',
+    completer: async (_ctx, partialArg) => {
+      try {
+        const profiles = await listProfiles();
+        const candidates = ['none', ...profiles];
+        const normalizedPartial =
+          normalizeProfilePartial(partialArg).toLowerCase();
+        return candidates
+          .filter((option) =>
+            normalizedPartial.length === 0
+              ? true
+              : option.toLowerCase().startsWith(normalizedPartial),
+          )
+          .map((option) => ({
+            value: option,
+            description:
+              option === 'none'
+                ? 'Clear default profile'
+                : profileSuggestionDescription,
+          }));
+      } catch {
+        return [];
+      }
+    },
+  },
+];
 
 /**
  * Profile save subcommand
@@ -22,21 +119,7 @@ const saveCommand: SlashCommand = {
   name: 'save',
   description: 'save current configuration to a profile',
   kind: CommandKind.BUILT_IN,
-  completion: async (_context: CommandContext, partialArg: string) => {
-    const profileManager = new ProfileManager();
-    const profiles = await profileManager.listProfiles();
-
-    // Filter profiles based on partial argument
-    if (partialArg) {
-      // Handle quoted partial arguments
-      const unquoted = partialArg.startsWith('"')
-        ? partialArg.slice(1)
-        : partialArg;
-      return profiles.filter((profile) => profile.startsWith(unquoted));
-    }
-
-    return profiles;
-  },
+  schema: profileSaveSchema,
   action: async (
     context: CommandContext,
     args: string,
@@ -202,21 +285,7 @@ const loadCommand: SlashCommand = {
   name: 'load',
   description: 'load configuration from a saved profile',
   kind: CommandKind.BUILT_IN,
-  completion: async (_context: CommandContext, partialArg: string) => {
-    const profileManager = new ProfileManager();
-    const profiles = await profileManager.listProfiles();
-
-    // Filter profiles based on partial argument
-    if (partialArg) {
-      // Handle quoted partial arguments
-      const unquoted = partialArg.startsWith('"')
-        ? partialArg.slice(1)
-        : partialArg;
-      return profiles.filter((profile) => profile.startsWith(unquoted));
-    }
-
-    return profiles;
-  },
+  schema: profileLoadSchema,
   action: async (
     context: CommandContext,
     args: string,
@@ -458,21 +527,7 @@ const deleteCommand: SlashCommand = {
   name: 'delete',
   description: 'delete a saved profile',
   kind: CommandKind.BUILT_IN,
-  completion: async (_context: CommandContext, partialArg: string) => {
-    const profileManager = new ProfileManager();
-    const profiles = await profileManager.listProfiles();
-
-    // Filter profiles based on partial argument
-    if (partialArg) {
-      // Handle quoted partial arguments
-      const unquoted = partialArg.startsWith('"')
-        ? partialArg.slice(1)
-        : partialArg;
-      return profiles.filter((profile) => profile.startsWith(unquoted));
-    }
-
-    return profiles;
-  },
+  schema: profileDeleteSchema,
   action: async (
     context: CommandContext,
     args: string,
@@ -552,23 +607,7 @@ const setDefaultCommand: SlashCommand = {
   name: 'set-default',
   description: 'set a profile to load automatically on startup',
   kind: CommandKind.BUILT_IN,
-  completion: async (_context: CommandContext, partialArg: string) => {
-    const profileManager = new ProfileManager();
-    const profiles = await profileManager.listProfiles();
-
-    // Add 'none' option to clear default
-    const options = ['none', ...profiles];
-
-    // Filter based on partial argument
-    if (partialArg) {
-      const unquoted = partialArg.startsWith('"')
-        ? partialArg.slice(1)
-        : partialArg;
-      return options.filter((option) => option.startsWith(unquoted));
-    }
-
-    return options;
-  },
+  schema: profileSetDefaultSchema,
   action: async (
     context: CommandContext,
     args: string,

@@ -212,16 +212,12 @@ export interface SlashCommand {
     | SlashCommandActionReturn
     | Promise<void | SlashCommandActionReturn>;
 
-  // Provides argument completion (e.g., completing a tag for `/chat resume <tag>`).
-  // @plan:PLAN-20250117-SUBAGENTCONFIG.P10
-  completion?: (
-    context: CommandContext,
-    partialArg: string,
-    fullLine?: string, // @plan:PLAN-20250117-SUBAGENTCONFIG.P10
-  ) => Promise<string[]>;
-
-  // Schema-based completion for structured argument handling
-  // @plan:PLAN-20251013-AUTOCOMPLETE.P05
+  /**
+   * Schema-based completion for structured argument handling
+   * @plan:PLAN-20251013-AUTOCOMPLETE.P05
+   * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+   * Legacy completion helpers removed; schema is the single source.
+   */
   schema?: CommandArgumentSchema;
 
   subCommands?: SlashCommand[];

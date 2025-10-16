@@ -245,9 +245,7 @@ export function useSlashCompletion(
       const remainingParts = rawParts.slice(pathParts.length);
       const commandPathLength = pathParts.length;
 
-      const leafSupportsArguments = Boolean(
-        leafCommand && (leafCommand.schema || leafCommand.completion),
-      );
+      const leafSupportsArguments = Boolean(leafCommand?.schema);
 
       let commandPartial = '';
       let argumentPartial = '';
@@ -408,42 +406,6 @@ export function useSlashCompletion(
             });
           return;
         }
-
-        // Fallback to legacy completion function
-        // Call completion function directly to check if it's async
-        // @plan:PLAN-20250117-SUBAGENTCONFIG.P11
-        const completionResult = leafCommand!.completion!(
-          commandContext,
-          argString,
-          currentLine,
-        );
-
-        if (completionResult instanceof Promise) {
-          // Only for async completions, show loading and handle asynchronously
-          setIsLoadingSuggestions(true);
-          completionResult.then((results) => {
-            const finalSuggestions = (results || []).map((s) => ({
-              label: s,
-              value: s,
-            }));
-            setSuggestions(finalSuggestions);
-            setShowSuggestions(finalSuggestions.length > 0);
-            setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-            setIsLoadingSuggestions(false);
-          });
-        } else {
-          // For synchronous completions, update immediately without loading state
-          const results = completionResult as string[] | undefined;
-          const finalSuggestions = (results || []).map((s) => ({
-            label: s,
-            value: s,
-          }));
-          setSuggestions(finalSuggestions);
-          setShowSuggestions(finalSuggestions.length > 0);
-          setActiveSuggestionIndex(finalSuggestions.length > 0 ? 0 : -1);
-          // Don't touch loading state for synchronous completions
-        }
-        return;
       }
 
       // Command/Sub-command Completion

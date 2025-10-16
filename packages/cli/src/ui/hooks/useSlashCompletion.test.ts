@@ -706,18 +706,18 @@ describe('useSlashCompletion', () => {
     });
 
     describe('Argument Completion', () => {
-      it('should call the command.completion function for argument suggestions', async () => {
+      it('should call the schema completer for argument suggestions', async () => {
         const availableTags = [
           'my-chat-tag-1',
           'my-chat-tag-2',
           'another-channel',
         ];
-        const mockCompletionFn = vi
-          .fn()
-          .mockImplementation(
-            async (_context: CommandContext, partialArg: string) =>
-              availableTags.filter((tag) => tag.startsWith(partialArg)),
-          );
+        const mockCompleter = vi.fn(
+          async (_context: CommandContext, partialArg: string) =>
+            availableTags
+              .filter((tag) => tag.startsWith(partialArg))
+              .map((tag) => ({ value: tag })),
+        );
 
         const slashCommands = [
           {
@@ -727,7 +727,14 @@ describe('useSlashCompletion', () => {
               {
                 name: 'resume',
                 description: 'Resume a saved chat',
-                completion: mockCompletionFn,
+                schema: [
+                  {
+                    kind: 'value',
+                    name: 'tag',
+                    description: 'Saved chat tag',
+                    completer: mockCompleter,
+                  },
+                ],
               },
             ],
           },
@@ -747,9 +754,10 @@ describe('useSlashCompletion', () => {
           await new Promise((resolve) => setTimeout(resolve, 150));
         });
 
-        expect(mockCompletionFn).toHaveBeenCalledWith(
+        expect(mockCompleter).toHaveBeenCalledWith(
           mockCommandContext,
           'my-ch',
+          expect.objectContaining({ partialToken: 'my-ch' }),
         );
 
         expect(result.current.suggestions).toEqual([
@@ -758,10 +766,14 @@ describe('useSlashCompletion', () => {
         ]);
       });
 
-      it('should call command.completion with an empty string when args start with a space', async () => {
-        const mockCompletionFn = vi
+      it('should call schema completer with an empty string when args start with a space', async () => {
+        const mockCompleter = vi
           .fn()
-          .mockResolvedValue(['my-chat-tag-1', 'my-chat-tag-2', 'my-channel']);
+          .mockResolvedValue([
+            { value: 'my-chat-tag-1' },
+            { value: 'my-chat-tag-2' },
+            { value: 'my-channel' },
+          ]);
 
         const slashCommands = [
           {
@@ -771,7 +783,14 @@ describe('useSlashCompletion', () => {
               {
                 name: 'resume',
                 description: 'Resume a saved chat',
-                completion: mockCompletionFn,
+                schema: [
+                  {
+                    kind: 'value',
+                    name: 'tag',
+                    description: 'Saved chat tag',
+                    completer: mockCompleter,
+                  },
+                ],
               },
             ],
           },
@@ -791,13 +810,17 @@ describe('useSlashCompletion', () => {
           await new Promise((resolve) => setTimeout(resolve, 150));
         });
 
-        expect(mockCompletionFn).toHaveBeenCalledWith(mockCommandContext, '');
+        expect(mockCompleter).toHaveBeenCalledWith(
+          mockCommandContext,
+          '',
+          expect.objectContaining({ partialToken: '' }),
+        );
         expect(result.current.suggestions).toHaveLength(3);
         expect(result.current.showSuggestions).toBe(true);
       });
 
-      it('should handle completion function that returns null', async () => {
-        const completionFn = vi.fn().mockResolvedValue(null);
+      it('should handle schema completer that returns an empty array', async () => {
+        const completer = vi.fn().mockResolvedValue([]);
         const slashCommands = [
           {
             name: 'chat',
@@ -806,7 +829,14 @@ describe('useSlashCompletion', () => {
               {
                 name: 'resume',
                 description: 'Resume a saved chat',
-                completion: completionFn,
+                schema: [
+                  {
+                    kind: 'value',
+                    name: 'tag',
+                    description: 'Saved chat tag',
+                    completer,
+                  },
+                ],
               },
             ],
           },

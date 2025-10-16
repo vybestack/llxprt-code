@@ -652,91 +652,6 @@ export const useSlashCommandProcessor = (
     ],
   );
 
-  /**
-   * Command completion handler
-   * @plan:PLAN-20250117-SUBAGENTCONFIG.P11
-   *
-   * Supports nested command completions by tracking the last command
-   * with a completion handler. If a leaf subcommand doesn't have a
-   * completion handler, the parent's handler is used instead.
-   */
-  const completion = useCallback(
-    async (line: string, cursor: number): Promise<string[]> => {
-      const sliced = line.slice(0, cursor);
-      const trimmed = sliced.trim();
-
-      if (!trimmed.startsWith('/')) {
-        return [];
-      }
-
-      const withoutSlash = trimmed.slice(1);
-      if (withoutSlash.length === 0) {
-        return [];
-      }
-
-      const parts = withoutSlash.split(/\s+/);
-      let currentCommands: readonly SlashCommand[] | undefined = commands;
-      let leafCommand: SlashCommand | undefined;
-      let commandWithCompletion: SlashCommand | undefined;
-      let matchedParts = 0;
-
-      for (const part of parts) {
-        if (!currentCommands || currentCommands.length === 0) {
-          break;
-        }
-
-        const found: SlashCommand | undefined = currentCommands.find(
-          (command) =>
-            command.name === part ||
-            command.altNames?.some((alias) => alias === part),
-        );
-
-        if (!found) {
-          break;
-        }
-
-        leafCommand = found;
-        matchedParts += 1;
-
-        // Track the last command with a completion handler
-        if (found.completion) {
-          commandWithCompletion = found;
-        }
-
-        currentCommands = found.subCommands;
-      }
-
-      // Use leaf command's completion if it has one, otherwise use parent's
-      const commandToUse = leafCommand?.completion
-        ? leafCommand
-        : commandWithCompletion;
-
-      if (!commandToUse || !commandToUse.completion) {
-        return [];
-      }
-
-      const matchedPrefix = parts.slice(0, matchedParts).join(' ');
-      const argsSection = withoutSlash
-        .slice(matchedPrefix.length)
-        .replace(/^\s*/, '');
-
-      try {
-        const result = await commandToUse.completion(
-          commandContext,
-          argsSection,
-          sliced,
-        );
-        return result ?? [];
-      } catch (error) {
-        commandContext.ui.setDebugMessage(
-          `Completion failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return [];
-      }
-    },
-    [commands, commandContext],
-  );
-
   return {
     handleSlashCommand,
     slashCommands: commands,
@@ -744,6 +659,5 @@ export const useSlashCommandProcessor = (
     commandContext,
     shellConfirmationRequest,
     confirmationRequest,
-    completion,
   };
 };

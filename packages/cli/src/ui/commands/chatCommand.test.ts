@@ -27,6 +27,7 @@ import * as fsPromises from 'fs/promises';
 import { chatCommand } from './chatCommand.js';
 import { Stats } from 'fs';
 import { HistoryItemWithoutId } from '../types.js';
+import { createCompletionHandler } from './schema/index.js';
 
 vi.mock('fs/promises', () => ({
   default: {
@@ -319,7 +320,22 @@ describe('chatCommand', () => {
       });
     });
 
-    describe('completion', () => {
+    describe('schema completion', () => {
+      const runCompletion = async (partial: string): Promise<string[]> => {
+        const handler = createCompletionHandler(resumeCommand.schema!);
+        const result = await handler(
+          mockContext,
+          {
+            args: partial,
+            completedArgs: [],
+            partialArg: partial,
+            commandPathLength: 2,
+          },
+          `/chat resume ${partial}`,
+        );
+        return result.suggestions.map((option) => option.value);
+      };
+
       it('should provide completion suggestions', async () => {
         const fakeFiles = ['checkpoint-alpha.json', 'checkpoint-beta.json'];
         mockFs.readdir.mockImplementation(
@@ -334,9 +350,7 @@ describe('chatCommand', () => {
             }) as Stats) as unknown as typeof fsPromises.stat,
         );
 
-        const result = await resumeCommand?.completion?.(mockContext, 'a');
-
-        expect(result).toEqual(['alpha']);
+        expect(await runCompletion('a')).toEqual(['alpha']);
       });
 
       it('should suggest filenames sorted by modified time (newest first)', async () => {
@@ -355,9 +369,7 @@ describe('chatCommand', () => {
           return { mtime: new Date(date.getTime() + 1000) } as Stats;
         }) as unknown as typeof fsPromises.stat);
 
-        const result = await resumeCommand?.completion?.(mockContext, '');
-        // Sort items by last modified time (newest first)
-        expect(result).toEqual(['test2', 'test1']);
+        expect(await runCompletion('')).toEqual(['test2', 'test1']);
       });
     });
   });
@@ -399,7 +411,7 @@ describe('chatCommand', () => {
       });
     });
 
-    describe('completion', () => {
+    describe('schema completion', () => {
       it('should provide completion suggestions', async () => {
         const fakeFiles = ['checkpoint-alpha.json', 'checkpoint-beta.json'];
         mockFs.readdir.mockImplementation(
@@ -414,9 +426,21 @@ describe('chatCommand', () => {
             }) as Stats) as unknown as typeof fsPromises.stat,
         );
 
-        const result = await deleteCommand?.completion?.(mockContext, 'a');
+        const handler = createCompletionHandler(deleteCommand.schema!);
+        const result = await handler(
+          mockContext,
+          {
+            args: 'a',
+            completedArgs: [],
+            partialArg: 'a',
+            commandPathLength: 2,
+          },
+          '/chat delete a',
+        );
 
-        expect(result).toEqual(['alpha']);
+        expect(result.suggestions.map((option) => option.value)).toEqual([
+          'alpha',
+        ]);
       });
     });
   });

@@ -12,11 +12,44 @@ import {
 } from './types.js';
 import { MessageType } from '../types.js';
 import { AnyDeclarativeTool } from '@vybestack/llxprt-code-core';
+import { type CommandArgumentSchema } from './schema/types.js';
+
+const toolsSchema: CommandArgumentSchema = [
+  {
+    kind: 'value',
+    name: 'subcommand',
+    description: 'Choose tools subcommand',
+    /**
+     * @plan:PLAN-20251013-AUTOCOMPLETE.P11
+     * @requirement:REQ-004
+     * Subcommands now resolved via schema options.
+     */
+    options: [
+      {
+        value: 'disable',
+        description: 'Open dialog to disable tools',
+      },
+      {
+        value: 'enable',
+        description: 'Open dialog to enable tools',
+      },
+      {
+        value: 'desc',
+        description: 'List tools with descriptions',
+      },
+      {
+        value: 'descriptions',
+        description: 'Alias for desc',
+      },
+    ],
+  },
+];
 
 export const toolsCommand: SlashCommand = {
   name: 'tools',
   description: 'list, enable, or disable Gemini CLI tools',
   kind: CommandKind.BUILT_IN,
+  schema: toolsSchema,
   action: async (
     context: CommandContext,
     args?: string,
@@ -99,20 +132,5 @@ export const toolsCommand: SlashCommand = {
     message += '\u001b[0m';
 
     context.ui.addItem({ type: MessageType.INFO, text: message }, Date.now());
-  },
-  completion: async (
-    _context: CommandContext,
-    args: string,
-  ): Promise<string[]> => {
-    const trimmed = args.trim();
-    const parts = trimmed.split(/\s+/);
-
-    // Only complete subcommands
-    if (parts.length === 1) {
-      const subcommands = ['disable', 'enable', 'desc', 'descriptions'];
-      return subcommands.filter((cmd) => cmd.startsWith(parts[0]));
-    }
-
-    return [];
   },
 };

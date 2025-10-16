@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { toolsCommand } from './toolsCommand.tsx';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { MessageType } from '../types.js';
+import { createCompletionHandler } from './schema/index.js';
 import type { Tool } from '@vybestack/llxprt-code-core';
 
 // Mock tools for testing
@@ -167,14 +168,25 @@ describe('toolsCommand', () => {
     });
   });
 
-  describe('completion', () => {
-    it('should complete subcommands', async () => {
+  describe('schema completion', () => {
+    it('suggests schema-defined subcommands', async () => {
       const mockContext = createMockCommandContext({});
+      const handler = createCompletionHandler(toolsCommand.schema!);
 
-      if (!toolsCommand.completion) throw new Error('Completion not defined');
-      const completions = await toolsCommand.completion(mockContext, 'dis');
+      const result = await handler(
+        mockContext,
+        {
+          args: 'dis',
+          completedArgs: [],
+          partialArg: 'dis',
+          commandPathLength: 1,
+        },
+        '/tools dis',
+      );
 
-      expect(completions).toContain('disable');
+      expect(result.suggestions.map((option) => option.value)).toContain(
+        'disable',
+      );
     });
   });
 });

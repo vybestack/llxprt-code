@@ -12,6 +12,7 @@ import { restoreCommand } from './restoreCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../test-utils/mockCommandContext.js';
 import { Config, GitService } from '@vybestack/llxprt-code-core';
+import { createCompletionHandler } from './schema/index.js';
 
 describe('restoreCommand', () => {
   let mockContext: CommandContext;
@@ -73,7 +74,7 @@ describe('restoreCommand', () => {
         name: 'restore',
         description: expect.any(String),
         action: expect.any(Function),
-        completion: expect.any(Function),
+        schema: expect.any(Array),
       }),
     );
   });
@@ -222,34 +223,52 @@ describe('restoreCommand', () => {
     });
   });
 
-  describe('completion', () => {
-    it('should return an empty array if temp dir is not found', async () => {
-      vi.mocked(mockConfig.storage.getProjectTempDir).mockReturnValue('');
+  describe('schema completion', () => {
+    const runCompletion = async (
+      partialArg: string,
+      fullLine: string = `/restore ${partialArg}`,
+    ): Promise<string[]> => {
       const command = restoreCommand(mockConfig);
+      if (!command?.schema) {
+        throw new Error('restore command schema missing');
+      }
 
-      expect(await command?.completion?.(mockContext, '')).toEqual([]);
+      const handler = createCompletionHandler(command.schema);
+      const result = await handler(
+        mockContext,
+        {
+          args: partialArg,
+          completedArgs: [],
+          partialArg,
+          commandPathLength: 1,
+        },
+        fullLine,
+      );
+      return result.suggestions.map((option) => option.value);
+    };
+
+    it('returns an empty array if temp dir is not found', async () => {
+      vi.mocked(mockConfig.storage.getProjectTempDir).mockReturnValueOnce('');
+      expect(await runCompletion('')).toEqual([]);
     });
 
-    it('should return an empty array on readdir error', async () => {
+    it('returns an empty array on readdir error', async () => {
       await fs.rm(checkpointsDir, { recursive: true, force: true });
-      const command = restoreCommand(mockConfig);
-
-      expect(await command?.completion?.(mockContext, '')).toEqual([]);
+      expect(await runCompletion('')).toEqual([]);
     });
 
-    it('should return a list of checkpoint names', async () => {
+    it('returns a filtered list of checkpoint names', async () => {
+      await fs.mkdir(checkpointsDir, { recursive: true });
       await fs.writeFile(path.join(checkpointsDir, 'test1.json'), '{}');
       await fs.writeFile(path.join(checkpointsDir, 'test2.json'), '{}');
       await fs.writeFile(
         path.join(checkpointsDir, 'not-a-checkpoint.txt'),
         '{}',
       );
-      const command = restoreCommand(mockConfig);
 
-      expect(await command?.completion?.(mockContext, '')).toEqual([
-        'test1',
-        'test2',
-      ]);
+      expect(await runCompletion('')).toEqual(['test1', 'test2']);
+      expect(await runCompletion('test')).toEqual(['test1', 'test2']);
+      expect(await runCompletion('test2')).toEqual(['test2']);
     });
   });
 });

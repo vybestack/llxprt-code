@@ -261,6 +261,9 @@ async function suggestForValue(
 
     if (node.completer) {
       const results = await node.completer(ctx, partialArg, tokenInfo);
+      if (!Array.isArray(results)) {
+        return [];
+      }
       return results.map((option) => ({
         value: option.value,
         description: option.description,

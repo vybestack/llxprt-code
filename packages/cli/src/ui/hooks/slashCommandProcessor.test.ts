@@ -27,7 +27,6 @@ function createTestCommand(overrides: Partial<SlashCommand>): SlashCommand {
     description: overrides.description || 'A test command',
     kind: overrides.kind || CommandKind.BUILT_IN,
     action: overrides.action || vi.fn(),
-    completion: overrides.completion, // Completion is optional
     subCommands: overrides.subCommands || undefined,
   };
 }
@@ -58,37 +57,15 @@ describe('useSlashCommandProcessor', () => {
 
   // Existing tests would be here...
 
-  /**
-   * @plan:PLAN-20250117-SUBAGENTCONFIG.P10
-   */
-  it('passes full line to command completion', async () => {
-    const completionSpy = vi.fn(
-      async (_context, partialArg: string, fullLine?: string) => {
-        expect(partialArg).toBe('sa');
-        expect(fullLine).toBe('/subagent sa');
-        return [];
-      },
-    );
-
-    const testCommand = createTestCommand({
-      name: 'subagent',
-      completion: completionSpy,
-    });
-
+  it('loads slash commands via BuiltinCommandLoader', async () => {
+    const testCommand = createTestCommand({ name: 'subagent' });
     mockBuiltinLoadCommands.mockResolvedValue([testCommand]);
     const { result } = renderHook(() =>
       useSlashCommandProcessor(mockConfig, mockSettings),
     );
 
-    // Wait for commands to load
-    await waitFor(() => expect(result.current.slashCommands).toHaveLength(1));
-
-    const completionResults = await result.current.completion(
-      '/subagent sa',
-      '/subagent sa'.length,
+    await waitFor(() =>
+      expect(result.current.slashCommands).toEqual([testCommand]),
     );
-
-    expect(completionSpy).toHaveBeenCalledTimes(1);
-    expect(completionResults).toEqual([]);
   });
 });
