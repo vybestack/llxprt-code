@@ -10,8 +10,8 @@
 - `project-plans/autocomplete/analysis/schema-authoring-guide.md`
   - Document schema authoring steps for future commands, referencing actual implementations for `/subagent` and `/set`.
   - Include section on property/mutation testing expectations.
-- `dev-docs/PLAN.md`
-  - Append entry referencing `PLAN-20250214-AUTOCOMPLETE` for historical tracking.
+- `dev-docs/schema-guide.md`
+  - Summarize reusable guidance for schema-driven completions, linking to `PLAN-20251013-AUTOCOMPLETE` examples.
 - Update execution tracker statuses.
 
 ### Required Marker
@@ -23,7 +23,7 @@
 
 ```bash
 rg "PLAN-20250214-AUTOCOMPLETE" project-plans/autocomplete/analysis/schema-authoring-guide.md
-grep "PLAN-20250214-AUTOCOMPLETE" dev-docs/PLAN.md
+rg "PLAN-20250214-AUTOCOMPLETE" dev-docs/schema-guide.md
 ```
 
 ## Manual Verification Checklist

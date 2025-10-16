@@ -24,5 +24,5 @@
 | 10a   | P10a| [OK]  | 2025-10-15 | 2025-10-15 | 2025-10-15 | Build + Vitest + Stryker 73.67% |
 | 11    | P11 | [OK]  | 2025-10-16 | 2025-10-16 | -        | Legacy removal |
 | 11a   | P11a| ⬜     | -       | -         | -        | Legacy removal verification |
-| 12    | P12 | ⬜     | -       | -         | -        | Documentation |
-| 12a   | P12a| ⬜     | -       | -         | -        | Documentation verification |
+| 12    | P12 | [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Documentation |
+| 12a   | P12a| [OK]  | 2025-10-16 | 2025-10-16 | 2025-10-16 | Documentation verification |
