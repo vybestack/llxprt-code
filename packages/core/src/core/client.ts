@@ -11,6 +11,7 @@ import {
   Content,
   Tool,
   GenerateContentResponse,
+  SendMessageParameters,
 } from '@google/genai';
 import {
   getDirectoryContextString,
@@ -381,6 +382,17 @@ export class GeminiClient {
       role: 'user',
       parts: [{ text: await getDirectoryContextString(this.config) }],
     });
+  }
+
+  async generateDirectMessage(
+    params: SendMessageParameters,
+    promptId: string,
+  ): Promise<GenerateContentResponse> {
+    await this.lazyInitialize();
+    if (!this.chat) {
+      this.chat = await this.startChat([]);
+    }
+    return this.getChat().generateDirectMessage(params, promptId);
   }
 
   async startChat(extraHistory?: Content[]): Promise<GeminiChat> {

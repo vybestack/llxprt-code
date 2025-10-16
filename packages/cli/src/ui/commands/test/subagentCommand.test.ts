@@ -36,6 +36,7 @@ import {
   Logger,
   SessionMetrics,
 } from '@vybestack/llxprt-code-core';
+import { FunctionCallingConfigMode } from '@google/genai';
 import {
   CommandContext,
   MessageActionReturn,
@@ -651,13 +652,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
   let profileManager: ProfileManager;
   let tempDir: string;
   let mockGeminiClient: {
-    getChat: ReturnType<typeof vi.fn>;
-    hasChatInitialized: ReturnType<typeof vi.fn>;
-    resetChat: ReturnType<typeof vi.fn>;
-    startChat?: ReturnType<typeof vi.fn>;
-  };
-  let mockChat: {
-    sendMessage: ReturnType<typeof vi.fn>;
+    generateDirectMessage: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
@@ -685,16 +680,10 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
       subagentManager,
     });
 
-    // Mock GeminiClient and chat
-    mockChat = {
-      sendMessage: vi.fn(),
-    };
-
+    // Mock GeminiClient
     mockGeminiClient = {
-      getChat: vi.fn(() => mockChat),
-      hasChatInitialized: vi.fn(() => true),
-      resetChat: vi.fn(async () => {
-        mockGeminiClient.hasChatInitialized.mockReturnValue(true);
+      generateDirectMessage: vi.fn().mockResolvedValue({
+        text: 'Auto generated prompt',
       }),
     };
 
@@ -711,7 +700,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
   it('should generate system prompt using LLM', async () => {
     // Mock LLM response
-    mockChat.sendMessage.mockResolvedValue({
+    mockGeminiClient.generateDirectMessage.mockResolvedValue({
       text: 'You are an expert Python debugger specializing in finding and fixing bugs.',
     });
 
@@ -720,10 +709,18 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     const result = await subagentCommand.subCommands![0].action!(context, args);
 
     // Verify LLM was called
-    expect(mockChat.sendMessage).toHaveBeenCalledTimes(1);
-    const callArgs = mockChat.sendMessage.mock.calls[0][0];
+    expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledTimes(1);
+    const callArgs = mockGeminiClient.generateDirectMessage.mock.calls[0][0];
     expect(callArgs.message).toMatch(/expert Python debugger/);
     expect(callArgs.message).toMatch(/system prompt/i);
+    expect(callArgs.config).toEqual({
+      toolConfig: {
+        functionCallingConfig: {
+          mode: FunctionCallingConfigMode.NONE,
+        },
+      },
+      tools: [],
+    });
 
     // Verify success message type and content
     expect(result).toBeDefined();
@@ -742,7 +739,9 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
 
   it('should handle LLM generation failure', async () => {
     // Mock LLM error
-    mockChat.sendMessage.mockRejectedValue(new Error('Network error'));
+    mockGeminiClient.generateDirectMessage.mockRejectedValue(
+      new Error('Network error'),
+    );
 
     const args = 'testagent testprofile auto "expert debugger"';
     const result = await subagentCommand.subCommands![0].action!(context, args);
@@ -755,11 +754,24 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
         /failed to generate|connection|manual mode/i,
       );
     }
+    expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: {
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.NONE,
+            },
+          },
+          tools: [],
+        },
+      }),
+      expect.any(String),
+    );
   });
 
   it('should handle empty LLM response', async () => {
     // Mock empty response
-    mockChat.sendMessage.mockResolvedValue({
+    mockGeminiClient.generateDirectMessage.mockResolvedValue({
       text: '',
     });
 
@@ -772,45 +784,23 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
       expect(result.messageType).toBe('error');
       expect(result.content).toMatch(/empty.*response|manual mode/i);
     }
-  });
-
-  it('should initialize chat automatically when not already started', async () => {
-    mockGeminiClient.hasChatInitialized
-      .mockReturnValueOnce(false)
-      .mockReturnValue(true);
-
-    mockChat.sendMessage.mockResolvedValue({ text: 'Auto generated prompt' });
-
-    const args = 'testagent testprofile auto "expert debugger"';
-    const result = await subagentCommand.subCommands![0].action!(context, args);
-
-    expect(mockGeminiClient.resetChat).toHaveBeenCalled();
-    expect(result).toBeDefined();
-    expect(result?.type).toBe('message');
-    if (result && result.type === 'message') {
-      expect(result.messageType).toBe('info');
-      expect(result.content).toMatch(/created successfully/i);
-    }
-  });
-
-  it('should surface an error if chat cannot be initialized', async () => {
-    mockGeminiClient.hasChatInitialized.mockReturnValue(false);
-    mockGeminiClient.resetChat.mockRejectedValue(new Error('init failed'));
-
-    const args = 'testagent testprofile auto "expert debugger"';
-    const result = await subagentCommand.subCommands![0].action!(context, args);
-
-    expect(mockGeminiClient.resetChat).toHaveBeenCalled();
-    expect(result).toBeDefined();
-    expect(result?.type).toBe('message');
-    if (result && result.type === 'message') {
-      expect(result.messageType).toBe('error');
-      expect(result.content).toMatch(/unable to start chat session/i);
-    }
+    expect(mockGeminiClient.generateDirectMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: {
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.NONE,
+            },
+          },
+          tools: [],
+        },
+      }),
+      expect.any(String),
+    );
   });
 
   it('should use correct prompt template for LLM', async () => {
-    mockChat.sendMessage.mockResolvedValue({
+    mockGeminiClient.generateDirectMessage.mockResolvedValue({
       text: 'Generated prompt',
     });
 
@@ -818,7 +808,7 @@ describe('saveCommand - auto mode @requirement:REQ-003', () => {
     const args = `testagent testprofile auto "${description}"`;
     await subagentCommand.subCommands![0].action!(context, args);
 
-    const callArgs = mockChat.sendMessage.mock.calls[0][0];
+    const callArgs = mockGeminiClient.generateDirectMessage.mock.calls[0][0];
 
     // Verify prompt includes description
     expect(callArgs.message).toContain(description);

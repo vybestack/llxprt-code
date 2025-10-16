@@ -16,6 +16,7 @@ import {
 } from './types.js';
 import { Colors } from '../colors.js';
 import { SubagentConfig } from '@vybestack/llxprt-code-core';
+import { FunctionCallingConfigMode } from '@google/genai';
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -320,40 +321,22 @@ const saveCommand: SlashCommand = {
           };
         }
 
-        if (!client.hasChatInitialized?.()) {
-          try {
-            if (typeof client.resetChat === 'function') {
-              await client.resetChat();
-            } else if (typeof client.startChat === 'function') {
-              await client.startChat();
-            }
-          } catch (_initializeError) {
-            return {
-              type: 'message',
-              messageType: 'error',
-              content:
-                'Error: Unable to start chat session. Try manual mode or check your connection.',
-            };
-          }
-        }
-
-        if (!client.hasChatInitialized?.()) {
-          return {
-            type: 'message',
-            messageType: 'error',
-            content:
-              'Error: Unable to start chat session. Try manual mode or check your connection.',
-          };
-        }
-
-        const chat = client.getChat();
-
         // Construct prompt
         const autoModePrompt = `Generate a detailed system prompt for a subagent with the following purpose:\n\n${input}\n\nRequirements:\n- Create a comprehensive system prompt that defines the subagent's role, capabilities, and behavior\n- Be specific and actionable\n- Use clear, professional language\n- Output ONLY the system prompt text, no explanations or metadata`;
 
-        // Call LLM with correct signature: sendMessage(params, prompt_id)
-        const response = await chat.sendMessage(
-          { message: autoModePrompt },
+        // Call LLM with a direct request that bypasses tool declarations and history
+        const response = await client.generateDirectMessage(
+          {
+            message: autoModePrompt,
+            config: {
+              tools: [],
+              toolConfig: {
+                functionCallingConfig: {
+                  mode: FunctionCallingConfigMode.NONE,
+                },
+              },
+            },
+          },
           'subagent-auto-prompt',
         );
         finalSystemPrompt = response.text || '';

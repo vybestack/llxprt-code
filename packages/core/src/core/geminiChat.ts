@@ -954,6 +954,142 @@ export class GeminiChat {
     })(this);
   }
 
+  async generateDirectMessage(
+    params: SendMessageParameters,
+    prompt_id: string,
+  ): Promise<GenerateContentResponse> {
+    const provider = this.getActiveProvider();
+    if (!provider) {
+      throw new Error('No active provider configured');
+    }
+
+    const userContent = normalizeToolInteractionInput(params.message);
+    const idGen = this.historyService.getIdGeneratorCallback();
+    const matcher = this.makePositionMatcher();
+    const userIContents: IContent[] = Array.isArray(userContent)
+      ? userContent.map((content) =>
+          ContentConverters.toIContent(content, idGen, matcher),
+        )
+      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+
+    const requestContents = ContentConverters.toGeminiContents(userIContents);
+    await this._logApiRequest(
+      requestContents,
+      this.config.getModel(),
+      prompt_id,
+    );
+
+    const startTime = Date.now();
+    let aggregatedText = '';
+
+    try {
+      const response = await retryWithBackoff(
+        async () => {
+          const modelToUse =
+            this.config.getModel() || DEFAULT_GEMINI_FLASH_MODEL;
+
+          if (
+            this.config.getQuotaErrorOccurred() &&
+            modelToUse === DEFAULT_GEMINI_FLASH_MODEL
+          ) {
+            throw new Error(
+              'Please submit a new query to continue with the Flash model.',
+            );
+          }
+
+          const toolsFromConfig =
+            params.config?.tools && Array.isArray(params.config.tools)
+              ? (params.config.tools as Array<{
+                  functionDeclarations: Array<{
+                    name: string;
+                    description?: string;
+                    parametersJsonSchema?: unknown;
+                  }>;
+                }>)
+              : undefined;
+
+          const streamResponse = provider.generateChatCompletion(
+            userIContents,
+            toolsFromConfig && toolsFromConfig.length > 0
+              ? toolsFromConfig
+              : undefined,
+          );
+
+          let lastResponse: IContent | undefined;
+          for await (const iContent of streamResponse) {
+            lastResponse = iContent;
+            for (const block of iContent.blocks ?? []) {
+              if (block.type === 'text') {
+                aggregatedText += block.text;
+              }
+            }
+          }
+
+          if (!lastResponse) {
+            throw new Error('No response from provider');
+          }
+
+          const directResponse = this.convertIContentToResponse(lastResponse);
+
+          if (aggregatedText.trim()) {
+            const candidate = directResponse.candidates?.[0];
+            if (candidate) {
+              const parts = candidate.content?.parts ?? [];
+              const hasText = parts.some(
+                (part) => 'text' in part && part.text?.trim(),
+              );
+              if (!hasText) {
+                candidate.content = candidate.content || {
+                  role: 'model',
+                  parts: [],
+                };
+                candidate.content.parts = [
+                  ...(candidate.content.parts || []),
+                  { text: aggregatedText },
+                ];
+              }
+            }
+            Object.defineProperty(directResponse, 'text', {
+              configurable: true,
+              get() {
+                return aggregatedText;
+              },
+            });
+          }
+
+          return directResponse;
+        },
+        {
+          shouldRetry: (error: unknown) => {
+            if (error instanceof Error && error.message) {
+              if (isSchemaDepthError(error.message)) return false;
+              if (error.message.includes('429')) return true;
+              if (error.message.match(/5\d{2}/)) return true;
+            }
+            return false;
+          },
+          onPersistent429: async (authType?: string, error?: unknown) =>
+            await this.handleFlashFallback(authType, error),
+          authType: this.config.getContentGeneratorConfig()?.authType,
+        },
+      );
+
+      const durationMs = Date.now() - startTime;
+      await this._logApiResponse(
+        durationMs,
+        prompt_id,
+        response.usageMetadata,
+        JSON.stringify(response),
+      );
+
+      return response;
+    } catch (error) {
+      const durationMs = Date.now() - startTime;
+      this._logApiError(durationMs, error, prompt_id);
+      throw error;
+    }
+  }
+
   private async makeApiCallAndProcessStream(
     _params: SendMessageParameters,
     _prompt_id: string,
