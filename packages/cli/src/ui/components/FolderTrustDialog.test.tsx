@@ -5,7 +5,7 @@
  */
 
 import { renderWithProviders } from '../../test-utils/render.js';
-import { waitFor } from '@testing-library/react';
+import { waitFor, act } from '@testing-library/react';
 import { vi } from 'vitest';
 import { FolderTrustDialog, FolderTrustChoice } from './FolderTrustDialog.js';
 
@@ -44,7 +44,9 @@ describe('FolderTrustDialog', () => {
       <FolderTrustDialog onSelect={onSelect} isRestarting={false} />,
     );
 
-    stdin.write('\x1b'); // escape key
+    act(() => {
+      stdin.write('\u001b[27u'); // Press kitty escape key
+    });
 
     await waitFor(() => {
       expect(onSelect).toHaveBeenCalledWith(FolderTrustChoice.DO_NOT_TRUST);
@@ -89,7 +91,9 @@ describe('FolderTrustDialog', () => {
       <FolderTrustDialog onSelect={vi.fn()} isRestarting={false} />,
     );
 
-    stdin.write('r');
+    act(() => {
+      stdin.write('r');
+    });
 
     await waitFor(() => {
       expect(mockedExit).not.toHaveBeenCalled();
