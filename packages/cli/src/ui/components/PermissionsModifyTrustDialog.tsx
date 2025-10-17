@@ -178,7 +178,7 @@ export const PermissionsModifyTrustDialog: React.FC<
         <Box marginLeft={1} marginTop={1}>
           <Text color={Colors.AccentYellow}>
             To see changes, llxprt must be restarted. Press &apos;r&apos; to
-            exit and apply changes now, or Escape to continue without restart.
+            exit and apply changes now, or Esc to continue without restart.
           </Text>
         </Box>
       </Box>

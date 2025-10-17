@@ -320,7 +320,7 @@ def fibonacci(n):
       <Box marginTop={1}>
         <Text color={Colors.Gray} wrap="truncate">
           (Use Enter to select
-          {showScopeSelection ? ', Tab to change focus' : ''})
+          {showScopeSelection ? ', Tab to change focus' : ''}, Esc to close)
         </Text>
       </Box>
     </Box>
