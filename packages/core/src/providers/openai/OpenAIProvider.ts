@@ -684,23 +684,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // Get streaming setting from ephemeral settings (default: enabled)
     const streamingSetting =
       this.providerConfig?.getEphemeralSettings?.()?.['streaming'];
-    let streamingEnabled = streamingSetting !== 'disabled';
-
-    // WORKAROUND: Disable streaming for Cerebras/Qwen when tools are present
-    // Their API has a bug where mixing text + tool calls in streaming fails
-    if (
-      streamingEnabled &&
-      formattedTools &&
-      formattedTools.length > 0 &&
-      (model.toLowerCase().includes('qwen') ||
-        this.getBaseURL()?.includes('cerebras'))
-    ) {
-      this.logger.warn(
-        () =>
-          `[OpenAIProvider] Disabling streaming for ${model} with tools due to known API bug with mixed text/tool responses`,
-      );
-      streamingEnabled = false;
-    }
+    const streamingEnabled = streamingSetting !== 'disabled';
 
     // Get the system prompt
     const userMemory = this.globalConfig?.getUserMemory
