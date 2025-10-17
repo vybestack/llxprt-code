@@ -5,7 +5,8 @@
  */
 
 import { GitIgnoreParser, GitIgnoreFilter } from '../utils/gitIgnoreParser.js';
-import { isGitRepository } from '../utils/gitUtils.js';
+import { findGitRoot } from '../utils/gitUtils.js';
+import * as fs from 'fs';
 import * as path from 'path';
 
 const LLXPRT_IGNORE_FILE_NAME = '.llxprtignore';
@@ -21,9 +22,15 @@ export class FileDiscoveryService {
   private projectRoot: string;
 
   constructor(projectRoot: string) {
-    this.projectRoot = path.resolve(projectRoot);
-    if (isGitRepository(this.projectRoot)) {
-      const parser = new GitIgnoreParser(this.projectRoot);
+    const absoluteRoot = path.resolve(projectRoot);
+    this.projectRoot = this.tryRealpath(absoluteRoot);
+    const gitRootCandidate = findGitRoot(this.projectRoot);
+    const resolvedGitRoot = gitRootCandidate
+      ? this.tryRealpath(gitRootCandidate)
+      : null;
+
+    if (resolvedGitRoot) {
+      const parser = new GitIgnoreParser(resolvedGitRoot);
       try {
         parser.loadGitRepoPatterns();
       } catch (_error) {
@@ -31,6 +38,7 @@ export class FileDiscoveryService {
       }
       this.gitIgnoreFilter = parser;
     }
+
     const gParser = new GitIgnoreParser(this.projectRoot);
     try {
       gParser.loadPatterns(LLXPRT_IGNORE_FILE_NAME);
@@ -50,38 +58,47 @@ export class FileDiscoveryService {
       respectLlxprtIgnore: true,
     },
   ): string[] {
-    return filePaths.filter((filePath) => {
-      if (options.respectGitIgnore && this.shouldGitIgnoreFile(filePath)) {
-        return false;
+    const respectGitIgnore = options.respectGitIgnore ?? true;
+    const respectLlxprtIgnore = options.respectLlxprtIgnore ?? true;
+
+    const filtered: string[] = [];
+    for (const filePath of filePaths) {
+      const absolutePath = this.resolveAbsolutePath(filePath);
+
+      if (respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
+        continue;
       }
-      if (
-        options.respectLlxprtIgnore &&
-        this.shouldLlxprtIgnoreFile(filePath)
-      ) {
-        return false;
+      if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(absolutePath)) {
+        continue;
       }
-      return true;
-    });
+      filtered.push(absolutePath);
+    }
+
+    return filtered;
   }
 
   /**
    * Checks if a single file should be git-ignored
    */
   shouldGitIgnoreFile(filePath: string): boolean {
-    if (this.gitIgnoreFilter) {
-      return this.gitIgnoreFilter.isIgnored(filePath);
+    if (!this.gitIgnoreFilter) {
+      return false;
     }
-    return false;
+
+    const absolutePath = this.resolveAbsolutePath(filePath);
+    return this.gitIgnoreFilter.isIgnored(absolutePath);
   }
 
   /**
    * Checks if a single file should be llxprt-ignored
    */
   shouldLlxprtIgnoreFile(filePath: string): boolean {
-    if (this.llxprtIgnoreFilter) {
-      return this.llxprtIgnoreFilter.isIgnored(filePath);
+    if (!this.llxprtIgnoreFilter) {
+      return false;
     }
-    return false;
+
+    const absolutePath = this.resolveAbsolutePath(filePath);
+    return this.llxprtIgnoreFilter.isIgnored(absolutePath);
   }
 
   /**
@@ -92,11 +109,12 @@ export class FileDiscoveryService {
     options: FilterFilesOptions = {},
   ): boolean {
     const { respectGitIgnore = true, respectLlxprtIgnore = true } = options;
+    const absolutePath = this.resolveAbsolutePath(filePath);
 
-    if (respectGitIgnore && this.shouldGitIgnoreFile(filePath)) {
+    if (respectGitIgnore && this.shouldGitIgnoreFile(absolutePath)) {
       return true;
     }
-    if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(filePath)) {
+    if (respectLlxprtIgnore && this.shouldLlxprtIgnoreFile(absolutePath)) {
       return true;
     }
     return false;
@@ -107,5 +125,30 @@ export class FileDiscoveryService {
    */
   getLlxprtIgnorePatterns(): string[] {
     return this.llxprtIgnoreFilter?.getPatterns() ?? [];
+  }
+
+  private resolveAbsolutePath(filePath: string): string {
+    if (path.isAbsolute(filePath)) {
+      try {
+        return fs.realpathSync(filePath);
+      } catch (_error) {
+        return path.normalize(filePath);
+      }
+    }
+
+    const resolved = path.resolve(this.projectRoot, filePath);
+    try {
+      return fs.realpathSync(resolved);
+    } catch (_error) {
+      return path.normalize(resolved);
+    }
+  }
+
+  private tryRealpath(p: string): string {
+    try {
+      return fs.realpathSync(p);
+    } catch (_error) {
+      return path.normalize(p);
+    }
   }
 }

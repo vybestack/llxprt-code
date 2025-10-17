@@ -602,6 +602,74 @@ Content of file[1]
         'Successfully read and concatenated content from **1 file(s)**',
       );
     });
+
+    it('should respect repository-level gitignore patterns when workspace is nested', async () => {
+      const repoRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'read-many-files-repo-'),
+      );
+      const workspaceDir = path.join(repoRoot, 'workspace');
+      fs.mkdirSync(path.join(repoRoot, '.git'), { recursive: true });
+      fs.mkdirSync(workspaceDir, { recursive: true });
+      fs.writeFileSync(path.join(repoRoot, '.gitignore'), 'secret.txt\n');
+      const secretFile = path.join(workspaceDir, 'secret.txt');
+      const visibleFile = path.join(workspaceDir, 'visible.txt');
+      fs.writeFileSync(secretFile, 'top secret');
+      fs.writeFileSync(visibleFile, 'visible');
+
+      const nestedFileService = new FileDiscoveryService(workspaceDir);
+      const canonicalSecretFile = fs.realpathSync(secretFile);
+      const canonicalVisibleFile = fs.realpathSync(visibleFile);
+      expect(
+        nestedFileService.filterFiles(
+          [canonicalSecretFile, canonicalVisibleFile],
+          {
+            respectGitIgnore: true,
+            respectLlxprtIgnore: false,
+          },
+        ),
+      ).toEqual([canonicalVisibleFile]);
+      const nestedConfig = {
+        getFileService: () => nestedFileService,
+        getFileSystemService: () => new StandardFileSystemService(),
+        getEphemeralSettings: () => ({}),
+        getFileFilteringOptions: () => ({
+          respectGitIgnore: true,
+          respectLlxprtIgnore: true,
+        }),
+        getTargetDir: () => workspaceDir,
+        getWorkspaceDirs: () => [workspaceDir],
+        getWorkspaceContext: () => new WorkspaceContext(workspaceDir),
+        getFileExclusions: () => ({
+          getCoreIgnorePatterns: () => COMMON_IGNORE_PATTERNS,
+          getDefaultExcludePatterns: () => DEFAULT_FILE_EXCLUDES,
+          getGlobExcludes: () => COMMON_IGNORE_PATTERNS,
+          buildExcludePatterns: () => DEFAULT_FILE_EXCLUDES,
+          getReadManyFilesExcludes: () => DEFAULT_FILE_EXCLUDES,
+        }),
+      } as Partial<Config> as Config;
+
+      const nestedTool = new ReadManyFilesTool(nestedConfig);
+      const invocation = nestedTool.build({ paths: ['**/*.txt'] });
+      const result = await invocation.execute(new AbortController().signal);
+      const content = result.llmContent as string[];
+      const secretIncluded = content.some(
+        (c) =>
+          typeof c === 'string' && c.includes(`--- ${canonicalSecretFile} ---`),
+      );
+      const visibleIncluded = content.some(
+        (c) =>
+          typeof c === 'string' &&
+          c.includes(`--- ${canonicalVisibleFile} ---\n\nvisible\n\n`),
+      );
+
+      expect(secretIncluded).toBe(false);
+      expect(visibleIncluded).toBe(true);
+      expect(result.returnDisplay).toContain(
+        'Successfully read and concatenated content from **1 file(s)**',
+      );
+
+      fs.rmSync(repoRoot, { recursive: true, force: true });
+    });
   });
 
   describe('Error handling', () => {

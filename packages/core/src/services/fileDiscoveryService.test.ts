@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { FileDiscoveryService } from './fileDiscoveryService.js';
@@ -27,6 +28,7 @@ describe('FileDiscoveryService', () => {
     );
     projectRoot = path.join(testRootDir, 'project');
     await fs.mkdir(projectRoot, { recursive: true });
+    projectRoot = await fs.realpath(projectRoot);
   });
 
   afterEach(async () => {
@@ -134,6 +136,61 @@ describe('FileDiscoveryService', () => {
 
       expect(service.filterFiles([])).toEqual([]);
     });
+
+    it('should respect gitignore located at repository root when initialized from nested workspace', async () => {
+      const repoRoot = path.join(testRootDir, 'nested-repo');
+      await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
+      await fs.mkdir(repoRoot, { recursive: true });
+      const canonicalRepoRoot = await fs.realpath(repoRoot);
+      const workspaceDir = path.join(canonicalRepoRoot, 'workspace');
+      await fs.mkdir(workspaceDir, { recursive: true });
+      await fs.writeFile(
+        path.join(canonicalRepoRoot, '.gitignore'),
+        'secret.txt\n',
+      );
+
+      const service = new FileDiscoveryService(workspaceDir);
+      const secretPath = path.join(workspaceDir, 'secret.txt');
+      const visiblePath = path.join(workspaceDir, 'visible.txt');
+      await fs.writeFile(secretPath, 'top secret');
+      await fs.writeFile(visiblePath, 'hello');
+
+      expect(
+        service.filterFiles([secretPath, visiblePath], {
+          respectGitIgnore: true,
+          respectLlxprtIgnore: true,
+        }),
+      ).toEqual([fsSync.realpathSync(visiblePath)]);
+    });
+
+    it('should bypass gitignore when caller opts out even in nested workspace', async () => {
+      const repoRoot = path.join(testRootDir, 'nested-repo');
+      await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
+      await fs.mkdir(repoRoot, { recursive: true });
+      const canonicalRepoRoot = await fs.realpath(repoRoot);
+      const workspaceDir = path.join(canonicalRepoRoot, 'workspace');
+      await fs.mkdir(workspaceDir, { recursive: true });
+      await fs.writeFile(
+        path.join(canonicalRepoRoot, '.gitignore'),
+        'secret.txt\n',
+      );
+
+      const service = new FileDiscoveryService(workspaceDir);
+      const secretPath = path.join(workspaceDir, 'secret.txt');
+      const visiblePath = path.join(workspaceDir, 'visible.txt');
+      await fs.writeFile(secretPath, 'top secret');
+      await fs.writeFile(visiblePath, 'hello');
+
+      expect(
+        service.filterFiles([secretPath, visiblePath], {
+          respectGitIgnore: false,
+          respectLlxprtIgnore: true,
+        }),
+      ).toEqual([
+        fsSync.realpathSync(secretPath),
+        fsSync.realpathSync(visiblePath),
+      ]);
+    });
   });
 
   describe('shouldGitIgnoreFile & shouldLlxprtIgnoreFile', () => {
@@ -146,11 +203,11 @@ describe('FileDiscoveryService', () => {
     it('should return true for git-ignored files', () => {
       const service = new FileDiscoveryService(projectRoot);
 
-      expect(
-        service.shouldGitIgnoreFile(
-          path.join(projectRoot, 'node_modules/package/index.js'),
-        ),
-      ).toBe(true);
+      const ignoredPath = path.join(
+        projectRoot,
+        'node_modules/package/index.js',
+      );
+      expect(service.shouldGitIgnoreFile(ignoredPath)).toBe(true);
     });
 
     it('should return false for non-git-ignored files', () => {
@@ -164,9 +221,8 @@ describe('FileDiscoveryService', () => {
     it('should return true for llxprt-ignored files', () => {
       const service = new FileDiscoveryService(projectRoot);
 
-      expect(
-        service.shouldLlxprtIgnoreFile(path.join(projectRoot, 'debug.log')),
-      ).toBe(true);
+      const ignoredLogPath = path.join(projectRoot, 'debug.log');
+      expect(service.shouldLlxprtIgnoreFile(ignoredLogPath)).toBe(true);
     });
 
     it('should return false for non-llxprt-ignored files', () => {
@@ -182,9 +238,8 @@ describe('FileDiscoveryService', () => {
     it('should handle relative project root paths', async () => {
       await fs.mkdir(path.join(projectRoot, '.git'));
       await createTestFile('.gitignore', 'ignored.txt');
-      const service = new FileDiscoveryService(
-        path.relative(process.cwd(), projectRoot),
-      );
+      const relativeRoot = path.relative(process.cwd(), projectRoot);
+      const service = new FileDiscoveryService(relativeRoot);
 
       expect(
         service.shouldGitIgnoreFile(path.join(projectRoot, 'ignored.txt')),
