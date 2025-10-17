@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import yargs from 'yargs';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import yargs, { type Argv } from 'yargs';
 import { addCommand } from './add.js';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 
@@ -36,12 +36,12 @@ vi.mock('../../config/settings.js', async () => {
   };
 });
 
-const mockedLoadSettings = loadSettings as vi.Mock;
+const mockedLoadSettings = loadSettings as Mock;
 
 describe('mcp add command', () => {
-  let parser: yargs.Argv;
-  let mockSetValue: vi.Mock;
-  let mockConsoleError: vi.Mock;
+  let parser: Argv;
+  let mockSetValue: Mock;
+  let mockConsoleError: Mock;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -212,7 +212,7 @@ describe('mcp add command', () => {
           .spyOn(process, 'exit')
           .mockImplementation((() => {
             throw new Error('process.exit called');
-          }) as (code?: number) => never);
+          }) as (code?: number | string | null) => never);
 
         await expect(
           parser.parseAsync(`add ${serverName} ${command}`),
@@ -230,7 +230,7 @@ describe('mcp add command', () => {
           .spyOn(process, 'exit')
           .mockImplementation((() => {
             throw new Error('process.exit called');
-          }) as (code?: number) => never);
+          }) as (code?: number | string | null) => never);
 
         await expect(
           parser.parseAsync(`add --scope project ${serverName} ${command}`),
