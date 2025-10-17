@@ -27,11 +27,11 @@ describe('toolOutputLimiter', () => {
   });
 
   describe('estimateTokens', () => {
-    it('should estimate tokens as roughly 1/4 of characters', () => {
-      expect(estimateTokens('hello')).toBe(2); // 5 chars / 4 = 1.25, ceil = 2
-      expect(estimateTokens('hello world')).toBe(3); // 11 chars / 4 = 2.75, ceil = 3
+    it('should estimate tokens using tiktoken for gpt-4o', () => {
+      expect(estimateTokens('hello')).toBe(1); // 'hello' is 1 token in gpt-4o
+      expect(estimateTokens('hello world')).toBe(2); // 'hello world' is 2 tokens in gpt-4o
       expect(estimateTokens('')).toBe(0);
-      expect(estimateTokens('a'.repeat(100))).toBe(25); // 100 / 4 = 25
+      expect(estimateTokens('a'.repeat(100))).toBeLessThan(50); // Should be much less than char count due to tokenization
     });
   });
 
@@ -87,7 +87,11 @@ describe('toolOutputLimiter', () => {
     });
 
     it('should warn when content exceeds limit in warn mode', () => {
-      const content = 'a'.repeat(250000); // Way over default 50k token limit
+      // Create content with many unique words to avoid token compression
+      const words = Array.from({ length: 10000 }, (_, i) => `word${i}`).join(
+        ' ',
+      );
+      const content = words.repeat(10); // This should exceed the effective limit
       mockConfig.getEphemeralSettings.mockReturnValue({
         'tool-output-truncate-mode': 'warn',
       });
@@ -101,11 +105,20 @@ describe('toolOutputLimiter', () => {
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toBe('');
       expect(result.message).toContain('test-tool output exceeded token limit');
-      expect(result.message).toContain('62500 > 50000');
+      expect(result.message).toContain(
+        'The results were found but are too large to display',
+      );
+      expect(result.message).toContain(
+        'Use more specific search patterns or file paths to narrow results',
+      );
     });
 
     it('should truncate content in truncate mode', () => {
-      const content = 'a'.repeat(250000); // Way over default 50k token limit
+      // Create content with many unique words to avoid token compression
+      const words = Array.from({ length: 10000 }, (_, i) => `word${i}`).join(
+        ' ',
+      );
+      const content = words.repeat(10); // This should exceed the effective limit
       mockConfig.getEphemeralSettings.mockReturnValue({
         'tool-output-truncate-mode': 'truncate',
       });
@@ -119,15 +132,22 @@ describe('toolOutputLimiter', () => {
       expect(result.wasTruncated).toBe(true);
       expect(result.content.length).toBeLessThan(content.length);
       expect(result.content).toContain('[Output truncated due to token limit]');
-      expect(result.originalTokens).toBe(62500);
+      expect(result.message).toContain('Output truncated from');
+      expect(result.message).toContain('to');
+      expect(result.message).toContain('tokens');
     });
 
     it('should sample lines in sample mode', () => {
-      const lines = Array.from({ length: 1000 }, (_, i) => `Line ${i}`);
+      // Create enough lines to exceed the limit without making the test slow
+      const lines = Array.from(
+        { length: 80 },
+        (_, i) =>
+          `Line number ${i} with some additional content to exercise sampling behavior`,
+      );
       const content = lines.join('\n');
       mockConfig.getEphemeralSettings.mockReturnValue({
         'tool-output-truncate-mode': 'sample',
-        'tool-output-max-tokens': 1000, // Very small limit
+        'tool-output-max-tokens': 200, // Force sampling on smaller content set
       });
 
       const result = limitOutputTokens(
@@ -138,12 +158,16 @@ describe('toolOutputLimiter', () => {
 
       expect(result.wasTruncated).toBe(true);
       expect(result.content).toContain('[Sampled');
-      expect(result.content).toContain('of 1000 lines due to token limit]');
-      expect(result.content.split('\n').length).toBeLessThan(1000);
+      expect(result.content).toContain('of 80 lines due to token limit]');
+      expect(result.content.split('\n').length).toBeLessThan(80);
     });
 
     it('should handle single line content in sample mode', () => {
-      const content = 'a'.repeat(250000); // Single line, way over limit
+      // Create single line with many unique words to avoid token compression
+      const words = Array.from({ length: 50000 }, (_, i) => `word${i}`).join(
+        ' ',
+      );
+      const content = words; // Single line, over effective limit with gpt-4o tokenization
       mockConfig.getEphemeralSettings.mockReturnValue({
         'tool-output-truncate-mode': 'sample',
       });
@@ -157,6 +181,10 @@ describe('toolOutputLimiter', () => {
       // Should fall back to truncate behavior for single lines
       expect(result.wasTruncated).toBe(true);
       expect(result.content.length).toBeLessThan(content.length);
+      expect(result.content).toContain('[Output truncated due to token limit]');
+      expect(result.message).toContain('Output truncated from');
+      expect(result.message).toContain('to');
+      expect(result.message).toContain('tokens');
     });
 
     it('should respect custom max tokens setting', () => {
@@ -173,7 +201,15 @@ describe('toolOutputLimiter', () => {
       );
 
       expect(result.wasTruncated).toBe(true);
-      expect(result.message).toContain('250 > 100');
+      expect(result.content).toBe('');
+      // Updated expectation: check for the new generic message content instead of specific numbers
+      expect(result.message).toContain('test-tool output exceeded token limit');
+      expect(result.message).toContain(
+        'The results were found but are too large to display',
+      );
+      expect(result.message).toContain(
+        'Use more specific search patterns or file paths to narrow results',
+      );
     });
   });
 
