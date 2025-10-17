@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import os, { EOL } from 'os';
 import crypto from 'crypto';
+import { spawnSync } from 'child_process';
 import { Config } from '../config/config.js';
 import { ToolErrorType } from './tool-error.js';
 import {
@@ -54,6 +55,26 @@ export interface ShellToolParams {
    * Optional directory to execute the command in, relative to the target directory
    */
   directory?: string;
+
+  /**
+   * Optional number of lines to show from the beginning of output
+   */
+  head_lines?: number;
+
+  /**
+   * Optional number of lines to show from the end of output
+   */
+  tail_lines?: number;
+
+  /**
+   * Optional grep pattern to filter output lines
+   */
+  grep_pattern?: string;
+
+  /**
+   * Optional grep flags (e.g., -i for case-insensitive, -v for inverted)
+   */
+  grep_flags?: string[];
 }
 
 class ShellToolInvocation extends BaseToolInvocation<
@@ -116,6 +137,22 @@ class ShellToolInvocation extends BaseToolInvocation<
     terminalColumns?: number,
     terminalRows?: number,
   ): Promise<ToolResult> {
+    // Validate filtering parameters
+    if (this.params.head_lines) {
+      validatePositiveInteger(this.params.head_lines, 'head_lines');
+    }
+    if (this.params.tail_lines) {
+      validatePositiveInteger(this.params.tail_lines, 'tail_lines');
+    }
+    if (this.params.grep_pattern) {
+      if (!this.params.grep_pattern.trim()) {
+        throw new Error('grep_pattern cannot be empty');
+      }
+    }
+    if (this.params.grep_flags) {
+      validateGrepFlags(this.params.grep_flags);
+    }
+
     const strippedCommand = stripShellWrapper(this.params.command);
 
     if (signal.aborted) {
@@ -152,7 +189,7 @@ class ShellToolInvocation extends BaseToolInvocation<
       let lastUpdateTime = Date.now();
       let isBinaryStream = false;
 
-      const { result: resultPromise } = await ShellExecutionService.execute(
+      const executionResult = await ShellExecutionService.execute(
         commandToExecute,
         cwd,
         (event: ShellOutputEvent) => {
@@ -205,10 +242,11 @@ class ShellToolInvocation extends BaseToolInvocation<
         terminalRows,
       );
 
-      const result = await resultPromise;
+      const result = await executionResult.result;
 
       const backgroundPIDs: number[] = [];
-      if (os.platform() !== 'win32') {
+      let pgid: number | null = null;
+      if (os.platform() !== 'win32' && result) {
         if (fs.existsSync(tempFilePath)) {
           const pgrepLines = fs
             .readFileSync(tempFilePath, 'utf8')
@@ -219,7 +257,7 @@ class ShellToolInvocation extends BaseToolInvocation<
               console.error(`pgrep: ${line}`);
             }
             const pid = Number(line);
-            if (pid !== result.pid) {
+            if (result.pid && pid !== result.pid) {
               backgroundPIDs.push(pid);
             }
           }
@@ -228,19 +266,52 @@ class ShellToolInvocation extends BaseToolInvocation<
             console.error('missing pgrep output');
           }
         }
+
+        // Try to get the actual PGID
+        try {
+          const psResult = spawnSync('ps', [
+            '-o',
+            'pgid=',
+            '-p',
+            String(result.pid),
+          ]);
+          if (psResult.status === 0 && psResult.stdout.toString().trim()) {
+            pgid = parseInt(psResult.stdout.toString().trim(), 10);
+          }
+        } catch (error) {
+          // If we can't get the PGID, that's okay
+          console.error('Failed to get PGID:', error);
+        }
       }
 
+      const rawOutput = result?.output ?? '';
+      const filterInfo = applyOutputFilters(rawOutput, this.params);
+      const filteredOutput = filterInfo.content;
+
       let llmContent = '';
-      if (result.aborted) {
+      let returnDisplayMessage = '';
+
+      if (!result) {
+        llmContent = 'Command failed to execute.';
+        if (this.config.getDebugMode()) {
+          returnDisplayMessage = llmContent;
+        }
+      } else if (result.aborted) {
         llmContent = 'Command was cancelled by user before it could complete.';
-        if (result.output.trim()) {
-          llmContent += ` Below is the output before it was cancelled:\n${result.output}`;
+        if (rawOutput && rawOutput.trim()) {
+          llmContent += ` Below is the output before it was cancelled:\n${rawOutput}`;
         } else {
           llmContent += ' There was no output before it was cancelled.';
         }
+
+        if (this.config.getDebugMode()) {
+          returnDisplayMessage = llmContent;
+        } else if (filteredOutput && filteredOutput.trim()) {
+          returnDisplayMessage = filteredOutput;
+        } else {
+          returnDisplayMessage = 'Command cancelled by user.';
+        }
       } else {
-        // Create a formatted error string for display, replacing the wrapper command
-        // with the user-facing command.
         const finalError = result.error
           ? result.error.message.replace(commandToExecute, this.params.command)
           : '(none)';
@@ -248,45 +319,39 @@ class ShellToolInvocation extends BaseToolInvocation<
         llmContent = [
           `Command: ${this.params.command}`,
           `Directory: ${this.params.directory || '(root)'}`,
-          `Output: ${result.output || '(empty)'}`,
-          `Error: ${finalError}`, // Use the cleaned error string.
+          `Stdout: ${filteredOutput || '(empty)'}`,
+          `Stderr: ${result.stderr || '(empty)'}`,
+          `Error: ${finalError}`,
           `Exit Code: ${result.exitCode ?? '(none)'}`,
           `Signal: ${result.signal ?? '(none)'}`,
           `Background PIDs: ${
             backgroundPIDs.length ? backgroundPIDs.join(', ') : '(none)'
           }`,
-          `Process Group PGID: ${result.pid ?? '(none)'}`,
+          `Process Group PGID: ${pgid ?? result.pid ?? '(none)'}`,
         ].join('\n');
-      }
 
-      let returnDisplayMessage = '';
-      if (this.config.getDebugMode()) {
-        returnDisplayMessage = llmContent;
-      } else {
-        if (result.output.trim()) {
-          returnDisplayMessage = result.output;
-        } else {
-          if (result.aborted) {
-            returnDisplayMessage = 'Command cancelled by user.';
-          } else if (result.signal) {
-            returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
-          } else if (result.error) {
-            returnDisplayMessage = `Command failed: ${getErrorMessage(
-              result.error,
-            )}`;
-          } else if (result.exitCode !== null && result.exitCode !== 0) {
-            returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
-          }
-          // If output is empty and command succeeded (code 0, no error/signal/abort),
-          // returnDisplayMessage will remain empty, which is fine.
+        if (this.config.getDebugMode()) {
+          returnDisplayMessage = llmContent;
+        } else if (filteredOutput && filteredOutput.trim()) {
+          returnDisplayMessage = filteredOutput;
+        } else if (result.signal) {
+          returnDisplayMessage = `Command terminated by signal: ${result.signal}`;
+        } else if (result.error) {
+          returnDisplayMessage = `Command failed: ${getErrorMessage(result.error)}`;
+        } else if (result.exitCode !== null && result.exitCode !== 0) {
+          returnDisplayMessage = `Command exited with code: ${result.exitCode}`;
         }
       }
 
-      let processedContent = llmContent;
+      if (filterInfo.description && !this.config.getDebugMode()) {
+        returnDisplayMessage = returnDisplayMessage
+          ? `[${filterInfo.description}]\n${returnDisplayMessage}`
+          : `[${filterInfo.description}]`;
+      }
 
       // Check if summarization is configured
       const summarizeConfig = this.config.getSummarizeToolOutputConfig();
-      const executionError = result.error
+      const executionError = result?.error
         ? {
             error: {
               message: result.error.message,
@@ -294,7 +359,14 @@ class ShellToolInvocation extends BaseToolInvocation<
             },
           }
         : {};
-      if (summarizeConfig && summarizeConfig[ShellTool.Name]) {
+
+      let llmPayload = llmContent;
+      if (
+        summarizeConfig &&
+        summarizeConfig[ShellTool.Name] &&
+        result &&
+        !result.aborted
+      ) {
         // Get the ServerToolsProvider for summarization
         const contentGenConfig = this.config.getContentGeneratorConfig();
         if (contentGenConfig?.providerManager) {
@@ -306,12 +378,15 @@ class ShellToolInvocation extends BaseToolInvocation<
             // TODO: Need to adapt summarizeToolOutput to use ServerToolsProvider
             // For now, check if it's a Gemini provider and use the existing function
             if (serverToolsProvider.name === 'gemini') {
-              processedContent = await summarizeToolOutput(
+              const summary = await summarizeToolOutput(
                 llmContent,
                 this.config.getGeminiClient(),
                 signal,
                 summarizeConfig[ShellTool.Name].tokenBudget,
               );
+              if (summary) {
+                llmPayload = summary;
+              }
             }
             // If not Gemini, we can't summarize yet - need provider-agnostic summarization
           }
@@ -320,7 +395,7 @@ class ShellToolInvocation extends BaseToolInvocation<
 
       // ALWAYS apply token-based limiting at the end to protect the outer model
       const limitedResult = limitOutputTokens(
-        processedContent,
+        llmPayload,
         this.config,
         'run_shell_command',
       );
@@ -347,20 +422,89 @@ class ShellToolInvocation extends BaseToolInvocation<
   }
 }
 
+function applyOutputFilters(
+  output: string,
+  params: ShellToolParams,
+): { content: string; description?: string } {
+  let content = output;
+  const descriptionParts: string[] = [];
+
+  // Apply grep filter first
+  if (params.grep_pattern) {
+    const lines = content.split('\n');
+    let filteredLines: string[];
+
+    if (params.grep_flags?.includes('-v')) {
+      // Inverted grep
+      const options = params.grep_flags.includes('-i') ? 'i' : '';
+      const regex = new RegExp(params.grep_pattern, options);
+      filteredLines = lines.filter((line) => !regex.test(line));
+    } else {
+      // Normal grep
+      const options = params.grep_flags?.includes('-i') ? 'i' : '';
+      const regex = new RegExp(params.grep_pattern, options);
+      filteredLines = lines.filter((line) => regex.test(line));
+    }
+
+    content = filteredLines.join('\n');
+    descriptionParts.push(`grep_pattern filter: "${params.grep_pattern}"`);
+    if (params.grep_flags?.length) {
+      descriptionParts.push(`flags: [${params.grep_flags.join(', ')}]`);
+    }
+  }
+
+  // Apply head_lines filter
+  if (params.head_lines) {
+    validatePositiveInteger(params.head_lines, 'head_lines');
+    const lines = content.split('\n');
+    const headLines = lines.slice(0, params.head_lines);
+    const wasTruncated = lines.length > params.head_lines;
+
+    content = headLines.join('\n');
+    descriptionParts.push(
+      `head_lines filter: showing first ${params.head_lines} lines${wasTruncated ? ` (of ${lines.length} total)` : ''}`,
+    );
+  }
+
+  // Apply tail_lines filter
+  if (params.tail_lines) {
+    validatePositiveInteger(params.tail_lines, 'tail_lines');
+    const lines = content.split('\n');
+    const tailLines = lines.slice(-params.tail_lines);
+    const wasTruncated = lines.length > params.tail_lines;
+
+    content = tailLines.join('\n');
+    descriptionParts.push(
+      `tail_lines filter: showing last ${params.tail_lines} lines${wasTruncated ? ` (of ${lines.length} total)` : ''}`,
+    );
+  }
+
+  return {
+    content,
+    description:
+      descriptionParts.length > 0 ? descriptionParts.join('; ') : undefined,
+  };
+}
+
+function validatePositiveInteger(value: number, paramName: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${paramName} must be a positive integer, got: ${value}`);
+  }
+}
+
+function validateGrepFlags(flags: string[]): void {
+  const validFlags = ['-i', '-v', '-E', '-F', '-x', '-w'];
+  for (const flag of flags) {
+    if (!validFlags.includes(flag)) {
+      throw new Error(
+        `Invalid grep flag: ${flag}. Valid flags: ${validFlags.join(', ')}`,
+      );
+    }
+  }
+}
+
 function getShellToolDescription(): string {
-  const returnedInfo = `
-
-      The following information is returned:
-
-      Command: Executed command.
-      Directory: Directory (relative to project root) where command was executed, or \`(root)\`.
-      Stdout: Output on stdout stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.
-      Stderr: Output on stderr stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.
-      Error: Error or \`(none)\` if no error was reported for the subprocess.
-      Exit Code: Exit code or \`(none)\` if terminated by signal.
-      Signal: Signal number or \`(none)\` if no signal was received.
-      Background PIDs: List of background processes started or \`(none)\`.
-      Process Group PGID: Process group started or \`(none)\``;
+  const returnedInfo = `\n\n      The following information is returned:\n\n      Command: Executed command.\n      Directory: Directory (relative to project root) where command was executed, or \`(root)\`.\n      Stdout: Output on stdout stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Stderr: Output on stderr stream. Can be \`(empty)\` or partial on error and for any unwaited background processes.\n      Error: Error or \`(none)\` if no error was reported for the subprocess.\n      Exit Code: Exit code or \`(none)\` if terminated by signal.\n      Signal: Signal number or \`(none)\` if no signal was received.\n      Background PIDs: List of background processes started or \`(none)\`.\n      Process Group PGID: Process group started or \`(none)\``;
 
   if (os.platform() === 'win32') {
     return `This tool executes a given shell command as \`cmd.exe /c <command>\`. Command can start background processes using \`start /b\`.${returnedInfo}`;
