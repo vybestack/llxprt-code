@@ -264,7 +264,7 @@ export async function startInteractiveUI(
     renderOptions,
   );
 
-  checkForUpdates()
+  checkForUpdates(settings)
     .then((info) => {
       handleAutoUpdate(info, settings, config.getProjectRoot());
     })
