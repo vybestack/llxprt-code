@@ -52,6 +52,7 @@ import {
   COMPRESSION_TOKEN_THRESHOLD,
   COMPRESSION_PRESERVE_THRESHOLD,
 } from './compression-config.js';
+import { estimateTokens as estimateTextTokens } from '../utils/toolOutputLimiter.js';
 
 export enum StreamEventType {
   /** A regular content chunk from the API. */
@@ -543,19 +544,16 @@ export class GeminiChat {
   ): Promise<GenerateContentResponse> {
     await this.sendPromise;
 
-    // Check compression - first check if already compressing, then check if needed
-    if (this.compressionPromise) {
-      this.logger.debug('Waiting for ongoing compression to complete');
-      await this.compressionPromise;
-    } else if (this.shouldCompress()) {
-      // Only check shouldCompress if not already compressing
-      this.logger.debug('Triggering compression before message send');
-      this.compressionPromise = this.performCompression(prompt_id);
-      await this.compressionPromise;
-      this.compressionPromise = null;
-    }
-
     const userContent = normalizeToolInteractionInput(params.message);
+
+    const idGen = this.historyService.getIdGeneratorCallback();
+    const matcher = this.makePositionMatcher();
+    const userIContents: IContent[] = Array.isArray(userContent)
+      ? userContent.map((c) => ContentConverters.toIContent(c, idGen, matcher))
+      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+
+    const pendingTokens = await this.estimatePendingTokens(userIContents);
+    await this.ensureCompressionBeforeSend(prompt_id, pendingTokens, 'send');
 
     // DO NOT add user content to history yet - use send-then-commit pattern
 
@@ -574,15 +572,6 @@ export class GeminiChat {
 
     // Get curated history WITHOUT the new user message
     const currentHistory = this.historyService.getCuratedForProvider();
-
-    // Convert user content to IContent
-    const idGen = this.historyService.getIdGeneratorCallback();
-    const matcher = this.makePositionMatcher();
-
-    // Handle both single Content and Content[] from normalizeToolInteractionInput
-    const userIContents: IContent[] = Array.isArray(userContent)
-      ? userContent.map((c) => ContentConverters.toIContent(c, idGen, matcher))
-      : [ContentConverters.toIContent(userContent, idGen, matcher)];
 
     // Build request with history + new message(s)
     const iContents = [...currentHistory, ...userIContents];
@@ -867,22 +856,19 @@ export class GeminiChat {
     );
     await this.sendPromise;
 
-    // Check compression - first check if already compressing, then check if needed
-    if (this.compressionPromise) {
-      this.logger.debug('Waiting for ongoing compression to complete');
-      await this.compressionPromise;
-    } else if (this.shouldCompress()) {
-      // Only check shouldCompress if not already compressing
-      this.logger.debug('Triggering compression before message send in stream');
-      this.compressionPromise = this.performCompression(prompt_id);
-      await this.compressionPromise;
-      this.compressionPromise = null;
-    }
-
     // Normalize tool interaction input - handles flattened arrays from UI
     const userContent: Content | Content[] = normalizeToolInteractionInput(
       params.message,
     );
+    const idGen = this.historyService.getIdGeneratorCallback();
+    const matcher = this.makePositionMatcher();
+    const userIContents: IContent[] = Array.isArray(userContent)
+      ? userContent.map((content) =>
+          ContentConverters.toIContent(content, idGen, matcher),
+        )
+      : [ContentConverters.toIContent(userContent, idGen, matcher)];
+    const pendingTokens = await this.estimatePendingTokens(userIContents);
+    await this.ensureCompressionBeforeSend(prompt_id, pendingTokens, 'stream');
 
     // DO NOT add anything to history here - wait until after successful send!
     // Tool responses will be handled in recordHistory after the model responds
@@ -1132,7 +1118,7 @@ export class GeminiChat {
   /**
    * Check if compression is needed based on token count
    */
-  private shouldCompress(): boolean {
+  private shouldCompress(pendingTokens: number = 0): boolean {
     // Calculate compression threshold only if not cached
     if (this.cachedCompressionThreshold === null) {
       const threshold =
@@ -1152,7 +1138,8 @@ export class GeminiChat {
       });
     }
 
-    const currentTokens = this.historyService.getTotalTokens();
+    const currentTokens =
+      this.historyService.getTotalTokens() + Math.max(0, pendingTokens);
     const shouldCompress = currentTokens >= this.cachedCompressionThreshold;
 
     if (shouldCompress) {
@@ -1163,6 +1150,109 @@ export class GeminiChat {
     }
 
     return shouldCompress;
+  }
+
+  private async ensureCompressionBeforeSend(
+    prompt_id: string,
+    pendingTokens: number,
+    source: 'send' | 'stream',
+  ): Promise<void> {
+    if (this.compressionPromise) {
+      this.logger.debug('Waiting for ongoing compression to complete');
+      try {
+        await this.compressionPromise;
+      } finally {
+        this.compressionPromise = null;
+      }
+    }
+
+    await this.historyService.waitForTokenUpdates();
+
+    if (this.shouldCompress(pendingTokens)) {
+      const triggerMessage =
+        source === 'stream'
+          ? 'Triggering compression before message send in stream'
+          : 'Triggering compression before message send';
+      this.logger.debug(triggerMessage, {
+        pendingTokens,
+        historyTokens: this.historyService.getTotalTokens(),
+      });
+      this.compressionPromise = this.performCompression(prompt_id);
+      try {
+        await this.compressionPromise;
+      } finally {
+        this.compressionPromise = null;
+      }
+    }
+  }
+
+  private async estimatePendingTokens(contents: IContent[]): Promise<number> {
+    if (contents.length === 0) {
+      return 0;
+    }
+
+    try {
+      return await this.historyService.estimateTokensForContents(
+        contents,
+        this.config.getModel(),
+      );
+    } catch (error) {
+      this.logger.debug(
+        'Failed to estimate pending tokens with tokenizer, using fallback',
+        error,
+      );
+      let fallback = 0;
+      for (const content of contents) {
+        try {
+          const serialized = JSON.stringify(content);
+          fallback += estimateTextTokens(serialized);
+        } catch (stringifyError) {
+          this.logger.debug(
+            'Failed to stringify content for fallback token estimate',
+            stringifyError,
+          );
+          try {
+            const blockStrings = content.blocks
+              ?.map((block) => {
+                switch (block.type) {
+                  case 'text':
+                    return block.text;
+                  case 'tool_call':
+                    return JSON.stringify({
+                      name: block.name,
+                      parameters: block.parameters,
+                    });
+                  case 'tool_response':
+                    return JSON.stringify({
+                      callId: block.callId,
+                      toolName: block.toolName,
+                      result: block.result,
+                      error: block.error,
+                    });
+                  case 'thinking':
+                    return block.thought;
+                  case 'code':
+                    return block.code;
+                  case 'media':
+                    return block.caption ?? '';
+                  default:
+                    return '';
+                }
+              })
+              .join('\n');
+            if (blockStrings) {
+              fallback += estimateTextTokens(blockStrings);
+            }
+          } catch (blockError) {
+            this.logger.debug(
+              'Failed to estimate tokens from blocks',
+              blockError,
+            );
+          }
+        }
+      }
+      return fallback;
+    }
   }
 
   /**
