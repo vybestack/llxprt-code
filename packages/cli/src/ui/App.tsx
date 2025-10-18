@@ -1391,7 +1391,7 @@ You can switch authentication methods by typing /auth or switch to a different m
       !isProviderModelDialogOpen &&
       !isToolsDialogOpen &&
       !showPrivacyNotice &&
-      geminiClient?.isInitialized?.()
+      geminiClient
     ) {
       submitQuery(initialPrompt);
       initialPromptSubmitted.current = true;
